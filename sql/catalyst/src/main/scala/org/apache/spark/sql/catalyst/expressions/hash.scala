@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.{BigDecimal, RoundingMode}
 import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
 
@@ -334,6 +335,8 @@ abstract class HashExpression[E] extends Expression {
     }
   }
 
+  protected def genHashTimestamp(t: String, result: String): String = genHashLong(t, result)
+
   protected def genHashCalendarInterval(input: String, result: String): String = {
     val microsecondsHash = s"$hasherClassName.hashLong($input.microseconds, $result)"
     s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
@@ -399,7 +402,8 @@ abstract class HashExpression[E] extends Expression {
     case NullType => ""
     case BooleanType => genHashBoolean(input, result)
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
-    case LongType | TimestampType => genHashLong(input, result)
+    case LongType => genHashLong(input, result)
+    case TimestampType => genHashTimestamp(input, result)
     case FloatType => genHashFloat(input, result)
     case DoubleType => genHashDouble(input, result)
     case d: DecimalType => genHashDecimal(ctx, d, input, result)
@@ -432,6 +436,10 @@ abstract class InterpretedHashFunction {
 
   protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
+  /**
+   * Computes hash of a given `value` of type `dataType`. The caller needs to check the validity
+   * of input `value`.
+   */
   def hash(value: Any, dataType: DataType, seed: Long): Long = {
     value match {
       case null => seed
@@ -573,15 +581,12 @@ object XxHash64Function extends InterpretedHashFunction {
   }
 }
 
-
 /**
- * Simulates Hive's hashing function at
- * org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#hashcode() in Hive
+ * Simulates Hive's hashing function from Hive v1.2.1 at
+ * org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#hashcode()
  *
  * We should use this hash function for both shuffle and bucket of Hive tables, so that
  * we can guarantee shuffle and bucketing have same data distribution
- *
- * TODO: Support Decimal and date related types
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.")
@@ -595,7 +600,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override protected def hasherClassName: String = classOf[HiveHasher].getName
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
-    HiveHashFunction.hash(value, dataType, seed).toInt
+    HiveHashFunction.hash(value, dataType, this.seed).toInt
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -636,12 +641,27 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override protected def genHashBytes(b: String, result: String): String =
     s"$result = $hasherClassName.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length);"
 
+  override protected def genHashDecimal(
+      ctx: CodegenContext,
+      d: DecimalType,
+      input: String,
+      result: String): String = {
+    s"""
+      $result = ${HiveHashFunction.getClass.getName.stripSuffix("$")}.normalizeDecimal(
+        $input.toJavaBigDecimal()).hashCode();"""
+  }
+
   override protected def genHashCalendarInterval(input: String, result: String): String = {
     s"""
-        $result = (31 * $hasherClassName.hashInt($input.months)) +
-          $hasherClassName.hashLong($input.microseconds);"
+      $result = (int)
+        ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashCalendarInterval($input);
      """
   }
+
+  override protected def genHashTimestamp(input: String, result: String): String =
+    s"""
+      $result = (int) ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestamp($input);
+     """
 
   override protected def genHashString(input: String, result: String): String = {
     val baseObject = s"$input.getBaseObject()"
@@ -733,6 +753,87 @@ object HiveHashFunction extends InterpretedHashFunction {
     HiveHasher.hashUnsafeBytes(base, offset, len)
   }
 
+  private val HIVE_DECIMAL_MAX_PRECISION = 38
+  private val HIVE_DECIMAL_MAX_SCALE = 38
+
+  // Mimics normalization done for decimals in Hive at HiveDecimalV1.normalize()
+  def normalizeDecimal(input: BigDecimal): BigDecimal = {
+    if (input == null) return null
+
+    def trimDecimal(input: BigDecimal) = {
+      var result = input
+      if (result.compareTo(BigDecimal.ZERO) == 0) {
+        // Special case for 0, because java doesn't strip zeros correctly on that number.
+        result = BigDecimal.ZERO
+      } else {
+        result = result.stripTrailingZeros
+        if (result.scale < 0) {
+          // no negative scale decimals
+          result = result.setScale(0)
+        }
+      }
+      result
+    }
+
+    var result = trimDecimal(input)
+    val intDigits = result.precision - result.scale
+    if (intDigits > HIVE_DECIMAL_MAX_PRECISION) {
+      return null
+    }
+
+    val maxScale = Math.min(HIVE_DECIMAL_MAX_SCALE,
+      Math.min(HIVE_DECIMAL_MAX_PRECISION - intDigits, result.scale))
+    if (result.scale > maxScale) {
+      result = result.setScale(maxScale, RoundingMode.HALF_UP)
+      // Trimming is again necessary, because rounding may introduce new trailing 0's.
+      result = trimDecimal(result)
+    }
+    result
+  }
+
+  /**
+   * Mimics TimestampWritable.hashCode() in Hive
+   */
+  def hashTimestamp(timestamp: Long): Long = {
+    val timestampInSeconds = timestamp / 1000000
+    val nanoSecondsPortion = (timestamp % 1000000) * 1000
+
+    var result = timestampInSeconds
+    result <<= 30 // the nanosecond part fits in 30 bits
+    result |= nanoSecondsPortion
+    ((result >>> 32) ^ result).toInt
+  }
+
+  /**
+   * Hive allows input intervals to be defined using units below but the intervals
+   * have to be from the same category:
+   * - year, month (stored as HiveIntervalYearMonth)
+   * - day, hour, minute, second, nanosecond (stored as HiveIntervalDayTime)
+   *
+   * eg. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
+   *
+   * This method mimics HiveIntervalDayTime.hashCode() in Hive.
+   *
+   * Two differences wrt Hive due to how intervals are stored in Spark vs Hive:
+   *
+   * - If the `INTERVAL` is backed as HiveIntervalYearMonth in Hive, then this method will not
+   *   produce Hive compatible result. The reason being Spark's representation of calendar does not
+   *   have such categories based on the interval and is unified.
+   *
+   * - Spark's [[CalendarInterval]] has precision upto microseconds but Hive's
+   *   HiveIntervalDayTime can store data with precision upto nanoseconds. So, any input intervals
+   *   with nanosecond values will lead to wrong output hashes (ie. non adherent with Hive output)
+   */
+  def hashCalendarInterval(calendarInterval: CalendarInterval): Long = {
+    val totalSeconds = calendarInterval.microseconds / CalendarInterval.MICROS_PER_SECOND.toInt
+    val result: Int = (17 * 37) + (totalSeconds ^ totalSeconds >> 32).toInt
+
+    val nanoSeconds =
+      (calendarInterval.microseconds -
+        (totalSeconds * CalendarInterval.MICROS_PER_SECOND.toInt)).toInt * 1000
+     (result * 37) + nanoSeconds
+  }
+
   override def hash(value: Any, dataType: DataType, seed: Long): Long = {
     value match {
       case null => 0
@@ -781,12 +882,15 @@ object HiveHashFunction extends InterpretedHashFunction {
         var i = 0
         val length = struct.numFields
         while (i < length) {
-          result = (31 * result) + hash(struct.get(i, types(i)), types(i), seed + 1).toInt
+          result = (31 * result) + hash(struct.get(i, types(i)), types(i), 0).toInt
           i += 1
         }
         result
 
-      case _ => super.hash(value, dataType, seed)
+      case d: Decimal => normalizeDecimal(d.toJavaBigDecimal).hashCode()
+      case timestamp: Long if dataType.isInstanceOf[TimestampType] => hashTimestamp(timestamp)
+      case calendarInterval: CalendarInterval => hashCalendarInterval(calendarInterval)
+      case _ => super.hash(value, dataType, 0)
     }
   }
 }

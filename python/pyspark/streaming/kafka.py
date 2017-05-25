@@ -262,7 +262,7 @@ class OffsetRange(object):
 
 class TopicAndPartition(object):
     """
-    Represents a specific top and partition for Kafka.
+    Represents a specific topic and partition for Kafka.
     """
 
     def __init__(self, topic, partition):

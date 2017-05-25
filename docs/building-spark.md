@@ -12,8 +12,8 @@ redirect_from: "building-with-maven.html"
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.3.9 or newer and Java 7+.
-Note that support for Java 7 is deprecated as of Spark 2.0.0 and may be removed in Spark 2.2.0.
+Building Spark using Maven requires Maven 3.3.9 or newer and Java 8+.
+Note that support for Java 7 was removed as of Spark 2.2.0.
 
 ### Setting up Maven's Memory Usage
 
@@ -21,28 +21,18 @@ You'll need to configure Maven to use more memory than usual by setting `MAVEN_O
 
     export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
 
-When compiling with Java 7, you will need to add the additional option "-XX:MaxPermSize=512M" to MAVEN_OPTS.
-
+(The `ReservedCodeCacheSize` setting is optional but recommended.)
 If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
 
     [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
-    [ERROR] PermGen space -> [Help 1]
-
-    [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
     [ERROR] Java heap space -> [Help 1]
-
-    [INFO] Compiling 233 Scala sources and 41 Java sources to /Users/me/Development/spark/sql/core/target/scala-{site.SCALA_BINARY_VERSION}/classes...
-    OpenJDK 64-Bit Server VM warning: CodeCache is full. Compiler has been disabled.
-    OpenJDK 64-Bit Server VM warning: Try increasing the code cache size using -XX:ReservedCodeCacheSize=
 
 You can fix these problems by setting the `MAVEN_OPTS` variable as discussed before.
 
 **Note:**
 
 * If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
-* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
-* You may see warnings like "ignoring option MaxPermSize=1g; support was removed in 8.0" when building or running tests with Java 8 and `build/mvn`. These warnings are harmless.
-
+* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.    
 
 ### build/mvn
 
@@ -142,20 +132,6 @@ Thus, the full flow for running continuous-compilation of the `core` submodule m
     $ cd core
     $ ../build/mvn scala:cc
 
-## Speeding up Compilation with Zinc
-
-[Zinc](https://github.com/typesafehub/zinc) is a long-running server version of SBT's incremental
-compiler. When run locally as a background process, it speeds up builds of Scala-based projects
-like Spark. Developers who regularly recompile Spark with Maven will be the most interested in
-Zinc. The project site gives instructions for building and running `zinc`; OS X users can
-install it using `brew install zinc`.
-
-If using the `build/mvn` package `zinc` will automatically be downloaded and leveraged for all
-builds. This process will auto-start after the first time `build/mvn` is called and bind to port
-3030 unless the `ZINC_PORT` environment variable is set. The `zinc` process can subsequently be
-shut down at any time by running `build/zinc-<version>/bin/zinc -shutdown` and will automatically
-restart whenever `build/mvn` is called.
-
 ## Building with SBT
 
 Maven is the official build tool recommended for packaging Spark, and is the *build of reference*.
@@ -169,10 +145,16 @@ can be set to control the SBT build. For example:
 
 To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
 in interactive mode by running `build/sbt`, and then run all build commands at the command
-prompt. For more recommendations on reducing build time, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html).
+prompt.
 
-## Encrypted Filesystems
+## Speeding up Compilation
+
+Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc
+(for developers who build with Maven) or by avoiding re-compilation of the assembly JAR (for
+developers who build with SBT).  For more information about how to do this, refer to the
+[Useful Developer Tools page](http://spark.apache.org/developer-tools.html#reducing-build-times).
+
+## Encrypted Filesystems
 
 When building on an encrypted filesystem (if your home directory is encrypted, for example), then the Spark build might fail with a "Filename too long" error. As a workaround, add the following in the configuration args of the `scala-maven-plugin` in the project `pom.xml`:
 
@@ -200,43 +182,16 @@ The following is an example of a command to run the tests:
 
     ./build/mvn test
 
-The ScalaTest plugin also supports running only a specific Scala test suite as follows:
-
-    ./build/mvn -P... -Dtest=none -DwildcardSuites=org.apache.spark.repl.ReplSuite test
-    ./build/mvn -P... -Dtest=none -DwildcardSuites=org.apache.spark.repl.* test
-
-or a Java test:
-
-    ./build/mvn test -P... -DwildcardSuites=none -Dtest=org.apache.spark.streaming.JavaAPISuite
-
 ## Testing with SBT
 
 The following is an example of a command to run the tests:
 
     ./build/sbt test
 
-To run only a specific test suite as follows:
+## Running Individual Tests
 
-    ./build/sbt "test-only org.apache.spark.repl.ReplSuite"
-    ./build/sbt "test-only org.apache.spark.repl.*"
-
-To run test suites of a specific sub project as follows:
-
-    ./build/sbt core/test
-
-## Running Java 8 Test Suites
-
-Running only Java 8 tests and nothing else.
-
-    ./build/mvn install -DskipTests
-    ./build/mvn -pl :java8-tests_2.11 test
-
-or
-
-    ./build/sbt java8-tests/test
-
-Java 8 tests are automatically enabled when a Java 8 JDK is detected.
-If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
+For information about how to run individual tests, refer to the
+[Useful Developer Tools page](http://spark.apache.org/developer-tools.html#running-individual-tests).
 
 ## PySpark pip installable
 
@@ -277,7 +232,7 @@ Once installed, the `docker` service needs to be started, if not already running
 On Linux, this can be done by `sudo service docker start`.
 
     ./build/mvn install -DskipTests
-    ./build/mvn -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
+    ./build/mvn test -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
 
 or
 

@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 
 trait AnalysisTest extends PlanTest {
 
@@ -29,7 +31,7 @@ trait AnalysisTest extends PlanTest {
   protected val caseInsensitiveAnalyzer = makeAnalyzer(caseSensitive = false)
 
   private def makeAnalyzer(caseSensitive: Boolean): Analyzer = {
-    val conf = new SimpleCatalystConf(caseSensitive)
+    val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
     val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
     catalog.createTempView("TaBlE", TestRelations.testRelation, overrideIfExists = true)
     catalog.createTempView("TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
@@ -79,7 +81,8 @@ trait AnalysisTest extends PlanTest {
       analyzer.checkAnalysis(analyzer.execute(inputPlan))
     }
 
-    if (!expectedErrors.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains)) {
+    if (!expectedErrors.map(_.toLowerCase(Locale.ROOT)).forall(
+        e.getMessage.toLowerCase(Locale.ROOT).contains)) {
       fail(
         s"""Exception message should contain the following substrings:
            |

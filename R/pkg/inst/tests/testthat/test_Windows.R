@@ -17,9 +17,12 @@
 context("Windows-specific tests")
 
 test_that("sparkJars tag in SparkContext", {
+  skip_on_cran()
+
   if (.Platform$OS.type != "windows") {
     skip("This test is only for Windows, skipped")
   }
+
   testOutput <- launchScript("ECHO", "a/b/c", wait = TRUE)
   abcPath <- testOutput[1]
   expect_equal(abcPath, "a\\b\\c")

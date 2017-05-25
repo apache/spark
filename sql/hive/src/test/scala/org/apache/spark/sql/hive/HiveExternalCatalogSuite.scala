@@ -22,7 +22,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.types.StructType
 
@@ -49,13 +48,6 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
   }
 
   import utils._
-
-  test("list partitions by filter") {
-    val catalog = newBasicCatalog()
-    val selectedPartitions = catalog.listPartitionsByFilter("db2", "tbl2", Seq('a.int === 1))
-    assert(selectedPartitions.length == 1)
-    assert(selectedPartitions.head.spec == part1.spec)
-  }
 
   test("SPARK-18647: do not put provider in table properties for Hive serde table") {
     val catalog = newBasicCatalog()

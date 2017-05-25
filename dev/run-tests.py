@@ -344,6 +344,19 @@ def build_spark_sbt(hadoop_version):
     exec_sbt(profiles_and_goals)
 
 
+def build_spark_unidoc_sbt(hadoop_version):
+    set_title_and_block("Building Unidoc API Documentation", "BLOCK_DOCUMENTATION")
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    sbt_goals = ["unidoc"]
+    profiles_and_goals = build_profiles + sbt_goals
+
+    print("[info] Building Spark unidoc (w/Hive 1.2.1) using SBT with these arguments: ",
+          " ".join(profiles_and_goals))
+
+    exec_sbt(profiles_and_goals)
+
+
 def build_spark_assembly_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
@@ -352,6 +365,16 @@ def build_spark_assembly_sbt(hadoop_version):
     print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
+
+    # Note that we skip Unidoc build only if Hadoop 2.6 is explicitly set in this SBT build.
+    # Due to a different dependency resolution in SBT & Unidoc by an unknown reason, the
+    # documentation build fails on a specific machine & environment in Jenkins but it was unable
+    # to reproduce. Please see SPARK-20343. This is a band-aid fix that should be removed in
+    # the future.
+    is_hadoop_version_2_6 = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE") == "hadoop2.6"
+    if not is_hadoop_version_2_6:
+        # Make sure that Java and Scala API documentation can be generated
+        build_spark_unidoc_sbt(hadoop_version)
 
 
 def build_apache_spark(build_tool, hadoop_version):
@@ -491,9 +514,6 @@ def main():
         sys.exit(2)
 
     java_version = determine_java_version(java_exe)
-
-    if java_version.minor < 8:
-        print("[warn] Java 8 tests will not run because JDK version is < 1.8.")
 
     # install SparkR
     if which("R"):

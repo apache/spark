@@ -78,7 +78,24 @@ private class ConfigEntryWithDefault[T] (
   def readFrom(reader: ConfigReader): T = {
     reader.get(key).map(valueConverter).getOrElse(_defaultValue)
   }
+}
 
+private class ConfigEntryWithDefaultFunction[T] (
+     key: String,
+     _defaultFunction: () => T,
+     valueConverter: String => T,
+     stringConverter: T => String,
+     doc: String,
+     isPublic: Boolean)
+  extends ConfigEntry(key, valueConverter, stringConverter, doc, isPublic) {
+
+  override def defaultValue: Option[T] = Some(_defaultFunction())
+
+  override def defaultValueString: String = stringConverter(_defaultFunction())
+
+  def readFrom(reader: ConfigReader): T = {
+    reader.get(key).map(valueConverter).getOrElse(_defaultFunction())
+  }
 }
 
 private class ConfigEntryWithDefaultString[T] (

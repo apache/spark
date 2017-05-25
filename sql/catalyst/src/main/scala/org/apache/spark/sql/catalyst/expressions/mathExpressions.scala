@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -68,7 +69,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   }
 
   // name of function in java.lang.Math
-  def funcName: String = name.toLowerCase
+  def funcName: String = name.toLowerCase(Locale.ROOT)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
@@ -124,7 +125,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.${name.toLowerCase}($c1, $c2)")
+    defineCodeGen(ctx, ev, (c1, c2) =>
+      s"java.lang.Math.${name.toLowerCase(Locale.ROOT)}($c1, $c2)")
   }
 }
 
@@ -230,9 +232,10 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DecimalType))
+    Seq(TypeCollection(LongType, DoubleType, DecimalType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case LongType => input.asInstanceOf[Long]
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].ceil
   }
@@ -345,9 +348,10 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DecimalType))
+    Seq(TypeCollection(LongType, DoubleType, DecimalType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case LongType => input.asInstanceOf[Long]
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].floor
   }
@@ -540,6 +544,20 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
        0.0
   """)
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the cotangent of `expr`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1);
+       0.6420926159343306
+  """)
+case class Cot(child: Expression)
+  extends UnaryMathExpression((x: Double) => 1 / math.tan(x), "COT") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.tan($c);")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the hyperbolic tangent of `expr`.",
@@ -964,7 +982,7 @@ case class Logarithm(left: Expression, right: Expression)
  *
  * @param child expr to be round, all [[NumericType]] is allowed as Input
  * @param scale new scale to be round to, this should be a constant int at runtime
- * @param mode rounding mode (e.g. HALF_UP, HALF_UP)
+ * @param mode rounding mode (e.g. HALF_UP, HALF_EVEN)
  * @param modeStr rounding mode string name (e.g. "ROUND_HALF_UP", "ROUND_HALF_EVEN")
  */
 abstract class RoundBase(child: Expression, scale: Expression,
@@ -1021,10 +1039,10 @@ abstract class RoundBase(child: Expression, scale: Expression,
 
   // not overriding since _scale is a constant int at runtime
   def nullSafeEval(input1: Any): Any = {
-    child.dataType match {
-      case _: DecimalType =>
+    dataType match {
+      case DecimalType.Fixed(_, s) =>
         val decimal = input1.asInstanceOf[Decimal]
-        if (decimal.changePrecision(decimal.precision, _scale, mode)) decimal else null
+        decimal.toPrecision(decimal.precision, s, mode).orNull
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType =>
@@ -1053,10 +1071,10 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)
 
-    val evaluationCode = child.dataType match {
-      case _: DecimalType =>
+    val evaluationCode = dataType match {
+      case DecimalType.Fixed(_, s) =>
         s"""
-        if (${ce.value}.changePrecision(${ce.value}.precision(), ${_scale},
+        if (${ce.value}.changePrecision(${ce.value}.precision(), ${s},
             java.math.BigDecimal.${modeStr})) {
           ${ev.value} = ${ce.value};
         } else {

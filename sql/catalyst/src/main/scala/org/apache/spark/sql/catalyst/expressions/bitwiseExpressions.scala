@@ -86,7 +86,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 }
 
 /**
- * A function that calculates bitwise xor of two numbers.
+ * A function that calculates bitwise xor({@literal ^}) of two numbers.
  *
  * Code generation inherited from BinaryArithmetic.
  */

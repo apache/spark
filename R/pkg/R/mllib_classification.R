@@ -46,15 +46,16 @@ setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"
 #' @note NaiveBayesModel since 2.0.0
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
-#' linear SVM Model
+#' Linear SVM Model
 #'
-#' Fits an linear SVM model against a SparkDataFrame. It is a binary classifier, similar to svm in glmnet package
+#' Fits a linear SVM model against a SparkDataFrame, similar to svm in e1071 package.
+#' Currently only supports binary classification model with linear kernel.
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
 #' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param regParam The regularization parameter.
+#' @param regParam The regularization parameter. Only supports L2 regularization currently.
 #' @param maxIter Maximum iteration number.
 #' @param tol Convergence tolerance of iterations.
 #' @param standardization Whether to standardize the training features before fitting the model. The coefficients
@@ -75,9 +76,9 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' df <- createDataFrame(iris)
-#' training <- df[df$Species %in% c("versicolor", "virginica"), ]
-#' model <- spark.svmLinear(training, Species ~ ., regParam = 0.5)
+#' t <- as.data.frame(Titanic)
+#' training <- createDataFrame(t)
+#' model <- spark.svmLinear(training, Survived ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' # fitted values on training data
@@ -111,10 +112,10 @@ setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formu
             new("LinearSVCModel", jobj = jobj)
           })
 
-#  Predicted values based on an LinearSVCModel model
+#  Predicted values based on a LinearSVCModel model
 
 #' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns the predicted values based on an LinearSVCModel.
+#' @return \code{predict} returns the predicted values based on a LinearSVCModel.
 #' @rdname spark.svmLinear
 #' @aliases predict,LinearSVCModel,SparkDataFrame-method
 #' @export
@@ -124,13 +125,12 @@ setMethod("predict", signature(object = "LinearSVCModel"),
             predict_internal(object, newData)
           })
 
-#  Get the summary of an LinearSVCModel
+#  Get the summary of a LinearSVCModel
 
-#' @param object an LinearSVCModel fitted by \code{spark.svmLinear}.
+#' @param object a LinearSVCModel fitted by \code{spark.svmLinear}.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list includes \code{coefficients} (coefficients of the fitted model),
-#'         \code{intercept} (intercept of the fitted model), \code{numClasses} (number of classes),
-#'         \code{numFeatures} (number of features).
+#'         \code{numClasses} (number of classes), \code{numFeatures} (number of features).
 #' @rdname spark.svmLinear
 #' @aliases summary,LinearSVCModel-method
 #' @export
@@ -138,22 +138,14 @@ setMethod("predict", signature(object = "LinearSVCModel"),
 setMethod("summary", signature(object = "LinearSVCModel"),
           function(object) {
             jobj <- object@jobj
-            features <- callJMethod(jobj, "features")
-            labels <- callJMethod(jobj, "labels")
-            coefficients <- callJMethod(jobj, "coefficients")
-            nCol <- length(coefficients) / length(features)
-            coefficients <- matrix(unlist(coefficients), ncol = nCol)
-            intercept <- callJMethod(jobj, "intercept")
+            features <- callJMethod(jobj, "rFeatures")
+            coefficients <- callJMethod(jobj, "rCoefficients")
+            coefficients <- as.matrix(unlist(coefficients))
+            colnames(coefficients) <- c("Estimate")
+            rownames(coefficients) <- unlist(features)
             numClasses <- callJMethod(jobj, "numClasses")
             numFeatures <- callJMethod(jobj, "numFeatures")
-            if (nCol == 1) {
-              colnames(coefficients) <- c("Estimate")
-            } else {
-              colnames(coefficients) <- unlist(labels)
-            }
-            rownames(coefficients) <- unlist(features)
-            list(coefficients = coefficients, intercept = intercept,
-                 numClasses = numClasses, numFeatures = numFeatures)
+            list(coefficients = coefficients, numClasses = numClasses, numFeatures = numFeatures)
           })
 
 #  Save fitted LinearSVCModel to the input path
@@ -207,6 +199,9 @@ function(object, path, overwrite = FALSE) {
 #'                  excepting that at most one value may be 0. The class with largest value p/t is predicted, where p
 #'                  is the original probability of that class and t is the class's threshold.
 #' @param weightCol The weight column name.
+#' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
+#'                         or the number of partitions are large, this param could be adjusted to a larger size.
+#'                         This is an expert parameter. Default value should be good for most cases.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.logit} returns a fitted logistic regression model.
 #' @rdname spark.logit
@@ -217,9 +212,9 @@ function(object, path, overwrite = FALSE) {
 #' \dontrun{
 #' sparkR.session()
 #' # binary logistic regression
-#' df <- createDataFrame(iris)
-#' training <- df[df$Species %in% c("versicolor", "virginica"), ]
-#' model <- spark.logit(training, Species ~ ., regParam = 0.5)
+#' t <- as.data.frame(Titanic)
+#' training <- createDataFrame(t)
+#' model <- spark.logit(training, Survived ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' # fitted values on training data
@@ -236,8 +231,7 @@ function(object, path, overwrite = FALSE) {
 #'
 #' # multinomial logistic regression
 #'
-#' df <- createDataFrame(iris)
-#' model <- spark.logit(df, Species ~ ., regParam = 0.5)
+#' model <- spark.logit(training, Class ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' }
@@ -245,11 +239,13 @@ function(object, path, overwrite = FALSE) {
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
                    tol = 1E-6, family = "auto", standardization = TRUE,
-                   thresholds = 0.5, weightCol = NULL) {
+                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2) {
             formula <- paste(deparse(formula), collapse = "")
 
-            if (is.null(weightCol)) {
-              weightCol <- ""
+            if (!is.null(weightCol) && weightCol == "") {
+              weightCol <- NULL
+            } else if (!is.null(weightCol)) {
+              weightCol <- as.character(weightCol)
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
@@ -257,7 +253,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                                 as.numeric(elasticNetParam), as.integer(maxIter),
                                 as.numeric(tol), as.character(family),
                                 as.logical(standardization), as.array(thresholds),
-                                as.character(weightCol))
+                                weightCol, as.integer(aggregationDepth))
             new("LogisticRegressionModel", jobj = jobj)
           })
 

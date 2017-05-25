@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -30,7 +32,8 @@ class ReplaceOperatorSuite extends PlanTest {
       Batch("Replace Operators", FixedPoint(100),
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
-        ReplaceIntersectWithSemiJoin) :: Nil
+        ReplaceIntersectWithSemiJoin,
+        ReplaceDeduplicateWithAggregate) :: Nil
   }
 
   test("replace Intersect with Left-semi Join") {
@@ -70,5 +73,33 @@ class ReplaceOperatorSuite extends PlanTest {
     val correctAnswer = Aggregate(input.output, input.output, input)
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace batch Deduplicate with Aggregate") {
+    val input = LocalRelation('a.int, 'b.int)
+    val attrA = input.output(0)
+    val attrB = input.output(1)
+    val query = Deduplicate(Seq(attrA), input, streaming = false) // dropDuplicates("a")
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(
+        Seq(attrA),
+        Seq(
+          attrA,
+          Alias(new First(attrB).toAggregateExpression(), attrB.name)(attrB.exprId)
+        ),
+        input)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("don't replace streaming Deduplicate") {
+    val input = LocalRelation('a.int, 'b.int)
+    val attrA = input.output(0)
+    val query = Deduplicate(Seq(attrA), input, streaming = true) // dropDuplicates("a")
+    val optimized = Optimize.execute(query.analyze)
+
+    comparePlans(optimized, query)
   }
 }

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.net.URI
+import java.util.TimeZone
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -26,7 +29,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 
@@ -238,6 +243,19 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     }
   }
 
+  test("alter table schema") {
+    val catalog = newBasicCatalog()
+    val tbl1 = catalog.getTable("db2", "tbl1")
+    val newSchema = StructType(Seq(
+      StructField("col1", IntegerType),
+      StructField("new_field_2", StringType),
+      StructField("a", IntegerType),
+      StructField("b", StringType)))
+    catalog.alterTableSchema("db2", "tbl1", newSchema)
+    val newTbl1 = catalog.getTable("db2", "tbl1")
+    assert(newTbl1.schema == newSchema)
+  }
+
   test("get table") {
     assert(newBasicCatalog().getTable("db2", "tbl1").identifier.table == "tbl1")
   }
@@ -340,7 +358,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       "db1",
       "tbl",
       Map("partCol1" -> "1", "partCol2" -> "2")).location
-    val tableLocation = catalog.getTable("db1", "tbl").location
+    val tableLocation = new Path(catalog.getTable("db1", "tbl").location)
     val defaultPartitionLocation = new Path(new Path(tableLocation, "partCol1=1"), "partCol2=2")
     assert(new Path(partitionLocation) == defaultPartitionLocation)
   }
@@ -419,6 +437,44 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     // if no partition is matched for the given partition spec, an empty list should be returned.
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown", "b" -> "1"))).isEmpty)
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown"))).isEmpty)
+  }
+
+  test("list partitions by filter") {
+    val tz = TimeZone.getDefault.getID
+    val catalog = newBasicCatalog()
+
+    def checkAnswer(
+        table: CatalogTable, filters: Seq[Expression], expected: Set[CatalogTablePartition])
+      : Unit = {
+
+      assertResult(expected.map(_.spec)) {
+        catalog.listPartitionsByFilter(table.database, table.identifier.identifier, filters, tz)
+          .map(_.spec).toSet
+      }
+    }
+
+    val tbl2 = catalog.getTable("db2", "tbl2")
+
+    checkAnswer(tbl2, Seq.empty, Set(part1, part2))
+    checkAnswer(tbl2, Seq('a.int <= 1), Set(part1))
+    checkAnswer(tbl2, Seq('a.int === 2), Set.empty)
+    checkAnswer(tbl2, Seq(In('a.int * 10, Seq(30))), Set(part2))
+    checkAnswer(tbl2, Seq(Not(In('a.int, Seq(4)))), Set(part1, part2))
+    checkAnswer(tbl2, Seq('a.int === 1, 'b.string === "2"), Set(part1))
+    checkAnswer(tbl2, Seq('a.int === 1 && 'b.string === "2"), Set(part1))
+    checkAnswer(tbl2, Seq('a.int === 1, 'b.string === "x"), Set.empty)
+    checkAnswer(tbl2, Seq('a.int === 1 || 'b.string === "x"), Set(part1))
+
+    intercept[AnalysisException] {
+      try {
+        checkAnswer(tbl2, Seq('a.int > 0 && 'col1.int > 0), Set.empty)
+      } catch {
+        // HiveExternalCatalog may be the first one to notice and throw an exception, which will
+        // then be caught and converted to a RuntimeException with a descriptive message.
+        case ex: RuntimeException if ex.getMessage.contains("MetaException") =>
+          throw new AnalysisException(ex.getMessage)
+      }
+    }
   }
 
   test("drop partitions") {
@@ -508,7 +564,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
-    val tableLocation = catalog.getTable("db1", "tbl").location
+    val tableLocation = new Path(catalog.getTable("db1", "tbl").location)
 
     val mixedCasePart1 = CatalogTablePartition(
       Map("partCol1" -> "1", "partCol2" -> "2"), storageFormat)
@@ -699,7 +755,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   // File System operations
   // --------------------------------------------------------------------------
 
-  private def exists(uri: String, children: String*): Boolean = {
+  private def exists(uri: URI, children: String*): Boolean = {
     val base = new Path(uri)
     val finalPath = children.foldLeft(base) {
       case (parent, child) => new Path(parent, child)
@@ -742,7 +798,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       identifier = TableIdentifier("external_table", Some("db1")),
       tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat(
-        Some(Utils.createTempDir().getAbsolutePath),
+        Some(Utils.createTempDir().toURI),
         None, None, None, false, Map.empty),
       schema = new StructType().add("a", "int").add("b", "string"),
       provider = Some(defaultProvider)
@@ -790,7 +846,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val partWithExistingDir = CatalogTablePartition(
       Map("partCol1" -> "7", "partCol2" -> "8"),
       CatalogStorageFormat(
-        Some(tempPath.toURI.toString),
+        Some(tempPath.toURI),
         None, None, None, false, Map.empty))
     catalog.createPartitions("db1", "tbl", Seq(partWithExistingDir), ignoreIfExists = false)
 
@@ -799,7 +855,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val partWithNonExistingDir = CatalogTablePartition(
       Map("partCol1" -> "9", "partCol2" -> "10"),
       CatalogStorageFormat(
-        Some(tempPath.toURI.toString),
+        Some(tempPath.toURI),
         None, None, None, false, Map.empty))
     catalog.createPartitions("db1", "tbl", Seq(partWithNonExistingDir), ignoreIfExists = false)
     assert(tempPath.exists())
@@ -883,7 +939,7 @@ abstract class CatalogTestUtils {
 
   def newFunc(): CatalogFunction = newFunc("funcName")
 
-  def newUriForDatabase(): String = Utils.createTempDir().toURI.toString.stripSuffix("/")
+  def newUriForDatabase(): URI = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
 
   def newDb(name: String): CatalogDatabase = {
     CatalogDatabase(name, name + " description", newUriForDatabase(), Map.empty)
@@ -895,7 +951,7 @@ abstract class CatalogTestUtils {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
-      storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().getAbsolutePath)),
+      storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
       schema = new StructType()
         .add("col1", "int")
         .add("col2", "string")

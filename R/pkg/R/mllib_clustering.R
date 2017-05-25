@@ -72,8 +72,9 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' df <- createDataFrame(iris)
-#' model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- spark.bisectingKmeans(df, Class ~ Survived, k = 4)
 #' summary(model)
 #'
 #' # get fitted result from a bisecting k-means model
@@ -82,7 +83,7 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #'
 #' # fitted values on training data
 #' fitted <- predict(model, df)
-#' head(select(fitted, "Sepal_Length", "prediction"))
+#' head(select(fitted, "Class", "prediction"))
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
@@ -338,14 +339,14 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data(iris)
-#' df <- createDataFrame(iris)
-#' model <- spark.kmeans(df, Sepal_Length ~ Sepal_Width, k = 4, initMode = "random")
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- spark.kmeans(df, Class ~ Survived, k = 4, initMode = "random")
 #' summary(model)
 #'
 #' # fitted values on training data
 #' fitted <- predict(model, df)
-#' head(select(fitted, "Sepal_Length", "prediction"))
+#' head(select(fitted, "Class", "prediction"))
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
@@ -497,11 +498,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @export
 #' @examples
 #' \dontrun{
-#' # nolint start
-#' # An example "path/to/file" can be
-#' # paste0(Sys.getenv("SPARK_HOME"), "/data/mllib/sample_lda_libsvm_data.txt")
-#' # nolint end
-#' text <- read.df("path/to/file", source = "libsvm")
+#' text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")
 #' model <- spark.lda(data = text, optimizer = "em")
 #'
 #' # get a summary of the model

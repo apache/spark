@@ -20,12 +20,7 @@ package org.apache.spark.network.crypto;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
-import java.security.Key;
-import javax.crypto.KeyGenerator;
-import javax.crypto.Mac;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -37,7 +32,6 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.sasl.SaslClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -103,20 +97,18 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
   private void doSparkAuth(TransportClient client, Channel channel)
     throws GeneralSecurityException, IOException {
 
-    AuthEngine engine = new AuthEngine(authUser, secretKeyHolder.getSecretKey(authUser), conf);
-    try {
+    String secretKey = secretKeyHolder.getSecretKey(authUser);
+    try (AuthEngine engine = new AuthEngine(authUser, secretKey, conf)) {
       ClientChallenge challenge = engine.challenge();
       ByteBuf challengeData = Unpooled.buffer(challenge.encodedLength());
       challenge.encode(challengeData);
 
-      ByteBuffer responseData = client.sendRpcSync(challengeData.nioBuffer(),
-        conf.authRTTimeoutMs());
+      ByteBuffer responseData =
+          client.sendRpcSync(challengeData.nioBuffer(), conf.authRTTimeoutMs());
       ServerResponse response = ServerResponse.decodeMessage(responseData);
 
       engine.validate(response);
       engine.sessionCipher().addToChannel(channel);
-    } finally {
-      engine.close();
     }
   }
 

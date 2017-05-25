@@ -37,6 +37,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val formula = new RFormula().setFormula("id ~ v1 + v2")
     val original = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
     val model = formula.fit(original)
+    MLTestingUtils.checkCopyAndUids(formula, model)
     val result = model.transform(original)
     val resultSchema = model.transformSchema(original.schema)
     val expected = Seq(

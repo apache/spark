@@ -145,11 +145,6 @@ private[spark] class KafkaRDD[K, V](
       a.host > b.host
     }
 
-  /**
-   * Non-negative modulus, from java 8 math
-   */
-  private def floorMod(a: Int, b: Int): Int = ((a % b) + b) % b
-
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
     // The intention is best-effort consistent executor for a given topicpartition,
     // so that caching consumers can be effective.
@@ -164,7 +159,7 @@ private[spark] class KafkaRDD[K, V](
       Seq()
     } else {
       // execs is sorted, tp.hashCode depends only on topic and partition, so consistent index
-      val index = this.floorMod(tp.hashCode, execs.length)
+      val index = Math.floorMod(tp.hashCode, execs.length)
       val chosen = execs(index)
       Seq(chosen.toString)
     }
@@ -204,7 +199,7 @@ private[spark] class KafkaRDD[K, V](
 
     val consumer = if (useConsumerCache) {
       CachedKafkaConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
-      if (context.attemptNumber > 1) {
+      if (context.attemptNumber >= 1) {
         // just in case the prior attempt failures were cache related
         CachedKafkaConsumer.remove(groupId, part.topic, part.partition)
       }

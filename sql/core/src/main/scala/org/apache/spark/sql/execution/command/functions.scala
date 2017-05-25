@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
@@ -49,6 +51,7 @@ case class CreateFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
     if (isTemp) {
       if (databaseName.isDefined) {
         throw new AnalysisException(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
@@ -57,17 +60,13 @@ case class CreateFunctionCommand(
       // We first load resources and then put the builder in the function registry.
       // Please note that it is allowed to overwrite an existing temp function.
       catalog.loadFunctionResources(resources)
-      val info = new ExpressionInfo(className, functionName)
-      val builder = catalog.makeFunctionBuilder(functionName, className)
-      catalog.createTempFunction(functionName, info, builder, ignoreIfExists = false)
+      catalog.registerFunction(func, ignoreIfExists = false)
     } else {
       // For a permanent, we will store the metadata into underlying external catalog.
       // This function will be loaded into the FunctionRegistry when a query uses it.
       // We do not load it into FunctionRegistry right now.
       // TODO: should we also parse "IF NOT EXISTS"?
-      catalog.createFunction(
-        CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources),
-        ignoreIfExists = false)
+      catalog.createFunction(func, ignoreIfExists = false)
     }
     Seq.empty[Row]
   }
@@ -100,7 +99,7 @@ case class DescribeFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
-    functionName.funcName.toLowerCase match {
+    functionName.funcName.toLowerCase(Locale.ROOT) match {
       case "<>" =>
         Row(s"Function: $functionName") ::
           Row("Usage: expr1 <> expr2 - " +
@@ -208,8 +207,6 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    // The session catalog caches some persistent functions in the FunctionRegistry
-    // so there can be duplicates.
-    functionNames.distinct.sorted.map(Row(_))
+    functionNames.sorted.map(Row(_))
   }
 }

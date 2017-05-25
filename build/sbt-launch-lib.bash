@@ -117,7 +117,7 @@ get_mem_opts () {
   (( $perm < 4096 )) || perm=4096
   local codecache=$(( $perm / 2 ))
 
-  echo "-Xms${mem}m -Xmx${mem}m -XX:MaxPermSize=${perm}m -XX:ReservedCodeCacheSize=${codecache}m"
+  echo "-Xms${mem}m -Xmx${mem}m -XX:ReservedCodeCacheSize=${codecache}m"
 }
 
 require_arg () {

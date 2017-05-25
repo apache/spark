@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{File, IOException}
 import java.net.URI
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
@@ -121,6 +123,30 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(getDataFromFiles(provider, version = 2) === Set("b" -> 2, "c" -> 4))
   }
 
+  test("filter and concurrent updates") {
+    val provider = newStoreProvider()
+
+    // Verify state before starting a new set of updates
+    assert(provider.latestIterator.isEmpty)
+    val store = provider.getStore(0)
+    put(store, "a", 1)
+    put(store, "b", 2)
+
+    // Updates should work while iterating of filtered entries
+    val filtered = store.filter { case (keyRow, _) => rowToString(keyRow) == "a" }
+    filtered.foreach { case (keyRow, valueRow) =>
+      store.put(keyRow, intToRow(rowToInt(valueRow) + 1))
+    }
+    assert(get(store, "a") === Some(2))
+
+    // Removes should work while iterating of filtered entries
+    val filtered2 = store.filter { case (keyRow, _) => rowToString(keyRow) == "b" }
+    filtered2.foreach { case (keyRow, _) =>
+      store.remove(keyRow)
+    }
+    assert(get(store, "b") === None)
+  }
+
   test("updates iterator with all combos of updates and removes") {
     val provider = newStoreProvider()
     var currentVersion: Int = 0
@@ -210,13 +236,6 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(store1.commit() === 2)
     assert(rowsToSet(store1.iterator()) === Set("a" -> 1, "b" -> 1))
     assert(getDataFromFiles(provider) === Set("a" -> 1, "b" -> 1))
-
-    // Overwrite the version with other data
-    val store2 = provider.getStore(1)
-    put(store2, "c", 1)
-    assert(store2.commit() === 2)
-    assert(rowsToSet(store2.iterator()) === Set("a" -> 1, "c" -> 1))
-    assert(getDataFromFiles(provider) === Set("a" -> 1, "c" -> 1))
   }
 
   test("snapshotting") {
@@ -292,6 +311,20 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(getDataFromFiles(provider, 19) === Set("a" -> 19))
   }
 
+  test("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
+    val conf = new Configuration()
+    conf.set("fs.fake.impl", classOf[RenameLikeHDFSFileSystem].getName)
+    conf.set("fs.defaultFS", "fake:///")
+
+    val provider = newStoreProvider(hadoopConf = conf)
+    provider.getStore(0).commit()
+    provider.getStore(0).commit()
+
+    // Verify we don't leak temp files
+    val tempFiles = FileUtils.listFiles(new File(provider.id.checkpointLocation),
+      null, true).asScala.filter(_.getName.startsWith("temp-"))
+    assert(tempFiles.isEmpty)
+  }
 
   test("corrupted file handling") {
     val provider = newStoreProvider(minDeltasForSnapshot = 5)
@@ -678,6 +711,21 @@ private[state] object StateStoreSuite {
       case ValueUpdated(key, value) => Updated(rowToString(key), rowToInt(value))
       case ValueRemoved(key, _) => Removed(rowToString(key))
     }.toSet
+  }
+}
+
+/**
+ * Fake FileSystem that simulates HDFS rename semantic, i.e. renaming a file atop an existing
+ * one should return false.
+ * See hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/filesystem/filesystem.html
+ */
+class RenameLikeHDFSFileSystem extends RawLocalFileSystem {
+  override def rename(src: Path, dst: Path): Boolean = {
+    if (exists(dst)) {
+      return false
+    } else {
+      return super.rename(src, dst)
+    }
   }
 }
 

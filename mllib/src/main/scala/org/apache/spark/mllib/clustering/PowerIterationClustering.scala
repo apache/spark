@@ -259,7 +259,7 @@ object PowerIterationClustering extends Logging {
         val j = ctx.dstId
         val s = ctx.attr
         if (s < 0.0) {
-          throw new SparkException("Similarity must be nonnegative but found s($i, $j) = $s.")
+          throw new SparkException(s"Similarity must be nonnegative but found s($i, $j) = $s.")
         }
         if (s > 0.0) {
           ctx.sendToSrc(s)
@@ -283,7 +283,7 @@ object PowerIterationClustering extends Logging {
     : Graph[Double, Double] = {
     val edges = similarities.flatMap { case (i, j, s) =>
       if (s < 0.0) {
-        throw new SparkException("Similarity must be nonnegative but found s($i, $j) = $s.")
+        throw new SparkException(s"Similarity must be nonnegative but found s($i, $j) = $s.")
       }
       if (i != j) {
         Seq(Edge(i, j, s), Edge(j, i, s))

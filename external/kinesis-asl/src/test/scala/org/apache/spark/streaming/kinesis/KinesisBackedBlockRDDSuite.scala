@@ -51,7 +51,7 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
       shardIdToSeqNumbers = shardIdToDataAndSeqNumbers.mapValues { _.map { _._2 }}
       shardIdToRange = shardIdToSeqNumbers.map { case (shardId, seqNumbers) =>
         val seqNumRange = SequenceNumberRange(
-          testUtils.streamName, shardId, seqNumbers.head, seqNumbers.last)
+          testUtils.streamName, shardId, seqNumbers.head, seqNumbers.last, seqNumbers.size)
         (shardId, seqNumRange)
       }
       allRanges = shardIdToRange.values.toSeq
@@ -181,7 +181,7 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
 
     // Create the necessary ranges to use in the RDD
     val fakeRanges = Array.fill(numPartitions - numPartitionsInKinesis)(
-      SequenceNumberRanges(SequenceNumberRange("fakeStream", "fakeShardId", "xxx", "yyy")))
+      SequenceNumberRanges(SequenceNumberRange("fakeStream", "fakeShardId", "xxx", "yyy", 1)))
     val realRanges = Array.tabulate(numPartitionsInKinesis) { i =>
       val range = shardIdToRange(shardIds(i + (numPartitions - numPartitionsInKinesis)))
       SequenceNumberRanges(Array(range))

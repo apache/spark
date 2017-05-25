@@ -140,7 +140,7 @@ class RandomForestClassifier @Since("1.4.0") (
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
 
     val numFeatures = oldDataset.first().features.size
-    val m = new RandomForestClassificationModel(trees, numFeatures, numClasses)
+    val m = new RandomForestClassificationModel(uid, trees, numFeatures, numClasses)
     instr.logSuccess(m)
     m
   }

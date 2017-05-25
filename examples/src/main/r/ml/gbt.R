@@ -40,7 +40,7 @@ summary(model)
 
 # Prediction
 predictions <- predict(model, test)
-showDF(predictions)
+head(predictions)
 # $example off:classification$
 
 # GBT regression model
@@ -59,5 +59,7 @@ summary(model)
 
 # Prediction
 predictions <- predict(model, test)
-showDF(predictions)
+head(predictions)
 # $example off:regression$
+
+sparkR.session.stop()

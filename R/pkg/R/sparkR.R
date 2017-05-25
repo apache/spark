@@ -322,9 +322,18 @@ sparkRHive.init <- function(jsc = NULL) {
 #' SparkSession or initializes a new SparkSession.
 #' Additional Spark properties can be set in \code{...}, and these named parameters take priority
 #' over values in \code{master}, \code{appName}, named lists of \code{sparkConfig}.
-#' When called in an interactive session, this checks for the Spark installation, and, if not
+#'
+#' When called in an interactive session, this method checks for the Spark installation, and, if not
 #' found, it will be downloaded and cached automatically. Alternatively, \code{install.spark} can
 #' be called manually.
+#'
+#' A default warehouse is created automatically in the current directory when a managed table is
+#' created via \code{sql} statement \code{CREATE TABLE}, for example. To change the location of the
+#' warehouse, set the named parameter \code{spark.sql.warehouse.dir} to the SparkSession. Along with
+#' the warehouse, an accompanied metastore may also be automatically created in the current
+#' directory when a new SparkSession is initialized with \code{enableHiveSupport} set to
+#' \code{TRUE}, which is the default. For more details, refer to Hive configuration at
+#' \url{http://spark.apache.org/docs/latest/sql-programming-guide.html#hive-tables}.
 #'
 #' For details on how to initialize and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
@@ -379,6 +388,10 @@ sparkR.session <- function(
   deployMode <- ""
   if (exists("spark.submit.deployMode", envir = sparkConfigMap)) {
     deployMode <- sparkConfigMap[["spark.submit.deployMode"]]
+  }
+
+  if (!exists("spark.r.sql.derby.temp.dir", envir = sparkConfigMap)) {
+    sparkConfigMap[["spark.r.sql.derby.temp.dir"]] <- tempdir()
   }
 
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.lang.reflect.Modifier
+
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
@@ -64,6 +66,8 @@ trait FunctionRegistry {
   /** Clear all registered functions. */
   def clear(): Unit
 
+  /** Create a copy of this registry with identical functions as this registry. */
+  override def clone(): FunctionRegistry = throw new CloneNotSupportedException()
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -107,7 +111,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.clear()
   }
 
-  def copy(): SimpleFunctionRegistry = synchronized {
+  override def clone(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
       registry.registerFunction(name, info, builder)
@@ -150,6 +154,7 @@ object EmptyFunctionRegistry extends FunctionRegistry {
     throw new UnsupportedOperationException
   }
 
+  override def clone(): FunctionRegistry = this
 }
 
 
@@ -229,6 +234,7 @@ object FunctionRegistry {
     expression[StringToMap]("str_to_map"),
     expression[Sqrt]("sqrt"),
     expression[Tan]("tan"),
+    expression[Cot]("cot"),
     expression[Tanh]("tanh"),
 
     expression[Add]("+"),
@@ -421,6 +427,12 @@ object FunctionRegistry {
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
 
+    // json
+    expression[StructsToJson]("to_json"),
+    expression[JsonToStructs]("from_json"),
+
+    // cast
+    expression[Cast]("cast"),
     // Cast aliases (SPARK-16730)
     castAlias("boolean", BooleanType),
     castAlias("tinyint", ByteType),
@@ -448,8 +460,17 @@ object FunctionRegistry {
   private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
+    // For `RuntimeReplaceable`, skip the constructor with most arguments, which is the main
+    // constructor and contains non-parameter `child` and should not be used as function builder.
+    val constructors = if (classOf[RuntimeReplaceable].isAssignableFrom(tag.runtimeClass)) {
+      val all = tag.runtimeClass.getConstructors
+      val maxNumArgs = all.map(_.getParameterCount).max
+      all.filterNot(_.getParameterCount == maxNumArgs)
+    } else {
+      tag.runtimeClass.getConstructors
+    }
     // See if we can find a constructor that accepts Seq[Expression]
-    val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
+    val varargCtor = constructors.find(_.getParameterTypes.toSeq == Seq(classOf[Seq[_]]))
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
@@ -463,11 +484,8 @@ object FunctionRegistry {
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
-          case Success(e) =>
-            e
-          case Failure(e) =>
-            throw new AnalysisException(s"Invalid number of arguments for function $name")
+        val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
+          throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
@@ -497,7 +515,9 @@ object FunctionRegistry {
       }
       Cast(args.head, dataType)
     }
-    (name, (expressionInfo[Cast](name), builder))
+    val clazz = scala.reflect.classTag[Cast].runtimeClass
+    val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
+    (name, (new ExpressionInfo(clazz.getCanonicalName, null, name, usage, null), builder))
   }
 
   /**
