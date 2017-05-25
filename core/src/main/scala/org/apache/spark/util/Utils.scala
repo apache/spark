@@ -1004,7 +1004,6 @@ private[spark] object Utils extends Logging {
           for (child <- listFilesSafely(file)) {
             try {
               deleteRecursively(child)
-              logTrace(s"${file.getAbsolutePath} has been deleted")
             } catch {
               // In case of multiple exceptions, only last one will be thrown
               case ioe: IOException => savedIOException = ioe
@@ -1016,7 +1015,9 @@ private[spark] object Utils extends Logging {
           ShutdownHookManager.removeShutdownDeleteDir(file)
         }
       } finally {
-        if (!file.delete()) {
+        if (file.delete()) {
+            logTrace(s"${file.getAbsolutePath} has been deleted")
+        } else {
           // Delete can also fail if the file simply did not exist
           if (file.exists()) {
             throw new IOException("Failed to delete: " + file.getAbsolutePath)
