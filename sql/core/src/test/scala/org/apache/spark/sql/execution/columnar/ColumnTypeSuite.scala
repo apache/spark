@@ -148,7 +148,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
   test("show type name in type mismatch error") {
     val invalidType = new DataType {
         override def defaultSize: Int = 1
-        override private[spark] def asNullable: DataType = null
+        override private[spark] def asNullable: DataType = this
         override def typeName: String = "invalid type name"
     }
 
