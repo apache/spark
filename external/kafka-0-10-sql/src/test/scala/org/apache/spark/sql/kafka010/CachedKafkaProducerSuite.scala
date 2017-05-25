@@ -34,7 +34,6 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     super.beforeEach()
     val clear = PrivateMethod[Unit]('clear)
     CachedKafkaProducer.invokePrivate(clear())
-    CanonicalizeKafkaParams.clear()
   }
 
   test("Should return the cached instance on calling getOrCreate with same params.") {
@@ -44,9 +43,8 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
-    val kafkaParams2 = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
-    val producer = CachedKafkaProducer.getOrCreate(kafkaParams2)
-    val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams2)
+    val producer = CachedKafkaProducer.getOrCreate(kafkaParams)
+    val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams)
     assert(producer == producer2)
 
     val cacheMap = PrivateMethod[ConcurrentMap[String, Option[KP]]]('getAsMap)
@@ -60,12 +58,9 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
-    val kafkaParams2 = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
+    val producer: KP = CachedKafkaProducer.getOrCreate(kafkaParams)
     kafkaParams.put("acks", "1")
-    val kafkaParams3 = CanonicalizeKafkaParams.computeUniqueCanonicalForm(kafkaParams)
-    val producer: KP = CachedKafkaProducer.getOrCreate(kafkaParams2)
-
-    val producer2: KP = CachedKafkaProducer.getOrCreate(kafkaParams3)
+    val producer2: KP = CachedKafkaProducer.getOrCreate(kafkaParams)
     // With updated conf, a new producer instance should be created.
     assert(producer != producer2)
 
@@ -73,7 +68,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     val map = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map.size == 2)
 
-    CachedKafkaProducer.close(kafkaParams3)
+    CachedKafkaProducer.close(kafkaParams)
     val map2 = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map2.size == 1)
   }
