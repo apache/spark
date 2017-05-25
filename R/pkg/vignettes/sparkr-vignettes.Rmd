@@ -783,11 +783,12 @@ head(predict(isoregModel, newDF))
 `spark.decisionTree` fits a [decision tree](https://en.wikipedia.org/wiki/Decision_tree_learning) classification or regression model on a `SparkDataFrame`.
 Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
 
-We use the `longley` dataset to train a decision tree and make predictions:
+We use the `Titanic` dataset to train a decision tree and make predictions:
 
 ```{r}
-df <- createDataFrame(longley)
-dtModel <- spark.decisionTree(df, Employed ~ ., type = "regression", maxDepth = 2)
+t <- as.data.frame(Titanic)
+df <- createDataFrame(t)
+dtModel <- spark.decisionTree(df, Age ~ ., type = "regression", maxDepth = 2)
 summary(dtModel)
 predictions <- predict(dtModel, df)
 ```
@@ -797,11 +798,12 @@ predictions <- predict(dtModel, df)
 `spark.gbt` fits a [gradient-boosted tree](https://en.wikipedia.org/wiki/Gradient_boosting) classification or regression model on a `SparkDataFrame`.
 Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
 
-We use the `longley` dataset to train a gradient-boosted tree and make predictions:
+We use the `Titanic` dataset to train a gradient-boosted tree and make predictions:
 
-```{r, warning=FALSE}
-df <- createDataFrame(longley)
-gbtModel <- spark.gbt(df, Employed ~ ., type = "regression", maxDepth = 2, maxIter = 2)
+```{r}
+t <- as.data.frame(Titanic)
+df <- createDataFrame(t)
+gbtModel <- spark.gbt(df, Age ~ ., type = "regression", maxDepth = 2, maxIter = 2)
 summary(gbtModel)
 predictions <- predict(gbtModel, df)
 ```
@@ -811,11 +813,12 @@ predictions <- predict(gbtModel, df)
 `spark.randomForest` fits a [random forest](https://en.wikipedia.org/wiki/Random_forest) classification or regression model on a `SparkDataFrame`.
 Users can call `summary` to get a summary of the fitted model, `predict` to make predictions, and `write.ml`/`read.ml` to save/load fitted models.
 
-In the following example, we use the `longley` dataset to train a random forest and make predictions:
+In the following example, we use the `Titanic` dataset to train a random forest and make predictions:
 
-```{r, warning=FALSE}
-df <- createDataFrame(longley)
-rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
+```{r}
+t <- as.data.frame(Titanic)
+df <- createDataFrame(t)
+rfModel <- spark.randomForest(df, Age ~ ., type = "regression", maxDepth = 2, numTrees = 2)
 summary(rfModel)
 predictions <- predict(rfModel, df)
 ```
@@ -981,17 +984,18 @@ Given a `SparkDataFrame`, the test compares continuous data in a given column `t
 specified by parameter `nullHypothesis`.
 Users can call `summary` to get a summary of the test results.
 
-In the following example, we test whether the `longley` dataset's `Armed_Forces` column
+In the following example, we test whether the `Titanic` dataset's `Freq` column
 follows a normal distribution.  We set the parameters of the normal distribution using
 the mean and standard deviation of the sample.
 
-```{r, warning=FALSE}
-df <- createDataFrame(longley)
-afStats <- head(select(df, mean(df$Armed_Forces), sd(df$Armed_Forces)))
-afMean <- afStats[1]
-afStd <- afStats[2]
+```{r}
+t <- as.data.frame(Titanic)
+df <- createDataFrame(t)
+freqStats <- head(select(df, mean(df$Freq), sd(df$Freq)))
+freqMean <- freqStats[1]
+freqStd <- freqStats[2]
 
-test <- spark.kstest(df, "Armed_Forces", "norm", c(afMean, afStd))
+test <- spark.kstest(df, "Freq", "norm", c(freqMean, freqStd))
 testSummary <- summary(test)
 testSummary
 ```
