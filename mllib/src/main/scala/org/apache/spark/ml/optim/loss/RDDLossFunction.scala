@@ -45,8 +45,10 @@ import org.apache.spark.rdd.RDD
  * @tparam Agg Specialization of [[DifferentiableLossAggregator]], representing the concrete type
  *             of the aggregator.
  */
-private[ml] class RDDLossFunction[Agg <: DifferentiableLossAggregator[Instance, Agg]: ClassTag](
-    instances: RDD[Instance],
+private[ml] class RDDLossFunction[
+    T: ClassTag,
+    Agg <: DifferentiableLossAggregator[T, Agg]: ClassTag](
+    instances: RDD[T],
     getAggregator: (Broadcast[Vector] => Agg),
     regularization: Option[DifferentiableRegularization[Array[Double]]],
     aggregationDepth: Int = 2)
@@ -55,7 +57,7 @@ private[ml] class RDDLossFunction[Agg <: DifferentiableLossAggregator[Instance, 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val bcCoefficients = instances.context.broadcast(Vectors.fromBreeze(coefficients))
     val thisAgg = getAggregator(bcCoefficients)
-    val seqOp = (agg: Agg, x: Instance) => agg.add(x)
+    val seqOp = (agg: Agg, x: T) => agg.add(x)
     val combOp = (agg1: Agg, agg2: Agg) => agg1.merge(agg2)
     val newAgg = instances.treeAggregate(thisAgg)(seqOp, combOp, aggregationDepth)
     val gradient = newAgg.gradient

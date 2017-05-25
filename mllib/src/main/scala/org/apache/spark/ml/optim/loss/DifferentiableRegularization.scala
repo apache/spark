@@ -24,7 +24,7 @@ import breeze.optimize.DiffFunction
  *
  * @tparam T The type of the coefficients being regularized.
  */
-trait DifferentiableRegularization[T] extends DiffFunction[T] {
+private[ml] trait DifferentiableRegularization[T] extends DiffFunction[T] {
 
   def regParam: Double
 
@@ -40,7 +40,7 @@ trait DifferentiableRegularization[T] extends DiffFunction[T] {
  * @param featuresStd Option indicating whether the regularization should be scaled by the standard
  *                    deviation of the features.
  */
-class L2RegularizationLoss(
+private[ml] class L2Regularization(
     val regParam: Double,
     shouldApply: Int => Boolean,
     featuresStd: Option[Array[Double]]) extends DifferentiableRegularization[Array[Double]] {

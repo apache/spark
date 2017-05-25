@@ -33,7 +33,7 @@ import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.optim.aggregator.LeastSquaresAggregator
-import org.apache.spark.ml.optim.loss.{L2RegularizationLoss, RDDLossFunction}
+import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -324,13 +324,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       bcFeaturesStd, bcFeaturesMean)(_)
     val regularization = if (effectiveL2RegParam != 0.0) {
       val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
-      Some(new L2RegularizationLoss(effectiveL2RegParam, shouldApply,
+      Some(new L2Regularization(effectiveL2RegParam, shouldApply,
         if ($(standardization)) None else Some(featuresStd)))
     } else {
       None
     }
-    val costFun = new RDDLossFunction[LeastSquaresAggregator](instances, getAggregatorFunc,
-      regularization, $(aggregationDepth))
+    val costFun = new RDDLossFunction(instances, getAggregatorFunc, regularization,
+      $(aggregationDepth))
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))

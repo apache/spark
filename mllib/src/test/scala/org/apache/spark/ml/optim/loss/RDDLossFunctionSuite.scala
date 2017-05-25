@@ -40,10 +40,10 @@ class RDDLossFunctionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("regularization") {
     val coefficients = Vectors.dense(0.5, -0.1)
-    val regLossFun = new L2RegularizationLoss(0.1, (_: Int) => true, None)
+    val regLossFun = new L2Regularization(0.1, (_: Int) => true, None)
     val getAgg = (bvec: Broadcast[Vector]) => new TestAggregator(2)(bvec.value)
-    val lossNoReg = new RDDLossFunction[TestAggregator](instances, getAgg, None)
-    val lossWithReg = new RDDLossFunction[TestAggregator](instances, getAgg, Some(regLossFun))
+    val lossNoReg = new RDDLossFunction(instances, getAgg, None)
+    val lossWithReg = new RDDLossFunction(instances, getAgg, Some(regLossFun))
 
     val (loss1, grad1) = lossNoReg.calculate(coefficients.asBreeze.toDenseVector)
     val (regLoss, regGrad) = regLossFun.calculate(coefficients.toArray)
@@ -58,7 +58,7 @@ class RDDLossFunctionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rdd = sc.parallelize(Seq.empty[Instance])
     val coefficients = Vectors.dense(0.5, -0.1)
     val getAgg = (bv: Broadcast[Vector]) => new TestAggregator(2)(bv.value)
-    val lossFun = new RDDLossFunction[TestAggregator](rdd, getAgg, None)
+    val lossFun = new RDDLossFunction(rdd, getAgg, None)
     withClue("cannot calculate cost for empty dataset") {
       intercept[IllegalArgumentException]{
         lossFun.calculate(coefficients.asBreeze.toDenseVector)
@@ -69,7 +69,7 @@ class RDDLossFunctionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("versus aggregating on an iterable") {
     val coefficients = Vectors.dense(0.5, -0.1)
     val getAgg = (bv: Broadcast[Vector]) => new TestAggregator(2)(bv.value)
-    val lossFun = new RDDLossFunction[TestAggregator](instances, getAgg, None)
+    val lossFun = new RDDLossFunction(instances, getAgg, None)
     val (loss, grad) = lossFun.calculate(coefficients.asBreeze.toDenseVector)
 
     // just map the aggregator over the instances array

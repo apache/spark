@@ -27,14 +27,14 @@ class DifferentiableRegularizationSuite extends SparkFunSuite {
     val numFeatures = coefficients.size
 
     // check without features standard
-    val regFun = new L2RegularizationLoss(regParam, shouldApply, None)
+    val regFun = new L2Regularization(regParam, shouldApply, None)
     val (loss, grad) = regFun.calculate(coefficients)
     assert(loss === 0.5 * regParam * coefficients.map(x => x * x).sum)
     assert(grad === coefficients.map(_ * regParam))
 
     // check with features standard
     val featuresStd = Array(0.1, 1.1, 0.5)
-    val regFunStd = new L2RegularizationLoss(regParam, shouldApply, Some(featuresStd))
+    val regFunStd = new L2Regularization(regParam, shouldApply, Some(featuresStd))
     val (lossStd, gradStd) = regFunStd.calculate(coefficients)
     val expectedLossStd = 0.5 * regParam * (0 until numFeatures).map { j =>
       coefficients(j) * coefficients(j) / (featuresStd(j) * featuresStd(j))
@@ -47,14 +47,14 @@ class DifferentiableRegularizationSuite extends SparkFunSuite {
 
     // check should apply
     val shouldApply2 = (i: Int) => i == 1
-    val regFunApply = new L2RegularizationLoss(regParam, shouldApply2, None)
+    val regFunApply = new L2Regularization(regParam, shouldApply2, None)
     val (lossApply, gradApply) = regFunApply.calculate(coefficients)
     assert(lossApply === 0.5 * regParam * coefficients(1) * coefficients(1))
     assert(gradApply ===  Array(0.0, coefficients(1) * regParam, 0.0))
 
     // check with zero features standard
     val featuresStdZero = Array(0.1, 0.0, 0.5)
-    val regFunStdZero = new L2RegularizationLoss(regParam, shouldApply, Some(featuresStdZero))
+    val regFunStdZero = new L2Regularization(regParam, shouldApply, Some(featuresStdZero))
     val (_, gradStdZero) = regFunStdZero.calculate(coefficients)
     assert(gradStdZero(1) == 0.0)
   }
