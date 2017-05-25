@@ -24,11 +24,11 @@ import java.nio.ByteOrder
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
