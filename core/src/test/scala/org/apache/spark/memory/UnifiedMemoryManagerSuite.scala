@@ -303,4 +303,31 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     mm.invokePrivate[Unit](assertInvariants())
   }
 
+  test("execution can evict cached blocks when there are multiple active tasks (SPARK-12155)") {
+    val conf = new SparkConf()
+      .set("spark.memory.fraction", "1")
+      .set("spark.memory.storageFraction", "0")
+      .set("spark.testing.memory", "1000")
+    val mm = UnifiedMemoryManager(conf, numCores = 2)
+    val ms = makeMemoryStore(mm)
+    assert(mm.maxMemory === 1000)
+    // Have two tasks each acquire some execution memory so that the memory pool registers that
+    // there are two active tasks:
+    assert(mm.acquireExecutionMemory(100L, 0, MemoryMode.ON_HEAP) === 100L)
+    assert(mm.acquireExecutionMemory(100L, 1, MemoryMode.ON_HEAP) === 100L)
+    // Fill up all of the remaining memory with storage.
+    for (_ <- 1 to 8) {
+      assert(mm.acquireStorageMemory(dummyBlock, 100L, evictedBlocks))
+      assertEvictBlocksToFreeSpaceNotCalled(ms)
+    }
+    assert(mm.storageMemoryUsed === 800)
+    assert(mm.executionMemoryUsed === 200)
+    assert(evictedBlocks.isEmpty)
+    // A task should still be able to allocate 100 bytes execution memory by evicting blocks
+    assert(mm.acquireExecutionMemory(100L, 0, MemoryMode.ON_HEAP) === 100L)
+    assertEvictBlocksToFreeSpaceCalled(ms, 100L)
+    assert(mm.executionMemoryUsed === 300)
+    assert(mm.storageMemoryUsed === 700)
+    assert(evictedBlocks.nonEmpty)
+  }
 }
