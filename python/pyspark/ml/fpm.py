@@ -70,7 +70,7 @@ class HasNumPartitions(Params):
 
     def getNumPartitions(self):
         """
-        Gets the value of numPartitions or its default value.
+        Gets the value of :py:attr:`numPartitions` or its default value.
         """
         return self.getOrDefault(self.numPartitions)
 
