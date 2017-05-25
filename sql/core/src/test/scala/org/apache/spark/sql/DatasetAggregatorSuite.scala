@@ -263,6 +263,16 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       ("a", 4), ("b", 3))
   }
 
+  test("typed aggregate: min, max") {
+    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 4, "b" -> -4, "b" -> 0).toDS()
+    checkDataset(
+      ds.groupByKey(_._1).agg(
+        typed.min(_._2), typed.minLong(_._2), typed.max(_._2), typed.maxLong(_._2)),
+      ("a", 1.0, 1L, 3.0, 3L), ("b", -4.0, -4L, 4.0, 4L))
+  }
+
+
+
   test("SPARK-12555 - result should not be corrupted after input columns are reordered") {
     val ds = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
 
