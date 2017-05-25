@@ -1004,7 +1004,7 @@ private[spark] object Utils extends Logging {
           for (child <- listFilesSafely(file)) {
             try {
               deleteRecursively(child)
-              logTrace(file.getAbsolutePath + " has been deleted")
+              logTrace(s"${file.getAbsolutePath} has been deleted")
             } catch {
               // In case of multiple exceptions, only last one will be thrown
               case ioe: IOException => savedIOException = ioe
