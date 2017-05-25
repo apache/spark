@@ -43,7 +43,7 @@ import org.apache.spark.annotation.Private
 @Private
 class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     initialCapacity: Int,
-    loadFactor: Double)
+    private[collection] val loadFactor: Double)
   extends Serializable {
 
   require(initialCapacity <= OpenHashSet.MAX_CAPACITY,
@@ -95,6 +95,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   // specialization bug that would generate two arrays (one for Object and one for specialized T).
   protected var _data: Array[T] = _
   _data = new Array[T](_capacity)
+
+  private[collection] def data: Array[T] = _data
 
   /** Number of elements in the set. */
   def size: Int = _size

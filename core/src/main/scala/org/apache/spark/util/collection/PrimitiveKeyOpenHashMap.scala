@@ -53,6 +53,9 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
     _keySet.getPos(k) != OpenHashSet.INVALID_POS
   }
 
+  private[spark] def keySet = _keySet
+  private[spark] def values = _values
+
   /** Get the value for a given key */
   def apply(k: K): V = {
     val pos = _keySet.getPos(k)
@@ -69,6 +72,19 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
   def update(k: K, v: V) {
     val pos = _keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
     _values(pos) = v
+    _keySet.rehashIfNeeded(k, grow, move)
+    _oldValues = null
+  }
+
+  /** Set the value for a key, merging old and new values if necessary. */
+  def setMerge(k: K, v: V, mergeF: (V, V) => V) {
+    val pos = _keySet.addWithoutResize(k)
+    val ind = pos & OpenHashSet.POSITION_MASK
+    if ((pos & OpenHashSet.NONEXISTENCE_MASK) != 0) { // if first add
+      _values(ind) = v
+    } else {
+      _values(ind) = mergeF(_values(ind), v)
+    }
     _keySet.rehashIfNeeded(k, grow, move)
     _oldValues = null
   }
