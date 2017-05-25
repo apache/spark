@@ -336,6 +336,12 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
+          case u @ Union(left, right) if left.output.size != right.output.size =>
+            failAnalysis(
+              s"union's left child and right child have different output size. " +
+                s"union node: $u left output size: ${left.output.size}, " +
+                  s"right output size: ${right.output.size}")
+
           case _ => // Fallbacks to the following checks
         }
 
