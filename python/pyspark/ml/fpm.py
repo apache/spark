@@ -57,9 +57,9 @@ class HasNumPartitions(Params):
     numPartitions = Param(
         Params._dummy(),
         "numPartitions",
-        """Number of partitions (at least 1) used by parallel FP-growth.
-        By default the param is not set,
-        and partition number of the input dataset is used.""",
+        "Number of partitions (at least 1) used by parallel FP-growth. " +
+        "By default the param is not set, " +
+        "and partition number of the input dataset is used.",
         typeConverter=TypeConverters.toInt)
 
     def setNumPartitions(self, value):
