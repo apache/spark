@@ -29,12 +29,25 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 
 /** Unique identifier for a [[StateStore]] */
-case class StateStoreId(checkpointLocation: String, operatorId: Long, partitionId: Int)
+case class StateStoreId(
+    checkpointLocation: String,
+    operatorId: Long,
+    partitionId: Int,
+    name: String = "")
 
+case class StateStoreStats()
+
+case class UnsafeRowTuple(var key: UnsafeRow = null, var value: UnsafeRow = null) {
+  def withRows(key: UnsafeRow, value: UnsafeRow): UnsafeRowTuple = {
+    this.key = key
+    this.value = value
+    this
+  }
+}
 
 /**
  * Base trait for a versioned key-value store used for streaming aggregations
@@ -47,30 +60,24 @@ trait StateStore {
   /** Version of the data in this store before committing updates. */
   def version: Long
 
-  /** Get the current value of a key. */
-  def get(key: UnsafeRow): Option[UnsafeRow]
+  /**
+   * Get the current value of a key.
+   */
+  def get(key: UnsafeRow): UnsafeRow
 
   /**
-   * Return an iterator of key-value pairs that satisfy a certain condition.
-   * Note that the iterator must be fail-safe towards modification to the store, that is,
-   * it must be based on the snapshot of store the time of this call, and any change made to the
-   * store while iterating through iterator should not cause the iterator to fail or have
-   * any affect on the values in the iterator.
+   * Put a new value for a key.
+   * @return Previous value of the key or null.
    */
-  def filter(condition: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)]
-
-  /** Put a new value for a key. */
   def put(key: UnsafeRow, value: UnsafeRow): Unit
 
   /**
-   * Remove keys that match the following condition.
-   */
-  def remove(condition: UnsafeRow => Boolean): Unit
-
-  /**
    * Remove a single key.
+   * @return Previous value of the removed key or null.
    */
   def remove(key: UnsafeRow): Unit
+
+  def getRange(start: Option[UnsafeRow], end: Option[UnsafeRow]): Iterator[UnsafeRowTuple]
 
   /**
    * Commit all the updates that have been made to the store, and return the new version.
@@ -80,17 +87,7 @@ trait StateStore {
   /** Abort all the updates that have been made to the store. */
   def abort(): Unit
 
-  /**
-   * Iterator of store data after a set of updates have been committed.
-   * This can be called only after committing all the updates made in the current thread.
-   */
-  def iterator(): Iterator[(UnsafeRow, UnsafeRow)]
-
-  /**
-   * Iterator of the updates that have been committed.
-   * This can be called only after committing all the updates made in the current thread.
-   */
-  def updates(): Iterator[StoreUpdate]
+  def iterator(): Iterator[UnsafeRowTuple] = getRange(None, None)
 
   /** Number of keys in the state store */
   def numKeys(): Long
@@ -105,25 +102,42 @@ trait StateStore {
 /** Trait representing a provider of a specific version of a [[StateStore]]. */
 trait StateStoreProvider {
 
-  /** Get the store with the existing version. */
+  def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int], // for sorting the data
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration): Unit
+
+  def id: StateStoreId
+
+  def close(): Unit
+
   def getStore(version: Long): StateStore
 
   /** Optional method for providers to allow for background maintenance */
   def doMaintenance(): Unit = { }
 }
 
-
-/** Trait representing updates made to a [[StateStore]]. */
-sealed trait StoreUpdate {
-  def key: UnsafeRow
-  def value: UnsafeRow
+object StateStoreProvider {
+  def instantiate(
+      providerClass: String,
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int], // for sorting the data
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration): StateStoreProvider = {
+    val provider = Utils.getContextOrSparkClassLoader
+      .loadClass(providerClass)
+      .newInstance()
+      .asInstanceOf[StateStoreProvider]
+    provider.init(stateStoreId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
+    provider
+  }
 }
 
-case class ValueAdded(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
-
-case class ValueUpdated(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
-
-case class ValueRemoved(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
 
 
 /**
@@ -182,9 +196,11 @@ object StateStore extends Logging {
 
   /** Get or create a store associated with the id. */
   def get(
+      providerClass: String,
       storeId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
+      indexOrdinal: Option[Int],
       version: Long,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStore = {
@@ -193,7 +209,9 @@ object StateStore extends Logging {
       startMaintenanceIfNeeded()
       val provider = loadedProviders.getOrElseUpdate(
         storeId,
-        new HDFSBackedStateStoreProvider(storeId, keySchema, valueSchema, storeConf, hadoopConf))
+        StateStoreProvider.instantiate(
+          providerClass, storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
+      )
       reportActiveStoreInstance(storeId)
       provider
     }
@@ -202,7 +220,7 @@ object StateStore extends Logging {
 
   /** Unload a state store provider */
   def unload(storeId: StateStoreId): Unit = loadedProviders.synchronized {
-    loadedProviders.remove(storeId)
+    loadedProviders.remove(storeId).foreach(_.close())
   }
 
   /** Whether a state store provider is loaded or not */
@@ -216,6 +234,7 @@ object StateStore extends Logging {
 
   /** Unload and stop all state store providers */
   def stop(): Unit = loadedProviders.synchronized {
+    loadedProviders.keySet.foreach { key => unload(key) }
     loadedProviders.clear()
     _coordRef = null
     if (maintenanceTask != null) {

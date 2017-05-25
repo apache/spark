@@ -33,11 +33,14 @@ import org.apache.spark.util.SerializableConfiguration
 class StateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
+    providerClass: String,
     checkpointLocation: String,
     operatorId: Long,
+    storeName: String,
     storeVersion: Long,
     keySchema: StructType,
     valueSchema: StructType,
+    indexOrdinal: Option[Int],
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef])
   extends RDD[U](dataRDD) {
@@ -51,15 +54,16 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
-    val storeId = StateStoreId(checkpointLocation, operatorId, partition.index)
+    val storeId = StateStoreId(checkpointLocation, operatorId, partition.index, storeName)
     storeCoordinator.flatMap(_.getLocation(storeId)).toSeq
   }
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     var store: StateStore = null
-    val storeId = StateStoreId(checkpointLocation, operatorId, partition.index)
+    val storeId = StateStoreId(checkpointLocation, operatorId, partition.index, storeName)
     store = StateStore.get(
-      storeId, keySchema, valueSchema, storeVersion, storeConf, confBroadcast.value.value)
+      providerClass, storeId, keySchema, valueSchema, indexOrdinal, storeVersion,
+      storeConf, confBroadcast.value.value)
     val inputIter = dataRDD.iterator(partition, ctxt)
     storeUpdateFunction(store, inputIter)
   }

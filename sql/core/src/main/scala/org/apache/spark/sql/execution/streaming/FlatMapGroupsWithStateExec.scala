@@ -109,9 +109,11 @@ case class FlatMapGroupsWithStateExec(
     child.execute().mapPartitionsWithStateStore[InternalRow](
       getStateId.checkpointLocation,
       getStateId.operatorId,
+      storeName = "default",
       getStateId.batchId,
       groupingAttributes.toStructType,
       stateAttributes.toStructType,
+      indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         val updater = new StateStoreUpdater(store)
@@ -191,12 +193,12 @@ case class FlatMapGroupsWithStateExec(
             throw new IllegalStateException(
               s"Cannot filter timed out keys for $timeoutConf")
         }
-        val timingOutKeys = store.filter { case (_, stateRow) =>
+        val timingOutKeys = store.getRange(None, None).filter { case UnsafeRowTuple(_, stateRow) =>
           val timeoutTimestamp = getTimeoutTimestamp(stateRow)
           timeoutTimestamp != NO_TIMESTAMP && timeoutTimestamp < timeoutThreshold
         }
-        timingOutKeys.flatMap { case (keyRow, stateRow) =>
-          callFunctionAndUpdateState(keyRow, Iterator.empty, Some(stateRow), hasTimedOut = true)
+        timingOutKeys.flatMap { case UnsafeRowTuple(keyRow, stateRow) =>
+          callFunctionAndUpdateState(keyRow, Iterator.empty, stateRow, hasTimedOut = true)
         }
       } else Iterator.empty
     }
@@ -205,18 +207,23 @@ case class FlatMapGroupsWithStateExec(
      * Call the user function on a key's data, update the state store, and return the return data
      * iterator. Note that the store updating is lazy, that is, the store will be updated only
      * after the returned iterator is fully consumed.
+     *
+     * @param keyRow Row representing the key, cannot be null
+     * @param valueRowIter Iterator of values as rows, cannot be null, but can be empty
+     * @param prevStateRow Row representing the previous state, can be null
+     * @param hasTimedOut Whether this function is being called for a key timeout
      */
     private def callFunctionAndUpdateState(
         keyRow: UnsafeRow,
         valueRowIter: Iterator[InternalRow],
-        prevStateRowOption: Option[UnsafeRow],
+        prevStateRow: UnsafeRow,
         hasTimedOut: Boolean): Iterator[InternalRow] = {
 
       val keyObj = getKeyObj(keyRow)  // convert key to objects
       val valueObjIter = valueRowIter.map(getValueObj.apply) // convert value rows to objects
-      val stateObjOption = getStateObj(prevStateRowOption)
+      val stateObj = getStateObj(prevStateRow)
       val keyedState = GroupStateImpl.createForStreaming(
-        stateObjOption,
+        Option(stateObj),
         batchTimestampMs.getOrElse(NO_TIMESTAMP),
         eventTimeWatermark.getOrElse(NO_TIMESTAMP),
         timeoutConf,
@@ -249,14 +256,11 @@ case class FlatMapGroupsWithStateExec(
           numUpdatedStateRows += 1
 
         } else {
-          val previousTimeoutTimestamp = prevStateRowOption match {
-            case Some(row) => getTimeoutTimestamp(row)
-            case None => NO_TIMESTAMP
-          }
+          val previousTimeoutTimestamp = getTimeoutTimestamp(prevStateRow)
           val stateRowToWrite = if (keyedState.hasUpdated) {
             getStateRow(keyedState.get)
           } else {
-            prevStateRowOption.orNull
+            prevStateRow
           }
 
           val hasTimeoutChanged = currentTimeoutTimestamp != previousTimeoutTimestamp
@@ -269,7 +273,7 @@ case class FlatMapGroupsWithStateExec(
               throw new IllegalStateException("Attempting to write empty state")
             }
             setTimeoutTimestamp(stateRowToWrite, currentTimeoutTimestamp)
-            store.put(keyRow.copy(), stateRowToWrite.copy())
+            store.put(keyRow, stateRowToWrite)
             numUpdatedStateRows += 1
           }
         }
@@ -280,18 +284,21 @@ case class FlatMapGroupsWithStateExec(
     }
 
     /** Returns the state as Java object if defined */
-    def getStateObj(stateRowOption: Option[UnsafeRow]): Option[Any] = {
-      stateRowOption.map(getStateObjFromRow)
+    def getStateObj(stateRow: UnsafeRow): Any = {
+      if (stateRow != null) getStateObjFromRow(stateRow) else null
     }
 
     /** Returns the row for an updated state */
     def getStateRow(obj: Any): UnsafeRow = {
+      assert(obj != null)
       getStateRowFromObj(obj)
     }
 
     /** Returns the timeout timestamp of a state row is set */
     def getTimeoutTimestamp(stateRow: UnsafeRow): Long = {
-      if (isTimeoutEnabled) stateRow.getLong(timeoutTimestampIndex) else NO_TIMESTAMP
+      if (isTimeoutEnabled && stateRow != null) {
+        stateRow.getLong(timeoutTimestampIndex)
+      } else NO_TIMESTAMP
     }
 
     /** Set the timestamp in a state row */
