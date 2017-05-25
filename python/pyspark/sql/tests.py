@@ -769,6 +769,10 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.spark.sql("select null as col")
         self.assertEqual(Row(col=None), df.first())
 
+    def test_select_null_literal(self):
+        df = self.sqlCtx.sql("select null as col")
+        self.assertEquals(Row(col=None), df.first())
+
     def test_apply_schema(self):
         from datetime import date, datetime
         rdd = self.sc.parallelize([(127, -128, -32768, 32767, 2147483647, 1.0,
