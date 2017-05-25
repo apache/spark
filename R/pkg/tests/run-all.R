@@ -21,7 +21,7 @@ library(SparkR)
 # Turn all warnings into errors
 options("warn" = 2)
 
-message("--- Start test ", as.POSIXct(Sys.time(), tz = "GMT")))
+message("--- Start test ", as.POSIXct(Sys.time(), tz = "GMT"))
 
 # Setup global test environment
 # Install Spark first to set SPARK_HOME
