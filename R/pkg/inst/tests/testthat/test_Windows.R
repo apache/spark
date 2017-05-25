@@ -27,3 +27,5 @@ test_that("sparkJars tag in SparkContext", {
   abcPath <- testOutput[1]
   expect_equal(abcPath, "a\\b\\c")
 })
+
+message("--- End test (Windows) ", Sys.time())

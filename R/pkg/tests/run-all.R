@@ -21,6 +21,8 @@ library(SparkR)
 # Turn all warnings into errors
 options("warn" = 2)
 
+message("--- Start test ", Sys.time())
+
 # Setup global test environment
 # Install Spark first to set SPARK_HOME
 install.spark()

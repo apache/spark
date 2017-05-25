@@ -243,3 +243,5 @@ test_that("basenameSansExtFromUrl", {
 })
 
 sparkR.session.stop()
+
+message("--- End test (utils) ", Sys.time())
