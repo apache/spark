@@ -393,12 +393,12 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       // HiveSimpleUDF
       sql(s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
       val df1 = sql("SELECT testStringStringUDF(rand(), \"hello\")")
-      assert(!df1.queryExecution.analyzed.asInstanceOf[Project].projectList.forall(_.deterministic))
+      assert(!df1.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
 
       // HiveGenericUDF
       sql(s"CREATE TEMPORARY FUNCTION testGenericUDFHash AS '${classOf[GenericUDFHash].getName}'")
       val df2 = sql("SELECT testGenericUDFHash(rand())")
-      assert(!df2.queryExecution.analyzed.asInstanceOf[Project].projectList.forall(_.deterministic))
+      assert(!df2.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
     }
   }
 

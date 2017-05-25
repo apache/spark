@@ -441,7 +441,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   test("input row calculation with trigger input DF having multiple leaves") {
     val streamingTriggerDF =
       spark.createDataset(1 to 5).toDF.union(spark.createDataset(6 to 10).toDF)
-    require(streamingTriggerDF.queryExecution.analyzed.collectLeaves().size > 1)
+    require(streamingTriggerDF.logicalPlan.collectLeaves().size > 1)
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF)
 
     // After the first trigger, the calculated input rows should be 10

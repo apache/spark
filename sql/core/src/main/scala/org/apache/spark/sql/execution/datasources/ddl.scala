@@ -90,7 +90,7 @@ case class CreateTempViewUsing(
 
     val catalog = sparkSession.sessionState.catalog
     val viewDefinition = Dataset.ofRows(
-      sparkSession, LogicalRelation(dataSource.resolveRelation())).queryExecution.analyzed
+      sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan
 
     if (global) {
       catalog.createGlobalTempView(tableIdent.table, viewDefinition, replace)

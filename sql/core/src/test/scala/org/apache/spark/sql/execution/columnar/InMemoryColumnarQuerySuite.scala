@@ -38,7 +38,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   private def cachePrimitiveTest(data: DataFrame, dataType: String) {
     data.createOrReplaceTempView(s"testData$dataType")
     val storageLevel = MEMORY_ONLY
-    val plan = spark.sessionState.executePlan(data.queryExecution.analyzed).sparkPlan
+    val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
     val inMemoryRelation = InMemoryRelation(useCompression = true, 5, storageLevel, plan, None)
 
     assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == storageLevel)
@@ -114,7 +114,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("simple columnar query") {
-    val plan = spark.sessionState.executePlan(testData.queryExecution.analyzed).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -131,8 +131,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("projection") {
-    val plan = spark.sessionState.executePlan(testData.select('value, 'key).queryExecution.analyzed)
-      .sparkPlan
+    val plan = spark.sessionState.executePlan(testData.select('value, 'key).logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().map {
@@ -148,7 +147,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
-    val plan = spark.sessionState.executePlan(testData.queryExecution.analyzed).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -322,7 +321,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-17549: cached table size should be correctly calculated") {
     val data = spark.sparkContext.parallelize(1 to 10, 5).toDF()
-    val plan = spark.sessionState.executePlan(data.queryExecution.analyzed).sparkPlan
+    val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
     val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None)
 
     // Materialize the data.

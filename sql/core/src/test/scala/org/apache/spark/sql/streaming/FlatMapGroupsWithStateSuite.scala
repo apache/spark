@@ -1034,7 +1034,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       .toDS
       .groupByKey(x => x)
       .flatMapGroupsWithState[Int, Int](Append, timeoutConf = timeoutType)(func)
-      .queryExecution.analyzed.collectFirst {
+      .logicalPlan.collectFirst {
         case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t, _) =>
           FlatMapGroupsWithStateExec(
             f, k, v, g, d, o, None, s, m, t,

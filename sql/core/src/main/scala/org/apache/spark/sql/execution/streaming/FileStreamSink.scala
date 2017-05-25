@@ -115,7 +115,7 @@ class FileStreamSink(
       // the given columns names.
       val partitionColumns: Seq[Attribute] = partitionColumnNames.map { col =>
         val nameEquality = data.sparkSession.sessionState.conf.resolver
-        data.queryExecution.analyzed.output.find(f => nameEquality(f.name, col)).getOrElse {
+        data.logicalPlan.output.find(f => nameEquality(f.name, col)).getOrElse {
           throw new RuntimeException(s"Partition column $col not found in schema ${data.schema}")
         }
       }

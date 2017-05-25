@@ -516,7 +516,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                 queryToUse.flatMap { query =>
                   findSourceIndex(query.logicalPlan)
                 }.orElse {
-                  findSourceIndex(stream.queryExecution.analyzed)
+                  findSourceIndex(stream.logicalPlan)
                 }.getOrElse {
                   throw new IllegalArgumentException(
                     "Could find index of the source to which data was added")

@@ -617,7 +617,7 @@ class StreamExecution(
     val withNewSources = logicalPlan transform {
       case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { data =>
-          val newPlan = data.queryExecution.analyzed
+          val newPlan = data.logicalPlan
           assert(output.size == newPlan.output.size,
             s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
             s"${Utils.truncatedString(newPlan.output, ",")}")

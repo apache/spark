@@ -44,7 +44,7 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
     //
     // Hence, we need to manually convert internal rows to objects using encoder.
     val encoder = encoderFor[T].resolveAndBind(
-      data.queryExecution.analyzed.output,
+      data.logicalPlan.output,
       data.sparkSession.sessionState.analyzer)
     data.queryExecution.toRdd.foreachPartition { iter =>
       if (writer.open(TaskContext.getPartitionId(), batchId)) {

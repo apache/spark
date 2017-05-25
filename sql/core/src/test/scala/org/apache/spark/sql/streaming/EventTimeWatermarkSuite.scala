@@ -338,7 +338,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       .withWatermark("first", "1 minute")
       .withWatermark("second", "2 minutes")
 
-    val eventTimeColumns = df.queryExecution.analyzed.output
+    val eventTimeColumns = df.logicalPlan.output
       .filter(_.metadata.contains(EventTimeWatermark.delayKey))
     assert(eventTimeColumns.size === 1)
     assert(eventTimeColumns(0).name === "second")
