@@ -732,15 +732,24 @@ class SparkSubmitSuite
 
   test("downloadFile - invalid url") {
     intercept[IOException] {
-      SparkSubmit.downloadFile("abc:/local/file", new Configuration())
+      SparkSubmit.downloadFile("abc:/my/file", new Configuration())
     }
   }
 
-  test("downloadFile does nothing for empty path") {
-    assert(SparkSubmit.downloadFile("", new Configuration()) === "")
+  test("downloadFile - file doesn't exist") {
+    val hadoopConf = new Configuration()
+    // Set s3a implementation to local file system for testing.
+    hadoopConf.set("fs.s3a.impl", "org.apache.spark.deploy.TestFileSystem")
+    // Disable file system impl cache to make sure the test file system is picked up.
+    hadoopConf.set("fs.s3a.impl.disable.cache", "true")
+    intercept[FileNotFoundException] {
+      SparkSubmit.downloadFile("s3a:/no/such/file", hadoopConf)
+    }
   }
 
   test("downloadFile does not download local file") {
+    // empty path is considered as local file.
+    assert(SparkSubmit.downloadFile("", new Configuration()) === "")
     assert(SparkSubmit.downloadFile("/local/file", new Configuration()) === "/local/file")
   }
 
