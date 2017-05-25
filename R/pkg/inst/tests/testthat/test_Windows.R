@@ -28,4 +28,4 @@ test_that("sparkJars tag in SparkContext", {
   expect_equal(abcPath, "a\\b\\c")
 })
 
-message("--- End test (Windows) ", Sys.time())
+message("--- End test (Windows) ", as.POSIXct(Sys.time(), tz = "GMT")))
