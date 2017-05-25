@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Date
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
@@ -39,4 +41,50 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
   }
 
+  test("trunc") {
+
+    // numeric
+    def testTruncNumber(input: Double, fmt: Int, expected: Double): Unit = {
+      checkEvaluation(Trunc(Literal.create(input, DoubleType),
+        Literal.create(fmt, IntegerType)),
+        expected)
+      checkEvaluation(Trunc(Literal.create(input, DoubleType),
+        NonFoldableLiteral.create(fmt, IntegerType)),
+        expected)
+    }
+
+    testTruncNumber(1234567891.1234567891, 4, 1234567891.1234)
+    testTruncNumber(1234567891.1234567891, -4, 1234560000)
+    testTruncNumber(1234567891.1234567891, 0, 1234567891)
+
+    checkEvaluation(Trunc(Literal.create(1D, DoubleType),
+      NonFoldableLiteral.create(null, IntegerType)),
+      null)
+    checkEvaluation(Trunc(Literal.create(null, DoubleType),
+      NonFoldableLiteral.create(1, IntegerType)),
+      null)
+    checkEvaluation(Trunc(Literal.create(null, DoubleType),
+      NonFoldableLiteral.create(null, IntegerType)),
+      null)
+
+    // date
+    def testTruncDate(input: Date, fmt: String, expected: Date): Unit = {
+      checkEvaluation(Trunc(Literal.create(input, DateType), Literal.create(fmt, StringType)),
+        expected)
+      checkEvaluation(
+        Trunc(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
+        expected)
+    }
+    val date = Date.valueOf("2015-07-22")
+    Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
+      testTruncDate(date, fmt, Date.valueOf("2015-01-01"))
+    }
+    Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
+      testTruncDate(date, fmt, Date.valueOf("2015-07-01"))
+    }
+    testTruncDate(date, "DD", null)
+    testTruncDate(date, null, null)
+    testTruncDate(null, "MON", null)
+    testTruncDate(null, null, null)
+  }
 }

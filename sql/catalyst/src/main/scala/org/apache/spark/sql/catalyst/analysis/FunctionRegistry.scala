@@ -355,7 +355,6 @@ object FunctionRegistry {
     expression[ParseToDate]("to_date"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
-    expression[TruncDate]("trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
@@ -388,6 +387,7 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
     expression[CallMethodViaReflection]("java_method"),
+    expression[Trunc]("trunc"),
 
     // grouping sets
     expression[Cube]("cube"),

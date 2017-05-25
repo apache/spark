@@ -1,4 +1,3 @@
-
 -- unary minus and plus
 select -100;
 select +230;
@@ -73,3 +72,8 @@ select floor(0);
 select floor(1);
 select floor(1234567890123456);
 select floor(12345678901234567);
+
+-- trunc number
+select trunc(1234567891.1234567891, 4), trunc(1234567891.1234567891, -4),
+  trunc(1234567891.1234567891, 4), trunc(1234567891.1234567891, 0), trunc(1234567891.1234567891);
+select trunc(1234567891.1234567891, null), trunc(null, 4), trunc(null, null);

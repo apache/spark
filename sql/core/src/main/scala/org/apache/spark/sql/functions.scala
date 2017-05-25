@@ -2733,7 +2733,7 @@ object functions {
    * @since 1.5.0
    */
   def trunc(date: Column, format: String): Column = withExpr {
-    TruncDate(date.expr, Literal(format))
+    Trunc(date.expr, Literal(format))
   }
 
   /**
