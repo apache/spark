@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import scala.util.DynamicVariable
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry, Timer}
+import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.config._
@@ -108,6 +109,15 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
           }
         }
       }
+    }
+  }
+
+  override protected def createTimer(listener: SparkListenerInterface): Option[Timer] = {
+    if (listener.getClass.getName.startsWith("org.apache.spark")) {
+      metrics.perListenerTimers.size()
+      Some(metrics.perListenerTimers(listener.getClass.getSimpleName))
+    } else {
+      None
     }
   }
 
@@ -270,5 +280,16 @@ private[spark] class LiveListenerBusMetrics(queue: LinkedBlockingQueue[_]) exten
       override def getValue: Int = queue.size()
     })
   }
+
+  /**
+   * Mapping from fully-qualified listener class name to a timer tracking the processing time of
+   * events processed by that listener.
+   */
+  val perListenerTimers: LoadingCache[String, Timer] =
+    CacheBuilder.newBuilder().build[String, Timer](new CacheLoader[String, Timer] {
+      override def load(listenerName: String): Timer = {
+        metricRegistry.timer(MetricRegistry.name("listenerProcessingTime", listenerName))
+      }
+    })
 }
 
