@@ -389,7 +389,7 @@ case class DataSource(
   }
 
   /**
-   * Writes the given [[DataFrame]] out in this [[FileFormat]].
+   * Writes the given [[LogicalPlan]] out in this [[FileFormat]].
    */
   private def planForWritingFileFormat(
       format: FileFormat, mode: SaveMode, data: LogicalPlan): LogicalPlan = {
@@ -433,7 +433,7 @@ case class DataSource(
   }
 
   /**
-   * Writes the given [[DataFrame]] out to this [[DataSource]] and returns a [[BaseRelation]] for
+   * Writes the given [[LogicalPlan]] out to this [[DataSource]] and returns a [[BaseRelation]] for
    * the following reading.
    */
   def writeAndRead(mode: SaveMode, data: LogicalPlan): BaseRelation = {
@@ -455,7 +455,7 @@ case class DataSource(
   }
 
   /**
-   * Returns a logical plan to write the given [[DataFrame]] out to this [[DataSource]].
+   * Returns a logical plan to write the given [[LogicalPlan]] out to this [[DataSource]].
    */
   def planForWriting(mode: SaveMode, data: LogicalPlan): LogicalPlan = {
     if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {

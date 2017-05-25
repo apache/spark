@@ -965,7 +965,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("sanity test for SPARK-6618") {
-    val threads: Seq[Thread] = (1 to 100).map { i =>
+    val threads: Seq[Thread] = (1 to 10).map { i =>
       new Thread("test-thread-" + i) {
         override def run(): Unit = {
           val tableName = s"SPARK_6618_table_$i"
