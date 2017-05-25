@@ -122,8 +122,10 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       // be similar with Hive.
       desc.run(sparkSession).map {
         case Row(name: String, dataType: String, comment) =>
-          Seq(name, dataType, Option(comment.asInstanceOf[String]).getOrElse(""))
-            .map(s => String.format(s"%-20s", s)).mkString("\t")
+          Seq(name, dataType,
+            Option(comment.asInstanceOf[String]).getOrElse(""))
+            .map(s => String.format(s"%-20s", s))
+            .mkString("\t")
       }
     // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
     case command @ ExecutedCommandExec(s: ShowTablesCommand, _) if !s.isExtended =>

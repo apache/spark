@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.{SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{SortExec, SparkPlan, SQLExecution}
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -161,7 +161,7 @@ object FileFormatWriter extends Logging {
       }
     }
 
-    // TODO: make sure there is execution id when we reach here.
+    SQLExecution.checkSQLExecutionId(sparkSession)
 
     // This call shouldn't be put into the `try` block below because it only initializes and
     // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.

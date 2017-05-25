@@ -2452,7 +2452,7 @@ class Dataset[T] private[sql](
 
   // An internal version of `take`, which won't set execution id and trigger listeners.
   private[sql] def takeInternal(n: Int): Array[T] = {
-    queryExecution.executedPlan.executeTake(1).map(boundEnc.fromRow)
+    collectFromPlan(limit(n).queryExecution.executedPlan)
   }
 
   /**
@@ -2478,6 +2478,11 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def collect(): Array[T] = withAction("collect", queryExecution)(collectFromPlan)
+
+  // An internal version of `collect`, which won't set execution id and trigger listeners.
+  private[sql] def collectInternal(): Array[T] = {
+    collectFromPlan(queryExecution.executedPlan)
+  }
 
   /**
    * Returns a Java list that contains all rows in this Dataset.

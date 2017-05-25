@@ -31,6 +31,7 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 
@@ -346,7 +347,10 @@ abstract class HiveComparisonTest
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
-          try { (query, prepareAnswer(query, query.hiveResultString())) } catch {
+          def getResult(): Seq[String] = {
+            SQLExecution.withNewExecutionId(query.sparkSession, query)(query.hiveResultString())
+          }
+          try { (query, prepareAnswer(query, getResult())) } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
