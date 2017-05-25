@@ -22,7 +22,6 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
 
-import org.apache.spark.io.NioBufferedFileInputStream;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
@@ -41,6 +40,7 @@ import org.apache.spark.annotation.Private;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
+import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.commons.io.output.CloseShieldOutputStream;
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -101,7 +101,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private class CloseAndFlushShieldOutputStream extends CloseShieldOutputStream {
 
-    public CloseAndFlushShieldOutputStream(OutputStream outputStream) {
+    CloseAndFlushShieldOutputStream(OutputStream outputStream) {
       super(outputStream);
     }
 
@@ -334,14 +334,15 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   /**
-   * Merges spill files using Java FileStreams. This code path is typically slower than the NIO-based merge,
-   * {@link UnsafeShuffleWriter#mergeSpillsWithTransferTo(SpillInfo[], File)}, and it's mostly used in
-   * cases where the IO compression codec does not support concatenation of compressed data, when
-   * encryption is enabled, or when users have explicitly disabled use of {@code transferTo} in
-   * order to work around kernel bugs. This code path might also be faster in cases where individual
-   * partition size in a spill is small and UnsafeShuffleWriter#mergeSpillsWithTransferTo method performs many
-   * small disk ios which is inefficient. In those case, Using large buffers for input and output files helps
-   * reducing the number of disk ios, making the file merging faster.
+   * Merges spill files using Java FileStreams. This code path is typically slower than
+   * the NIO-based merge, {@link UnsafeShuffleWriter#mergeSpillsWithTransferTo(SpillInfo[],
+   * File)}, and it's mostly used in cases where the IO compression codec does not support
+   * concatenation of compressed data, when encryption is enabled, or when users have
+   * explicitly disabled use of {@code transferTo} in order to work around kernel bugs.
+   * This code path might also be faster in cases where individual partition size in a spill
+   * is small and UnsafeShuffleWriter#mergeSpillsWithTransferTo method performs many small
+   * disk ios which is inefficient. In those case, Using large buffers for input and output
+   * files helps reducing the number of disk ios, making the file merging faster.
    *
    * @param spills the spills to merge.
    * @param outputFile the file to write the merged data to.
@@ -367,8 +368,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     boolean threwException = true;
     try {
       for (int i = 0; i < spills.length; i++) {
-        spillInputStreams[i] = new NioBufferedFileInputStream(spills[i].file,
-                (int) sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024);
+        spillInputStreams[i] = new NioBufferedFileInputStream(
+            spills[i].file,
+            (int) sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024);
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         final long initialFileLength = mergedFileOutputStream.getByteCount();
