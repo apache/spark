@@ -1016,7 +1016,7 @@ private[spark] object Utils extends Logging {
         }
       } finally {
         if (file.delete()) {
-            logTrace(s"${file.getAbsolutePath} has been deleted")
+          logTrace(s"${file.getAbsolutePath} has been deleted")
         } else {
           // Delete can also fail if the file simply did not exist
           if (file.exists()) {
