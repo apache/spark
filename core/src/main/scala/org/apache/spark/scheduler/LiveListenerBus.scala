@@ -136,14 +136,12 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
       logError(s"$name has already stopped! Dropping event $event")
       return
     }
-    metrics.numEventsReceived.inc()
+    metrics.numEventsPosted.inc()
     val eventAdded = eventQueue.offer(event)
     if (eventAdded) {
       eventLock.release()
     } else {
       onDropEvent(event)
-      metrics.numDroppedEvents.inc()
-      droppedEventsCounter.incrementAndGet()
     }
 
     val droppedEvents = droppedEventsCounter.get
@@ -223,6 +221,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
    * Note: `onDropEvent` can be called in any thread.
    */
   def onDropEvent(event: SparkListenerEvent): Unit = {
+    metrics.numDroppedEvents.inc()
+    droppedEventsCounter.incrementAndGet()
     if (logDroppedEvent.compareAndSet(false, true)) {
       // Only log the following message once to avoid duplicated annoying logs.
       logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
@@ -245,11 +245,12 @@ private[spark] class LiveListenerBusMetrics(queue: LinkedBlockingQueue[_]) exten
   override val metricRegistry: MetricRegistry = new MetricRegistry
 
   /**
-   * The total number of events posted to the LiveListenerBus. This counts the number of times
-   * that `post()` is called, which might be less than the total number of events processed in
-   * case events are dropped.
+   * The total number of events posted to the LiveListenerBus. This is a count of the total number
+   * of events which have been produced by the application and sent to the listener bus, NOT a
+   * count of the number of events which have been processed and delivered to listeners (or dropped
+   * without being delivered).
    */
-  val numEventsReceived: Counter = metricRegistry.counter(MetricRegistry.name("numEventsReceived"))
+  val numEventsPosted: Counter = metricRegistry.counter(MetricRegistry.name("numEventsPosted"))
 
   /**
    * The total number of events that were dropped without being delivered to listeners.
@@ -262,7 +263,7 @@ private[spark] class LiveListenerBusMetrics(queue: LinkedBlockingQueue[_]) exten
   val eventProcessingTime: Timer = metricRegistry.timer(MetricRegistry.name("eventProcessingTime"))
 
   /**
-   * The number of of messages waiting in the queue.
+   * The number of messages waiting in the queue.
    */
   val queueSize: Gauge[Int] = {
     metricRegistry.register(MetricRegistry.name("queueSize"), new Gauge[Int]{

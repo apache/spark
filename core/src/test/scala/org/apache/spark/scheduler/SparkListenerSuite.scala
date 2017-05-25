@@ -64,7 +64,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.addListener(counter)
 
     // Metrics are initially empty.
-    assert(bus.metrics.numEventsReceived.getCount === 0)
+    assert(bus.metrics.numEventsPosted.getCount === 0)
     assert(bus.metrics.numDroppedEvents.getCount === 0)
     assert(bus.metrics.queueSize.getValue === 0)
     assert(bus.metrics.eventProcessingTime.getCount === 0)
@@ -74,7 +74,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     // Five messages should be marked as received and queued, but no messages should be posted to
     // listeners yet because the the listener bus hasn't been started.
-    assert(bus.metrics.numEventsReceived.getCount === 5)
+    assert(bus.metrics.numEventsPosted.getCount === 5)
     assert(bus.metrics.queueSize.getValue === 5)
     assert(counter.count === 0)
 
@@ -90,7 +90,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.stop()
     (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
     assert(counter.count === 5)
-    assert(bus.metrics.numEventsReceived.getCount === 5)
+    assert(bus.metrics.numEventsPosted.getCount === 5)
 
     // Listener bus must not be started twice
     intercept[IllegalStateException] {
