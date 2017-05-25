@@ -160,7 +160,7 @@ private[ml] class LeastSquaresAggregator(
     bcFeaturesStd: Broadcast[Array[Double]],
     bcFeaturesMean: Broadcast[Array[Double]])(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[Instance, LeastSquaresAggregator] {
-  require(labelStd > 0.0, s"${this.getClass.getName} requires the label standard" +
+  require(labelStd > 0.0, s"${this.getClass.getName} requires the label standard " +
     s"deviation to be positive.")
 
   private val numFeatures = bcFeaturesStd.value.length
@@ -210,13 +210,13 @@ private[ml] class LeastSquaresAggregator(
         val localGradientSumArray = gradientSumArray
         val localFeaturesStd = featuresStd
         features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-            localGradientSumArray(index) += weight * diff * value / localFeaturesStd(index)
+          val fStd = localFeaturesStd(index)
+          if (fStd != 0.0 && value != 0.0) {
+            localGradientSumArray(index) += weight * diff * value / fStd
           }
         }
         lossSum += weight * diff * diff / 2.0
       }
-
       weightSum += weight
       this
     }

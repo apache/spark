@@ -31,7 +31,7 @@ private[ml] trait DifferentiableLossAggregator[
     Datum,
     Agg <: DifferentiableLossAggregator[Datum, Agg]] extends Serializable {
 
-  self: Agg =>
+  self: Agg => // enforce classes that extend this to be the same type as `Agg`
 
   protected var weightSum: Double = 0.0
   protected var lossSum: Double = 0.0

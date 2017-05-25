@@ -26,6 +26,7 @@ import breeze.optimize.DiffFunction
  */
 private[ml] trait DifferentiableRegularization[T] extends DiffFunction[T] {
 
+  /** Magnitude of the regularization penalty. */
   def regParam: Double
 
 }
@@ -49,18 +50,20 @@ private[ml] class L2Regularization(
     var sum = 0.0
     val gradient = new Array[Double](coefficients.length)
     coefficients.indices.filter(shouldApply).foreach { j =>
+      val coef = coefficients(j)
       featuresStd match {
-        case Some(std) =>
-          if (std(j) != 0.0) {
-            val temp = coefficients(j) / (std(j) * std(j))
-            sum += coefficients(j) * temp
+        case Some(stds) =>
+          val std = stds(j)
+          if (std != 0.0) {
+            val temp = coef / (std * std)
+            sum += coef * temp
             gradient(j) = regParam * temp
           } else {
             0.0
           }
         case None =>
-          sum += coefficients(j) * coefficients(j)
-          gradient(j) = coefficients(j) * regParam
+          sum += coef * coef
+          gradient(j) = coef * regParam
       }
     }
     (0.5 * sum * regParam, gradient)
