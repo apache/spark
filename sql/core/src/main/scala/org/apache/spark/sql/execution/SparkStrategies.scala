@@ -114,7 +114,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * Matches a plan whose output should be small enough to be used in broadcast join.
      */
     private def canBroadcast(plan: LogicalPlan): Boolean = {
-      plan.stats(conf).isBroadcastable ||
+      plan.stats(conf).hints.isBroadcastable.getOrElse(false) ||
         (plan.stats(conf).sizeInBytes >= 0 &&
           plan.stats(conf).sizeInBytes <= conf.autoBroadcastJoinThreshold)
     }
