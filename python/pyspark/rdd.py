@@ -716,10 +716,19 @@ class RDD(object):
         >>> sorted(rdd.cartesian(rdd).collect())
         [(1, 1), (1, 2), (2, 1), (2, 2)]
         """
+        def reserialize_if_cartesian(rdd):
+            if isinstance(rdd._jrdd_deserializer, CartesianDeserializer):
+                return rdd._reserialize(self.ctx.serializer)
+            else:
+                return rdd
+
+        this = reserialize_if_cartesian(self)
+        other = reserialize_if_cartesian(other)
+
         # Due to batching, we can't use the Java cartesian method.
-        deserializer = CartesianDeserializer(self._jrdd_deserializer,
+        deserializer = CartesianDeserializer(this._jrdd_deserializer,
                                              other._jrdd_deserializer)
-        return RDD(self._jrdd.cartesian(other._jrdd), self.ctx, deserializer)
+        return RDD(this._jrdd.cartesian(other._jrdd), self.ctx, deserializer)
 
     def groupBy(self, f, numPartitions=None, partitionFunc=portable_hash):
         """
