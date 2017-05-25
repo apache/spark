@@ -472,15 +472,11 @@ identifierComment
     ;
 
 relationPrimary
-    : catalogTable                                         #tableName
+    : tableIdentifier sample? tableAlias                   #tableName
     | '(' queryNoWith ')' sample? (AS? strictIdentifier)   #aliasedQuery
     | '(' relation ')' sample? (AS? strictIdentifier)?     #aliasedRelation
     | inlineTable                                          #inlineTableDefault2
     | functionTable                                        #tableValuedFunction
-    ;
-
-catalogTable
-    : tableIdentifier sample? tableAlias
     ;
 
 inlineTable

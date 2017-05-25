@@ -676,17 +676,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create an aliased table reference. This is typically used in FROM clauses.
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
-    val tableId = visitTableIdentifier(ctx.catalogTable.tableIdentifier)
-    val table = Option(ctx.catalogTable.tableAlias.identifierList) match {
+    val tableId = visitTableIdentifier(ctx.tableIdentifier)
+    val table = Option(ctx.tableAlias.identifierList) match {
       case Some(aliases) => UnresolvedRelation(tableId, visitIdentifierList(aliases))
       case _ => UnresolvedRelation(tableId)
     }
-    val tableWithAlias = Option(ctx.catalogTable.tableAlias.strictIdentifier).map(_.getText) match {
+    val tableWithAlias = Option(ctx.tableAlias.strictIdentifier).map(_.getText) match {
       case Some(strictIdentifier) =>
         SubqueryAlias(strictIdentifier, table)
       case _ => table
     }
-    tableWithAlias.optionalMap(ctx.catalogTable.sample)(withSample)
+    tableWithAlias.optionalMap(ctx.sample)(withSample)
   }
 
   /**
