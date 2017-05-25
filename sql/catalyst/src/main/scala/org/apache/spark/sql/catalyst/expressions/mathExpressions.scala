@@ -966,7 +966,7 @@ case class Logarithm(left: Expression, right: Expression)
  *
  * @param child expr to be round, all [[NumericType]] is allowed as Input
  * @param scale new scale to be round to, this should be a constant int at runtime
- * @param mode rounding mode (e.g. HALF_UP, HALF_UP)
+ * @param mode rounding mode (e.g. HALF_UP, HALF_EVEN)
  * @param modeStr rounding mode string name (e.g. "ROUND_HALF_UP", "ROUND_HALF_EVEN")
  */
 abstract class RoundBase(child: Expression, scale: Expression,
