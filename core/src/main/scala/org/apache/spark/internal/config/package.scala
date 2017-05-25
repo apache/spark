@@ -278,4 +278,19 @@ package object config {
         "spark.io.compression.codec.")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val SHUFFLE_ACCURATE_BLOCK_THRESHOLD =
+    ConfigBuilder("spark.shuffle.accurateBlockThreshold")
+      .doc("When we compress the size of shuffle blocks in HighlyCompressedMapStatus, we will " +
+        "record the size accurately if it's above this config. This helps to prevent OOM by " +
+        "avoiding underestimating shuffle block size when fetch shuffle blocks.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(100 * 1024 * 1024)
+
+  private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
+    ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
+      .doc("The blocks of a shuffle request will be fetched to disk when size of the request is " +
+        "above this threshold. This is to avoid a giant request takes too much memory.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("200m")
 }
