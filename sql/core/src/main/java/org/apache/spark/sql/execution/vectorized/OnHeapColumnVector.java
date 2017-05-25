@@ -21,7 +21,6 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 
 import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
@@ -49,23 +48,13 @@ public final class OnHeapColumnVector extends ColumnVector {
   private double[] doubleData;
 
   // Only set if type is Array.
-  /**
-   * When `useUnsafeArrayData` is true, data[] keeps UnsafeArray.baseObject for all rows
-   * a pair of offset & lengths for each row are stored into arrayOffsets[] & arrayLength[]
-   */
-  private byte[] data;
-  private int dataOffset;
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
-  protected OnHeapColumnVector(int capacity, DataType type, boolean useUnsafeArrayData) {
-    super(capacity, type, MemoryMode.ON_HEAP, useUnsafeArrayData);
+  protected OnHeapColumnVector(int capacity, DataType type) {
+    super(capacity, type, MemoryMode.ON_HEAP);
     reserveInternal(capacity);
     reset();
-  }
-
-  protected OnHeapColumnVector(int capacity, DataType type) {
-    this(capacity, type, false);
   }
 
   @Override
@@ -141,6 +130,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     return byteData[rowId] == 1;
   }
 
+  @Override
+  public void getBooleanArray(int offset, int length, boolean[] array) {
+    // assume that it is possible to do bulkcopy from byte[] to boolean[]
+    Platform.copyMemory(byteData, Platform.BYTE_ARRAY_OFFSET + offset, array, Platform.BOOLEAN_ARRAY_OFFSET, length);
+  }
+
   //
 
   //
@@ -173,6 +168,11 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getByteArray(int offset, int length, byte[] array) {
+    Platform.copyMemory(byteData, Platform.BYTE_ARRAY_OFFSET + offset, array, Platform.BYTE_ARRAY_OFFSET, length);
+  }
+
   //
   // APIs dealing with Shorts
   //
@@ -203,6 +203,10 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getShortArray(int offset, int length, short[] array) {
+    Platform.copyMemory(shortData, Platform.SHORT_ARRAY_OFFSET + offset * 2, array, Platform.SHORT_ARRAY_OFFSET, length * 2);
+  }
 
   //
   // APIs dealing with Ints
@@ -243,6 +247,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getIntArray(int offset, int length, int[] array) {
+    assert(dictionary == null);
+    Platform.copyMemory(intData, Platform.INT_ARRAY_OFFSET + offset * 4, array, Platform.INT_ARRAY_OFFSET, length * 4);
   }
 
   /**
@@ -297,6 +307,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getLongArray(int offset, int length, long[] array) {
+    assert(dictionary == null);
+    Platform.copyMemory(longData, Platform.LONG_ARRAY_OFFSET + offset * 8, array, Platform.LONG_ARRAY_OFFSET, length * 8);
+  }
+
   //
   // APIs dealing with floats
   //
@@ -334,6 +350,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getFloatArray(int offset, int length, float[] array) {
+    assert(dictionary == null);
+    Platform.copyMemory(floatData, Platform.FLOAT_ARRAY_OFFSET + offset * 4, array, Platform.FLOAT_ARRAY_OFFSET, length * 4);
   }
 
   //
@@ -377,6 +399,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getDoubleArray(int offset, int length, double[] array) {
+    assert(dictionary == null);
+    Platform.copyMemory(doubleData, Platform.DOUBLE_ARRAY_OFFSET + offset * 8, array, Platform.DOUBLE_ARRAY_OFFSET, length * 8);
+  }
+
   //
   // APIs dealing with Arrays
   //
@@ -397,36 +425,32 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void putArray(int rowId, Object src, int offset, int length) {
-    if (arrayLengths.length < rowId) {
-      int newCapacity = Math.min(MAX_CAPACITY, arrayLengths.length * 2);
-      int[] newLengths = new int[newCapacity];
-      int[] newOffsets = new int[newCapacity];
-      if (arrayLengths != null) {
-        System.arraycopy(arrayLengths, 0, newLengths, 0, arrayLengths.length);
-        System.arraycopy(arrayOffsets, 0, newOffsets, 0, arrayLengths.length);
-        arrayLengths = newLengths;
-        arrayOffsets = newOffsets;
-      }
+  public void putArray(int rowId, Object src, int srcOffset, int dstOffset, int numElements) {
+    DataType et = type;
+    reserve(dstOffset + numElements);
+    if (et == DataTypes.BooleanType || et == DataTypes.ByteType) {
+      Platform.copyMemory(
+        src, srcOffset, byteData, Platform.BYTE_ARRAY_OFFSET + dstOffset, numElements);
+    } else if (et == DataTypes.BooleanType || et == DataTypes.ByteType) {
+      Platform.copyMemory(
+        src, srcOffset, shortData, Platform.SHORT_ARRAY_OFFSET + dstOffset * 2, numElements * 2);
+    } else if (et == DataTypes.IntegerType || et == DataTypes.DateType ||
+      DecimalType.is32BitDecimalType(type)) {
+      Platform.copyMemory(
+        src, srcOffset, intData, Platform.INT_ARRAY_OFFSET + dstOffset * 4, numElements * 4);
+    } else if (type instanceof LongType || type instanceof TimestampType ||
+      DecimalType.is64BitDecimalType(type)) {
+      Platform.copyMemory(
+        src, srcOffset, longData, Platform.LONG_ARRAY_OFFSET + dstOffset * 8, numElements * 8);
+    } else if (et == DataTypes.FloatType) {
+      Platform.copyMemory(
+        src, srcOffset, floatData, Platform.FLOAT_ARRAY_OFFSET + dstOffset * 4, numElements * 4);
+    } else if (et == DataTypes.DoubleType) {
+      Platform.copyMemory(
+        src, srcOffset, doubleData, Platform.DOUBLE_ARRAY_OFFSET + dstOffset * 8, numElements * 8);
+    } else {
+      throw new RuntimeException("Unhandled " + type);
     }
-    putArray(rowId, dataOffset, length);
-    if (data.length < dataOffset + length) {
-      int newCapacity = (int) Math.min(MAX_CAPACITY, (dataOffset + length) * 2L);
-      byte[] newData = new byte[newCapacity];
-      System.arraycopy(data, 0, newData,0, dataOffset);
-      data = newData;
-    }
-    Platform.copyMemory(src, offset, data, Platform.BOOLEAN_ARRAY_OFFSET + dataOffset, length);
-    dataOffset += length;
-  }
-
-  @Override
-  public UnsafeArrayData getUnsafeArray(int rowId) {
-    int offset = getArrayOffset(rowId);
-    int length = getArrayLength(rowId);
-    UnsafeArrayData array = new UnsafeArrayData();
-    array.pointTo(data, Platform.BYTE_ARRAY_OFFSET + offset, length);
-    return array;
   }
 
   @Override
@@ -450,7 +474,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    if (isArray() || DecimalType.isByteArrayDecimalType(type)) {
+    if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
       if (this.arrayLengths != null) {
@@ -459,15 +483,6 @@ public final class OnHeapColumnVector extends ColumnVector {
       }
       arrayLengths = newLengths;
       arrayOffsets = newOffsets;
-      if (useUnsafeArrayData) {
-        DataType et = ((ArrayType)type).elementType();
-        if (data == null || data.length < newCapacity) {
-          int length = newCapacity * et.defaultSize() + UnsafeArrayData.calculateHeaderPortionInBytes(newCapacity);
-          byte[] newData = new byte[length];
-          if (data != null) System.arraycopy(data, 0, newData, 0, dataOffset);
-          data = newData;
-        }
-      }
     } else if (type instanceof BooleanType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];

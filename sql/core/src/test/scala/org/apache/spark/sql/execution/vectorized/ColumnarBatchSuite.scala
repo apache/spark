@@ -24,11 +24,11 @@ import java.nio.ByteOrder
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -716,7 +716,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
   test("Int UnsafeArray") {
     (MemoryMode.ON_HEAP :: Nil).foreach { memMode => {
-      val column = ColumnVector.allocate(10, new ArrayType(IntegerType, true), memMode, true)
+      val column = ColumnVector.allocate(10, new ArrayType(IntegerType, true), memMode)
 
       // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
       val len1 = column.putArray(0, UnsafeArrayData.fromPrimitiveArray(Array(0)))
@@ -729,10 +729,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(len3 == ((UnsafeArrayData.calculateHeaderPortionInBytes(0) + 0 * 4 + 7) / 8) * 8)
       assert(len4 == ((UnsafeArrayData.calculateHeaderPortionInBytes(3) + 3 * 4 + 7) / 8) * 8)
 
-      val a1 = column.getArray(0).asInstanceOf[UnsafeArrayData].toIntArray
-      val a2 = column.getArray(1).asInstanceOf[UnsafeArrayData].toIntArray
-      val a3 = column.getArray(2).asInstanceOf[UnsafeArrayData].toIntArray
-      val a4 = column.getArray(3).asInstanceOf[UnsafeArrayData].toIntArray
+      val a1 = column.getArray(0).toIntArray
+      val a2 = column.getArray(1).toIntArray
+      val a3 = column.getArray(2).toIntArray
+      val a4 = column.getArray(3).toIntArray
       assert(a1 === Array(0))
       assert(a2 === Array(1, 2))
       assert(a3 === Array.empty[Int])
@@ -757,7 +757,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.reset
       val array = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
       column.putArray(0, UnsafeArrayData.fromPrimitiveArray(array))
-      assert(column.getArray(0).asInstanceOf[UnsafeArrayData].toIntArray === array)
+      assert(column.getArray(0).toIntArray === array)
     }}
   }
 

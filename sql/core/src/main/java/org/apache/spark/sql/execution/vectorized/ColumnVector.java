@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
-import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -66,14 +65,10 @@ public abstract class ColumnVector implements AutoCloseable {
    * in number of elements, not number of bytes.
    */
   public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
-    return allocate(capacity, type, mode, false);
-  }
-
-  public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode, boolean useUnsafeArrayData) {
     if (mode == MemoryMode.OFF_HEAP) {
       return new OffHeapColumnVector(capacity, type);
     } else {
-      return new OnHeapColumnVector(capacity, type, useUnsafeArrayData);
+      return new OnHeapColumnVector(capacity, type);
     }
   }
 
@@ -87,6 +82,15 @@ public abstract class ColumnVector implements AutoCloseable {
     public final ColumnVector data;
     public int length;
     public int offset;
+
+    // reused buffer to return a primitive array
+    protected boolean[] reuseBooleanArray;
+    protected byte[] reuseByteArray;
+    protected short[] reuseShortArray;
+    protected int[] reuseIntArray;
+    protected long[] reuseLongArray;
+    protected float[] reuseFloatArray;
+    protected double[] reuseDoubleArray;
 
     // Populate if binary data is required for the Array. This is stored here as an optimization
     // for string data.
@@ -106,6 +110,69 @@ public abstract class ColumnVector implements AutoCloseable {
     @Override
     public ArrayData copy() {
       throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean[] toBooleanArray() {
+      if (reuseBooleanArray == null || reuseBooleanArray.length != length) {
+        reuseBooleanArray = new boolean[length];
+      }
+      data.getBooleanArray(offset, length, reuseBooleanArray);
+      return reuseBooleanArray;
+    }
+
+    @Override
+    public byte[] toByteArray() {
+      if (reuseByteArray == null || reuseByteArray.length != length) {
+        reuseByteArray = new byte[length];
+      }
+      data.getByteArray(offset, length, reuseByteArray);
+      return reuseByteArray;
+    }
+
+    @Override
+    public short[] toShortArray() {
+      if (reuseShortArray == null || reuseShortArray.length != length) {
+        reuseShortArray = new short[length];
+      }
+      data.getShortArray(offset, length, reuseShortArray);
+      return reuseShortArray;
+    }
+
+    @Override
+    public int[] toIntArray() {
+      if (reuseIntArray == null || reuseIntArray.length != length) {
+        reuseIntArray = new int[length];
+      }
+      data.getIntArray(offset, length, reuseIntArray);
+      return reuseIntArray;
+    }
+
+    @Override
+    public long[] toLongArray() {
+      if (reuseLongArray == null || reuseLongArray.length != length) {
+        reuseLongArray = new long[length];
+      }
+      data.getLongArray(offset, length, reuseLongArray);
+      return reuseLongArray;
+    }
+
+    @Override
+    public float[] toFloatArray() {
+      if (reuseFloatArray == null || reuseFloatArray.length != length) {
+        reuseFloatArray = new float[length];
+      }
+      data.getFloatArray(offset, length, reuseFloatArray);
+      return reuseFloatArray;
+    }
+
+    @Override
+    public double[] toDoubleArray() {
+      if (reuseDoubleArray == null || reuseDoubleArray.length != length) {
+        reuseDoubleArray = new double[length];
+      }
+      data.getDoubleArray(offset, length, reuseDoubleArray);
+      return reuseDoubleArray;
     }
 
     // TODO: this is extremely expensive.
@@ -375,6 +442,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract boolean getBoolean(int rowId);
 
   /**
+   * Sets a primitive array for (offset, length) to array.
+   */
+  public abstract void getBooleanArray(int rowId, int count, boolean[] array);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putByte(int rowId, byte value);
@@ -395,6 +467,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract byte getByte(int rowId);
 
   /**
+   * Sets a primitive array for (offset, length) to array.
+   */
+  public abstract void getByteArray(int rowId, int count, byte[] array);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putShort(int rowId, short value);
@@ -408,6 +485,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
    */
   public abstract void putShorts(int rowId, int count, short[] src, int srcIndex);
+
+  /**
+   * Sets a primitive array for (offset, length) to array.
+   */
+  public abstract void getShortArray(int rowId, int count, short[] array);
 
   /**
    * Returns the value for rowId.
@@ -439,6 +521,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract int getInt(int rowId);
+
+  /**
+   * Sets a primitive array for (offset, length) to array.
+   */
+  public abstract void getIntArray(int rowId, int count, int[] array);
 
   /**
    * Returns the dictionary Id for rowId.
@@ -474,6 +561,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract long getLong(int rowId);
 
   /**
+   * Sets a primitive array for (offset, length) to array.
+   */
+  public abstract void getLongArray(int rowId, int count, long[] array);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putFloat(int rowId, float value);
@@ -501,6 +593,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract float getFloat(int rowId);
 
   /**
+   * Sets a primitive array for (offset, length) to array.
+   */
+  public abstract void getFloatArray(int rowId, int count, float[] array);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putDouble(int rowId, double value);
@@ -526,6 +623,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract double getDouble(int rowId);
+
+  /**
+   * Sets a primitive array for (offset, length) to array.
+   */
+  public abstract void getDoubleArray(int rowId, int count, double[] array);
 
   /**
    * Puts a byte array that already exists in this column.
@@ -562,31 +664,29 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the array at rowid.
    */
-  public abstract UnsafeArrayData getUnsafeArray(int rowId);
-
-  public final ArrayData getArray(int rowId) {
-    if (!useUnsafeArrayData) {
-      resultArray.length = getArrayLength(rowId);
-      resultArray.offset = getArrayOffset(rowId);
-      return resultArray;
-    } else {
-      return getUnsafeArray(rowId);
-    }
+  public final Array getArray(int rowId) {
+    resultArray.length = getArrayLength(rowId);
+    resultArray.offset = getArrayOffset(rowId);
+    return resultArray;
   }
 
   public final int putArray(int rowId, ArrayData array) {
-    if (!useUnsafeArrayData) {
-      throw new UnsupportedOperationException();
-    }
     UnsafeArrayData unsafeArray = (UnsafeArrayData)array;
     Object baseObjects = unsafeArray.getBaseObject();
-    long offset = unsafeArray.getBaseOffset();
     int length = unsafeArray.getSizeInBytes();
-    if (offset > Integer.MAX_VALUE) {
-      throw new UnsupportedOperationException(
-        "Cannot put this array to ColumnVector as it's too big.");
+    int numElements = unsafeArray.numElements();
+    long elementOffset = unsafeArray.getBaseOffset() + UnsafeArrayData.calculateHeaderPortionInBytes(numElements);
+    childColumns[0].putArray(rowId, baseObjects, (int) elementOffset, elementsAppended, numElements);
+    putArray(rowId, elementsAppended, numElements);
+    elementsAppended += numElements;
+
+    if (((ArrayType)type).containsNull())  {
+      for (int i = 0; i < numElements; i++) {
+        if (unsafeArray.isNullAt(i)) {
+          childColumns[0].putNotNull(i);
+        }
+      }
     }
-    putArray(rowId, baseObjects, (int) offset, length);
     return length;
   }
 
@@ -598,7 +698,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Sets the value at rowId to `value`.
    */
-  public abstract void putArray(int rowId, Object value, int offset, int count);
+  public abstract void putArray(int rowId, Object value, int srcOffset, int dstOffset, int numElements);
   public abstract int putByteArray(int rowId, byte[] value, int offset, int count);
   public final int putByteArray(int rowId, byte[] value) {
     return putByteArray(rowId, value, 0, value.length);
@@ -608,9 +708,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   private Array getByteArray(int rowId) {
-    resultArray.length = getArrayLength(rowId);
-    resultArray.offset = getArrayOffset(rowId);
-    Array array = resultArray;
+    Array array = getArray(rowId);
     array.data.loadBytes(array);
     return array;
   }
@@ -915,9 +1013,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns true if this column is an array.
    */
-  public final boolean isArray() {
-    return (resultArray != null) || (type instanceof ArrayType);
-  }
+  public final boolean isArray() { return resultArray != null; }
 
   /**
    * Marks this column as being constant.
@@ -934,8 +1030,6 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   @VisibleForTesting
   protected int MAX_CAPACITY = Integer.MAX_VALUE;
-
-  protected boolean useUnsafeArrayData;
 
   /**
    * Data type for this column.
@@ -965,7 +1059,7 @@ public abstract class ColumnVector implements AutoCloseable {
   protected static final int DEFAULT_ARRAY_LENGTH = 4;
 
   /**
-   * Current write cursor (row index) when appending data.
+   * Current write cursor (row index) when appending or putting data.
    */
   protected int elementsAppended;
 
@@ -1034,19 +1128,10 @@ public abstract class ColumnVector implements AutoCloseable {
    * type.
    */
   protected ColumnVector(int capacity, DataType type, MemoryMode memMode) {
-    this(capacity, type, memMode, false);
-  }
-
-  protected ColumnVector(int capacity, DataType type, MemoryMode memMode, boolean useUnsafeArrayData) {
     this.capacity = capacity;
     this.type = type;
-    this.useUnsafeArrayData = useUnsafeArrayData;
 
-    if (useUnsafeArrayData && type instanceof ArrayType) {
-      this.childColumns = null;
-      this.resultArray = null;
-      this.resultStruct = null;
-    } else if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
+    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
         || DecimalType.isByteArrayDecimalType(type)) {
       DataType childType;
       int childCapacity = capacity;

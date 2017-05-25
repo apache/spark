@@ -65,19 +65,15 @@ public final class ColumnarBatch {
   final Row row;
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode) {
-    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode, false);
+    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode);
   }
 
   public static ColumnarBatch allocate(StructType type) {
-    return new ColumnarBatch(type, DEFAULT_BATCH_SIZE, DEFAULT_MEMORY_MODE, false);
+    return new ColumnarBatch(type, DEFAULT_BATCH_SIZE, DEFAULT_MEMORY_MODE);
   }
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
-    return allocate(schema, memMode, maxRows, false);
-  }
-
-  public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows, boolean useUnsafeArrayData) {
-    return new ColumnarBatch(schema, maxRows, memMode, useUnsafeArrayData);
+    return new ColumnarBatch(schema, maxRows, memMode);
   }
 
   /**
@@ -470,7 +466,7 @@ public final class ColumnarBatch {
     nullFilteredColumns.add(ordinal);
   }
 
-  private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode, boolean useUnsafeArrayData) {
+  private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode) {
     this.schema = schema;
     this.capacity = maxRows;
     this.columns = new ColumnVector[schema.size()];
@@ -479,7 +475,7 @@ public final class ColumnarBatch {
 
     for (int i = 0; i < schema.fields().length; ++i) {
       StructField field = schema.fields()[i];
-      columns[i] = ColumnVector.allocate(maxRows, field.dataType(), memMode, useUnsafeArrayData);
+      columns[i] = ColumnVector.allocate(maxRows, field.dataType(), memMode);
     }
 
     this.row = new Row(this);

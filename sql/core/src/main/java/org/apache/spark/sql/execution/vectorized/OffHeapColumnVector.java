@@ -20,7 +20,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
@@ -135,6 +134,9 @@ public final class OffHeapColumnVector extends ColumnVector {
   @Override
   public boolean getBoolean(int rowId) { return Platform.getByte(null, data + rowId) == 1; }
 
+  @Override
+  public void getBooleanArray(int offset, int length, boolean[] array) { throw new UnsupportedOperationException(); }
+
   //
   // APIs dealing with Bytes
   //
@@ -165,6 +167,9 @@ public final class OffHeapColumnVector extends ColumnVector {
       return (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
   }
+
+  @Override
+  public void getByteArray(int offset, int length, byte[] array) { throw new UnsupportedOperationException(); }
 
   //
   // APIs dealing with shorts
@@ -197,6 +202,9 @@ public final class OffHeapColumnVector extends ColumnVector {
       return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
   }
+
+  @Override
+  public void getShortArray(int offset, int length, short[] array) { throw new UnsupportedOperationException(); }
 
   //
   // APIs dealing with ints
@@ -256,6 +264,9 @@ public final class OffHeapColumnVector extends ColumnVector {
     return Platform.getInt(null, data + 4 * rowId);
   }
 
+  @Override
+  public void getIntArray(int offset, int length, int[] array) { throw new UnsupportedOperationException(); }
+
   //
   // APIs dealing with Longs
   //
@@ -303,6 +314,9 @@ public final class OffHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getLongArray(int offset, int length, long[] array) { throw new UnsupportedOperationException(); }
+
   //
   // APIs dealing with floats
   //
@@ -349,6 +363,8 @@ public final class OffHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getFloatArray(int offset, int length, float[] array) { throw new UnsupportedOperationException(); }
 
   //
   // APIs dealing with doubles
@@ -396,6 +412,9 @@ public final class OffHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getDoubleArray(int offset, int length, double[] array) { throw new UnsupportedOperationException(); }
+
   //
   // APIs dealing with Arrays.
   //
@@ -407,12 +426,7 @@ public final class OffHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void putArray(int rowId, Object src, int offset, int length) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public UnsafeArrayData getUnsafeArray(int rowId) {
+  public void putArray(int rowId, Object src, int srcOffset, int dstOffset, int length) {
     throw new UnsupportedOperationException();
   }
 
