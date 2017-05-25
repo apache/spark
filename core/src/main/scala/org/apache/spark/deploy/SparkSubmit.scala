@@ -311,7 +311,7 @@ object SparkSubmit extends CommandLineUtils {
       RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
     }
 
-    // In client mode, download remotes files.
+    // In client mode, download remote files.
     if (deployMode == CLIENT) {
       val hadoopConf = new HadoopConfiguration()
       args.primaryResource = Option(args.primaryResource).map(downloadFile(_, hadoopConf)).orNull

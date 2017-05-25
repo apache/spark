@@ -730,6 +730,16 @@ class SparkSubmitSuite
     }
   }
 
+  test("downloadFile - invalid url") {
+    intercept[IOException] {
+      SparkSubmit.downloadFile("abc:/local/file", new Configuration())
+    }
+  }
+
+  test("downloadFile does nothing for empty path") {
+    assert(SparkSubmit.downloadFile("", new Configuration()) === "")
+  }
+
   test("downloadFile does not download local file") {
     assert(SparkSubmit.downloadFile("/local/file", new Configuration()) === "/local/file")
   }
