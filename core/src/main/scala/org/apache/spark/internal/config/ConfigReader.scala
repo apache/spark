@@ -92,13 +92,25 @@ private[spark] class ConfigReader(conf: ConfigProvider) {
         require(!usedRefs.contains(ref), s"Circular reference in $input: $ref")
 
         val replacement = bindings.get(prefix)
-          .flatMap(_.get(name))
+          .flatMap(getOrDefault(_, name))
           .map { v => substitute(v, usedRefs + ref) }
           .getOrElse(m.matched)
         Regex.quoteReplacement(replacement)
       })
     } else {
       input
+    }
+  }
+
+  private def getOrDefault(conf: ConfigProvider, key: String): Option[String] = {
+    conf.get(key).orElse {
+      ConfigEntry.findEntry(key) match {
+        case e: ConfigEntryWithDefault[_] => Option(e.defaultValueString)
+        case e: ConfigEntryWithDefaultString[_] => Option(e.defaultValueString)
+        case e: ConfigEntryWithDefaultFunction[_] => Option(e.defaultValueString)
+        case e: FallbackConfigEntry[_] => getOrDefault(conf, e.fallback.key)
+        case _ => None
+      }
     }
   }
 
