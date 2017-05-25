@@ -23,17 +23,17 @@ from pyspark.ml.param.shared import *
 __all__ = ["FPGrowth", "FPGrowthModel"]
 
 
-class HasSupport(Params):
+class HasMinSupport(Params):
     """
-    Mixin for param support.
+    Mixin for param minSupport.
     """
 
     minSupport = Param(
         Params._dummy(),
         "minSupport",
-        """Minimal support level of the frequent pattern. [0.0, 1.0].
-        Any pattern that appears more than (minSupport * size-of-the-dataset)
-        times will be output""",
+        "Minimal support level of the frequent pattern. [0.0, 1.0]. " +
+        "Any pattern that appears more than (minSupport * size-of-the-dataset) " +
+        "times will be output in the frequent itemsets.",
         typeConverter=TypeConverters.toFloat)
 
     def setMinSupport(self, value):
@@ -49,16 +49,17 @@ class HasSupport(Params):
         return self.getOrDefault(self.minSupport)
 
 
-class HasConfidence(Params):
+class HasMinConfidence(Params):
     """
-    Mixin for param confidence.
+    Mixin for param minConfidence.
     """
 
     minConfidence = Param(
         Params._dummy(),
         "minConfidence",
-        """Minimal confidence for generating Association Rule. [0.0, 1.0]
-        Note that minConfidence has no effect during fitting.""",
+        "Minimal confidence for generating Association Rule. [0.0, 1.0]. " +
+        "minConfidence will not affect the mining for frequent itemsets, " +
+        "but will affect the association rules generation.",
         typeConverter=TypeConverters.toFloat)
 
     def setMinConfidence(self, value):
@@ -126,7 +127,7 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 
 class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
-               HasSupport, HasConfidence, JavaMLWritable, JavaMLReadable):
+               HasMinSupport, HasMinConfidence, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
