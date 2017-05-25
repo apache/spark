@@ -49,6 +49,32 @@ class HasMinSupport(Params):
         return self.getOrDefault(self.minSupport)
 
 
+class HasNumPartitions(Params):
+    """
+    Mixin for param numPartitions: Number of partitions (at least 1) used by parallel FP-growth.
+    """
+
+    numPartitions = Param(
+        Params._dummy(),
+        "numPartitions",
+        "Number of partitions (at least 1) used by parallel FP-growth. " +
+        "By default the param is not set, " +
+        "and partition number of the input dataset is used.",
+        typeConverter=TypeConverters.toInt)
+
+    def setNumPartitions(self, value):
+        """
+        Sets the value of :py:attr:`numPartitions`.
+        """
+        return self._set(numPartitions=value)
+
+    def getNumPartitions(self):
+        """
+        Gets the value of :py:attr:`numPartitions` or its default value.
+        """
+        return self.getOrDefault(self.numPartitions)
+
+
 class HasMinConfidence(Params):
     """
     Mixin for param minConfidence.
@@ -127,7 +153,9 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 
 class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
-               HasMinSupport, HasMinConfidence, JavaMLWritable, JavaMLReadable):
+               HasMinSupport, HasNumPartitions, HasMinConfidence,
+               JavaMLWritable, JavaMLReadable):
+
     """
     .. note:: Experimental
 
