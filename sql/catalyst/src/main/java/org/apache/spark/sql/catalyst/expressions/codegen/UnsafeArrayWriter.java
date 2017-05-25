@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -259,4 +260,158 @@ public class UnsafeArrayWriter {
     // move the cursor forward.
     holder.cursor += 16;
   }
+
+  private void writePrimitiveArray(Object input, int offset, int elementSize, int length)  {
+    Platform.copyMemory(input, offset, holder.buffer, startingOffset + headerInBytes, elementSize * length);
+  }
+
+  public void writePrimitiveBooleanArray(ArrayData arrayData) {
+    boolean[] input = arrayData.toBooleanArray();
+    int length = input.length;
+    int offset = Platform.BYTE_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 1, length);
+  }
+
+  public void writePrimitiveByteArray(ArrayData arrayData) {
+    byte[] input = arrayData.toByteArray();
+    int length = input.length;
+    int offset = Platform.BYTE_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 1, length);
+  }
+
+  public void writePrimitiveShortArray(ArrayData arrayData) {
+    short[] input = arrayData.toShortArray();
+    int length = input.length;
+    int offset = Platform.SHORT_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 2, length);
+  }
+
+  public void writePrimitiveIntArray(ArrayData arrayData) {
+    int[] input = arrayData.toIntArray();
+    int length = input.length;
+    int offset = Platform.INT_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 4, length);
+  }
+
+  public void writePrimitiveLongArray(ArrayData arrayData) {
+    long[] input = arrayData.toLongArray();
+    int length = input.length;
+    int offset = Platform.LONG_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 8, length);
+  }
+
+  public void writePrimitiveFloatArray(ArrayData arrayData) {
+    float[] input = arrayData.toFloatArray();
+    int length = input.length;
+    int offset = Platform.FLOAT_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 4, length);
+  }
+
+  public void writePrimitiveDoubleArray(ArrayData arrayData) {
+    double[] input = arrayData.toDoubleArray();
+    int length = input.length;
+    int offset = Platform.DOUBLE_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 8, length);
+  }
+
+/** uncomment this if SPARK-16043 is merged
+
+  public void writePrimitiveBooleanArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericBooleanArrayData) {
+      boolean[] input = ((GenericBooleanArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.BOOLEAN_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putBoolean(holder.buffer, holder.cursor + i, arrayData.getBoolean(i));
+      }
+    }
+  }
+
+  public void writePrimitiveByteArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericByteArrayData) {
+      byte[] input = ((GenericByteArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.BYTE_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putByte(holder.buffer, holder.cursor + i, arrayData.getByte(i));
+      }
+    }
+  }
+
+  public void writePrimitiveShortArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericShortArrayData) {
+      short[] input = ((GenericShortArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.SHORT_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putShort(holder.buffer, holder.cursor + i, arrayData.getShort(i));
+      }
+    }
+  }
+
+  public void writePrimitiveIntArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericIntArrayData) {
+      int[] input = ((GenericIntArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.INT_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putInt(holder.buffer, holder.cursor + i, arrayData.getInt(i));
+      }
+    }
+  }
+
+  public void writePrimitiveLongArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericLongArrayData) {
+      long[] input = ((GenericLongArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.LONG_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putLong(holder.buffer, holder.cursor + i, arrayData.getLong(i));
+      }
+    }
+  }
+
+  public void writePrimitiveFloatArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericFloatArrayData) {
+      float[] input = ((GenericFloatArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.FLOAT_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putFloat(holder.buffer, holder.cursor + i, arrayData.getFloat(i));
+      }
+    }
+  }
+
+  public void writePrimitiveDoubleArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericDoubleArrayData) {
+      double[] input = ((GenericDoubleArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.DOUBLE_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putFloat(holder.buffer, holder.cursor + i, arrayData.getFloat(i));
+      }
+    }
+  }
+*/
 }

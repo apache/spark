@@ -124,12 +124,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
             """
 
-          case a @ ArrayType(et, _) =>
+          case a @ ArrayType(et, cn) =>
             s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
               final int $tmpCursor = $bufferHolder.cursor;
-              ${writeArrayToBuffer(ctx, input.value, et, bufferHolder)}
+              ${writeArrayToBuffer(ctx, input.value, et, cn, bufferHolder)}
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
             """
 
@@ -178,6 +178,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ctx: CodegenContext,
       input: String,
       elementType: DataType,
+      containsNull: Boolean,
       bufferHolder: String): String = {
     val arrayWriterClass = classOf[UnsafeArrayWriter].getName
     val arrayWriter = ctx.freshName("arrayWriter")
@@ -209,10 +210,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
-      case a @ ArrayType(et, _) =>
+      case a @ ArrayType(et, cn) =>
         s"""
           final int $tmpCursor = $bufferHolder.cursor;
-          ${writeArrayToBuffer(ctx, element, et, bufferHolder)}
+          ${writeArrayToBuffer(ctx, element, et, cn, bufferHolder)}
           $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
@@ -231,7 +232,31 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => s"$arrayWriter.write($index, $element);"
     }
 
-    val primitiveTypeName = if (ctx.isPrimitiveType(jt)) ctx.primitiveTypeName(et) else ""
+    val typeName = if (ctx.isPrimitiveType(jt)) ctx.primitiveTypeName(et) else ""
+    val storeElements = if (containsNull) {
+      s"""
+      for (int $index = 0; $index < $numElements; $index++) {
+        if ($input.isNullAt($index)) {
+          $arrayWriter.setNull${typeName}($index);
+        } else {
+          final $jt $element = ${ctx.getValue(input, et, index)};
+          $writeElement
+        }
+      }
+      """
+    } else {
+      if (ctx.isPrimitiveType(jt)) {
+        s"$arrayWriter.writePrimitive${typeName}Array($input);"
+      } else {
+        s"""
+        for (int $index = 0; $index < $numElements; $index++) {
+          final $jt $element = ${ctx.getValue(input, et, index)};
+          $writeElement
+        }
+        """
+      }
+    }
+
     s"""
       if ($input instanceof UnsafeArrayData) {
         ${writeUnsafeData(ctx, s"((UnsafeArrayData) $input)", bufferHolder)}
@@ -239,14 +264,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         final int $numElements = $input.numElements();
         $arrayWriter.initialize($bufferHolder, $numElements, $elementOrOffsetSize);
 
-        for (int $index = 0; $index < $numElements; $index++) {
-          if ($input.isNullAt($index)) {
-            $arrayWriter.setNull$primitiveTypeName($index);
-          } else {
-            final $jt $element = ${ctx.getValue(input, et, index)};
-            $writeElement
-          }
-        }
+        $storeElements
       }
     """
   }
@@ -278,11 +296,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         // Remember the current cursor so that we can write numBytes of key array later.
         final int $tmpCursor = $bufferHolder.cursor;
 
-        ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder)}
+        ${writeArrayToBuffer(ctx, keys, keyType, false, bufferHolder)}
         // Write the numBytes of key array into the first 8 bytes.
         Platform.putLong($bufferHolder.buffer, $tmpCursor - 8, $bufferHolder.cursor - $tmpCursor);
 
-        ${writeArrayToBuffer(ctx, values, valueType, bufferHolder)}
+        ${writeArrayToBuffer(ctx, values, valueType, true, bufferHolder)}
       }
     """
   }
