@@ -72,6 +72,10 @@ package object config {
   private[spark] val DYN_ALLOCATION_MAX_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.maxExecutors").intConf.createWithDefault(Int.MaxValue)
 
+  private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefaultString("3s")
+
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
 

@@ -29,6 +29,7 @@ import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
+import org.apache.spark.internal.config
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcEndpointAddress
@@ -95,7 +96,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private var totalGpusAcquired = 0
 
   // The amount of time to wait for locality scheduling
-  private val localityWait = conf.getTimeAsMs("spark.locality.wait", "3s")
+  private val localityWait = conf.get(config.LOCALITY_WAIT)
   // The start of the waiting, for data local scheduling
   private var localityWaitStartTime = System.currentTimeMillis()
   // If true, the scheduler is in the process of launching executors to reach the requested
