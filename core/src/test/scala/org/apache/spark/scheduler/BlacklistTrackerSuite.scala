@@ -561,12 +561,13 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     blacklist.updateBlacklistForFetchFailure("hostA", exec = "1")
 
     verify(allocationClientMock).killExecutors(Seq("1"), true, true)
+    verify(allocationClientMock, never).killExecutorsOnHost(any())
 
     // Enable external shuffle service to see if all the executors on this node will be killed.
-    conf.set("spark.shuffle.service.enabled", "true")
+    conf.set(config.SHUFFLE_SERVICE_ENABLED, true)
     blacklist.updateBlacklistForFetchFailure("hostA", exec = "2")
 
-    verify(allocationClientMock).killExecutors(Seq("2"), true, true)
+    verify(allocationClientMock, never).killExecutors(Seq("2"), true, true)
     verify(allocationClientMock).killExecutorsOnHost("hostA")
   }
 }

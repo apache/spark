@@ -1169,7 +1169,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     tsm.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
       FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0, 0, "ignored"))
 
-    assert(blacklistTracker.isExecutorBlacklisted(taskDescs(0).executorId))
     assert(blacklistTracker.isNodeBlacklisted("host1"))
   }
 

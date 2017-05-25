@@ -178,19 +178,26 @@ private[scheduler] class BlacklistTracker (
 
   def updateBlacklistForFetchFailure(host: String, exec: String): Unit = {
     if (BLACKLIST_FETCH_FAILURE_ENABLED) {
-      logWarning(
-        s"""
-           |${config.BLACKLIST_FETCH_FAILURE_ENABLED.key} is enabled. If we blacklist
-           |on fetch failures, we are implicitly saying that we believe the failure is
-           |non-transient, and can't be recovered from (even if this is the first fetch failure).
-           |If the external shuffle-service is on, then every other executor on this node would
-           |be suffering from the same issue, so we should blacklist (and potentially kill) all
-           |of them immediately.
-         """.stripMargin)
+      // spark.blacklist.application.fetchFailure.enabled is enabled. If we blacklist
+      // on fetch failures, we are implicitly saying that we believe the failure is
+      // non-transient, and can't be recovered from (even if this is the first fetch failure).
+      // If the external shuffle-service is on, then every other executor on this node would
+      // be suffering from the same issue, so we should blacklist (and potentially kill) all
+      // of them immediately.
 
       val now = clock.getTimeMillis()
       val expiryTimeForNewBlacklists = now + BLACKLIST_TIMEOUT_MILLIS
-      if (!executorIdToBlacklistStatus.contains(exec)) {
+
+      if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+        if (!nodeIdToBlacklistExpiryTime.contains(host)) {
+          logInfo(s"blacklisting node $host due to fetch failure of external shuffle service")
+
+          nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)
+          listenerBus.post(SparkListenerNodeBlacklisted(now, host, 1))
+          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
+          killExecutorsOnBlacklistedNode(host)
+        }
+      } else if (!executorIdToBlacklistStatus.contains(exec)) {
         logInfo(s"Blacklisting executor $exec due to fetch failure")
 
         executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(host, expiryTimeForNewBlacklists))
@@ -202,16 +209,6 @@ private[scheduler] class BlacklistTracker (
 
         val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(exec, HashSet[String]())
         blacklistedExecsOnNode += exec
-
-        if (conf.getBoolean("spark.shuffle.service.enabled", false) &&
-            !nodeIdToBlacklistExpiryTime.contains(host)) {
-          logInfo(s"blacklisting node $host due to fetch failure of external shuffle service")
-
-          nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)
-          listenerBus.post(SparkListenerNodeBlacklisted(now, exec, blacklistedExecsOnNode.size))
-          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
-          killExecutorsOnBlacklistedNode(host)
-        }
       }
     }
   }
