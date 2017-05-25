@@ -330,7 +330,7 @@ private[spark] object Utils extends Logging {
         val inChannel = in.asInstanceOf[FileInputStream].getChannel()
         val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
         val size = inChannel.size()
-        copyFileStreamNIO(inChannel, outChannel, size)
+        copyFileStreamNIO(inChannel, outChannel, 0, size)
         size
       } else {
         var count = 0L
@@ -356,13 +356,19 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  def copyFileStreamNIO(input: FileChannel, output: FileChannel, bytesToCopy: Long): Unit = {
+  def copyFileStreamNIO(
+      input: FileChannel,
+      output: FileChannel,
+      startPosition: Long,
+      bytesToCopy: Long): Unit = {
     val initialPos = output.position()
     var count = 0L
     // In case transferTo method transferred less data than we have required.
     while (count < bytesToCopy) {
-      count += input.transferTo(count, bytesToCopy - count, output)
+      count += input.transferTo(count + startPosition, bytesToCopy - count, output)
     }
+    assert(count == bytesToCopy,
+      s"request to copy $bytesToCopy bytes, but actually copied $count bytes.")
 
     // Check the position after transferTo loop to see if it is in the right position and
     // give user information if not.

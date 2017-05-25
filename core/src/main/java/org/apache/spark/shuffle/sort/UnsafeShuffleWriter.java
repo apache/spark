@@ -422,11 +422,14 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       for (int partition = 0; partition < numPartitions; partition++) {
         for (int i = 0; i < spills.length; i++) {
           final long partitionLengthInSpill = spills[i].partitionLengths[partition];
-          long bytesToTransfer = partitionLengthInSpill;
           final FileChannel spillInputChannel = spillInputChannels[i];
           final long writeStartTime = System.nanoTime();
-          Utils.copyFileStreamNIO(spillInputChannel, mergedFileOutputChannel, bytesToTransfer);
-          spillInputChannelPositions[i] += bytesToTransfer;
+          Utils.copyFileStreamNIO(
+            spillInputChannel,
+            mergedFileOutputChannel,
+            spillInputChannelPositions[i],
+            partitionLengthInSpill);
+          spillInputChannelPositions[i] += partitionLengthInSpill;
           writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
           bytesWrittenToMergedFile += partitionLengthInSpill;
           partitionLengths[partition] += partitionLengthInSpill;
