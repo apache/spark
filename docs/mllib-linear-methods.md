@@ -258,10 +258,10 @@ applying the logistic function
 \mathrm{f}(z) = \frac{1}{1 + e^{-z}}
 \]`
 where $z = \wv^T \x$.
-By default, if $\mathrm{f}(\wv^T x) > 0.5$, the outcome is positive, or
-negative otherwise, though unlike linear SVMs, the raw output of the logistic regression
-model, $\mathrm{f}(z)$, has a probabilistic interpretation (i.e., the probability
-that $\x$ is positive).
+By default, if $\mathrm{f}(\wv^T x) > 0.5$, the outcome is positive, else it is negative.
+Logistic regression is distinct from say linear SVMs in its formally being a Bayesian model, albeit trivial one: rather than producing directly an 'input-output machine', the conditional distribution of the output given the input is modeled explicitly through the function $\mathrm{f}$ above; this model can be and is then used to provide definite outputs for definite inputs.
+
+
 
 Binary logistic regression can be generalized into
 [multinomial logistic regression](http://en.wikipedia.org/wiki/Multinomial_logistic_regression) to
