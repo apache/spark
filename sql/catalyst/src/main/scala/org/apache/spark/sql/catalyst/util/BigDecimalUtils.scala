@@ -27,8 +27,8 @@ object BigDecimalUtils {
   /**
    * Returns double type input truncated to scale decimal places.
    */
-  def trunc(input: Double, scale: Int): JBigDecimal = {
-    trunc(JBigDecimal.valueOf(input), scale)
+  def trunc(input: Double, scale: Int): Double = {
+    trunc(JBigDecimal.valueOf(input), scale).doubleValue()
   }
 
   /**

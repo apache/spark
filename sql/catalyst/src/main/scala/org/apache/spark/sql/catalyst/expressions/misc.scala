@@ -168,7 +168,7 @@ case class Trunc(data: Expression, format: Expression = Literal(0))
           } else {
             format.eval().asInstanceOf[Int]
           }
-          BigDecimalUtils.trunc(d.asInstanceOf[Double], scale).doubleValue()
+          BigDecimalUtils.trunc(d.asInstanceOf[Double], scale)
         case dateType: DateType =>
           val level = if (format.foldable) {
             truncFormat
@@ -199,11 +199,11 @@ case class Trunc(data: Expression, format: Expression = Literal(0))
             boolean ${ev.isNull} = ${d.isNull};
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
             if (!${ev.isNull}) {
-              ${ev.value} = $bdu.trunc(${d.value}, $truncFormat).doubleValue();
+              ${ev.value} = $bdu.trunc(${d.value}, $truncFormat);
             }""")
         } else {
           nullSafeCodeGen(ctx, ev, (doubleVal, fmt) => {
-            s"${ev.value} = $bdu.trunc($doubleVal, $fmt).doubleValue();"
+            s"${ev.value} = $bdu.trunc($doubleVal, $fmt);"
           })
         }
       case dateType: DateType =>

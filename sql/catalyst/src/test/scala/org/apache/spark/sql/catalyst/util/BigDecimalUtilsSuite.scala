@@ -27,7 +27,6 @@ class BigDecimalUtilsSuite extends SparkFunSuite {
     assert(trunc(bg, 4) === 1234567891.1234)
     assert(trunc(bg, -4) === 1234560000)
     assert(trunc(bg, 0) === 1234567891)
-    assert(trunc(12345.5554f, 0) === 1234567891)
   }
 
 }
