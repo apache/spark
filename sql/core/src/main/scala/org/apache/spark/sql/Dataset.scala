@@ -242,9 +242,12 @@ class Dataset[T] private[sql](
    * @param vertical If set to true, prints output rows vertically (one line per column value).
    */
   private[sql] def showString(
-      _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
+      _numRows: Int,
+      truncate: Int = 20,
+      vertical: Boolean = false,
+      isInternal: Boolean = false): String = {
     val numRows = _numRows.max(0)
-    val takeResult = toDF().take(numRows + 1)
+    val takeResult = if (isInternal) toDF().takeInternal(numRows + 1) else toDF().take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
@@ -680,6 +683,15 @@ class Dataset[T] private[sql](
     println(showString(numRows, truncate = 20))
   } else {
     println(showString(numRows, truncate = 0))
+  }
+  // scalastyle:on println
+
+  // scalastyle:off println
+  // An internal version of `show`, which won't set execution id and trigger listeners.
+  private[sql] def showInternal(numRows: Int, truncate: Boolean): Unit = if (truncate) {
+    println(showString(numRows, truncate = 20, isInternal = true))
+  } else {
+    println(showString(numRows, truncate = 0, isInternal = true))
   }
   // scalastyle:on println
 

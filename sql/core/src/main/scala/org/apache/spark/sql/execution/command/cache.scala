@@ -34,16 +34,9 @@ case class CacheTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>
-      CreateViewCommand(
-        name = tableIdent,
-        userSpecifiedColumns = Nil,
-        comment = None,
-        properties = Map.empty,
-        originalText = None,
-        child = logicalPlan,
-        allowExisting = false,
-        replace = false,
-        viewType = LocalTempView).run(sparkSession)
+      Dataset.ofRows(sparkSession, logicalPlan)
+        .createTempViewCommand(tableIdent.quotedString, replace = false, global = false)
+        .run(sparkSession)
     }
     sparkSession.catalog.cacheTable(tableIdent.quotedString)
 
