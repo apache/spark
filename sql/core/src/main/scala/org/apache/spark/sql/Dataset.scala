@@ -206,7 +206,7 @@ class Dataset[T] private[sql](
    * `fromRow` method later.
    */
   private val boundEnc =
-    exprEnc.resolveAndBind(planWithBarrier.output, sparkSession.sessionState.analyzer)
+    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
 
   private implicit def classTag = exprEnc.clsTag
 
@@ -438,7 +438,7 @@ class Dataset[T] private[sql](
         s"Old column names (${schema.size}): " + schema.fields.map(_.name).mkString(", ") + "\n" +
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
-    val newCols = planWithBarrier.output.zip(colNames).map { case (oldAttribute, newName) =>
+    val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
       Column(oldAttribute).as(newName)
     }
     select(newCols : _*)
@@ -525,7 +525,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def isStreaming: Boolean = planWithBarrier.isStreaming
+  def isStreaming: Boolean = logicalPlan.isStreaming
 
   /**
    * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to truncate
@@ -576,7 +576,7 @@ class Dataset[T] private[sql](
     Dataset.ofRows(
       sparkSession,
       LogicalRDD(
-        planWithBarrier.output,
+        logicalPlan.output,
         internalRdd,
         outputPartitioning,
         physicalPlan.outputOrdering
