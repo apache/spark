@@ -15,28 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.test
+package org.apache.spark.sql.jdbc
 
-import org.scalatest.BeforeAndAfterAll
+import java.sql.Types
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.hive.HiveExternalCatalog
-import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.types._
 
 
-trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
-  protected val spark: SparkSession = TestHive.sparkSession
-  protected val hiveContext: TestHiveContext = TestHive
-  protected val hiveClient: HiveClient =
-    spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+private case object TeradataDialect extends JdbcDialect {
 
-  protected override def afterAll(): Unit = {
-    try {
-      hiveContext.reset()
-    } finally {
-      super.afterAll()
-    }
+  override def canHandle(url: String): Boolean = { url.startsWith("jdbc:teradata") }
+
+  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    case StringType => Some(JdbcType("VARCHAR(255)", java.sql.Types.VARCHAR))
+    case BooleanType => Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    case _ => None
   }
-
 }

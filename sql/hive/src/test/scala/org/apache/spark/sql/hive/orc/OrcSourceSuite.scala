@@ -153,7 +153,6 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
   }
 
   test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
     val location = Utils.createTempDir()
     val uri = location.toURI
     try {

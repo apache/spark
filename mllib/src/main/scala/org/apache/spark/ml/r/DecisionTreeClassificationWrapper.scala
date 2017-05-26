@@ -23,64 +23,57 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.classification.{LinearSVC, LinearSVCModel}
+import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, DecisionTreeClassifier}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
-private[r] class LinearSVCWrapper private (
-    val pipeline: PipelineModel,
-    val features: Array[String],
-    val labels: Array[String]) extends MLWritable {
-  import LinearSVCWrapper._
+private[r] class DecisionTreeClassifierWrapper private (
+  val pipeline: PipelineModel,
+  val formula: String,
+  val features: Array[String]) extends MLWritable {
 
-  private val svcModel: LinearSVCModel =
-    pipeline.stages(1).asInstanceOf[LinearSVCModel]
+  import DecisionTreeClassifierWrapper._
 
-  lazy val rFeatures: Array[String] = if (svcModel.getFitIntercept) {
-    Array("(Intercept)") ++ features
-  } else {
-    features
-  }
+  private val dtcModel: DecisionTreeClassificationModel =
+    pipeline.stages(1).asInstanceOf[DecisionTreeClassificationModel]
 
-  lazy val rCoefficients: Array[Double] = if (svcModel.getFitIntercept) {
-    Array(svcModel.intercept) ++ svcModel.coefficients.toArray
-  } else {
-    svcModel.coefficients.toArray
-  }
+  lazy val numFeatures: Int = dtcModel.numFeatures
+  lazy val featureImportances: Vector = dtcModel.featureImportances
+  lazy val maxDepth: Int = dtcModel.getMaxDepth
 
-  lazy val numClasses: Int = svcModel.numClasses
-
-  lazy val numFeatures: Int = svcModel.numFeatures
+  def summary: String = dtcModel.toDebugString
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)
       .drop(PREDICTED_LABEL_INDEX_COL)
-      .drop(svcModel.getFeaturesCol)
-      .drop(svcModel.getLabelCol)
+      .drop(dtcModel.getFeaturesCol)
+      .drop(dtcModel.getLabelCol)
   }
 
-  override def write: MLWriter = new LinearSVCWrapper.LinearSVCWrapperWriter(this)
+  override def write: MLWriter = new
+      DecisionTreeClassifierWrapper.DecisionTreeClassifierWrapperWriter(this)
 }
 
-private[r] object LinearSVCWrapper
-  extends MLReadable[LinearSVCWrapper] {
+private[r] object DecisionTreeClassifierWrapper extends MLReadable[DecisionTreeClassifierWrapper] {
 
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
-  def fit(
+  def fit(  // scalastyle:ignore
       data: DataFrame,
       formula: String,
-      regParam: Double,
-      maxIter: Int,
-      tol: Double,
-      standardization: Boolean,
-      threshold: Double,
-      weightCol: String,
-      aggregationDepth: Int
-      ): LinearSVCWrapper = {
+      maxDepth: Int,
+      maxBins: Int,
+      impurity: String,
+      minInstancesPerNode: Int,
+      minInfoGain: Double,
+      checkpointInterval: Int,
+      seed: String,
+      maxMemoryInMB: Int,
+      cacheNodeIds: Boolean): DecisionTreeClassifierWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
@@ -88,25 +81,23 @@ private[r] object LinearSVCWrapper
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
-    val fitIntercept = rFormula.hasIntercept
-
     // get labels and feature names from output schema
     val (features, labels) = getFeaturesAndLabels(rFormulaModel, data)
 
     // assemble and fit the pipeline
-    val svc = new LinearSVC()
-      .setRegParam(regParam)
-      .setMaxIter(maxIter)
-      .setTol(tol)
-      .setFitIntercept(fitIntercept)
-      .setStandardization(standardization)
+    val dtc = new DecisionTreeClassifier()
+      .setMaxDepth(maxDepth)
+      .setMaxBins(maxBins)
+      .setImpurity(impurity)
+      .setMinInstancesPerNode(minInstancesPerNode)
+      .setMinInfoGain(minInfoGain)
+      .setCheckpointInterval(checkpointInterval)
+      .setMaxMemoryInMB(maxMemoryInMB)
+      .setCacheNodeIds(cacheNodeIds)
       .setFeaturesCol(rFormula.getFeaturesCol)
       .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
-      .setThreshold(threshold)
-      .setAggregationDepth(aggregationDepth)
-
-    if (weightCol != null) svc.setWeightCol(weightCol)
+    if (seed != null && seed.length > 0) dtc.setSeed(seed.toLong)
 
     val idxToStr = new IndexToString()
       .setInputCol(PREDICTED_LABEL_INDEX_COL)
@@ -114,47 +105,48 @@ private[r] object LinearSVCWrapper
       .setLabels(labels)
 
     val pipeline = new Pipeline()
-      .setStages(Array(rFormulaModel, svc, idxToStr))
+      .setStages(Array(rFormulaModel, dtc, idxToStr))
       .fit(data)
 
-    new LinearSVCWrapper(pipeline, features, labels)
+    new DecisionTreeClassifierWrapper(pipeline, formula, features)
   }
 
-  override def read: MLReader[LinearSVCWrapper] = new LinearSVCWrapperReader
+  override def read: MLReader[DecisionTreeClassifierWrapper] =
+    new DecisionTreeClassifierWrapperReader
 
-  override def load(path: String): LinearSVCWrapper = super.load(path)
+  override def load(path: String): DecisionTreeClassifierWrapper = super.load(path)
 
-  class LinearSVCWrapperWriter(instance: LinearSVCWrapper) extends MLWriter {
+  class DecisionTreeClassifierWrapperWriter(instance: DecisionTreeClassifierWrapper)
+    extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("features" -> instance.features.toSeq) ~
-        ("labels" -> instance.labels.toSeq)
+        ("formula" -> instance.formula) ~
+        ("features" -> instance.features.toSeq)
       val rMetadataJson: String = compact(render(rMetadata))
-      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
+      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
       instance.pipeline.save(pipelinePath)
     }
   }
 
-  class LinearSVCWrapperReader extends MLReader[LinearSVCWrapper] {
+  class DecisionTreeClassifierWrapperReader extends MLReader[DecisionTreeClassifierWrapper] {
 
-    override def load(path: String): LinearSVCWrapper = {
+    override def load(path: String): DecisionTreeClassifierWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
+      val pipeline = PipelineModel.load(pipelinePath)
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
+      val formula = (rMetadata \ "formula").extract[String]
       val features = (rMetadata \ "features").extract[Array[String]]
-      val labels = (rMetadata \ "labels").extract[Array[String]]
 
-      val pipeline = PipelineModel.load(pipelinePath)
-      new LinearSVCWrapper(pipeline, features, labels)
+      new DecisionTreeClassifierWrapper(pipeline, formula, features)
     }
   }
 }
-
