@@ -2067,6 +2067,18 @@ object functions {
    */
   def radians(columnName: String): Column = radians(Column(columnName))
 
+  /**
+   * returns number truncated by specified decimal places.
+   *
+   * @param scale: 4. -4, 0
+   *
+   * @group math_funcs
+   * @since 2.3.0
+   */
+  def trunc(db: Column, scale: Int = 0): Column = withExpr {
+    Trunc(db.expr, Literal(scale))
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
   //////////////////////////////////////////////////////////////////////////////////////////////
