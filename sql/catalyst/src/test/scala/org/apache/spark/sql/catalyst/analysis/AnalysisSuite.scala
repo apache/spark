@@ -441,6 +441,20 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     checkAnalysis(SubqueryAlias("tbl", testRelation).as("tbl2"), testRelation)
   }
 
+  test("analysis barrier") {
+    // [[AnalysisBarrier]] will be removed after analysis
+    checkAnalysis(
+      Project(Seq(UnresolvedAttribute("tbl.a")),
+        AnalysisBarrier(SubqueryAlias("tbl", testRelation))),
+      Project(testRelation.output, SubqueryAlias("tbl", testRelation)))
+
+    // Verify we won't go through a plan wrapped in a barrier.
+    // Since we wrap an unresolved plan and analyzer won't go through it. It remains unresolved.
+    val barrier = AnalysisBarrier(Project(Seq(UnresolvedAttribute("tbl.b")),
+      SubqueryAlias("tbl", testRelation)))
+    assertAnalysisError(barrier, Seq("cannot resolve '`tbl.b`'"))
+  }
+
   test("SPARK-20311 range(N) as alias") {
     def rangeWithAliases(args: Seq[Int], outputNames: Seq[String]): LogicalPlan = {
       SubqueryAlias("t", UnresolvedTableValuedFunction("range", args.map(Literal(_)), outputNames))
