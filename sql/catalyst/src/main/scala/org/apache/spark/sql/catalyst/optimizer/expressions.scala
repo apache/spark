@@ -72,7 +72,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
  *   in the AND node.
  */
 object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
-  def containsNonConjunctionPredicates(expression: Expression): Boolean = expression.find {
+  private def containsNonConjunctionPredicates(expression: Expression): Boolean = expression.find {
     case _: Not | _: Or => true
     case _ => false
   }.isDefined

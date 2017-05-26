@@ -151,4 +151,17 @@ class ConstantPropagationSuite extends PlanTest {
 
     comparePlans(Optimize.execute(query), correctAnswer)
   }
+
+  test("conflicting equality predicates") {
+    val query = testRelation
+      .select(columnA)
+      .where(
+        columnA === Literal(1) && columnA === Literal(2) && columnB === Add(columnA, Literal(3)))
+
+    val correctAnswer = testRelation
+      .select(columnA)
+      .where(columnA === Literal(1) && columnA === Literal(2) && columnB === Literal(5))
+
+    comparePlans(Optimize.execute(query.analyze), correctAnswer)
+  }
 }
