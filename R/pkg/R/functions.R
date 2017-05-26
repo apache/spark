@@ -4032,7 +4032,9 @@ setMethod("input_file_name", signature("missing"),
 #' @examples
 #' \dontrun{
 #' trunc(df$c, "year")
+#' trunc(df$c, "yy")
 #' trunc(df$c, "month")
+#' trunc(df$c, "mon")
 #' }
 #' @note trunc since 2.3.0
 setMethod("trunc",
