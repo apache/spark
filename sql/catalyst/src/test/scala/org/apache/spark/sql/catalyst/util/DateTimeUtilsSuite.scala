@@ -349,6 +349,25 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToTimestamp(UTF8String.fromString("2015-04-31")).isEmpty)
   }
 
+  test("SPARK-15379: special invalid date string") {
+    // Test stringToDate
+    assert(stringToDate(
+      UTF8String.fromString("2015-02-29 00:00:00")).isEmpty)
+    assert(stringToDate(
+      UTF8String.fromString("2015-04-31 00:00:00")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("2015-02-29")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("2015-04-31")).isEmpty)
+
+
+    // Test stringToTimestamp
+    assert(stringToTimestamp(
+      UTF8String.fromString("2015-02-29 00:00:00")).isEmpty)
+    assert(stringToTimestamp(
+      UTF8String.fromString("2015-04-31 00:00:00")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("2015-02-29")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("2015-04-31")).isEmpty)
+  }
+
   test("hours") {
     val c = Calendar.getInstance(TimeZonePST)
     c.set(2015, 2, 18, 13, 2, 11)
