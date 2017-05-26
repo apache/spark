@@ -31,8 +31,9 @@ import scala.util.Try
 
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
-import org.apache.spark.util.Utils
 import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.Utils
+
 
 /**
  * Parses and encapsulates arguments from the spark-submit script.
