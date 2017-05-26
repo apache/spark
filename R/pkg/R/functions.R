@@ -4037,7 +4037,7 @@ setMethod("input_file_name", signature("missing"),
 #' @note trunc since 2.3.0
 setMethod("trunc",
           signature(x = "Column"),
-          function(x, format = "year") {
+          function(x, format) {
             jc <- callJStatic("org.apache.spark.sql.functions", "trunc", x@jc, format)
             column(jc)
           })
