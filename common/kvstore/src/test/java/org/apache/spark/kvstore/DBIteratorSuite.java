@@ -127,7 +127,9 @@ public abstract class DBIteratorSuite {
     // the same way the store is expected to.
     CustomType1 first = allEntries.get(0);
     clashingEntries = new ArrayList<>();
-    for (int i = 0; i < RND.nextInt(MIN_ENTRIES) + 1; i++) {
+
+    int clashCount = RND.nextInt(MIN_ENTRIES) + 1;
+    for (int i = 0; i < clashCount; i++) {
       CustomType1 t = new CustomType1();
       t.key = "n-key" + (count + i);
       t.id = first.id;
