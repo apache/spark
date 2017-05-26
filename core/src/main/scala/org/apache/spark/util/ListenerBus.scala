@@ -41,13 +41,13 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * Returns a CodaHale metrics Timer for measuring the listener's event processing time.
    * This method is intended to be overridden by subclasses.
    */
-  protected def createTimer(listener: L): Option[Timer] = None
+  protected def getTimer(listener: L): Option[Timer] = None
 
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
    */
   final def addListener(listener: L): Unit = {
-    listenersPlusTimers.add((listener, createTimer(listener).orNull))
+    listenersPlusTimers.add((listener, getTimer(listener).orNull))
   }
 
   /**

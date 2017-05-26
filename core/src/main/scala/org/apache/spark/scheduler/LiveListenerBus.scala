@@ -20,12 +20,13 @@ package org.apache.spark.scheduler
 import java.util.concurrent._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
+import scala.collection.mutable
 import scala.util.DynamicVariable
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry, Timer}
-import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
@@ -112,13 +113,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
     }
   }
 
-  override protected def createTimer(listener: SparkListenerInterface): Option[Timer] = {
-    if (listener.getClass.getName.startsWith("org.apache.spark")) {
-      metrics.perListenerTimers.size()
-      Some(metrics.perListenerTimers(listener.getClass.getSimpleName))
-    } else {
-      None
-    }
+  override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
+    metrics.getTimerForListener(listener)
   }
 
   /**
@@ -250,7 +246,8 @@ private[spark] object LiveListenerBus {
   val name = "SparkListenerBus"
 }
 
-private[spark] class LiveListenerBusMetrics(queue: LinkedBlockingQueue[_]) extends Source {
+private[spark]
+class LiveListenerBusMetrics(queue: LinkedBlockingQueue[_]) extends Source with Logging {
   override val sourceName: String = "LiveListenerBus"
   override val metricRegistry: MetricRegistry = new MetricRegistry
 
@@ -281,15 +278,29 @@ private[spark] class LiveListenerBusMetrics(queue: LinkedBlockingQueue[_]) exten
     })
   }
 
+  // Guarded by synchronization.
+  private val perListenerClassTimers = mutable.Map[String, Timer]()
+
   /**
-   * Mapping from fully-qualified listener class name to a timer tracking the processing time of
-   * events processed by that listener.
+   * Returns a timer tracking the processing time of the given listener class.
+   * events processed by that listener. This method is thread-safe.
    */
-  val perListenerTimers: LoadingCache[String, Timer] =
-    CacheBuilder.newBuilder().build[String, Timer](new CacheLoader[String, Timer] {
-      override def load(listenerName: String): Timer = {
-        metricRegistry.timer(MetricRegistry.name("listenerProcessingTime", listenerName))
+  def getTimerForListener(listener: SparkListenerInterface): Option[Timer] = {
+    synchronized {
+      val className = listener.getClass.getName
+      val maxTimed = 128
+      perListenerClassTimers.get(className).orElse {
+        if (perListenerClassTimers.size == maxTimed) {
+          logError(s"Not measuring processing time for listener class $className because a " +
+            s"maximum of $maxTimed listener classes are already timed.")
+          None
+        } else {
+          perListenerClassTimers(className) =
+            metricRegistry.timer(MetricRegistry.name("listenerProcessingTime", className))
+          perListenerClassTimers.get(className)
+        }
       }
-    })
+    }
+  }
 }
 
