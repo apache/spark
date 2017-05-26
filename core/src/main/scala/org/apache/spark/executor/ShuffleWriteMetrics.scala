@@ -31,6 +31,7 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
   private[executor] val _bytesWritten = new LongAccumulator
   private[executor] val _recordsWritten = new LongAccumulator
   private[executor] val _writeTime = new LongAccumulator
+  private[executor] val _underestimatedBlocksSize = new LongAccumulator
 
   /**
    * Number of bytes written for the shuffle by this task.
@@ -47,6 +48,11 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
    */
   def writeTime: Long = _writeTime.sum
 
+  /**
+   * The sum of underestimated sizes of blocks in MapStatus.
+   */
+  def underestimatedBlocksSize: Long = _underestimatedBlocksSize.value
+
   private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
   private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
   private[spark] def incWriteTime(v: Long): Unit = _writeTime.add(v)
@@ -55,6 +61,10 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
   }
   private[spark] def decRecordsWritten(v: Long): Unit = {
     _recordsWritten.setValue(recordsWritten - v)
+  }
+
+  private[spark] def incUnderestimatedBlocksSize(v: Long) = {
+    _underestimatedBlocksSize.add(v)
   }
 
   // Legacy methods for backward compatibility.

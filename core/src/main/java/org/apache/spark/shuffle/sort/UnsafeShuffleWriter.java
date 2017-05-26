@@ -19,33 +19,30 @@ package org.apache.spark.shuffle.sort;
 
 import javax.annotation.Nullable;
 import java.io.*;
+import java.lang.Long;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
 
-import scala.Option;
-import scala.Product2;
+import scala.*;
 import scala.collection.JavaConverters;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.io.ByteStreams;
-import com.google.common.io.Closeables;
-import com.google.common.io.Files;
+import com.google.common.io.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.commons.io.output.CloseShieldOutputStream;
+import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.spark.*;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
-import org.apache.commons.io.output.CloseShieldOutputStream;
-import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
-import org.apache.spark.scheduler.MapStatus;
-import org.apache.spark.scheduler.MapStatus$;
+import org.apache.spark.scheduler.*;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
@@ -228,6 +225,16 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    if (mapStatus instanceof HighlyCompressedMapStatus) {
+      if (logger.isDebugEnabled() && partitionLengths.length > 0) {
+        Tuple2<String, Object> tuple = SortShuffleWriter$.MODULE$.genBlocksDistributionStr(
+          partitionLengths, (HighlyCompressedMapStatus) mapStatus, taskContext);
+        if (!tuple._1.isEmpty()) {
+          logger.debug(tuple._1);
+        }
+        writeMetrics.incUnderestimatedBlocksSize((Long)(tuple._2));
+      }
+    }
   }
 
   @VisibleForTesting

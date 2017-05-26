@@ -94,6 +94,8 @@ class TaskMetricsSuite extends SparkFunSuite {
     sr.setRemoteBytesRead(30L)
     sr.incRemoteBytesRead(3L)
     sr.incRemoteBytesRead(3L)
+    sr.setRemoteBytesReadToMem(10L)
+    sr.incRemoteBytesReadToMem(8L)
     sr.setLocalBytesRead(400L)
     sr.setLocalBytesRead(40L)
     sr.incLocalBytesRead(4L)
@@ -110,6 +112,7 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(sr.remoteBlocksFetched == 12)
     assert(sr.localBlocksFetched == 24)
     assert(sr.remoteBytesRead == 36L)
+    assert(sr.remoteBytesReadToMem === 18L)
     assert(sr.localBytesRead == 48L)
     assert(sr.fetchWaitTime == 60L)
     assert(sr.recordsRead == 72L)
@@ -133,10 +136,12 @@ class TaskMetricsSuite extends SparkFunSuite {
     sw.decRecordsWritten(2L)
     sw.incWriteTime(300L)
     sw.incWriteTime(30L)
+    sw.incUnderestimatedBlocksSize(1024)
     // assert new values exist
     assert(sw.bytesWritten == 108L)
     assert(sw.recordsWritten == 216L)
     assert(sw.writeTime == 330L)
+    assert(sw.underestimatedBlocksSize === 1024)
   }
 
   test("mutating input metrics values") {

@@ -200,6 +200,7 @@ private[v1] object AllStagesResource {
           readBytes = submetricQuantiles(_.totalBytesRead),
           readRecords = submetricQuantiles(_.recordsRead),
           remoteBytesRead = submetricQuantiles(_.remoteBytesRead),
+          remoteBytesReadToMem = submetricQuantiles(_.remoteBytesReadToMem),
           remoteBlocksFetched = submetricQuantiles(_.remoteBlocksFetched),
           localBlocksFetched = submetricQuantiles(_.localBlocksFetched),
           totalBlocksFetched = submetricQuantiles(_.totalBlocksFetched),
@@ -216,7 +217,8 @@ private[v1] object AllStagesResource {
         def build: ShuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
           writeBytes = submetricQuantiles(_.bytesWritten),
           writeRecords = submetricQuantiles(_.recordsWritten),
-          writeTime = submetricQuantiles(_.writeTime)
+          writeTime = submetricQuantiles(_.writeTime),
+          underestimatedBlocksSize = submetricQuantiles(_.underestimatedBlocksSize)
         )
       }.build
 
@@ -281,6 +283,7 @@ private[v1] object AllStagesResource {
       localBlocksFetched = internal.localBlocksFetched,
       fetchWaitTime = internal.fetchWaitTime,
       remoteBytesRead = internal.remoteBytesRead,
+      remoteBytesReadToMem = internal.remoteBytesReadToMem,
       localBytesRead = internal.localBytesRead,
       recordsRead = internal.recordsRead
     )
@@ -290,7 +293,8 @@ private[v1] object AllStagesResource {
     new ShuffleWriteMetrics(
       bytesWritten = internal.bytesWritten,
       writeTime = internal.writeTime,
-      recordsWritten = internal.recordsWritten
+      recordsWritten = internal.recordsWritten,
+      underestimatedBlocksSize = internal.underestimatedBlocksSize
     )
   }
 }

@@ -39,6 +39,7 @@ import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.scheduler.HighlyCompressedMapStatus;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
 import org.apache.spark.serializer.Serializer;
@@ -74,6 +75,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
+  private final TaskContext taskContext;
   private final int fileBufferSize;
   private final boolean transferToEnabled;
   private final int numPartitions;
@@ -114,6 +116,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.shuffleId = dep.shuffleId();
     this.partitioner = dep.partitioner();
     this.numPartitions = partitioner.numPartitions();
+    this.taskContext = taskContext;
     this.writeMetrics = taskContext.taskMetrics().shuffleWriteMetrics();
     this.serializer = dep.serializer();
     this.shuffleBlockResolver = shuffleBlockResolver;
@@ -168,6 +171,16 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    if (mapStatus instanceof HighlyCompressedMapStatus) {
+      if (logger.isDebugEnabled() && partitionLengths.length > 0) {
+        Tuple2<String, Object> tuple = SortShuffleWriter$.MODULE$.genBlocksDistributionStr(
+          partitionLengths, (HighlyCompressedMapStatus) mapStatus, taskContext);
+        if (!tuple._1.isEmpty()) {
+          logger.debug(tuple._1);
+        }
+        writeMetrics.incUnderestimatedBlocksSize((Long)(tuple._2));
+      }
+    }
   }
 
   @VisibleForTesting

@@ -208,13 +208,15 @@ class ShuffleReadMetrics private[spark](
     val localBlocksFetched: Long,
     val fetchWaitTime: Long,
     val remoteBytesRead: Long,
+    val remoteBytesReadToMem: Long,
     val localBytesRead: Long,
     val recordsRead: Long)
 
 class ShuffleWriteMetrics private[spark](
     val bytesWritten: Long,
     val writeTime: Long,
-    val recordsWritten: Long)
+    val recordsWritten: Long,
+    val underestimatedBlocksSize: Long)
 
 class TaskMetricDistributions private[spark](
     val quantiles: IndexedSeq[Double],
@@ -249,12 +251,14 @@ class ShuffleReadMetricDistributions private[spark](
     val localBlocksFetched: IndexedSeq[Double],
     val fetchWaitTime: IndexedSeq[Double],
     val remoteBytesRead: IndexedSeq[Double],
+    val remoteBytesReadToMem: IndexedSeq[Double],
     val totalBlocksFetched: IndexedSeq[Double])
 
 class ShuffleWriteMetricDistributions private[spark](
     val writeBytes: IndexedSeq[Double],
     val writeRecords: IndexedSeq[Double],
-    val writeTime: IndexedSeq[Double])
+    val writeTime: IndexedSeq[Double],
+    val underestimatedBlocksSize: IndexedSeq[Double])
 
 class AccumulableInfo private[spark](
     val id: Long,

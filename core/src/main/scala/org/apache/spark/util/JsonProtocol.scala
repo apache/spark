@@ -339,12 +339,15 @@ private[spark] object JsonProtocol {
         ("Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.localBlocksFetched) ~
         ("Fetch Wait Time" -> taskMetrics.shuffleReadMetrics.fetchWaitTime) ~
         ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
+        ("Remote Bytes Read To Mem" -> taskMetrics.shuffleReadMetrics.remoteBytesReadToMem) ~
         ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
         ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
     val shuffleWriteMetrics: JValue =
       ("Shuffle Bytes Written" -> taskMetrics.shuffleWriteMetrics.bytesWritten) ~
         ("Shuffle Write Time" -> taskMetrics.shuffleWriteMetrics.writeTime) ~
-        ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten)
+        ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten) ~
+        ("Underestimated Blocks Size Writen" ->
+          taskMetrics.shuffleWriteMetrics.underestimatedBlocksSize)
     val inputMetrics: JValue =
       ("Bytes Read" -> taskMetrics.inputMetrics.bytesRead) ~
         ("Records Read" -> taskMetrics.inputMetrics.recordsRead)
@@ -804,6 +807,8 @@ private[spark] object JsonProtocol {
       readMetrics.incRemoteBlocksFetched((readJson \ "Remote Blocks Fetched").extract[Int])
       readMetrics.incLocalBlocksFetched((readJson \ "Local Blocks Fetched").extract[Int])
       readMetrics.incRemoteBytesRead((readJson \ "Remote Bytes Read").extract[Long])
+      Utils.jsonOption(readJson \ "Remote Bytes Read To Mem")
+        .foreach { v => readMetrics.incRemoteBytesReadToMem(v.extract[Long])}
       readMetrics.incLocalBytesRead(
         Utils.jsonOption(readJson \ "Local Bytes Read").map(_.extract[Long]).getOrElse(0L))
       readMetrics.incFetchWaitTime((readJson \ "Fetch Wait Time").extract[Long])
@@ -820,6 +825,8 @@ private[spark] object JsonProtocol {
       writeMetrics.incRecordsWritten(
         Utils.jsonOption(writeJson \ "Shuffle Records Written").map(_.extract[Long]).getOrElse(0L))
       writeMetrics.incWriteTime((writeJson \ "Shuffle Write Time").extract[Long])
+      Utils.jsonOption(writeJson \ "Underestimated Blocks Size Writen")
+        .foreach { v => writeMetrics.incUnderestimatedBlocksSize(v.extract[Long])}
     }
 
     // Output metrics

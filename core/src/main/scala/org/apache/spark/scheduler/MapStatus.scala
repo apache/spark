@@ -189,6 +189,8 @@ private[spark] class HighlyCompressedMapStatus private (
     }
     hugeBlockSizes = hugeBlockSizesArray.toMap
   }
+
+  def getAvgSize: Long = avgSize
 }
 
 private[spark] object HighlyCompressedMapStatus {
