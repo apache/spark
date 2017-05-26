@@ -841,20 +841,22 @@ object SparkSubmit extends CommandLineUtils {
   /**
    * Download a list of remote files to temp local files. If the file is local, the original file
    * will be returned.
-   * @param fileList A comma separated file list, it cannot be null.
+   * @param fileList A comma separated file list.
    * @return A comma separated local files list.
    */
   private[deploy] def downloadFileList(
       fileList: String,
       hadoopConf: HadoopConfiguration): String = {
+    require(fileList != null, "fileList cannot be null.")
     fileList.split(",").map(downloadFile(_, hadoopConf)).mkString(",")
   }
 
   /**
-   * Download remote file to a temporary local file. If the file is local, the original file
-   * will be returned.
+   * Download a file from the remote to a local temporary directory. If the input path points to
+   * a local path, returns it with no operation.
    */
   private[deploy] def downloadFile(path: String, hadoopConf: HadoopConfiguration): String = {
+    require(path != null, "path cannot be null.")
     val uri = Utils.resolveURI(path)
     uri.getScheme match {
       case "file" | "local" =>
