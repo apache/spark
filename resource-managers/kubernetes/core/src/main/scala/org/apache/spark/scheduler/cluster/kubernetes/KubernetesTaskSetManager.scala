@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.kubernetes
 
+import java.net.InetAddress
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.scheduler.{TaskSchedulerImpl, TaskSet, TaskSetManager}
@@ -23,7 +25,9 @@ import org.apache.spark.scheduler.{TaskSchedulerImpl, TaskSet, TaskSetManager}
 private[spark] class KubernetesTaskSetManager(
     sched: TaskSchedulerImpl,
     taskSet: TaskSet,
-    maxTaskFailures: Int) extends TaskSetManager(sched, taskSet, maxTaskFailures) {
+    maxTaskFailures: Int,
+    inetAddressUtil: InetAddressUtil = new InetAddressUtil)
+  extends TaskSetManager(sched, taskSet, maxTaskFailures) {
 
   /**
    * Overrides the lookup to use not only the executor pod IP, but also the cluster node
@@ -52,12 +56,30 @@ private[spark] class KubernetesTaskSetManager(
           if (pendingTasksClusterNodeIP.nonEmpty) {
             logDebug(s"Got preferred task list $pendingTasksClusterNodeIP for executor host " +
               s"$executorIP using cluster node IP $clusterNodeIP")
+            pendingTasksClusterNodeIP
+          } else {
+            val clusterNodeFullName = inetAddressUtil.getFullHostName(clusterNodeIP)
+            val pendingTasksClusterNodeFullName = super.getPendingTasksForHost(clusterNodeFullName)
+            if (pendingTasksClusterNodeFullName.nonEmpty) {
+              logDebug(s"Got preferred task list $pendingTasksClusterNodeFullName " +
+                s"for executor host $executorIP using cluster node full name $clusterNodeFullName")
+            }
+            pendingTasksClusterNodeFullName
           }
-          pendingTasksClusterNodeIP
         }
       } else {
         pendingTasksExecutorIP  // Empty
       }
     }
+  }
+}
+
+// To support mocks in unit tests.
+private[kubernetes] class InetAddressUtil {
+
+  // NOTE: This does issue a network call to DNS. Caching is done internally by the InetAddress
+  // class for both hits and misses.
+  def getFullHostName(ipAddress: String): String = {
+    InetAddress.getByName(ipAddress).getCanonicalHostName
   }
 }
