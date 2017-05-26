@@ -636,7 +636,6 @@ class SparkSession private(
   def read: DataFrameReader = new DataFrameReader(self)
 
   /**
-   * :: Experimental ::
    * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
    * {{{
    *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
@@ -645,7 +644,6 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  @Experimental
   @InterfaceStability.Evolving
   def readStream: DataStreamReader = new DataStreamReader(self)
 
