@@ -364,13 +364,14 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // Use a counting output stream to avoid having to close the underlying file and ask
     // the file system for its size after each partition is written.
     final CountingOutputStream mergedFileOutputStream = new CountingOutputStream(bos);
+    final int inputBufferSizeInBytes = (int) sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
 
     boolean threwException = true;
     try {
       for (int i = 0; i < spills.length; i++) {
         spillInputStreams[i] = new NioBufferedFileInputStream(
             spills[i].file,
-            (int) sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024);
+            inputBufferSizeInBytes);
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         final long initialFileLength = mergedFileOutputStream.getByteCount();
