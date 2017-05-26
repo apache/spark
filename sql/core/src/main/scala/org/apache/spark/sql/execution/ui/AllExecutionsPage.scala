@@ -36,19 +36,19 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       if (listener.getRunningExecutions.nonEmpty) {
         _content ++=
           new RunningExecutionTable(
-            parent, "Running Queries (" + listener.getRunningExecutions.size + ")", currentTime,
+            parent, s"Running Queries (${listener.getRunningExecutions.size})", currentTime,
             listener.getRunningExecutions.sortBy(_.submissionTime).reverse).toNodeSeq
       }
       if (listener.getCompletedExecutions.nonEmpty) {
         _content ++=
           new CompletedExecutionTable(
-            parent, "Completed Queries (" + listener.getCompletedExecutions.size + ")", currentTime,
+            parent, s"Completed Queries (${listener.getCompletedExecutions.size})", currentTime,
             listener.getCompletedExecutions.sortBy(_.submissionTime).reverse).toNodeSeq
       }
       if (listener.getFailedExecutions.nonEmpty) {
         _content ++=
           new FailedExecutionTable(
-            parent, "Failed Queries (" + listener.getFailedExecutions.size + ")", currentTime,
+            parent, s"Failed Queries (${listener.getFailedExecutions.size})", currentTime,
             listener.getFailedExecutions.sortBy(_.submissionTime).reverse).toNodeSeq
       }
       _content
