@@ -119,23 +119,23 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("toBlockMatrix sparse backing") {
     val sparseData = Seq(
-      (7L, Vectors.sparse(6, Seq((0, 4.0))))
+      (15L, Vectors.sparse(12, Seq((0, 4.0))))
     ).map(x => IndexedRow(x._1, x._2))
 
     // Gonna make m and n larger here so the matrices can easily be completely sparse:
-    val m = 8
-    val n = 6
+    val m = 16
+    val n = 12
 
     val idxRowMatSparse = new IndexedRowMatrix(sc.parallelize(sparseData))
 
     // Tests when n % colsPerBlock != 0
-    val blockMat = idxRowMatSparse.toBlockMatrix(4, 4)
+    val blockMat = idxRowMatSparse.toBlockMatrix(8, 8)
     assert(blockMat.numRows() === m)
     assert(blockMat.numCols() === n)
     assert(blockMat.toBreeze() === idxRowMatSparse.toBreeze())
 
     // Tests when m % rowsPerBlock != 0
-    val blockMat2 = idxRowMatSparse.toBlockMatrix(3, 3)
+    val blockMat2 = idxRowMatSparse.toBlockMatrix(6, 6)
     assert(blockMat2.numRows() === m)
     assert(blockMat2.numCols() === n)
     assert(blockMat2.toBreeze() === idxRowMatSparse.toBreeze())
@@ -149,38 +149,34 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("toBlockMatrix mixed backing") {
+    val m = 24
+    val n = 18
+
     val mixedData = Seq(
-      (0L, Vectors.dense(1, 2, 3)),
-      (3L, Vectors.sparse(3, Seq((0, 4.0)))))
+      (0L, Vectors.dense((0 to 17).map(_.toDouble).toArray)),
+      (1L, Vectors.dense((0 to 17).map(_.toDouble).toArray)),
+      (23L, Vectors.sparse(18, Seq((0, 4.0)))))
       .map(x => IndexedRow(x._1, x._2))
 
     val idxRowMatMixed = new IndexedRowMatrix(
       sc.parallelize(mixedData))
 
     // Tests when n % colsPerBlock != 0
-    val blockMat = idxRowMatMixed.toBlockMatrix(2, 2)
+    val blockMat = idxRowMatMixed.toBlockMatrix(12, 12)
     assert(blockMat.numRows() === m)
     assert(blockMat.numCols() === n)
     assert(blockMat.toBreeze() === idxRowMatMixed.toBreeze())
 
     // Tests when m % rowsPerBlock != 0
-    val blockMat2 = idxRowMatMixed.toBlockMatrix(3, 1)
+    val blockMat2 = idxRowMatMixed.toBlockMatrix(18, 6)
     assert(blockMat2.numRows() === m)
     assert(blockMat2.numCols() === n)
     assert(blockMat2.toBreeze() === idxRowMatMixed.toBreeze())
 
     val blocks = blockMat.blocks.collect()
 
-    /* Diagram of mixed data blockmat. Lines indicate blocking.
-    1 2 | 3
-    0 0 | 0
-    -------
-    0 0 | 0
-    4 0 | 0
-     */
-
-    blocks.forall { case((row, col), matrix) =>
-      if (row == 0) matrix.isInstanceOf[DenseMatrix] else matrix.isInstanceOf[SparseMatrix]}
+    assert(blocks.forall { case((row, col), matrix) =>
+      if (row == 0) matrix.isInstanceOf[DenseMatrix] else matrix.isInstanceOf[SparseMatrix]})
   }
 
   test("multiply a local matrix") {

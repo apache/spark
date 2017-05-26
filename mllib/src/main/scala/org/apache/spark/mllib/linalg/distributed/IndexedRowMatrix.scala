@@ -113,12 +113,17 @@ class IndexedRowMatrix @Since("1.0.0") (
     require(colsPerBlock > 0,
       s"colsPerBlock needs to be greater than 0. colsPerBlock: $colsPerBlock")
 
+    // Since block matrices require an integer row index
+    require(numRows() / rowsPerBlock < Int.MaxValue,
+      "Number of rows divided by rowsPerBlock cannot exceed maximum integer.")
+
     val m = numRows()
     val n = numCols()
-    val lastRowBlockIndex = m / rowsPerBlock
-    val lastColBlockIndex = n / colsPerBlock
-    val lastRowBlockSize = (m % rowsPerBlock).toInt
-    val lastColBlockSize = (n % colsPerBlock).toInt
+    // The remainder calculations only matter when m % rowsPerBlock != 0 or n % colsPerBlock != 0
+    val remainderRowBlockIndex = m / rowsPerBlock
+    val remainderColBlockIndex = n / colsPerBlock
+    val remainderRowBlockSize = (m % rowsPerBlock).toInt
+    val remainderColBlockSize = (n % colsPerBlock).toInt
     val numRowBlocks = math.ceil(m.toDouble / rowsPerBlock).toInt
     val numColBlocks = math.ceil(n.toDouble / colsPerBlock).toInt
 
@@ -143,9 +148,9 @@ class IndexedRowMatrix @Since("1.0.0") (
     }.groupByKey(GridPartitioner(numRowBlocks, numColBlocks, rows.getNumPartitions)).map {
       case ((blockRow, blockColumn), itr) =>
         val actualNumRows =
-          if (blockRow == lastRowBlockIndex) lastRowBlockSize else rowsPerBlock
+          if (blockRow == remainderRowBlockIndex) remainderRowBlockSize else rowsPerBlock
         val actualNumColumns =
-          if (blockColumn == lastColBlockIndex) lastColBlockSize else colsPerBlock
+          if (blockColumn == remainderColBlockIndex) remainderColBlockSize else colsPerBlock
 
         val arraySize = actualNumRows * actualNumColumns
         val matrixAsArray = new Array[Double](arraySize)
@@ -157,7 +162,7 @@ class IndexedRowMatrix @Since("1.0.0") (
           }
         }
         val denseMatrix = new DenseMatrix(actualNumRows, actualNumColumns, matrixAsArray)
-        val finalMatrix = if (countForValues / arraySize.toDouble >= 0.5) {
+        val finalMatrix = if (countForValues / arraySize.toDouble >= 0.1) {
           denseMatrix
         } else {
           denseMatrix.toSparse
