@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
 import scala.io.Source
@@ -47,28 +48,37 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   val id = seq.toString
   override val rpcEnv: RpcEnv = RpcEnv.create("worker", "localhost", seq,
     conf, new SecurityManager(conf))
-  var appRegistered = false
-  def newDriver(): RpcEndpointRef = {
+  var apps = new mutable.HashMap[String, String]()
+  val driverIdToAppId = new mutable.HashMap[String, String]()
+  def newDriver(driverId: String): RpcEndpointRef = {
     val name = s"driver_${drivers.size}"
     rpcEnv.setupEndpoint(name, new RpcEndpoint {
       override val rpcEnv: RpcEnv = MockWorker.this.rpcEnv
       override def receive: PartialFunction[Any, Unit] = {
-        case RegisteredApplication(_, _) => appRegistered = true
+        case RegisteredApplication(appId, _) =>
+          apps(appId) = appId
+          driverIdToAppId(driverId) = appId
       }
     })
   }
 
   val appDesc = DeployTestUtils.createAppDesc()
-  val drivers = new HashMap[String, String]
+  val drivers = new mutable.HashMap[String, String]
   override def receive: PartialFunction[Any, Unit] = {
     case RegisteredWorker(masterRef, _, _) =>
-      masterRef.send(WorkerLatestState("1", Nil, drivers.keys.toSeq))
+      masterRef.send(WorkerLatestState(id, Nil, drivers.keys.toSeq))
     case LaunchDriver(driverId, desc) =>
       drivers(driverId) = driverId
-      master.send(RegisterApplication(appDesc, newDriver()))
+      master.send(RegisterApplication(appDesc, newDriver(driverId)))
     case KillDriver(driverId) =>
       master.send(DriverStateChanged(driverId, DriverState.KILLED, None))
       drivers.remove(driverId)
+      driverIdToAppId.get(driverId) match {
+        case Some(appId) =>
+          apps.remove(appId)
+          master.send(UnregisterApplication(appId))
+      }
+      driverIdToAppId.remove(driverId)
   }
 }
 
@@ -560,7 +570,7 @@ class MasterSuite extends SparkFunSuite
     master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
 
     eventually(timeout(10.seconds)) {
-      assert(!worker1.appRegistered)
+      assert(worker1.apps.nonEmpty)
     }
 
     eventually(timeout(10.seconds)) {
@@ -580,7 +590,7 @@ class MasterSuite extends SparkFunSuite
       "http://localhost:8081",
       RpcAddress("localhost", 10001)))
     eventually(timeout(10.seconds)) {
-      assert(!worker2.appRegistered)
+      assert(worker2.apps.nonEmpty)
     }
 
     master.self.send(worker1Reg)
@@ -591,6 +601,10 @@ class MasterSuite extends SparkFunSuite
       assert(worker.length == 1)
       // make sure the `DriverStateChanged` arrives at Master.
       assert(worker(0).drivers.isEmpty)
+      assert(worker1.apps.isEmpty)
+      assert(worker1.drivers.isEmpty)
+      assert(worker2.apps.size == 1)
+      assert(worker2.drivers.size == 1)
       assert(masterState.activeDrivers.length == 1)
       assert(masterState.activeApps.length == 1)
     }
