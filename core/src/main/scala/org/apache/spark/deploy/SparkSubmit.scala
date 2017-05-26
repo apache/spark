@@ -23,7 +23,6 @@ import java.net.URL
 import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
-import javax.ws.rs.core.UriBuilder
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -869,11 +868,7 @@ object SparkSubmit extends CommandLineUtils {
         printStream.println(s"Downloading ${uri.toString} to ${tmpFile.getAbsolutePath}.")
         // scalastyle:on println
         fs.copyToLocalFile(new Path(uri), new Path(tmpFile.getAbsolutePath))
-        UriBuilder
-          .fromPath(tmpFile.getAbsolutePath)
-          .scheme("file")
-          .build()
-          .toString
+        s"file:${tmpFile.getAbsolutePath}"
     }
   }
 }
