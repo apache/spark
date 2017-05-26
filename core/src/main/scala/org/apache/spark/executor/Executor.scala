@@ -26,8 +26,6 @@ import java.util.Properties
 import java.util.concurrent._
 import javax.annotation.concurrent.GuardedBy
 
-import org.apache.spark.executor.CommitDeniedException
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.control.NonFatal
