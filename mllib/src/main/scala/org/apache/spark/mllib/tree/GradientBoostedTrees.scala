@@ -49,14 +49,16 @@ import org.apache.spark.rdd.RDD
 @Since("1.2.0")
 class GradientBoostedTrees private[spark] (
     private val boostingStrategy: BoostingStrategy,
-    private val seed: Int)
+    private val seed: Int,
+    private val featureSubsetStrategy: String)
   extends Serializable with Logging {
 
   /**
    * @param boostingStrategy Parameters for the gradient boosting algorithm.
    */
   @Since("1.2.0")
-  def this(boostingStrategy: BoostingStrategy) = this(boostingStrategy, seed = 0)
+  def this(boostingStrategy: BoostingStrategy) = this(boostingStrategy, seed = 0,
+    featureSubsetStrategy = "all")
 
   /**
    * Method to train a gradient boosting model
@@ -69,7 +71,7 @@ class GradientBoostedTrees private[spark] (
     val algo = boostingStrategy.treeStrategy.algo
     val (trees, treeWeights) = NewGBT.run(input.map { point =>
       NewLabeledPoint(point.label, point.features.asML)
-    }, boostingStrategy, seed.toLong)
+    }, boostingStrategy, seed.toLong, featureSubsetStrategy)
     new GradientBoostedTreesModel(algo, trees.map(_.toOld), treeWeights)
   }
 
@@ -101,7 +103,7 @@ class GradientBoostedTrees private[spark] (
       NewLabeledPoint(point.label, point.features.asML)
     }, validationInput.map { point =>
       NewLabeledPoint(point.label, point.features.asML)
-    }, boostingStrategy, seed.toLong)
+    }, boostingStrategy, seed.toLong, featureSubsetStrategy)
     new GradientBoostedTreesModel(algo, trees.map(_.toOld), treeWeights)
   }
 
@@ -132,7 +134,7 @@ object GradientBoostedTrees extends Logging {
   def train(
       input: RDD[LabeledPoint],
       boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
-    new GradientBoostedTrees(boostingStrategy, seed = 0).run(input)
+    new GradientBoostedTrees(boostingStrategy, seed = 0, featureSubsetStrategy = "all").run(input)
   }
 
   /**

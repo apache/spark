@@ -99,6 +99,8 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   @Since("2.0.0")
   def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
+
+
   override protected def train(dataset: Dataset[_]): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
@@ -108,7 +110,8 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
 
-    val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
+    val trees = RandomForest.run(oldDataset, strategy, numTrees = 1,
+      featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
@@ -118,11 +121,12 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(data: RDD[LabeledPoint],
-      oldStrategy: OldStrategy): DecisionTreeRegressionModel = {
+      oldStrategy: OldStrategy, featureSubsetStrategy: String): DecisionTreeRegressionModel = {
     val instr = Instrumentation.create(this, data)
     instr.logParams(params: _*)
 
-    val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
+    val trees = RandomForest.run(data, oldStrategy, numTrees = 1,
+      featureSubsetStrategy = featureSubsetStrategy,
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
