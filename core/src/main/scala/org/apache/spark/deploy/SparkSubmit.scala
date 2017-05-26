@@ -868,7 +868,7 @@ object SparkSubmit extends CommandLineUtils {
         printStream.println(s"Downloading ${uri.toString} to ${tmpFile.getAbsolutePath}.")
         // scalastyle:on println
         fs.copyToLocalFile(new Path(uri), new Path(tmpFile.getAbsolutePath))
-        s"file:${tmpFile.getAbsolutePath}"
+        Utils.resolveURI(tmpFile.getAbsolutePath).toString
     }
   }
 }
