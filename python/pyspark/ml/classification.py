@@ -862,6 +862,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> model_path = temp_path + "/rfc_model"
     >>> model.save(model_path)
     >>> model2 = RandomForestClassificationModel.load(model_path)
+    >>> model.getMaxDepth() == model2.getMaxDepth()
+    True
     >>> model.featureImportances == model2.featureImportances
     True
 
@@ -997,6 +999,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> model_path = temp_path + "gbtc_model"
     >>> model.save(model_path)
     >>> model2 = GBTClassificationModel.load(model_path)
+    >>> model.getMaxDepth() == model2.getMaxDepth()
+    True
     >>> model.featureImportances == model2.featureImportances
     True
     >>> model.treeWeights == model2.treeWeights

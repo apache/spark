@@ -883,6 +883,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> model_path = temp_path + "/rfr_model"
     >>> model.save(model_path)
     >>> model2 = RandomForestRegressionModel.load(model_path)
+    >>> model.getMaxDepth() == model2.getMaxDepth()
+    True
     >>> model.featureImportances == model2.featureImportances
     True
 
@@ -1002,6 +1004,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> model_path = temp_path + "gbtr_model"
     >>> model.save(model_path)
     >>> model2 = GBTRegressionModel.load(model_path)
+    >>> model.getMaxDepth() == model2.getMaxDepth()
+    True
     >>> model.featureImportances == model2.featureImportances
     True
     >>> model.treeWeights == model2.treeWeights
