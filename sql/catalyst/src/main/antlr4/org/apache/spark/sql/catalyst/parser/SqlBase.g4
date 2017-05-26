@@ -381,7 +381,7 @@ querySpecification
     ;
 
 hint
-    : '/*+' hintStatements+=hintStatement (',' hintStatements+=hintStatement)* '*/'
+    : '/*+' hintStatements+=hintStatement (hintStatements+=hintStatement)* '*/'
     ;
 
 hintStatement

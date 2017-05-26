@@ -594,7 +594,7 @@ class PlanParserSuite extends PlanTest {
 
   test("SPARK-20854: multiple hints") {
     comparePlans(
-      parsePlan("SELECT /*+ HINT1(a, 1), hint2(b, 2) */ * from t"),
+      parsePlan("SELECT /*+ HINT1(a, 1) hint2(b, 2) */ * from t"),
       UnresolvedHint("hint2", Seq($"b", Literal(2)),
         UnresolvedHint("HINT1", Seq($"a", Literal(1)),
         table("t").select(star())
