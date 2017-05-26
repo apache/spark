@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -895,4 +896,12 @@ case class Deduplicate(
     streaming: Boolean) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+}
+
+/** A logical plan for setting a barrier of analysis */
+case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
+  override def output: Seq[Attribute] = child.output
+  override def analyzed: Boolean = true
+  override def isStreaming: Boolean = child.isStreaming
+  override lazy val canonicalized: LogicalPlan = child.canonicalized
 }
