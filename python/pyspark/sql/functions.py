@@ -1046,7 +1046,7 @@ def trunc(date, format=0):
     >>> df.select(trunc(df.d, -4).alias('negative')).collect()
     [Row(negative=1234560000.0)]
     >>> df.select(trunc(df.d).alias('zero')).collect()
-    [Row(negative=1234567891.0)]
+    [Row(zero=1234567891.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
