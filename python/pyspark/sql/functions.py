@@ -1030,7 +1030,8 @@ def to_timestamp(col, format=None):
 @since(1.5)
 def trunc(date, format=0):
     """
-    Returns date truncated to the unit specified by the format.
+    Returns date truncated to the unit specified by the format or
+    number truncated by specified decimal places..
 
     :param format: 'year', 'YYYY', 'yy' or 'month', 'mon', 'mm'
 
