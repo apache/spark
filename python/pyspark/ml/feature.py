@@ -3056,7 +3056,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
                             typeConverter=TypeConverters.toBoolean)
 
     stringIndexerOrderType = Param(Params._dummy(), "stringIndexerOrderType",
-                                   "How to order categories of a string FEATURE column used by " +
+                                   "How to order categories of a string feature column used by " +
                                    "StringIndexer. The last category after ordering is dropped " +
                                    "when encoding strings. Supported options: frequencyDesc, " +
                                    "frequencyAsc, alphabetDesc, alphabetAsc. The default value " +
