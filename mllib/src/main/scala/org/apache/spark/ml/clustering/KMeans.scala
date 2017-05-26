@@ -85,13 +85,13 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   def getInitSteps: Int = $(initSteps)
 
   /**
-   * The fraction of the data to update centers per iteration. Must be &gt; 0 and &le; 1.
+   * The fraction of data used to update centers per iteration. Must be &gt; 0 and &le; 1.
    * Default: 1.0.
    * @group param
    */
   @Since("2.3.0")
-  final val miniBatchFraction = new DoubleParam(this, "miniBatchFraction", "The fraction of the" +
-    " data to update clustering centers per iteration. Must be in (0, 1].",
+  final val miniBatchFraction = new DoubleParam(this, "miniBatchFraction", "The fraction of" +
+    " data used to update cluster centers per iteration. Must be in (0, 1].",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
   /** @group getParam */

@@ -95,6 +95,12 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     intercept[IllegalArgumentException] {
       new KMeans().setMiniBatchFraction(0)
     }
+    intercept[IllegalArgumentException] {
+      new KMeans().setMiniBatchFraction(-0.01)
+    }
+    intercept[IllegalArgumentException] {
+      new KMeans().setMiniBatchFraction(1.01)
+    }
   }
 
   test("fit, transform and summary") {
