@@ -280,6 +280,16 @@ case class InsertIntoHiveTable(
     val partitionColumns = fileSinkConf.getTableInfo.getProperties.getProperty("partition_columns")
     val partitionColumnNames = Option(partitionColumns).map(_.split("/")).getOrElse(Array.empty)
 
+    // All column names in the format of "<column name 1>,<column name 2>,..."
+    val columnsCnt = tableDesc.getProperties.getProperty("columns").split(",").size
+
+    if (columnsCnt + numDynamicPartitions != child.output.size) {
+      throw new SparkException(s"Cannot insert into target table ${tableDesc.getTableName} " +
+        s"because column number are different: target table has $columnsCnt column(s) and " +
+        s"$numDynamicPartitions dynamic partition column(s), but input has ${child.output.size} " +
+        s"column(s).")
+    }
+
     // By this time, the partition map must match the table's partition columns
     if (partitionColumnNames.toSet != partition.keySet) {
       throw new SparkException(
