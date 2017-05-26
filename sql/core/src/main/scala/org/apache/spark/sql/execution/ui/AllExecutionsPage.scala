@@ -20,9 +20,7 @@ package org.apache.spark.sql.execution.ui
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable
-import scala.xml.{NodeSeq, Node}
-
-import org.apache.commons.lang3.StringEscapeUtils
+import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
@@ -91,7 +89,6 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           }
         </ul>
       </div>
-    
     UIUtils.headerSparkPage("SQL", summary ++ content, parent, Some(5000))
   }
 }
