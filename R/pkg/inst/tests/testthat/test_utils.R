@@ -245,4 +245,4 @@ test_that("basenameSansExtFromUrl", {
 sparkR.session.stop()
 
 message("--- End test (utils) ", as.POSIXct(Sys.time(), tz = "GMT"))
-messgae("elapsed ", (proc.time() - timer_ptm)[3])
+message("elapsed ", (proc.time() - timer_ptm)[3])

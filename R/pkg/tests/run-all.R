@@ -23,7 +23,6 @@ options("warn" = 2)
 
 message("--- Start test ", as.POSIXct(Sys.time(), tz = "GMT"))
 timer_ptm <- proc.time()
-Sys.setenv(NOT_CRAN = "false")
 
 # Setup global test environment
 # Install Spark first to set SPARK_HOME
