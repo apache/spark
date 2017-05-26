@@ -20,4 +20,9 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-exec python -u ./dev/run-tests.py "$@"
+set -e
+for i in `seq 0 100`; do
+  build/sbt streaming-kafka-0-10/test
+  rm external/kafka-0-10/target/unit-tests.log
+done
+# exec python -u ./dev/run-tests.py "$@"
