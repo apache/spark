@@ -340,9 +340,6 @@ private[spark] class Executor(
             metricsSystem = env.metricsSystem)
           threwException = false
           res
-        } catch {
-          case _: CommitDeniedException =>
-            throw new TaskKilledException("commit denied")
         } finally {
           val releasedLocks = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
@@ -464,7 +461,7 @@ private[spark] class Executor(
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskFailedReason
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
         case t: Throwable =>
           // Attempt to exit cleanly by informing the driver of our failure.
