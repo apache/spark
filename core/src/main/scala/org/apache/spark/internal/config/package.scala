@@ -287,4 +287,13 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(100 * 1024 * 1024)
 
+  private[spark] val SHUFFLE_REGISTRATION_TIMEOUT =
+    ConfigBuilder("spark.shuffle.registration.timeout")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(5000)
+
+  private[spark] val SHUFFLE_REGISTRATION_MAX_ATTEMPTS =
+    ConfigBuilder("spark.shuffle.registration.maxAttempts")
+      .intConf
+      .createWithDefault(3)
 }

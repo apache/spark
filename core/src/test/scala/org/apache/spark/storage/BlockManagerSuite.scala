@@ -19,11 +19,12 @@ package org.apache.spark.storage
 
 import java.nio.ByteBuffer
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.concurrent.Future
-import scala.language.implicitConversions
-import scala.language.postfixOps
+import scala.language.{implicitConversions, postfixOps}
 import scala.reflect.ClassTag
 
 import org.mockito.{Matchers => mc}
@@ -37,10 +38,13 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.UnifiedMemoryManager
-import org.apache.spark.network.{BlockDataManager, BlockTransferService}
+import org.apache.spark.network.{BlockDataManager, BlockTransferService, TransportContext}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.network.netty.NettyBlockTransferService
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
+import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
+import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.BlockFetchingListener
+import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
@@ -1278,6 +1282,57 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations("item").nonEmpty)
     assert(store2.getRemoteBytes("item").isEmpty)
     assert(master.getLocations("item").isEmpty)
+  }
+
+  test("SPARK-20640: Shuffle registration timeout and maxAttempts conf are working") {
+    val shufflePort = 10000
+    val tryAgainMsg = "test_spark_20640_try_again"
+    conf.set("spark.shuffle.service.enabled", "true")
+    conf.set("spark.shuffle.service.port", shufflePort.toString)
+    // a server which delays response 50ms and must try twice for success.
+    def newShuffleServer(): TransportServer = {
+      val attempts = new mutable.HashMap[String, Int]()
+      val handler = new NoOpRpcHandler {
+        override def receive(client: TransportClient, message: ByteBuffer,
+                             callback: RpcResponseCallback): Unit = {
+          val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
+          msgObj match {
+            case exec: RegisterExecutor =>
+              Thread.sleep(50)
+              val attempt = attempts.getOrElse(exec.execId, 0) + 1
+              attempts(exec.execId) = attempt
+              if (attempt < 2) {
+                callback.onFailure(new Exception(tryAgainMsg))
+                return
+              }
+              callback.onSuccess(ByteBuffer.wrap(new Array[Byte](0)))
+          }
+        }
+      }
+
+      val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 0)
+      val transCtx = new TransportContext(transConf, handler, true)
+      transCtx.createServer(shufflePort, Nil.asInstanceOf[Seq[TransportServerBootstrap]].asJava)
+    }
+    newShuffleServer()
+
+    conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
+    conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
+    var e = intercept[SparkException]{
+      makeBlockManager(8000, "executor1")
+    }.getMessage
+    assert(e.contains("TimeoutException"))
+
+    conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
+    conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
+    e = intercept[SparkException]{
+      makeBlockManager(8000, "executor2")
+    }.getMessage
+    assert(e.contains(tryAgainMsg))
+
+    conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
+    conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "2")
+    makeBlockManager(8000, "executor3")
   }
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
