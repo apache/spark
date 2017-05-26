@@ -651,16 +651,16 @@ object StateStoreTestsHelper {
     row.getInt(0)
   }
 
-  def rowsToStringInt(row: UnsafeRowTuple): (String, Int) = {
+  def rowsToStringInt(row: UnsafeRowPair): (String, Int) = {
     (rowToString(row.key), rowToInt(row.value))
   }
 
-  def rowsToSet(iterator: Iterator[UnsafeRowTuple]): Set[(String, Int)] = {
+  def rowsToSet(iterator: Iterator[UnsafeRowPair]): Set[(String, Int)] = {
     iterator.map(rowsToStringInt).toSet
   }
 
   def remove(store: StateStore, condition: String => Boolean): Unit = {
-    store.getRange(None, None).foreach { case UnsafeRowTuple(key, _) =>
+    store.getRange(None, None).foreach { case UnsafeRowPair(key, _) =>
       if (condition(rowToString(key))) store.remove(key)
     }
   }

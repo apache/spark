@@ -123,7 +123,7 @@ trait WatermarkSupport extends UnaryExecNode {
 
   protected def removeKeysOlderThanWatermark(store: StateStore): Unit = {
     if (watermarkPredicateForKeys.nonEmpty) {
-      store.getRange(None, None).foreach { case UnsafeRowTuple(key, _) =>
+      store.getRange(None, None).foreach { case UnsafeRowPair(key, _) =>
         if (watermarkPredicateForKeys.get.eval(key)) {
           store.remove(key)
         }
@@ -220,7 +220,7 @@ case class StateStoreSaveExec(
               store.commit()
             }
             numTotalStateRows += store.numKeys()
-            store.iterator().map { case UnsafeRowTuple(_, v) =>
+            store.iterator().map { case UnsafeRowPair(_, v) =>
               numOutputRows += 1
               v.asInstanceOf[InternalRow]
             }
@@ -240,11 +240,12 @@ case class StateStoreSaveExec(
 
             val removalStartTime = System.currentTimeMillis
             val rangeIter = store.getRange(None, None)
+
             new NextIterator[InternalRow] {
               override protected def getNext(): InternalRow = {
                 var removedValueRow: InternalRow = null
                 while(rangeIter.hasNext && removedValueRow == null) {
-                  val UnsafeRowTuple(keyRow, valueRow) = rangeIter.next()
+                  val UnsafeRowPair(keyRow, valueRow) = rangeIter.next()
                   if (watermarkPredicateForKeys.get.eval(keyRow)) {
                     store.remove(keyRow)
                     removedValueRow = valueRow

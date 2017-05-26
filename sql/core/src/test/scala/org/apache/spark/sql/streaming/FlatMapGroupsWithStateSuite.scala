@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, GroupStateImpl, MemoryStream}
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, UnsafeRowTuple}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, UnsafeRowPair}
 import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.MemoryStateStore
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -1064,10 +1064,8 @@ object FlatMapGroupsWithStateSuite {
     import scala.collection.JavaConverters._
     private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-    override def getRange(
-        start: Option[UnsafeRow],
-        end: Option[UnsafeRow]): Iterator[UnsafeRowTuple] = {
-      map.entrySet.iterator.asScala.map { case e => UnsafeRowTuple(e.getKey, e.getValue) }
+    override def iterator(): Iterator[UnsafeRowPair] = {
+      map.entrySet.iterator.asScala.map { case e => UnsafeRowPair(e.getKey, e.getValue) }
     }
 
     override def get(key: UnsafeRow): UnsafeRow = map.get(key)

@@ -556,8 +556,8 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
       .doc(
-        "Minimum number of state store delta files that needs to be generated before they " +
-          "consolidated into snapshots.")
+        "The class used to manage state data in stateful streaming queries. This class must" +
+          "be a subclass of StateStoreProvider, and must have a zero-arg constructor.")
       .stringConf
       .createOptional
 

@@ -116,7 +116,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
     override def getRange(
         start: Option[UnsafeRow],
-        end: Option[UnsafeRow]): Iterator[UnsafeRowTuple] = {
+        end: Option[UnsafeRow]): Iterator[UnsafeRowPair] = {
       verify(state == UPDATING, "Cannot getRange after already committed or aborted")
       iterator()
     }
@@ -165,10 +165,10 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(): Iterator[UnsafeRowTuple] = {
-      val unsafeRowTuple = UnsafeRowTuple()
+    override def iterator(): Iterator[UnsafeRowPair] = {
+      val unsafeRowPair = UnsafeRowPair()
       mapToUpdate.entrySet.asScala.iterator.map { entry =>
-        unsafeRowTuple.withRows(entry.getKey, entry.getValue)
+        unsafeRowPair.withRows(entry.getKey, entry.getValue)
       }
     }
 
@@ -277,11 +277,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
    * Get iterator of all the data of the latest version of the store.
    * Note that this will look up the files to determined the latest known version.
    */
-  private[state] def latestIterator(): Iterator[UnsafeRowTuple] = synchronized {
+  private[state] def latestIterator(): Iterator[UnsafeRowPair] = synchronized {
     val versionsInFiles = fetchFiles().map(_.version).toSet
     val versionsLoaded = loadedMaps.keySet
     val allKnownVersions = versionsInFiles ++ versionsLoaded
-    val unsafeRowTuple = UnsafeRowTuple()
+    val unsafeRowTuple = UnsafeRowPair()
     if (allKnownVersions.nonEmpty) {
       loadMap(allKnownVersions.max).entrySet().iterator().asScala.map { entry =>
         unsafeRowTuple.withRows(entry.getKey, entry.getValue)

@@ -193,11 +193,11 @@ case class FlatMapGroupsWithStateExec(
             throw new IllegalStateException(
               s"Cannot filter timed out keys for $timeoutConf")
         }
-        val timingOutKeys = store.getRange(None, None).filter { case UnsafeRowTuple(_, stateRow) =>
+        val timingOutKeys = store.getRange(None, None).filter { case UnsafeRowPair(_, stateRow) =>
           val timeoutTimestamp = getTimeoutTimestamp(stateRow)
           timeoutTimestamp != NO_TIMESTAMP && timeoutTimestamp < timeoutThreshold
         }
-        timingOutKeys.flatMap { case UnsafeRowTuple(keyRow, stateRow) =>
+        timingOutKeys.flatMap { case UnsafeRowPair(keyRow, stateRow) =>
           callFunctionAndUpdateState(keyRow, Iterator.empty, stateRow, hasTimedOut = true)
         }
       } else Iterator.empty
