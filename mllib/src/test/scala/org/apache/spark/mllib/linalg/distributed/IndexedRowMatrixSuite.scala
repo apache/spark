@@ -140,12 +140,12 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(blockMat2.numCols() === n)
     assert(blockMat2.toBreeze() === idxRowMatSparse.toBreeze())
 
-    assert(blockMat.blocks.map { case (_, matrix: Matrix) =>
+    assert(blockMat.blocks.collect().forall{ case (_, matrix: Matrix) =>
       matrix.isInstanceOf[SparseMatrix]
-    }.reduce(_ && _))
-    assert(blockMat2.blocks.map { case (_, matrix: Matrix) =>
+    })
+    assert(blockMat2.blocks.collect().forall{ case (_, matrix: Matrix) =>
       matrix.isInstanceOf[SparseMatrix]
-    }.reduce(_ && _))
+    })
   }
 
   test("toBlockMatrix mixed backing") {

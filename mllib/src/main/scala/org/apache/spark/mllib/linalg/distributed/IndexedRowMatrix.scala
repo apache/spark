@@ -114,7 +114,7 @@ class IndexedRowMatrix @Since("1.0.0") (
       s"colsPerBlock needs to be greater than 0. colsPerBlock: $colsPerBlock")
 
     // Since block matrices require an integer row index
-    require(numRows() / rowsPerBlock < Int.MaxValue,
+    require(numRows() / rowsPerBlock.toDouble <= Int.MaxValue,
       "Number of rows divided by rowsPerBlock cannot exceed maximum integer.")
 
     val m = numRows()
