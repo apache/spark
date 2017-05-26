@@ -179,11 +179,9 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
 
 # Copy docker files
-mkdir -p "$DISTDIR/dockerfiles/driver"
-mkdir -p "$DISTDIR/dockerfiles/executor"
+mkdir -p "$DISTDIR/dockerfiles"
 DOCKERFILES_SRC="$SPARK_HOME/resource-managers/kubernetes/docker-minimal-bundle/src/main/docker"
-cp "$DOCKERFILES_SRC/driver/Dockerfile" "$DISTDIR/dockerfiles/driver/Dockerfile"
-cp "$DOCKERFILES_SRC/executor/Dockerfile" "$DISTDIR/dockerfiles/executor/Dockerfile"
+cp -R "$DOCKERFILES_SRC/." "$DISTDIR/dockerfiles/."
 
 # Only create the yarn directory if the yarn artifacts were build.
 if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
