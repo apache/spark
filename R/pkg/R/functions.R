@@ -4015,3 +4015,29 @@ setMethod("input_file_name", signature("missing"),
             jc <- callJStatic("org.apache.spark.sql.functions", "input_file_name")
             column(jc)
           })
+
+#' trunc
+#'
+#' Returns date truncated to the unit specified by the format.
+#'
+#' @param x Column to compute on.
+#' @param format string used for specify the truncation method. For example,
+#' "year", "yyyy", "yy" for truncate by year, or "month", "mon", "mm" for truncate by month.
+#'
+#' @rdname trunc
+#' @name trunc
+#' @family date time functions
+#' @aliases trunc,Column-method
+#' @export
+#' @examples
+#' \dontrun{
+#' trunc(df$c, "year")
+#' trunc(df$c, "month")
+#' }
+#' @note trunc since 2.3.0
+setMethod("trunc",
+          signature(x = "Column"),
+          function(x, format = "year") {
+            jc <- callJStatic("org.apache.spark.sql.functions", "trunc", x@jc, format)
+            column(jc)
+          })

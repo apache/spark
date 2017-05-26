@@ -1404,6 +1404,8 @@ test_that("column functions", {
   c20 <- to_timestamp(c) + to_timestamp(c, "yyyy") + to_date(c, "yyyy")
   c21 <- posexplode_outer(c) + explode_outer(c)
   c22 <- not(c)
+  c23 <- trunc(c) + trunc(c, "year") + trunc(c, "yyyy") + trunc(c, "yy") +
+    trunc(c, "month") + trunc(c, "mon") + trunc(c, "mm")
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
