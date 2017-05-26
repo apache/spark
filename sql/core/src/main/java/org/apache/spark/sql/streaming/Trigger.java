@@ -33,7 +33,6 @@ import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
 public class Trigger {
 
   /**
-   * :: Experimental ::
    * A trigger policy that runs a query periodically based on an interval in processing time.
    * If `interval` is 0, the query will run as fast as possible.
    *
@@ -44,7 +43,6 @@ public class Trigger {
   }
 
   /**
-   * :: Experimental ::
    * (Java-friendly)
    * A trigger policy that runs a query periodically based on an interval in processing time.
    * If `interval` is 0, the query will run as fast as possible.
@@ -61,7 +59,6 @@ public class Trigger {
   }
 
   /**
-   * :: Experimental ::
    * (Scala-friendly)
    * A trigger policy that runs a query periodically based on an interval in processing time.
    * If `duration` is 0, the query will run as fast as possible.
@@ -77,7 +74,6 @@ public class Trigger {
   }
 
   /**
-   * :: Experimental ::
    * A trigger policy that runs a query periodically based on an interval in processing time.
    * If `interval` is effectively 0, the query will run as fast as possible.
    *
