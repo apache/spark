@@ -23,7 +23,7 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -2794,8 +2794,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def window(
       timeColumn: Column,
       windowDuration: String,
@@ -2848,8 +2846,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
     window(timeColumn, windowDuration, slideDuration, "0 second")
   }
@@ -2887,8 +2883,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def window(timeColumn: Column, windowDuration: String): Column = {
     window(timeColumn, windowDuration, windowDuration, "0 second")
   }
