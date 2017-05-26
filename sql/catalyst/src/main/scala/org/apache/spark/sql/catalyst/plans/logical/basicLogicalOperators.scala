@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -195,9 +196,9 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     val leftSize = left.stats(conf).sizeInBytes
     val rightSize = right.stats(conf).sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    val isBroadcastable = left.stats(conf).isBroadcastable || right.stats(conf).isBroadcastable
-
-    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = isBroadcastable)
+    Statistics(
+      sizeInBytes = sizeInBytes,
+      hints = left.stats(conf).hints.resetForJoin())
   }
 }
 
@@ -364,7 +365,8 @@ case class Join(
       case _ =>
         // Make sure we don't propagate isBroadcastable in other joins, because
         // they could explode the size.
-        super.computeStats(conf).resetHintsForJoin()
+        val stats = super.computeStats(conf)
+        stats.copy(hints = stats.hints.resetForJoin())
     }
 
     if (conf.cboEnabled) {
@@ -560,7 +562,7 @@ case class Aggregate(
         Statistics(
           sizeInBytes = EstimationUtils.getOutputSize(output, outputRowCount = 1),
           rowCount = Some(1),
-          isBroadcastable = child.stats(conf).isBroadcastable)
+          hints = child.stats(conf).hints)
       } else {
         super.computeStats(conf)
       }
@@ -749,7 +751,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
     Statistics(
       sizeInBytes = EstimationUtils.getOutputSize(output, rowCount, childStats.attributeStats),
       rowCount = Some(rowCount),
-      isBroadcastable = childStats.isBroadcastable)
+      hints = childStats.hints)
   }
 }
 
@@ -770,7 +772,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
       Statistics(
         sizeInBytes = 1,
         rowCount = Some(0),
-        isBroadcastable = childStats.isBroadcastable)
+        hints = childStats.hints)
     } else {
       // The output row count of LocalLimit should be the sum of row counts from each partition.
       // However, since the number of partitions is not available here, we just use statistics of
@@ -827,7 +829,7 @@ case class Sample(
     }
     val sampledRowCount = childStats.rowCount.map(c => EstimationUtils.ceil(BigDecimal(c) * ratio))
     // Don't propagate column stats, because we don't know the distribution after a sample operation
-    Statistics(sizeInBytes, sampledRowCount, isBroadcastable = childStats.isBroadcastable)
+    Statistics(sizeInBytes, sampledRowCount, hints = childStats.hints)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
@@ -894,4 +896,12 @@ case class Deduplicate(
     streaming: Boolean) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+}
+
+/** A logical plan for setting a barrier of analysis */
+case class AnalysisBarrier(child: LogicalPlan) extends LeafNode {
+  override def output: Seq[Attribute] = child.output
+  override def analyzed: Boolean = true
+  override def isStreaming: Boolean = child.isStreaming
+  override lazy val canonicalized: LogicalPlan = child.canonicalized
 }

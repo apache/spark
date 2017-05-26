@@ -424,7 +424,7 @@ case class DataSource(
       }.head
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
-    // ordering of data.logicalPlan (partition columns are all moved after data column).  This
+    // ordering of data.logicalPlan (partition columns are all moved after data column). This
     // will be adjusted within InsertIntoHadoopFsRelation.
     val plan =
       InsertIntoHadoopFsRelationCommand(
