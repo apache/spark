@@ -1239,11 +1239,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val attr = ctx.fieldName.getText
     expression(ctx.base) match {
       case unresolved_attr @ UnresolvedAttribute(nameParts) =>
-        ctx.fieldName.getStart.getText match {
-          case escapedIdentifier(columnNameRegex) if conf.supportQuotedRegexColumnName =>
-            UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name))
-          case _ =>
-            UnresolvedAttribute(nameParts :+ attr)
+        if (conf.supportQuotedRegexColumnName) {
+          UnresolvedRegex(attr, Some(unresolved_attr.name))
+        } else {
+          UnresolvedAttribute(nameParts :+ attr)
         }
       case e =>
         UnresolvedExtractValue(e, Literal(attr))
@@ -1255,12 +1254,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * quoted in ``
    */
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
-    ctx.getStart.getText match {
-      case escapedIdentifier(columnNameRegex) if conf.supportQuotedRegexColumnName =>
-        UnresolvedRegex(columnNameRegex, None)
-      case _ =>
-        UnresolvedAttribute.quoted(ctx.getText)
+    if (conf.supportQuotedRegexColumnName) {
+      if (!ctx.getParent().isInstanceOf[DereferenceContext] ||
+          ctx.getParent().asInstanceOf[DereferenceContext].fieldName == this) {
+        return UnresolvedRegex(ctx.getText, None)
+      }
     }
+
+    UnresolvedAttribute.quoted(ctx.getText)
   }
 
   /**
