@@ -102,6 +102,10 @@ private[spark] class ConfigReader(conf: ConfigProvider) {
     }
   }
 
+  /**
+   * Gets the value of a config from the given `ConfigProvider`. If no value is found for this
+   * config, and the `ConfigEntry` defines this config has default value, return the default value.
+   */
   private def getOrDefault(conf: ConfigProvider, key: String): Option[String] = {
     conf.get(key).orElse {
       ConfigEntry.findEntry(key) match {
