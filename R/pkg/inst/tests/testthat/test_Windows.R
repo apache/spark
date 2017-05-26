@@ -29,3 +29,4 @@ test_that("sparkJars tag in SparkContext", {
 })
 
 message("--- End test (Windows) ", as.POSIXct(Sys.time(), tz = "GMT"))
+messgae("elapsed ", (proc.time() - timer_ptm)[3])
