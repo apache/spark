@@ -200,26 +200,6 @@ test_that("spark.logit", {
   coefs <- summary$coefficients[, "Estimate"]
   expect_true(all(abs(coefsR - coefs) < 0.1))
 
-  # Test binomial logistic regression againt two classes with upperBoundsOnCoefficients
-  # and upperBoundsOnIntercepts
-  u <- matrix(c(1.0, 0.0, 1.0, 0.0), nrow = 1, ncol = 4)
-  model <- spark.logit(training, Species ~ ., upperBoundsOnCoefficients = u,
-                       upperBoundsOnIntercepts = 1.0)
-  summary <- summary(model)
-  coefsR <- c(-11.13331, 1.00000, 0.00000, 1.00000, 0.00000)
-  coefs <- summary$coefficients[, "Estimate"]
-  expect_true(all(abs(coefsR - coefs) < 0.1))
-
-  # Test binomial logistic regression againt two classes with lowerBoundsOnCoefficients
-  # and lowerBoundsOnIntercepts
-  l <- matrix(c(0.0, -1.0, 0.0, -1.0), nrow = 1, ncol = 4)
-  model <- spark.logit(training, Species ~ ., lowerBoundsOnCoefficients = l,
-                       lowerBoundsOnIntercepts = 0.0)
-  summary <- summary(model)
-  coefsR <- c(0, 0, -1, 0, 1.902192)
-  coefs <- summary$coefficients[, "Estimate"]
-  expect_true(all(abs(coefsR - coefs) < 0.1))
-
   # Test prediction with string label
   prediction <- predict(model, training)
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "character")
@@ -243,6 +223,26 @@ test_that("spark.logit", {
   model2 <- spark.logit(df2, label ~ feature, weightCol = "weight")
   prediction2 <- collect(select(predict(model2, df2), "prediction"))
   expect_equal(sort(prediction2$prediction), c("0.0", "0.0", "0.0", "0.0", "0.0"))
+
+  # Test binomial logistic regression againt two classes with upperBoundsOnCoefficients
+  # and upperBoundsOnIntercepts
+  u <- matrix(c(1.0, 0.0, 1.0, 0.0), nrow = 1, ncol = 4)
+  model <- spark.logit(training, Species ~ ., upperBoundsOnCoefficients = u,
+  upperBoundsOnIntercepts = 1.0)
+  summary <- summary(model)
+  coefsR <- c(-11.13331, 1.00000, 0.00000, 1.00000, 0.00000)
+  coefs <- summary$coefficients[, "Estimate"]
+  expect_true(all(abs(coefsR - coefs) < 0.1))
+
+  # Test binomial logistic regression againt two classes with lowerBoundsOnCoefficients
+  # and lowerBoundsOnIntercepts
+  l <- matrix(c(0.0, -1.0, 0.0, -1.0), nrow = 1, ncol = 4)
+  model <- spark.logit(training, Species ~ ., lowerBoundsOnCoefficients = l,
+  lowerBoundsOnIntercepts = 0.0)
+  summary <- summary(model)
+  coefsR <- c(0, 0, -1, 0, 1.902192)
+  coefs <- summary$coefficients[, "Estimate"]
+  expect_true(all(abs(coefsR - coefs) < 0.1))
 })
 
 test_that("spark.mlp", {
