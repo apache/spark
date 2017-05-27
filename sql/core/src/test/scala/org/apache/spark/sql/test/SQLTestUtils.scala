@@ -18,35 +18,40 @@
 package org.apache.spark.sql.test
 
 import java.io.File
-import java.util.UUID
+import java.net.URI
+import java.nio.file.Files
+import java.util.{Locale, UUID}
 
+import scala.concurrent.duration._
 import scala.language.implicitConversions
-import scala.util.Try
+import scala.util.control.NonFatal
 
-import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.FilterExec
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{UninterruptibleThread, Utils}
 
 /**
  * Helper trait that should be extended by all SQL test suites.
  *
- * This allows subclasses to plugin a custom [[SQLContext]]. It comes with test data
+ * This allows subclasses to plugin a custom `SQLContext`. It comes with test data
  * prepared in advance as well as all implicit conversions used extensively by dataframes.
- * To use implicit methods, import `testImplicits._` instead of through the [[SQLContext]].
+ * To use implicit methods, import `testImplicits._` instead of through the `SQLContext`.
  *
- * Subclasses should *not* create [[SQLContext]]s in the test suite constructor, which is
+ * Subclasses should *not* create `SQLContext`s in the test suite constructor, which is
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
 private[sql] trait SQLTestUtils
-  extends SparkFunSuite
+  extends SparkFunSuite with Eventually
   with BeforeAndAfterAll
   with SQLTestData { self =>
 
@@ -62,7 +67,7 @@ private[sql] trait SQLTestUtils
    * A helper object for importing SQL implicits.
    *
    * Note that the alternative of importing `spark.implicits._` is not possible here.
-   * This is because we create the [[SQLContext]] immediately before the first test is run,
+   * This is because we create the `SQLContext` immediately before the first test is run,
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
@@ -70,7 +75,7 @@ private[sql] trait SQLTestUtils
   }
 
   /**
-   * Materialize the test data immediately after the [[SQLContext]] is set up.
+   * Materialize the test data immediately after the `SQLContext` is set up.
    * This is necessary if the data is accessed by name but not through direct reference.
    */
   protected def setupTestData(): Unit = {
@@ -92,7 +97,13 @@ private[sql] trait SQLTestUtils
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(spark.conf.get(key)).toOption)
+    val currentValues = keys.map { key =>
+      if (spark.conf.contains(key)) {
+        Some(spark.conf.get(key))
+      } else {
+        None
+      }
+    }
     (keys, values).zipped.foreach(spark.conf.set)
     try f finally {
       keys.zip(currentValues).foreach {
@@ -115,6 +126,30 @@ private[sql] trait SQLTestUtils
   }
 
   /**
+   * Copy file in jar's resource to a temp file, then pass it to `f`.
+   * This function is used to make `f` can use the path of temp file(e.g. file:/), instead of
+   * path of jar's resource which starts with 'jar:file:/'
+   */
+  protected def withResourceTempPath(resourcePath: String)(f: File => Unit): Unit = {
+    val inputStream =
+      Thread.currentThread().getContextClassLoader.getResourceAsStream(resourcePath)
+    withTempDir { dir =>
+      val tmpFile = new File(dir, "tmp")
+      Files.copy(inputStream, tmpFile.toPath)
+      f(tmpFile)
+    }
+  }
+
+  /**
+   * Waits for all tasks on all executors to be finished.
+   */
+  protected def waitForTasksToFinish(): Unit = {
+    eventually(timeout(10.seconds)) {
+      assert(spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+  /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
    * returns.
    *
@@ -122,7 +157,11 @@ private[sql] trait SQLTestUtils
    */
   protected def withTempDir(f: File => Unit): Unit = {
     val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
+    try f(dir) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      Utils.deleteRecursively(dir)
+    }
   }
 
   /**
@@ -149,7 +188,7 @@ private[sql] trait SQLTestUtils
   /**
    * Drops temporary table `tableName` after calling `f`.
    */
-  protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
+  protected def withTempView(tableNames: String*)(f: => Unit): Unit = {
     try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
@@ -196,7 +235,39 @@ private[sql] trait SQLTestUtils
       fail("Failed to create temporary database", cause)
     }
 
-    try f(dbName) finally spark.sql(s"DROP DATABASE $dbName CASCADE")
+    try f(dbName) finally {
+      if (spark.catalog.currentDatabase == dbName) {
+        spark.sql(s"USE $DEFAULT_DATABASE")
+      }
+      spark.sql(s"DROP DATABASE $dbName CASCADE")
+    }
+  }
+
+  /**
+   * Drops database `dbName` after calling `f`.
+   */
+  protected def withDatabase(dbNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      dbNames.foreach { name =>
+        spark.sql(s"DROP DATABASE IF EXISTS $name")
+      }
+      spark.sql(s"USE $DEFAULT_DATABASE")
+    }
+  }
+
+  /**
+   * Enables Locale `language` before executing `f`, then switches back to the default locale of JVM
+   * after `f` returns.
+   */
+  protected def withLocale(language: String)(f: => Unit): Unit = {
+    val originalLocale = Locale.getDefault
+    try {
+      // Add Locale setting
+      Locale.setDefault(new Locale(language))
+      f
+    } finally {
+      Locale.setDefault(originalLocale)
+    }
   }
 
   /**
@@ -221,8 +292,8 @@ private[sql] trait SQLTestUtils
   }
 
   /**
-   * Turn a logical plan into a [[DataFrame]]. This should be removed once we have an easier
-   * way to construct [[DataFrame]] directly out of local data without relying on implicits.
+   * Turn a logical plan into a `DataFrame`. This should be removed once we have an easier
+   * way to construct `DataFrame` directly out of local data without relying on implicits.
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
     Dataset.ofRows(spark, plan)
@@ -240,6 +311,59 @@ private[sql] trait SQLTestUtils
         f
       }
     }
+  }
+
+  /**
+   * Run a test on a separate `UninterruptibleThread`.
+   */
+  protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)
+    (body: => Unit): Unit = {
+    val timeoutMillis = 10000
+    @transient var ex: Throwable = null
+
+    def runOnThread(): Unit = {
+      val thread = new UninterruptibleThread(s"Testing thread for test $name") {
+        override def run(): Unit = {
+          try {
+            body
+          } catch {
+            case NonFatal(e) =>
+              ex = e
+          }
+        }
+      }
+      thread.setDaemon(true)
+      thread.start()
+      thread.join(timeoutMillis)
+      if (thread.isAlive) {
+        thread.interrupt()
+        // If this interrupt does not work, then this thread is most likely running something that
+        // is not interruptible. There is not much point to wait for the thread to termniate, and
+        // we rather let the JVM terminate the thread on exit.
+        fail(
+          s"Test '$name' running on o.a.s.util.UninterruptibleThread timed out after" +
+            s" $timeoutMillis ms")
+      } else if (ex != null) {
+        throw ex
+      }
+    }
+
+    if (quietly) {
+      testQuietly(name) { runOnThread() }
+    } else {
+      test(name) { runOnThread() }
+    }
+  }
+
+  /**
+   * This method is used to make the given path qualified, when a path
+   * does not contain a scheme, this path will not be changed after the default
+   * FileSystem is changed.
+   */
+  def makeQualifiedPath(path: String): URI = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.makeQualified(hadoopPath).toUri
   }
 }
 

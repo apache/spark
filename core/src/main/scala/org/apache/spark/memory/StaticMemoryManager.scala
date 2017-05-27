@@ -55,6 +55,8 @@ private[spark] class StaticMemoryManager(
     (maxOnHeapStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
 
+  override def maxOffHeapStorageMemory: Long = 0L
+
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,

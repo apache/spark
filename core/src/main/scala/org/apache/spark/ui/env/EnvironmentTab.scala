@@ -23,6 +23,7 @@ import org.apache.spark.ui._
 
 private[ui] class EnvironmentTab(parent: SparkUI) extends SparkUITab(parent, "environment") {
   val listener = parent.environmentListener
+  val conf = parent.conf
   attachPage(new EnvironmentPage(this))
 }
 
@@ -31,6 +32,7 @@ private[ui] class EnvironmentTab(parent: SparkUI) extends SparkUITab(parent, "en
  * A SparkListener that prepares information to be displayed on the EnvironmentTab
  */
 @DeveloperApi
+@deprecated("This class will be removed in a future release.", "2.2.0")
 class EnvironmentListener extends SparkListener {
   var jvmInformation = Seq[(String, String)]()
   var sparkProperties = Seq[(String, String)]()

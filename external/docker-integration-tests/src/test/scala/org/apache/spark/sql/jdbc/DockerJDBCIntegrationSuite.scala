@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import com.spotify.docker.client._
+import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually

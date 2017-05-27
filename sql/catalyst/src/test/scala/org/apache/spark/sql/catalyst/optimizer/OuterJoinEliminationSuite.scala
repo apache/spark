@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{Coalesce, IsNotNull}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf.CONSTRAINT_PROPAGATION_ENABLED
 
 class OuterJoinEliminationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -30,7 +32,16 @@ class OuterJoinEliminationSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Outer Join Elimination", Once,
-        OuterJoinElimination,
+        EliminateOuterJoin(conf),
+        PushPredicateThroughJoin) :: Nil
+  }
+
+  object OptimizeWithConstraintPropagationDisabled extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Subqueries", Once,
+        EliminateSubqueryAliases) ::
+      Batch("Outer Join Elimination", Once,
+        EliminateOuterJoin(conf.copy(CONSTRAINT_PROPAGATION_ENABLED -> false)),
         PushPredicateThroughJoin) :: Nil
   }
 
@@ -191,5 +202,60 @@ class OuterJoinEliminationSuite extends PlanTest {
       left.join(right, Inner, Option("b".attr + 3 === "e".attr && "a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("joins: no outer join elimination if the filter is not NULL eliminated") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery =
+      x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
+        .where(Coalesce("y.e".attr :: "x.a".attr :: Nil))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val left = testRelation
+    val right = testRelation1
+    val correctAnswer =
+      left.join(right, FullOuter, Option("a".attr === "d".attr))
+        .where(Coalesce("e".attr :: "a".attr :: Nil)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("joins: no outer join elimination if the filter's constraints are not NULL eliminated") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery =
+      x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
+        .where(IsNotNull(Coalesce("y.e".attr :: "x.a".attr :: Nil)))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val left = testRelation
+    val right = testRelation1
+    val correctAnswer =
+      left.join(right, FullOuter, Option("a".attr === "d".attr))
+        .where(IsNotNull(Coalesce("e".attr :: "a".attr :: Nil))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("no outer join elimination if constraint propagation is disabled") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    // The predicate "x.b + y.d >= 3" will be inferred constraints like:
+    // "x.b != null" and "y.d != null", if constraint propagation is enabled.
+    // When we disable it, the predicate can't be evaluated on left or right plan and used to
+    // filter out nulls. So the Outer Join will not be eliminated.
+    val originalQuery =
+      x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
+        .where("x.b".attr + "y.d".attr >= 3)
+
+    val optimized = OptimizeWithConstraintPropagationDisabled.execute(originalQuery.analyze)
+
+    comparePlans(optimized, originalQuery.analyze)
   }
 }

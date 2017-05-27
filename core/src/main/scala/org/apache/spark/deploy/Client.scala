@@ -116,33 +116,34 @@ private class ClientEndpoint(
   }
 
   /* Find out driver status then exit the JVM */
-  def pollAndReportStatus(driverId: String) {
+  def pollAndReportStatus(driverId: String): Unit = {
     // Since ClientEndpoint is the only RpcEndpoint in the process, blocking the event loop thread
     // is fine.
     logInfo("... waiting before polling master for driver state")
     Thread.sleep(5000)
     logInfo("... polling master for driver state")
     val statusResponse =
-      activeMasterEndpoint.askWithRetry[DriverStatusResponse](RequestDriverStatus(driverId))
-    statusResponse.found match {
-      case false =>
-        logError(s"ERROR: Cluster master did not recognize $driverId")
-        System.exit(-1)
-      case true =>
-        logInfo(s"State of $driverId is ${statusResponse.state.get}")
-        // Worker node, if present
-        (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
-          case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
-            logInfo(s"Driver running on $hostPort ($id)")
-          case _ =>
-        }
-        // Exception, if present
-        statusResponse.exception.map { e =>
+      activeMasterEndpoint.askSync[DriverStatusResponse](RequestDriverStatus(driverId))
+    if (statusResponse.found) {
+      logInfo(s"State of $driverId is ${statusResponse.state.get}")
+      // Worker node, if present
+      (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
+        case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
+          logInfo(s"Driver running on $hostPort ($id)")
+        case _ =>
+      }
+      // Exception, if present
+      statusResponse.exception match {
+        case Some(e) =>
           logError(s"Exception from cluster was: $e")
           e.printStackTrace()
           System.exit(-1)
-        }
-        System.exit(0)
+        case _ =>
+          System.exit(0)
+      }
+    } else {
+      logError(s"ERROR: Cluster master did not recognize $driverId")
+      System.exit(-1)
     }
   }
 
@@ -220,7 +221,9 @@ object Client {
     val conf = new SparkConf()
     val driverArgs = new ClientArguments(args)
 
-    conf.set("spark.rpc.askTimeout", "10")
+    if (!conf.contains("spark.rpc.askTimeout")) {
+      conf.set("spark.rpc.askTimeout", "10s")
+    }
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
     val rpcEnv =

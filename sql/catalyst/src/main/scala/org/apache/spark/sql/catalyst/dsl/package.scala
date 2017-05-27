@@ -109,8 +109,9 @@ package object dsl {
     def cast(to: DataType): Expression = Cast(expr, to)
 
     def asc: SortOrder = SortOrder(expr, Ascending)
+    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Set.empty)
     def desc: SortOrder = SortOrder(expr, Descending)
-
+    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Set.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
@@ -242,6 +243,9 @@ package object dsl {
       def array(dataType: DataType): AttributeReference =
         AttributeReference(s, ArrayType(dataType), nullable = true)()
 
+      def array(arrayType: ArrayType): AttributeReference =
+        AttributeReference(s, arrayType)()
+
       /** Creates a new AttributeReference of type map */
       def map(keyType: DataType, valueType: DataType): AttributeReference =
         map(MapType(keyType, valueType))
@@ -276,11 +280,10 @@ package object dsl {
   object expressions extends ExpressionConversions  // scalastyle:ignore
 
   object plans {  // scalastyle:ignore
-    def table(ref: String): LogicalPlan =
-      UnresolvedRelation(TableIdentifier(ref), None)
+    def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
 
     def table(db: String, ref: String): LogicalPlan =
-      UnresolvedRelation(TableIdentifier(ref, Option(db)), None)
+      UnresolvedRelation(TableIdentifier(ref, Option(db)))
 
     implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) {
       def select(exprs: Expression*): LogicalPlan = {
@@ -293,11 +296,7 @@ package object dsl {
 
       def where(condition: Expression): LogicalPlan = Filter(condition, logicalPlan)
 
-      def filter[T : Encoder](func: T => Boolean): LogicalPlan = {
-        val deserialized = logicalPlan.deserialize[T]
-        val condition = expressions.callFunction(func, BooleanType, deserialized.output.head)
-        Filter(condition, deserialized).serialize[T]
-      }
+      def filter[T : Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
 
       def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
 
@@ -367,15 +366,18 @@ package object dsl {
       def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
         InsertIntoTable(
           analysis.UnresolvedRelation(TableIdentifier(tableName)),
-          Map.empty, logicalPlan, overwrite, false)
+          Map.empty, logicalPlan, overwrite, ifPartitionNotExists = false)
 
-      def as(alias: String): LogicalPlan = logicalPlan match {
-        case UnresolvedRelation(tbl, _) => UnresolvedRelation(tbl, Option(alias))
-        case plan => SubqueryAlias(alias, plan)
-      }
+      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
-      def distribute(exprs: Expression*): LogicalPlan =
-        RepartitionByExpression(exprs, logicalPlan)
+      def coalesce(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = false, logicalPlan)
+
+      def repartition(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = true, logicalPlan)
+
+      def distribute(exprs: Expression*)(n: Int): LogicalPlan =
+        RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
 
       def analyze: LogicalPlan =
         EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))

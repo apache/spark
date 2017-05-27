@@ -33,12 +33,14 @@ if __name__ == "__main__":
         (0, 0.1),
         (1, 0.8),
         (2, 0.2)
-    ], ["label", "feature"])
+    ], ["id", "feature"])
+
     binarizer = Binarizer(threshold=0.5, inputCol="feature", outputCol="binarized_feature")
+
     binarizedDataFrame = binarizer.transform(continuousDataFrame)
-    binarizedFeatures = binarizedDataFrame.select("binarized_feature")
-    for binarized_feature, in binarizedFeatures.collect():
-        print(binarized_feature)
+
+    print("Binarizer output with Threshold = %f" % binarizer.getThreshold())
+    binarizedDataFrame.show()
     # $example off$
 
     spark.stop()

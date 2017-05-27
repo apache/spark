@@ -23,7 +23,7 @@ import java.util.{Arrays, Map => JMap, UUID}
 import java.util.concurrent.RejectedExecutionException
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, Map => SMap}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -45,24 +45,27 @@ private[hive] class SparkExecuteStatementOperation(
     statement: String,
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true)
-    (sqlContext: SQLContext, sessionToActivePool: SMap[SessionHandle, String])
+    (sqlContext: SQLContext, sessionToActivePool: JMap[SessionHandle, String])
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
   with Logging {
 
   private var result: DataFrame = _
+
+  // We cache the returned rows to get iterators again in case the user wants to use FETCH_FIRST.
+  // This is only used when `spark.sql.thriftServer.incrementalCollect` is set to `false`.
+  // In case of `true`, this will be `None` and FETCH_FIRST will trigger re-execution.
+  private var resultList: Option[Array[SparkRow]] = _
+
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
 
   private lazy val resultSchema: TableSchema = {
-    if (result == null || result.queryExecution.analyzed.output.size == 0) {
+    if (result == null || result.schema.isEmpty) {
       new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
     } else {
-      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
-      val schema = result.queryExecution.analyzed.output.map { attr =>
-        new FieldSchema(attr.name, attr.dataType.catalogString, "")
-      }
-      new TableSchema(schema.asJava)
+      logInfo(s"Result Schema: ${result.schema}")
+      SparkExecuteStatementOperation.getTableSchema(result.schema)
     }
   }
 
@@ -110,6 +113,20 @@ private[hive] class SparkExecuteStatementOperation(
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
     val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
+
+    // Reset iter to header when fetching start from first row
+    if (order.equals(FetchOrientation.FETCH_FIRST)) {
+      iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
+        resultList = None
+        result.toLocalIterator.asScala
+      } else {
+        if (resultList.isEmpty) {
+          resultList = Some(result.collect())
+        }
+        resultList.get.iterator
+      }
+    }
+
     if (!iter.hasNext) {
       resultRowSet
     } else {
@@ -206,7 +223,8 @@ private[hive] class SparkExecuteStatementOperation(
       statementId,
       parentSession.getUsername)
     sqlContext.sparkContext.setJobGroup(statementId, statement)
-    sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
+    val pool = sessionToActivePool.get(parentSession.getSessionHandle)
+    if (pool != null) {
       sqlContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
     }
     try {
@@ -214,18 +232,18 @@ private[hive] class SparkExecuteStatementOperation(
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
         case SetCommand(Some((SQLConf.THRIFTSERVER_POOL.key, Some(value)))) =>
-          sessionToActivePool(parentSession.getSessionHandle) = value
+          sessionToActivePool.put(parentSession.getSessionHandle, value)
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
       HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
       iter = {
-        val useIncrementalCollect =
-          sqlContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
-        if (useIncrementalCollect) {
+        if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
+          resultList = None
           result.toLocalIterator.asScala
         } else {
-          result.collect().iterator
+          resultList = Some(result.collect())
+          resultList.get.iterator
         }
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
@@ -267,5 +285,15 @@ private[hive] class SparkExecuteStatementOperation(
         backgroundHandle.cancel(true)
       }
     }
+  }
+}
+
+object SparkExecuteStatementOperation {
+  def getTableSchema(structType: StructType): TableSchema = {
+    val schema = structType.map { field =>
+      val attrTypeString = if (field.dataType == NullType) "void" else field.dataType.catalogString
+      new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
+    }
+    new TableSchema(schema.asJava)
   }
 }

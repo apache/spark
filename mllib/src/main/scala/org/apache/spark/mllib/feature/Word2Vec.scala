@@ -30,11 +30,13 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.BoundedPriorityQueue
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -313,6 +315,20 @@ class Word2Vec extends Serializable with Logging {
     val expTable = sc.broadcast(createExpTable())
     val bcVocab = sc.broadcast(vocab)
     val bcVocabHash = sc.broadcast(vocabHash)
+    try {
+      doFit(dataset, sc, expTable, bcVocab, bcVocabHash)
+    } finally {
+      expTable.destroy(blocking = false)
+      bcVocab.destroy(blocking = false)
+      bcVocabHash.destroy(blocking = false)
+    }
+  }
+
+  private def doFit[S <: Iterable[String]](
+    dataset: RDD[S], sc: SparkContext,
+    expTable: Broadcast[Array[Float]],
+    bcVocab: Broadcast[Array[VocabWord]],
+    bcVocabHash: Broadcast[mutable.HashMap[String, Int]]) = {
     // each partition is a collection of sentences,
     // will be translated into arrays of Index integer
     val sentences: RDD[Array[Int]] = dataset.mapPartitions { sentenceIter =>
@@ -430,8 +446,8 @@ class Word2Vec extends Serializable with Logging {
         }
         i += 1
       }
-      bcSyn0Global.unpersist(false)
-      bcSyn1Global.unpersist(false)
+      bcSyn0Global.destroy(false)
+      bcSyn1Global.destroy(false)
     }
     newSentences.unpersist()
 
@@ -475,8 +491,8 @@ class Word2VecModel private[spark] (
 
   // wordVecNorms: Array of length numWords, each value being the Euclidean norm
   //               of the wordVector.
-  private val wordVecNorms: Array[Double] = {
-    val wordVecNorms = new Array[Double](numWords)
+  private val wordVecNorms: Array[Float] = {
+    val wordVecNorms = new Array[Float](numWords)
     var i = 0
     while (i < numWords) {
       val vec = wordVectors.slice(i * vectorSize, i * vectorSize + vectorSize)
@@ -515,7 +531,7 @@ class Word2VecModel private[spark] (
   }
 
   /**
-   * Find synonyms of a word
+   * Find synonyms of a word; do not include the word itself in results.
    * @param word a word
    * @param num number of synonyms to find
    * @return array of (word, cosineSimilarity)
@@ -523,21 +539,38 @@ class Word2VecModel private[spark] (
   @Since("1.1.0")
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)
-    findSynonyms(vector, num)
+    findSynonyms(vector, num, Some(word))
   }
 
   /**
-   * Find synonyms of the vector representation of a word
+   * Find synonyms of the vector representation of a word, possibly
+   * including any words in the model vocabulary whose vector respresentation
+   * is the supplied vector.
    * @param vector vector representation of a word
    * @param num number of synonyms to find
    * @return array of (word, cosineSimilarity)
    */
   @Since("1.1.0")
   def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
+    findSynonyms(vector, num, None)
+  }
+
+  /**
+   * Find synonyms of the vector representation of a word, rejecting
+   * words identical to the value of wordOpt, if one is supplied.
+   * @param vector vector representation of a word
+   * @param num number of synonyms to find
+   * @param wordOpt optionally, a word to reject from the results list
+   * @return array of (word, cosineSimilarity)
+   */
+  private def findSynonyms(
+      vector: Vector,
+      num: Int,
+      wordOpt: Option[String]): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
-    // TODO: optimize top-k
+
     val fVector = vector.toArray.map(_.toFloat)
-    val cosineVec = Array.fill[Float](numWords)(0)
+    val cosineVec = new Array[Float](numWords)
     val alpha: Float = 1
     val beta: Float = 0
     // Normalize input vector before blas.sgemv to avoid Inf value
@@ -548,23 +581,35 @@ class Word2VecModel private[spark] (
     blas.sgemv(
       "T", vectorSize, numWords, alpha, wordVectors, vectorSize, fVector, 1, beta, cosineVec, 1)
 
-    val cosVec = cosineVec.map(_.toDouble)
-    var ind = 0
-    while (ind < numWords) {
-      val norm = wordVecNorms(ind)
-      if (norm == 0.0) {
-        cosVec(ind) = 0.0
+    var i = 0
+    while (i < numWords) {
+      val norm = wordVecNorms(i)
+      if (norm == 0.0f) {
+        cosineVec(i) = 0.0f
       } else {
-        cosVec(ind) /= norm
+        cosineVec(i) /= norm
       }
-      ind += 1
+      i += 1
     }
 
-    wordList.zip(cosVec)
-      .toSeq
-      .sortBy(-_._2)
-      .take(num + 1)
-      .tail
+    val pq = new BoundedPriorityQueue[(String, Float)](num + 1)(Ordering.by(_._2))
+
+    var j = 0
+    while (j < numWords) {
+      pq += Tuple2(wordList(j), cosineVec(j))
+      j += 1
+    }
+
+    val scored = pq.toSeq.sortBy(-_._2)
+
+    val filtered = wordOpt match {
+      case Some(w) => scored.filter(tup => w != tup._1)
+      case None => scored
+    }
+
+    filtered
+      .take(num)
+      .map { case (word, score) => (word, score.toDouble) }
       .toArray
   }
 
@@ -629,14 +674,16 @@ object Word2VecModel extends Loader[Word2VecModel] {
         ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      // We want to partition the model in partitions of size 32MB
-      val partitionSize = (1L << 25)
+      // We want to partition the model in partitions smaller than
+      // spark.kryoserializer.buffer.max
+      val bufferSize = Utils.byteStringAsBytes(
+        spark.conf.get("spark.kryoserializer.buffer.max", "64m"))
       // We calculate the approximate size of the model
-      // We only calculate the array size, not considering
-      // the string size, the formula is:
-      // floatSize * numWords * vectorSize
-      val approxSize = 4L * numWords * vectorSize
-      val nPartitions = ((approxSize / partitionSize) + 1).toInt
+      // We only calculate the array size, considering an
+      // average string size of 15 bytes, the formula is:
+      // (floatSize * vectorSize + 15) * numWords
+      val approxSize = (4L * vectorSize + 15) * numWords
+      val nPartitions = ((approxSize / bufferSize) + 1).toInt
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
       spark.createDataFrame(dataArray).repartition(nPartitions).write.parquet(Loader.dataPath(path))
     }

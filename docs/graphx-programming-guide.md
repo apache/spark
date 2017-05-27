@@ -11,6 +11,7 @@ description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 <!-- All the documentation links  -->
 
 [EdgeRDD]: api/scala/index.html#org.apache.spark.graphx.EdgeRDD
+[VertexRDD]: api/scala/index.html#org.apache.spark.graphx.VertexRDD
 [Edge]: api/scala/index.html#org.apache.spark.graphx.Edge
 [EdgeTriplet]: api/scala/index.html#org.apache.spark.graphx.EdgeTriplet
 [Graph]: api/scala/index.html#org.apache.spark.graphx.Graph
@@ -24,7 +25,6 @@ description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 [Graph.outerJoinVertices]: api/scala/index.html#org.apache.spark.graphx.Graph@outerJoinVertices[U,VD2](RDD[(VertexId,U)])((VertexId,VD,Option[U])⇒VD2)(ClassTag[U],ClassTag[VD2]):Graph[VD2,ED]
 [Graph.aggregateMessages]: api/scala/index.html#org.apache.spark.graphx.Graph@aggregateMessages[A]((EdgeContext[VD,ED,A])⇒Unit,(A,A)⇒A,TripletFields)(ClassTag[A]):VertexRDD[A]
 [EdgeContext]: api/scala/index.html#org.apache.spark.graphx.EdgeContext
-[Graph.mapReduceTriplets]: api/scala/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]
 [GraphOps.collectNeighborIds]: api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighborIds(EdgeDirection):VertexRDD[Array[VertexId]]
 [GraphOps.collectNeighbors]: api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighbors(EdgeDirection):VertexRDD[Array[(VertexId,VD)]]
 [RDD Persistence]: programming-guide.html#rdd-persistence
@@ -36,7 +36,6 @@ description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 [Graph.fromEdgeTuples]: api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdgeTuples[VD](RDD[(VertexId,VertexId)],VD,Option[PartitionStrategy])(ClassTag[VD]):Graph[VD,Int]
 [Graph.fromEdges]: api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdges[VD,ED](RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
 [PartitionStrategy]: api/scala/index.html#org.apache.spark.graphx.PartitionStrategy
-[Graph.partitionBy]: api/scala/index.html#org.apache.spark.graphx.Graph$@partitionBy(partitionStrategy:org.apache.spark.graphx.PartitionStrategy):org.apache.spark.graphx.Graph[VD,ED]
 [PageRank]: api/scala/index.html#org.apache.spark.graphx.lib.PageRank$
 [ConnectedComponents]: api/scala/index.html#org.apache.spark.graphx.lib.ConnectedComponents$
 [TriangleCount]: api/scala/index.html#org.apache.spark.graphx.lib.TriangleCount$
@@ -67,23 +66,6 @@ operators (e.g., [subgraph](#structural_operators), [joinVertices](#join_operato
 [aggregateMessages](#aggregateMessages)) as well as an optimized variant of the [Pregel](#pregel) API. In addition, GraphX includes a growing collection of graph [algorithms](#graph_algorithms) and
 [builders](#graph_builders) to simplify graph analytics tasks.
 
-
-## Migrating from Spark 1.1
-
-GraphX in Spark 1.2 contains a few user facing API changes:
-
-1. To improve performance we have introduced a new version of
-[`mapReduceTriplets`][Graph.mapReduceTriplets] called
-[`aggregateMessages`][Graph.aggregateMessages] which takes the messages previously returned from
-[`mapReduceTriplets`][Graph.mapReduceTriplets] through a callback ([`EdgeContext`][EdgeContext])
-rather than by return value.
-We are deprecating [`mapReduceTriplets`][Graph.mapReduceTriplets] and encourage users to consult
-the [transition guide](#mrTripletsTransition).
-
-2. In Spark 1.0 and 1.1, the type signature of [`EdgeRDD`][EdgeRDD] switched from
-`EdgeRDD[ED]` to `EdgeRDD[ED, VD]` to enable some caching optimizations.  We have since discovered
-a more elegant solution and have restored the type signature to the more natural `EdgeRDD[ED]` type.
-
 # Getting Started
 
 To get started you first need to import Spark and GraphX into your project, as follows:
@@ -107,7 +89,7 @@ with user defined objects attached to each vertex and edge.  A directed multigra
 graph with potentially multiple parallel edges sharing the same source and destination vertex.  The
 ability to support parallel edges simplifies modeling scenarios where there can be multiple
 relationships (e.g., co-worker and friend) between the same vertices.  Each vertex is keyed by a
-*unique* 64-bit long identifier (`VertexID`).  GraphX does not impose any ordering constraints on
+*unique* 64-bit long identifier (`VertexId`).  GraphX does not impose any ordering constraints on
 the vertex identifiers.  Similarly, edges have corresponding source and destination vertex
 identifiers.
 
@@ -148,12 +130,12 @@ class Graph[VD, ED] {
 }
 {% endhighlight %}
 
-The classes `VertexRDD[VD]` and `EdgeRDD[ED]` extend and are optimized versions of `RDD[(VertexID,
+The classes `VertexRDD[VD]` and `EdgeRDD[ED]` extend and are optimized versions of `RDD[(VertexId,
 VD)]` and `RDD[Edge[ED]]` respectively.  Both `VertexRDD[VD]` and `EdgeRDD[ED]` provide  additional
 functionality built around graph computation and leverage internal optimizations.  We discuss the
-`VertexRDD` and `EdgeRDD` API in greater detail in the section on [vertex and edge
+`VertexRDD`[VertexRDD] and `EdgeRDD`[EdgeRDD] API in greater detail in the section on [vertex and edge
 RDDs](#vertex_and_edge_rdds) but for now they can be thought of as simply RDDs of the form:
-`RDD[(VertexID, VD)]` and `RDD[Edge[ED]]`.
+`RDD[(VertexId, VD)]` and `RDD[Edge[ED]]`.
 
 ### Example Property Graph
 
@@ -215,7 +197,7 @@ graph.edges.filter(e => e.srcId > e.dstId).count
 {% endhighlight %}
 
 > Note that `graph.vertices` returns an `VertexRDD[(String, String)]` which extends
-> `RDD[(VertexID, (String, String))]` and so we use the scala `case` expression to deconstruct the
+> `RDD[(VertexId, (String, String))]` and so we use the scala `case` expression to deconstruct the
 > tuple.  On the other hand, `graph.edges` returns an `EdgeRDD` containing `Edge[String]` objects.
 > We could have also used the case class type constructor as in the following:
 > {% highlight scala %}
@@ -305,7 +287,7 @@ class Graph[VD, ED] {
   // Change the partitioning heuristic  ============================================================
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
   // Transform vertex and edge attributes ==========================================================
-  def mapVertices[VD2](map: (VertexID, VD) => VD2): Graph[VD2, ED]
+  def mapVertices[VD2](map: (VertexId, VD) => VD2): Graph[VD2, ED]
   def mapEdges[ED2](map: Edge[ED] => ED2): Graph[VD, ED2]
   def mapEdges[ED2](map: (PartitionID, Iterator[Edge[ED]]) => Iterator[ED2]): Graph[VD, ED2]
   def mapTriplets[ED2](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
@@ -315,18 +297,18 @@ class Graph[VD, ED] {
   def reverse: Graph[VD, ED]
   def subgraph(
       epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
-      vpred: (VertexID, VD) => Boolean = ((v, d) => true))
+      vpred: (VertexId, VD) => Boolean = ((v, d) => true))
     : Graph[VD, ED]
   def mask[VD2, ED2](other: Graph[VD2, ED2]): Graph[VD, ED]
   def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED]
   // Join RDDs with the graph ======================================================================
-  def joinVertices[U](table: RDD[(VertexID, U)])(mapFunc: (VertexID, VD, U) => VD): Graph[VD, ED]
-  def outerJoinVertices[U, VD2](other: RDD[(VertexID, U)])
-      (mapFunc: (VertexID, VD, Option[U]) => VD2)
+  def joinVertices[U](table: RDD[(VertexId, U)])(mapFunc: (VertexId, VD, U) => VD): Graph[VD, ED]
+  def outerJoinVertices[U, VD2](other: RDD[(VertexId, U)])
+      (mapFunc: (VertexId, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
   // Aggregate information about adjacent triplets =================================================
-  def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexID]]
-  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexID, VD)]]
+  def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexId]]
+  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexId, VD)]]
   def aggregateMessages[Msg: ClassTag](
       sendMsg: EdgeContext[VD, ED, Msg] => Unit,
       mergeMsg: (Msg, Msg) => Msg,
@@ -334,15 +316,15 @@ class Graph[VD, ED] {
     : VertexRDD[A]
   // Iterative graph-parallel computation ==========================================================
   def pregel[A](initialMsg: A, maxIterations: Int, activeDirection: EdgeDirection)(
-      vprog: (VertexID, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID,A)],
+      vprog: (VertexId, VD, A) => VD,
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED]
   // Basic graph algorithms ========================================================================
   def pageRank(tol: Double, resetProb: Double = 0.15): Graph[Double, Double]
-  def connectedComponents(): Graph[VertexID, ED]
+  def connectedComponents(): Graph[VertexId, ED]
   def triangleCount(): Graph[Int, ED]
-  def stronglyConnectedComponents(numIter: Int): Graph[VertexID, ED]
+  def stronglyConnectedComponents(numIter: Int): Graph[VertexId, ED]
 }
 {% endhighlight %}
 
@@ -438,15 +420,15 @@ val graph = Graph(users, relationships, defaultUser)
 // Notice that there is a user 0 (for which we have no information) connected to users
 // 4 (peter) and 5 (franklin).
 graph.triplets.map(
-    triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
-  ).collect.foreach(println(_))
+  triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
+).collect.foreach(println(_))
 // Remove missing vertices as well as the edges to connected to them
 val validGraph = graph.subgraph(vpred = (id, attr) => attr._2 != "Missing")
 // The valid subgraph will disconnect users 4 and 5 by removing user 0
 validGraph.vertices.collect.foreach(println(_))
 validGraph.triplets.map(
-    triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
-  ).collect.foreach(println(_))
+  triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
+).collect.foreach(println(_))
 {% endhighlight %}
 
 > Note in the above example only the vertex predicate is provided.  The `subgraph` operator defaults
@@ -499,7 +481,7 @@ original value.
 > is therefore recommended that the input RDD be made unique using the following which will
 > also *pre-index* the resulting values to substantially accelerate the subsequent join.
 > {% highlight scala %}
-val nonUniqueCosts: RDD[(VertexID, Double)]
+val nonUniqueCosts: RDD[(VertexId, Double)]
 val uniqueCosts: VertexRDD[Double] =
   graph.vertices.aggregateUsingIndex(nonUnique, (a,b) => a + b)
 val joinedGraph = graph.joinVertices(uniqueCosts)(
@@ -529,7 +511,7 @@ val degreeGraph = graph.outerJoinVertices(outDegrees) { (id, oldAttr, outDegOpt)
 > provide type annotation for the user defined function:
 > {% highlight scala %}
 val joinedGraph = graph.joinVertices(uniqueCosts,
-  (id: VertexID, oldCost: Double, extraCost: Double) => oldCost + extraCost)
+  (id: VertexId, oldCost: Double, extraCost: Double) => oldCost + extraCost)
 {% endhighlight %}
 
 >
@@ -576,7 +558,7 @@ The user defined `mergeMsg` function takes two messages destined to the same ver
 yields a single message.  Think of `mergeMsg` as the <i>reduce</i> function in map-reduce.
 The  [`aggregateMessages`][Graph.aggregateMessages] operator returns a `VertexRDD[Msg]`
 containing the aggregate message (of type `Msg`) destined to each vertex.  Vertices that did not
-receive a message are not included in the returned `VertexRDD`.
+receive a message are not included in the returned `VertexRDD`[VertexRDD].
 
 <!--
 > An [`EdgeContext`][EdgeContext] is provided in place of a [`EdgeTriplet`][EdgeTriplet] to
@@ -603,29 +585,7 @@ slightly unreliable and instead opted for more explicit user control.
 In the following example we use the [`aggregateMessages`][Graph.aggregateMessages] operator to
 compute the average age of the more senior followers of each user.
 
-{% highlight scala %}
-// Import random graph generation library
-import org.apache.spark.graphx.util.GraphGenerators
-// Create a graph with "age" as the vertex property.  Here we use a random graph for simplicity.
-val graph: Graph[Double, Int] =
-  GraphGenerators.logNormalGraph(sc, numVertices = 100).mapVertices( (id, _) => id.toDouble )
-// Compute the number of older followers and their total age
-val olderFollowers: VertexRDD[(Int, Double)] = graph.aggregateMessages[(Int, Double)](
-  triplet => { // Map Function
-    if (triplet.srcAttr > triplet.dstAttr) {
-      // Send message to destination vertex containing counter and age
-      triplet.sendToDst(1, triplet.srcAttr)
-    }
-  },
-  // Add counter and age
-  (a, b) => (a._1 + b._1, a._2 + b._2) // Reduce Function
-)
-// Divide total age by number of older followers to get average age of older followers
-val avgAgeOfOlderFollowers: VertexRDD[Double] =
-  olderFollowers.mapValues( (id, value) => value match { case (count, totalAge) => totalAge / count } )
-// Display the results
-avgAgeOfOlderFollowers.collect.foreach(println(_))
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/graphx/AggregateMessagesExample.scala %}
 
 > The `aggregateMessages` operation performs optimally when the messages (and the sums of
 > messages) are constant sized (e.g., floats and addition instead of lists and concatenation).
@@ -635,7 +595,7 @@ avgAgeOfOlderFollowers.collect.foreach(println(_))
 ### Map Reduce Triplets Transition Guide (Legacy)
 
 In earlier versions of GraphX neighborhood aggregation was accomplished using the
-[`mapReduceTriplets`][Graph.mapReduceTriplets] operator:
+`mapReduceTriplets` operator:
 
 {% highlight scala %}
 class Graph[VD, ED] {
@@ -646,7 +606,7 @@ class Graph[VD, ED] {
 }
 {% endhighlight %}
 
-The [`mapReduceTriplets`][Graph.mapReduceTriplets] operator takes a user defined map function which
+The `mapReduceTriplets` operator takes a user defined map function which
 is applied to each triplet and can yield *messages* which are aggregated using the user defined
 `reduce` function.
 However, we found the user of the returned iterator to be expensive and it inhibited our ability to
@@ -748,7 +708,9 @@ messages remaining.
 > messaging function.  These constraints allow additional optimization within GraphX.
 
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
-of its implementation (note calls to graph.cache have been removed):
+of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodcally
+checkpoint graph and messages by setting "spark.graphx.pregel.checkpointInterval" to a positive number,
+say 10. And set checkpoint directory as well using SparkContext.setCheckpointDir(directory: String)):
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
@@ -762,6 +724,7 @@ class GraphOps[VD, ED] {
     : Graph[VD, ED] = {
     // Receive the initial message at each vertex
     var g = mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
+
     // compute the messages
     var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
     var activeMessages = messages.count()
@@ -774,8 +737,8 @@ class GraphOps[VD, ED] {
       // Send new messages, skipping edges where neither side received a message. We must cache
       // messages so it can be materialized on the next line, allowing us to uncache the previous
       // iteration.
-      messages = g.mapReduceTriplets(
-        sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
+      messages = GraphXUtils.mapReduceTriplets(
+        g, sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
       activeMessages = messages.count()
       i += 1
     }
@@ -793,29 +756,7 @@ second argument list contains the user defined functions for receiving messages 
 We can use the Pregel operator to express computation such as single source
 shortest path in the following example.
 
-{% highlight scala %}
-import org.apache.spark.graphx._
-// Import random graph generation library
-import org.apache.spark.graphx.util.GraphGenerators
-// A graph with edge attributes containing distances
-val graph: Graph[Long, Double] =
-  GraphGenerators.logNormalGraph(sc, numVertices = 100).mapEdges(e => e.attr.toDouble)
-val sourceId: VertexId = 42 // The ultimate source
-// Initialize the graph such that all vertices except the root have distance infinity.
-val initialGraph = graph.mapVertices((id, _) => if (id == sourceId) 0.0 else Double.PositiveInfinity)
-val sssp = initialGraph.pregel(Double.PositiveInfinity)(
-  (id, dist, newDist) => math.min(dist, newDist), // Vertex Program
-  triplet => {  // Send Message
-    if (triplet.srcAttr + triplet.attr < triplet.dstAttr) {
-      Iterator((triplet.dstId, triplet.srcAttr + triplet.attr))
-    } else {
-      Iterator.empty
-    }
-  },
-  (a,b) => math.min(a,b) // Merge Message
-  )
-println(sssp.vertices.collect.mkString("\n"))
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/graphx/SSSPExample.scala %}
 
 <a name="graph_builders"></a>
 
@@ -877,21 +818,22 @@ object Graph {
 
 GraphX exposes `RDD` views of the vertices and edges stored within the graph.  However, because
 GraphX maintains the vertices and edges in optimized data structures and these data structures
-provide additional functionality, the vertices and edges are returned as `VertexRDD` and `EdgeRDD`
+provide additional functionality, the vertices and edges are returned as `VertexRDD`[VertexRDD] and `EdgeRDD`[EdgeRDD]
 respectively.  In this section we review some of the additional useful functionality in these types.
+Note that this is just an incomplete list, please refer to the API docs for the official list of operations. 
 
 ## VertexRDDs
 
-The `VertexRDD[A]` extends `RDD[(VertexID, A)]` and adds the additional constraint that each
-`VertexID` occurs only *once*.  Moreover, `VertexRDD[A]` represents a *set* of vertices each with an
+The `VertexRDD[A]` extends `RDD[(VertexId, A)]` and adds the additional constraint that each
+`VertexId` occurs only *once*.  Moreover, `VertexRDD[A]` represents a *set* of vertices each with an
 attribute of type `A`.  Internally, this is achieved by storing the vertex attributes in a reusable
 hash-map data-structure.  As a consequence if two `VertexRDD`s are derived from the same base
-`VertexRDD` (e.g., by `filter` or `mapValues`) they can be joined in constant time without hash
-evaluations. To leverage this indexed data structure, the `VertexRDD` exposes the following
+`VertexRDD`[VertexRDD] (e.g., by `filter` or `mapValues`) they can be joined in constant time without hash
+evaluations. To leverage this indexed data structure, the `VertexRDD`[VertexRDD] exposes the following
 additional functionality:
 
 {% highlight scala %}
-class VertexRDD[VD] extends RDD[(VertexID, VD)] {
+class VertexRDD[VD] extends RDD[(VertexId, VD)] {
   // Filter the vertex set but preserves the internal index
   def filter(pred: Tuple2[VertexId, VD] => Boolean): VertexRDD[VD]
   // Transform the values without changing the ids (preserves the internal index)
@@ -909,17 +851,17 @@ class VertexRDD[VD] extends RDD[(VertexID, VD)] {
 }
 {% endhighlight %}
 
-Notice, for example,  how the `filter` operator returns an `VertexRDD`.  Filter is actually
+Notice, for example,  how the `filter` operator returns an `VertexRDD`[VertexRDD].  Filter is actually
 implemented using a `BitSet` thereby reusing the index and preserving the ability to do fast joins
 with other `VertexRDD`s.  Likewise, the `mapValues` operators do not allow the `map` function to
-change the `VertexID` thereby enabling the same `HashMap` data structures to be reused.  Both the
+change the `VertexId` thereby enabling the same `HashMap` data structures to be reused.  Both the
 `leftJoin` and `innerJoin` are able to identify when joining two `VertexRDD`s derived from the same
 `HashMap` and implement the join by linear scan rather than costly point lookups.
 
-The `aggregateUsingIndex` operator is useful for efficient construction of a new `VertexRDD` from an
-`RDD[(VertexID, A)]`.  Conceptually, if I have constructed a `VertexRDD[B]` over a set of vertices,
-*which is a super-set* of the vertices in some `RDD[(VertexID, A)]` then I can reuse the index to
-both aggregate and then subsequently index the `RDD[(VertexID, A)]`.  For example:
+The `aggregateUsingIndex` operator is useful for efficient construction of a new `VertexRDD`[VertexRDD] from an
+`RDD[(VertexId, A)]`.  Conceptually, if I have constructed a `VertexRDD[B]` over a set of vertices,
+*which is a super-set* of the vertices in some `RDD[(VertexId, A)]` then I can reuse the index to
+both aggregate and then subsequently index the `RDD[(VertexId, A)]`.  For example:
 
 {% highlight scala %}
 val setA: VertexRDD[Int] = VertexRDD(sc.parallelize(0L until 100L).map(id => (id, 1)))
@@ -940,7 +882,7 @@ of the various partitioning strategies defined in [`PartitionStrategy`][Partitio
 each partition, edge attributes and adjacency structure, are stored separately enabling maximum
 reuse when changing attribute values.
 
-The three additional functions exposed by the `EdgeRDD` are:
+The three additional functions exposed by the `EdgeRDD`[EdgeRDD] are:
 {% highlight scala %}
 // Transform the edge attributes while preserving the structure
 def mapValues[ED2](f: Edge[ED] => ED2): EdgeRDD[ED2]
@@ -950,7 +892,7 @@ def reverse: EdgeRDD[ED]
 def innerJoin[ED2, ED3](other: EdgeRDD[ED2])(f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3]
 {% endhighlight %}
 
-In most applications we have found that operations on the `EdgeRDD` are accomplished through the
+In most applications we have found that operations on the `EdgeRDD`[EdgeRDD] are accomplished through the
 graph operators or rely on operations defined in the base `RDD` class.
 
 # Optimized Representation
@@ -1007,66 +949,21 @@ PageRank measures the importance of each vertex in a graph, assuming an edge fro
 
 GraphX comes with static and dynamic implementations of PageRank as methods on the [`PageRank` object][PageRank]. Static PageRank runs for a fixed number of iterations, while dynamic PageRank runs until the ranks converge (i.e., stop changing by more than a specified tolerance). [`GraphOps`][GraphOps] allows calling these algorithms directly as methods on `Graph`.
 
-GraphX also includes an example social network dataset that we can run PageRank on. A set of users is given in `graphx/data/users.txt`, and a set of relationships between users is given in `graphx/data/followers.txt`. We compute the PageRank of each user as follows:
+GraphX also includes an example social network dataset that we can run PageRank on. A set of users is given in `data/graphx/users.txt`, and a set of relationships between users is given in `data/graphx/followers.txt`. We compute the PageRank of each user as follows:
 
-{% highlight scala %}
-// Load the edges as a graph
-val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt")
-// Run PageRank
-val ranks = graph.pageRank(0.0001).vertices
-// Join the ranks with the usernames
-val users = sc.textFile("graphx/data/users.txt").map { line =>
-  val fields = line.split(",")
-  (fields(0).toLong, fields(1))
-}
-val ranksByUsername = users.join(ranks).map {
-  case (id, (username, rank)) => (username, rank)
-}
-// Print the result
-println(ranksByUsername.collect().mkString("\n"))
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/graphx/PageRankExample.scala %}
 
 ## Connected Components
 
 The connected components algorithm labels each connected component of the graph with the ID of its lowest-numbered vertex. For example, in a social network, connected components can approximate clusters. GraphX contains an implementation of the algorithm in the [`ConnectedComponents` object][ConnectedComponents], and we compute the connected components of the example social network dataset from the [PageRank section](#pagerank) as follows:
 
-{% highlight scala %}
-// Load the graph as in the PageRank example
-val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt")
-// Find the connected components
-val cc = graph.connectedComponents().vertices
-// Join the connected components with the usernames
-val users = sc.textFile("graphx/data/users.txt").map { line =>
-  val fields = line.split(",")
-  (fields(0).toLong, fields(1))
-}
-val ccByUsername = users.join(cc).map {
-  case (id, (username, cc)) => (username, cc)
-}
-// Print the result
-println(ccByUsername.collect().mkString("\n"))
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/graphx/ConnectedComponentsExample.scala %}
 
 ## Triangle Counting
 
 A vertex is part of a triangle when it has two adjacent vertices with an edge between them. GraphX implements a triangle counting algorithm in the [`TriangleCount` object][TriangleCount] that determines the number of triangles passing through each vertex, providing a measure of clustering. We compute the triangle count of the social network dataset from the [PageRank section](#pagerank). *Note that `TriangleCount` requires the edges to be in canonical orientation (`srcId < dstId`) and the graph to be partitioned using [`Graph.partitionBy`][Graph.partitionBy].*
 
-{% highlight scala %}
-// Load the edges in canonical order and partition the graph for triangle count
-val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt", true).partitionBy(PartitionStrategy.RandomVertexCut)
-// Find the triangle count for each vertex
-val triCounts = graph.triangleCount().vertices
-// Join the triangle counts with the usernames
-val users = sc.textFile("graphx/data/users.txt").map { line =>
-  val fields = line.split(",")
-  (fields(0).toLong, fields(1))
-}
-val triCountByUsername = users.join(triCounts).map { case (id, (username, tc)) =>
-  (username, tc)
-}
-// Print the result
-println(triCountByUsername.collect().mkString("\n"))
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/graphx/TriangleCountingExample.scala %}
 
 
 # Examples
@@ -1076,36 +973,4 @@ to important relationships and users, run page-rank on the sub-graph, and
 then finally return attributes associated with the top users.  I can do
 all of this in just a few lines with GraphX:
 
-{% highlight scala %}
-// Connect to the Spark cluster
-val sc = new SparkContext("spark://master.amplab.org", "research")
-
-// Load my user data and parse into tuples of user id and attribute list
-val users = (sc.textFile("graphx/data/users.txt")
-  .map(line => line.split(",")).map( parts => (parts.head.toLong, parts.tail) ))
-
-// Parse the edge data which is already in userId -> userId format
-val followerGraph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt")
-
-// Attach the user attributes
-val graph = followerGraph.outerJoinVertices(users) {
-  case (uid, deg, Some(attrList)) => attrList
-  // Some users may not have attributes so we set them as empty
-  case (uid, deg, None) => Array.empty[String]
-}
-
-// Restrict the graph to users with usernames and names
-val subgraph = graph.subgraph(vpred = (vid, attr) => attr.size == 2)
-
-// Compute the PageRank
-val pagerankGraph = subgraph.pageRank(0.001)
-
-// Get the attributes of the top pagerank users
-val userInfoWithPageRank = subgraph.outerJoinVertices(pagerankGraph.vertices) {
-  case (uid, attrList, Some(pr)) => (pr, attrList.toList)
-  case (uid, attrList, None) => (0.0, attrList.toList)
-}
-
-println(userInfoWithPageRank.vertices.top(5)(Ordering.by(_._2._1)).mkString("\n"))
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/graphx/ComprehensiveExample.scala %}

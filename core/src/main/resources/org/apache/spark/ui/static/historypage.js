@@ -15,26 +15,10 @@
  * limitations under the License.
  */
 
-// this function works exactly the same as UIUtils.formatDuration
-function formatDuration(milliseconds) {
-  if (milliseconds < 100) {
-    return milliseconds + " ms";
-  }
-  var seconds = milliseconds * 1.0 / 1000;
-  if (seconds < 1) {
-    return seconds.toFixed(1) + " s";
-  }
-  if (seconds < 60) {
-    return seconds.toFixed(0) + " s";
-  }
-  var minutes = seconds / 60;
-  if (minutes < 10) {
-    return minutes.toFixed(1) + " min";
-  } else if (minutes < 60) {
-    return minutes.toFixed(0) + " min";
-  }
-  var hours = minutes / 60;
-  return hours.toFixed(1) + " h";
+var appLimit = -1;
+
+function setAppLimit(val) {
+    appLimit = val;
 }
 
 function makeIdNumeric(id) {
@@ -94,6 +78,12 @@ jQuery.extend( jQuery.fn.dataTableExt.oSort, {
     }
 } );
 
+jQuery.extend( jQuery.fn.dataTableExt.ofnSearch, {
+    "appid-numeric": function ( a ) {
+        return a.replace(/[\r\n]/g, " ").replace(/<.*?>/g, "");
+    }
+} );
+
 $(document).ajaxStop($.unblockUI);
 $(document).ajaxStart(function(){
     $.blockUI({ message: '<h3>Loading history summary...</h3>'});
@@ -111,7 +101,7 @@ $(document).ready(function() {
     requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
-    $.getJSON("api/v1/applications", function(response,status,jqXHR) {
+    $.getJSON("api/v1/applications?limit=" + appLimit, function(response,status,jqXHR) {
       var array = [];
       var hasMultipleAttempts = false;
       for (i in response) {
@@ -130,12 +120,19 @@ $(document).ready(function() {
           attempt["startTime"] = formatDate(attempt["startTime"]);
           attempt["endTime"] = formatDate(attempt["endTime"]);
           attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
+          attempt["log"] = uiRoot + "/api/v1/applications/" + id + "/" +
+            (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
+
           var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
           array.push(app_clone);
         }
       }
 
-      var data = {"applications": array}
+      var data = {
+        "uiroot": uiRoot,
+        "applications": array
+        }
+
       $.get("static/historypage-template.html", function(template) {
         historySummary.append(Mustache.render($(template).filter("#history-summary-template").html(),data));
         var selector = "#history-summary-table";
@@ -149,6 +146,10 @@ $(document).ready(function() {
                         {name: 'sixth', type: "title-numeric"},
                         {name: 'seventh'},
                         {name: 'eighth'},
+                        {name: 'ninth'},
+                    ],
+                    "columnDefs": [
+                        {"searchable": false, "targets": [5]}
                     ],
                     "autoWidth": false,
                     "order": [[ 4, "desc" ]]

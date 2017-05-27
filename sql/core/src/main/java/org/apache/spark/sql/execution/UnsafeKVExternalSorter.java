@@ -22,6 +22,7 @@ import java.io.IOException;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
@@ -54,8 +55,10 @@ public final class UnsafeKVExternalSorter {
       StructType valueSchema,
       BlockManager blockManager,
       SerializerManager serializerManager,
-      long pageSizeBytes) throws IOException {
-    this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes, null);
+      long pageSizeBytes,
+      long numElementsForSpillThreshold) throws IOException {
+    this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes,
+      numElementsForSpillThreshold, null);
   }
 
   public UnsafeKVExternalSorter(
@@ -64,6 +67,7 @@ public final class UnsafeKVExternalSorter {
       BlockManager blockManager,
       SerializerManager serializerManager,
       long pageSizeBytes,
+      long numElementsForSpillThreshold,
       @Nullable BytesToBytesMap map) throws IOException {
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;
@@ -86,14 +90,18 @@ public final class UnsafeKVExternalSorter {
         taskContext,
         recordComparator,
         prefixComparator,
-        /* initialSize */ 4096,
+        SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
+                                     UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
         pageSizeBytes,
+        numElementsForSpillThreshold,
         canUseRadixSort);
     } else {
       // The array will be used to do in-place sort, which require half of the space to be empty.
-      assert(map.numKeys() <= map.getArray().size() / 2);
+      // Note: each record in the map takes two entries in the array, one is record pointer,
+      // another is the key prefix.
+      assert(map.numKeys() * 2 <= map.getArray().size() / 2);
       // During spilling, the array in map will not be used, so we can borrow that and use it
-      // as the underline array for in-memory sorter (it's always large enough).
+      // as the underlying array for in-memory sorter (it's always large enough).
       // Since we will not grow the array, it's fine to pass `null` as consumer.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         null, taskMemoryManager, recordComparator, prefixComparator, map.getArray(),
@@ -131,8 +139,10 @@ public final class UnsafeKVExternalSorter {
         taskContext,
         new KVComparator(ordering, keySchema.length()),
         prefixComparator,
-        /* initialSize */ 4096,
+        SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
+                                     UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
         pageSizeBytes,
+        numElementsForSpillThreshold,
         inMemSorter);
 
       // reset the map, so we can re-use it to insert new records. the inMemSorter will not used

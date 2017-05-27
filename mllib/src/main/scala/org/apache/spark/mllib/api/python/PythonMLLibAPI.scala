@@ -126,13 +126,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       k: Int,
       maxIterations: Int,
       minDivisibleClusterSize: Double,
-      seed: Long): BisectingKMeansModel = {
-    new BisectingKMeans()
+      seed: java.lang.Long): BisectingKMeansModel = {
+    val kmeans = new BisectingKMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setMinDivisibleClusterSize(minDivisibleClusterSize)
-      .setSeed(seed)
-      .run(data)
+    if (seed != null) kmeans.setSeed(seed)
+    kmeans.run(data)
   }
 
   /**
@@ -634,8 +634,22 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
    */
-  def fitChiSqSelector(numTopFeatures: Int, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
-    new ChiSqSelector(numTopFeatures).fit(data.rdd)
+  def fitChiSqSelector(
+      selectorType: String,
+      numTopFeatures: Int,
+      percentile: Double,
+      fpr: Double,
+      fdr: Double,
+      fwe: Double,
+      data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector()
+      .setSelectorType(selectorType)
+      .setNumTopFeatures(numTopFeatures)
+      .setPercentile(percentile)
+      .setFpr(fpr)
+      .setFdr(fdr)
+      .setFwe(fwe)
+      .fit(data.rdd)
   }
 
   /**
@@ -678,7 +692,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       learningRate: Double,
       numPartitions: Int,
       numIterations: Int,
-      seed: Long,
+      seed: java.lang.Long,
       minCount: Int,
       windowSize: Int): Word2VecModelWrapper = {
     val word2vec = new Word2Vec()
@@ -686,9 +700,9 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setLearningRate(learningRate)
       .setNumPartitions(numPartitions)
       .setNumIterations(numIterations)
-      .setSeed(seed)
       .setMinCount(minCount)
       .setWindowSize(windowSize)
+    if (seed != null) word2vec.setSeed(seed)
     try {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
@@ -751,7 +765,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       impurityStr: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int): RandomForestModel = {
+      seed: java.lang.Long): RandomForestModel = {
 
     val algo = Algo.fromString(algoStr)
     val impurity = Impurities.fromString(impurityStr)
@@ -763,11 +777,13 @@ private[python] class PythonMLLibAPI extends Serializable {
       maxBins = maxBins,
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap)
     val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    // Only done because methods below want an int, not an optional Long
+    val intSeed = getSeedOrDefault(seed).toInt
     try {
       if (algo == Algo.Classification) {
-        RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, seed)
+        RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, intSeed)
       } else {
-        RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, seed)
+        RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, intSeed)
       }
     } finally {
       cached.unpersist(blocking = false)
@@ -1127,7 +1143,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around RowMatrix constructor.
    */
   def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
-    new RowMatrix(rows.rdd.retag(classOf[Vector]), numRows, numCols)
+    new RowMatrix(rows.rdd, numRows, numCols)
   }
 
   /**
@@ -1200,6 +1216,34 @@ private[python] class PythonMLLibAPI extends Serializable {
     val sc = blockMatrix.blocks.sparkContext
     val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
     spark.createDataFrame(blockMatrix.blocks)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertVectorColumnsToML()]].
+   */
+  def convertVectorColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertVectorColumnsToML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertVectorColumnsFromML()]]
+   */
+  def convertVectorColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertVectorColumnsFromML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertMatrixColumnsToML()]].
+   */
+  def convertMatrixColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertMatrixColumnsFromML()]]
+   */
+  def convertMatrixColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala: _*)
   }
 }
 

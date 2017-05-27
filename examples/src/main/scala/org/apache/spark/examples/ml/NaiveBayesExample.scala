@@ -30,12 +30,13 @@ object NaiveBayesExample {
       .builder
       .appName("NaiveBayesExample")
       .getOrCreate()
+
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
     val data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     // Split the data into training and test sets (30% held out for testing)
-    val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
+    val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3), seed = 1234L)
 
     // Train a NaiveBayes model.
     val model = new NaiveBayes()
@@ -51,7 +52,7 @@ object NaiveBayesExample {
       .setPredictionCol("prediction")
       .setMetricName("accuracy")
     val accuracy = evaluator.evaluate(predictions)
-    println("Accuracy: " + accuracy)
+    println("Test set accuracy = " + accuracy)
     // $example off$
 
     spark.stop()

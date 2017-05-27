@@ -135,11 +135,6 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
           @Override
           public void call(JavaRDD<String> rdd) {
             result.addAll(rdd.collect());
-            for (OffsetRange o : offsetRanges.get()) {
-              System.out.println(
-                o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset()
-              );
-            }
           }
         }
     );

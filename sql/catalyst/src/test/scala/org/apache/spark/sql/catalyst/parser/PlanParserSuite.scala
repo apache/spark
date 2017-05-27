@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGenerator, UnresolvedInlineTable, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -68,6 +67,9 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select * from a except select * from b", a.except(b))
     intercept("select * from a except all select * from b", "EXCEPT ALL is not supported.")
     assertEqual("select * from a except distinct select * from b", a.except(b))
+    assertEqual("select * from a minus select * from b", a.except(b))
+    intercept("select * from a minus all select * from b", "MINUS ALL is not supported.")
+    assertEqual("select * from a minus distinct select * from b", a.except(b))
     assertEqual("select * from a intersect select * from b", a.intersect(b))
     intercept("select * from a intersect all select * from b", "INTERSECT ALL is not supported.")
     assertEqual("select * from a intersect distinct select * from b", a.intersect(b))
@@ -78,7 +80,7 @@ class PlanParserSuite extends PlanTest {
       val ctes = namedPlans.map {
         case (name, cte) =>
           name -> SubqueryAlias(name, cte)
-      }.toMap
+      }
       With(plan, ctes)
     }
     assertEqual(
@@ -150,10 +152,7 @@ class PlanParserSuite extends PlanTest {
     val orderSortDistrClusterClauses = Seq(
       ("", basePlan),
       (" order by a, b desc", basePlan.orderBy('a.asc, 'b.desc)),
-      (" sort by a, b desc", basePlan.sortBy('a.asc, 'b.desc)),
-      (" distribute by a, b", basePlan.distribute('a, 'b)),
-      (" distribute by a sort by b", basePlan.distribute('a).sortBy('b.asc)),
-      (" cluster by a, b", basePlan.distribute('a, 'b).sortBy('a.asc, 'b.asc))
+      (" sort by a, b desc", basePlan.sortBy('a.asc, 'b.desc))
     )
 
     orderSortDistrClusterClauses.foreach {
@@ -177,28 +176,33 @@ class PlanParserSuite extends PlanTest {
     def insert(
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
-        ifNotExists: Boolean = false): LogicalPlan =
-      InsertIntoTable(table("s"), partition, plan, overwrite, ifNotExists)
+        ifPartitionNotExists: Boolean = false): LogicalPlan =
+      InsertIntoTable(table("s"), partition, plan, overwrite, ifPartitionNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
       insert(Map.empty, overwrite = true))
-    assertEqual(s"insert overwrite table s if not exists $sql",
-      insert(Map.empty, overwrite = true, ifNotExists = true))
+    assertEqual(s"insert overwrite table s partition (e = 1) if not exists $sql",
+      insert(Map("e" -> Option("1")), overwrite = true, ifPartitionNotExists = true))
     assertEqual(s"insert into s $sql",
       insert(Map.empty))
     assertEqual(s"insert into table s partition (c = 'd', e = 1) $sql",
       insert(Map("c" -> Option("d"), "e" -> Option("1"))))
-    assertEqual(s"insert overwrite table s partition (c = 'd', x) if not exists $sql",
-      insert(Map("c" -> Option("d"), "x" -> None), overwrite = true, ifNotExists = true))
 
     // Multi insert
     val plan2 = table("t").where('x > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
       InsertIntoTable(
-        table("s"), Map.empty, plan.limit(1), overwrite = false, ifNotExists = false).union(
+        table("s"), Map.empty, plan.limit(1), false, ifPartitionNotExists = false).union(
         InsertIntoTable(
-          table("u"), Map.empty, plan2, overwrite = false, ifNotExists = false)))
+          table("u"), Map.empty, plan2, false, ifPartitionNotExists = false)))
+  }
+
+  test ("insert with if not exists") {
+    val sql = "select * from t"
+    intercept(s"insert overwrite table s partition (e = 1, x) if not exists $sql",
+      "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [x]")
+    intercept[ParseException](parsePlan(s"insert overwrite table s if not exists $sql"))
   }
 
   test("aggregation") {
@@ -217,9 +221,8 @@ class PlanParserSuite extends PlanTest {
 
     // Grouping Sets
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
-      GroupingSets(Seq(0, 1, 3), Seq('a, 'b), table("d"), Seq('a, 'b, 'sum.function('c).as("c"))))
-    intercept(s"$sql grouping sets((a, b), (c), ())",
-      "c doesn't show up in the GROUP BY list")
+      GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b), table("d"),
+        Seq('a, 'b, 'sum.function('c).as("c"))))
   }
 
   test("limit") {
@@ -332,14 +335,14 @@ class PlanParserSuite extends PlanTest {
     val testUsingJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t $sql u using(a, b)",
-        table("t").join(table("u"), UsingJoin(jt, Seq('a.attr, 'b.attr)), None).select(star()))
+        table("t").join(table("u"), UsingJoin(jt, Seq("a", "b")), None).select(star()))
     }
     val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
     val testExistence = Seq(testUnconditionalJoin, testConditionalJoin, testUsingJoin)
     def test(sql: String, jt: JoinType, tests: Seq[(String, JoinType) => Unit]): Unit = {
       tests.foreach(_(sql, jt))
     }
-    test("cross join", Inner, Seq(testUnconditionalJoin))
+    test("cross join", Cross, Seq(testUnconditionalJoin))
     test(",", Inner, Seq(testUnconditionalJoin))
     test("join", Inner, testAll)
     test("inner join", Inner, testAll)
@@ -353,10 +356,54 @@ class PlanParserSuite extends PlanTest {
     test("left anti join", LeftAnti, testExistence)
     test("anti join", LeftAnti, testExistence)
 
+    // Test natural cross join
+    intercept("select * from a natural cross join b")
+
+    // Test natural join with a condition
+    intercept("select * from a natural join b on a.id = b.id")
+
     // Test multiple consecutive joins
     assertEqual(
       "select * from a join b join c right join d",
       table("a").join(table("b")).join(table("c")).join(table("d"), RightOuter).select(star()))
+
+    // SPARK-17296
+    assertEqual(
+      "select * from t1 cross join t2 join t3 on t3.id = t1.id join t4 on t4.id = t1.id",
+      table("t1")
+        .join(table("t2"), Cross)
+        .join(table("t3"), Inner, Option(Symbol("t3.id") === Symbol("t1.id")))
+        .join(table("t4"), Inner, Option(Symbol("t4.id") === Symbol("t1.id")))
+        .select(star()))
+
+    // Test multiple on clauses.
+    intercept("select * from t1 inner join t2 inner join t3 on col3 = col2 on col3 = col1")
+
+    // Parenthesis
+    assertEqual(
+      "select * from t1 inner join (t2 inner join t3 on col3 = col2) on col3 = col1",
+      table("t1")
+        .join(table("t2")
+          .join(table("t3"), Inner, Option('col3 === 'col2)), Inner, Option('col3 === 'col1))
+        .select(star()))
+    assertEqual(
+      "select * from t1 inner join (t2 inner join t3) on col3 = col2",
+      table("t1")
+        .join(table("t2").join(table("t3"), Inner, None), Inner, Option('col3 === 'col2))
+        .select(star()))
+    assertEqual(
+      "select * from t1 inner join (t2 inner join t3 on col3 = col2)",
+      table("t1")
+        .join(table("t2").join(table("t3"), Inner, Option('col3 === 'col2)), Inner, None)
+        .select(star()))
+
+    // Implicit joins.
+    assertEqual(
+      "select * from t1, t3 join t2 on t1.col1 = t2.col2",
+      table("t1")
+        .join(table("t3"))
+        .join(table("t2"), Inner, Option(Symbol("t1.col1") === Symbol("t2.col2")))
+        .select(star()))
   }
 
   test("sampled relations") {
@@ -397,6 +444,17 @@ class PlanParserSuite extends PlanTest {
         |      (select id from t0)) as u_1
       """.stripMargin,
       plan.union(plan).union(plan).as("u_1").select('id))
+
+  }
+
+  test("aliased subquery") {
+    assertEqual("select a from (select id as a from t0) tt",
+      table("t0").select('id.as("a")).as("tt").select('a))
+    intercept("select a from (select id as a from t0)", "mismatched input")
+
+    assertEqual("from (select id as a from t0) tt select a",
+      table("t0").select('id.as("a")).as("tt").select('a))
+    intercept("from (select id as a from t0) select a", "extraneous input 'a'")
   }
 
   test("scalar sub-query") {
@@ -418,20 +476,32 @@ class PlanParserSuite extends PlanTest {
     assertEqual("table d.t", table("d", "t"))
   }
 
-  test("inline table") {
-    assertEqual("values 1, 2, 3, 4", LocalRelation.fromExternalRows(
-      Seq('col1.int),
-      Seq(1, 2, 3, 4).map(x => Row(x))))
+  test("table valued function") {
     assertEqual(
-      "values (1, 'a'), (2, 'b'), (3, 'c') as tbl(a, b)",
-      LocalRelation.fromExternalRows(
-        Seq('a.int, 'b.string),
-        Seq((1, "a"), (2, "b"), (3, "c")).map(x => Row(x._1, x._2))).as("tbl"))
-    intercept("values (a, 'a'), (b, 'b')",
-      "All expressions in an inline table must be constants.")
-    intercept("values (1, 'a'), (2, 'b') as tbl(a, b, c)",
-      "Number of aliases must match the number of fields in an inline table.")
-    intercept[ArrayIndexOutOfBoundsException](parsePlan("values (1, 'a'), (2, 'b', 5Y)"))
+      "select * from range(2)",
+      UnresolvedTableValuedFunction("range", Literal(2) :: Nil, Seq.empty).select(star()))
+  }
+
+  test("SPARK-20311 range(N) as alias") {
+    assertEqual(
+      "SELECT * FROM range(10) AS t",
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(10) :: Nil, Seq.empty))
+        .select(star()))
+    assertEqual(
+      "SELECT * FROM range(7) AS t(a)",
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(7) :: Nil, "a" :: Nil))
+        .select(star()))
+  }
+
+  test("inline table") {
+    assertEqual("values 1, 2, 3, 4",
+      UnresolvedInlineTable(Seq("col1"), Seq(1, 2, 3, 4).map(x => Seq(Literal(x)))))
+
+    assertEqual(
+      "values (1, 'a'), (2, 'b') as tbl(a, b)",
+      UnresolvedInlineTable(
+        Seq("a", "b"),
+        Seq(Literal(1), Literal("a")) :: Seq(Literal(2), Literal("b")) :: Nil).as("tbl"))
   }
 
   test("simple select query with !> and !<") {
@@ -441,5 +511,54 @@ class PlanParserSuite extends PlanTest {
     // !> is equivalent to <=
     assertEqual("select a, b from db.c where x !> 1",
       table("db", "c").where('x <= 1).select('a, 'b))
+  }
+
+  test("select hint syntax") {
+    // Hive compatibility: Missing parameter raises ParseException.
+    val m = intercept[ParseException] {
+      parsePlan("SELECT /*+ HINT() */ * FROM t")
+    }.getMessage
+    assert(m.contains("no viable alternative at input"))
+
+    // Hive compatibility: No database.
+    val m2 = intercept[ParseException] {
+      parsePlan("SELECT /*+ MAPJOIN(default.t) */ * from default.t")
+    }.getMessage
+    assert(m2.contains("mismatched input '.' expecting {')', ','}"))
+
+    // Disallow space as the delimiter.
+    val m3 = intercept[ParseException] {
+      parsePlan("SELECT /*+ INDEX(a b c) */ * from default.t")
+    }.getMessage
+    assert(m3.contains("mismatched input 'b' expecting {')', ','}"))
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT */ * FROM t"),
+      UnresolvedHint("HINT", Seq.empty, table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ BROADCASTJOIN(u) */ * FROM t"),
+      UnresolvedHint("BROADCASTJOIN", Seq("u"), table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(u) */ * FROM t"),
+      UnresolvedHint("MAPJOIN", Seq("u"), table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ STREAMTABLE(a,b,c) */ * FROM t"),
+      UnresolvedHint("STREAMTABLE", Seq("a", "b", "c"), table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ INDEX(t, emp_job_ix) */ * FROM t"),
+      UnresolvedHint("INDEX", Seq("t", "emp_job_ix"), table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(`default.t`) */ * from `default.t`"),
+      UnresolvedHint("MAPJOIN", Seq("default.t"), table("default.t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
+      UnresolvedHint("MAPJOIN", Seq("t"),
+        table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
   }
 }

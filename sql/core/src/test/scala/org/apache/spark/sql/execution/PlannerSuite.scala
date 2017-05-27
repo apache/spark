@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -71,7 +71,7 @@ class PlannerSuite extends SharedSQLContext {
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
     def checkPlan(fieldTypes: Seq[DataType]): Unit = {
-      withTempTable("testLimit") {
+      withTempView("testLimit") {
         val fields = fieldTypes.zipWithIndex.map {
           case (dataType, index) => StructField(s"c${index}", dataType, true)
         } :+ StructField("key", IntegerType, true)
@@ -131,7 +131,7 @@ class PlannerSuite extends SharedSQLContext {
 
   test("InMemoryRelation statistics propagation") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "81920") {
-      withTempTable("tiny") {
+      withTempView("tiny") {
         testData.limit(3).createOrReplaceTempView("tiny")
         sql("CACHE TABLE tiny")
 
@@ -157,7 +157,7 @@ class PlannerSuite extends SharedSQLContext {
       val df = spark.read.parquet(path)
       df.createOrReplaceTempView("testPushed")
 
-      withTempTable("testPushed") {
+      withTempView("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
         assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
       }
@@ -198,7 +198,7 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("PartitioningCollection") {
-    withTempTable("normal", "small", "tiny") {
+    withTempView("normal", "small", "tiny") {
       testData.createOrReplaceTempView("normal")
       testData.limit(10).createOrReplaceTempView("small")
       testData.limit(3).createOrReplaceTempView("tiny")
@@ -241,16 +241,19 @@ class PlannerSuite extends SharedSQLContext {
   test("collapse adjacent repartitions") {
     val doubleRepartitioned = testData.repartition(10).repartition(20).coalesce(5)
     def countRepartitions(plan: LogicalPlan): Int = plan.collect { case r: Repartition => r }.length
-    assert(countRepartitions(doubleRepartitioned.queryExecution.logical) === 3)
-    assert(countRepartitions(doubleRepartitioned.queryExecution.optimizedPlan) === 1)
+    assert(countRepartitions(doubleRepartitioned.queryExecution.analyzed) === 3)
+    assert(countRepartitions(doubleRepartitioned.queryExecution.optimizedPlan) === 2)
     doubleRepartitioned.queryExecution.optimizedPlan match {
-      case r: Repartition =>
-        assert(r.numPartitions === 5)
-        assert(r.shuffle === false)
+      case Repartition (numPartitions, shuffle, Repartition(_, shuffleChild, _)) =>
+        assert(numPartitions === 5)
+        assert(shuffle === false)
+        assert(shuffleChild === true)
     }
   }
 
-  // --- Unit tests of EnsureRequirements ---------------------------------------------------------
+  ///////////////////////////////////////////////////////////////////////////
+  // Unit tests of EnsureRequirements for Exchange
+  ///////////////////////////////////////////////////////////////////////////
 
   // When it comes to testing whether EnsureRequirements properly ensures distribution requirements,
   // there two dimensions that need to be considered: are the child partitionings compatible and
@@ -363,7 +366,7 @@ class PlannerSuite extends SharedSQLContext {
   // This is a regression test for SPARK-9703
   test("EnsureRequirements should not repartition if only ordering requirement is unsatisfied") {
     // Consider an operator that imposes both output distribution and  ordering requirements on its
-    // children, such as sort sort merge join. If the distribution requirements are satisfied but
+    // children, such as sort merge join. If the distribution requirements are satisfied but
     // the output ordering requirements are unsatisfied, then the planner should only add sorts and
     // should not need to add additional shuffles / exchanges.
     val outputOrdering = Seq(SortOrder(Literal(1), Ascending))
@@ -383,55 +386,6 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("EnsureRequirements adds sort when there is no existing ordering") {
-    val orderingA = SortOrder(Literal(1), Ascending)
-    val orderingB = SortOrder(Literal(2), Ascending)
-    assert(orderingA != orderingB)
-    val inputPlan = DummySparkPlan(
-      children = DummySparkPlan(outputOrdering = Seq.empty) :: Nil,
-      requiredChildOrdering = Seq(Seq(orderingB)),
-      requiredChildDistribution = Seq(UnspecifiedDistribution)
-    )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: SortExec => true }.isEmpty) {
-      fail(s"Sort should have been added:\n$outputPlan")
-    }
-  }
-
-  test("EnsureRequirements skips sort when required ordering is prefix of existing ordering") {
-    val orderingA = SortOrder(Literal(1), Ascending)
-    val orderingB = SortOrder(Literal(2), Ascending)
-    assert(orderingA != orderingB)
-    val inputPlan = DummySparkPlan(
-      children = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB)) :: Nil,
-      requiredChildOrdering = Seq(Seq(orderingA)),
-      requiredChildDistribution = Seq(UnspecifiedDistribution)
-    )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: SortExec => true }.nonEmpty) {
-      fail(s"No sorts should have been added:\n$outputPlan")
-    }
-  }
-
-  // This is a regression test for SPARK-11135
-  test("EnsureRequirements adds sort when required ordering isn't a prefix of existing ordering") {
-    val orderingA = SortOrder(Literal(1), Ascending)
-    val orderingB = SortOrder(Literal(2), Ascending)
-    assert(orderingA != orderingB)
-    val inputPlan = DummySparkPlan(
-      children = DummySparkPlan(outputOrdering = Seq(orderingA)) :: Nil,
-      requiredChildOrdering = Seq(Seq(orderingA, orderingB)),
-      requiredChildDistribution = Seq(UnspecifiedDistribution)
-    )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: SortExec => true }.isEmpty) {
-      fail(s"Sort should have been added:\n$outputPlan")
-    }
-  }
-
   test("EnsureRequirements eliminates Exchange if child has Exchange with same partitioning") {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
@@ -442,7 +396,7 @@ class PlannerSuite extends SharedSQLContext {
         children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
         requiredChildDistribution = Seq(distribution),
         requiredChildOrdering = Seq(Seq.empty)),
-        None)
+      None)
 
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
@@ -471,8 +425,6 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  // ---------------------------------------------------------------------------------------------
-
   test("Reuse exchanges") {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
@@ -486,12 +438,12 @@ class PlannerSuite extends SharedSQLContext {
       None)
 
     val inputPlan = SortMergeJoinExec(
-        Literal(1) :: Nil,
-        Literal(1) :: Nil,
-        Inner,
-        None,
-        shuffle,
-        shuffle)
+      Literal(1) :: Nil,
+      Literal(1) :: Nil,
+      Inner,
+      None,
+      shuffle,
+      shuffle)
 
     val outputPlan = ReuseExchange(spark.sessionState.conf).apply(inputPlan)
     if (outputPlan.collect { case e: ReusedExchangeExec => true }.size != 1) {
@@ -517,6 +469,158 @@ class PlannerSuite extends SharedSQLContext {
     if (outputPlan2.collect { case e: ShuffleExchange => true }.size != 2) {
       fail(s"Should have only two shuffles:\n$outputPlan")
     }
+  }
+
+  ///////////////////////////////////////////////////////////////////////////
+  // Unit tests of EnsureRequirements for Sort
+  ///////////////////////////////////////////////////////////////////////////
+
+  private val exprA = Literal(1)
+  private val exprB = Literal(2)
+  private val exprC = Literal(3)
+  private val orderingA = SortOrder(exprA, Ascending)
+  private val orderingB = SortOrder(exprB, Ascending)
+  private val orderingC = SortOrder(exprC, Ascending)
+  private val planA = DummySparkPlan(outputOrdering = Seq(orderingA),
+    outputPartitioning = HashPartitioning(exprA :: Nil, 5))
+  private val planB = DummySparkPlan(outputOrdering = Seq(orderingB),
+    outputPartitioning = HashPartitioning(exprB :: Nil, 5))
+  private val planC = DummySparkPlan(outputOrdering = Seq(orderingC),
+    outputPartitioning = HashPartitioning(exprC :: Nil, 5))
+
+  assert(orderingA != orderingB && orderingA != orderingC && orderingB != orderingC)
+
+  private def assertSortRequirementsAreSatisfied(
+      childPlan: SparkPlan,
+      requiredOrdering: Seq[SortOrder],
+      shouldHaveSort: Boolean): Unit = {
+    val inputPlan = DummySparkPlan(
+      children = childPlan :: Nil,
+      requiredChildOrdering = Seq(requiredOrdering),
+      requiredChildDistribution = Seq(UnspecifiedDistribution)
+    )
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (shouldHaveSort) {
+      if (outputPlan.collect { case s: SortExec => true }.isEmpty) {
+        fail(s"Sort should have been added:\n$outputPlan")
+      }
+    } else {
+      if (outputPlan.collect { case s: SortExec => true }.nonEmpty) {
+        fail(s"No sorts should have been added:\n$outputPlan")
+      }
+    }
+  }
+
+  test("EnsureRequirements skips sort when either side of join keys is required after inner SMJ") {
+    val innerSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, planA, planB)
+    // Both left and right keys should be sorted after the SMJ.
+    Seq(orderingA, orderingB).foreach { ordering =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = innerSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = false)
+    }
+  }
+
+  test("EnsureRequirements skips sort when key order of a parent SMJ is propagated from its " +
+    "child SMJ") {
+    val childSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, planA, planB)
+    val parentSmj = SortMergeJoinExec(exprB :: Nil, exprC :: Nil, Inner, None, childSmj, planC)
+    // After the second SMJ, exprA, exprB and exprC should all be sorted.
+    Seq(orderingA, orderingB, orderingC).foreach { ordering =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = parentSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = false)
+    }
+  }
+
+  test("EnsureRequirements for sort operator after left outer sort merge join") {
+    // Only left key is sorted after left outer SMJ (thus doesn't need a sort).
+    val leftSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, LeftOuter, None, planA, planB)
+    Seq((orderingA, false), (orderingB, true)).foreach { case (ordering, needSort) =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = leftSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = needSort)
+    }
+  }
+
+  test("EnsureRequirements for sort operator after right outer sort merge join") {
+    // Only right key is sorted after right outer SMJ (thus doesn't need a sort).
+    val rightSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, RightOuter, None, planA, planB)
+    Seq((orderingA, true), (orderingB, false)).foreach { case (ordering, needSort) =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = rightSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = needSort)
+    }
+  }
+
+  test("EnsureRequirements adds sort after full outer sort merge join") {
+    // Neither keys is sorted after full outer SMJ, so they both need sorts.
+    val fullSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, FullOuter, None, planA, planB)
+    Seq(orderingA, orderingB).foreach { ordering =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = fullSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = true)
+    }
+  }
+
+  test("EnsureRequirements adds sort when there is no existing ordering") {
+    assertSortRequirementsAreSatisfied(
+      childPlan = DummySparkPlan(outputOrdering = Seq.empty),
+      requiredOrdering = Seq(orderingB),
+      shouldHaveSort = true)
+  }
+
+  test("EnsureRequirements skips sort when required ordering is prefix of existing ordering") {
+    assertSortRequirementsAreSatisfied(
+      childPlan = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB)),
+      requiredOrdering = Seq(orderingA),
+      shouldHaveSort = false)
+  }
+
+  test("EnsureRequirements skips sort when required ordering is semantically equal to " +
+    "existing ordering") {
+    val exprId: ExprId = NamedExpression.newExprId
+    val attribute1 =
+      AttributeReference(
+        name = "col1",
+        dataType = LongType,
+        nullable = false
+      ) (exprId = exprId,
+        qualifier = Some("col1_qualifier")
+      )
+
+    val attribute2 =
+      AttributeReference(
+        name = "col1",
+        dataType = LongType,
+        nullable = false
+      ) (exprId = exprId)
+
+    val orderingA1 = SortOrder(attribute1, Ascending)
+    val orderingA2 = SortOrder(attribute2, Ascending)
+
+    assert(orderingA1 != orderingA2, s"$orderingA1 should NOT equal to $orderingA2")
+    assert(orderingA1.semanticEquals(orderingA2),
+      s"$orderingA1 should be semantically equal to $orderingA2")
+
+    assertSortRequirementsAreSatisfied(
+      childPlan = DummySparkPlan(outputOrdering = Seq(orderingA1)),
+      requiredOrdering = Seq(orderingA2),
+      shouldHaveSort = false)
+  }
+
+  // This is a regression test for SPARK-11135
+  test("EnsureRequirements adds sort when required ordering isn't a prefix of existing ordering") {
+    assertSortRequirementsAreSatisfied(
+      childPlan = DummySparkPlan(outputOrdering = Seq(orderingA)),
+      requiredOrdering = Seq(orderingA, orderingB),
+      shouldHaveSort = true)
   }
 }
 

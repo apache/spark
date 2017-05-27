@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Linear Methods - spark.mllib
-displayTitle: Linear Methods - spark.mllib
+title: Linear Methods - RDD-based API
+displayTitle: Linear Methods - RDD-based API
 ---
 
 * Table of contents
@@ -78,6 +78,11 @@ methods `spark.mllib` supports:
   </tbody>
 </table>
 
+Note that, in the mathematical formulation above, a binary label $y$ is denoted as either
+$+1$ (positive) or $-1$ (negative), which is convenient for the formulation.
+*However*, the negative label is represented by $0$ in `spark.mllib` instead of $-1$, to be consistent with
+multiclass labeling.
+
 ### Regularizers
 
 The purpose of the
@@ -134,12 +139,8 @@ and logistic regression.
 Linear SVMs supports only binary classification, while logistic regression supports both binary and
 multiclass classification problems.
 For both methods, `spark.mllib` supports L1 and L2 regularized variants.
-The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib,
+The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.html#labeled-point) in MLlib,
 where labels are class indices starting from zero: $0, 1, 2, \ldots$.
-Note that, in the mathematical formulation in this guide, a binary label $y$ is denoted as either
-$+1$ (positive) or $-1$ (negative), which is convenient for the formulation.
-*However*, the negative label is represented by $0$ in `spark.mllib` instead of $-1$, to be consistent with
-multiclass labeling.
 
 ### Linear Support Vector Machines (SVMs)
 
@@ -221,7 +222,7 @@ svmAlg.optimizer()
   .setNumIterations(200)
   .setRegParam(0.1)
   .setUpdater(new L1Updater());
-final SVMModel modelL1 = svmAlg.run(training.rdd());
+SVMModel modelL1 = svmAlg.run(training.rdd());
 {% endhighlight %}
 
 In order to run the above application, follow the instructions
@@ -490,5 +491,3 @@ Algorithms are all implemented in Scala:
 * [RidgeRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
 * [LassoWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
 
-Python calls the Scala implementation via
-[PythonMLLibAPI](api/scala/index.html#org.apache.spark.mllib.api.python.PythonMLLibAPI).

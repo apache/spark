@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.typeOf
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -94,7 +94,7 @@ object TestingUDT {
       .add("c", DoubleType, nullable = false)
 
     override def serialize(n: NestedStruct): Any = {
-      val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
       row.setInt(0, n.a)
       row.setLong(1, n.b)
       row.setDouble(2, n.c)
@@ -289,6 +289,29 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(serializer.children.last.isInstanceOf[NewInstance])
     assert(serializer.children.last.asInstanceOf[NewInstance]
       .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
+  }
+
+  test("SPARK 16792: Get correct deserializer for List[_]") {
+    val listDeserializer = deserializerFor[List[Int]]
+    assert(listDeserializer.dataType == ObjectType(classOf[List[_]]))
+  }
+
+  test("serialize and deserialize arbitrary sequence types") {
+    import scala.collection.immutable.Queue
+    val queueSerializer = serializerFor[Queue[Int]](BoundReference(
+      0, ObjectType(classOf[Queue[Int]]), nullable = false))
+    assert(queueSerializer.dataType.head.dataType ==
+      ArrayType(IntegerType, containsNull = false))
+    val queueDeserializer = deserializerFor[Queue[Int]]
+    assert(queueDeserializer.dataType == ObjectType(classOf[Queue[_]]))
+
+    import scala.collection.mutable.ArrayBuffer
+    val arrayBufferSerializer = serializerFor[ArrayBuffer[Int]](BoundReference(
+      0, ObjectType(classOf[ArrayBuffer[Int]]), nullable = false))
+    assert(arrayBufferSerializer.dataType.head.dataType ==
+      ArrayType(IntegerType, containsNull = false))
+    val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]]
+    assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
   }
 
   private val dataTypeForComplexData = dataTypeFor[ComplexData]

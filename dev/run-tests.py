@@ -110,7 +110,7 @@ def determine_modules_to_test(changed_modules):
     ['graphx', 'examples']
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ['sql', 'hive', 'mllib', 'examples', 'hive-thriftserver',
+    ['sql', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
      'pyspark-sql', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
     """
     modules_to_test = set()
@@ -294,7 +294,7 @@ def exec_sbt(sbt_args=()):
             print(line, end='')
     retcode = sbt_proc.wait()
 
-    if retcode > 0:
+    if retcode != 0:
         exit_from_command_with_retcode(sbt_cmd, retcode)
 
 
@@ -305,11 +305,8 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
-        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3"],
-        "hadoop2.4": ["-Pyarn", "-Phadoop-2.4"],
-        "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
-        "hadoop2.7": ["-Pyarn", "-Phadoop-2.7"],
+        "hadoop2.6": ["-Phadoop-2.6"],
+        "hadoop2.7": ["-Phadoop-2.7"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -347,6 +344,19 @@ def build_spark_sbt(hadoop_version):
     exec_sbt(profiles_and_goals)
 
 
+def build_spark_unidoc_sbt(hadoop_version):
+    set_title_and_block("Building Unidoc API Documentation", "BLOCK_DOCUMENTATION")
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    sbt_goals = ["unidoc"]
+    profiles_and_goals = build_profiles + sbt_goals
+
+    print("[info] Building Spark unidoc (w/Hive 1.2.1) using SBT with these arguments: ",
+          " ".join(profiles_and_goals))
+
+    exec_sbt(profiles_and_goals)
+
+
 def build_spark_assembly_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
@@ -355,6 +365,16 @@ def build_spark_assembly_sbt(hadoop_version):
     print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
+
+    # Note that we skip Unidoc build only if Hadoop 2.6 is explicitly set in this SBT build.
+    # Due to a different dependency resolution in SBT & Unidoc by an unknown reason, the
+    # documentation build fails on a specific machine & environment in Jenkins but it was unable
+    # to reproduce. Please see SPARK-20343. This is a band-aid fix that should be removed in
+    # the future.
+    is_hadoop_version_2_6 = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE") == "hadoop2.6"
+    if not is_hadoop_version_2_6:
+        # Make sure that Java and Scala API documentation can be generated
+        build_spark_unidoc_sbt(hadoop_version)
 
 
 def build_apache_spark(build_tool, hadoop_version):
@@ -432,6 +452,12 @@ def run_python_tests(test_modules, parallelism):
     run_cmd(command)
 
 
+def run_python_packaging_tests():
+    set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
+    command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
+    run_cmd(command)
+
+
 def run_build_tests():
     set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
     run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
@@ -489,9 +515,6 @@ def main():
 
     java_version = determine_java_version(java_exe)
 
-    if java_version.minor < 8:
-        print("[warn] Java 8 tests will not run because JDK version is < 1.8.")
-
     # install SparkR
     if which("R"):
         run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
@@ -502,14 +525,14 @@ def main():
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.3")
+        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.6")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.3")
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.6")
         test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
@@ -583,6 +606,7 @@ def main():
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
         run_python_tests(modules_with_python_tests, opts.parallelism)
+        run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
 

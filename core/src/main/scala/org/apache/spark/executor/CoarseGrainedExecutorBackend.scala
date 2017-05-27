@@ -19,10 +19,12 @@ package org.apache.spark.executor
 
 import java.net.URL
 import java.nio.ByteBuffer
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.util.{Failure, Success}
+import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -30,7 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.TaskDescription
+import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -39,6 +41,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
     driverUrl: String,
     executorId: String,
+    hostname: String,
     cores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv)
@@ -57,49 +60,49 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
-      ref.ask[Boolean](RegisterExecutor(executorId, self, cores, extractLogUrls))
+      ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) =>
         // Always receive `true`. Just ignore it
       case Failure(e) =>
-        logError(s"Cannot register with driver: $driverUrl", e)
-        exitExecutor(1)
+        exitExecutor(1, s"Cannot register with driver: $driverUrl", e, notifyDriver = false)
     }(ThreadUtils.sameThread)
   }
 
   def extractLogUrls: Map[String, String] = {
     val prefix = "SPARK_LOG_URL_"
     sys.env.filterKeys(_.startsWith(prefix))
-      .map(e => (e._1.substring(prefix.length).toLowerCase, e._2))
+      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2))
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case RegisteredExecutor(hostname) =>
+    case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
-      executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
+      try {
+        executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
+      } catch {
+        case NonFatal(e) =>
+          exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
+      }
 
     case RegisterExecutorFailed(message) =>
-      logError("Slave registration failed: " + message)
-      exitExecutor(1)
+      exitExecutor(1, "Slave registration failed: " + message)
 
     case LaunchTask(data) =>
       if (executor == null) {
-        logError("Received LaunchTask command but executor was null")
-        exitExecutor(1)
+        exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
-        val taskDesc = ser.deserialize[TaskDescription](data.value)
+        val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
-          taskDesc.name, taskDesc.serializedTask)
+        executor.launchTask(this, taskDesc)
       }
 
-    case KillTask(taskId, _, interruptThread) =>
+    case KillTask(taskId, _, interruptThread, reason) =>
       if (executor == null) {
-        logError("Received KillTask command but executor was null")
-        exitExecutor(1)
+        exitExecutor(1, "Received KillTask command but executor was null")
       } else {
-        executor.killTask(taskId, interruptThread)
+        executor.killTask(taskId, interruptThread, reason)
       }
 
     case StopExecutor =>
@@ -126,8 +129,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     if (stopping.get()) {
       logInfo(s"Driver from $remoteAddress disconnected during shutdown")
     } else if (driver.exists(_.address == remoteAddress)) {
-      logError(s"Driver $remoteAddress disassociated! Shutting down.")
-      exitExecutor(1)
+      exitExecutor(1, s"Driver $remoteAddress disassociated! Shutting down.", null,
+        notifyDriver = false)
     } else {
       logWarning(s"An unknown ($remoteAddress) driver disconnected.")
     }
@@ -146,7 +149,27 @@ private[spark] class CoarseGrainedExecutorBackend(
    * executor exits differently. For e.g. when an executor goes down,
    * back-end may not want to take the parent process down.
    */
-  protected def exitExecutor(code: Int): Unit = System.exit(code)
+  protected def exitExecutor(code: Int,
+                             reason: String,
+                             throwable: Throwable = null,
+                             notifyDriver: Boolean = true) = {
+    val message = "Executor self-exiting due to : " + reason
+    if (throwable != null) {
+      logError(message, throwable)
+    } else {
+      logError(message)
+    }
+
+    if (notifyDriver && driver.nonEmpty) {
+      driver.get.ask[Boolean](
+        RemoveExecutor(executorId, new ExecutorLossReason(reason))
+      ).onFailure { case e =>
+        logWarning(s"Unable to notify the driver due to " + e.getMessage, e)
+      }(ThreadUtils.sameThread)
+    }
+
+    System.exit(code)
+  }
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
@@ -168,17 +191,16 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
-      val port = executorConf.getInt("spark.executor.port", 0)
       val fetcher = RpcEnv.create(
         "driverPropsFetcher",
         hostname,
-        port,
+        -1,
         executorConf,
         new SecurityManager(executorConf),
         clientMode = true)
       val driver = fetcher.setupEndpointRefByURI(driverUrl)
-      val props = driver.askWithRetry[Seq[(String, String)]](RetrieveSparkProps) ++
-        Seq[(String, String)](("spark.app.id", appId))
+      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
+      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", appId))
       fetcher.shutdown()
 
       // Create SparkEnv using properties we fetched from the driver.
@@ -194,19 +216,19 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       if (driverConf.contains("spark.yarn.credentials.file")) {
         logInfo("Will periodically update credentials from: " +
           driverConf.get("spark.yarn.credentials.file"))
-        SparkHadoopUtil.get.startExecutorDelegationTokenRenewer(driverConf)
+        SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
       val env = SparkEnv.createExecutorEnv(
-        driverConf, executorId, hostname, port, cores, isLocal = false)
+        driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, isLocal = false)
 
       env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
-        env.rpcEnv, driverUrl, executorId, cores, userClassPath, env))
+        env.rpcEnv, driverUrl, executorId, hostname, cores, userClassPath, env))
       workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.rpcEnv.awaitTermination()
-      SparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
+      SparkHadoopUtil.get.stopCredentialUpdater()
     }
   }
 

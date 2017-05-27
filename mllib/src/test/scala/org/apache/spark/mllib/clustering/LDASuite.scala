@@ -118,8 +118,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(weights.length == 2)
         val bdvTopicDist = topicDistribution.asBreeze
         val top2Indices = argtopk(bdvTopicDist, 2)
-        assert(top2Indices.toArray === indices)
-        assert(bdvTopicDist(top2Indices).toArray === weights)
+        assert(top2Indices.toSet === indices.toSet)
+        assert(bdvTopicDist(top2Indices).toArray.toSet === weights.toSet)
     }
 
     // Check: log probabilities
@@ -505,6 +505,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(distributedModel.topicConcentration === sameDistributedModel.topicConcentration)
       assert(distributedModel.gammaShape === sameDistributedModel.gammaShape)
       assert(distributedModel.globalTopicTotals === sameDistributedModel.globalTopicTotals)
+      assert(distributedModel.logLikelihood ~== sameDistributedModel.logLikelihood absTol 1e-6)
+      assert(distributedModel.logPrior ~== sameDistributedModel.logPrior absTol 1e-6)
 
       val graph = distributedModel.graph
       val sameGraph = sameDistributedModel.graph

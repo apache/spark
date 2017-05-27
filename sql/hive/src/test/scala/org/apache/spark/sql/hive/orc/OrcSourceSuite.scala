@@ -22,6 +22,7 @@ import java.io.File
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -56,7 +57,7 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
          |  stringField STRING
          |)
          |STORED AS ORC
-         |LOCATION '${orcTableAsDir.getCanonicalPath}'
+         |LOCATION '${orcTableAsDir.toURI}'
        """.stripMargin)
 
     sql(
@@ -146,6 +147,53 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
     sql("DROP TABLE IF EXISTS orcNullValues")
   }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    assert(new OrcOptions(Map("Orc.Compress" -> "NONE")).compressionCodec == "NONE")
+  }
+
+  test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
+    val location = Utils.createTempDir()
+    val uri = location.toURI
+    try {
+      hiveClient.runSqlHive("USE default")
+      hiveClient.runSqlHive(
+        """
+          |CREATE EXTERNAL TABLE hive_orc(
+          |  a STRING,
+          |  b CHAR(10),
+          |  c VARCHAR(10),
+          |  d ARRAY<CHAR(3)>)
+          |STORED AS orc""".stripMargin)
+      // Hive throws an exception if I assign the location in the create table statement.
+      hiveClient.runSqlHive(
+        s"ALTER TABLE hive_orc SET LOCATION '$uri'")
+      hiveClient.runSqlHive(
+        """
+          |INSERT INTO TABLE hive_orc
+          |SELECT 'a', 'b', 'c', ARRAY(CAST('d' AS CHAR(3)))
+          |FROM (SELECT 1) t""".stripMargin)
+
+      // We create a different table in Spark using the same schema which points to
+      // the same location.
+      spark.sql(
+        s"""
+           |CREATE EXTERNAL TABLE spark_orc(
+           |  a STRING,
+           |  b CHAR(10),
+           |  c VARCHAR(10),
+           |  d ARRAY<CHAR(3)>)
+           |STORED AS orc
+           |LOCATION '$uri'""".stripMargin)
+      val result = Row("a", "b         ", "c", Seq("d  "))
+      checkAnswer(spark.table("hive_orc"), result)
+      checkAnswer(spark.table("spark_orc"), result)
+    } finally {
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS spark_orc")
+      Utils.deleteRecursively(location)
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite {
@@ -153,18 +201,18 @@ class OrcSourceSuite extends OrcSuite {
     super.beforeAll()
 
     spark.sql(
-      s"""CREATE TEMPORARY TABLE normal_orc_source
+      s"""CREATE TEMPORARY VIEW normal_orc_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
-         |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
+         |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
 
     spark.sql(
-      s"""CREATE TEMPORARY TABLE normal_orc_as_source
+      s"""CREATE TEMPORARY VIEW normal_orc_as_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
-         |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
+         |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
   }

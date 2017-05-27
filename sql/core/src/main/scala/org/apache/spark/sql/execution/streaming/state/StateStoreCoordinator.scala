@@ -38,14 +38,14 @@ private case class VerifyIfInstanceActive(storeId: StateStoreId, executorId: Str
 private case class GetLocation(storeId: StateStoreId)
   extends StateStoreCoordinatorMessage
 
-private case class DeactivateInstances(storeRootLocation: String)
+private case class DeactivateInstances(checkpointLocation: String)
   extends StateStoreCoordinatorMessage
 
 private object StopCoordinator
   extends StateStoreCoordinatorMessage
 
 /** Helper object used to create reference to [[StateStoreCoordinator]]. */
-private[sql] object StateStoreCoordinatorRef extends Logging {
+object StateStoreCoordinatorRef extends Logging {
 
   private val endpointName = "StateStoreCoordinator"
 
@@ -77,7 +77,7 @@ private[sql] object StateStoreCoordinatorRef extends Logging {
  * Reference to a [[StateStoreCoordinator]] that can be used to coordinate instances of
  * [[StateStore]]s across all the executors, and get their locations for job scheduling.
  */
-private[sql] class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
+class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
 
   private[state] def reportActiveInstance(
       storeId: StateStoreId,
@@ -88,21 +88,21 @@ private[sql] class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointR
 
   /** Verify whether the given executor has the active instance of a state store */
   private[state] def verifyIfInstanceActive(storeId: StateStoreId, executorId: String): Boolean = {
-    rpcEndpointRef.askWithRetry[Boolean](VerifyIfInstanceActive(storeId, executorId))
+    rpcEndpointRef.askSync[Boolean](VerifyIfInstanceActive(storeId, executorId))
   }
 
   /** Get the location of the state store */
   private[state] def getLocation(storeId: StateStoreId): Option[String] = {
-    rpcEndpointRef.askWithRetry[Option[String]](GetLocation(storeId))
+    rpcEndpointRef.askSync[Option[String]](GetLocation(storeId))
   }
 
   /** Deactivate instances related to a set of operator */
   private[state] def deactivateInstances(storeRootLocation: String): Unit = {
-    rpcEndpointRef.askWithRetry[Boolean](DeactivateInstances(storeRootLocation))
+    rpcEndpointRef.askSync[Boolean](DeactivateInstances(storeRootLocation))
   }
 
   private[state] def stop(): Unit = {
-    rpcEndpointRef.askWithRetry[Boolean](StopCoordinator)
+    rpcEndpointRef.askSync[Boolean](StopCoordinator)
   }
 }
 
@@ -111,11 +111,13 @@ private[sql] class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointR
  * Class for coordinating instances of [[StateStore]]s loaded in executors across the cluster,
  * and get their locations for job scheduling.
  */
-private class StateStoreCoordinator(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint {
+private class StateStoreCoordinator(override val rpcEnv: RpcEnv)
+    extends ThreadSafeRpcEndpoint with Logging {
   private val instances = new mutable.HashMap[StateStoreId, ExecutorCacheTaskLocation]
 
   override def receive: PartialFunction[Any, Unit] = {
     case ReportActiveInstance(id, host, executorId) =>
+      logDebug(s"Reported state store $id is active at $executorId")
       instances.put(id, ExecutorCacheTaskLocation(host, executorId))
   }
 
@@ -125,19 +127,25 @@ private class StateStoreCoordinator(override val rpcEnv: RpcEnv) extends ThreadS
         case Some(location) => location.executorId == execId
         case None => false
       }
+      logDebug(s"Verified that state store $id is active: $response")
       context.reply(response)
 
     case GetLocation(id) =>
-      context.reply(instances.get(id).map(_.toString))
+      val executorId = instances.get(id).map(_.toString)
+      logDebug(s"Got location of the state store $id: $executorId")
+      context.reply(executorId)
 
-    case DeactivateInstances(loc) =>
+    case DeactivateInstances(checkpointLocation) =>
       val storeIdsToRemove =
-        instances.keys.filter(_.checkpointLocation == loc).toSeq
+        instances.keys.filter(_.checkpointLocation == checkpointLocation).toSeq
       instances --= storeIdsToRemove
+      logDebug(s"Deactivating instances related to checkpoint location $checkpointLocation: " +
+        storeIdsToRemove.mkString(", "))
       context.reply(true)
 
     case StopCoordinator =>
       stop() // Stop before replying to ensure that endpoint name has been deregistered
+      logInfo("StateStoreCoordinator stopped")
       context.reply(true)
   }
 }

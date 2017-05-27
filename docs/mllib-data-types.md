@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Data Types - MLlib
-displayTitle: Data Types - MLlib
+title: Data Types - RDD-based API
+displayTitle: Data Types - RDD-based API
 ---
 
 * Table of contents
@@ -104,7 +104,7 @@ dv2 = [1.0, 0.0, 3.0]
 # Create a SparseVector.
 sv1 = Vectors.sparse(3, [0, 2], [1.0, 3.0])
 # Use a single-column SciPy csc_matrix as a sparse vector.
-sv2 = sps.csc_matrix((np.array([1.0, 3.0]), np.array([0, 2]), np.array([0, 2])), shape = (3, 1))
+sv2 = sps.csc_matrix((np.array([1.0, 3.0]), np.array([0, 2]), np.array([0, 2])), shape=(3, 1))
 {% endhighlight %}
 
 </div>
@@ -517,12 +517,12 @@ from pyspark.mllib.linalg.distributed import IndexedRow, IndexedRowMatrix
 
 # Create an RDD of indexed rows.
 #   - This can be done explicitly with the IndexedRow class:
-indexedRows = sc.parallelize([IndexedRow(0, [1, 2, 3]), 
-                              IndexedRow(1, [4, 5, 6]), 
-                              IndexedRow(2, [7, 8, 9]), 
+indexedRows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
+                              IndexedRow(1, [4, 5, 6]),
+                              IndexedRow(2, [7, 8, 9]),
                               IndexedRow(3, [10, 11, 12])])
 #   - or by using (long, vector) tuples:
-indexedRows = sc.parallelize([(0, [1, 2, 3]), (1, [4, 5, 6]), 
+indexedRows = sc.parallelize([(0, [1, 2, 3]), (1, [4, 5, 6]),
                               (2, [7, 8, 9]), (3, [10, 11, 12])])
 
 # Create an IndexedRowMatrix from an RDD of IndexedRows.
@@ -731,15 +731,15 @@ from pyspark.mllib.linalg import Matrices
 from pyspark.mllib.linalg.distributed import BlockMatrix
 
 # Create an RDD of sub-matrix blocks.
-blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])), 
+blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
 
 # Create a BlockMatrix from an RDD of sub-matrix blocks.
 mat = BlockMatrix(blocks, 3, 2)
 
 # Get its size.
-m = mat.numRows() # 6
-n = mat.numCols() # 2
+m = mat.numRows()  # 6
+n = mat.numCols()  # 2
 
 # Get the blocks as an RDD of sub-matrix blocks.
 blocksRDD = mat.blocks

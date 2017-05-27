@@ -33,11 +33,11 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
       Batch("Constant Folding", FixedPoint(50),
-        NullPropagation,
+        NullPropagation(conf),
         ConstantFolding,
         BooleanSimplification,
-        BinaryComparisonSimplification,
-        PruneFilters) :: Nil
+        SimplifyBinaryComparison,
+        PruneFilters(conf)) :: Nil
   }
 
   val nullableRelation = LocalRelation('a.int.withNullability(true))

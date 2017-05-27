@@ -54,7 +54,25 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     t.createOrReplaceTempView("t")
   }
 
-  test("rdd deserialization does not crash [SPARK-15791]") {
+  test("SPARK-18854 numberedTreeString for subquery") {
+    val df = sql("select * from range(10) where id not in " +
+      "(select id from range(2) union all select id from range(2))")
+
+    // The depth first traversal of the plan tree
+    val dfs = Seq("Project", "Filter", "Union", "Project", "Range", "Project", "Range", "Range")
+    val numbered = df.queryExecution.analyzed.numberedTreeString.split("\n")
+
+    // There should be 8 plan nodes in total
+    assert(numbered.size == dfs.size)
+
+    for (i <- dfs.indices) {
+      val node = df.queryExecution.analyzed(i)
+      assert(node.nodeName == dfs(i))
+      assert(numbered(i).contains(node.nodeName))
+    }
+  }
+
+  test("SPARK-15791: rdd deserialization does not crash") {
     sql("select (select 1 as b) as b").rdd.count()
   }
 
@@ -73,6 +91,31 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("select (select 's' as s) as b"),
       Array(Row("s"))
+    )
+  }
+
+  test("define CTE in CTE subquery") {
+    checkAnswer(
+      sql(
+        """
+          | with t2 as (with t1 as (select 1 as b, 2 as c) select b, c from t1)
+          | select a from (select 1 as a union all select 2 as a) t
+          | where a = (select max(b) from t2)
+        """.stripMargin),
+      Array(Row(1))
+    )
+    checkAnswer(
+      sql(
+        """
+          | with t2 as (with t1 as (select 1 as b, 2 as c) select b, c from t1),
+          | t3 as (
+          |   with t4 as (select 1 as d, 3 as e)
+          |   select * from t4 cross join t2 where t2.b = t4.d
+          | )
+          | select a from (select 1 as a union all select 2 as a) t
+          | where a = (select max(d) from t3)
+        """.stripMargin),
+      Array(Row(1))
     )
   }
 
@@ -128,7 +171,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-15677: Queries against local relations with scalar subquery in Select list") {
-    withTempTable("t1", "t2") {
+    withTempView("t1", "t2") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
 
@@ -220,12 +263,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1, 2.0) :: Row(1, 2.0) :: Nil)
 
     checkAnswer(
-      sql("select * from l where a not in (select c from t where b < d)"),
-      Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) :: Nil)
+      sql("select * from l where (a, b) not in (select c, d from t) and a < 4"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Nil)
 
     // Empty sub-query
     checkAnswer(
-      sql("select * from l where a not in (select c from r where c > 10 and b < d)"),
+      sql("select * from l where (a, b) not in (select c, d from r where c > 10)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
       Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
 
@@ -267,7 +310,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-15832: Test embedded existential predicate sub-queries") {
-    withTempTable("t1", "t2", "t3", "t4", "t5") {
+    withTempView("t1", "t2", "t3", "t4", "t5") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
       Seq((1, 1), (2, 2), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t3")
@@ -458,6 +501,18 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
   }
 
+  test("SPARK-18504 extra GROUP BY column in correlated scalar subquery is not permitted") {
+    withTempView("t") {
+      Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+
+      val errMsg = intercept[AnalysisException] {
+        sql("select (select sum(-1) from t t2 where t1.c2 = t2.c1 group by t2.c2) sum from t t1")
+      }
+      assert(errMsg.getMessage.contains(
+        "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns:"))
+    }
+  }
+
   test("non-aggregated correlated scalar subquery") {
     val msg1 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
@@ -473,10 +528,10 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("non-equal correlated scalar subquery") {
     val msg1 = intercept[AnalysisException] {
-      sql("select a, (select b from l l2 where l2.a < l1.a) sum_b from l l1")
+      sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1")
     }
     assert(msg1.getMessage.contains(
-      "The correlated scalar subquery can only contain equality predicates"))
+      "Correlated column is not allowed in a non-equality predicate:"))
   }
 
   test("disjunctive correlated scalar subquery") {
@@ -551,8 +606,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             |    select cntPlusOne + 1 as cntPlusTwo from (
             |        select cnt + 1 as cntPlusOne from (
             |            select sum(r.c) s, count(*) cnt from r where l.a = r.c having cnt = 0
-            |        )
-            |    )
+            |        ) t1
+            |    ) t2
             |) = 2""".stripMargin),
       Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
   }
@@ -567,8 +622,257 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-15370: COUNT bug with attribute ref in subquery input and output ") {
     checkAnswer(
-      sql("select l.b, (select (r.c + count(*)) is null from r where l.a = r.c) from l"),
+      sql(
+        """
+          |select l.b, (select (r.c + count(*)) is null
+          |from r
+          |where l.a = r.c group by r.c) from l
+        """.stripMargin),
       Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
         Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+  }
+
+  test("SPARK-16804: Correlated subqueries containing LIMIT - 1") {
+    withTempView("onerow") {
+      Seq(1).toDF("c1").createOrReplaceTempView("onerow")
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from onerow t1
+            | where exists (select 1 from onerow t2 where t1.c1=t2.c1)
+            | and   exists (select 1 from onerow LIMIT 1)""".stripMargin),
+        Row(1) :: Nil)
+    }
+  }
+
+  test("SPARK-16804: Correlated subqueries containing LIMIT - 2") {
+    withTempView("onerow") {
+      Seq(1).toDF("c1").createOrReplaceTempView("onerow")
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from onerow t1
+            | where exists (select 1
+            |               from   (select 1 as c1 from onerow t2 LIMIT 1) t2
+            |               where  t1.c1=t2.c1)""".stripMargin),
+        Row(1) :: Nil)
+    }
+  }
+
+  test("SPARK-17337: Incorrect column resolution leads to incorrect results") {
+    withTempView("t1", "t2") {
+      Seq(1, 2).toDF("c1").createOrReplaceTempView("t1")
+      Seq(1).toDF("c2").createOrReplaceTempView("t2")
+
+      checkAnswer(
+        sql(
+          """
+            | select *
+            | from   (select t2.c2+1 as c3
+            |         from   t1 left join t2 on t1.c1=t2.c2) t3
+            | where  c3 not in (select c2 from t2)""".stripMargin),
+        Row(2) :: Nil)
+     }
+   }
+
+   test("SPARK-17348: Correlated subqueries with non-equality predicate (good case)") {
+     withTempView("t1", "t2") {
+       Seq((1, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
+       Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t2")
+
+       // Simple case
+       checkAnswer(
+         sql(
+           """
+             | select c1
+             | from   t1
+             | where  c1 in (select t2.c1
+             |               from   t2
+             |               where  t1.c2 >= t2.c2)""".stripMargin),
+         Row(1) :: Nil)
+
+       // More complex case with OR predicate
+       checkAnswer(
+         sql(
+           """
+             | select t1.c1
+             | from   t1, t1 as t3
+             | where  t1.c1 = t3.c1
+             | and    (t1.c1 in (select t2.c1
+             |                   from   t2
+             |                   where  t1.c2 >= t2.c2
+             |                          or t3.c2 < t2.c2)
+             |         or t1.c2 >= 0)""".stripMargin),
+         Row(1) :: Nil)
+    }
+  }
+
+  test("SPARK-17348: Correlated subqueries with non-equality predicate (error case)") {
+    withTempView("t1", "t2", "t3", "t4") {
+      Seq((1, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      Seq((2, 1)).toDF("c1", "c2").createOrReplaceTempView("t3")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t4")
+
+      // Simplest case
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select t1.c1
+            | from   t1
+            | where  t1.c1 in (select max(t2.c1)
+            |                  from   t2
+            |                  where  t1.c2 >= t2.c2)""".stripMargin).collect()
+      }
+
+      // Add a HAVING on top and augmented within an OR predicate
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select t1.c1
+            | from   t1
+            | where  t1.c1 in (select max(t2.c1)
+            |                  from   t2
+            |                  where  t1.c2 >= t2.c2
+            |                  having count(*) > 0 )
+            |         or t1.c2 >= 0""".stripMargin).collect()
+      }
+
+      // Add a HAVING on top and augmented within an OR predicate
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select t1.c1
+            | from   t1, t1 as t3
+            | where  t1.c1 = t3.c1
+            | and    (t1.c1 in (select max(t2.c1)
+            |                   from   t2
+            |                   where  t1.c2 = t2.c2
+            |                          or t3.c2 = t2.c2)
+            |        )""".stripMargin).collect()
+      }
+
+      // In Window expression: changing the data set to
+      // demonstrate if this query ran, it would return incorrect result.
+      intercept[AnalysisException] {
+        sql(
+          """
+          | select c1
+          | from   t3
+          | where  c1 in (select max(t4.c1) over ()
+          |               from   t4
+          |               where t3.c2 >= t4.c2)""".stripMargin).collect()
+      }
+    }
+  }
+  // This restriction applies to
+  // the permutation of { LOJ, ROJ, FOJ } x { EXISTS, IN, scalar subquery }
+  // where correlated predicates appears in right operand of LOJ,
+  // or in left operand of ROJ, or in either operand of FOJ.
+  // The test cases below cover the representatives of the patterns
+  test("Correlated subqueries in outer joins") {
+    withTempView("t1", "t2", "t3") {
+      Seq(1).toDF("c1").createOrReplaceTempView("t1")
+      Seq(2).toDF("c1").createOrReplaceTempView("t2")
+      Seq(1).toDF("c1").createOrReplaceTempView("t3")
+
+      // Left outer join (LOJ) in IN subquery context
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select t1.c1
+            | from   t1
+            | where  1 IN (select 1
+            |              from   t3 left outer join
+            |                     (select c1 from t2 where t1.c1 = 2) t2
+            |                     on t2.c1 = t3.c1)""".stripMargin).collect()
+      }
+      // Right outer join (ROJ) in EXISTS subquery context
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select t1.c1
+            | from   t1
+            | where  exists (select 1
+            |                from   (select c1 from t2 where t1.c1 = 2) t2
+            |                       right outer join t3
+            |                       on t2.c1 = t3.c1)""".stripMargin).collect()
+      }
+      // SPARK-18578: Full outer join (FOJ) in scalar subquery context
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select (select max(1)
+            |         from   (select c1 from  t2 where t1.c1 = 2 and t1.c1=t2.c1) t2
+            |                full join t3
+            |                on t2.c1=t3.c1)
+            | from   t1""".stripMargin).collect()
+      }
+    }
+  }
+
+  // Generate operator
+  test("Correlated subqueries in LATERAL VIEW") {
+    withTempView("t1", "t2") {
+      Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq[(Int, Array[Int])]((1, Array(1, 2)), (2, Array(-1, -3)))
+        .toDF("c1", "arr_c2").createTempView("t2")
+      checkAnswer(
+        sql(
+          """
+          | SELECT c2
+          | FROM t1
+          | WHERE EXISTS (SELECT *
+          |               FROM t2 LATERAL VIEW explode(arr_c2) q AS c2
+                          WHERE t1.c1 = t2.c1)""".stripMargin),
+        Row(1) :: Row(0) :: Nil)
+
+      val msg1 = intercept[AnalysisException] {
+        sql(
+          """
+            | SELECT c1
+            | FROM t2
+            | WHERE EXISTS (SELECT *
+            |               FROM t1 LATERAL VIEW explode(t2.arr_c2) q AS c2
+            |               WHERE t1.c1 = t2.c1)
+          """.stripMargin)
+      }
+      assert(msg1.getMessage.contains(
+        "Expressions referencing the outer query are not supported outside of WHERE/HAVING"))
+    }
+  }
+
+  test("SPARK-19933 Do not eliminate top-level aliases in sub-queries") {
+    withTempView("t1", "t2") {
+      spark.range(4).createOrReplaceTempView("t1")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t1)"),
+        Row(0) :: Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      spark.range(2).createOrReplaceTempView("t2")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t2)"),
+        Row(0) :: Row(1) :: Nil)
+    }
+  }
+
+  test("ListQuery and Exists should work even no correlated references") {
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c AND (r.d in (select d from r) OR l.a >= 1)"),
+      Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) ::
+        Row(2, 1.0, 2, 3.0) :: Row(3.0, 3.0, 3, 2.0) :: Row(6, null, 6, null) :: Nil)
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c + 1 AND (exists (select * from r) OR l.a = r.c)"),
+      Row(3, 3.0, 2, 3.0) :: Row(3, 3.0, 2, 3.0) :: Nil)
+  }
+
+  test("SPARK-20688: correctly check analysis for scalar sub-queries") {
+    withTempView("t") {
+      Seq(1 -> "a").toDF("i", "j").createTempView("t")
+      val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
+      assert(e.message.contains("cannot resolve '`a`' given input columns: [i, j]"))
+    }
   }
 }

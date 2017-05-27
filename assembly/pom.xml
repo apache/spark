@@ -21,11 +21,10 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>2.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-assembly_2.11</artifactId>
   <name>Spark Project Assembly</name>
   <url>http://spark.apache.org/</url>
@@ -140,6 +139,16 @@
       </dependencies>
     </profile>
     <profile>
+      <id>mesos</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-mesos_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
       <id>hive</id>
       <dependencies>
         <dependency>
@@ -178,6 +187,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-assembly-plugin</artifactId>
+            <version>3.0.0</version>
             <executions>
               <execution>
                 <id>dist</id>
@@ -215,6 +225,20 @@
       <properties>
         <parquet.deps.scope>provided</parquet.deps.scope>
       </properties>
+    </profile>
+
+    <!--
+     Pull in spark-hadoop-cloud and its associated JARs,
+    -->
+    <profile>
+      <id>hadoop-cloud</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-hadoop-cloud_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
     </profile>
   </profiles>
 </project>

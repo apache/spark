@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Benchmark
 
 /**
@@ -44,6 +43,7 @@ object TPCDSQueryBenchmark {
       .set("spark.driver.memory", "3g")
       .set("spark.executor.memory", "3g")
       .set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
+      .set("spark.sql.crossJoin.enabled", "true")
 
   val spark = SparkSession.builder.config(conf).getOrCreate()
 
@@ -64,8 +64,6 @@ object TPCDSQueryBenchmark {
     require(dataLocation.nonEmpty,
       "please modify the value of dataLocation to point to your local TPCDS data")
     val tableSizes = setupTables(dataLocation)
-    spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
-    spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
     queries.foreach { name =>
       val queryString = fileToString(new File(Thread.currentThread().getContextClassLoader
         .getResource(s"tpcds/$name.sql").getFile))
@@ -76,13 +74,13 @@ object TPCDSQueryBenchmark {
       // per-row processing time for those cases.
       val queryRelations = scala.collection.mutable.HashSet[String]()
       spark.sql(queryString).queryExecution.logical.map {
-        case ur @ UnresolvedRelation(t: TableIdentifier, _) =>
+        case ur @ UnresolvedRelation(t: TableIdentifier) =>
           queryRelations.add(t.table)
         case lp: LogicalPlan =>
           lp.expressions.foreach { _ foreach {
             case subquery: SubqueryExpression =>
               subquery.plan.foreach {
-                case ur @ UnresolvedRelation(t: TableIdentifier, _) =>
+                case ur @ UnresolvedRelation(t: TableIdentifier) =>
                   queryRelations.add(t.table)
                 case _ =>
               }

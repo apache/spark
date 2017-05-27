@@ -39,8 +39,7 @@ if __name__ == "__main__":
 
     dctDf = dct.transform(df)
 
-    for dcts in dctDf.select("featuresDCT").take(3):
-        print(dcts)
+    dctDf.select("featuresDCT").show(truncate=False)
     # $example off$
 
     spark.stop()

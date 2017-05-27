@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URI
+
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -26,10 +30,10 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   private def checkTablePath(dbName: String, tableName: String): Unit = {
     val metastoreTable = spark.sharedState.externalCatalog.getTable(dbName, tableName)
-    val expectedPath =
-      spark.sharedState.externalCatalog.getDatabase(dbName).locationUri + "/" + tableName
+    val expectedPath = new Path(new Path(
+      spark.sharedState.externalCatalog.getDatabase(dbName).locationUri), tableName).toUri
 
-    assert(metastoreTable.storage.serdeProperties("path") === expectedPath)
+    assert(metastoreTable.location === expectedPath)
   }
 
   private def getTableNames(dbName: Option[String] = None): Array[String] = {
@@ -80,7 +84,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
               |CREATE TABLE t1
               |USING parquet
               |OPTIONS (
-              |  path '$path'
+              |  path '${dir.toURI}'
               |)
             """.stripMargin)
           assert(getTableNames(Option(db)).contains("t1"))
@@ -105,7 +109,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
               |CREATE TABLE $db.t1
               |USING parquet
               |OPTIONS (
-              |  path '$path'
+              |  path '${dir.toURI}'
               |)
             """.stripMargin)
         assert(getTableNames(Option(db)).contains("t1"))
@@ -212,7 +216,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             s"""CREATE EXTERNAL TABLE t (id BIGINT)
                |PARTITIONED BY (p INT)
                |STORED AS PARQUET
-               |LOCATION '$path'
+               |LOCATION '${dir.toURI}'
              """.stripMargin)
 
           checkAnswer(spark.table("t"), spark.emptyDataFrame)
@@ -244,7 +248,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
           s"""CREATE EXTERNAL TABLE $db.t (id BIGINT)
                |PARTITIONED BY (p INT)
                |STORED AS PARQUET
-               |LOCATION '$path'
+               |LOCATION '${dir.toURI}'
              """.stripMargin)
 
         checkAnswer(spark.table(s"$db.t"), spark.emptyDataFrame)
@@ -269,19 +273,17 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       val message = intercept[AnalysisException] {
         df.write.format("parquet").saveAsTable("`d:b`.`t:a`")
       }.getMessage
-      assert(message.contains("is not a valid name for metastore"))
+      assert(message.contains("Database 'd:b' not found"))
     }
 
     {
       val message = intercept[AnalysisException] {
         df.write.format("parquet").saveAsTable("`d:b`.`table`")
       }.getMessage
-      assert(message.contains("is not a valid name for metastore"))
+      assert(message.contains("Database 'd:b' not found"))
     }
 
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
+    withTempDir { dir =>
       {
         val message = intercept[AnalysisException] {
           sql(
@@ -289,11 +291,12 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             |CREATE TABLE `d:b`.`t:a` (a int)
             |USING parquet
             |OPTIONS (
-            |  path '$path'
+            |  path '${dir.toURI}'
             |)
             """.stripMargin)
         }.getMessage
-        assert(message.contains("is not a valid name for metastore"))
+        assert(message.contains("`t:a` is not a valid name for tables/databases. " +
+          "Valid names only contain alphabet characters, numbers and _."))
       }
 
       {
@@ -303,11 +306,11 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
               |CREATE TABLE `d:b`.`table` (a int)
               |USING parquet
               |OPTIONS (
-              |  path '$path'
+              |  path '${dir.toURI}'
               |)
               """.stripMargin)
         }.getMessage
-        assert(message.contains("is not a valid name for metastore"))
+        assert(message.contains("Database 'd:b' not found"))
       }
     }
   }

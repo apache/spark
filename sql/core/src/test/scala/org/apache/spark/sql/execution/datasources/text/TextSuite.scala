@@ -66,7 +66,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
 
   test("reading partitioned data using read.textFile()") {
     val partitionedData = Thread.currentThread().getContextClassLoader
-      .getResource("text-partitioned").toString
+      .getResource("test-data/text-partitioned").toString
     val ds = spark.read.textFile(partitionedData)
     val data = ds.collect()
 
@@ -76,7 +76,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
 
   test("support for partitioned reading using read.text()") {
     val partitionedData = Thread.currentThread().getContextClassLoader
-      .getResource("text-partitioned").toString
+      .getResource("test-data/text-partitioned").toString
     val df = spark.read.text(partitionedData)
     val data = df.filter("year = '2015'").select("value").collect()
 
@@ -115,9 +115,27 @@ class TextSuite extends QueryTest with SharedSQLContext {
     )
     withTempDir { dir =>
       val testDf = spark.read.text(testFile)
-      val tempDir = Utils.createTempDir()
-      val tempDirPath = tempDir.getAbsolutePath
+      val tempDirPath = dir.getAbsolutePath
       testDf.write.option("compression", "none")
+        .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
+      val compressedFiles = new File(tempDirPath).listFiles()
+      assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
+      verifyFrame(spark.read.options(extraOptions).text(tempDirPath))
+    }
+  }
+
+  test("case insensitive option") {
+    val extraOptions = Map[String, String](
+      "mApReDuCe.output.fileoutputformat.compress" -> "true",
+      "mApReDuCe.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
+      "mApReDuCe.map.output.compress" -> "true",
+      "mApReDuCe.output.fileoutputformat.compress.codec" -> classOf[GzipCodec].getName,
+      "mApReDuCe.map.output.compress.codec" -> classOf[GzipCodec].getName
+    )
+    withTempDir { dir =>
+      val testDf = spark.read.text(testFile)
+      val tempDirPath = dir.getAbsolutePath
+      testDf.write.option("CoMpReSsIoN", "none")
         .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
       val compressedFiles = new File(tempDirPath).listFiles()
       assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
@@ -155,7 +173,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   private def testFile: String = {
-    Thread.currentThread().getContextClassLoader.getResource("text-suite.txt").toString
+    Thread.currentThread().getContextClassLoader.getResource("test-data/text-suite.txt").toString
   }
 
   /** Verifies data and schema. */

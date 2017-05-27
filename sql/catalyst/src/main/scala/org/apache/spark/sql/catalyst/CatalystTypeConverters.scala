@@ -199,34 +199,14 @@ object CatalystTypeConverters {
     private[this] val keyConverter = getConverterForType(keyType)
     private[this] val valueConverter = getConverterForType(valueType)
 
-    override def toCatalystImpl(scalaValue: Any): MapData = scalaValue match {
-      case m: Map[_, _] =>
-        val length = m.size
-        val convertedKeys = new Array[Any](length)
-        val convertedValues = new Array[Any](length)
+    override def toCatalystImpl(scalaValue: Any): MapData = {
+      val keyFunction = (k: Any) => keyConverter.toCatalyst(k)
+      val valueFunction = (k: Any) => valueConverter.toCatalyst(k)
 
-        var i = 0
-        for ((key, value) <- m) {
-          convertedKeys(i) = keyConverter.toCatalyst(key)
-          convertedValues(i) = valueConverter.toCatalyst(value)
-          i += 1
-        }
-        ArrayBasedMapData(convertedKeys, convertedValues)
-
-      case jmap: JavaMap[_, _] =>
-        val length = jmap.size()
-        val convertedKeys = new Array[Any](length)
-        val convertedValues = new Array[Any](length)
-
-        var i = 0
-        val iter = jmap.entrySet.iterator
-        while (iter.hasNext) {
-          val entry = iter.next()
-          convertedKeys(i) = keyConverter.toCatalyst(entry.getKey)
-          convertedValues(i) = valueConverter.toCatalyst(entry.getValue)
-          i += 1
-        }
-        ArrayBasedMapData(convertedKeys, convertedValues)
+      scalaValue match {
+        case map: Map[_, _] => ArrayBasedMapData(map, keyFunction, valueFunction)
+        case javaMap: JavaMap[_, _] => ArrayBasedMapData(javaMap, keyFunction, valueFunction)
+      }
     }
 
     override def toScala(catalystValue: MapData): Map[Any, Any] = {
@@ -330,11 +310,7 @@ object CatalystTypeConverters {
         case d: JavaBigInteger => Decimal(d)
         case d: Decimal => d
       }
-      if (decimal.changePrecision(dataType.precision, dataType.scale)) {
-        decimal
-      } else {
-        null
-      }
+      decimal.toPrecision(dataType.precision, dataType.scale).orNull
     }
     override def toScala(catalystValue: Decimal): JavaBigDecimal = {
       if (catalystValue == null) null
@@ -382,7 +358,7 @@ object CatalystTypeConverters {
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.
    */
-  private[sql] def createToCatalystConverter(dataType: DataType): Any => Any = {
+  def createToCatalystConverter(dataType: DataType): Any => Any = {
     if (isPrimitive(dataType)) {
       // Although the `else` branch here is capable of handling inbound conversion of primitives,
       // we add some special-case handling for those types here. The motivation for this relates to
@@ -409,7 +385,7 @@ object CatalystTypeConverters {
    * Typical use case would be converting a collection of rows that have the same schema. You will
    * call this function once to get a converter, and apply it to every row.
    */
-  private[sql] def createToScalaConverter(dataType: DataType): Any => Any = {
+  def createToScalaConverter(dataType: DataType): Any => Any = {
     if (isPrimitive(dataType)) {
       identity
     } else {
@@ -433,18 +409,11 @@ object CatalystTypeConverters {
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Any] => new GenericArrayData(arr.map(convertToCatalyst))
-    case m: Map[_, _] =>
-      val length = m.size
-      val convertedKeys = new Array[Any](length)
-      val convertedValues = new Array[Any](length)
-
-      var i = 0
-      for ((key, value) <- m) {
-        convertedKeys(i) = convertToCatalyst(key)
-        convertedValues(i) = convertToCatalyst(value)
-        i += 1
-      }
-      ArrayBasedMapData(convertedKeys, convertedValues)
+    case map: Map[_, _] =>
+      ArrayBasedMapData(
+        map,
+        (key: Any) => convertToCatalyst(key),
+        (value: Any) => convertToCatalyst(value))
     case other => other
   }
 

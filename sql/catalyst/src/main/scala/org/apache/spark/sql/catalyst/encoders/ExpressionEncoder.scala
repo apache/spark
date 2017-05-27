@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LocalRelation}
-import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, ObjectType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -45,26 +45,33 @@ import org.apache.spark.util.Utils
 object ExpressionEncoder {
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
-    val mirror = typeTag[T].mirror
-    val tpe = typeTag[T].tpe
+    val mirror = ScalaReflection.mirror
+    val tpe = typeTag[T].in(mirror).tpe
+
+    if (ScalaReflection.optionOfProductType(tpe)) {
+      throw new UnsupportedOperationException(
+        "Cannot create encoder for Option of Product type, because Product type is represented " +
+          "as a row, and the entire row can not be null in Spark SQL like normal databases. " +
+          "You can wrap your type with Tuple1 if you do want top level null Product objects, " +
+          "e.g. instead of creating `Dataset[Option[MyClass]]`, you can do something like " +
+          "`val ds: Dataset[Tuple1[MyClass]] = Seq(Tuple1(MyClass(...)), Tuple1(null)).toDS`")
+    }
+
     val cls = mirror.runtimeClass(tpe)
     val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
-    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = !cls.isPrimitive)
     val nullSafeInput = if (flat) {
       inputObject
     } else {
-      // For input object of non-flat type, we can't encode it to row if it's null, as Spark SQL
+      // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
       // doesn't allow top-level row to be null, only its columns can be null.
-      AssertNotNull(inputObject, Seq("top level non-flat input object"))
+      AssertNotNull(inputObject, Seq("top level Product input object"))
     }
     val serializer = ScalaReflection.serializerFor[T](nullSafeInput)
     val deserializer = ScalaReflection.deserializerFor[T]
 
-    val schema = ScalaReflection.schemaFor[T] match {
-      case ScalaReflection.Schema(s: StructType, _) => s
-      case ScalaReflection.Schema(dt, nullable) => new StructType().add("value", dt, nullable)
-    }
+    val schema = serializer.dataType
 
     new ExpressionEncoder[T](
       schema,
@@ -110,16 +117,34 @@ object ExpressionEncoder {
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
 
-    val serializer = encoders.map {
-      case e if e.flat => e.serializer.head
-      case other => CreateStruct(other.serializer)
-    }.zipWithIndex.map { case (expr, index) =>
-      expr.transformUp {
-        case BoundReference(0, t, _) =>
-          Invoke(
-            BoundReference(0, ObjectType(cls), nullable = true),
-            s"_${index + 1}",
-            t)
+    val serializer = encoders.zipWithIndex.map { case (enc, index) =>
+      val originalInputObject = enc.serializer.head.collect { case b: BoundReference => b }.head
+      val newInputObject = Invoke(
+        BoundReference(0, ObjectType(cls), nullable = true),
+        s"_${index + 1}",
+        originalInputObject.dataType)
+
+      val newSerializer = enc.serializer.map(_.transformUp {
+        case b: BoundReference if b == originalInputObject => newInputObject
+      })
+
+      if (enc.flat) {
+        newSerializer.head
+      } else {
+        // For non-flat encoder, the input object is not top level anymore after being combined to
+        // a tuple encoder, thus it can be null and we should wrap the `CreateStruct` with `If` and
+        // null check to handle null case correctly.
+        // e.g. for Encoder[(Int, String)], the serializer expressions will create 2 columns, and is
+        // not able to handle the case when the input tuple is null. This is not a problem as there
+        // is a check to make sure the input object won't be null. However, if this encoder is used
+        // to create a bigger tuple encoder, the original input object becomes a filed of the new
+        // input tuple and can be null. So instead of creating a struct directly here, we should add
+        // a null/None check and return a null struct if the null/None check fails.
+        val struct = CreateStruct(newSerializer)
+        val nullCheck = Or(
+          IsNull(newInputObject),
+          Invoke(Literal.fromObject(None), "equals", BooleanType, newInputObject :: Nil))
+        If(nullCheck, Literal.create(null, struct.dataType), struct)
       }
     }
 
@@ -150,6 +175,10 @@ object ExpressionEncoder {
       deserializer,
       ClassTag(cls))
   }
+
+  // Tuple1
+  def tuple[T](e: ExpressionEncoder[T]): ExpressionEncoder[Tuple1[T]] =
+    tuple(Seq(e)).asInstanceOf[ExpressionEncoder[Tuple1[T]]]
 
   def tuple[T1, T2](
       e1: ExpressionEncoder[T1],
@@ -200,11 +229,15 @@ case class ExpressionEncoder[T](
   // serializer expressions are used to encode an object to a row, while the object is usually an
   // intermediate value produced inside an operator, not from the output of the child operator. This
   // is quite different from normal expressions, and `AttributeReference` doesn't work here
-  // (intermediate value is not an attribute). We assume that all serializer expressions use a same
-  // `BoundReference` to refer to the object, and throw exception if they don't.
-  assert(serializer.forall(_.references.isEmpty), "serializer cannot reference to any attributes.")
-  assert(serializer.flatMap(_.collect { case b: BoundReference => b}).distinct.length <= 1,
-    "all serializer expressions must use the same BoundReference.")
+  // (intermediate value is not an attribute). We assume that all serializer expressions use the
+  // same `BoundReference` to refer to the object, and throw exception if they don't.
+  assert(serializer.forall(_.references.isEmpty), "serializer cannot reference any attributes.")
+  assert(serializer.flatMap { ser =>
+    val boundRefs = ser.collect { case b: BoundReference => b }
+    assert(boundRefs.nonEmpty,
+      "each serializer expression should contains at least one `BoundReference`")
+    boundRefs
+  }.distinct.length <= 1, "all serializer expressions must use the same BoundReference.")
 
   /**
    * Returns a new copy of this encoder, where the `deserializer` is resolved and bound to the
@@ -230,7 +263,7 @@ case class ExpressionEncoder[T](
   private lazy val extractProjection = GenerateUnsafeProjection.generate(serializer)
 
   @transient
-  private lazy val inputRow = new GenericMutableRow(1)
+  private lazy val inputRow = new GenericInternalRow(1)
 
   @transient
   private lazy val constructProjection = GenerateSafeProjection.generate(deserializer :: Nil)
@@ -255,7 +288,7 @@ case class ExpressionEncoder[T](
   } catch {
     case e: Exception =>
       throw new RuntimeException(
-        s"Error while encoding: $e\n${serializer.map(_.treeString).mkString("\n")}", e)
+        s"Error while encoding: $e\n${serializer.map(_.simpleString).mkString("\n")}", e)
   }
 
   /**
@@ -267,7 +300,7 @@ case class ExpressionEncoder[T](
     constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
   } catch {
     case e: Exception =>
-      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.treeString}", e)
+      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.simpleString}", e)
   }
 
   /**

@@ -62,11 +62,17 @@ private[spark] abstract class MemoryManager(
   offHeapStorageMemoryPool.incrementPoolSize(offHeapStorageMemory)
 
   /**
-   * Total available memory for storage, in bytes. This amount can vary over time, depending on
-   * the MemoryManager implementation.
+   * Total available on heap memory for storage, in bytes. This amount can vary over time,
+   * depending on the MemoryManager implementation.
    * In this model, this is equivalent to the amount of memory not occupied by execution.
    */
   def maxOnHeapStorageMemory: Long
+
+  /**
+   * Total available off heap memory for storage, in bytes. This amount can vary over time,
+   * depending on the MemoryManager implementation.
+   */
+  def maxOffHeapStorageMemory: Long
 
   /**
    * Set the [[MemoryStore]] used by this manager to evict cached blocks.

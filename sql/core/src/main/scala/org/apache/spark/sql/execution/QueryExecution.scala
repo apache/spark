@@ -18,18 +18,17 @@
 package org.apache.spark.sql.execution
 
 import java.nio.charset.StandardCharsets
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec}
+import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
 import org.apache.spark.util.Utils
 
@@ -46,16 +45,21 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   protected def planner = sparkSession.sessionState.planner
 
   def assertAnalyzed(): Unit = {
-    try sparkSession.sessionState.analyzer.checkAnalysis(analyzed) catch {
+    // Analyzer is invoked outside the try block to avoid calling it again from within the
+    // catch block below.
+    analyzed
+    try {
+      sparkSession.sessionState.analyzer.checkAnalysis(analyzed)
+    } catch {
       case e: AnalysisException =>
-        val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
+        val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
         ae.setStackTrace(e.getStackTrace)
         throw ae
     }
   }
 
   def assertSupported(): Unit = {
-    if (sparkSession.sessionState.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+    if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
       UnsupportedOperationChecker.checkForBatch(analyzed)
     }
   }
@@ -101,15 +105,15 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
     CollapseCodegenStages(sparkSession.sessionState.conf),
-    ReuseExchange(sparkSession.sessionState.conf))
+    ReuseExchange(sparkSession.sessionState.conf),
+    ReuseSubquery(sparkSession.sessionState.conf))
 
   protected def stringOrError[A](f: => A): String =
-    try f.toString catch { case e: Throwable => e.toString }
+    try f.toString catch { case e: AnalysisException => e.toString }
 
 
   /**
-   * Returns the result as a hive compatible sequence of strings.  For native commands, the
-   * execution is simply passed back to Hive.
+   * Returns the result as a hive compatible sequence of strings. This is for testing only.
    */
   def hiveResultString(): Seq[String] = executedPlan match {
     case ExecutedCommandExec(desc: DescribeTableCommand) =>
@@ -122,37 +126,21 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
             .map(s => String.format(s"%-20s", s))
             .mkString("\t")
       }
-    case command: ExecutedCommandExec =>
-      command.executeCollect().map(_.getString(0))
-
+    // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
+    case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
+      command.executeCollect().map(_.getString(1))
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
       // We need the types so we can output struct field names
       val types = analyzed.output.map(_.dataType)
       // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t")).toSeq
+      result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
   }
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
   private def toHiveString(a: (Any, DataType)): String = {
     val primitiveTypes = Seq(StringType, IntegerType, LongType, DoubleType, FloatType,
       BooleanType, ByteType, ShortType, DateType, TimestampType, BinaryType)
-
-    /** Implementation following Hive's TimestampWritable.toString */
-    def formatTimestamp(timestamp: Timestamp): String = {
-      val timestampString = timestamp.toString
-      if (timestampString.length() > 19) {
-        if (timestampString.length() == 21) {
-          if (timestampString.substring(19).compareTo(".0") == 0) {
-            return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp)
-          }
-        }
-        return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp) +
-          timestampString.substring(19)
-      }
-
-      return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp)
-    }
 
     def formatDecimal(d: java.math.BigDecimal): String = {
       if (d.compareTo(java.math.BigDecimal.ZERO) == 0) {
@@ -194,8 +182,11 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "NULL"
-      case (d: Int, DateType) => new java.util.Date(DateTimeUtils.daysToMillis(d)).toString
-      case (t: Timestamp, TimestampType) => formatTimestamp(t)
+      case (d: Date, DateType) =>
+        DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
+      case (t: Timestamp, TimestampType) =>
+        DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t),
+          DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone))
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
       case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
       case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
@@ -208,7 +199,11 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       """.stripMargin.trim
   }
 
-  override def toString: String = {
+  override def toString: String = completeString(appendStats = false)
+
+  def toStringWithStats: String = completeString(appendStats = true)
+
+  private def completeString(appendStats: Boolean): String = {
     def output = Utils.truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
     val analyzedPlan = Seq(
@@ -216,12 +211,20 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       stringOrError(analyzed.treeString(verbose = true))
     ).filter(_.nonEmpty).mkString("\n")
 
+    val optimizedPlanString = if (appendStats) {
+      // trigger to compute stats for logical plans
+      optimizedPlan.stats(sparkSession.sessionState.conf)
+      optimizedPlan.treeString(verbose = true, addSuffix = true)
+    } else {
+      optimizedPlan.treeString(verbose = true)
+    }
+
     s"""== Parsed Logical Plan ==
        |${stringOrError(logical.treeString(verbose = true))}
        |== Analyzed Logical Plan ==
        |$analyzedPlan
        |== Optimized Logical Plan ==
-       |${stringOrError(optimizedPlan.treeString(verbose = true))}
+       |${stringOrError(optimizedPlanString)}
        |== Physical Plan ==
        |${stringOrError(executedPlan.treeString(verbose = true))}
     """.stripMargin.trim

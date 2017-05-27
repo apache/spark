@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Advanced topics - spark.ml
-displayTitle: Advanced topics - spark.ml
+title: Advanced topics
+displayTitle: Advanced topics
 ---
 
 * Table of contents
@@ -49,7 +49,7 @@ MLlib L-BFGS solver calls the corresponding implementation in [breeze](https://g
 
 ## Normal equation solver for weighted least squares
 
-MLlib implements normal equation solver for [weighted least squares](https://en.wikipedia.org/wiki/Least_squares#Weighted_least_squares) by [WeightedLeastSquares](https://github.com/apache/spark/blob/master/mllib/src/main/scala/org/apache/spark/ml/optim/WeightedLeastSquares.scala).
+MLlib implements normal equation solver for [weighted least squares](https://en.wikipedia.org/wiki/Least_squares#Weighted_least_squares) by [WeightedLeastSquares]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/mllib/src/main/scala/org/apache/spark/ml/optim/WeightedLeastSquares.scala).
 
 Given $n$ weighted observations $(w_i, a_i, b_i)$:
 
@@ -59,21 +59,29 @@ Given $n$ weighted observations $(w_i, a_i, b_i)$:
 
 The number of features for each observation is $m$. We use the following weighted least squares formulation:
 `\[   
-minimize_{x}\frac{1}{2} \sum_{i=1}^n \frac{w_i(a_i^T x -b_i)^2}{\sum_{k=1}^n w_k} + \frac{1}{2}\frac{\lambda}{\delta}\sum_{j=1}^m(\sigma_{j} x_{j})^2
+\min_{\mathbf{x}}\frac{1}{2} \sum_{i=1}^n \frac{w_i(\mathbf{a}_i^T \mathbf{x} -b_i)^2}{\sum_{k=1}^n w_k} + \frac{\lambda}{\delta}\left[\frac{1}{2}(1 - \alpha)\sum_{j=1}^m(\sigma_j x_j)^2 + \alpha\sum_{j=1}^m |\sigma_j x_j|\right]
 \]`
-where $\lambda$ is the regularization parameter, $\delta$ is the population standard deviation of the label
+where $\lambda$ is the regularization parameter, $\alpha$ is the elastic-net mixing parameter, $\delta$ is the population standard deviation of the label
 and $\sigma_j$ is the population standard deviation of the j-th feature column.
 
-This objective function has an analytic solution and it requires only one pass over the data to collect necessary statistics to solve.
-Unlike the original dataset which can only be stored in a distributed system,
-these statistics can be loaded into memory on a single machine if the number of features is relatively small, and then we can solve the objective function through Cholesky factorization on the driver.
+This objective function requires only one pass over the data to collect the statistics necessary to solve it. For an
+$n \times m$ data matrix, these statistics require only $O(m^2)$ storage and so can be stored on a single machine when $m$ (the number of features) is
+relatively small. We can then solve the normal equations on a single machine using local methods like direct Cholesky factorization or iterative optimization programs.
 
-WeightedLeastSquares only supports L2 regularization and provides options to enable or disable regularization and standardization.
-In order to make the normal equation approach efficient, WeightedLeastSquares requires that the number of features be no more than 4096. For larger problems, use L-BFGS instead.
+Spark MLlib currently supports two types of solvers for the normal equations: Cholesky factorization and Quasi-Newton methods (L-BFGS/OWL-QN). Cholesky factorization
+depends on a positive definite covariance matrix (i.e. columns of the data matrix must be linearly independent) and will fail if this condition is violated. Quasi-Newton methods
+are still capable of providing a reasonable solution even when the covariance matrix is not positive definite, so the normal equation solver can also fall back to 
+Quasi-Newton methods in this case. This fallback is currently always enabled for the `LinearRegression` and `GeneralizedLinearRegression` estimators.
+
+`WeightedLeastSquares` supports L1, L2, and elastic-net regularization and provides options to enable or disable regularization and standardization. In the case where no 
+L1 regularization is applied (i.e. $\alpha = 0$), there exists an analytical solution and either Cholesky or Quasi-Newton solver may be used. When $\alpha > 0$ no analytical 
+solution exists and we instead use the Quasi-Newton solver to find the coefficients iteratively. 
+
+In order to make the normal equation approach efficient, `WeightedLeastSquares` requires that the number of features be no more than 4096. For larger problems, use L-BFGS instead.
 
 ## Iteratively reweighted least squares (IRLS)
 
-MLlib implements [iteratively reweighted least squares (IRLS)](https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares) by [IterativelyReweightedLeastSquares](https://github.com/apache/spark/blob/master/mllib/src/main/scala/org/apache/spark/ml/optim/IterativelyReweightedLeastSquares.scala).
+MLlib implements [iteratively reweighted least squares (IRLS)](https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares) by [IterativelyReweightedLeastSquares]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/mllib/src/main/scala/org/apache/spark/ml/optim/IterativelyReweightedLeastSquares.scala).
 It can be used to find the maximum likelihood estimates of a generalized linear model (GLM), find M-estimator in robust regression and other optimization problems.
 Refer to [Iteratively Reweighted Least Squares for Maximum Likelihood Estimation, and some Robust and Resistant Alternatives](http://www.jstor.org/stable/2345503) for more information.
 
@@ -83,6 +91,6 @@ It solves certain optimization problems iteratively through the following proced
 * solve a weighted least squares (WLS) problem by WeightedLeastSquares.
 * repeat above steps until convergence.
 
-Since it involves solving a weighted least squares (WLS) problem by WeightedLeastSquares in each iteration,
+Since it involves solving a weighted least squares (WLS) problem by `WeightedLeastSquares` in each iteration,
 it also requires the number of features to be no more than 4096.
 Currently IRLS is used as the default solver of [GeneralizedLinearRegression](api/scala/index.html#org.apache.spark.ml.regression.GeneralizedLinearRegression).

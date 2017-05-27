@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -49,6 +50,15 @@ trait StateStore {
   /** Get the current value of a key. */
   def get(key: UnsafeRow): Option[UnsafeRow]
 
+  /**
+   * Return an iterator of key-value pairs that satisfy a certain condition.
+   * Note that the iterator must be fail-safe towards modification to the store, that is,
+   * it must be based on the snapshot of store the time of this call, and any change made to the
+   * store while iterating through iterator should not cause the iterator to fail or have
+   * any affect on the values in the iterator.
+   */
+  def filter(condition: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)]
+
   /** Put a new value for a key. */
   def put(key: UnsafeRow, value: UnsafeRow): Unit
 
@@ -56,6 +66,11 @@ trait StateStore {
    * Remove keys that match the following condition.
    */
   def remove(condition: UnsafeRow => Boolean): Unit
+
+  /**
+   * Remove a single key.
+   */
+  def remove(key: UnsafeRow): Unit
 
   /**
    * Commit all the updates that have been made to the store, and return the new version.
@@ -77,10 +92,13 @@ trait StateStore {
    */
   def updates(): Iterator[StoreUpdate]
 
+  /** Number of keys in the state store */
+  def numKeys(): Long
+
   /**
    * Whether all updates have been committed
    */
-  private[state] def hasCommitted: Boolean
+  private[streaming] def hasCommitted: Boolean
 }
 
 
@@ -96,13 +114,16 @@ trait StateStoreProvider {
 
 
 /** Trait representing updates made to a [[StateStore]]. */
-sealed trait StoreUpdate
+sealed trait StoreUpdate {
+  def key: UnsafeRow
+  def value: UnsafeRow
+}
 
 case class ValueAdded(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
 
 case class ValueUpdated(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
 
-case class KeyRemoved(key: UnsafeRow) extends StoreUpdate
+case class ValueRemoved(key: UnsafeRow, value: UnsafeRow) extends StoreUpdate
 
 
 /**
@@ -113,17 +134,51 @@ case class KeyRemoved(key: UnsafeRow) extends StoreUpdate
  * the store is the active instance. Accordingly, it either keeps it loaded and performs
  * maintenance, or unloads the store.
  */
-private[sql] object StateStore extends Logging {
+object StateStore extends Logging {
 
-  val MAINTENANCE_INTERVAL_CONFIG = "spark.streaming.stateStore.maintenanceInterval"
+  val MAINTENANCE_INTERVAL_CONFIG = "spark.sql.streaming.stateStore.maintenanceInterval"
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
 
+  @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
-  private val maintenanceTaskExecutor =
-    ThreadUtils.newDaemonSingleThreadScheduledExecutor("state-store-maintenance-task")
 
-  @volatile private var maintenanceTask: ScheduledFuture[_] = null
-  @volatile private var _coordRef: StateStoreCoordinatorRef = null
+  /**
+   * Runs the `task` periodically and automatically cancels it if there is an exception. `onError`
+   * will be called when an exception happens.
+   */
+  class MaintenanceTask(periodMs: Long, task: => Unit, onError: => Unit) {
+    private val executor =
+      ThreadUtils.newDaemonSingleThreadScheduledExecutor("state-store-maintenance-task")
+
+    private val runnable = new Runnable {
+      override def run(): Unit = {
+        try {
+          task
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Error running maintenance thread", e)
+            onError
+            throw e
+        }
+      }
+    }
+
+    private val future: ScheduledFuture[_] = executor.scheduleAtFixedRate(
+      runnable, periodMs, periodMs, TimeUnit.MILLISECONDS)
+
+    def stop(): Unit = {
+      future.cancel(false)
+      executor.shutdown()
+    }
+
+    def isRunning: Boolean = !future.isDone
+  }
+
+  @GuardedBy("loadedProviders")
+  private var maintenanceTask: MaintenanceTask = null
+
+  @GuardedBy("loadedProviders")
+  private var _coordRef: StateStoreCoordinatorRef = null
 
   /** Get or create a store associated with the id. */
   def get(
@@ -156,7 +211,7 @@ private[sql] object StateStore extends Logging {
   }
 
   def isMaintenanceRunning: Boolean = loadedProviders.synchronized {
-    maintenanceTask != null
+    maintenanceTask != null && maintenanceTask.isRunning
   }
 
   /** Unload and stop all state store providers */
@@ -164,7 +219,7 @@ private[sql] object StateStore extends Logging {
     loadedProviders.clear()
     _coordRef = null
     if (maintenanceTask != null) {
-      maintenanceTask.cancel(false)
+      maintenanceTask.stop()
       maintenanceTask = null
     }
     logInfo("StateStore stopped")
@@ -173,14 +228,14 @@ private[sql] object StateStore extends Logging {
   /** Start the periodic maintenance task if not already started and if Spark active */
   private def startMaintenanceIfNeeded(): Unit = loadedProviders.synchronized {
     val env = SparkEnv.get
-    if (maintenanceTask == null && env != null) {
+    if (env != null && !isMaintenanceRunning) {
       val periodMs = env.conf.getTimeAsMs(
         MAINTENANCE_INTERVAL_CONFIG, s"${MAINTENANCE_INTERVAL_DEFAULT_SECS}s")
-      val runnable = new Runnable {
-        override def run(): Unit = { doMaintenance() }
-      }
-      maintenanceTask = maintenanceTaskExecutor.scheduleAtFixedRate(
-        runnable, periodMs, periodMs, TimeUnit.MILLISECONDS)
+      maintenanceTask = new MaintenanceTask(
+        periodMs,
+        task = { doMaintenance() },
+        onError = { loadedProviders.synchronized { loadedProviders.clear() } }
+      )
       logInfo("State Store maintenance task started")
     }
   }
@@ -192,21 +247,20 @@ private[sql] object StateStore extends Logging {
   private def doMaintenance(): Unit = {
     logDebug("Doing maintenance")
     if (SparkEnv.get == null) {
-      stop()
-    } else {
-      loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
-        try {
-          if (verifyIfStoreInstanceActive(id)) {
-            provider.doMaintenance()
-          } else {
-            unload(id)
-            logInfo(s"Unloaded $provider")
-          }
-        } catch {
-          case NonFatal(e) =>
-            logWarning(s"Error managing $provider, stopping management thread")
-            stop()
+      throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
+    }
+    loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
+      try {
+        if (verifyIfStoreInstanceActive(id)) {
+          provider.doMaintenance()
+        } else {
+          unload(id)
+          logInfo(s"Unloaded $provider")
         }
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Error managing $provider, stopping management thread")
+          throw e
       }
     }
   }
@@ -232,7 +286,7 @@ private[sql] object StateStore extends Logging {
     }
   }
 
-  private def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
+  private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {
       if (_coordRef == null) {

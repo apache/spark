@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession
 
 
 /**
- * Usage: MultiBroadcastTest [slices] [numElem]
+ * Usage: MultiBroadcastTest [partitions] [numElem]
  */
 object MultiBroadcastTest {
   def main(args: Array[String]) {

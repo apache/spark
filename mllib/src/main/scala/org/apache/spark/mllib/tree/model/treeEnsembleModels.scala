@@ -151,31 +151,24 @@ class GradientBoostedTreesModel @Since("1.2.0") (
       case _ => data
     }
 
-    val numIterations = trees.length
-    val evaluationArray = Array.fill(numIterations)(0.0)
-    val localTreeWeights = treeWeights
-
-    var predictionAndError = GradientBoostedTreesModel.computeInitialPredictionAndError(
-      remappedData, localTreeWeights(0), trees(0), loss)
-
-    evaluationArray(0) = predictionAndError.values.mean()
-
     val broadcastTrees = sc.broadcast(trees)
-    (1 until numIterations).foreach { nTree =>
-      predictionAndError = remappedData.zip(predictionAndError).mapPartitions { iter =>
-        val currentTree = broadcastTrees.value(nTree)
-        val currentTreeWeight = localTreeWeights(nTree)
-        iter.map { case (point, (pred, error)) =>
-          val newPred = pred + currentTree.predict(point.features) * currentTreeWeight
-          val newError = loss.computeError(newPred, point.label)
-          (newPred, newError)
-        }
-      }
-      evaluationArray(nTree) = predictionAndError.values.mean()
-    }
+    val localTreeWeights = treeWeights
+    val treesIndices = trees.indices
 
-    broadcastTrees.unpersist()
-    evaluationArray
+    val dataCount = remappedData.count()
+    val evaluation = remappedData.map { point =>
+      treesIndices
+        .map(idx => broadcastTrees.value(idx).predict(point.features) * localTreeWeights(idx))
+        .scanLeft(0.0)(_ + _).drop(1)
+        .map(prediction => loss.computeError(prediction, point.label))
+    }
+    .aggregate(treesIndices.map(_ => 0.0))(
+      (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),
+      (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
+    .map(_ / dataCount)
+
+    broadcastTrees.destroy(blocking = false)
+    evaluation.toArray
   }
 
   override protected def formatVersion: String = GradientBoostedTreesModel.formatVersion
@@ -194,7 +187,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @param initTreeWeight: learning rate assigned to the first tree.
    * @param initTree: first DecisionTreeModel.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to every sample.
    */
   @Since("1.4.0")
@@ -220,7 +213,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @param treeWeight: Learning rate.
    * @param tree: Tree using which the prediction and error should be updated.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to each sample.
    */
   @Since("1.4.0")
@@ -348,7 +341,7 @@ private[tree] sealed class TreeEnsembleModel(
   def predict(features: RDD[Vector]): RDD[Double] = features.map(x => predict(x))
 
   /**
-   * Java-friendly version of [[org.apache.spark.mllib.tree.model.TreeEnsembleModel#predict]].
+   * Java-friendly version of `org.apache.spark.mllib.tree.model.TreeEnsembleModel.predict`.
    */
   def predict(features: JavaRDD[Vector]): JavaRDD[java.lang.Double] = {
     predict(features.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]

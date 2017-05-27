@@ -34,7 +34,7 @@ private[ml] object TreeTests extends SparkFunSuite {
    * Convert the given data to a DataFrame, and set the features and label metadata.
    * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
    *              This must be non-empty.
-   * @param categoricalFeatures  Map: categorical feature index -> number of distinct values
+   * @param categoricalFeatures  Map: categorical feature index to number of distinct values
    * @param numClasses  Number of classes label can take.  If 0, mark as continuous.
    * @return DataFrame with metadata
    */
@@ -69,7 +69,9 @@ private[ml] object TreeTests extends SparkFunSuite {
       df("label").as("label", labelMetadata))
   }
 
-  /** Java-friendly version of [[setMetadata()]] */
+  /**
+   * Java-friendly version of `setMetadata()`
+   */
   def setMetadata(
       data: JavaRDD[LabeledPoint],
       categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],
@@ -180,6 +182,18 @@ private[ml] object TreeTests extends SparkFunSuite {
     new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0)),
     new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 0)),
     new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0))
+  ))
+
+  /**
+   * Create some toy data for testing correctness of variance.
+   */
+  def varianceData(sc: SparkContext): RDD[LabeledPoint] = sc.parallelize(Seq(
+    new LabeledPoint(1.0, Vectors.dense(Array(0.0))),
+    new LabeledPoint(2.0, Vectors.dense(Array(1.0))),
+    new LabeledPoint(3.0, Vectors.dense(Array(2.0))),
+    new LabeledPoint(10.0, Vectors.dense(Array(3.0))),
+    new LabeledPoint(12.0, Vectors.dense(Array(4.0))),
+    new LabeledPoint(14.0, Vectors.dense(Array(5.0)))
   ))
 
   /**

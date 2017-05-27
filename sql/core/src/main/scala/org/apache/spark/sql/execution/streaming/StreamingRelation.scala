@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
 
 object StreamingRelation {
@@ -48,6 +51,17 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
 case class StreamingExecutionRelation(source: Source, output: Seq[Attribute]) extends LeafNode {
   override def isStreaming: Boolean = true
   override def toString: String = source.toString
+}
+
+/**
+ * A dummy physical plan for [[StreamingRelation]] to support
+ * [[org.apache.spark.sql.Dataset.explain]]
+ */
+case class StreamingRelationExec(sourceName: String, output: Seq[Attribute]) extends LeafExecNode {
+  override def toString: String = sourceName
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException("StreamingRelationExec cannot be executed")
+  }
 }
 
 object StreamingExecutionRelation {

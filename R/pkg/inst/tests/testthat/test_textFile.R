@@ -18,33 +18,40 @@
 context("the textFile() function")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 mockFile <- c("Spark is pretty.", "Spark is awesome.")
 
 test_that("textFile() on a local file returns an RDD", {
+  skip_on_cran()
+
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName)
   expect_is(rdd, "RDD")
-  expect_true(count(rdd) > 0)
-  expect_equal(count(rdd), 2)
+  expect_true(countRDD(rdd) > 0)
+  expect_equal(countRDD(rdd), 2)
 
   unlink(fileName)
 })
 
 test_that("textFile() followed by a collect() returns the same content", {
+  skip_on_cran()
+
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName)
-  expect_equal(collect(rdd), as.list(mockFile))
+  expect_equal(collectRDD(rdd), as.list(mockFile))
 
   unlink(fileName)
 })
 
 test_that("textFile() word count works as expected", {
+  skip_on_cran()
+
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
@@ -54,7 +61,7 @@ test_that("textFile() word count works as expected", {
   wordCount <- lapply(words, function(word) { list(word, 1L) })
 
   counts <- reduceByKey(wordCount, "+", 2L)
-  output <- collect(counts)
+  output <- collectRDD(counts)
   expected <- list(list("pretty.", 1), list("is", 2), list("awesome.", 1),
                    list("Spark", 2))
   expect_equal(sortKeyValueList(output), sortKeyValueList(expected))
@@ -63,6 +70,8 @@ test_that("textFile() word count works as expected", {
 })
 
 test_that("several transformations on RDD created by textFile()", {
+  skip_on_cran()
+
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
@@ -71,12 +80,14 @@ test_that("several transformations on RDD created by textFile()", {
     # PipelinedRDD initially created from RDD
     rdd <- lapply(rdd, function(x) paste(x, x))
   }
-  collect(rdd)
+  collectRDD(rdd)
 
   unlink(fileName)
 })
 
 test_that("textFile() followed by a saveAsTextFile() returns the same content", {
+  skip_on_cran()
+
   fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName1)
@@ -84,24 +95,28 @@ test_that("textFile() followed by a saveAsTextFile() returns the same content", 
   rdd <- textFile(sc, fileName1, 1L)
   saveAsTextFile(rdd, fileName2)
   rdd <- textFile(sc, fileName2)
-  expect_equal(collect(rdd), as.list(mockFile))
+  expect_equal(collectRDD(rdd), as.list(mockFile))
 
   unlink(fileName1)
   unlink(fileName2)
 })
 
 test_that("saveAsTextFile() on a parallelized list works as expected", {
+  skip_on_cran()
+
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   l <- list(1, 2, 3)
   rdd <- parallelize(sc, l, 1L)
   saveAsTextFile(rdd, fileName)
   rdd <- textFile(sc, fileName)
-  expect_equal(collect(rdd), lapply(l, function(x) {toString(x)}))
+  expect_equal(collectRDD(rdd), lapply(l, function(x) {toString(x)}))
 
   unlink(fileName)
 })
 
 test_that("textFile() and saveAsTextFile() word count works as expected", {
+  skip_on_cran()
+
   fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName1)
@@ -116,7 +131,7 @@ test_that("textFile() and saveAsTextFile() word count works as expected", {
   saveAsTextFile(counts, fileName2)
   rdd <- textFile(sc, fileName2)
 
-  output <- collect(rdd)
+  output <- collectRDD(rdd)
   expected <- list(list("awesome.", 1), list("Spark", 2),
                    list("pretty.", 1), list("is", 2))
   expectedStr <- lapply(expected, function(x) { toString(x) })
@@ -127,35 +142,41 @@ test_that("textFile() and saveAsTextFile() word count works as expected", {
 })
 
 test_that("textFile() on multiple paths", {
+  skip_on_cran()
+
   fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines("Spark is pretty.", fileName1)
   writeLines("Spark is awesome.", fileName2)
 
   rdd <- textFile(sc, c(fileName1, fileName2))
-  expect_equal(count(rdd), 2)
+  expect_equal(countRDD(rdd), 2)
 
   unlink(fileName1)
   unlink(fileName2)
 })
 
 test_that("Pipelined operations on RDDs created using textFile", {
+  skip_on_cran()
+
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName)
 
   lengths <- lapply(rdd, function(x) { length(x) })
-  expect_equal(collect(lengths), list(1, 1))
+  expect_equal(collectRDD(lengths), list(1, 1))
 
   lengthsPipelined <- lapply(lengths, function(x) { x + 10 })
-  expect_equal(collect(lengthsPipelined), list(11, 11))
+  expect_equal(collectRDD(lengthsPipelined), list(11, 11))
 
   lengths30 <- lapply(lengthsPipelined, function(x) { x + 20 })
-  expect_equal(collect(lengths30), list(31, 31))
+  expect_equal(collectRDD(lengths30), list(31, 31))
 
   lengths20 <- lapply(lengths, function(x) { x + 20 })
-  expect_equal(collect(lengths20), list(21, 21))
+  expect_equal(collectRDD(lengths20), list(21, 21))
 
   unlink(fileName)
 })
+
+sparkR.session.stop()

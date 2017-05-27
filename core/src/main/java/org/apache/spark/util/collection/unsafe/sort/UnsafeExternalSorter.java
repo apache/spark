@@ -34,9 +34,9 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.util.TaskCompletionListener;
 import org.apache.spark.util.Utils;
 
 /**
@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils;
  */
 public final class UnsafeExternalSorter extends MemoryConsumer {
 
-  private final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
+  private static final Logger logger = LoggerFactory.getLogger(UnsafeExternalSorter.class);
 
   @Nullable
   private final PrefixComparator prefixComparator;
@@ -59,6 +59,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   /** The buffer size to use when writing spills using DiskBlockObjectWriter */
   private final int fileBufferSizeBytes;
 
+  /**
+   * Force this sorter to spill when there are this many elements in memory. The default value is
+   * 1024 * 1024 * 1024 / 2 which allows the maximum size of the pointer array to be 8G.
+   */
+  public static final long DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD = 1024 * 1024 * 1024 / 2;
+
+  private final long numElementsForSpillThreshold;
   /**
    * Memory pages that hold the records being sorted. The pages in this list are freed when
    * spilling, although in principle we could recycle these pages across spills (on the other hand,
@@ -88,10 +95,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
+      long numElementsForSpillThreshold,
       UnsafeInMemorySorter inMemorySorter) throws IOException {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       serializerManager, taskContext, recordComparator, prefixComparator, initialSize,
-        pageSizeBytes, inMemorySorter, false /* ignored */);
+        numElementsForSpillThreshold, pageSizeBytes, inMemorySorter, false /* ignored */);
     sorter.spill(Long.MAX_VALUE, sorter);
     // The external sorter will be used to insert records, in-memory sorter is not needed.
     sorter.inMemSorter = null;
@@ -107,10 +115,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
+      long numElementsForSpillThreshold,
       boolean canUseRadixSort) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
-      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null,
-      canUseRadixSort);
+      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes,
+      numElementsForSpillThreshold, null, canUseRadixSort);
   }
 
   private UnsafeExternalSorter(
@@ -122,6 +131,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
+      long numElementsForSpillThreshold,
       @Nullable UnsafeInMemorySorter existingInMemorySorter,
       boolean canUseRadixSort) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
@@ -132,9 +142,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     this.recordComparator = recordComparator;
     this.prefixComparator = prefixComparator;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
-    // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
+    // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024
     this.fileBufferSizeBytes = 32 * 1024;
-    this.writeMetrics = taskContext.taskMetrics().shuffleWriteMetrics();
+    // The spill metrics are stored in a new ShuffleWriteMetrics,
+    // and then discarded (this fixes SPARK-16827).
+    // TODO: Instead, separate spill metrics should be stored and reported (tracked in SPARK-3577).
+    this.writeMetrics = new ShuffleWriteMetrics();
 
     if (existingInMemorySorter == null) {
       this.inMemSorter = new UnsafeInMemorySorter(
@@ -143,18 +156,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       this.inMemSorter = existingInMemorySorter;
     }
     this.peakMemoryUsedBytes = getMemoryUsage();
+    this.numElementsForSpillThreshold = numElementsForSpillThreshold;
 
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
     // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
     // does not fully consume the sorter's output (e.g. sort followed by limit).
-    taskContext.addTaskCompletionListener(
-      new TaskCompletionListener() {
-        @Override
-        public void onTaskCompletion(TaskContext context) {
-          cleanupResources();
-        }
-      }
-    );
+    taskContext.addTaskCompletionListener(context -> {
+      cleanupResources();
+    });
   }
 
   /**
@@ -373,18 +382,25 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       Object recordBase, long recordOffset, int length, long prefix, boolean prefixIsNull)
     throws IOException {
 
+    assert(inMemSorter != null);
+    if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
+      logger.info("Spilling data because number of spilledRecords crossed the threshold " +
+        numElementsForSpillThreshold);
+      spill();
+    }
+
     growPointerArrayIfNecessary();
+    int uaoSize = UnsafeAlignedOffset.getUaoSize();
     // Need 4 bytes to store the record length.
-    final int required = length + 4;
+    final int required = length + uaoSize;
     acquireNewPageIfNecessary(required);
 
     final Object base = currentPage.getBaseObject();
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
-    Platform.putInt(base, pageCursor, length);
-    pageCursor += 4;
+    UnsafeAlignedOffset.putSize(base, pageCursor, length);
+    pageCursor += uaoSize;
     Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
     pageCursor += length;
-    assert(inMemSorter != null);
     inMemSorter.insertRecord(recordAddress, prefix, prefixIsNull);
   }
 
@@ -401,15 +417,16 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     throws IOException {
 
     growPointerArrayIfNecessary();
-    final int required = keyLen + valueLen + 4 + 4;
+    int uaoSize = UnsafeAlignedOffset.getUaoSize();
+    final int required = keyLen + valueLen + (2 * uaoSize);
     acquireNewPageIfNecessary(required);
 
     final Object base = currentPage.getBaseObject();
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
-    Platform.putInt(base, pageCursor, keyLen + valueLen + 4);
-    pageCursor += 4;
-    Platform.putInt(base, pageCursor, keyLen);
-    pageCursor += 4;
+    UnsafeAlignedOffset.putSize(base, pageCursor, keyLen + valueLen + uaoSize);
+    pageCursor += uaoSize;
+    UnsafeAlignedOffset.putSize(base, pageCursor, keyLen);
+    pageCursor += uaoSize;
     Platform.copyMemory(keyBase, keyOffset, base, pageCursor, keyLen);
     pageCursor += keyLen;
     Platform.copyMemory(valueBase, valueOffset, base, pageCursor, valueLen);
@@ -505,7 +522,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           // is accessing the current record. We free this page in that caller's next loadNext()
           // call.
           for (MemoryBlock page : allocatedPages) {
-            if (!loaded || page.getBaseObject() != upstream.getBaseObject()) {
+            if (!loaded || page.pageNumber !=
+                    ((UnsafeInMemorySorter.SortedIterator)upstream).getCurrentPageNumber()) {
               released += page.size();
               freePage(page);
             } else {

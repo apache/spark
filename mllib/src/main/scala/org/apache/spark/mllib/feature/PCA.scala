@@ -70,7 +70,7 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
   }
 
   /**
-   * Java-friendly version of [[fit()]]
+   * Java-friendly version of `fit()`.
    */
   @Since("1.4.0")
   def fit(sources: JavaRDD[Vector]): PCAModel = fit(sources.rdd)
@@ -91,7 +91,7 @@ class PCAModel private[spark] (
    * Transform a vector by computed Principal Components.
    *
    * @param vector vector to be transformed.
-   *               Vector must be the same length as the source vectors given to [[PCA.fit()]].
+   *               Vector must be the same length as the source vectors given to `PCA.fit()`.
    * @return transformed vector. Vector will be of length k.
    */
   @Since("1.4.0")

@@ -29,6 +29,8 @@ public final class Platform {
 
   private static final Unsafe _UNSAFE;
 
+  public static final int BOOLEAN_ARRAY_OFFSET;
+
   public static final int BYTE_ARRAY_OFFSET;
 
   public static final int SHORT_ARRAY_OFFSET;
@@ -44,18 +46,23 @@ public final class Platform {
   private static final boolean unaligned;
   static {
     boolean _unaligned;
-    // use reflection to access unaligned field
-    try {
-      Class<?> bitsClass =
-        Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
-      Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
-      unalignedMethod.setAccessible(true);
-      _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
-    } catch (Throwable t) {
-      // We at least know x86 and x64 support unaligned access.
-      String arch = System.getProperty("os.arch", "");
-      //noinspection DynamicRegexReplaceableByCompiledPattern
-      _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64)$");
+    String arch = System.getProperty("os.arch", "");
+    if (arch.equals("ppc64le") || arch.equals("ppc64")) {
+      // Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231), but
+      // ppc64 and ppc64le support it
+      _unaligned = true;
+    } else {
+      try {
+        Class<?> bitsClass =
+          Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
+        Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
+        unalignedMethod.setAccessible(true);
+        _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
+      } catch (Throwable t) {
+        // We at least know x86 and x64 support unaligned access.
+        //noinspection DynamicRegexReplaceableByCompiledPattern
+        _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
+      }
     }
     unaligned = _unaligned;
   }
@@ -160,20 +167,19 @@ public final class Platform {
       constructor.setAccessible(true);
       Field cleanerField = cls.getDeclaredField("cleaner");
       cleanerField.setAccessible(true);
-      final long memory = allocateMemory(size);
+      long memory = allocateMemory(size);
       ByteBuffer buffer = (ByteBuffer) constructor.newInstance(memory, size);
-      Cleaner cleaner = Cleaner.create(buffer, new Runnable() {
-        @Override
-        public void run() {
-          freeMemory(memory);
-        }
-      });
+      Cleaner cleaner = Cleaner.create(buffer, () -> freeMemory(memory));
       cleanerField.set(buffer, cleaner);
       return buffer;
     } catch (Exception e) {
       throwException(e);
     }
     throw new IllegalStateException("unreachable");
+  }
+
+  public static void setMemory(Object object, long offset, long size, byte value) {
+    _UNSAFE.setMemory(object, offset, size, value);
   }
 
   public static void setMemory(long address, byte value, long size) {
@@ -231,6 +237,7 @@ public final class Platform {
     _UNSAFE = unsafe;
 
     if (_UNSAFE != null) {
+      BOOLEAN_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(boolean[].class);
       BYTE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(byte[].class);
       SHORT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(short[].class);
       INT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(int[].class);
@@ -238,6 +245,7 @@ public final class Platform {
       FLOAT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(float[].class);
       DOUBLE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(double[].class);
     } else {
+      BOOLEAN_ARRAY_OFFSET = 0;
       BYTE_ARRAY_OFFSET = 0;
       SHORT_ARRAY_OFFSET = 0;
       INT_ARRAY_OFFSET = 0;

@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.File
+import java.io.{File, IOException}
+import java.net.URI
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -74,6 +77,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
     // Verify state after updating
     put(store, "a", 1)
+    assert(store.numKeys() === 1)
     intercept[IllegalStateException] {
       store.iterator()
     }
@@ -85,7 +89,9 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     // Make updates, commit and then verify state
     put(store, "b", 2)
     put(store, "aa", 3)
+    assert(store.numKeys() === 3)
     remove(store, _.startsWith("a"))
+    assert(store.numKeys() === 1)
     assert(store.commit() === 1)
 
     assert(store.hasCommitted)
@@ -107,12 +113,38 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val reloadedProvider = new HDFSBackedStateStoreProvider(
       store.id, keySchema, valueSchema, StateStoreConf.empty, new Configuration)
     val reloadedStore = reloadedProvider.getStore(1)
+    assert(reloadedStore.numKeys() === 1)
     put(reloadedStore, "c", 4)
+    assert(reloadedStore.numKeys() === 2)
     assert(reloadedStore.commit() === 2)
     assert(rowsToSet(reloadedStore.iterator()) === Set("b" -> 2, "c" -> 4))
     assert(getDataFromFiles(provider) === Set("b" -> 2, "c" -> 4))
     assert(getDataFromFiles(provider, version = 1) === Set("b" -> 2))
     assert(getDataFromFiles(provider, version = 2) === Set("b" -> 2, "c" -> 4))
+  }
+
+  test("filter and concurrent updates") {
+    val provider = newStoreProvider()
+
+    // Verify state before starting a new set of updates
+    assert(provider.latestIterator.isEmpty)
+    val store = provider.getStore(0)
+    put(store, "a", 1)
+    put(store, "b", 2)
+
+    // Updates should work while iterating of filtered entries
+    val filtered = store.filter { case (keyRow, _) => rowToString(keyRow) == "a" }
+    filtered.foreach { case (keyRow, valueRow) =>
+      store.put(keyRow, intToRow(rowToInt(valueRow) + 1))
+    }
+    assert(get(store, "a") === Some(2))
+
+    // Removes should work while iterating of filtered entries
+    val filtered2 = store.filter { case (keyRow, _) => rowToString(keyRow) == "b" }
+    filtered2.foreach { case (keyRow, _) =>
+      store.remove(keyRow)
+    }
+    assert(get(store, "b") === None)
   }
 
   test("updates iterator with all combos of updates and removes") {
@@ -204,13 +236,6 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(store1.commit() === 2)
     assert(rowsToSet(store1.iterator()) === Set("a" -> 1, "b" -> 1))
     assert(getDataFromFiles(provider) === Set("a" -> 1, "b" -> 1))
-
-    // Overwrite the version with other data
-    val store2 = provider.getStore(1)
-    put(store2, "c", 1)
-    assert(store2.commit() === 2)
-    assert(rowsToSet(store2.iterator()) === Set("a" -> 1, "c" -> 1))
-    assert(getDataFromFiles(provider) === Set("a" -> 1, "c" -> 1))
   }
 
   test("snapshotting") {
@@ -286,6 +311,20 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(getDataFromFiles(provider, 19) === Set("a" -> 19))
   }
 
+  test("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
+    val conf = new Configuration()
+    conf.set("fs.fake.impl", classOf[RenameLikeHDFSFileSystem].getName)
+    conf.set("fs.defaultFS", "fake:///")
+
+    val provider = newStoreProvider(hadoopConf = conf)
+    provider.getStore(0).commit()
+    provider.getStore(0).commit()
+
+    // Verify we don't leak temp files
+    val tempFiles = FileUtils.listFiles(new File(provider.id.checkpointLocation),
+      null, true).asScala.filter(_.getName.startsWith("temp-"))
+    assert(tempFiles.isEmpty)
+  }
 
   test("corrupted file handling") {
     val provider = newStoreProvider(minDeltasForSnapshot = 5)
@@ -362,77 +401,171 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
+      // Make maintenance thread do snapshots and cleanups very fast
       .set(StateStore.MAINTENANCE_INTERVAL_CONFIG, "10ms")
+      // Make sure that when SparkContext stops, the StateStore maintenance thread 'quickly'
+      // fails to talk to the StateStoreCoordinator and unloads all the StateStores
       .set("spark.rpc.numRetries", "1")
     val opId = 0
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
     val storeId = StateStoreId(dir, opId, 0)
-    val storeConf = StateStoreConf.empty
+    val sqlConf = new SQLConf()
+    sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
+    val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
     val provider = new HDFSBackedStateStoreProvider(
       storeId, keySchema, valueSchema, storeConf, hadoopConf)
 
+    var latestStoreVersion = 0
+
+    def generateStoreVersions() {
+      for (i <- 1 to 20) {
+        val store = StateStore.get(
+          storeId, keySchema, valueSchema, latestStoreVersion, storeConf, hadoopConf)
+        put(store, "a", i)
+        store.commit()
+        latestStoreVersion += 1
+      }
+    }
+
+    val timeoutDuration = 60 seconds
 
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           require(!StateStore.isMaintenanceRunning, "StateStore is unexpectedly running")
 
-          for (i <- 1 to 20) {
-            val store = StateStore.get(
-              storeId, keySchema, valueSchema, i - 1, storeConf, hadoopConf)
-            put(store, "a", i)
-            store.commit()
-          }
+          // Generate sufficient versions of store for snapshots
+          generateStoreVersions()
 
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
+            // Store should have been reported to the coordinator
             assert(coordinatorRef.getLocation(storeId).nonEmpty, "active instance was not reported")
-          }
 
-          // Background maintenance should clean up and generate snapshots
-          assert(StateStore.isMaintenanceRunning, "Maintenance task is not running")
-
-          eventually(timeout(10 seconds)) {
-            // Earliest delta file should get cleaned up
-            assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
+            // Background maintenance should clean up and generate snapshots
+            assert(StateStore.isMaintenanceRunning, "Maintenance task is not running")
 
             // Some snapshots should have been generated
-            val snapshotVersions = (0 to 20).filter { version =>
+            val snapshotVersions = (1 to latestStoreVersion).filter { version =>
               fileExists(provider, version, isSnapshot = true)
             }
             assert(snapshotVersions.nonEmpty, "no snapshot file found")
           }
 
+          // Generate more versions such that there is another snapshot and
+          // the earliest delta file will be cleaned up
+          generateStoreVersions()
+
+          // Earliest delta file should get cleaned up
+          eventually(timeout(timeoutDuration)) {
+            assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
+          }
+
           // If driver decides to deactivate all instances of the store, then this instance
           // should be unloaded
           coordinatorRef.deactivateInstances(dir)
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeId))
           }
 
           // Reload the store and verify
-          StateStore.get(storeId, keySchema, valueSchema, 20, storeConf, hadoopConf)
+          StateStore.get(storeId, keySchema, valueSchema, latestStoreVersion, storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
 
           // If some other executor loads the store, then this instance should be unloaded
           coordinatorRef.reportActiveInstance(storeId, "other-host", "other-exec")
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeId))
           }
 
           // Reload the store and verify
-          StateStore.get(storeId, keySchema, valueSchema, 20, storeConf, hadoopConf)
+          StateStore.get(storeId, keySchema, valueSchema, latestStoreVersion, storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
         }
       }
 
       // Verify if instance is unloaded if SparkContext is stopped
-      require(SparkEnv.get === null)
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(timeoutDuration)) {
+        require(SparkEnv.get === null)
         assert(!StateStore.isLoaded(storeId))
         assert(!StateStore.isMaintenanceRunning)
       }
     }
+  }
+
+  test("SPARK-18342: commit fails when rename fails") {
+    import RenameReturnsFalseFileSystem._
+    val dir = scheme + "://" + Utils.createDirectory(tempDir, Random.nextString(5)).toURI.getPath
+    val conf = new Configuration()
+    conf.set(s"fs.$scheme.impl", classOf[RenameReturnsFalseFileSystem].getName)
+    val provider = newStoreProvider(dir = dir, hadoopConf = conf)
+    val store = provider.getStore(0)
+    put(store, "a", 0)
+    val e = intercept[IllegalStateException](store.commit())
+    assert(e.getCause.getMessage.contains("Failed to rename"))
+  }
+
+  test("SPARK-18416: do not create temp delta file until the store is updated") {
+    val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    val storeId = StateStoreId(dir, 0, 0)
+    val storeConf = StateStoreConf.empty
+    val hadoopConf = new Configuration()
+    val deltaFileDir = new File(s"$dir/0/0/")
+
+    def numTempFiles: Int = {
+      if (deltaFileDir.exists) {
+        deltaFileDir.listFiles.map(_.getName).count(n => n.contains("temp") && !n.startsWith("."))
+      } else 0
+    }
+
+    def numDeltaFiles: Int = {
+      if (deltaFileDir.exists) {
+        deltaFileDir.listFiles.map(_.getName).count(n => n.contains(".delta") && !n.startsWith("."))
+      } else 0
+    }
+
+    def shouldNotCreateTempFile[T](body: => T): T = {
+      val before = numTempFiles
+      val result = body
+      assert(numTempFiles === before)
+      result
+    }
+
+    // Getting the store should not create temp file
+    val store0 = shouldNotCreateTempFile {
+      StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf)
+    }
+
+    // Put should create a temp file
+    put(store0, "a", 1)
+    assert(numTempFiles === 1)
+    assert(numDeltaFiles === 0)
+
+    // Commit should remove temp file and create a delta file
+    store0.commit()
+    assert(numTempFiles === 0)
+    assert(numDeltaFiles === 1)
+
+    // Remove should create a temp file
+    val store1 = shouldNotCreateTempFile {
+      StateStore.get(storeId, keySchema, valueSchema, 1, storeConf, hadoopConf)
+    }
+    remove(store1, _ == "a")
+    assert(numTempFiles === 1)
+    assert(numDeltaFiles === 1)
+
+    // Commit should remove temp file and create a delta file
+    store1.commit()
+    assert(numTempFiles === 0)
+    assert(numDeltaFiles === 2)
+
+    // Commit without any updates should create a delta file
+    val store2 = shouldNotCreateTempFile {
+      StateStore.get(storeId, keySchema, valueSchema, 2, storeConf, hadoopConf)
+    }
+    store2.commit()
+    assert(numTempFiles === 0)
+    assert(numDeltaFiles === 3)
   }
 
   def getDataFromFiles(
@@ -504,17 +637,19 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   def newStoreProvider(
       opId: Long = Random.nextLong,
       partition: Int = 0,
-      minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get
+      minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      dir: String = Utils.createDirectory(tempDir, Random.nextString(5)).toString,
+      hadoopConf: Configuration = new Configuration()
     ): HDFSBackedStateStoreProvider = {
-    val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
+    sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
     new HDFSBackedStateStoreProvider(
       StateStoreId(dir, opId, partition),
       keySchema,
       valueSchema,
       new StateStoreConf(sqlConf),
-      new Configuration())
+      hadoopConf)
   }
 
   def remove(store: StateStore, condition: String => Boolean): Unit = {
@@ -571,10 +706,42 @@ private[state] object StateStoreSuite {
   }
 
   def updatesToSet(iterator: Iterator[StoreUpdate]): Set[TestUpdate] = {
-    iterator.map { _ match {
+    iterator.map {
       case ValueAdded(key, value) => Added(rowToString(key), rowToInt(value))
       case ValueUpdated(key, value) => Updated(rowToString(key), rowToInt(value))
-      case KeyRemoved(key) => Removed(rowToString(key))
-    }}.toSet
+      case ValueRemoved(key, _) => Removed(rowToString(key))
+    }.toSet
   }
+}
+
+/**
+ * Fake FileSystem that simulates HDFS rename semantic, i.e. renaming a file atop an existing
+ * one should return false.
+ * See hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/filesystem/filesystem.html
+ */
+class RenameLikeHDFSFileSystem extends RawLocalFileSystem {
+  override def rename(src: Path, dst: Path): Boolean = {
+    if (exists(dst)) {
+      return false
+    } else {
+      return super.rename(src, dst)
+    }
+  }
+}
+
+/**
+ * Fake FileSystem to test that the StateStore throws an exception while committing the
+ * delta file, when `fs.rename` returns `false`.
+ */
+class RenameReturnsFalseFileSystem extends RawLocalFileSystem {
+  import RenameReturnsFalseFileSystem._
+  override def getUri: URI = {
+    URI.create(s"$scheme:///")
+  }
+
+  override def rename(src: Path, dst: Path): Boolean = false
+}
+
+object RenameReturnsFalseFileSystem {
+  val scheme = s"StateStoreSuite${math.abs(Random.nextInt)}fs"
 }

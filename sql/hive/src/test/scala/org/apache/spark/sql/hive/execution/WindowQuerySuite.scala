@@ -43,7 +43,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |  p_retailprice DOUBLE,
         |  p_comment STRING)
       """.stripMargin)
-    val testData1 = TestHive.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
+    val testData1 = TestHive.getHiveFile("data/files/part_tiny.txt").toURI
     sql(
       s"""
          |LOAD DATA LOCAL INPATH '$testData1' overwrite into table part
@@ -246,5 +246,17 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |null as avg
         |from part
         """.stripMargin))
+  }
+
+  test("SPARK-16646: LAST_VALUE(FALSE) OVER ()") {
+    checkAnswer(sql("SELECT LAST_VALUE(FALSE) OVER ()"), Row(false))
+    checkAnswer(sql("SELECT LAST_VALUE(FALSE, FALSE) OVER ()"), Row(false))
+    checkAnswer(sql("SELECT LAST_VALUE(TRUE, TRUE) OVER ()"), Row(true))
+  }
+
+  test("SPARK-16646: FIRST_VALUE(FALSE) OVER ()") {
+    checkAnswer(sql("SELECT FIRST_VALUE(FALSE) OVER ()"), Row(false))
+    checkAnswer(sql("SELECT FIRST_VALUE(FALSE, FALSE) OVER ()"), Row(false))
+    checkAnswer(sql("SELECT FIRST_VALUE(TRUE, TRUE) OVER ()"), Row(true))
   }
 }

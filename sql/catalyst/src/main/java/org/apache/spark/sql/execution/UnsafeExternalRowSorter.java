@@ -38,6 +38,7 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterIterator;
 
 public final class UnsafeExternalRowSorter {
 
+  static final int DEFAULT_INITIAL_SORT_BUFFER_SIZE = 4096;
   /**
    * If positive, forces records to be spilled to disk at the given frequency (measured in numbers
    * of records). This is only intended to be used in tests.
@@ -85,8 +86,11 @@ public final class UnsafeExternalRowSorter {
       taskContext,
       new RowComparator(ordering, schema.length()),
       prefixComparator,
-      /* initialSize */ 4096,
+      sparkEnv.conf().getInt("spark.shuffle.sort.initialBufferSize",
+                             DEFAULT_INITIAL_SORT_BUFFER_SIZE),
       pageSizeBytes,
+      SparkEnv.get().conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+        UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
       canUseRadixSort
     );
   }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.{DataFrame, Encoder, ForeachWriter}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 
 /**
  * A [[Sink]] that forwards all data into [[ForeachWriter]] according to the contract defined by
@@ -30,21 +31,33 @@ import org.apache.spark.sql.{DataFrame, Encoder, ForeachWriter}
 class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Serializable {
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    data.as[T].foreachPartition { iter =>
+    // This logic should've been as simple as:
+    // ```
+    //   data.as[T].foreachPartition { iter => ... }
+    // ```
+    //
+    // Unfortunately, doing that would just break the incremental planing. The reason is,
+    // `Dataset.foreachPartition()` would further call `Dataset.rdd()`, but `Dataset.rdd()` will
+    // create a new plan. Because StreamExecution uses the existing plan to collect metrics and
+    // update watermark, we should never create a new plan. Otherwise, metrics and watermark are
+    // updated in the new plan, and StreamExecution cannot retrieval them.
+    //
+    // Hence, we need to manually convert internal rows to objects using encoder.
+    val encoder = encoderFor[T].resolveAndBind(
+      data.logicalPlan.output,
+      data.sparkSession.sessionState.analyzer)
+    data.queryExecution.toRdd.foreachPartition { iter =>
       if (writer.open(TaskContext.getPartitionId(), batchId)) {
-        var isFailed = false
         try {
           while (iter.hasNext) {
-            writer.process(iter.next())
+            writer.process(encoder.fromRow(iter.next()))
           }
         } catch {
           case e: Throwable =>
-            isFailed = true
             writer.close(e)
+            throw e
         }
-        if (!isFailed) {
-          writer.close(null)
-        }
+        writer.close(null)
       } else {
         writer.close(null)
       }

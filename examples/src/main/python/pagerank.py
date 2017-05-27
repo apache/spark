@@ -18,6 +18,9 @@
 """
 This is an example implementation of PageRank. For more conventional use,
 Please refer to PageRank implementation provided by graphx
+
+Example Usage:
+bin/spark-submit examples/src/main/python/pagerank.py data/mllib/pagerank_data.txt 10
 """
 from __future__ import print_function
 
@@ -46,8 +49,8 @@ if __name__ == "__main__":
         print("Usage: pagerank <file> <iterations>", file=sys.stderr)
         exit(-1)
 
-    print("""WARN: This is a naive implementation of PageRank and is
-          given as an example! Please refer to PageRank implementation provided by graphx""",
+    print("WARN: This is a naive implementation of PageRank and is given as an example!\n" +
+          "Please refer to PageRank implementation provided by graphx",
           file=sys.stderr)
 
     # Initialize the spark context.

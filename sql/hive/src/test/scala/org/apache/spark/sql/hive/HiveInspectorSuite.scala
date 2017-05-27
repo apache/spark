@@ -35,6 +35,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 
 class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
+
+  def unwrap(data: Any, oi: ObjectInspector): Any = {
+    val unwrapper = unwrapperFor(oi)
+    unwrapper(data)
+  }
+
   test("Test wrap SettableStructObjectInspector") {
     val udaf = new UDAFPercentile.PercentileLongEvaluator()
     udaf.init()
@@ -75,6 +81,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
 
   val data =
     Literal(true) ::
+    Literal(null) ::
     Literal(0.asInstanceOf[Byte]) ::
     Literal(0.asInstanceOf[Short]) ::
     Literal(0) ::

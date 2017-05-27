@@ -17,15 +17,12 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
- * :: Experimental ::
- * Class for calculating [[http://en.wikipedia.org/wiki/Binary_entropy_function entropy]] during
- * binary classification.
+ * Class for calculating entropy during multiclass classification.
  */
 @Since("1.0.0")
-@Experimental
 object Entropy extends Impurity {
 
   private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)

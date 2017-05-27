@@ -55,7 +55,7 @@ object SVMDataGenerator {
     val sc = new SparkContext(sparkMaster, "SVMGenerator")
 
     val globalRnd = new Random(94720)
-    val trueWeights = Array.fill[Double](nfeatures + 1)(globalRnd.nextGaussian())
+    val trueWeights = Array.fill[Double](nfeatures)(globalRnd.nextGaussian())
 
     val data: RDD[LabeledPoint] = sc.parallelize(0 until nexamples, parts).map { idx =>
       val rnd = new Random(42 + idx)

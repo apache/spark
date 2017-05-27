@@ -64,7 +64,15 @@ package object expressions  {
    * column of the new row. If the schema of the input row is specified, then the given expression
    * will be bound to that schema.
    */
-  abstract class Projection extends (InternalRow => InternalRow)
+  abstract class Projection extends (InternalRow => InternalRow) {
+
+    /**
+     * Initializes internal states given the current partition index.
+     * This is used by nondeterministic expressions to set initial states.
+     * The default implementation does nothing.
+     */
+    def initialize(partitionIndex: Int): Unit = {}
+  }
 
   /**
    * Converts a [[InternalRow]] to another Row given a sequence of expression that define each
@@ -81,7 +89,7 @@ package object expressions  {
     def currentValue: InternalRow
 
     /** Uses the given row to store the output of the projection. */
-    def target(row: MutableRow): MutableProjection
+    def target(row: InternalRow): MutableProjection
   }
 
 
@@ -130,5 +138,5 @@ package object expressions  {
    * input will result in null output). We will use this information during constructing IsNotNull
    * constraints.
    */
-  trait NullIntolerant
+  trait NullIntolerant extends Expression
 }
