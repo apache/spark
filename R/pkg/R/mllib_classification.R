@@ -294,7 +294,8 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                                 as.numeric(tol), as.character(family),
                                 as.logical(standardization), as.array(thresholds),
                                 weightCol, as.integer(aggregationDepth),
-                                as.integer(lrow), as.integer(lcol), as.integer(urow), as.integer(ucol),
+                                as.integer(lrow), as.integer(lcol),
+                                as.integer(urow), as.integer(ucol),
                                 lowerBoundsOnCoefficients, upperBoundsOnCoefficients,
                                 lowerBoundsOnIntercepts, upperBoundsOnIntercepts)
             new("LogisticRegressionModel", jobj = jobj)
