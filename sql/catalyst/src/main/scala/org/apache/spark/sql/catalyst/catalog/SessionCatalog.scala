@@ -1094,16 +1094,16 @@ class SessionCatalog(
   def createTempMacro(
     name: String,
     info: ExpressionInfo,
-    funcDefinition: FunctionBuilder): Unit = {
+    functionBuilder: FunctionBuilder): Unit = {
     if (functionRegistry.functionExists(name)) {
-      throw new TempMacroAlreadyExistsException(name)
+      throw new AnalysisException(s"Function $name already exists")
     }
-    functionRegistry.registerMacro(name, info, funcDefinition)
+    functionRegistry.registerFunction(name, info, functionBuilder)
   }
 
   /** Drop a temporary macro. */
   def dropTempMacro(name: String, ignoreIfNotExists: Boolean): Unit = {
-    if (!functionRegistry.dropMacro(name) && !ignoreIfNotExists) {
+    if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
       throw new NoSuchTempMacroException(name)
     }
   }
