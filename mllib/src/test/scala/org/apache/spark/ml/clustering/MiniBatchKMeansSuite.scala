@@ -157,8 +157,8 @@ class MiniBatchKMeansSuite extends SparkFunSuite with MLlibTestSparkContext
       assert(model.clusterCenters === model2.clusterCenters)
     }
     val kmeans = new MiniBatchKMeans()
-    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings,
-      KMeansSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(kmeans, dataset, MiniBatchKMeansSuite.allParamSettings,
+      MiniBatchKMeansSuite.allParamSettings, checkModelData)
   }
 }
 
@@ -173,6 +173,6 @@ object MiniBatchKMeansSuite {
     "k" -> 3,
     "maxIter" -> 2,
     "tol" -> 0.01,
-    "fraction" -> 1.0
+    "fraction" -> 0.1
   )
 }
