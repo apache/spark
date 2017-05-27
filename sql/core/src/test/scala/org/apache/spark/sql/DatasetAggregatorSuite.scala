@@ -269,6 +269,10 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       ds.groupByKey(_._1).agg(
         typed.min(_._2), typed.minLong(_._2), typed.max(_._2), typed.maxLong(_._2)),
       ("a", 1.0, 1L, 3.0, 3L), ("b", -4.0, -4L, 4.0, 4L))
+
+    checkDataset(
+      ds.filter("1 > 2").groupByKey(_._1).agg(
+        typed.min(_._2), typed.minLong(_._2), typed.max(_._2), typed.maxLong(_._2)))
   }
 
 
