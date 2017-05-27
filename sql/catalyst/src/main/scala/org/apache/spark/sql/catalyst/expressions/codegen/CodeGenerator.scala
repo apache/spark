@@ -961,11 +961,11 @@ object CodeGenerator extends Logging {
       recordCompilationStats(evaluator)
     } catch {
       case e: JaninoRuntimeException =>
-        val msg = s"failed to compile: $e\n$formatted"
+        val msg = s"failed to compile: $e"
         logError(msg, e)
         throw new JaninoRuntimeException(msg, e)
       case e: CompileException =>
-        val msg = s"failed to compile: $e\n$formatted"
+        val msg = s"failed to compile: $e"
         logError(msg, e)
         throw new CompileException(msg, e.getLocation)
     }
