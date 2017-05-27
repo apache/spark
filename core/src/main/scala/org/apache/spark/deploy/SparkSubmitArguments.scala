@@ -73,6 +73,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var proxyUser: String = null
   var principal: String = null
   var keytab: String = null
+  var usePython: Boolean = false
+  var useR: Boolean = false
 
   // Standalone cluster mode only
   var supervise: Boolean = false
@@ -196,6 +198,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
+    usePython = isPython || sparkProperties.getOrElse("spark.usePython", "false").toBoolean
+    useR = isR || sparkProperties.getOrElse("spark.useR", "false").toBoolean
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && !isR && primaryResource != null) {
