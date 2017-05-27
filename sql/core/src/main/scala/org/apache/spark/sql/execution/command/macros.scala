@@ -72,7 +72,7 @@ case class CreateMacroCommand(
           s"expected number of columns: ${columns.size} for Macro $macroName")
       }
       macroFunction.transform {
-        // Skip to validate the input type because check it before.
+        // Skip to validate the input type because check it at runtime.
         case b: BoundReference => children(b.ordinal)
       }
     }
