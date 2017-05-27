@@ -273,6 +273,18 @@ class Word2VecModel private[ml] (
     wordVectors.findSynonyms(word, num)
   }
 
+  @Since("2.2.0")
+  def findSynonymsTuple(vec: Vector, num: Int): (Array[String], Array[Double]) = {
+    val result = findSynonymsArray(vec, num)
+    (result.map(e => e._1), result.map(e => e._2))
+  }
+
+  @Since("2.2.0")
+  def findSynonymsTuple(word: String, num: Int): (Array[String], Array[Double]) = {
+    val result = findSynonymsArray(word, num)
+    (result.map(e => e._1), result.map(e => e._2))
+  }
+
   /** @group setParam */
   @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
