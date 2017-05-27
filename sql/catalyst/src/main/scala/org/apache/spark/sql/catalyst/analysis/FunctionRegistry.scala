@@ -276,6 +276,8 @@ object FunctionRegistry {
 
     // string functions
     expression[Ascii]("ascii"),
+    expression[Chr]("char"),
+    expression[Chr]("chr"),
     expression[Base64]("base64"),
     expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
