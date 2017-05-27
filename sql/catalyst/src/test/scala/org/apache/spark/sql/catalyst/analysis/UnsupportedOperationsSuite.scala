@@ -383,6 +383,16 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append
   )
 
+  assertNotSupportedInStreamingPlan(
+    "Deduplicate - must include watermark in deduplication columns when watermark exists",
+    Deduplicate(
+      Seq(attribute),
+      TestStreamingRelation(Seq(attribute, attributeWithWatermark)),
+      streaming = true),
+    outputMode = Append,
+    expectedMsgs = Seq("dropDuplicates", "not included in deduplication columns")
+  )
+
   // Inner joins: Stream-stream not supported
   testBinaryOperationInStreamingPlan(
     "inner join",

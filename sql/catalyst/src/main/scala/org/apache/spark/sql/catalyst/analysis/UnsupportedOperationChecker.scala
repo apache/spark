@@ -98,7 +98,7 @@ object UnsupportedOperationChecker {
 
         // Find any attributes that are associated with an eventTime watermark.
         val watermarkAttributes = aggregate.groupingExpressions.collect {
-          case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
+          case a: Attribute if EventTimeWatermark.containWatermark(a) => a
         }
 
         // We can append rows to the sink once the group is under the watermark. Without this
@@ -213,6 +213,13 @@ object UnsupportedOperationChecker {
         case d: Deduplicate if collectStreamingAggregates(d).nonEmpty =>
           throwError("dropDuplicates is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
+
+        case d: Deduplicate
+          if EventTimeWatermark.containWatermark(d.child.output: _*)
+            && !EventTimeWatermark.containWatermark(d.keys: _*) =>
+          throwError("dropDuplicates on a streaming DataFrame/Dataset is not supported when " +
+            "watermark column exists but is not included in deduplication columns. Consider " +
+            "include the watermark column in the deduplication columns")
 
         case Join(left, right, joinType, _) =>
 
