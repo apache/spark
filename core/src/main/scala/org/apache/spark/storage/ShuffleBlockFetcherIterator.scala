@@ -214,11 +214,12 @@ final class ShuffleBlockFetcherIterator(
       }
     }
 
-    // Shuffle remote blocks to disk when the request is too large.
-    // TODO: Encryption and compression should be considered.
+    // Fetch remote shuffle blocks to disk when the request is too large. Since the shuffle data is
+    // already encrypted and compressed over the wire(w.r.t. the related configs), we can just fetch
+    // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
-      val shuffleFiles = blockIds.map {
-        bId => blockManager.diskBlockManager.createTempLocalBlock()._2
+      val shuffleFiles = blockIds.map { _ =>
+        blockManager.diskBlockManager.createTempLocalBlock()._2
       }.toArray
       shuffleFilesSet ++= shuffleFiles
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
