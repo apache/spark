@@ -239,8 +239,14 @@ function(object, path, overwrite = FALSE) {
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
                    tol = 1E-6, family = "auto", standardization = TRUE,
-                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2) {
+                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
+                   lowerBoundsOnCoefficients = NULL, upperBoundsOnCoefficients = NULL,
+                   lowerBoundsOnIntercepts = NULL, upperBoundsOnIntercepts = NULL) {
             formula <- paste(deparse(formula), collapse = "")
+            lrow <- 0
+            lcol <- 0
+            urow <- 0
+            ucol <- 0
 
             if (!is.null(weightCol) && weightCol == "") {
               weightCol <- NULL
@@ -248,12 +254,35 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
               weightCol <- as.character(weightCol)
             }
 
+            if (!is.null(lowerBoundsOnIntercepts)) {
+                lowerBoundsOnIntercepts <- as.array(lowerBoundsOnIntercepts)
+            }
+
+            if (!is.null(upperBoundsOnIntercepts)) {
+                upperBoundsOnIntercepts <- as.array(upperBoundsOnIntercepts)
+            }
+
+            if (!is.null(lowerBoundsOnCoefficients)) {
+              lrow = nrow(lowerBoundsOnCoefficients)
+              lcol = ncol(lowerBoundsOnCoefficients)
+              lowerBoundsOnCoefficients <- as.array(as.vector(lowerBoundsOnCoefficients))
+            }
+
+            if (!is.null(upperBoundsOnIntercepts)) {
+              urow = nrow(upperBoundsOnIntercepts)
+              ucol = ncol(upperBoundsOnIntercepts)
+              upperBoundsOnIntercepts <- as.array(as.vector(upperBoundsOnIntercepts))
+            }
+
             jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam),
                                 as.numeric(elasticNetParam), as.integer(maxIter),
                                 as.numeric(tol), as.character(family),
                                 as.logical(standardization), as.array(thresholds),
-                                weightCol, as.integer(aggregationDepth))
+                                weightCol, as.integer(aggregationDepth),
+                                as.integer(lrow), as.integer(lcol), as.integer(urow), as.integer(ucol),
+                                lowerBoundsOnCoefficients, upperBoundsOnCoefficients,
+                                lowerBoundsOnIntercepts, upperBoundsOnIntercepts)
             new("LogisticRegressionModel", jobj = jobj)
           })
 
