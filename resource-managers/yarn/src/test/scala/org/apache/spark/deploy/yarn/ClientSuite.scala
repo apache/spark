@@ -116,15 +116,16 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val cp = env("CLASSPATH").split(":|;|<CPS>")
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
       val uri = new URI(entry)
-      if (LOCAL_SCHEME.equals(uri.getScheme())) {
-        cp should contain (uri.getPath())
+      if (LOCAL_SCHEME.equals(uri.getScheme)) {
+        cp should contain (uri.getPath)
       } else {
-        cp should not contain (uri.getPath())
+        cp should not contain uri.getPath
       }
     })
+    cp should not contain "local"
     cp should contain(PWD)
-    cp should contain (s"$PWD${Path.SEPARATOR}${LOCALIZED_CONF_DIR}")
-    cp should not contain (APP_JAR)
+    cp should contain (s"$PWD${Path.SEPARATOR}$LOCALIZED_CONF_DIR")
+    cp should not contain APP_JAR
   }
 
   test("Jar path propagation through SparkConf") {
