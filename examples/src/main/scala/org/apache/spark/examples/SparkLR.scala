@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 
 /**
  * Logistic regression based classification.
- * Usage: SparkLR [partitions]
+ * Usage: SparkLR [slices]
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
  * please refer to org.apache.spark.ml.classification.LogisticRegression.

@@ -21,7 +21,7 @@ package org.apache.spark.examples
 import org.apache.spark.sql.SparkSession
 
 /**
- * Usage: BroadcastTest [partitions] [numElem] [blockSize]
+ * Usage: BroadcastTest [slices] [numElem] [blockSize]
  */
 object BroadcastTest {
   def main(args: Array[String]) {
