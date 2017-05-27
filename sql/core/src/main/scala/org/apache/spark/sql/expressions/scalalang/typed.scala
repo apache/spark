@@ -110,9 +110,6 @@ object typed {
   // varianceOf: Double
   // approxCountDistinct: Long
 
-  // minOf: T
-  // maxOf: T
-
   // firstOf: T
   // lastOf: T
 }

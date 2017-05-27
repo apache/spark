@@ -44,7 +44,6 @@ class TypedSumDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Dou
   }
 }
 
-
 class TypedSumLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
   override def zero: Long = 0L
   override def reduce(b: Long, a: IN): Long = b + f(a)
@@ -61,7 +60,6 @@ class TypedSumLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
     toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
   }
 }
-
 
 class TypedCount[IN](val f: IN => Any) extends Aggregator[IN, Long, Long] {
   override def zero: Long = 0
@@ -81,7 +79,6 @@ class TypedCount[IN](val f: IN => Any) extends Aggregator[IN, Long, Long] {
     toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
   }
 }
-
 
 class TypedAverage[IN](val f: IN => Double) extends Aggregator[IN, (Double, Long), Double] {
   override def zero: (Double, Long) = (0.0, 0L)

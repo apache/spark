@@ -21,10 +21,7 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.TypedColumn;
-import org.apache.spark.sql.execution.aggregate.TypedAverage;
-import org.apache.spark.sql.execution.aggregate.TypedCount;
-import org.apache.spark.sql.execution.aggregate.TypedSumDouble;
-import org.apache.spark.sql.execution.aggregate.TypedSumLong;
+import org.apache.spark.sql.execution.aggregate.*;
 
 /**
  * :: Experimental ::
@@ -73,5 +70,41 @@ public class typed {
    */
   public static <T> TypedColumn<T, Long> sumLong(MapFunction<T, Long> f) {
     return new TypedSumLong<T>(f).toColumnJava();
+  }
+
+  /**
+   * Min aggregate function for floating point (double) type.
+   *
+   * @since 2.3.0
+   */
+  public static <T> TypedColumn<T, Double> min(MapFunction<T, Double> f) {
+    return new TypedMinDouble<T>(f).toColumnJava();
+  }
+
+  /**
+   * Min aggregate function for floating point (double) type.
+   *
+   * @since 2.3.0
+   */
+  public static <T> TypedColumn<T, Long> minLong(MapFunction<T, Long> f) {
+    return new TypedMinLong<T>(f).toColumnJava();
+  }
+
+  /**
+   * Min aggregate function for floating point (double) type.
+   *
+   * @since 2.3.0
+   */
+  public static <T> TypedColumn<T, Double> max(MapFunction<T, Double> f) {
+    return new TypedMaxDouble<T>(f).toColumnJava();
+  }
+
+  /**
+   * Min aggregate function for floating point (double) type.
+   *
+   * @since 2.3.0
+   */
+  public static <T> TypedColumn<T, Long> maxLong(MapFunction<T, Long> f) {
+    return new TypedMaxLong<T>(f).toColumnJava();
   }
 }

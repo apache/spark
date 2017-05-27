@@ -66,4 +66,40 @@ public class Java8DatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase 
         Arrays.asList(new Tuple2<>("a", 3L), new Tuple2<>("b", 3L)),
         agged.collectAsList());
   }
+
+  @Test
+  public void testTypedAggregationMinDouble() {
+    KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
+    Dataset<Tuple2<String, Double>> agged = grouped.agg(typed.min(v -> (double)v._2()));
+    Assert.assertEquals(
+            Arrays.asList(new Tuple2<>("a", 1.0), new Tuple2<>("b", 3.0)),
+            agged.collectAsList());
+  }
+
+  @Test
+  public void testTypedAggregationMinLong() {
+    KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
+    Dataset<Tuple2<String, Long>> agged = grouped.agg(typed.minLong(v -> (long) v._2()));
+    Assert.assertEquals(
+            Arrays.asList(new Tuple2<>("a", 1L), new Tuple2<>("b", 3L)),
+            agged.collectAsList());
+  }
+
+  @Test
+  public void testTypedAggregationMaxDouble() {
+    KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
+    Dataset<Tuple2<String, Double>> agged = grouped.agg(typed.max(v -> (double)v._2()));
+    Assert.assertEquals(
+            Arrays.asList(new Tuple2<>("a", 2.0), new Tuple2<>("b", 3.0)),
+            agged.collectAsList());
+  }
+
+  @Test
+  public void testTypedAggregationMaxLong() {
+    KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
+    Dataset<Tuple2<String, Long>> agged = grouped.agg(typed.maxLong(v -> (long)v._2()));
+    Assert.assertEquals(
+            Arrays.asList(new Tuple2<>("a", 2L), new Tuple2<>("b", 3L)),
+            agged.collectAsList());
+  }
 }
