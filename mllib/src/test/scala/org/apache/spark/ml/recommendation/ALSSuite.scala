@@ -516,6 +516,20 @@ class ALSSuite
       implicitPrefs = true, seed = 0)
   }
 
+  test("recommend for all") {
+    val spark = this.spark
+    import spark.implicits._
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
+    val model = new ALS().fit(ratings.toDF())
+    val items = model.recommendItemsForUsers(2)
+    assert(items.count() == 4
+      && items.select("ratings").rdd.collect().forall(_.getSeq[Rating[Int]](0).length == 2))
+
+    val users = model.recommendUsersForItems(2)
+    assert(users.count() == 4
+      && users.select("ratings").rdd.collect().forall(_.getSeq[Rating[Int]](0).length == 2))
+  }
+
   test("read/write") {
     val spark = this.spark
     import spark.implicits._

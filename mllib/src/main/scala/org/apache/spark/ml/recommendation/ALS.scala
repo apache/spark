@@ -41,6 +41,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
+import org.apache.spark.mllib.recommendation.MatrixFactorizationModel
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
@@ -271,6 +272,8 @@ class ALSModel private[ml] (
     @transient val itemFactors: DataFrame)
   extends Model[ALSModel] with ALSModelParams with MLWritable {
 
+  import org.apache.spark.ml.recommendation.ALS.Rating
+
   /** @group setParam */
   @Since("1.4.0")
   def setUserCol(value: String): this.type = set(userCol, value)
@@ -314,6 +317,44 @@ class ALSModel private[ml] (
       case ALSModel.NaN =>
         predictions
     }
+  }
+
+  /**
+   * Recommends top items for all users.
+   *
+   * @param num how many items to return for every user.
+   * @return a DataFrame that stores recommendations in two columns: `user` and `ratings`, where
+   *         every row contains a userID and an array of [[Rating]] objects which contains the
+   *         same userId, recommended itemID and "score".
+   */
+  @Since("2.1.0")
+  def recommendItemsForUsers(num: Int): DataFrame = {
+    val spark = userFactors.sparkSession
+    import spark.implicits._
+    toMLlibModel.recommendProductsForUsers(num).toDF("user", "ratings")
+  }
+
+  /**
+   * Recommends top users for all items.
+   *
+   * @param num how many users to return for every item.
+   * @return a DataFrame that stores recommendations in two columns: `item` and `ratings`, where
+   *         every row contains a itemID and an array of [[Rating]] objects which contains the
+   *         same itemID, recommended userID and "score".
+   */
+  @Since("2.1.0")
+  def recommendUsersForItems(num: Int): DataFrame = {
+    val spark = userFactors.sparkSession
+    import spark.implicits._
+    toMLlibModel.recommendProductsForUsers(num).toDF("item", "ratings")
+  }
+
+  private def toMLlibModel: MatrixFactorizationModel = {
+    val userFeatures = userFactors.select("id", "features").rdd
+      .map(r => (r.getInt(0), r.getSeq[Float](1).toArray.map(_.toDouble)))
+    val itemFeatures = itemFactors.select("id", "features").rdd
+      .map(r => (r.getInt(0), r.getSeq[Float](1).toArray.map(_.toDouble)))
+    new MatrixFactorizationModel(rank, userFeatures, itemFeatures)
   }
 
   @Since("1.3.0")
