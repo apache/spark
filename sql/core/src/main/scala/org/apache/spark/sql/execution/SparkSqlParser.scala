@@ -85,7 +85,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitResetConfiguration(
-    ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
+      ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
     ResetCommand
   }
 
@@ -178,7 +178,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitShowTblProperties(
-    ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
+      ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTablePropertiesCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.key).map(visitTablePropertyKey))
@@ -337,7 +337,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Validate a create table statement and return the [[TableIdentifier]].
    */
   override def visitCreateTableHeader(
-    ctx: CreateTableHeaderContext): TableHeader = withOrigin(ctx) {
+      ctx: CreateTableHeaderContext): TableHeader = withOrigin(ctx) {
     val temporary = ctx.TEMPORARY != null
     val ifNotExists = ctx.EXISTS != null
     if (temporary && ifNotExists) {
@@ -443,7 +443,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Creates a [[CreateTempViewUsing]] logical plan.
    */
   override def visitCreateTempViewUsing(
-    ctx: CreateTempViewUsingContext): LogicalPlan = withOrigin(ctx) {
+      ctx: CreateTempViewUsingContext): LogicalPlan = withOrigin(ctx) {
     CreateTempViewUsing(
       tableIdent = visitTableIdentifier(ctx.tableIdentifier()),
       userSpecifiedSchema = Option(ctx.colTypeList()).map(createSchema),
@@ -505,7 +505,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
    */
   override def visitTablePropertyList(
-    ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
+      ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.tableProperty.asScala.map { property =>
       val key = visitTablePropertyKey(property.key)
       val value = visitTablePropertyValue(property.value)
@@ -598,7 +598,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitSetDatabaseProperties(
-    ctx: SetDatabasePropertiesContext): LogicalPlan = withOrigin(ctx) {
+      ctx: SetDatabasePropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterDatabasePropertiesCommand(
       ctx.identifier.getText,
       visitPropertyKeyValues(ctx.tablePropertyList))
@@ -799,7 +799,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitSetTableProperties(
-    ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
+      ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterTableSetPropertiesCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       visitPropertyKeyValues(ctx.tablePropertyList),
@@ -816,7 +816,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitUnsetTableProperties(
-    ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
+      ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterTableUnsetPropertiesCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       visitPropertyKeys(ctx.tablePropertyList),
@@ -855,7 +855,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * is associated with physical tables
    */
   override def visitAddTablePartition(
-    ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
+      ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.VIEW != null) {
       operationNotAllowed("ALTER VIEW ... ADD PARTITION", ctx)
     }
@@ -886,7 +886,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitRenameTablePartition(
-    ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
+      ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRenamePartitionCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       visitNonOptionalPartitionSpec(ctx.from),
@@ -906,7 +906,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * is associated with physical tables
    */
   override def visitDropTablePartitions(
-    ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
+      ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.VIEW != null) {
       operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
     }
@@ -927,7 +927,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitRecoverPartitions(
-    ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
+      ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRecoverPartitionsCommand(visitTableIdentifier(ctx.tableIdentifier))
   }
 
@@ -1005,7 +1005,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Convert a nested constants list into a sequence of string sequences.
    */
   override def visitNestedConstantList(
-    ctx: NestedConstantListContext): Seq[Seq[String]] = withOrigin(ctx) {
+      ctx: NestedConstantListContext): Seq[Seq[String]] = withOrigin(ctx) {
     ctx.constantList.asScala.map(visitConstantList)
   }
 
@@ -1213,7 +1213,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Format: STORED AS ...
    */
   override def visitCreateFileFormat(
-    ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+      ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     (ctx.fileFormat, ctx.storageHandler) match {
       // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format
       case (c: TableFileFormatContext, null) =>
@@ -1232,7 +1232,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[CatalogStorageFormat]].
    */
   override def visitTableFileFormat(
-    ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+      ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     CatalogStorageFormat.empty.copy(
       inputFormat = Option(string(ctx.inFmt)),
       outputFormat = Option(string(ctx.outFmt)))
@@ -1242,7 +1242,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Resolve a [[HiveSerDe]] based on the name given and return it as a [[CatalogStorageFormat]].
    */
   override def visitGenericFileFormat(
-    ctx: GenericFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+      ctx: GenericFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     val source = ctx.identifier.getText
     HiveSerDe.sourceToSerDe(source) match {
       case Some(s) =>
@@ -1284,7 +1284,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create SERDE row format name and properties pair.
    */
   override def visitRowFormatSerde(
-    ctx: RowFormatSerdeContext): CatalogStorageFormat = withOrigin(ctx) {
+      ctx: RowFormatSerdeContext): CatalogStorageFormat = withOrigin(ctx) {
     import ctx._
     CatalogStorageFormat.empty.copy(
       serde = Option(string(name)),
@@ -1295,7 +1295,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a delimited row format properties object.
    */
   override def visitRowFormatDelimited(
-    ctx: RowFormatDelimitedContext): CatalogStorageFormat = withOrigin(ctx) {
+      ctx: RowFormatDelimitedContext): CatalogStorageFormat = withOrigin(ctx) {
     // Collect the entries if any.
     def entry(key: String, value: Token): Seq[(String, String)] = {
       Option(value).toSeq.map(x => key -> string(x))
@@ -1329,9 +1329,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *   ROW FORMAT ... STORED AS INPUTFORMAT ... OUTPUTFORMAT ...
    */
   private def validateRowFormatFileFormat(
-    rowFormatCtx: RowFormatContext,
-    createFileFormatCtx: CreateFileFormatContext,
-    parentCtx: ParserRuleContext): Unit = {
+      rowFormatCtx: RowFormatContext,
+      createFileFormatCtx: CreateFileFormatContext,
+      parentCtx: ParserRuleContext): Unit = {
     if (rowFormatCtx == null || createFileFormatCtx == null) {
       return
     }
@@ -1433,12 +1433,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[ScriptInputOutputSchema]].
    */
   override protected def withScriptIOSchema(
-    ctx: QuerySpecificationContext,
-    inRowFormat: RowFormatContext,
-    recordWriter: Token,
-    outRowFormat: RowFormatContext,
-    recordReader: Token,
-    schemaLess: Boolean): ScriptInputOutputSchema = {
+      ctx: QuerySpecificationContext,
+      inRowFormat: RowFormatContext,
+      recordWriter: Token,
+      outRowFormat: RowFormatContext,
+      recordReader: Token,
+      schemaLess: Boolean): ScriptInputOutputSchema = {
     if (recordWriter != null || recordReader != null) {
       // TODO: what does this message mean?
       throw new ParseException(
@@ -1448,9 +1448,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     // Decode and input/output format.
     type Format = (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
     def format(
-      fmt: RowFormatContext,
-      configKey: String,
-      defaultConfigValue: String): Format = fmt match {
+        fmt: RowFormatContext,
+        configKey: String,
+        defaultConfigValue: String): Format = fmt match {
       case c: RowFormatDelimitedContext =>
         // TODO we should use the visitRowFormatDelimited function here. However HiveScriptIOSchema
         // expects a seq of pairs in which the old parsers' token names are used as keys.
@@ -1509,9 +1509,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a clause for DISTRIBUTE BY.
    */
   override protected def withRepartitionByExpression(
-    ctx: QueryOrganizationContext,
-    expressions: Seq[Expression],
-    query: LogicalPlan): LogicalPlan = {
+      ctx: QueryOrganizationContext,
+      expressions: Seq[Expression],
+      query: LogicalPlan): LogicalPlan = {
     RepartitionByExpression(expressions, query, conf.numShufflePartitions)
   }
 }

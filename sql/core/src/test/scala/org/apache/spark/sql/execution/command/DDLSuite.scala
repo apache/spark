@@ -48,9 +48,9 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
   }
 
   protected override def generateTable(
-    catalog: SessionCatalog,
-    name: TableIdentifier,
-    isDataSource: Boolean = true): CatalogTable = {
+      catalog: SessionCatalog,
+      name: TableIdentifier,
+      isDataSource: Boolean = true): CatalogTable = {
     val storage =
       CatalogStorageFormat.empty.copy(locationUri = Some(catalog.defaultTablePath(name)))
     val metadata = new MetadataBuilder()
@@ -125,9 +125,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def generateTable(
-    catalog: SessionCatalog,
-    name: TableIdentifier,
-    isDataSource: Boolean = true): CatalogTable
+      catalog: SessionCatalog,
+      name: TableIdentifier,
+      isDataSource: Boolean = true): CatalogTable
 
   private val escapedIdentifier = "`(.+)`".r
 
@@ -170,16 +170,16 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   private def createTable(
-    catalog: SessionCatalog,
-    name: TableIdentifier,
-    isDataSource: Boolean = true): Unit = {
-    catalog.createTable(generateTable(catalog, name, isDataSource), ignoreIfExists = false)
+      catalog: SessionCatalog,
+      name: TableIdentifier,
+      isDataSource: Boolean = true): Unit = {
+      catalog.createTable(generateTable(catalog, name, isDataSource), ignoreIfExists = false)
   }
 
   private def createTablePartition(
-    catalog: SessionCatalog,
-    spec: TablePartitionSpec,
-    tableName: TableIdentifier): Unit = {
+      catalog: SessionCatalog,
+      spec: TablePartitionSpec,
+      tableName: TableIdentifier): Unit = {
     val part = CatalogTablePartition(
       spec, CatalogStorageFormat(None, None, None, None, false, Map()))
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
@@ -317,11 +317,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   private def checkSchemaInCreatedDataSourceTable(
-    path: File,
-    userSpecifiedSchema: Option[String],
-    userSpecifiedPartitionCols: Option[String],
-    expectedSchema: StructType,
-    expectedPartitionCols: Seq[String]): Unit = {
+      path: File,
+      userSpecifiedSchema: Option[String],
+      userSpecifiedPartitionCols: Option[String],
+      expectedSchema: StructType,
+      expectedPartitionCols: Seq[String]): Unit = {
     val tabName = "tab1"
     withTable(tabName) {
       val partitionClause =
@@ -968,13 +968,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val catalog = spark.sessionState.catalog
     sql(
       """
-        |CREATE TEMPORARY VIEW tab1
-        |USING org.apache.spark.sql.sources.DDLScanSource
-        |OPTIONS (
-        |  From '1',
-        |  To '10',
-        |  Table 'test1'
-        |)
+       |CREATE TEMPORARY VIEW tab1
+       |USING org.apache.spark.sql.sources.DDLScanSource
+       |OPTIONS (
+       |  From '1',
+       |  To '10',
+       |  Table 'test1'
+       |)
       """.stripMargin)
     assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
     sql("DROP VIEW tab1")
@@ -1498,7 +1498,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
         Row("Function: concat") ::
         Row("Usage: concat(str1, str2, ..., strN) - " +
-          "Returns the concatenation of str1, str2, ..., strN.") :: Nil
+            "Returns the concatenation of str1, str2, ..., strN.") :: Nil
     )
     // extended mode
     checkAnswer(
