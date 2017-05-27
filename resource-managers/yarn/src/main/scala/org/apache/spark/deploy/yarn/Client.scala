@@ -1275,7 +1275,8 @@ private object Client extends Logging {
     if (sparkConf.get(SPARK_ARCHIVE).isEmpty) {
       sparkConf.get(SPARK_JARS).foreach { jars =>
         jars.filter(isLocalUri).foreach { jar =>
-          addClasspathEntry(getClusterPath(sparkConf, jar), env)
+          val noLocal = jar.substring(LOCAL_SCHEME.length)
+          addClasspathEntry(getClusterPath(sparkConf, noLocal), env)
         }
       }
     }
