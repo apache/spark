@@ -277,14 +277,14 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
             }
 
             if (!is.null(lowerBoundsOnCoefficients)) {
-              lrow = nrow(lowerBoundsOnCoefficients)
-              lcol = ncol(lowerBoundsOnCoefficients)
+              lrow <- nrow(lowerBoundsOnCoefficients)
+              lcol <- ncol(lowerBoundsOnCoefficients)
               lowerBoundsOnCoefficients <- as.array(as.vector(lowerBoundsOnCoefficients))
             }
 
             if (!is.null(upperBoundsOnCoefficients)) {
-              urow = nrow(upperBoundsOnCoefficients)
-              ucol = ncol(upperBoundsOnCoefficients)
+              urow <- nrow(upperBoundsOnCoefficients)
+              ucol <- ncol(upperBoundsOnCoefficients)
               upperBoundsOnCoefficients <- as.array(as.vector(upperBoundsOnCoefficients))
             }
 
