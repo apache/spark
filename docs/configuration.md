@@ -686,6 +686,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.stopDelay</code></td>
+  <td>(none)</td>
+  <td>
+    A period of time to delay the stopping of the Web UI, so that it can be inspected after the application finishes.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.enabled</code></td>
   <td>true</td>
   <td>

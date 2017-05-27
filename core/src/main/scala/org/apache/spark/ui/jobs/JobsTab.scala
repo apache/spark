@@ -30,6 +30,9 @@ private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
   val executorListener = parent.executorsListener
   val operationGraphListener = parent.operationGraphListener
 
+  def activeStopDelay: Option[Long] =
+    parent.activeStopDelay
+
   def isFairScheduler: Boolean =
     jobProgresslistener.schedulingMode == Some(SchedulingMode.FAIR)
 

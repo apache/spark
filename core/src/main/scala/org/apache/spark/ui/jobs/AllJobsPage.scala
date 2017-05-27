@@ -313,6 +313,24 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
       val summary: NodeSeq =
         <div>
+          {
+            parent.activeStopDelay match {
+              case None =>
+              case Some(delay) =>
+                val confirm =
+                  s"if (window.confirm('Are you sure you allow the Spark UI to stop?')) " +
+                    "{ this.parentNode.submit(); return true; } else { return false; }"
+                val action = s"${parent.basePath}/proceed-with-ui-stop"
+                <div class="stop-delayed">
+                  <strong>The Spark UI has been asked to stop, but that is being delayed for
+                    {delay}s.
+                    <form action={action} method="POST" style="display:inline">
+                      <a href="#" onclick={confirm}>(stop now)</a>
+                    </form>
+                  </strong>
+                </div>
+            }
+          }
           <ul class="unstyled">
             <li>
               <strong>User:</strong>

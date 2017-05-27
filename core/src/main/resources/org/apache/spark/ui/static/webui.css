@@ -252,3 +252,8 @@ a.expandbutton {
 .table-cell-width-limited td {
   max-width: 600px;
 }
+
+.stop-delayed {
+  color: red;
+  margin-bottom: 1em;
+}
