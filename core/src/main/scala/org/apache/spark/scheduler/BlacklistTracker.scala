@@ -178,8 +178,7 @@ private[scheduler] class BlacklistTracker (
 
   def updateBlacklistForFetchFailure(host: String, exec: String): Unit = {
     if (BLACKLIST_FETCH_FAILURE_ENABLED) {
-      // spark.blacklist.application.fetchFailure.enabled is enabled. If we blacklist
-      // on fetch failures, we are implicitly saying that we believe the failure is
+      // If we blacklist on fetch failures, we are implicitly saying that we believe the failure is
       // non-transient, and can't be recovered from (even if this is the first fetch failure).
       // If the external shuffle-service is on, then every other executor on this node would
       // be suffering from the same issue, so we should blacklist (and potentially kill) all
@@ -196,6 +195,7 @@ private[scheduler] class BlacklistTracker (
           listenerBus.post(SparkListenerNodeBlacklisted(now, host, 1))
           _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
           killExecutorsOnBlacklistedNode(host)
+          updateNextExpiryTime()
         }
       } else if (!executorIdToBlacklistStatus.contains(exec)) {
         logInfo(s"Blacklisting executor $exec due to fetch failure")

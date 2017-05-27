@@ -54,7 +54,7 @@ import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 private[spark] class TaskSchedulerImpl private[scheduler](
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    private[scheduler] val blacklistTrackerOpt: Option[BlacklistTracker],
+    mockBlacklistTracker: Option[BlacklistTracker] = None,
     isLocal: Boolean = false)
   extends TaskScheduler with Logging {
 
@@ -63,17 +63,19 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   def this(sc: SparkContext) = {
     this(
       sc,
-      sc.conf.get(config.MAX_TASK_FAILURES),
-      TaskSchedulerImpl.maybeCreateBlacklistTracker(sc))
+      sc.conf.get(config.MAX_TASK_FAILURES))
   }
 
   def this(sc: SparkContext, maxTaskFailures: Int, isLocal: Boolean) = {
     this(
       sc,
       maxTaskFailures,
-      TaskSchedulerImpl.maybeCreateBlacklistTracker(sc),
+      mockBlacklistTracker = None,
       isLocal = isLocal)
   }
+
+  private[scheduler] lazy val blacklistTrackerOpt =
+    mockBlacklistTracker.orElse(maybeCreateBlacklistTracker(sc))
 
   val conf = sc.conf
 
