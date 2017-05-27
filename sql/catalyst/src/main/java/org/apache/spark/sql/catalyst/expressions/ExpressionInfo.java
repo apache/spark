@@ -26,6 +26,7 @@ public class ExpressionInfo {
     private String name;
     private String extended;
     private String db;
+    private boolean macro;
 
     public String getClassName() {
         return className;
@@ -47,19 +48,32 @@ public class ExpressionInfo {
         return db;
     }
 
-    public ExpressionInfo(String className, String db, String name, String usage, String extended) {
+    public boolean isMacro() {
+        return macro;
+    }
+
+    public ExpressionInfo(String className, String db, String name, String usage, String extended, boolean macro) {
         this.className = className;
         this.db = db;
         this.name = name;
         this.usage = usage;
         this.extended = extended;
+        this.macro = macro;
+    }
+
+    public ExpressionInfo(String className, String db, String name, String usage, String extended) {
+        this(className, db, name, usage, extended, false);
     }
 
     public ExpressionInfo(String className, String name) {
-        this(className, null, name, null, null);
+        this(className, null, name, null, null, false);
+    }
+
+    public ExpressionInfo(String className, String name, boolean macro) {
+        this(className, null, name, null, null, macro);
     }
 
     public ExpressionInfo(String className, String db, String name) {
-        this(className, db, name, null, null);
+        this(className, db, name, null, null, false);
     }
 }

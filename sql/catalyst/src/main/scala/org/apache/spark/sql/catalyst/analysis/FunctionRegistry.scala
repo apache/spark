@@ -60,6 +60,9 @@ trait FunctionRegistry {
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
 
+  /** Drop a macro and return whether the macro existed. */
+  def dropMacro(name: String): Boolean
+
   /** Checks if a function with a given name exists. */
   def functionExists(name: String): Boolean = lookupFunction(name).isDefined
 
@@ -107,6 +110,14 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.remove(name).isDefined
   }
 
+  override def dropMacro(name: String): Boolean = synchronized {
+    if (functionBuilders.get(name).map(_._1).filter(_.isMacro).isDefined) {
+      functionBuilders.remove(name).isDefined
+    } else {
+      false
+    }
+  }
+
   override def clear(): Unit = synchronized {
     functionBuilders.clear()
   }
@@ -143,6 +154,10 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   }
 
   override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def dropMacro(name: String): Boolean = {
     throw new UnsupportedOperationException
   }
 

@@ -1103,7 +1103,7 @@ class SessionCatalog(
 
   /** Drop a temporary macro. */
   def dropTempMacro(name: String, ignoreIfNotExists: Boolean): Unit = {
-    if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
+    if (!functionRegistry.dropMacro(name) && !ignoreIfNotExists) {
       throw new NoSuchTempMacroException(name)
     }
   }
