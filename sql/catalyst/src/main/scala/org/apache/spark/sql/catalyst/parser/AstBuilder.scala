@@ -1256,7 +1256,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
     if (conf.supportQuotedRegexColumnName) {
       if (!ctx.getParent().isInstanceOf[DereferenceContext] ||
-          ctx.getParent().asInstanceOf[DereferenceContext].fieldName == this) {
+          ctx.getParent().asInstanceOf[DereferenceContext].fieldName == ctx) {
         return UnresolvedRegex(ctx.getText, None)
       }
     }
