@@ -21,6 +21,7 @@ library(SparkR)
 # Turn all warnings into errors
 options("warn" = 2)
 
+Sys.setenv(TZ = "GMT")
 message("--- Start test ", as.POSIXct(Sys.time(), tz = "GMT"))
 timer_ptm <- proc.time()
 Sys.setenv(NOT_CRAN = "false")
