@@ -404,24 +404,31 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date[, format]) - Returns the week of the year of the given date. Defaults to ISO 8601 standard, but can be gregorian specific",
+  usage = "_FUNC_(date[, format[, firstDayOfWeek]) - Returns the week of the year of the given date. Defaults to ISO 8601 standard: weeks start on Monday, and week 1 is defined as the first week in the new year that contains a thursday. Start of week can be overriden, and the week first week can be defined as the week that contains the first day of the new year by setting it to 'gregorian'.",
   extended = """
     Examples:
-      > SELECT _FUNC_('2008-02-20');
-       8
-      > SELECT _FUNC_('2017-01-01', 'gregorian');
+      > SELECT _FUNC_('2011-01-01');
+       52
+      > SELECT _FUNC_('2011-01-01', 'gregorian');
        1
-      > SELECT _FUNC_('2017-01-01', 'iso');
+      > SELECT _FUNC_('2011-01-01', 'iso');
        52
-      > SELECT _FUNC_('2017-01-01');
+      > SELECT _FUNC_('2011-01-01', 'iso', 'monday');
        52
+      > SELECT _FUNC_('2011-01-01', 'iso', 'sunday');
+       1
+
   """)
 // scalastyle:on line.size.limit
-case class WeekOfYear(child: Expression, format: Expression) extends
+case class WeekOfYear(child: Expression, format: Expression, firstDayOfWeek: Expression) extends
   UnaryExpression with ImplicitCastInputTypes {
 
   def this(child: Expression) = {
-    this(child, Literal("iso"))
+    this(child, Literal("iso"), Literal("monday"))
+  }
+
+  def this(child: Expression, format: Expression) = {
+    this(child, format, Literal("monday"))
   }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -432,9 +439,21 @@ case class WeekOfYear(child: Expression, format: Expression) extends
     if ("gregorian".equalsIgnoreCase(format.toString)) 1 else 4
   }
 
+  @transient private lazy val startOfWeek = {
+    firstDayOfWeek.toString match {
+      case day if "monday".equalsIgnoreCase(day) => Calendar.MONDAY
+      case day if "tuesday".equalsIgnoreCase(day) => Calendar.TUESDAY
+      case day if "wednesday".equalsIgnoreCase(day) => Calendar.WEDNESDAY
+      case day if "thursday".equalsIgnoreCase(day) => Calendar.THURSDAY
+      case day if "friday".equalsIgnoreCase(day) => Calendar.FRIDAY
+      case day if "saturday".equalsIgnoreCase(day) => Calendar.SATURDAY
+      case day if "sunday".equalsIgnoreCase(day) => Calendar.SUNDAY
+    }
+  }
+
   @transient private lazy val c = {
     val c = Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
-    c.setFirstDayOfWeek(Calendar.MONDAY)
+    c.setFirstDayOfWeek(startOfWeek)
     c.setMinimalDaysInFirstWeek(minimalDays)
     c
   }
@@ -452,7 +471,7 @@ case class WeekOfYear(child: Expression, format: Expression) extends
       ctx.addMutableState(cal, c,
         s"""
           $c = $cal.getInstance($dtu.getTimeZone("UTC"));
-          $c.setFirstDayOfWeek($cal.MONDAY);
+          $c.setFirstDayOfWeek($startOfWeek);
           $c.setMinimalDaysInFirstWeek($minimalDays);
          """)
       s"""

@@ -197,23 +197,28 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("WeekOfYear") {
-    checkEvaluation(WeekOfYear(Literal.create(null, DateType), Literal("iso")), null)
-    checkEvaluation(WeekOfYear(Literal(d), Literal(false)), 15)
-    checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, gmtId), Literal("iso")), 45)
-    checkEvaluation(
-      WeekOfYear(Cast(Literal(sdfDate.format(d)), DateType, gmtId), Literal("iso")), 15)
-    checkEvaluation(
-      WeekOfYear(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime)), Literal("iso")), 40)
-    checkEvaluation(
-      WeekOfYear(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime)), Literal("iso")), 40)
-
-    checkEvaluation(
-      WeekOfYear(Cast(Literal("2017-01-01"), DateType, gmtId), Literal("iso")), 52)
-    checkEvaluation(
-      WeekOfYear(Cast(Literal("2017-01-01"), DateType, gmtId), Literal("gregorian")), 1)
+    checkEvaluation(WeekOfYear(
+      Literal.create(null, DateType), Literal("iso"), Literal("monday")), null)
+    checkEvaluation(WeekOfYear(Literal(d), Literal("iso"), Literal("monday")), 15)
+    checkEvaluation(WeekOfYear(
+      Cast(Literal(ts), DateType, gmtId), Literal("iso"), Literal("monday")), 45)
+    checkEvaluation(WeekOfYear(
+      Cast(Literal(sdfDate.format(d)), DateType, gmtId), Literal("iso"), Literal("monday")), 15)
+    checkEvaluation(WeekOfYear(
+      Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime)),
+      Literal("iso"), Literal("monday")), 40)
+    checkEvaluation(WeekOfYear(
+      Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime)),
+      Literal("iso"), Literal("monday")), 40)
+    checkEvaluation(WeekOfYear(
+      Cast(Literal("2011-01-01"), DateType, gmtId), Literal("iso"), Literal("monday")), 52)
+    checkEvaluation(WeekOfYear(
+      Cast(Literal("2011-01-01"), DateType, gmtId), Literal("gregorian"), Literal("monday")), 1)
+    checkEvaluation(WeekOfYear(
+      Cast(Literal("2011-01-01"), DateType, gmtId), Literal("iso"), Literal("sunday")), 52)
 
     checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => WeekOfYear(child, Literal(true)), DateType)
+      (child: Expression) => WeekOfYear(child, Literal("iso"), Literal("monday")), DateType)
 
   }
 
