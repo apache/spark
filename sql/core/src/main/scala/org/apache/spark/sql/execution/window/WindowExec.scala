@@ -156,21 +156,17 @@ case class WindowExec(
    * Collection containing an entry for each window frame to process. Each entry contains a frame's
    * [[WindowExpression]]s and factory function for the WindowFrameFunction.
    */
-  private[this] lazy val windowFrameExpressionFactoryPairs:
-    Seq[(mutable.Buffer[WindowExpression], InternalRow => WindowFunctionFrame)] =
-  {
+  private[this] lazy val windowFrameExpressionFactoryPairs = {
     type FrameKey = (String, FrameType, Option[Int], Option[Int])
     type ExpressionBuffer = mutable.Buffer[Expression]
     type WindowExpressionBuffer = mutable.Buffer[WindowExpression]
-    val framedFunctions = mutable.Map.empty[FrameKey, (WindowExpressionBuffer, ExpressionBuffer)]
+    val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
     // Add a function and its function to the map for a given frame.
-    def collect(
-      tpe: String, fr: SpecifiedWindowFrame, e: WindowExpression, fn: Expression): Unit =
-    {
+    def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
       val key = (tpe, fr.frameType, FrameBoundary(fr.frameStart), FrameBoundary(fr.frameEnd))
       val (es, fns) = framedFunctions.getOrElseUpdate(
-        key, (ArrayBuffer.empty[WindowExpression], ArrayBuffer.empty[Expression]))
+        key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es += e
       fns += fn
     }
