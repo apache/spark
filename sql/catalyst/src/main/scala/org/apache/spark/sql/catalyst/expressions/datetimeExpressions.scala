@@ -404,7 +404,7 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date[, format[, firstDayOfWeek]) - Returns the week of the year of the given date. Defaults to ISO 8601 standard: weeks start on Monday, and week 1 is defined as the first week in the new year that contains a thursday. Start of week can be overriden, and the week first week can be defined as the week that contains the first day of the new year by setting it to 'gregorian'.",
+  usage = "_FUNC_(date[, format[, firstDayOfWeek]) - Returns the week of the year of the given date. Defaults to ISO 8601 standard: weeks start on Monday, and week 1 is defined as the first week in the new year that contains more than half of the days (Thursday in a Monday to Sunday week). Start of week can be overriden, and the week first week can be defined as the week that contains the first day of the new year by setting it to 'gregorian'.",
   extended = """
     Examples:
       > SELECT _FUNC_('2011-01-01');
