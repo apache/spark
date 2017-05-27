@@ -232,19 +232,20 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, DoubleType, DecimalType))
+    Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
     case DoubleType => f(input.asInstanceOf[Double]).toLong
-    case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].ceil
+    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
       case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
-      case DecimalType.Fixed(precision, scale) =>
+      case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.ceil()")
+      case LongType => defineCodeGen(ctx, ev, c => s"$c")
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
@@ -348,19 +349,20 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, DoubleType, DecimalType))
+    Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
     case DoubleType => f(input.asInstanceOf[Double]).toLong
-    case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].floor
+    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
       case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
-      case DecimalType.Fixed(precision, scale) =>
+      case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.floor()")
+      case LongType => defineCodeGen(ctx, ev, c => s"$c")
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
