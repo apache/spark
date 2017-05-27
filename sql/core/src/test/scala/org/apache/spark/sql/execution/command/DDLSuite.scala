@@ -173,7 +173,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       catalog: SessionCatalog,
       name: TableIdentifier,
       isDataSource: Boolean = true): Unit = {
-      catalog.createTable(generateTable(catalog, name, isDataSource), ignoreIfExists = false)
+    catalog.createTable(generateTable(catalog, name, isDataSource), ignoreIfExists = false)
   }
 
   private def createTablePartition(

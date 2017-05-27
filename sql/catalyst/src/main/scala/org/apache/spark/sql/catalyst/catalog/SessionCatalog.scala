@@ -52,21 +52,21 @@ object SessionCatalog {
  * This class must be thread-safe.
  */
 class SessionCatalog(
-  val externalCatalog: ExternalCatalog,
-  globalTempViewManager: GlobalTempViewManager,
-  functionRegistry: FunctionRegistry,
-  conf: SQLConf,
-  hadoopConf: Configuration,
-  parser: ParserInterface,
-  functionResourceLoader: FunctionResourceLoader) extends Logging {
+    val externalCatalog: ExternalCatalog,
+    globalTempViewManager: GlobalTempViewManager,
+    functionRegistry: FunctionRegistry,
+    conf: SQLConf,
+    hadoopConf: Configuration,
+    parser: ParserInterface,
+    functionResourceLoader: FunctionResourceLoader) extends Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
   // For testing only.
   def this(
-    externalCatalog: ExternalCatalog,
-    functionRegistry: FunctionRegistry,
-    conf: SQLConf) {
+      externalCatalog: ExternalCatalog,
+      functionRegistry: FunctionRegistry,
+      conf: SQLConf) {
     this(
       externalCatalog,
       new GlobalTempViewManager("global_temp"),
@@ -323,8 +323,8 @@ class SessionCatalog(
    *                  bucket columns, and partition columns need to be at the end)
    */
   def alterTableSchema(
-    identifier: TableIdentifier,
-    newSchema: StructType): Unit = {
+      identifier: TableIdentifier,
+      newSchema: StructType): Unit = {
     val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
@@ -394,10 +394,10 @@ class SessionCatalog(
    * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
    */
   def loadTable(
-    name: TableIdentifier,
-    loadPath: String,
-    isOverwrite: Boolean,
-    isSrcLocal: Boolean): Unit = {
+      name: TableIdentifier,
+      loadPath: String,
+      isOverwrite: Boolean,
+      isSrcLocal: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
@@ -411,12 +411,12 @@ class SessionCatalog(
    * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
    */
   def loadPartition(
-    name: TableIdentifier,
-    loadPath: String,
-    spec: TablePartitionSpec,
-    isOverwrite: Boolean,
-    inheritTableSpecs: Boolean,
-    isSrcLocal: Boolean): Unit = {
+      name: TableIdentifier,
+      loadPath: String,
+      spec: TablePartitionSpec,
+      isOverwrite: Boolean,
+      inheritTableSpecs: Boolean,
+      isSrcLocal: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
@@ -441,9 +441,9 @@ class SessionCatalog(
    * Create a local temporary view.
    */
   def createTempView(
-    name: String,
-    tableDefinition: LogicalPlan,
-    overrideIfExists: Boolean): Unit = synchronized {
+      name: String,
+      tableDefinition: LogicalPlan,
+      overrideIfExists: Boolean): Unit = synchronized {
     val table = formatTableName(name)
     if (tempTables.contains(table) && !overrideIfExists) {
       throw new TempTableAlreadyExistsException(name)
@@ -455,9 +455,9 @@ class SessionCatalog(
    * Create a global temporary view.
    */
   def createGlobalTempView(
-    name: String,
-    viewDefinition: LogicalPlan,
-    overrideIfExists: Boolean): Unit = {
+      name: String,
+      viewDefinition: LogicalPlan,
+      overrideIfExists: Boolean): Unit = {
     globalTempViewManager.create(formatTableName(name), viewDefinition, overrideIfExists)
   }
 
@@ -466,8 +466,8 @@ class SessionCatalog(
    * temp view is matched and altered, false otherwise.
    */
   def alterTempViewDefinition(
-    name: TableIdentifier,
-    viewDefinition: LogicalPlan): Boolean = synchronized {
+      name: TableIdentifier,
+      viewDefinition: LogicalPlan): Boolean = synchronized {
     val viewName = formatTableName(name.table)
     if (name.database.isEmpty) {
       if (tempTables.contains(viewName)) {
@@ -605,9 +605,9 @@ class SessionCatalog(
    * the same name, then, if that does not exist, drop the table from the current database.
    */
   def dropTable(
-    name: TableIdentifier,
-    ignoreIfNotExists: Boolean,
-    purge: Boolean): Unit = synchronized {
+      name: TableIdentifier,
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = synchronized {
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
     if (db == globalTempViewManager.database) {
@@ -777,9 +777,9 @@ class SessionCatalog(
    * If no database is specified, assume the table is in the current database.
    */
   def createPartitions(
-    tableName: TableIdentifier,
-    parts: Seq[CatalogTablePartition],
-    ignoreIfExists: Boolean): Unit = {
+      tableName: TableIdentifier,
+      parts: Seq[CatalogTablePartition],
+      ignoreIfExists: Boolean): Unit = {
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
@@ -794,11 +794,11 @@ class SessionCatalog(
    * If no database is specified, assume the table is in the current database.
    */
   def dropPartitions(
-    tableName: TableIdentifier,
-    specs: Seq[TablePartitionSpec],
-    ignoreIfNotExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean): Unit = {
+      tableName: TableIdentifier,
+      specs: Seq[TablePartitionSpec],
+      ignoreIfNotExists: Boolean,
+      purge: Boolean,
+      retainData: Boolean): Unit = {
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
@@ -815,9 +815,9 @@ class SessionCatalog(
    * If no database is specified, assume the table is in the current database.
    */
   def renamePartitions(
-    tableName: TableIdentifier,
-    specs: Seq[TablePartitionSpec],
-    newSpecs: Seq[TablePartitionSpec]): Unit = {
+      tableName: TableIdentifier,
+      specs: Seq[TablePartitionSpec],
+      newSpecs: Seq[TablePartitionSpec]): Unit = {
     val tableMetadata = getTableMetadata(tableName)
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
@@ -871,8 +871,8 @@ class SessionCatalog(
    * then a partial spec of (a='1') will return the first two only.
    */
   def listPartitionNames(
-    tableName: TableIdentifier,
-    partialSpec: Option[TablePartitionSpec] = None): Seq[String] = {
+      tableName: TableIdentifier,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = {
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
@@ -892,8 +892,8 @@ class SessionCatalog(
    * then a partial spec of (a='1') will return the first two only.
    */
   def listPartitions(
-    tableName: TableIdentifier,
-    partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = {
+      tableName: TableIdentifier,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = {
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
@@ -910,8 +910,8 @@ class SessionCatalog(
    * satisfy the given partition-pruning predicate expressions.
    */
   def listPartitionsByFilter(
-    tableName: TableIdentifier,
-    predicates: Seq[Expression]): Seq[CatalogTablePartition] = {
+      tableName: TableIdentifier,
+      predicates: Seq[Expression]): Seq[CatalogTablePartition] = {
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
@@ -937,8 +937,8 @@ class SessionCatalog(
    * The columns must be the same but the orders could be different.
    */
   private def requireExactMatchedPartitionSpec(
-    specs: Seq[TablePartitionSpec],
-    table: CatalogTable): Unit = {
+      specs: Seq[TablePartitionSpec],
+      table: CatalogTable): Unit = {
     val defined = table.partitionColumnNames.sorted
     specs.foreach { s =>
       if (s.keys.toSeq.sorted != defined) {
@@ -955,8 +955,8 @@ class SessionCatalog(
    * That is, the columns of partition spec should be part of the defined partition spec.
    */
   private def requirePartialMatchedPartitionSpec(
-    specs: Seq[TablePartitionSpec],
-    table: CatalogTable): Unit = {
+      specs: Seq[TablePartitionSpec],
+      table: CatalogTable): Unit = {
     val defined = table.partitionColumnNames
     specs.foreach { s =>
       if (!s.keys.forall(defined.contains)) {
@@ -1068,9 +1068,9 @@ class SessionCatalog(
    * Registers a temporary or permanent function into a session-specific [[FunctionRegistry]]
    */
   def registerFunction(
-    funcDefinition: CatalogFunction,
-    ignoreIfExists: Boolean,
-    functionBuilder: Option[FunctionBuilder] = None): Unit = {
+      funcDefinition: CatalogFunction,
+      ignoreIfExists: Boolean,
+      functionBuilder: Option[FunctionBuilder] = None): Unit = {
     val func = funcDefinition.identifier
     if (functionRegistry.functionExists(func.unquotedString) && !ignoreIfExists) {
       throw new AnalysisException(s"Function $func already exists")
@@ -1165,8 +1165,8 @@ class SessionCatalog(
    * The name of this function in the FunctionRegistry will be `databaseName.functionName`.
    */
   def lookupFunction(
-    name: FunctionIdentifier,
-    children: Seq[Expression]): Expression = synchronized {
+      name: FunctionIdentifier,
+      children: Seq[Expression]): Expression = synchronized {
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).

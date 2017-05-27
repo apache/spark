@@ -127,33 +127,33 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
-        ResolveRelations ::
-        ResolveReferences ::
-        ResolveCreateNamedStruct ::
-        ResolveDeserializer ::
-        ResolveNewInstance ::
-        ResolveUpCast ::
-        ResolveGroupingAnalytics ::
-        ResolvePivot ::
-        ResolveOrdinalInOrderByAndGroupBy ::
-        ResolveAggAliasInGroupBy ::
-        ResolveMissingReferences ::
-        ExtractGenerator ::
-        ResolveGenerate ::
-        ResolveFunctions ::
-        ResolveAliases ::
-        ResolveSubquery ::
-        ResolveWindowOrder ::
-        ResolveWindowFrame ::
-        ResolveNaturalAndUsingJoin ::
-        ExtractWindowExpressions ::
-        GlobalAggregates ::
-        ResolveAggregateFunctions ::
-        TimeWindowing ::
-        ResolveInlineTables(conf) ::
-        ResolveTimeZone(conf) ::
-        TypeCoercion.typeCoercionRules ++
-          extendedResolutionRules : _*),
+      ResolveRelations ::
+      ResolveReferences ::
+      ResolveCreateNamedStruct ::
+      ResolveDeserializer ::
+      ResolveNewInstance ::
+      ResolveUpCast ::
+      ResolveGroupingAnalytics ::
+      ResolvePivot ::
+      ResolveOrdinalInOrderByAndGroupBy ::
+      ResolveAggAliasInGroupBy ::
+      ResolveMissingReferences ::
+      ExtractGenerator ::
+      ResolveGenerate ::
+      ResolveFunctions ::
+      ResolveAliases ::
+      ResolveSubquery ::
+      ResolveWindowOrder ::
+      ResolveWindowFrame ::
+      ResolveNaturalAndUsingJoin ::
+      ExtractWindowExpressions ::
+      GlobalAggregates ::
+      ResolveAggregateFunctions ::
+      TimeWindowing ::
+      ResolveInlineTables(conf) ::
+      ResolveTimeZone(conf) ::
+      TypeCoercion.typeCoercionRules ++
+      extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("View", Once,
       AliasViewChild(conf)),
@@ -514,7 +514,7 @@ class Analyzer(
           val pivotAggs = namedAggExps.map { a =>
             Alias(PivotFirst(namedPivotCol.toAttribute, a.toAttribute, castPivotValues)
               .toAggregateExpression()
-              , "__pivot_" + a.sql)()
+            , "__pivot_" + a.sql)()
           }
           val groupByExprsAttr = groupByExprs.map(_.toAttribute)
           val secondAgg = Aggregate(groupByExprsAttr, groupByExprsAttr ++ pivotAggs, firstAgg)
@@ -633,8 +633,8 @@ class Analyzer(
     //    and the default database is only used to look up a view);
     // 3. Use the currentDb of the SessionCatalog.
     private def lookupTableFromCatalog(
-      u: UnresolvedRelation,
-      defaultDatabase: Option[String] = None): LogicalPlan = {
+        u: UnresolvedRelation,
+        defaultDatabase: Option[String] = None): LogicalPlan = {
       val tableIdentWithDb = u.tableIdentifier.copy(
         database = u.tableIdentifier.database.orElse(defaultDatabase))
       try {
@@ -874,8 +874,8 @@ class Analyzer(
      * Build a project list for Project/Aggregate and expand the star if possible
      */
     private def buildExpandedProjectList(
-        exprs: Seq[NamedExpression],
-        child: LogicalPlan): Seq[NamedExpression] = {
+       exprs: Seq[NamedExpression],
+       child: LogicalPlan): Seq[NamedExpression] = {
       exprs.flatMap {
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
         case s: Star => s.expand(child, resolver)
@@ -1022,13 +1022,13 @@ class Analyzer(
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       case agg @ Aggregate(groups, aggs, child)
-        if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
-          groups.exists(!_.resolved) =>
+       if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+         groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
 
       case gs @ GroupingSets(selectedGroups, groups, child, aggs)
-        if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
-          groups.exists(_.isInstanceOf[UnresolvedAttribute]) =>
+       if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+         groups.exists(_.isInstanceOf[UnresolvedAttribute]) =>
         gs.copy(
           selectedGroupByExprs = selectedGroups.map(mayResolveAttrByAggregateExprs(_, aggs, child)),
           groupByExprs = mayResolveAttrByAggregateExprs(groups, aggs, child))
@@ -1555,7 +1555,7 @@ class Analyzer(
       case filter @ Filter(havingCondition, AnalysisBarrier(aggregate: Aggregate)) =>
         apply(Filter(havingCondition, aggregate)).mapChildren(AnalysisBarrier)
       case filter @ Filter(havingCondition,
-      aggregate @ Aggregate(grouping, originalAggExprs, child))
+             aggregate @ Aggregate(grouping, originalAggExprs, child))
         if aggregate.resolved =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
@@ -1583,8 +1583,8 @@ class Analyzer(
                 alias.toAttribute
               // Grouping functions are handled in the rule [[ResolveGroupingAnalytics]].
               case e: Expression if grouping.exists(_.semanticEquals(e)) &&
-                !ResolveGroupingAnalytics.hasGroupingFunction(e) &&
-                !aggregate.output.exists(_.semanticEquals(e)) =>
+                  !ResolveGroupingAnalytics.hasGroupingFunction(e) &&
+                  !aggregate.output.exists(_.semanticEquals(e)) =>
                 e match {
                   case ne: NamedExpression =>
                     aggregateExpressions += ne
@@ -1796,8 +1796,8 @@ class Analyzer(
      * names is empty names are assigned from field names in generator.
      */
     private[analysis] def makeGeneratorOutput(
-      generator: Generator,
-      names: Seq[String]): Seq[Attribute] = {
+        generator: Generator,
+        names: Seq[String]): Seq[Attribute] = {
       val elementAttrs = generator.elementSchema.toAttributes
 
       if (names.length == elementAttrs.length) {
@@ -1809,8 +1809,8 @@ class Analyzer(
       } else {
         failAnalysis(
           "The number of aliases supplied in the AS clause does not match the number of columns " +
-            s"output by the UDTF expected ${elementAttrs.size} aliases but got " +
-            s"${names.mkString(",")} ")
+          s"output by the UDTF expected ${elementAttrs.size} aliases but got " +
+          s"${names.mkString(",")} ")
       }
     }
   }
@@ -1951,8 +1951,8 @@ class Analyzer(
 
           // Extract Windowed AggregateExpression
           case we @ WindowExpression(
-          ae @ AggregateExpression(function, _, _, _),
-          spec: WindowSpecDefinition) =>
+              ae @ AggregateExpression(function, _, _, _),
+              spec: WindowSpecDefinition) =>
             val newChildren = function.children.map(extractExpr)
             val newFunction = function.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
             val newAgg = ae.copy(aggregateFunction = newFunction)
@@ -1979,8 +1979,8 @@ class Analyzer(
      * Adds operators for Window Expressions. Every Window operator handles a single Window Spec.
      */
     private def addWindow(
-      expressionsWithWindowFunctions: Seq[NamedExpression],
-      child: LogicalPlan): LogicalPlan = {
+        expressionsWithWindowFunctions: Seq[NamedExpression],
+        child: LogicalPlan): LogicalPlan = {
       // First, we need to extract all WindowExpressions from expressionsWithWindowFunctions
       // and put those extracted WindowExpressions to extractedWindowExprBuffer.
       // This step is needed because it is possible that an expression contains multiple
@@ -2051,8 +2051,8 @@ class Analyzer(
       // a resolved Aggregate will not have Window Functions.
       case f @ Filter(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
         if child.resolved &&
-          hasWindowFunction(aggregateExprs) &&
-          a.expressions.forall(_.resolved) =>
+           hasWindowFunction(aggregateExprs) &&
+           a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
@@ -2069,7 +2069,7 @@ class Analyzer(
       // Aggregate without Having clause.
       case a @ Aggregate(groupingExprs, aggregateExprs, child)
         if hasWindowFunction(aggregateExprs) &&
-          a.expressions.forall(_.resolved) =>
+           a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
@@ -2214,7 +2214,7 @@ class Analyzer(
   object ResolveNaturalAndUsingJoin extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       case j @ Join(left, right, UsingJoin(joinType, usingCols), condition)
-        if left.resolved && right.resolved && j.duplicateResolved =>
+          if left.resolved && right.resolved && j.duplicateResolved =>
         commonNaturalJoinProcessing(left, right, joinType, usingCols, None)
       case j @ Join(left, right, NaturalJoin(joinType), condition) if j.resolvedExceptNatural =>
         // find common column names from both sides
@@ -2544,8 +2544,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
       // Only support a single window expression for now
       if (windowExpressions.size == 1 &&
-        windowExpressions.head.timeColumn.resolved &&
-        windowExpressions.head.checkInputDataTypes().isSuccess) {
+          windowExpressions.head.timeColumn.resolved &&
+          windowExpressions.head.checkInputDataTypes().isSuccess) {
         val window = windowExpressions.head
 
         val metadata = window.timeColumn match {
@@ -2560,19 +2560,19 @@ object TimeWindowing extends Rule[LogicalPlan] {
           val windowId = Ceil((PreciseTimestamp(window.timeColumn) - window.startTime) /
             window.slideDuration)
           val windowStart = (windowId + i - maxNumOverlapping) *
-            window.slideDuration + window.startTime
+              window.slideDuration + window.startTime
           val windowEnd = windowStart + window.windowDuration
 
           CreateNamedStruct(
             Literal(WINDOW_START) :: windowStart ::
-              Literal(WINDOW_END) :: windowEnd :: Nil)
+            Literal(WINDOW_END) :: windowEnd :: Nil)
         }
 
         val projections = windows.map(_ +: p.children.head.output)
 
         val filterExpr =
           window.timeColumn >= windowAttr.getField(WINDOW_START) &&
-            window.timeColumn < windowAttr.getField(WINDOW_END)
+          window.timeColumn < windowAttr.getField(WINDOW_END)
 
         val expandedPlan =
           Filter(filterExpr,
