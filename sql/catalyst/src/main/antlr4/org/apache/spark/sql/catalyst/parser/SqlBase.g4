@@ -132,7 +132,6 @@ statement
     | CREATE TEMPORARY MACRO macroName=identifier
         '(' colTypeList? ')' expression                        #createMacro
     | DROP TEMPORARY MACRO (IF EXISTS)? macroName=identifier           #dropMacro
-    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN)? statement    #explain
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?
