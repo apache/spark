@@ -1001,7 +1001,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.ASTERISK =>
         Multiply(left, right)
       case SqlBaseParser.SLASH =>
-        Divide(left, right)
+        Cast(Divide(left, right), DoubleType)
       case SqlBaseParser.PERCENT =>
         Remainder(left, right)
       case SqlBaseParser.DIV =>
