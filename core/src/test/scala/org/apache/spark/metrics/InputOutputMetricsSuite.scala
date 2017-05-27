@@ -319,6 +319,45 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     }
     assert(bytesRead >= tmpFile.length())
   }
+
+  test("input metrics with old Hadoop API in different thread") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.textFile(tmpFilePath, 4).mapPartitions { iter =>
+        val buf = new ArrayBuffer[String]()
+        val thread = new Thread() {
+          override def run(): Unit = {
+            iter.flatMap(_.split(" ")).foreach(buf.append(_))
+          }
+        }
+        thread.start()
+        thread.join()
+
+        buf.iterator
+      }.count()
+    }
+    assert(bytesRead != 0)
+    assert(bytesRead >= tmpFile.length())
+  }
+
+  test("input metrics with new Hadoop API in different thread") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.newAPIHadoopFile(tmpFilePath, classOf[NewTextInputFormat], classOf[LongWritable],
+        classOf[Text]).mapPartitions { iter =>
+        val buf = new ArrayBuffer[String]()
+        val thread = new Thread() {
+          override def run(): Unit = {
+            iter.map(_._2.toString).flatMap(_.split(" ")).foreach(buf.append(_))
+          }
+        }
+        thread.start()
+        thread.join()
+
+        buf.iterator
+      }.count()
+    }
+    assert(bytesRead != 0)
+    assert(bytesRead >= tmpFile.length())
+  }
 }
 
 /**

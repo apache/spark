@@ -21,6 +21,7 @@ import java.io.IOException
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -143,14 +144,18 @@ class SparkHadoopUtil extends Logging {
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If
    * getFSBytesReadOnThreadCallback is called from thread r at time t, the returned callback will
    * return the bytes read on r since t.
-   *
-   * @return None if the required method can't be found.
    */
   private[spark] def getFSBytesReadOnThreadCallback(): () => Long = {
-    val threadStats = FileSystem.getAllStatistics.asScala.map(_.getThreadStatistics)
-    val f = () => threadStats.map(_.getBytesRead).sum
-    val baselineBytesRead = f()
-    () => f() - baselineBytesRead
+    val f = () => FileSystem.getAllStatistics.asScala.map(_.getThreadStatistics.getBytesRead).sum
+    val baseline = (Thread.currentThread().getId, f())
+    val bytesReadMap = new ConcurrentHashMap[Long, Long]()
+
+    () => {
+      bytesReadMap.put(Thread.currentThread().getId, f())
+      bytesReadMap.asScala.map { case (k, v) =>
+        v - (if (k == baseline._1) baseline._2 else 0)
+      }.sum
+    }
   }
 
   /**
