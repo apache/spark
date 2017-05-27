@@ -262,7 +262,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
 
     val plan = testRelation2.select('c).orderBy(Floor('a).asc)
     val expected = testRelation2.select(c, a)
-      .orderBy(Floor(Cast(a, LongType, Option(TimeZone.getDefault().getID))).asc).select(c)
+      .orderBy(Floor(Cast(a, DoubleType, Option(TimeZone.getDefault().getID))).asc).select(c)
 
     checkAnalysis(plan, expected)
   }
