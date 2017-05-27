@@ -108,7 +108,13 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       }
     } catch {
       case ioe: IOException =>
-        throw ioe
+        // we need to ignore exception of reading chunk fail while an app is still running
+        if(!maybeTruncated) {
+          throw ioe
+        } else {
+          logWarning(s"Got IOException from log file $sourceName" +
+            s" at line $lineNumber, the application maybe still running. ")
+        }
       case e: Exception =>
         logError(s"Exception parsing Spark event log: $sourceName", e)
         logError(s"Malformed line #$lineNumber: $currentLine\n")
