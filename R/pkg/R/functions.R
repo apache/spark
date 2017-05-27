@@ -61,8 +61,15 @@ NULL
 #' Date time arithmetic functions defined for \code{Column}.
 #'
 #' @param y Column to compute on.
-#' @param x if of class Column, it is used to perform arithmatic operations with \code{y}.
-#' If of class numeric, it is the number of months or days to be added to \code{y}.
+#' @param x For class Column, it is used to perform arithmetic operations with \code{y}.
+#' For class numeric, it is the number of months or days to be added to \code{y}.
+#' For class character, then it is
+#' \itemize{
+#'  \item \code{date_format}: date format specification.
+#'  \item \code{from_utc_timestamp, to_utc_timestamp}: time zone to use.
+#'  \item \code{next_day}: day of the week string.
+#' }
+#'
 #' @name column_datetime_diff_functions
 #' @rdname column_datetime_diff_functions
 #' @family data time functions
@@ -2335,7 +2342,6 @@ setMethod("n", signature(x = "Column"),
 #' Note: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
-#' @param x [\code{date_format}] date format specification.
 #' @rdname column_datetime_diff_functions
 #'
 #' @aliases date_format date_format,Column,character-method
@@ -2390,7 +2396,6 @@ setMethod("from_json", signature(x = "Column", schema = "structType"),
 #' \code{from_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day in UTC,
 #' returns another timestamp that corresponds to the same time of day in the given timezone.
 #'
-#' @param x [\code{from_utc_timestamp, to_utc_timestamp}] time zone to use.
 #' @rdname column_datetime_diff_functions
 #'
 #' @aliases from_utc_timestamp from_utc_timestamp,Column,character-method
@@ -2440,8 +2445,6 @@ setMethod("instr", signature(y = "Column", x = "character"),
 #' \code{next_day('2015-07-27', "Sunday")} returns 2015-08-02 because that is the first Sunday
 #' after 2015-07-27. Day of the week parameter is case insensitive, and accepts first three or
 #' two characters: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
-#'
-#' @param x [\code{next_day}] Day of the week string.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases next_day next_day,Column,character-method
