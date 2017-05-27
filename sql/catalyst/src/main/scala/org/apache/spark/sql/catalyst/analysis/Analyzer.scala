@@ -874,8 +874,8 @@ class Analyzer(
      * Build a project list for Project/Aggregate and expand the star if possible
      */
     private def buildExpandedProjectList(
-       exprs: Seq[NamedExpression],
-       child: LogicalPlan): Seq[NamedExpression] = {
+      exprs: Seq[NamedExpression],
+      child: LogicalPlan): Seq[NamedExpression] = {
       exprs.flatMap {
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
         case s: Star => s.expand(child, resolver)
@@ -1022,13 +1022,13 @@ class Analyzer(
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       case agg @ Aggregate(groups, aggs, child)
-       if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
-         groups.exists(!_.resolved) =>
+          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+            groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
 
       case gs @ GroupingSets(selectedGroups, groups, child, aggs)
-       if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
-         groups.exists(_.isInstanceOf[UnresolvedAttribute]) =>
+          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
+            groups.exists(_.isInstanceOf[UnresolvedAttribute]) =>
         gs.copy(
           selectedGroupByExprs = selectedGroups.map(mayResolveAttrByAggregateExprs(_, aggs, child)),
           groupByExprs = mayResolveAttrByAggregateExprs(groups, aggs, child))
@@ -1556,7 +1556,7 @@ class Analyzer(
         apply(Filter(havingCondition, aggregate)).mapChildren(AnalysisBarrier)
       case filter @ Filter(havingCondition,
              aggregate @ Aggregate(grouping, originalAggExprs, child))
-        if aggregate.resolved =>
+          if aggregate.resolved =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
         try {
@@ -2667,7 +2667,7 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
             val outerAliases = a.aggregateExpressions collect { case a: Alias => a }
             // Update the subquery plan to record the OuterReference to point to outer query plan.
             s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases))
-        }
+      }
     }
   }
 }
