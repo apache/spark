@@ -276,6 +276,8 @@ object FunctionRegistry {
 
     // string functions
     expression[Ascii]("ascii"),
+    expression[Chr]("char"),
+    expression[Chr]("chr"),
     expression[Base64]("base64"),
     expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
@@ -431,6 +433,8 @@ object FunctionRegistry {
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
 
+    // cast
+    expression[Cast]("cast"),
     // Cast aliases (SPARK-16730)
     castAlias("boolean", BooleanType),
     castAlias("tinyint", ByteType),
@@ -513,7 +517,9 @@ object FunctionRegistry {
       }
       Cast(args.head, dataType)
     }
-    (name, (expressionInfo[Cast](name), builder))
+    val clazz = scala.reflect.classTag[Cast].runtimeClass
+    val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
+    (name, (new ExpressionInfo(clazz.getCanonicalName, null, name, usage, null), builder))
   }
 
   /**
