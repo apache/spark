@@ -183,8 +183,8 @@ private[ui] class StagePagedTable(
   }
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    s"$parameterPath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc#$tableHeaderId"
+    URLEncoder.encode(s"$parameterPath&$stageTag.sort=$sortColumn" +
+      s"&$stageTag.desc=$desc#$tableHeaderId", "UTF-8")
   }
 
   override def headers: Seq[Node] = {
