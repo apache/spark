@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, _}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -713,6 +713,37 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       functionIdentifier.funcName,
       ctx.EXISTS != null,
       ctx.TEMPORARY != null)
+  }
+
+  /**
+   * Create a [[CreateMacroCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE TEMPORARY MACRO macro_name([col_name col_type, ...]) expression;
+   * }}}
+   */
+  override def visitCreateMacro(ctx: CreateMacroContext): LogicalPlan = withOrigin(ctx) {
+    val arguments = Option(ctx.colTypeList).map(visitColTypeList(_))
+      .getOrElse(Seq.empty[StructField])
+    val e = expression(ctx.expression)
+    CreateMacroCommand(
+      ctx.macroName.getText,
+      MacroFunctionWrapper(arguments, e))
+  }
+
+  /**
+   * Create a [[DropMacroCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   DROP TEMPORARY MACRO [IF EXISTS] macro_name;
+   * }}}
+   */
+  override def visitDropMacro(ctx: DropMacroContext): LogicalPlan = withOrigin(ctx) {
+    DropMacroCommand(
+      ctx.macroName.getText,
+      ctx.EXISTS != null)
   }
 
   /**

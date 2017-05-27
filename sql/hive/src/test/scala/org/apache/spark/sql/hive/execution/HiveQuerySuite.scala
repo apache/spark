@@ -1153,13 +1153,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql("ALTER INDEX my_index ON my_table set IDXPROPERTIES (\"prop1\"=\"val1_new\")")}
   }
 
-  test("create/drop macro commands are not supported") {
-    assertUnsupportedFeature {
-      sql("CREATE TEMPORARY MACRO SIGMOID (x DOUBLE) 1.0 / (1.0 + EXP(-x))")
-    }
-    assertUnsupportedFeature { sql("DROP TEMPORARY MACRO SIGMOID") }
-  }
-
   test("dynamic partitioning is allowed when hive.exec.dynamic.partition.mode is nonstrict") {
     val modeConfKey = "hive.exec.dynamic.partition.mode"
     withTable("with_parts") {

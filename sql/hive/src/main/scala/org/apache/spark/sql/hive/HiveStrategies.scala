@@ -237,7 +237,7 @@ private[hive] trait HiveStrategies {
           !predicate.references.isEmpty &&
           predicate.references.subsetOf(partitionKeyIds)
         }
-
+        FunctionRegistry.scala
         pruneFilterProject(
           projectList,
           otherPredicates,

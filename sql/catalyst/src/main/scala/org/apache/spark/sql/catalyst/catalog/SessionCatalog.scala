@@ -1020,6 +1020,24 @@ class SessionCatalog(
     }
   }
 
+  /** Create a temporary macro. */
+  def createTempMacro(
+    name: String,
+    info: ExpressionInfo,
+    funcDefinition: FunctionBuilder): Unit = {
+    if (functionRegistry.functionExists(name)) {
+      throw new TempMacroAlreadyExistsException(name)
+    }
+    functionRegistry.registerMacro(name, info, funcDefinition)
+  }
+
+  /** Drop a temporary macro. */
+  def dropTempMacro(name: String, ignoreIfNotExists: Boolean): Unit = {
+    if (!functionRegistry.dropMacro(name) && !ignoreIfNotExists) {
+      throw new NoSuchTempMacroException(name)
+    }
+  }
+
   /**
    * Retrieve the metadata of a metastore function.
    *
