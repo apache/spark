@@ -78,8 +78,11 @@ private[hive] class SparkHiveWriterContainer(
   @transient protected lazy val committer = conf.value.getOutputCommitter
   @transient protected lazy val jobContext = new JobContextImpl(conf.value, jID.value)
   @transient private lazy val taskContext = new TaskAttemptContextImpl(conf.value, taID.value)
-  @transient private lazy val outputFormat =
-    conf.value.getOutputFormat.asInstanceOf[HiveOutputFormat[AnyRef, Writable]]
+  @transient private lazy val outputFormat = conf.value.getOutputFormat match {
+    case format: HiveOutputFormat[AnyRef, Writable]
+      => format.asInstanceOf[HiveOutputFormat[AnyRef, Writable]]
+    case _ => null
+  }
 
   def driverSideSetup() {
     setIDs(0, 0, 0)
