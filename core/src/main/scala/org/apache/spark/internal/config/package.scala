@@ -151,9 +151,11 @@ package object config {
       .createOptional
   // End blacklist confs
 
-  private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =
-    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.size")
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
+    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
+      .withAlternative("spark.scheduler.listenerbus.eventqueue.size")
       .intConf
+      .checkValue(_ > 0, "The capacity of listener bus event queue must not be negative")
       .createWithDefault(10000)
 
   // This property sets the root namespace for metrics reporting
@@ -287,4 +289,10 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(100 * 1024 * 1024)
 
+  private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
+    ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
+      .doc("The blocks of a shuffle request will be fetched to disk when size of the request is " +
+        "above this threshold. This is to avoid a giant request takes too much memory.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("200m")
 }
