@@ -1092,9 +1092,9 @@ class SessionCatalog(
 
   /** Create a temporary macro. */
   def createTempMacro(
-    name: String,
-    info: ExpressionInfo,
-    functionBuilder: FunctionBuilder): Unit = {
+      name: String,
+      info: ExpressionInfo,
+      functionBuilder: FunctionBuilder): Unit = {
     if (functionRegistry.functionExists(name)) {
       throw new AnalysisException(s"Function $name already exists")
     }
