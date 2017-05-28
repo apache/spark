@@ -375,6 +375,7 @@ struct<FLOOR(CAST(0 AS DOUBLE)):bigint>
 
 
 -- !query 45
+<<<<<<< 9bddb3c617ffd21ddc431f65fbbd1960fa70913c
 select floor(1)
 -- !query 45 schema
 struct<FLOOR(CAST(1 AS DOUBLE)):bigint>
