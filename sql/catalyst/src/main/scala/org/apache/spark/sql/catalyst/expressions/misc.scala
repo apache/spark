@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.UUID
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Print the result of an expression to stderr (used for debugging codegen).
@@ -103,4 +106,26 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def prettyName: String = "current_database"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns a universally unique identifier (UUID) string. The value is returned as a canonical UUID 36-character string.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_();
+       46707d92-02f4-4817-8116-a4c3b23e6266
+  """)
+// scalastyle:on line.size.limit
+case class Uuid() extends LeafExpression with CodegenFallback {
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = StringType
+
+  override def eval(input: InternalRow): Any = {
+    UTF8String.fromString(UUID.randomUUID().toString)
+  }
+
+  override def prettyName: String = "uuid"
 }
