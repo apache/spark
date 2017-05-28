@@ -51,7 +51,31 @@ object InMemoryRelation {
  * @param stats The stat of columns
  */
 private[columnar]
-case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow) {
+  def column(columnarIterator: ColumnarIterator, index: Int): ColumnVector = {
+    val ordinal = columnarIterator.getColumnIndexes(index)
+    val dataType = columnarIterator.getColumnTypes(index)
+    val buffer = ByteBuffer.wrap(buffers(ordinal)).order(nativeOrder)
+    val accessor: BasicColumnAccessor[_] = dataType match {
+      case FloatType => new FloatColumnAccessor(buffer)
+      case DoubleType => new DoubleColumnAccessor(buffer)
+      case arrayType: ArrayType => new ArrayColumnAccessor(buffer, arrayType)
+      case _ => throw new UnsupportedOperationException(s"CachedBatch.column(): $dataType")
+    }
+
+    val (out, nullsBuffer) = if (accessor.isInstanceOf[NativeColumnAccessor[_]]) {
+      val nativeAccessor = accessor.asInstanceOf[NativeColumnAccessor[_]]
+      nativeAccessor.decompress(numRows);
+    } else {
+      val buffer = accessor.getByteBuffer
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      (buffer, nullsBuffer)
+    }
+
+    ColumnVector.allocate(numRows, dataType, true, out, nullsBuffer)
+  }
+}
 
 case class InMemoryRelation(
     output: Seq[Attribute],

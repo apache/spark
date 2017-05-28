@@ -97,6 +97,10 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case NullType | StringType | BinaryType =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
+        case ArrayType(_, _) =>
+          _isSupportColumnarCodeGen = true
+          s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
+             (${dt.getClass.getName}) columnTypes[$index]);"""
         case other =>
           s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
              (${dt.getClass.getName}) columnTypes[$index]);"""
