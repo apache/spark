@@ -595,15 +595,17 @@ class Analyzer(
         val defaultDatabase = AnalysisContext.get.defaultDatabase
         val foundRelation = lookupTableFromCatalog(u, defaultDatabase)
 
-        // If alias names assigned, add `Project` with the aliases
-        val relation = if (u.outputNames.nonEmpty) {
+        // Add `Project` to rename output column names if a query has alias names:
+        // e.g., SELECT col1, col2 FROM testData AS t(col1, col2)
+        val relation = if (u.outputColumnNames.nonEmpty) {
           val outputAttrs = foundRelation.output
-          // Checks if the number of the aliases is equal to expected one
-          if (u.outputNames.size != outputAttrs.size) {
-            u.failAnalysis(s"expected ${outputAttrs.size} columns but found " +
-              s"${u.outputNames.size} columns in alias names")
+          // Checks if the number of the aliases equals to the number of columns in the table.
+          if (u.outputColumnNames.size != outputAttrs.size) {
+            u.failAnalysis(s"Number of column aliases does not match number of columns. " +
+              s"Table name: ${u.tableName}; number of column aliases: " +
+              s"${u.outputColumnNames.size}; number of columns: ${outputAttrs.size}.")
           }
-          val aliases = outputAttrs.zip(u.outputNames).map {
+          val aliases = outputAttrs.zip(u.outputColumnNames).map {
             case (attr, name) => Alias(attr, name)()
           }
           Project(aliases, foundRelation)

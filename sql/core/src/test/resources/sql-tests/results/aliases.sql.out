@@ -42,7 +42,7 @@ SELECT * FROM testData AS t(col1, col2, col3)
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-expected 2 columns but found 3 columns in alias names; line 1 pos 14
+Number of column aliases does not match number of columns. Table name: testData; number of column aliases: 3; number of columns: 2.; line 1 pos 14
 
 
 -- !query 5
@@ -51,7 +51,7 @@ SELECT * FROM testData AS t(col1)
 struct<>
 -- !query 5 output
 org.apache.spark.sql.AnalysisException
-expected 2 columns but found 1 columns in alias names; line 1 pos 14
+Number of column aliases does not match number of columns. Table name: testData; number of column aliases: 1; number of columns: 2.; line 1 pos 14
 
 
 -- !query 6

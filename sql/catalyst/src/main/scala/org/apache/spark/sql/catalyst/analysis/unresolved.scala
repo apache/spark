@@ -41,10 +41,14 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
  *   // Assign alias names
  *   SELECT col1, col2 FROM testData AS t(col1, col2);
  * }}}
+ *
+ * @param tableIdentifier table name
+ * @param outputColumnNames alias names of columns. If these names given, an analyzer adds
+ *                          [[Project]] to rename the columns.
  */
 case class UnresolvedRelation(
     tableIdentifier: TableIdentifier,
-    outputNames: Seq[String] = Seq.empty)
+    outputColumnNames: Seq[String] = Seq.empty)
   extends LeafNode {
 
   /** Returns a `.` separated name for this relation. */
@@ -80,6 +84,11 @@ case class UnresolvedInlineTable(
  *   // Assign alias names
  *   select t.a from range(10) t(a);
  * }}}
+ *
+ * @param functionName name of this table-value function
+ * @param functionArgs list of function arguments
+ * @param outputNames alias names of function output columns. If these names given, an analyzer
+ *                    adds [[Project]] to rename the output columns.
  */
 case class UnresolvedTableValuedFunction(
     functionName: String,
