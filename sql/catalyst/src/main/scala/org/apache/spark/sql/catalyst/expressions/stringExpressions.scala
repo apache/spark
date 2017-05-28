@@ -345,8 +345,14 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, sear[, rep]) - Replaces all occurrences of `sear` with `rep`.",
+  usage = "_FUNC_(str, search[, replace]) - Replaces all occurrences of `search` with `replace`.",
   extended = """
+    Arguments:
+      str - a string expression
+      search - a string expression. If `search` is not found in `str`, source-string is returned unchanged.
+      replace - a string expression. If `replace` is not specified or is an empty string, nothing replaces
+                the string that is removed from `str`.
+
     Examples:
       > SELECT _FUNC_('ABCabc', 'abc', 'DEF');
        ABCDEF
