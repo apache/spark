@@ -96,6 +96,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       OptimizeIn(conf),
       ConstantFolding,
       ReorderAssociativeOperator,
+      SimplifyAssociativeOperator,
       LikeSimplification,
       BooleanSimplification,
       SimplifyConditionals,

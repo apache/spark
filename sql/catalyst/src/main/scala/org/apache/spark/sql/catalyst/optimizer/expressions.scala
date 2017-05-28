@@ -54,10 +54,150 @@ object ConstantFolding extends Rule[LogicalPlan] {
   }
 }
 
+/** A private [[UnaryExpression]] only used in expression optimization. */
+private[optimizer] case class UnaryReciprocal(child: Expression)
+    extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+}
 
 /**
- * Reorder associative integral-type operators and fold all constants into one.
+ * If the expressions are comprised of sub-expressions which can cancel out each other, e.g.,
+ * the pair of (b, -b) in a chain of `Add`, this rule also simplifies the expressions by removing
+ * such pairs of sub-expressions.
  */
+object SimplifyAssociativeOperator extends Rule[LogicalPlan] {
+  /** Finds the expressions existing in both set of expressions and drops them from two set. */
+  private def filterOutExprs(
+      leftExprs: Seq[Expression],
+      rightExprs: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    var newLeftExprs = leftExprs
+    val foundIndexes = rightExprs.zipWithIndex.map { case (r, rIndex) =>
+      val (rExpr, rDataType) = r match {
+        case Cast(wrappedR, dt, _) => (wrappedR, dt)
+        case _ => (r, r.dataType)
+      }
+      val found = newLeftExprs.indexWhere {
+        case Cast(wrapped, dt, _) if dt.sameType(rDataType) => wrapped.semanticEquals(rExpr)
+        case other if other.dataType.sameType(rDataType) => other.semanticEquals(rExpr)
+        case _ => false
+      }
+      if (found >= 0) {
+        newLeftExprs = newLeftExprs.slice(0, found) ++
+          newLeftExprs.slice(found + 1, newLeftExprs.length)
+      }
+      (found, rIndex)
+    }
+    val dropRightIndexes = foundIndexes.filter(_._1 >= 0).unzip._2
+    val newRightExprs = rightExprs.zipWithIndex.filterNot { case (r, index) =>
+      dropRightIndexes.contains(index)
+    }.unzip._1
+    (newLeftExprs, newRightExprs)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // We skip `Aggregate` when simplifying associative expressions. That is because we will
+    // traverse up expressions and replace them with simplified expressions. If the aggregate
+    // expressions which exists in grouping expressions are simplified, the optimized
+    // expression could not be derived from grouping expressions.
+    case q: LogicalPlan if !q.isInstanceOf[Aggregate] =>
+      q transformExpressionsUp {
+        case e => reorderExpr(e)
+      }
+  }
+
+  private def reorderExpr(expr: Expression): Expression = expr match {
+    case u @ UnaryMinus(UnaryMinus(c)) if u.deterministic => c
+
+    // If the expression is composed of `Add` and `Subtract`, we rearrange it by extracting all
+    // sub-expressions like:
+    // a + b => a, b
+    // a - b => a, -b
+    // -(a + b) => -a, -b
+    // -(a - b) => -a, b
+    // Then we concatenate those sub-expressions by:
+    // 1. Remove the pairs of sub-expressions like (b, -b).
+    // 2. Concatenate remainning sub-expressions with `Add`.
+    case a: Add if a.deterministic =>
+      // Extract sub-expressions.
+      val (positiveExprs, negativeExprs) = Canonicalize.gatherAdjacent(a, {
+        case Add(l, r) => Seq(l, r)
+        case Subtract(l, r) => Seq(l, UnaryMinus(r))
+        case UnaryMinus(Add(l, r)) => Seq(UnaryMinus(l), UnaryMinus(r))
+        case UnaryMinus(Subtract(l, r)) => Seq(UnaryMinus(l), r)
+      }).map { e =>
+        e.transform { case UnaryMinus(UnaryMinus(c)) => c }
+      }.filter {
+        // Remove any +0, -0
+        case Literal(0, _) => false
+        case UnaryMinus(Literal(0, _)) => false
+        case Cast(Literal(0, _), _, _) => false
+        case UnaryMinus(Cast(Literal(0, _), _, _)) => false
+        case _ => true
+      }.partition(!_.isInstanceOf[UnaryMinus])
+
+      // Remove the pairs of sub-expressions like (b, -b).
+      val (newLeftExprs, newRightExprs) = filterOutExprs(positiveExprs,
+        negativeExprs.map(_.asInstanceOf[UnaryMinus].child))
+
+      val finalExprs = (newLeftExprs ++ newRightExprs.map(UnaryMinus(_)))
+      if (finalExprs.isEmpty) {
+        Cast(Literal(0), a.dataType)
+      } else {
+        finalExprs.reduce(Add)
+      }
+
+    case s @ Subtract(sl, sr) if s.deterministic => reorderExpr(Add(sl, UnaryMinus(sr)))
+
+    // If the expression is composed of `Multiply` and `Divide`, we rearrange it by extracting
+    // all sub-expressions like:
+    // a * b => a, b
+    // a / b => a, 1 / b
+    // 1 / (a * b) => 1 / a, 1 / b
+    // 1 / (a / b) => 1 / a, b
+    // Then we concatenate those sub-expressions by:
+    // 1. Remove the pairs of sub-expressions like (b, 1 / b).
+    // 2. Concatenate remainning sub-expressions with `Multiply` and `Divide`.
+    case m: Multiply if m.deterministic =>
+      // Extract sub-expressions.
+      val (multiplyExprs, reciprocalExprs) = Canonicalize.gatherAdjacent(m, {
+        case Multiply(l, r) => Seq(l, r)
+        case Divide(l, r) => Seq(l, UnaryReciprocal(r))
+        case UnaryReciprocal(Multiply(l, r)) => Seq(UnaryReciprocal(l), UnaryReciprocal(r))
+        case UnaryReciprocal(Divide(l, r)) => Seq(UnaryReciprocal(l), r)
+      }).map { e =>
+        e.transform { case UnaryReciprocal(UnaryReciprocal(c)) => c }
+      }.filter {
+        // Remove any +1, -1
+        case Literal(1, _) => false
+        case UnaryReciprocal(Literal(1, _)) => false
+        case Cast(Literal(1, _), _, _) => false
+        case UnaryReciprocal(Cast(Literal(1, _), _, _)) => false
+        case _ => true
+      }.partition(!_.isInstanceOf[UnaryReciprocal])
+
+      // Remove the pairs of sub-expressions like (b, 1 / b).
+      val (newLeftExprs, newRightExprs) = filterOutExprs(multiplyExprs,
+        reciprocalExprs.map(_.asInstanceOf[UnaryReciprocal].child))
+
+      val finalExprs = (newLeftExprs ++ newRightExprs.map(UnaryReciprocal(_)))
+      if (finalExprs.isEmpty) {
+        Literal(1, m.dataType)
+      } else {
+        finalExprs.reduceLeft { (resultExpr, expr) =>
+          expr match {
+            case u: UnaryReciprocal => Divide(resultExpr, u.child)
+            case other => Multiply(resultExpr, expr)
+          }
+        }
+      }
+
+    case d @ Divide(dl, dr) if d.deterministic => reorderExpr(Multiply(dl, UnaryReciprocal(dr)))
+
+    case _ => expr
+  }
+}
+
+/** Reorder associative integral-type operators and fold all constants into one. */
 object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def flattenAdd(
     expression: Expression,
@@ -88,28 +228,27 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
       // grouping expressions.
       val groupingExpressionSet = collectGroupingExpressions(q)
       q transformExpressionsDown {
-      case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
-        val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
-        if (foldables.size > 1) {
-          val foldableExpr = foldables.reduce((x, y) => Add(x, y))
-          val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
-          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
-        } else {
-          a
-        }
-      case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
-        val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
-        if (foldables.size > 1) {
-          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
-          val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
-          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
-        } else {
-          m
-        }
-    }
+        case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
+          val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
+          if (foldables.size > 1) {
+            val foldableExpr = foldables.reduce((x, y) => Add(x, y))
+            val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
+            if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
+          } else {
+            a
+          }
+        case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
+          val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
+          if (foldables.size > 1) {
+            val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
+            val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
+            if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
+          } else {
+            m
+          }
+      }
   }
 }
-
 
 /**
  * Optimize IN predicates:

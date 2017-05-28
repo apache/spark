@@ -663,8 +663,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     // Project [((rand + 1 AS rand1) - (rand - 1 AS rand2)) AS (rand1 - rand2)]
     //   Project [key, Rand 5 AS rand]
     //     LogicalRDD [key, value]
+    //
+    // SPARK-19902: Above query plan is further optimized to ...
+    // Project [2.0 AS (rand1 - rand2)]
+    //     LogicalRDD [key, value]
+    // Because (rand + 1 AS rand1) - (rand - 1 AS rand2) is actually 2.
     val dfWithThreeProjects = dfWithTwoProjects.select($"rand1" - $"rand2")
-    checkNumProjects(dfWithThreeProjects, 2)
+    checkNumProjects(dfWithThreeProjects, 1)
     dfWithThreeProjects.collect().foreach { row =>
       assert(row.getDouble(0) === 2.0 +- 0.0001)
     }

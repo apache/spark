@@ -43,11 +43,14 @@ object Canonicalize extends {
     case _ => e
   }
 
-  /** Collects adjacent commutative operations. */
-  private def gatherCommutative(
+  /**
+   * Collects adjacent operations. The operations can be non commutative.
+   * This is not private because the optimizer uses this too.
+   */
+  def gatherAdjacent(
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = e match {
-    case c if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
+    case c if f.isDefinedAt(c) => f(c).flatMap(gatherAdjacent(_, f))
     case other => other :: Nil
   }
 
@@ -55,7 +58,7 @@ object Canonicalize extends {
   private def orderCommutative(
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] =
-    gatherCommutative(e, f).sortBy(_.hashCode())
+    gatherAdjacent(e, f).sortBy(_.hashCode())
 
   /** Rearrange expressions that are commutative or associative. */
   private def expressionReorder(e: Expression): Expression = e match {
