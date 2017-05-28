@@ -208,7 +208,8 @@ object ExpressionEncoder {
 }
 
 /**
- * A generic encoder for JVM objects.
+ * A generic encoder for JVM objects that uses Catalyst Expressions for a `serializer`
+ * and a `deserializer`.
  *
  * @param schema The schema after converting `T` to a Spark SQL row.
  * @param serializer A set of expressions, one for each top-level field that can be used to
