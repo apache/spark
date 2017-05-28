@@ -70,6 +70,12 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #'                      the relationship between the variance and mean of the distribution. Only
 #'                      applicable to the Tweedie family.
 #' @param link.power the index in the power link function. Only applicable to the Tweedie family.
+#' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
+#'                               decide the base level of a string feature as the last category after
+#'                               ordering is dropped when encoding strings. Supported options are
+#'                               'frequencyDesc', 'frequencyAsc', 'alphabetDesc', 'alphabetAsc'.
+#'                               The default value is 'frequencyDesc'. When the ordering is set to
+#'                               'alphabetDesc', this drops the same category as R when encoding strings.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model.
@@ -79,7 +85,7 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' t <- as.data.frame(Titanic)
+#' t <- as.data.frame(Titanic, stringsAsFactors = FALSE)
 #' df <- createDataFrame(t)
 #' model <- spark.glm(df, Freq ~ Sex + Age, family = "gaussian")
 #' summary(model)
@@ -96,6 +102,15 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
 #'
+#' # note that the default string encoding is different from R's glm
+#' model2 <- glm(Freq ~ Sex + Age, family = "gaussian", data = t)
+#' summary(model2)
+#' # use stringIndexerOrderType = "alphabetDesc" to force string encoding
+#' # to be consistent with R
+#' model3 <- spark.glm(df, Freq ~ Sex + Age, family = "gaussian",
+#'                    stringIndexerOrderType = "alphabetDesc")
+#' summary(model3)
+#'
 #' # fit tweedie model
 #' model <- spark.glm(df, Freq ~ Sex + Age, family = "tweedie",
 #'                    var.power = 1.2, link.power = 0)
@@ -110,7 +125,8 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
-                   regParam = 0.0, var.power = 0.0, link.power = 1.0 - var.power) {
+                   regParam = 0.0, var.power = 0.0, link.power = 1.0 - var.power,
+                   stringIndexerOrderType = "frequencyDesc") {
 
             if (is.character(family)) {
               # Handle when family = "tweedie"
@@ -145,7 +161,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, tolower(family$family), family$link,
                                 tol, as.integer(maxIter), weightCol, regParam,
-                                as.double(var.power), as.double(link.power))
+                                as.double(var.power), as.double(link.power),
+                                as.character(stringIndexerOrderType))
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
@@ -167,6 +184,12 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @param maxit integer giving the maximal number of IRLS iterations.
 #' @param var.power the index of the power variance function in the Tweedie family.
 #' @param link.power the index of the power link function in the Tweedie family.
+#' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
+#'                               decide the base level of a string feature as the last category after
+#'                               ordering is dropped when encoding strings. Supported options are
+#'                               'frequencyDesc', 'frequencyAsc', 'alphabetDesc', 'alphabetAsc'.
+#'                               The default value is 'frequencyDesc'. When the ordering is set to
+#'                               'alphabetDesc', this drops the same category as R when encoding strings.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
@@ -182,9 +205,11 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL,
-                   var.power = 0.0, link.power = 1.0 - var.power) {
+                   var.power = 0.0, link.power = 1.0 - var.power,
+                   stringIndexerOrderType = "frequencyDesc") {
             spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol,
-                      var.power = var.power, link.power = link.power)
+                      var.power = var.power, link.power = link.power,
+                      stringIndexerOrderType = stringIndexerOrderType)
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().

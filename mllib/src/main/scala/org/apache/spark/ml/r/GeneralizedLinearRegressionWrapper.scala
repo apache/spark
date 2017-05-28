@@ -64,7 +64,7 @@ private[r] class GeneralizedLinearRegressionWrapper private (
 
 private[r] object GeneralizedLinearRegressionWrapper
   extends MLReadable[GeneralizedLinearRegressionWrapper] {
-
+  // scalastyle:off
   def fit(
       formula: String,
       data: DataFrame,
@@ -75,8 +75,11 @@ private[r] object GeneralizedLinearRegressionWrapper
       weightCol: String,
       regParam: Double,
       variancePower: Double,
-      linkPower: Double): GeneralizedLinearRegressionWrapper = {
+      linkPower: Double,
+      stringIndexerOrderType: String): GeneralizedLinearRegressionWrapper = {
+  // scalastyle:on
     val rFormula = new RFormula().setFormula(formula)
+      .setStringIndexerOrderType(stringIndexerOrderType)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema

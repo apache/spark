@@ -367,6 +367,49 @@ test_that("glm save/load", {
   unlink(modelPath)
 })
 
+test_that("spark.glm and glm with string encoding", {
+  t <- as.data.frame(Titanic, stringsAsFactors = FALSE)
+  df <- createDataFrame(t)
+
+  # base R
+  rm <- stats::glm(Freq ~ Sex + Age, family = "gaussian", data = t)
+  # spark.glm with default stringIndexerOrderType = "frequencyDesc"
+  sm0 <- spark.glm(df, Freq ~ Sex + Age, family = "gaussian")
+  # spark.glm with stringIndexerOrderType = "alphabetDesc"
+  sm1 <- spark.glm(df, Freq ~ Sex + Age, family = "gaussian",
+                   stringIndexerOrderType = "alphabetDesc")
+  # glm with stringIndexerOrderType = "alphabetDesc"
+  sm2 <- glm(Freq ~ Sex + Age, family = "gaussian", data = df,
+                stringIndexerOrderType = "alphabetDesc")
+
+  rStats <- summary(rm)
+  rCoefs <- rStats$coefficients
+  sStats <- lapply(list(sm0, sm1, sm2), summary)
+  # order by coefficient size since column rendering may be different
+  o <- order(rCoefs[, 1])
+
+  # default encoding does not produce same results as R
+  expect_false(all(abs(rCoefs[o, ] - sStats[[1]]$coefficients[o, ]) < 1e-4))
+
+  # all estimates should be the same as R with stringIndexerOrderType = "alphabetDesc"
+  test <- lapply(sStats[2:3], function(stats) {
+    expect_true(all(abs(rCoefs[o, ] - stats$coefficients[o, ]) < 1e-4))
+    expect_equal(stats$dispersion, rStats$dispersion)
+    expect_equal(stats$null.deviance, rStats$null.deviance)
+    expect_equal(stats$deviance, rStats$deviance)
+    expect_equal(stats$df.null, rStats$df.null)
+    expect_equal(stats$df.residual, rStats$df.residual)
+    expect_equal(stats$aic, rStats$aic)
+  })
+
+  # fitted values should be equal regardless of string encoding
+  rVals <- predict(rm, t)
+  test <- lapply(list(sm0, sm1, sm2), function(sm) {
+    vals <- collect(select(predict(sm, df), "prediction"))
+    expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+  })
+})
+
 test_that("spark.isoreg", {
   label <- c(7.0, 5.0, 3.0, 5.0, 1.0)
   feature <- c(0.0, 1.0, 2.0, 3.0, 4.0)
