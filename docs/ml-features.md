@@ -499,6 +499,77 @@ for more details on the API.
 </div>
 </div>
 
+## Discrete Cosine Transform (DCT)
+
+The [Discrete Cosine
+Transform](https://en.wikipedia.org/wiki/Discrete_cosine_transform)
+transforms a length $N$ real-valued sequence in the time domain into
+another length $N$ real-valued sequence in the frequency domain. A
+[DCT](api/scala/index.html#org.apache.spark.ml.feature.DCT) class
+provides this functionality, implementing the
+[DCT-II](https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II)
+and scaling the result by $1/\sqrt{2}$ such that the representing matrix
+for the transform is unitary. No shift is applied to the transformed
+sequence (e.g. the $0$th element of the transformed sequence is the
+$0$th DCT coefficient and _not_ the $N/2$th).
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+import org.apache.spark.ml.feature.DCT
+import org.apache.spark.mllib.linalg.Vectors
+
+val data = Seq(
+  Vectors.dense(0.0, 1.0, -2.0, 3.0),
+  Vectors.dense(-1.0, 2.0, 4.0, -7.0),
+  Vectors.dense(14.0, -2.0, -5.0, 1.0))
+val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+val dct = new DCT()
+  .setInputCol("features")
+  .setOutputCol("featuresDCT")
+  .setInverse(false)
+val dctDf = dct.transform(df)
+dctDf.select("featuresDCT").show(3)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+import java.util.Arrays;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.feature.DCT;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.VectorUDT;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
+  RowFactory.create(Vectors.dense(0.0, 1.0, -2.0, 3.0)),
+  RowFactory.create(Vectors.dense(-1.0, 2.0, 4.0, -7.0)),
+  RowFactory.create(Vectors.dense(14.0, -2.0, -5.0, 1.0))
+));
+StructType schema = new StructType(new StructField[] {
+  new StructField("features", new VectorUDT(), false, Metadata.empty()),
+});
+DataFrame df = jsql.createDataFrame(data, schema);
+DCT dct = new DCT()
+  .setInputCol("features")
+  .setOutputCol("featuresDCT")
+  .setInverse(false);
+DataFrame dctDf = dct.transform(df);
+dctDf.select("featuresDCT").show(3);
+{% endhighlight %}
+</div>
+</div>
+
 ## StringIndexer
 
 `StringIndexer` encodes a string column of labels to a column of label indices.
