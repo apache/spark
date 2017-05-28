@@ -681,9 +681,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
     }
 
-    // construct Spark's statistics from information in Hive metastore
+    // Restore Spark's statistics from information in Metastore.
     val statsProps = table.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
 
+    // Currently we have two sources of statistics: one from Hive and the other from Spark.
+    // In our design, if Spark's statistics is available, we respect it over Hive's statistics.
     if (statsProps.nonEmpty) {
       val colStats = new mutable.HashMap[String, ColumnStat]
 
