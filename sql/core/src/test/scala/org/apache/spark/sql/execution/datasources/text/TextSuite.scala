@@ -172,6 +172,22 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("Write and read back empty data") {
+    withTempPath { path =>
+      val df = spark.read.format("text").load(testFile)
+      val emptyDf = df.limit(0)
+      emptyDf.write
+        .format("text")
+        .save(path.getCanonicalPath)
+
+      val copyEmptyDf = spark.read
+        .format("text")
+        .load(path.getCanonicalPath)
+
+      checkAnswer(emptyDf, copyEmptyDf)
+    }
+  }
+
   private def testFile: String = {
     Thread.currentThread().getContextClassLoader.getResource("test-data/text-suite.txt").toString
   }

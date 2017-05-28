@@ -232,4 +232,19 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       }
     }
   }
+
+  test("Write and read back empty data") {
+    withTempPath { path =>
+      val emptyDf = spark.range(10).limit(0).toDF()
+      emptyDf.write
+        .format(dataSourceName)
+        .save(path.getCanonicalPath)
+
+      val copyEmptyDf = spark.read
+        .format(dataSourceName)
+        .load(path.getCanonicalPath)
+
+      checkAnswer(emptyDf, copyEmptyDf)
+    }
+  }
 }
