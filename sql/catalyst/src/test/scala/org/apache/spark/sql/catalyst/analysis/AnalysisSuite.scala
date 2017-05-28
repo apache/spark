@@ -465,6 +465,23 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     assertAnalysisSuccess(rangeWithAliases(2 :: 6 :: 2 :: Nil, "c" :: Nil))
     assertAnalysisError(
       rangeWithAliases(3 :: Nil, "a" :: "b" :: Nil),
-      Seq("expected 1 columns but found 2 columns"))
+      Seq("Number of given aliases does not match number of output columns. "
+        + "Function name: range; number of aliases: 2; number of output columns: 1."))
+  }
+
+  test("SPARK-20841 Support table column aliases in FROM clause") {
+    def tableColumnsWithAliases(outputNames: Seq[String]): LogicalPlan = {
+      SubqueryAlias("t", UnresolvedRelation(TableIdentifier("TaBlE3"), outputNames))
+        .select(star())
+    }
+    assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
+    assertAnalysisError(
+      tableColumnsWithAliases("col1" :: Nil),
+      Seq("Number of column aliases does not match number of columns. Table name: TaBlE3; " +
+        "number of column aliases: 1; number of columns: 4."))
+    assertAnalysisError(
+      tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
+      Seq("Number of column aliases does not match number of columns. Table name: TaBlE3; " +
+        "number of column aliases: 5; number of columns: 4."))
   }
 }
