@@ -836,6 +836,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String replace(UTF8String search, UTF8String replace) {
+    if (EMPTY_UTF8.equals(search)) {
+      return this;
+    }
     String replaced = toString().replace(
       search.toString(), replace.toString());
     return fromString(replaced);
