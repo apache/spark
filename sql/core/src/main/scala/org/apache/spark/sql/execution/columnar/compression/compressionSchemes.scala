@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.execution.columnar.compression
 
-import java.nio.ByteBuffer
+import java.nio.{ByteBuffer, ByteOrder}
 
 import scala.collection.mutable
+
+import org.apache.parquet.column.values.bitpacking.Packer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.types._
-
+import org.apache.spark.unsafe.Platform
 
 private[columnar] case object PassThrough extends CompressionScheme {
   override val typeId = 0
@@ -527,6 +529,286 @@ private[columnar] case object LongDelta extends CompressionScheme {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getLong(buffer)
       row.setLong(ordinal, prev)
+    }
+  }
+}
+
+/**
+ * Writes integral-type values with delta encoding and binary packing.
+ * The format is as follows:
+ *
+ *  delta-binary-packing := <header> <block>*
+ *  header := <type id> <total value count>
+ *  block := <base value> <min delta> <list of bit widths of miniblocks> <miniblocks>
+ *
+ *  In miniblocks, deltas are written with the fixed bit width that the maximum value has in each
+ *  miniblock. If there are values 3, 1, 5, 2, and 3, this encoding writes delta values with
+ *  3-bit widths in a miniblock.
+ */
+private[columnar] object DeltaBinaryPacking {
+
+  val NUM_VALUES_IN_BLOCK: Int = 1024
+  val NUM_VALUES_IN_MINIBLOCK: Int = 64
+  val NUM_MINIBLOCKS_IN_BLOCK: Int = numMiniBlocks(NUM_VALUES_IN_BLOCK)
+
+  def numMiniBlocks(n: Int): Int = {
+    (n + NUM_VALUES_IN_MINIBLOCK - 1) / NUM_VALUES_IN_MINIBLOCK
+  }
+}
+
+private[columnar] case object IntDeltaBinaryPacking extends CompressionScheme {
+  import DeltaBinaryPacking._
+
+  private val nativeOrderPacker = if (ByteOrder.nativeOrder.equals(ByteOrder.BIG_ENDIAN)) {
+    Packer.BIG_ENDIAN
+  } else {
+    Packer.LITTLE_ENDIAN
+  }
+
+  override def typeId: Int = 6
+
+  override def decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])
+    : compression.Decoder[T] = {
+    new Decoder(buffer, INT).asInstanceOf[compression.Decoder[T]]
+  }
+
+  override def encoder[T <: AtomicType](columnType: NativeColumnType[T]): compression.Encoder[T] = {
+    (new Encoder).asInstanceOf[compression.Encoder[T]]
+  }
+
+  override def supports(columnType: ColumnType[_]): Boolean = columnType == INT
+
+  class Encoder extends compression.Encoder[IntegerType.type] {
+    override def compressedSize: Int = {
+      if (compressInProgress) {
+        totalBlocksSize += calculateSizeForBufferingValues()
+        compressInProgress = false
+      }
+      totalBlocksSize
+    }
+
+    override def uncompressedSize: Int = totalValueCount * 4
+
+    private var compressInProgress: Boolean = false
+    private var totalValueCount: Int = 0
+    private var totalBlocksSize: Int = 4 // Initially includes header size
+    private var baseValue: Int = _
+    private var prevValue: Int = _
+    private var minDeltaInCurrentBlock: Int = Integer.MAX_VALUE
+    private var deltaValuesToFlush: Int = 0
+    private val deltaValuesBuffer = new Array[Int](NUM_VALUES_IN_BLOCK)
+    // Uses this buffer to pack 8 values simultaneously in a miniblock.
+    // Since a maximum bit width is 32, the buffer size requires 32 bytes = 4 bytes multiplied by 8.
+    private val miniBlockBufferInByte = new Array[Byte](32)
+    private val bitWidths = new Array[Int](NUM_MINIBLOCKS_IN_BLOCK)
+
+    override def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {
+      val value = row.getInt(ordinal)
+
+      totalValueCount += 1
+
+      if (!compressInProgress) {
+        prevValue = value
+        compressInProgress = true
+        return
+      }
+
+      val delta = value - prevValue
+      deltaValuesBuffer(deltaValuesToFlush) = delta
+      deltaValuesToFlush += 1
+
+      if (delta < minDeltaInCurrentBlock) {
+        minDeltaInCurrentBlock = delta
+      }
+
+      if (NUM_VALUES_IN_BLOCK == deltaValuesToFlush) {
+        totalBlocksSize += calculateSizeForBufferingValues()
+        minDeltaInCurrentBlock = Integer.MAX_VALUE
+        deltaValuesToFlush = 0
+        compressInProgress = false
+      } else {
+        prevValue = value
+      }
+    }
+
+    override def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer = {
+      // First, writes data in a header
+      to.putInt(typeId)
+      to.putInt(totalValueCount)
+
+      minDeltaInCurrentBlock = Integer.MAX_VALUE
+      deltaValuesToFlush = 0
+      compressInProgress = false
+
+      while (from.hasRemaining) {
+        val value = INT.extract(from)
+
+        if (!compressInProgress) {
+          prevValue = value
+          baseValue = value
+          compressInProgress = true
+        } else {
+          val delta = value - prevValue
+          deltaValuesBuffer(deltaValuesToFlush) = delta
+          deltaValuesToFlush += 1
+
+          if (delta < minDeltaInCurrentBlock) {
+            minDeltaInCurrentBlock = delta
+          }
+
+          if (NUM_VALUES_IN_BLOCK == deltaValuesToFlush) {
+            flushBuffer(to)
+            minDeltaInCurrentBlock = Integer.MAX_VALUE
+            deltaValuesToFlush = 0
+            compressInProgress = false
+          } else {
+            prevValue = value
+          }
+        }
+      }
+
+      // If data left in buffer, flushes them
+      if (compressInProgress) {
+        flushBuffer(to)
+      }
+
+      assert(!to.hasRemaining)
+
+      to.rewind().asInstanceOf[ByteBuffer]
+    }
+
+    private[this] def calculateSizeForBufferingValues(): Int = {
+      if (compressInProgress) {
+        var totalSizeInBytes = 8
+
+        // Calculates and writes bit widths for each miniblock
+        val miniBlocksToFlush = numMiniBlocks(deltaValuesToFlush)
+        for (i <- 0 until miniBlocksToFlush) {
+          val miniStart = i * NUM_VALUES_IN_MINIBLOCK
+          val miniEnd = Math.min((i + 1) * NUM_VALUES_IN_MINIBLOCK, deltaValuesToFlush)
+          var mask = 0
+          for (j <- miniStart until miniEnd) {
+            mask |= (deltaValuesBuffer(j) - minDeltaInCurrentBlock)
+          }
+
+          val bitWidth = 32 - Integer.numberOfLeadingZeros(mask)
+          totalSizeInBytes += bitWidth * (NUM_VALUES_IN_MINIBLOCK / 8)
+          totalSizeInBytes += 1
+        }
+
+        totalSizeInBytes
+      } else {
+        0
+      }
+    }
+
+    private[this] def flushBuffer(out: ByteBuffer): Unit = {
+      var writePos = out.position()
+
+      // Converts delta values to be the difference to min delta and all positive
+      for (i <- 0 until deltaValuesToFlush) {
+        deltaValuesBuffer(i) -= minDeltaInCurrentBlock
+      }
+
+      // Writes data in a block header
+      Platform.putInt(out.array(), Platform.BYTE_ARRAY_OFFSET + writePos, baseValue)
+      Platform.putInt(out.array(), Platform.BYTE_ARRAY_OFFSET + writePos + 4,
+        minDeltaInCurrentBlock)
+      writePos += 8
+
+      // Calculates and writes bit widths for each miniblock
+      val miniBlocksToFlush = numMiniBlocks(deltaValuesToFlush)
+      for (i <- 0 until miniBlocksToFlush) {
+        val miniStart = i * NUM_VALUES_IN_MINIBLOCK
+        val miniEnd = Math.min((i + 1) * NUM_VALUES_IN_MINIBLOCK, deltaValuesToFlush)
+        var mask = 0
+        for (j <- miniStart until miniEnd) {
+          mask |= deltaValuesBuffer(j)
+        }
+
+        bitWidths(i) = 32 - Integer.numberOfLeadingZeros(mask)
+        Platform.putByte(out.array(), Platform.BYTE_ARRAY_OFFSET + writePos,
+          bitWidths(i).asInstanceOf[Byte])
+        writePos += 1
+      }
+
+      // Finally, writes data in miniblocks
+      for (i <- 0 until miniBlocksToFlush) {
+        val currentBitWidth = bitWidths(i)
+        val packer = nativeOrderPacker.newBytePacker(currentBitWidth)
+        val miniStart = i * NUM_VALUES_IN_MINIBLOCK
+        val miniEnd = (i + 1) * NUM_VALUES_IN_MINIBLOCK
+
+        val prevWritePos = writePos
+        for (j <- miniStart until miniEnd by 8) {
+          // Packs integer-typed 8 deltas simultaneously and convert them into a byte array by
+          // using the packer implemented in parquet.
+          //
+          // TODO: To support encoding LONG-typed columns, we need to implement a packer for
+          // long-typed deltas by ourselves because parquet has no packer for long-typed ones.
+          packer.pack8Values(deltaValuesBuffer, j, miniBlockBufferInByte, 0)
+          Platform.copyMemory(miniBlockBufferInByte, Platform.BYTE_ARRAY_OFFSET, out.array,
+            Platform.BYTE_ARRAY_OFFSET + writePos, currentBitWidth)
+          writePos += currentBitWidth
+        }
+      }
+
+      out.position(writePos)
+    }
+  }
+
+  class Decoder(buffer: ByteBuffer, columnType: NativeColumnType[IntegerType.type])
+    extends compression.Decoder[IntegerType.type] {
+
+    private var currentPos: Int = 0
+    private var totalValueCount = buffer.getInt
+    // Buffer for one base value and delta values
+    private val valuesBuffer = new Array[Int](NUM_VALUES_IN_BLOCK + 1)
+    private val deltaBuffer = new Array[Int](NUM_VALUES_IN_BLOCK)
+    private val miniBlockBufferInByte = new Array[Byte](32)
+    private val bitWidths = new Array[Int](NUM_MINIBLOCKS_IN_BLOCK)
+
+    if (hasNext) loadNextBatch()
+
+    override def hasNext: Boolean = totalValueCount > 0
+
+    override def next(row: MutableRow, ordinal: Int): Unit = {
+      if (currentPos == valuesBuffer.length) {
+        loadNextBatch()
+        currentPos = 0
+      }
+      val value = valuesBuffer(currentPos)
+      currentPos += 1
+      totalValueCount -= 1
+      row.setInt(ordinal, value)
+    }
+
+    private[this] def loadNextBatch(): Unit = {
+      val baseValue = buffer.getInt()
+      val minDeltaInCurrentBlock = buffer.getInt()
+      val miniBlocksToRead = Math.min(NUM_MINIBLOCKS_IN_BLOCK, numMiniBlocks(totalValueCount - 1))
+
+      for (i <- 0 until miniBlocksToRead) {
+        bitWidths(i) = buffer.get().asInstanceOf[Int]
+        assert(bitWidths(i) <= 32)
+      }
+
+      var writePos = 0
+      for (i <- 0 until miniBlocksToRead) {
+        val currentBitWidth = bitWidths(i)
+        val packer = nativeOrderPacker.newBytePacker(currentBitWidth)
+
+        for (j <- 0 until NUM_VALUES_IN_MINIBLOCK / 8) {
+          buffer.get(miniBlockBufferInByte, 0, currentBitWidth)
+          packer.unpack8Values(miniBlockBufferInByte, 0, deltaBuffer, writePos)
+          writePos += 8
+        }
+      }
+
+      valuesBuffer(0) = baseValue
+      for (i <- 1 to NUM_VALUES_IN_BLOCK) {
+        valuesBuffer(i) = valuesBuffer(i - 1) + deltaBuffer(i - 1) + minDeltaInCurrentBlock
+      }
     }
   }
 }

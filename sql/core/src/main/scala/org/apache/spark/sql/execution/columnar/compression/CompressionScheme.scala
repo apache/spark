@@ -63,7 +63,8 @@ private[columnar] trait AllCompressionSchemes extends WithCompressionSchemes {
 
 private[columnar] object CompressionScheme {
   val all: Seq[CompressionScheme] =
-    Seq(PassThrough, RunLengthEncoding, DictionaryEncoding, BooleanBitSet, IntDelta, LongDelta)
+    Seq(PassThrough, RunLengthEncoding, DictionaryEncoding, BooleanBitSet, IntDelta,
+      IntDeltaBinaryPacking, LongDelta)
 
   private val typeIdToScheme = all.map(scheme => scheme.typeId -> scheme).toMap
 
