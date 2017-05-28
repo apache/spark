@@ -402,6 +402,44 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the weekday index for date/timestamp (1 = Sunday, 2 = Monday, ..., 7 = Saturday).",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('2009-07-30');
+       5
+  """)
+// scalastyle:on line.size.limit
+case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  @transient private lazy val c = {
+    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
+  }
+
+  override protected def nullSafeEval(date: Any): Any = {
+    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    c.get(Calendar.DAY_OF_WEEK)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, time => {
+      val cal = classOf[Calendar].getName
+      val c = ctx.freshName("cal")
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      ctx.addMutableState(cal, c, s"""$c = $cal.getInstance($dtu.getTimeZone("UTC"));""")
+      s"""
+        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
+        ${ev.value} = $c.get($cal.DAY_OF_WEEK);
+      """
+    })
+  }
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the week of the year of the given date.",
   extended = """
