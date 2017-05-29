@@ -94,7 +94,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the label distribution to be used in the " +
       s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
-    ParamValidators.inArray[String](supportedFamilyNames))
+    (value: String) => supportedFamilyNames.contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("2.1.0")
@@ -183,14 +183,15 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * The bound matrix must be compatible with the shape (1, number of features) for binomial
    * regression, or (number of classes, number of features) for multinomial regression.
    * Otherwise, it throws exception.
+   * Default is none.
    *
-   * @group param
+   * @group expertParam
    */
   @Since("2.2.0")
   val lowerBoundsOnCoefficients: Param[Matrix] = new Param(this, "lowerBoundsOnCoefficients",
     "The lower bounds on coefficients if fitting under bound constrained optimization.")
 
-  /** @group getParam */
+  /** @group expertGetParam */
   @Since("2.2.0")
   def getLowerBoundsOnCoefficients: Matrix = $(lowerBoundsOnCoefficients)
 
@@ -199,14 +200,15 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * The bound matrix must be compatible with the shape (1, number of features) for binomial
    * regression, or (number of classes, number of features) for multinomial regression.
    * Otherwise, it throws exception.
+   * Default is none.
    *
-   * @group param
+   * @group expertParam
    */
   @Since("2.2.0")
   val upperBoundsOnCoefficients: Param[Matrix] = new Param(this, "upperBoundsOnCoefficients",
     "The upper bounds on coefficients if fitting under bound constrained optimization.")
 
-  /** @group getParam */
+  /** @group expertGetParam */
   @Since("2.2.0")
   def getUpperBoundsOnCoefficients: Matrix = $(upperBoundsOnCoefficients)
 
@@ -214,14 +216,15 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * The lower bounds on intercepts if fitting under bound constrained optimization.
    * The bounds vector size must be equal with 1 for binomial regression, or the number
    * of classes for multinomial regression. Otherwise, it throws exception.
+   * Default is none.
    *
-   * @group param
+   * @group expertParam
    */
   @Since("2.2.0")
   val lowerBoundsOnIntercepts: Param[Vector] = new Param(this, "lowerBoundsOnIntercepts",
     "The lower bounds on intercepts if fitting under bound constrained optimization.")
 
-  /** @group getParam */
+  /** @group expertGetParam */
   @Since("2.2.0")
   def getLowerBoundsOnIntercepts: Vector = $(lowerBoundsOnIntercepts)
 
@@ -229,14 +232,15 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * The upper bounds on intercepts if fitting under bound constrained optimization.
    * The bound vector size must be equal with 1 for binomial regression, or the number
    * of classes for multinomial regression. Otherwise, it throws exception.
+   * Default is none.
    *
-   * @group param
+   * @group expertParam
    */
   @Since("2.2.0")
   val upperBoundsOnIntercepts: Param[Vector] = new Param(this, "upperBoundsOnIntercepts",
     "The upper bounds on intercepts if fitting under bound constrained optimization.")
 
-  /** @group getParam */
+  /** @group expertGetParam */
   @Since("2.2.0")
   def getUpperBoundsOnIntercepts: Vector = $(upperBoundsOnIntercepts)
 
@@ -256,15 +260,19 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
     }
     if (!$(fitIntercept)) {
       require(!isSet(lowerBoundsOnIntercepts) && !isSet(upperBoundsOnIntercepts),
-        "Pls don't set bounds on intercepts if fitting without intercept.")
+        "Please don't set bounds on intercepts if fitting without intercept.")
     }
     super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 }
 
 /**
- * Logistic regression. Supports multinomial logistic (softmax) regression and binomial logistic
- * regression.
+ * Logistic regression. Supports:
+ *  - Multinomial logistic (softmax) regression.
+ *  - Binomial logistic regression.
+ *
+ * This class supports fitting traditional logistic regression model by LBFGS/OWLQN and
+ * bound (box) constrained logistic regression model by LBFGSB.
  */
 @Since("1.2.0")
 class LogisticRegression @Since("1.2.0") (
@@ -393,7 +401,7 @@ class LogisticRegression @Since("1.2.0") (
   /**
    * Set the lower bounds on coefficients if fitting under bound constrained optimization.
    *
-   * @group setParam
+   * @group expertSetParam
    */
   @Since("2.2.0")
   def setLowerBoundsOnCoefficients(value: Matrix): this.type = set(lowerBoundsOnCoefficients, value)
@@ -401,7 +409,7 @@ class LogisticRegression @Since("1.2.0") (
   /**
    * Set the upper bounds on coefficients if fitting under bound constrained optimization.
    *
-   * @group setParam
+   * @group expertSetParam
    */
   @Since("2.2.0")
   def setUpperBoundsOnCoefficients(value: Matrix): this.type = set(upperBoundsOnCoefficients, value)
@@ -409,7 +417,7 @@ class LogisticRegression @Since("1.2.0") (
   /**
    * Set the lower bounds on intercepts if fitting under bound constrained optimization.
    *
-   * @group setParam
+   * @group expertSetParam
    */
   @Since("2.2.0")
   def setLowerBoundsOnIntercepts(value: Vector): this.type = set(lowerBoundsOnIntercepts, value)
@@ -417,7 +425,7 @@ class LogisticRegression @Since("1.2.0") (
   /**
    * Set the upper bounds on intercepts if fitting under bound constrained optimization.
    *
-   * @group setParam
+   * @group expertSetParam
    */
   @Since("2.2.0")
   def setUpperBoundsOnIntercepts(value: Vector): this.type = set(upperBoundsOnIntercepts, value)
@@ -427,28 +435,40 @@ class LogisticRegression @Since("1.2.0") (
       numFeatures: Int): Unit = {
     if (isSet(lowerBoundsOnCoefficients)) {
       require($(lowerBoundsOnCoefficients).numRows == numCoefficientSets &&
-        $(lowerBoundsOnCoefficients).numCols == numFeatures)
+        $(lowerBoundsOnCoefficients).numCols == numFeatures,
+        "The shape of LowerBoundsOnCoefficients must be compatible with (1, number of features) " +
+          "for binomial regression, or (number of classes, number of features) for multinomial " +
+          "regression, but found: " +
+          s"(${getLowerBoundsOnCoefficients.numRows}, ${getLowerBoundsOnCoefficients.numCols}).")
     }
     if (isSet(upperBoundsOnCoefficients)) {
       require($(upperBoundsOnCoefficients).numRows == numCoefficientSets &&
-        $(upperBoundsOnCoefficients).numCols == numFeatures)
+        $(upperBoundsOnCoefficients).numCols == numFeatures,
+        "The shape of upperBoundsOnCoefficients must be compatible with (1, number of features) " +
+          "for binomial regression, or (number of classes, number of features) for multinomial " +
+          "regression, but found: " +
+          s"(${getUpperBoundsOnCoefficients.numRows}, ${getUpperBoundsOnCoefficients.numCols}).")
     }
     if (isSet(lowerBoundsOnIntercepts)) {
-      require($(lowerBoundsOnIntercepts).size == numCoefficientSets)
+      require($(lowerBoundsOnIntercepts).size == numCoefficientSets, "The size of " +
+        "lowerBoundsOnIntercepts must be equal with 1 for binomial regression, or the number of " +
+        s"classes for multinomial regression, but found: ${getLowerBoundsOnIntercepts.size}.")
     }
     if (isSet(upperBoundsOnIntercepts)) {
-      require($(upperBoundsOnIntercepts).size == numCoefficientSets)
+      require($(upperBoundsOnIntercepts).size == numCoefficientSets, "The size of " +
+        "upperBoundsOnIntercepts must be equal with 1 for binomial regression, or the number of " +
+        s"classes for multinomial regression, but found: ${getUpperBoundsOnIntercepts.size}.")
     }
     if (isSet(lowerBoundsOnCoefficients) && isSet(upperBoundsOnCoefficients)) {
       require($(lowerBoundsOnCoefficients).toArray.zip($(upperBoundsOnCoefficients).toArray)
-        .forall(x => x._1 <= x._2), "LowerBoundsOnCoefficients should always " +
+        .forall(x => x._1 <= x._2), "LowerBoundsOnCoefficients should always be " +
         "less than or equal to upperBoundsOnCoefficients, but found: " +
         s"lowerBoundsOnCoefficients = $getLowerBoundsOnCoefficients, " +
         s"upperBoundsOnCoefficients = $getUpperBoundsOnCoefficients.")
     }
     if (isSet(lowerBoundsOnIntercepts) && isSet(upperBoundsOnIntercepts)) {
       require($(lowerBoundsOnIntercepts).toArray.zip($(upperBoundsOnIntercepts).toArray)
-        .forall(x => x._1 <= x._2), "LowerBoundsOnIntercepts should always " +
+        .forall(x => x._1 <= x._2), "LowerBoundsOnIntercepts should always be " +
         "less than or equal to upperBoundsOnIntercepts, but found: " +
         s"lowerBoundsOnIntercepts = $getLowerBoundsOnIntercepts, " +
         s"upperBoundsOnIntercepts = $getUpperBoundsOnIntercepts.")
@@ -510,7 +530,7 @@ class LogisticRegression @Since("1.2.0") (
       case None => histogram.length
     }
 
-    val isMultinomial = $(family) match {
+    val isMultinomial = getFamily.toLowerCase(Locale.ROOT) match {
       case "binomial" =>
         require(numClasses == 1 || numClasses == 2, s"Binomial family only supports 1 or 2 " +
         s"outcome classes but found $numClasses.")

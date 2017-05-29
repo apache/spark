@@ -18,6 +18,8 @@
 context("test functions in sparkR.R")
 
 test_that("Check masked functions", {
+  skip_on_cran()
+
   # Check that we are not masking any new function from base, stats, testthat unexpectedly
   # NOTE: We should avoid adding entries to *namesOfMaskedCompletely* as masked functions make it
   # hard for users to use base R functions. Please check when in doubt.
@@ -55,8 +57,10 @@ test_that("Check masked functions", {
 })
 
 test_that("repeatedly starting and stopping SparkR", {
+  skip_on_cran()
+
   for (i in 1:4) {
-    sc <- suppressWarnings(sparkR.init())
+    sc <- suppressWarnings(sparkR.init(master = sparkRTestMaster))
     rdd <- parallelize(sc, 1:20, 2L)
     expect_equal(countRDD(rdd), 20)
     suppressWarnings(sparkR.stop())
@@ -65,7 +69,7 @@ test_that("repeatedly starting and stopping SparkR", {
 
 test_that("repeatedly starting and stopping SparkSession", {
   for (i in 1:4) {
-    sparkR.session(enableHiveSupport = FALSE)
+    sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
     df <- createDataFrame(data.frame(dummy = 1:i))
     expect_equal(count(df), i)
     sparkR.session.stop()
@@ -73,12 +77,14 @@ test_that("repeatedly starting and stopping SparkSession", {
 })
 
 test_that("rdd GC across sparkR.stop", {
-  sc <- sparkR.sparkContext() # sc should get id 0
+  skip_on_cran()
+
+  sc <- sparkR.sparkContext(master = sparkRTestMaster) # sc should get id 0
   rdd1 <- parallelize(sc, 1:20, 2L) # rdd1 should get id 1
   rdd2 <- parallelize(sc, 1:10, 2L) # rdd2 should get id 2
   sparkR.session.stop()
 
-  sc <- sparkR.sparkContext() # sc should get id 0 again
+  sc <- sparkR.sparkContext(master = sparkRTestMaster) # sc should get id 0 again
 
   # GC rdd1 before creating rdd3 and rdd2 after
   rm(rdd1)
@@ -96,7 +102,9 @@ test_that("rdd GC across sparkR.stop", {
 })
 
 test_that("job group functions can be called", {
-  sc <- sparkR.sparkContext()
+  skip_on_cran()
+
+  sc <- sparkR.sparkContext(master = sparkRTestMaster)
   setJobGroup("groupId", "job description", TRUE)
   cancelJobGroup("groupId")
   clearJobGroup()
@@ -108,12 +116,16 @@ test_that("job group functions can be called", {
 })
 
 test_that("utility function can be called", {
-  sparkR.sparkContext()
+  skip_on_cran()
+
+  sparkR.sparkContext(master = sparkRTestMaster)
   setLogLevel("ERROR")
   sparkR.session.stop()
 })
 
 test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whitelist", {
+  skip_on_cran()
+
   e <- new.env()
   e[["spark.driver.memory"]] <- "512m"
   ops <- getClientModeSparkSubmitOpts("sparkrmain", e)
@@ -141,6 +153,8 @@ test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whiteli
 })
 
 test_that("sparkJars sparkPackages as comma-separated strings", {
+  skip_on_cran()
+
   expect_warning(processSparkJars(" a, b "))
   jars <- suppressWarnings(processSparkJars(" a, b "))
   expect_equal(lapply(jars, basename), list("a", "b"))
@@ -161,14 +175,16 @@ test_that("sparkJars sparkPackages as comma-separated strings", {
 })
 
 test_that("spark.lapply should perform simple transforms", {
-  sparkR.sparkContext()
+  sparkR.sparkContext(master = sparkRTestMaster)
   doubled <- spark.lapply(1:10, function(x) { 2 * x })
   expect_equal(doubled, as.list(2 * 1:10))
   sparkR.session.stop()
 })
 
 test_that("add and get file to be downloaded with Spark job on every node", {
-  sparkR.sparkContext()
+  skip_on_cran()
+
+  sparkR.sparkContext(master = sparkRTestMaster)
   # Test add file.
   path <- tempfile(pattern = "hello", fileext = ".txt")
   filename <- basename(path)

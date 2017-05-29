@@ -71,6 +71,27 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two"), Row(4, 4, "four")))
   }
 
+  test("SPARK-20432: union one stream with itself") {
+    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load().select("a")
+    val unioned = df.union(df)
+    withTempDir { outputDir =>
+      withTempDir { checkpointDir =>
+        val query =
+          unioned
+            .writeStream.format("parquet")
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .start(outputDir.getAbsolutePath)
+        try {
+          query.processAllAvailable()
+          val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
+          checkDatasetUnorderly[Long](outputDf, (0L to 10L).union((0L to 10L)).toArray: _*)
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
   test("union two streams") {
     val inputData1 = MemoryStream[Int]
     val inputData2 = MemoryStream[Int]
@@ -120,6 +141,33 @@ class StreamSuite extends StreamTest {
     val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
     assertDF(df)
     assertDF(df)
+  }
+
+  test("Within the same streaming query, one StreamingRelation should only be transformed to one " +
+    "StreamingExecutionRelation") {
+    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
+    var query: StreamExecution = null
+    try {
+      query =
+        df.union(df)
+          .writeStream
+          .format("memory")
+          .queryName("memory")
+          .start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+      query.awaitInitialization(streamingTimeout.toMillis)
+      val executionRelations =
+        query
+          .logicalPlan
+          .collect { case ser: StreamingExecutionRelation => ser }
+      assert(executionRelations.size === 2)
+      assert(executionRelations.distinct.size === 1)
+    } finally {
+      if (query != null) {
+        query.stop()
+      }
+    }
   }
 
   test("unsupported queries") {

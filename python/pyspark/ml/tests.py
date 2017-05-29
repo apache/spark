@@ -404,6 +404,18 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(tp._paramMap, copied_no_extra)
         self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
 
+    def test_logistic_regression_check_thresholds(self):
+        self.assertIsInstance(
+            LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]),
+            LogisticRegression
+        )
+
+        self.assertRaisesRegexp(
+            ValueError,
+            "Logistic Regression getThreshold found inconsistent.*$",
+            LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
+        )
+
 
 class EvaluatorTests(SparkSessionTestCase):
 
@@ -1054,6 +1066,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(s.r2, 1.0, 2)
         self.assertTrue(isinstance(s.residuals, DataFrame))
         self.assertEqual(s.numInstances, 2)
+        self.assertEqual(s.degreesOfFreedom, 1)
         devResiduals = s.devianceResiduals
         self.assertTrue(isinstance(devResiduals, list) and isinstance(devResiduals[0], float))
         coefStdErr = s.coefficientStandardErrors
@@ -1063,7 +1076,8 @@ class TrainingSummaryTest(SparkSessionTestCase):
         pValues = s.pValues
         self.assertTrue(isinstance(pValues, list) and isinstance(pValues[0], float))
         # test evaluation (with training dataset) produces a summary with same values
-        # one check is enough to verify a summary is returned, Scala version runs full test
+        # one check is enough to verify a summary is returned
+        # The child class LinearRegressionTrainingSummary runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.explainedVariance, s.explainedVariance)
 
@@ -1081,6 +1095,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.numIterations, 1)  # this should default to a single iteration of WLS
         self.assertTrue(isinstance(s.predictions, DataFrame))
         self.assertEqual(s.predictionCol, "prediction")
+        self.assertEqual(s.numInstances, 2)
         self.assertTrue(isinstance(s.residuals(), DataFrame))
         self.assertTrue(isinstance(s.residuals("pearson"), DataFrame))
         coefStdErr = s.coefficientStandardErrors
@@ -1099,7 +1114,8 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.nullDeviance, float))
         self.assertTrue(isinstance(s.dispersion, float))
         # test evaluation (with training dataset) produces a summary with same values
-        # one check is enough to verify a summary is returned, Scala version runs full test
+        # one check is enough to verify a summary is returned
+        # The child class GeneralizedLinearRegressionTrainingSummary runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.deviance, s.deviance)
 

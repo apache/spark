@@ -209,7 +209,7 @@ class DataFrame(object):
         Interface for saving the content of the streaming :class:`DataFrame` out into external
         storage.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :return: :class:`DataStreamWriter`
         """
@@ -285,7 +285,7 @@ class DataFrame(object):
         :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
         source present.
 
-        .. note:: Experimental
+        .. note:: Evolving
         """
         return self._jdf.isStreaming()
 
@@ -368,7 +368,7 @@ class DataFrame(object):
             latest record that has been processed in the form of an interval
             (e.g. "1 minute" or "5 hours").
 
-        .. note:: Experimental
+        .. note:: Evolving
 
         >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
@@ -378,6 +378,35 @@ class DataFrame(object):
         if not delayThreshold or type(delayThreshold) is not str:
             raise TypeError("delayThreshold should be provided as a string interval")
         jdf = self._jdf.withWatermark(eventTime, delayThreshold)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since(2.2)
+    def hint(self, name, *parameters):
+        """Specifies some hint on the current DataFrame.
+
+        :param name: A name of the hint.
+        :param parameters: Optional parameters.
+        :return: :class:`DataFrame`
+
+        >>> df.join(df2.hint("broadcast"), "name").show()
+        +----+---+------+
+        |name|age|height|
+        +----+---+------+
+        | Bob|  5|    85|
+        +----+---+------+
+        """
+        if len(parameters) == 1 and isinstance(parameters[0], list):
+            parameters = parameters[0]
+
+        if not isinstance(name, str):
+            raise TypeError("name should be provided as str, got {0}".format(type(name)))
+
+        for p in parameters:
+            if not isinstance(p, str):
+                raise TypeError(
+                    "all parameters should be str, got {0} of type {1}".format(p, type(p)))
+
+        jdf = self._jdf.hint(name, self._jseq(parameters))
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)

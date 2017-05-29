@@ -126,8 +126,8 @@ private[spark] class TypedConfigBuilder[T](
 
   /** Creates a [[ConfigEntry]] that does not have a default value. */
   def createOptional: OptionalConfigEntry[T] = {
-    val entry = new OptionalConfigEntry[T](parent.key, converter, stringConverter, parent._doc,
-      parent._public)
+    val entry = new OptionalConfigEntry[T](parent.key, parent._alternatives, converter,
+      stringConverter, parent._doc, parent._public)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -140,8 +140,8 @@ private[spark] class TypedConfigBuilder[T](
       createWithDefaultString(default.asInstanceOf[String])
     } else {
       val transformedDefault = converter(stringConverter(default))
-      val entry = new ConfigEntryWithDefault[T](parent.key, transformedDefault, converter,
-        stringConverter, parent._doc, parent._public)
+      val entry = new ConfigEntryWithDefault[T](parent.key, parent._alternatives,
+        transformedDefault, converter, stringConverter, parent._doc, parent._public)
       parent._onCreate.foreach(_(entry))
       entry
     }
@@ -149,8 +149,8 @@ private[spark] class TypedConfigBuilder[T](
 
   /** Creates a [[ConfigEntry]] with a function to determine the default value */
   def createWithDefaultFunction(defaultFunc: () => T): ConfigEntry[T] = {
-    val entry = new ConfigEntryWithDefaultFunction[T](parent.key, defaultFunc, converter,
-      stringConverter, parent._doc, parent._public)
+    val entry = new ConfigEntryWithDefaultFunction[T](parent.key, parent._alternatives, defaultFunc,
+      converter, stringConverter, parent._doc, parent._public)
     parent._onCreate.foreach(_ (entry))
     entry
   }
@@ -160,8 +160,8 @@ private[spark] class TypedConfigBuilder[T](
    * [[String]] and must be a valid value for the entry.
    */
   def createWithDefaultString(default: String): ConfigEntry[T] = {
-    val entry = new ConfigEntryWithDefaultString[T](parent.key, default, converter, stringConverter,
-      parent._doc, parent._public)
+    val entry = new ConfigEntryWithDefaultString[T](parent.key, parent._alternatives, default,
+      converter, stringConverter, parent._doc, parent._public)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -180,6 +180,7 @@ private[spark] case class ConfigBuilder(key: String) {
   private[config] var _public = true
   private[config] var _doc = ""
   private[config] var _onCreate: Option[ConfigEntry[_] => Unit] = None
+  private[config] var _alternatives = List.empty[String]
 
   def internal(): ConfigBuilder = {
     _public = false
@@ -197,6 +198,11 @@ private[spark] case class ConfigBuilder(key: String) {
    */
   def onCreate(callback: ConfigEntry[_] => Unit): ConfigBuilder = {
     _onCreate = Option(callback)
+    this
+  }
+
+  def withAlternative(key: String): ConfigBuilder = {
+    _alternatives = _alternatives :+ key
     this
   }
 
@@ -229,7 +235,7 @@ private[spark] case class ConfigBuilder(key: String) {
   }
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
-    new FallbackConfigEntry(key, _doc, _public, fallback)
+    new FallbackConfigEntry(key, _alternatives, _doc, _public, fallback)
   }
 
   def regexConf: TypedConfigBuilder[Regex] = {

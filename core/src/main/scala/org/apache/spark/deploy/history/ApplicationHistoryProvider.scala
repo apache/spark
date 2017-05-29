@@ -30,7 +30,8 @@ private[spark] case class ApplicationAttemptInfo(
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
-    completed: Boolean = false)
+    completed: Boolean = false,
+    appSparkVersion: String)
 
 private[spark] case class ApplicationHistoryInfo(
     id: String,

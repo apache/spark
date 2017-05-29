@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
@@ -71,14 +71,15 @@ import org.apache.spark.SparkException
  *                  }}}.
  * @param query the logical plan representing data to write to.
  * @param overwrite overwrite existing table or partitions.
- * @param ifNotExists If true, only write if the table or partition does not exist.
+ * @param ifPartitionNotExists If true, only write if the partition does not exist.
+ *                                   Only valid for static partitions.
  */
 case class InsertIntoHiveTable(
     table: CatalogTable,
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifNotExists: Boolean) extends RunnableCommand {
+    ifPartitionNotExists: Boolean) extends RunnableCommand {
 
   override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -97,12 +98,24 @@ case class InsertIntoHiveTable(
     val inputPathUri: URI = inputPath.toUri
     val inputPathName: String = inputPathUri.getPath
     val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
-    val stagingPathName: String =
+    var stagingPathName: String =
       if (inputPathName.indexOf(stagingDir) == -1) {
         new Path(inputPathName, stagingDir).toString
       } else {
         inputPathName.substring(0, inputPathName.indexOf(stagingDir) + stagingDir.length)
       }
+
+    // SPARK-20594: This is a walk-around fix to resolve a Hive bug. Hive requires that the
+    // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
+    // under the table directory.
+    if (FileUtils.isSubDir(new Path(stagingPathName), inputPath, fs) &&
+      !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
+      logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
+        "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
+        "directory.")
+      stagingPathName = new Path(inputPathName, ".hive-staging").toString
+    }
+
     val dir: Path =
       fs.makeQualified(
         new Path(stagingPathName + "_" + executionId + "-" + TaskRunner.getTaskRunnerID))
@@ -295,6 +308,27 @@ case class InsertIntoHiveTable(
       }
     }
 
+    table.bucketSpec match {
+      case Some(bucketSpec) =>
+        // Writes to bucketed hive tables are allowed only if user does not care about maintaining
+        // table's bucketing ie. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
+        // set to false
+        val enforceBucketingConfig = "hive.enforce.bucketing"
+        val enforceSortingConfig = "hive.enforce.sorting"
+
+        val message = s"Output Hive table ${table.identifier} is bucketed but Spark" +
+          "currently does NOT populate bucketed output which is compatible with Hive."
+
+        if (hadoopConf.get(enforceBucketingConfig, "true").toBoolean ||
+          hadoopConf.get(enforceSortingConfig, "true").toBoolean) {
+          throw new AnalysisException(message)
+        } else {
+          logWarning(message + s" Inserting data anyways since both $enforceBucketingConfig and " +
+            s"$enforceSortingConfig are set to false.")
+        }
+      case _ => // do nothing since table has no bucketing
+    }
+
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
@@ -342,7 +376,7 @@ case class InsertIntoHiveTable(
 
         var doHiveOverwrite = overwrite
 
-        if (oldPart.isEmpty || !ifNotExists) {
+        if (oldPart.isEmpty || !ifPartitionNotExists) {
           // SPARK-18107: Insert overwrite runs much slower than hive-client.
           // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
           // version and we may not want to catch up new Hive version every time. We delete the

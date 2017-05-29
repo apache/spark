@@ -314,7 +314,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   test("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
     val conf = new Configuration()
     conf.set("fs.fake.impl", classOf[RenameLikeHDFSFileSystem].getName)
-    conf.set("fs.default.name", "fake:///")
+    conf.set("fs.defaultFS", "fake:///")
 
     val provider = newStoreProvider(hadoopConf = conf)
     provider.getStore(0).commit()

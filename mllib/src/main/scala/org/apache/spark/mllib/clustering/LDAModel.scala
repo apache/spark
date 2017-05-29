@@ -314,7 +314,7 @@ class LocalLDAModel private[spark] (
           docBound += count * LDAUtils.logSumExp(Elogthetad + localElogbeta(idx, ::).t)
         }
         // E[log p(theta | alpha) - log q(theta | gamma)]
-        docBound += sum((brzAlpha - gammad) :* Elogthetad)
+        docBound += sum((brzAlpha - gammad) *:* Elogthetad)
         docBound += sum(lgamma(gammad) - lgamma(brzAlpha))
         docBound += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
 
@@ -324,7 +324,7 @@ class LocalLDAModel private[spark] (
     // Bound component for prob(topic-term distributions):
     //   E[log p(beta | eta) - log q(beta | lambda)]
     val sumEta = eta * vocabSize
-    val topicsPart = sum((eta - lambda) :* Elogbeta) +
+    val topicsPart = sum((eta - lambda) *:* Elogbeta) +
       sum(lgamma(lambda) - lgamma(eta)) +
       sum(lgamma(sumEta) - lgamma(sum(lambda(::, breeze.linalg.*))))
 
@@ -721,7 +721,7 @@ class DistributedLDAModel private[clustering] (
       val N_wj = edgeContext.attr
       val smoothed_N_wk: TopicCounts = edgeContext.dstAttr + (eta - 1.0)
       val smoothed_N_kj: TopicCounts = edgeContext.srcAttr + (alpha - 1.0)
-      val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
+      val phi_wk: TopicCounts = smoothed_N_wk /:/ smoothed_N_k
       val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
       val tokenLogLikelihood = N_wj * math.log(phi_wk.dot(theta_kj))
       edgeContext.sendToDst(tokenLogLikelihood)
@@ -748,7 +748,7 @@ class DistributedLDAModel private[clustering] (
         if (isTermVertex(vertex)) {
           val N_wk = vertex._2
           val smoothed_N_wk: TopicCounts = N_wk + (eta - 1.0)
-          val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
+          val phi_wk: TopicCounts = smoothed_N_wk /:/ smoothed_N_k
           sumPrior + (eta - 1.0) * sum(phi_wk.map(math.log))
         } else {
           val N_kj = vertex._2

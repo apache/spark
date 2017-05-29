@@ -53,6 +53,26 @@ object FileStreamSink extends Logging {
       case _ => false
     }
   }
+
+  /**
+   * Returns true if the path is the metadata dir or its ancestor is the metadata dir.
+   * E.g.:
+   *  - ancestorIsMetadataDirectory(/.../_spark_metadata) => true
+   *  - ancestorIsMetadataDirectory(/.../_spark_metadata/0) => true
+   *  - ancestorIsMetadataDirectory(/a/b/c) => false
+   */
+  def ancestorIsMetadataDirectory(path: Path, hadoopConf: Configuration): Boolean = {
+    val fs = path.getFileSystem(hadoopConf)
+    var currentPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    while (currentPath != null) {
+      if (currentPath.getName == FileStreamSink.metadataDir) {
+        return true
+      } else {
+        currentPath = currentPath.getParent
+      }
+    }
+    return false
+  }
 }
 
 /**

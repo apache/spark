@@ -74,6 +74,7 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach with Eventua
   protected override def afterAll(): Unit = {
     super.afterAll()
     if (_spark != null) {
+      _spark.sessionState.catalog.reset()
       _spark.stop()
       _spark = null
     }

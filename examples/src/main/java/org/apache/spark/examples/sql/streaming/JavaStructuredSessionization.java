@@ -28,8 +28,6 @@ import java.io.Serializable;
 import java.sql.Timestamp;
 import java.util.*;
 
-import scala.Tuple2;
-
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network.
  * <p>

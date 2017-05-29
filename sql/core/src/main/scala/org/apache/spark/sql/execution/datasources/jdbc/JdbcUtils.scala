@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -217,20 +217,29 @@ object JdbcUtils extends Logging {
       case java.sql.Types.OTHER         => null
       case java.sql.Types.REAL          => DoubleType
       case java.sql.Types.REF           => StringType
+      case java.sql.Types.REF_CURSOR    => null
       case java.sql.Types.ROWID         => LongType
       case java.sql.Types.SMALLINT      => IntegerType
       case java.sql.Types.SQLXML        => StringType
       case java.sql.Types.STRUCT        => StringType
       case java.sql.Types.TIME          => TimestampType
+      case java.sql.Types.TIME_WITH_TIMEZONE
+                                        => TimestampType
       case java.sql.Types.TIMESTAMP     => TimestampType
+      case java.sql.Types.TIMESTAMP_WITH_TIMEZONE
+                                        => TimestampType
+      case -101                         => TimestampType // Value for Timestamp with Time Zone in Oracle
       case java.sql.Types.TINYINT       => IntegerType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
-      case _                            => null
+      case _                            =>
+        throw new SQLException("Unrecognized SQL type " + sqlType)
       // scalastyle:on
     }
 
-    if (answer == null) throw new SQLException("Unsupported type " + sqlType)
+    if (answer == null) {
+      throw new SQLException("Unsupported type " + JDBCType.valueOf(sqlType).getName)
+    }
     answer
   }
 

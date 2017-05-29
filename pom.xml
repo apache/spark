@@ -58,10 +58,6 @@
     <url>https://issues.apache.org/jira/browse/SPARK</url>
   </issueManagement>
 
-  <prerequisites>
-    <maven>${maven.version}</maven>
-  </prerequisites>
-
   <mailingLists>
     <mailingList>
       <name>Dev Mailing List</name>
@@ -2547,6 +2543,13 @@
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>hadoop-cloud</id>
+      <modules>
+        <module>hadoop-cloud</module>
       </modules>
     </profile>
 
