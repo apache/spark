@@ -22,7 +22,7 @@ import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.catalyst.expressions.GenericRow
 
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
@@ -270,9 +270,12 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
         typed.min(_._2), typed.minLong(_._2), typed.max(_._2), typed.maxLong(_._2)),
       ("a", 1.0, 1L, 3.0, 3L), ("b", -4.0, -4L, 4.0, 4L))
 
+    val empty = Seq.empty[(Double, Double)].toDS
+    val f = (x: (Double, Double)) => x._2
+    val g = (x: (Long, Long)) => x._2
     checkDataset(
-      ds.filter("1 > 2").groupByKey(_._1).agg(
-        typed.min(_._2), typed.minLong(_._2), typed.max(_._2), typed.maxLong(_._2)))
+      empty.agg(typed.min(f), typed.minLong(g), typed.max(f), typed.maxLong(g)),
+      Row(null, null, null, null))
   }
 
 

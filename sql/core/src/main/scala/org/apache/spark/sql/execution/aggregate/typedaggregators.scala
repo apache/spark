@@ -99,70 +99,86 @@ class TypedAverage[IN](val f: IN => Double) extends Aggregator[IN, (Double, Long
   }
 }
 
-class TypedMinDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Double] {
-  override def zero: Double = Double.PositiveInfinity
-  override def reduce(b: Double, a: IN): Double = math.min(b, f(a))
-  override def merge(b1: Double, b2: Double): Double = if (b1 < b2) b1 else b2
-  override def finish(reduction: Double): Double = reduction
+class TypedMinDouble[IN](val f: IN => Double)
+  extends Aggregator[IN, (Double, Long), java.lang.Double] {
 
-  override def bufferEncoder: Encoder[Double] = ExpressionEncoder[Double]()
-  override def outputEncoder: Encoder[Double] = ExpressionEncoder[Double]()
+  override def zero: (Double, Long) = (Double.PositiveInfinity, 0L)
+  override def reduce(b: (Double, Long), a: IN): (Double, Long) = (math.min(b._1, f(a)), b._2 + 1)
+  override def merge(b1: (Double, Long), b2: (Double, Long)): (Double, Long) =
+    (math.min(b1._1, b2._1), b1._2 + b2._2)
+  override def finish(reduction: (Double, Long)): java.lang.Double =
+    if (reduction._2 > 0) reduction._1 else null
 
-  // Java api support
-  def this(f: MapFunction[IN, java.lang.Double]) = this(x => f.call(x).asInstanceOf[Double])
-
-  def toColumnJava: TypedColumn[IN, java.lang.Double] = {
-    toColumn.asInstanceOf[TypedColumn[IN, java.lang.Double]]
-  }
-}
-
-class TypedMaxDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Double] {
-  override def zero: Double = Double.NegativeInfinity
-  override def reduce(b: Double, a: IN): Double = math.max(b, f(a))
-  override def merge(b1: Double, b2: Double): Double = if (b1 > b2) b1 else b2
-  override def finish(reduction: Double): Double = reduction
-
-  override def bufferEncoder: Encoder[Double] = ExpressionEncoder[Double]()
-  override def outputEncoder: Encoder[Double] = ExpressionEncoder[Double]()
+  override def bufferEncoder: Encoder[(Double, Long)] = ExpressionEncoder[(Double, Long)]()
+  override def outputEncoder: Encoder[java.lang.Double] = ExpressionEncoder[java.lang.Double]()
 
   // Java api support
   def this(f: MapFunction[IN, java.lang.Double]) = this(x => f.call(x).asInstanceOf[Double])
 
-  def toColumnJava: TypedColumn[IN, java.lang.Double] = {
-    toColumn.asInstanceOf[TypedColumn[IN, java.lang.Double]]
+  def toColumnScala: TypedColumn[IN, Double] = {
+    toColumn.asInstanceOf[TypedColumn[IN, Double]]
   }
 }
 
-class TypedMinLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
-  override def zero: Long = Long.MaxValue
-  override def reduce(b: Long, a: IN): Long = math.min(b, f(a))
-  override def merge(b1: Long, b2: Long): Long = if (b1 < b2) b1 else b2
-  override def finish(reduction: Long): Long = reduction
+class TypedMaxDouble[IN](val f: IN => Double)
+  extends Aggregator[IN, (Double, Long), java.lang.Double] {
 
-  override def bufferEncoder: Encoder[Long] = ExpressionEncoder[Long]()
-  override def outputEncoder: Encoder[Long] = ExpressionEncoder[Long]()
+  override def zero: (Double, Long) = (Double.NegativeInfinity, 0L)
+  override def reduce(b: (Double, Long), a: IN): (Double, Long) = (math.max(b._1, f(a)), b._2 + 1)
+  override def merge(b1: (Double, Long), b2: (Double, Long)): (Double, Long) =
+    (math.max(b1._1, b2._1), b1._2 + b2._2)
+  override def finish(reduction: (Double, Long)): java.lang.Double =
+    if (reduction._2 > 0) reduction._1 else null
+
+  override def bufferEncoder: Encoder[(Double, Long)] = ExpressionEncoder[(Double, Long)]()
+  override def outputEncoder: Encoder[java.lang.Double] = ExpressionEncoder[java.lang.Double]()
+
+  // Java api support
+  def this(f: MapFunction[IN, java.lang.Double]) = this(x => f.call(x).asInstanceOf[Double])
+
+  def toColumnScala: TypedColumn[IN, Double] = {
+    toColumn.asInstanceOf[TypedColumn[IN, Double]]
+  }
+}
+
+class TypedMinLong[IN](val f: IN => Long)
+  extends Aggregator[IN, (Long, Long), java.lang.Long] {
+
+  override def zero: (Long, Long) = (Long.MaxValue, 0L)
+  override def reduce(b: (Long, Long), a: IN): (Long, Long) = (math.min(b._1, f(a)), b._2 + 1)
+  override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) =
+    (math.min(b1._1, b2._1), b1._2 + b2._2)
+  override def finish(reduction: (Long, Long)): java.lang.Long =
+    if (reduction._2 > 0) reduction._1 else null
+
+  override def bufferEncoder: Encoder[(Long, Long)] = ExpressionEncoder[(Long, Long)]()
+  override def outputEncoder: Encoder[java.lang.Long] = ExpressionEncoder[java.lang.Long]()
 
   // Java api support
   def this(f: MapFunction[IN, java.lang.Long]) = this(x => f.call(x).asInstanceOf[Long])
 
-  def toColumnJava: TypedColumn[IN, java.lang.Long] = {
-    toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
+  def toColumnScala: TypedColumn[IN, Long] = {
+    toColumn.asInstanceOf[TypedColumn[IN, Long]]
   }
 }
 
-class TypedMaxLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
-  override def zero: Long = Long.MinValue
-  override def reduce(b: Long, a: IN): Long = math.max(b, f(a))
-  override def merge(b1: Long, b2: Long): Long = if (b1 > b2) b1 else b2
-  override def finish(reduction: Long): Long = reduction
+class TypedMaxLong[IN](val f: IN => Long)
+  extends Aggregator[IN, (Long, Long), java.lang.Long] {
 
-  override def bufferEncoder: Encoder[Long] = ExpressionEncoder[Long]()
-  override def outputEncoder: Encoder[Long] = ExpressionEncoder[Long]()
+  override def zero: (Long, Long) = (Long.MinValue, 0L)
+  override def reduce(b: (Long, Long), a: IN): (Long, Long) = (math.max(b._1, f(a)), b._2 + 1)
+  override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) =
+    (math.max(b1._1, b2._1), b1._2 + b2._2)
+  override def finish(reduction: (Long, Long)): java.lang.Long =
+    if (reduction._2 > 0) reduction._1 else null
+
+  override def bufferEncoder: Encoder[(Long, Long)] = ExpressionEncoder[(Long, Long)]()
+  override def outputEncoder: Encoder[java.lang.Long] = ExpressionEncoder[java.lang.Long]()
 
   // Java api support
   def this(f: MapFunction[IN, java.lang.Long]) = this(x => f.call(x).asInstanceOf[Long])
 
-  def toColumnJava: TypedColumn[IN, java.lang.Long] = {
-    toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
+  def toColumnScala: TypedColumn[IN, Long] = {
+    toColumn.asInstanceOf[TypedColumn[IN, Long]]
   }
 }
