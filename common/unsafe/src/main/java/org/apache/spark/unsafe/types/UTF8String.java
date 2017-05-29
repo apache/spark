@@ -688,28 +688,36 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *   ('hi', 1, '??') =&gt; 'h'
    */
   public UTF8String rpad(int len, UTF8String pad) {
-    int spaces = len - this.numChars(); // number of char need to pad
-    if (spaces <= 0 || pad.numBytes() == 0) {
-      // no padding at all, return the substring of the current string
-      return substring(0, len);
+    if (len < 0) {
+      return null;
+    } else if (len == 0) {
+      return EMPTY_UTF8;
     } else {
-      int padChars = pad.numChars();
-      int count = spaces / padChars; // how many padding string needed
-      // the partial string of the padding
-      UTF8String remain = pad.substring(0, spaces - padChars * count);
+      int spaces = len - this.numChars(); // number of char need to pad
+      if (spaces > 0 && pad.numBytes() == 0) {
+        return null;
+      } else if (spaces <= 0) {
+        // no padding at all, return the substring of the current string
+        return substring(0, len);
+      } else {
+        int padChars = pad.numChars();
+        int count = spaces / padChars; // how many padding string needed
+        // the partial string of the padding
+        UTF8String remain = pad.substring(0, spaces - padChars * count);
 
-      byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
-      copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
-      int offset = this.numBytes;
-      int idx = 0;
-      while (idx < count) {
-        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++ idx;
-        offset += pad.numBytes;
+        byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
+        copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
+        int offset = this.numBytes;
+        int idx = 0;
+        while (idx < count) {
+          copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
+          ++idx;
+          offset += pad.numBytes;
+        }
+        copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
+
+        return UTF8String.fromBytes(data);
       }
-      copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
-
-      return UTF8String.fromBytes(data);
     }
   }
 
@@ -720,30 +728,38 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *   ('hi', 1, '??') =&gt; 'h'
    */
   public UTF8String lpad(int len, UTF8String pad) {
-    int spaces = len - this.numChars(); // number of char need to pad
-    if (spaces <= 0 || pad.numBytes() == 0) {
-      // no padding at all, return the substring of the current string
-      return substring(0, len);
+    if(len < 0) {
+      return null;
+    } else if (len == 0) {
+      return EMPTY_UTF8;
     } else {
-      int padChars = pad.numChars();
-      int count = spaces / padChars; // how many padding string needed
-      // the partial string of the padding
-      UTF8String remain = pad.substring(0, spaces - padChars * count);
+      int spaces = len - this.numChars(); // number of char need to pad
+      if (spaces > 0 && pad.numBytes() == 0) {
+        return null;
+      } else if (spaces <= 0) {
+        // no padding at all, return the substring of the current string
+        return substring(0, len);
+      } else {
+        int padChars = pad.numChars();
+        int count = spaces / padChars; // how many padding string needed
+        // the partial string of the padding
+        UTF8String remain = pad.substring(0, spaces - padChars * count);
 
-      byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
+        byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
 
-      int offset = 0;
-      int idx = 0;
-      while (idx < count) {
-        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++ idx;
-        offset += pad.numBytes;
+        int offset = 0;
+        int idx = 0;
+        while (idx < count) {
+          copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
+          ++ idx;
+          offset += pad.numBytes;
+        }
+        copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
+        offset += remain.numBytes;
+        copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET + offset, numBytes());
+
+        return UTF8String.fromBytes(data);
       }
-      copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
-      offset += remain.numBytes;
-      copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET + offset, numBytes());
-
-      return UTF8String.fromBytes(data);
     }
   }
 

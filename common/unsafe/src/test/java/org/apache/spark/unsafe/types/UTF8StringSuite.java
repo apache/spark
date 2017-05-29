@@ -352,17 +352,40 @@ public class UTF8StringSuite {
       fromString("数据砖头孙行者孙行者孙行"),
       fromString("数据砖头").rpad(12, fromString("孙行者")));
 
-    assertEquals(EMPTY_UTF8, fromString("数据砖头").lpad(-10, fromString("孙行者")));
-    assertEquals(EMPTY_UTF8, fromString("数据砖头").lpad(-10, EMPTY_UTF8));
-    assertEquals(fromString("数据砖头"), fromString("数据砖头").lpad(5, EMPTY_UTF8));
+    assertEquals(null, fromString("数据砖头").lpad(-10, fromString("孙行者")));
+    assertEquals(null, fromString("数据砖头").lpad(-10, EMPTY_UTF8));
+    assertEquals(null, fromString("数据砖头").lpad(5, EMPTY_UTF8));
     assertEquals(fromString("数据砖"), fromString("数据砖头").lpad(3, EMPTY_UTF8));
-    assertEquals(EMPTY_UTF8, EMPTY_UTF8.lpad(3, EMPTY_UTF8));
+    assertEquals(null, EMPTY_UTF8.lpad(3, EMPTY_UTF8));
 
-    assertEquals(EMPTY_UTF8, fromString("数据砖头").rpad(-10, fromString("孙行者")));
-    assertEquals(EMPTY_UTF8, fromString("数据砖头").rpad(-10, EMPTY_UTF8));
-    assertEquals(fromString("数据砖头"), fromString("数据砖头").rpad(5, EMPTY_UTF8));
+    assertEquals(null, fromString("hello").lpad(-2, EMPTY_UTF8));
+    assertEquals(null, fromString("hello").lpad(-1, EMPTY_UTF8));
+    assertEquals(EMPTY_UTF8, fromString("hello").lpad(0, EMPTY_UTF8));
+    assertEquals(fromString("h"), fromString("hello").lpad(1, EMPTY_UTF8));
+    assertEquals(fromString("hel"), fromString("hello").lpad(3, EMPTY_UTF8));
+    assertEquals(fromString("hello"), fromString("hello").lpad(5, EMPTY_UTF8));
+    assertEquals(null, fromString("hello").lpad(6, EMPTY_UTF8));
+    assertEquals(null, EMPTY_UTF8.lpad(-1, EMPTY_UTF8));
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.lpad(0, EMPTY_UTF8));
+    assertEquals(null, EMPTY_UTF8.lpad(1, EMPTY_UTF8));
+
+    assertEquals(null, fromString("数据砖头").rpad(-10, fromString("孙行者")));
+    assertEquals(null, fromString("数据砖头").rpad(-10, EMPTY_UTF8));
+    assertEquals(null, fromString("数据砖头").rpad(5, EMPTY_UTF8));
     assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, EMPTY_UTF8));
-    assertEquals(EMPTY_UTF8, EMPTY_UTF8.rpad(3, EMPTY_UTF8));
+    assertEquals(null, EMPTY_UTF8.rpad(3, EMPTY_UTF8));
+
+    assertEquals(null, fromString("hello").rpad(-2, EMPTY_UTF8));
+    assertEquals(null, fromString("hello").rpad(-1, EMPTY_UTF8));
+    assertEquals(EMPTY_UTF8, fromString("hello").rpad(0, EMPTY_UTF8));
+    assertEquals(fromString("h"), fromString("hello").rpad(1, EMPTY_UTF8));
+    assertEquals(fromString("hel"), fromString("hello").rpad(3, EMPTY_UTF8));
+    assertEquals(fromString("hello"), fromString("hello").rpad(5, EMPTY_UTF8));
+    assertEquals(null, fromString("hello").rpad(6, EMPTY_UTF8));
+    assertEquals(null, EMPTY_UTF8.rpad(-1, EMPTY_UTF8));
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.rpad(0, EMPTY_UTF8));
+    assertEquals(null, EMPTY_UTF8.rpad(1, EMPTY_UTF8));
+
   }
 
   @Test
