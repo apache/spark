@@ -3032,18 +3032,6 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     ...
     >>> str(loadedModel)
     'RFormulaModel(ResolvedRFormula(label=y, terms=[x,s], hasIntercept=true)) (uid=...)'
-    >>> rf = RFormula(formula="y ~ x + s", stringIndexerOrderType="alphabetDesc")
-    >>> rf.getStringIndexerOrderType()
-    'alphabetDesc'
-    >>> rf.fit(df).transform(df).show()
-    +---+---+---+---------+-----+
-    |  y|  x|  s| features|label|
-    +---+---+---+---------+-----+
-    |1.0|1.0|  a|[1.0,0.0]|  1.0|
-    |0.0|2.0|  b|[2.0,1.0]|  0.0|
-    |0.0|0.0|  a|(2,[],[])|  0.0|
-    +---+---+---+---------+-----+
-    ...
 
     .. versionadded:: 1.5.0
     """
