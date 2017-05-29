@@ -48,6 +48,9 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     val recall0 = 2.0 / (2 + 2)
     val recall1 = 3.0 / (3 + 1)
     val recall2 = 1.0 / (1 + 0)
+    val specificity0 = 4.0 / (4 + 1)
+    val specificity1 = 4.0 / (4 + 1)
+    val specificity2 = 7.0 / (7 + 1)
     val f1measure0 = 2 * precision0 * recall0 / (precision0 + recall0)
     val f1measure1 = 2 * precision1 * recall1 / (precision1 + recall1)
     val f1measure2 = 2 * precision2 * recall2 / (precision2 + recall2)
@@ -68,6 +71,9 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(math.abs(metrics.recall(0.0) - recall0) < delta)
     assert(math.abs(metrics.recall(1.0) - recall1) < delta)
     assert(math.abs(metrics.recall(2.0) - recall2) < delta)
+    assert(math.abs(metrics.specificity(0.0) - specificity0) < delta)
+    assert(math.abs(metrics.specificity(1.0) - specificity1) < delta)
+    assert(math.abs(metrics.specificity(2.0) - specificity2) < delta)
     assert(math.abs(metrics.fMeasure(0.0) - f1measure0) < delta)
     assert(math.abs(metrics.fMeasure(1.0) - f1measure1) < delta)
     assert(math.abs(metrics.fMeasure(2.0) - f1measure2) < delta)
@@ -89,6 +95,8 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
       ((4.0 / 9) * precision0 + (4.0 / 9) * precision1 + (1.0 / 9) * precision2)) < delta)
     assert(math.abs(metrics.weightedRecall -
       ((4.0 / 9) * recall0 + (4.0 / 9) * recall1 + (1.0 / 9) * recall2)) < delta)
+    assert(math.abs(metrics.weightedSpecificity -
+      ((4.0 / 9) * specificity0 + (4.0 / 9) * specificity1 + (1.0 / 9) * specificity2)) < delta)
     assert(math.abs(metrics.weightedFMeasure -
       ((4.0 / 9) * f1measure0 + (4.0 / 9) * f1measure1 + (1.0 / 9) * f1measure2)) < delta)
     assert(math.abs(metrics.weightedFMeasure(2.0) -

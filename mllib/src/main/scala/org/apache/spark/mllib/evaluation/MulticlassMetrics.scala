@@ -115,6 +115,12 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   def recall(label: Double): Double = tpByClass(label).toDouble / labelCountByClass(label)
 
   /**
+   * Returns specificity for a given label (category)
+   * @param label the label.
+   */
+  def specificity(label: Double): Double = 1.0 - falsePositiveRate(label)
+
+  /**
    * Returns f-measure for a given label (category)
    * @param label the label.
    * @param beta the beta parameter.
@@ -197,6 +203,13 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   @Since("1.1.0")
   lazy val weightedPrecision: Double = labelCountByClass.map { case (category, count) =>
     precision(category) * count.toDouble / labelCount
+  }.sum
+
+  /**
+   * Returns weighted averaged specificity
+   */
+  lazy val weightedSpecificity: Double = labelCountByClass.map { case (category, count) =>
+    specificity(category) * count.toDouble / labelCount
   }.sum
 
   /**
