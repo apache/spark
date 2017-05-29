@@ -404,7 +404,10 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
   setDefault(featureSubsetStrategy -> "auto")
 
-  /** @group getParam */
+  /**
+   * @deprecated This method is deprecated and will be removed in 3.0.0
+   * @group setParam
+   */
   @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
 
