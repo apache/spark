@@ -391,7 +391,7 @@ private object GBTClassifierSuite extends SparkFunSuite {
     val numFeatures = data.first().features.size
     val oldBoostingStrategy =
       gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
-    val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
+    val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt, "all")
     val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
     val newModel = gbt.fit(newData)
