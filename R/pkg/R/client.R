@@ -42,6 +42,19 @@ determineSparkSubmitBin <- function() {
   }
   sparkSubmitBinName
 }
+# R supports both file separator in the file path (Unix : / and Windows: \) irrespective of the operating system
+# but when passing file path to Java or script program, it has to be converted according to operating system
+
+determinefileSeperator <- function() {
+  if (.Platform$OS.type == "unix") {
+      fileSeperator <- .Platform$file.sep    
+     } else {
+#    .Platform$file.sep contains "/" for windows too    
+#    http://www.inside-r.org/r-doc/base/file.path    
+     fileSeperator <- "\\"  
+   }
+   fileSeperator  
+}
 
 generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
   jars <- paste0(jars, collapse = ",")
@@ -63,7 +76,8 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
 launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
   sparkSubmitBinName <- determineSparkSubmitBin()
   if (sparkHome != "") {
-    sparkSubmitBin <- file.path(sparkHome, "bin", sparkSubmitBinName)
+    fileSeperator  <- determinefileSeperator()
+    sparkSubmitBin <- file.path(sparkHome, "bin", sparkSubmitBinName, fsep = fileSeperator)
   } else {
     sparkSubmitBin <- sparkSubmitBinName
   }
