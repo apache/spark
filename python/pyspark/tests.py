@@ -61,9 +61,9 @@ else:
 from pyspark import keyword_only
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
-from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.ml.feature import RFormula
+from pyspark.rdd import RDD
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
     CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer, \
     PairDeserializer, CartesianDeserializer, AutoBatchedSerializer, AutoSerializer, \
@@ -2207,20 +2207,20 @@ class KeywordOnlyTests(unittest.TestCase):
         self.assertEqual(b._x, 2)
 
 
-class SparkMLTests(unittest.TestCase):
+class SparkMLTests(ReusedPySparkTestCase):
 
     def test_rformula(self):
-        df = spark.createDataFrame([
-             (1.0, 1.0, "a"),
-             (0.0, 2.0, "b"),
-             (0.0, 0.0, "a")
-        ], ["y", "x", "s"])
+        df = self.sc.parallelize([
+            (1.0, 1.0, "a"),
+            (0.0, 2.0, "b"),
+            (0.0, 0.0, "a")
+        ]).toDF(["y", "x", "s"])
         rf = RFormula(formula="y ~ x + s", stringIndexerOrderType="alphabetDesc")
         self.assertEqual(rf.getStringIndexerOrderType(), 'alphabetDesc')
 
         result = rf.fit(df).transform(df)
         observed = result.select("features").collect()
-        expected = [[1.0, 0.0], [2.0, 1.0], [0.0,0.0]]
+        expected = [[1.0, 0.0], [2.0, 1.0], [0.0, 0.0]]
         for i in range(0, len(expected)):
             self.assertEqual(observed[i]["features"].toArray(), expected[i])
 
