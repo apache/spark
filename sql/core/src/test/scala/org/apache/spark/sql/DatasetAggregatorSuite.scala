@@ -273,12 +273,11 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     val empty = Seq.empty[(Double, Double)].toDS
     val f = (x: (Double, Double)) => x._2
     val g = (x: (Long, Long)) => x._2
+    empty.agg(typed.min(f)).show()
     checkDataset(
       empty.agg(typed.min(f), typed.minLong(g), typed.max(f), typed.maxLong(g)),
       Row(null, null, null, null))
   }
-
-
 
   test("SPARK-12555 - result should not be corrupted after input columns are reordered") {
     val ds = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]

@@ -82,7 +82,8 @@ object typed {
    *
    * @since 2.3.0
    */
-  def min[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedMinDouble[IN](f).toColumnScala
+  def min[IN](f: IN => Double): TypedColumn[IN, Double] =
+    new TypedMinDouble[IN](f).toColumnScala
 
   /**
    * Min aggregate function for integral (long, i.e. 64 bit integer) type.
