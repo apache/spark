@@ -1568,6 +1568,18 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(first['date'], epoch)
         self.assertEqual(first['lit_date'], epoch)
 
+    # regression test for SPARK-20787
+    def test_datetype_accepts_calendar_dates(self):
+        df1 = self.spark.createDataFrame(self.sc.parallelize([[datetime.datetime(1899,12,31)]]))
+        df2 = self.spark.createDataFrame(self.sc.parallelize([[datetime.datetime(100,1,1)]]))
+        try:
+            counted1 = df1.count()
+            counted2 = df2.count()
+            self.assertEqual(counted1, 1)
+            self.assertEqual(counted2, 1)
+        except Exception:
+            self.fail("Internal conversion should handle years 100-1899")
+
     def test_decimal(self):
         from decimal import Decimal
         schema = StructType([StructField("decimal", DecimalType(10, 5))])
