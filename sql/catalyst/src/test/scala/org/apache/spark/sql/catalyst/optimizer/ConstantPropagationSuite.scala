@@ -34,7 +34,7 @@ class ConstantPropagationSuite extends PlanTest {
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
-        Batch("ConstantPropagation", Once,
+        Batch("ConstantPropagation", FixedPoint(10),
           ColumnPruning,
           ConstantPropagation,
           ConstantFolding,
@@ -75,7 +75,7 @@ class ConstantPropagationSuite extends PlanTest {
         .where(
           columnA === Literal(11) &&
             columnB === Literal(10) &&
-            (columnA === Add(columnC, Literal(3)) || Literal(10) === columnC))
+            (Literal(11) === Add(columnC, Literal(3)) || Literal(10) === columnC))
         .analyze
 
     comparePlans(Optimize.execute(query), correctAnswer)
