@@ -246,16 +246,24 @@ object LBFGS extends Logging {
       val bcW = data.context.broadcast(w)
       val localGradient = gradient
 
-      val (gradientSum, lossSum) = data.treeAggregate((Vectors.zeros(n), 0.0))(
-          seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
-            val l = localGradient.compute(
-              features, label, bcW.value, grad)
-            (grad, loss + l)
-          },
-          combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
-            axpy(1.0, grad2, grad1)
-            (grad1, loss1 + loss2)
-          })
+      val seqOp = (c: (Vector, Double), v: (Double, Vector)) =>
+        (c, v) match {
+          case ((grad, loss), (label, features)) =>
+            val denseGrad = grad.toDense
+            val l = localGradient.compute(features, label, bcW.value, denseGrad)
+            (denseGrad, loss + l)
+        }
+
+      val combOp = (c1: (Vector, Double), c2: (Vector, Double)) =>
+        (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
+          val denseGrad1 = grad1.toDense
+          val denseGrad2 = grad2.toDense
+          axpy(1.0, denseGrad2, denseGrad1)
+          (denseGrad1, loss1 + loss2)
+       }
+
+      val zeroSparseVector = Vectors.sparse(n, Seq())
+      val (gradientSum, lossSum) = data.treeAggregate((zeroSparseVector, 0.0))(seqOp, combOp)
 
       /**
        * regVal is sum of weight squares if it's L2 updater;
