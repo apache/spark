@@ -233,16 +233,22 @@ test_that("spark.logit", {
   coefsR <- c(-11.13331, 1.00000, 0.00000, 1.00000, 0.00000)
   coefs <- summary$coefficients[, "Estimate"]
   expect_true(all(abs(coefsR - coefs) < 0.1))
+  # Test upperBoundsOnCoefficients should be matrix
+  expect_error(spark.logit(training, Species ~ ., upperBoundsOnCoefficients = as.array(c(1, 2)),
+               upperBoundsOnIntercepts = 1.0))
 
   # Test binomial logistic regression againt two classes with lowerBoundsOnCoefficients
   # and lowerBoundsOnIntercepts
   l <- matrix(c(0.0, -1.0, 0.0, -1.0), nrow = 1, ncol = 4)
   model <- spark.logit(training, Species ~ ., lowerBoundsOnCoefficients = l,
-  lowerBoundsOnIntercepts = 0.0)
+                       lowerBoundsOnIntercepts = 0.0)
   summary <- summary(model)
   coefsR <- c(0, 0, -1, 0, 1.902192)
   coefs <- summary$coefficients[, "Estimate"]
   expect_true(all(abs(coefsR - coefs) < 0.1))
+  # Test lowerBoundsOnCoefficients should be matrix
+  expect_error(spark.logit(training, Species ~ ., lowerBoundsOnCoefficients = as.array(c(1, 2)),
+               lowerBoundsOnIntercepts = 0.0))
 })
 
 test_that("spark.mlp", {
