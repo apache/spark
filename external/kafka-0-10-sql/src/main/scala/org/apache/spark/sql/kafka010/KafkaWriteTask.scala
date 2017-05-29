@@ -71,6 +71,7 @@ private[kafka010] class KafkaWriteTask(
     if (producer != null) {
       producer.flush()
       checkForErrors()
+      producer = null
     }
   }
 

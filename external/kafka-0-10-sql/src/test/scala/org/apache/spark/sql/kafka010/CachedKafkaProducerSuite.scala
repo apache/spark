@@ -47,7 +47,7 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams)
     assert(producer == producer2)
 
-    val cacheMap = PrivateMethod[ConcurrentMap[String, Option[KP]]]('getAsMap)
+    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
     val map = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map.size == 1)
   }
@@ -64,12 +64,15 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
     // With updated conf, a new producer instance should be created.
     assert(producer != producer2)
 
-    val cacheMap = PrivateMethod[ConcurrentMap[String, Option[KP]]]('getAsMap)
+    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
     val map = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map.size == 2)
 
     CachedKafkaProducer.close(kafkaParams)
     val map2 = CachedKafkaProducer.invokePrivate(cacheMap())
     assert(map2.size == 1)
+    import scala.collection.JavaConverters._
+    val (seq: Seq[(String, Object)], _producer: KP) = map2.asScala.toArray.apply(0)
+    assert(_producer == producer)
   }
 }

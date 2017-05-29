@@ -18,9 +18,10 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.{ConcurrentMap, TimeUnit}
+import java.util.concurrent.{ConcurrentMap, ExecutionException, TimeUnit}
 
-import com.google.common.cache.{Cache, CacheBuilder, RemovalListener, RemovalNotification}
+import com.google.common.cache._
+import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import org.apache.kafka.clients.producer.KafkaProducer
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -35,6 +36,13 @@ private[kafka010] object CachedKafkaProducer extends Logging {
   private lazy val cacheExpireTimeout: Long =
     SparkEnv.get.conf.getTimeAsMs("spark.kafka.producer.cache.timeout", "10m")
 
+  private val cacheLoader = new CacheLoader[Seq[(String, Object)], Producer] {
+    override def load(config: Seq[(String, Object)]): Producer = {
+      val configMap = config.map(x => x._1 -> x._2).toMap.asJava
+      createKafkaProducer(configMap)
+    }
+  }
+
   private val removalListener = new RemovalListener[Seq[(String, Object)], Producer]() {
     override def onRemoval(
         notification: RemovalNotification[Seq[(String, Object)], Producer]): Unit = {
@@ -46,15 +54,13 @@ private[kafka010] object CachedKafkaProducer extends Logging {
     }
   }
 
-  private lazy val guavaCache: Cache[Seq[(String, Object)], Producer] = CacheBuilder.newBuilder()
-    .expireAfterAccess(cacheExpireTimeout, TimeUnit.MILLISECONDS)
-    .removalListener(removalListener)
-    .build[Seq[(String, Object)], Producer]()
+  private lazy val guavaCache: LoadingCache[Seq[(String, Object)], Producer] =
+    CacheBuilder.newBuilder().expireAfterAccess(cacheExpireTimeout, TimeUnit.MILLISECONDS)
+      .removalListener(removalListener)
+      .build[Seq[(String, Object)], Producer](cacheLoader)
 
   private def createKafkaProducer(producerConfiguration: ju.Map[String, Object]): Producer = {
     val kafkaProducer: Producer = new Producer(producerConfiguration)
-    val paramsSeq: Seq[(String, Object)] = paramsToSeq(producerConfiguration)
-    guavaCache.put(paramsSeq, kafkaProducer)
     logDebug(s"Created a new instance of KafkaProducer for $producerConfiguration.")
     kafkaProducer
   }
@@ -64,14 +70,19 @@ private[kafka010] object CachedKafkaProducer extends Logging {
    * exist, a new KafkaProducer will be created. KafkaProducer is thread safe, it is best to keep
    * one instance per specified kafkaParams.
    */
-  private[kafka010] def getOrCreate(kafkaParams: ju.Map[String, Object]): Producer = synchronized {
+  private[kafka010] def getOrCreate(kafkaParams: ju.Map[String, Object]): Producer = {
     val paramsSeq: Seq[(String, Object)] = paramsToSeq(kafkaParams)
-    Option(guavaCache.getIfPresent(paramsSeq)).getOrElse(createKafkaProducer(kafkaParams))
+    try {
+      guavaCache.get(paramsSeq)
+    } catch {
+      case e @ (_: ExecutionException | _: UncheckedExecutionException | _: ExecutionError)
+        if e.getCause != null =>
+        throw e.getCause
+    }
   }
 
-  def paramsToSeq(kafkaParams: ju.Map[String, Object]): Seq[(String, Object)] = {
-    val paramsSeq: Seq[(String, Object)] =
-      kafkaParams.asScala.toSeq.sortBy(x => (x._1, x._2.toString))
+  private def paramsToSeq(kafkaParams: ju.Map[String, Object]): Seq[(String, Object)] = {
+    val paramsSeq: Seq[(String, Object)] = kafkaParams.asScala.toSeq.sortBy(x => x._1)
     paramsSeq
   }
 
