@@ -37,11 +37,15 @@ object MimaExcludes {
   // Exclude rules for 2.3.x
   lazy val v23excludes = v22excludes ++ Seq(
     // [SPARK-20495][SQL] Add StorageLevel to cacheTable API
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.cacheTable")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.cacheTable"),
+   
+    // [SPARK-20199][MLLIB] Add featureSubSet to GradientBoostedTrees
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.GradientBoostedTrees.this")
   )
 
   // Exclude rules for 2.2.x
   lazy val v22excludes = v21excludes ++ Seq(
+
     // [SPARK-20355] Add per application spark version on the history server headerpage
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.this"),
 
