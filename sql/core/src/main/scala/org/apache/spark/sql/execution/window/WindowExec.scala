@@ -159,7 +159,6 @@ case class WindowExec(
   private[this] lazy val windowFrameExpressionFactoryPairs = {
     type FrameKey = (String, FrameType, Option[Int], Option[Int])
     type ExpressionBuffer = mutable.Buffer[Expression]
-    type WindowExpressionBuffer = mutable.Buffer[WindowExpression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
     // Add a function and its function to the map for a given frame.
