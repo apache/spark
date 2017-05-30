@@ -53,6 +53,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(row.getSeq[Int](0) === Seq(0, 2))
   }
 
+  test("map with column name") {
+    val df = Seq(1 -> "a").toDF("a", "b")
+    val row = df.select(map("a", "b")).first()
+
+    val expectedType = MapType(IntegerType, StringType, valueContainsNull = true)
+    assert(row.schema(0).dataType === expectedType)
+    assert(row.getMap[Int, String](0) === Map(1 -> "a"))
+  }
+
   test("map with column expressions") {
     val df = Seq(1 -> "a").toDF("a", "b")
     val row = df.select(map($"a" + 1, $"b")).first()
