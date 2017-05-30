@@ -1157,8 +1157,8 @@ class SessionCatalog(
     }
 
     // If the name itself is not qualified, add the current database to it.
-    val database = name.database.orElse(Some(currentDb)).map(formatDatabaseName)
-    val qualifiedName = name.copy(database = database)
+    val database = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val qualifiedName = name.copy(database = Some(database))
 
     if (functionRegistry.functionExists(qualifiedName)) {
       // This function has been already loaded into the function registry.
@@ -1171,7 +1171,7 @@ class SessionCatalog(
     // in the metastore). We need to first put the function in the FunctionRegistry.
     // TODO: why not just check whether the function exists first?
     val catalogFunction = try {
-      externalCatalog.getFunction(currentDb, name.funcName)
+      externalCatalog.getFunction(database, name.funcName)
     } catch {
       case e: AnalysisException => failFunctionLookup(name.funcName)
       case e: NoSuchPermanentFunctionException => failFunctionLookup(name.funcName)
