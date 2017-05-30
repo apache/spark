@@ -2747,7 +2747,7 @@ class Dataset[T] private[sql](
   def createGlobalTempView(viewName: String): Unit = withPlan {
     createTempViewCommand(viewName, replace = false, global = true)
   }
-    
+
   /**
    * Creates or replaces a global temporary view using the given name. The lifetime of this
    * temporary view is tied to this Spark application.
