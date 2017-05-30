@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.util.Locale
+import java.util.concurrent.Callable
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -126,11 +127,53 @@ class SessionCatalog(
   }
 
   /**
-   * A cache of qualified table names to table relation plans.
-   */
+    * A cache of qualified table names to table relation plans.
+    * Accessing tableRelationCache directly is not recommended,
+    * since it will introduce exposures to guava libraries.
+    */
   val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
     val cacheSize = conf.tableRelationCacheSize
     CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
+  }
+
+  /**
+    * This method provides a way to get a cached plan
+    * without exposing components to Guava library.
+    */
+  def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
+    tableRelationCache.get(t, c)
+  }
+
+  /**
+    * This method provides a way to get a cached plan if the key exists
+    * without exposing components to Guava library.
+    */
+  def getCachedTableIfPresent(key: QualifiedTableName): LogicalPlan = {
+    tableRelationCache.getIfPresent(key)
+  }
+
+  /**
+    * This method provides a way to cache a plan
+    * without exposing components to Guava library.
+    */
+  def putTableInCache(t: QualifiedTableName, l: LogicalPlan): Unit = {
+    tableRelationCache.put(t, l)
+  }
+
+  /**
+    * This method provides a way to invalidate a cached plan
+    * without exposing components to Guava library.
+    */
+  def invalidateCachedTable(key: QualifiedTableName): Unit = {
+    tableRelationCache.invalidate(key)
+  }
+
+  /**
+    * This method provides a way to invalidate all the cached plans
+    * without exposing components to Guava library.
+    */
+  def invalidateAllCachedTables(): Unit = {
+    tableRelationCache.invalidateAll()
   }
 
   /**
