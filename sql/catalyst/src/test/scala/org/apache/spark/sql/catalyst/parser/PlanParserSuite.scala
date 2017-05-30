@@ -597,7 +597,16 @@ class PlanParserSuite extends PlanTest {
       parsePlan("SELECT /*+ HINT1(a, 1) hint2(b, 2) */ * from t"),
       UnresolvedHint("hint2", Seq($"b", Literal(2)),
         UnresolvedHint("HINT1", Seq($"a", Literal(1)),
-        table("t").select(star())
+          table("t").select(star())
+        )
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, 1),hint2(b, 2) */ * from t"),
+      UnresolvedHint("hint2", Seq($"b", Literal(2)),
+        UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+          table("t").select(star())
         )
       )
     )
@@ -607,6 +616,17 @@ class PlanParserSuite extends PlanTest {
       UnresolvedHint("HINT1", Seq($"a", Literal(1)),
         UnresolvedHint("hint2", Seq($"b", Literal(2)),
           table("t").select(star())
+        )
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, 1), hint2(b, 2) */ /*+ hint3(c, 3) */ * from t"),
+      UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+        UnresolvedHint("hint2", Seq($"b", Literal(2)),
+          UnresolvedHint("hint3", Seq($"c", Literal(3)),
+            table("t").select(star())
+          )
         )
       )
     )

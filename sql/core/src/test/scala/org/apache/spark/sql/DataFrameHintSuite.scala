@@ -17,37 +17,44 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.analysis.EliminateBarriers
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.UnresolvedHint
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataFrameHintSuite extends PlanTest with SharedSQLContext {
   import testImplicits._
   lazy val df = spark.range(10)
 
-  test("various hint parameters") {
+  private def check(df: Dataset[_], expected: LogicalPlan) = {
     comparePlans(
-      df.hint("hint1").queryExecution.logical,
+      EliminateBarriers(df.queryExecution.logical),
+      expected
+    )
+  }
+
+  test("various hint parameters") {
+    check(
+      df.hint("hint1"),
       UnresolvedHint("hint1", Seq(),
         df.logicalPlan
       )
     )
 
-    comparePlans(
-      df.hint("hint1", 1, "a").queryExecution.logical,
+    check(
+      df.hint("hint1", 1, "a"),
       UnresolvedHint("hint1", Seq(1, "a"), df.logicalPlan)
     )
 
-    comparePlans(
-      df.hint("hint1", 1, $"a").queryExecution.logical,
+    check(
+      df.hint("hint1", 1, $"a"),
       UnresolvedHint("hint1", Seq(1, $"a"),
         df.logicalPlan
       )
     )
 
-    comparePlans(
-      df.hint("hint1", Seq(1, 2, 3), Seq($"a", $"b", $"c")).queryExecution.logical,
+    check(
+      df.hint("hint1", Seq(1, 2, 3), Seq($"a", $"b", $"c")),
       UnresolvedHint("hint1", Seq(Seq(1, 2, 3), Seq($"a", $"b", $"c")),
         df.logicalPlan
       )

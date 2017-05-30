@@ -533,7 +533,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Add a [[UnresolvedHint]]s to a logical plan.
+   * Add [[UnresolvedHint]]s to a logical plan.
    */
   private def withHints(
       ctx: HintContext,

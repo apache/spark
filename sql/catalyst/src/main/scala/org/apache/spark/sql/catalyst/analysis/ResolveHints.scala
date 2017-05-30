@@ -96,7 +96,7 @@ object ResolveHints {
             case tableName: String => tableName
             case tableId: UnresolvedAttribute => tableId.name
             case unsupported => throw new AnalysisException("Broadcast hint parameter should be " +
-              s" identifier or string but was $unsupported (${unsupported.getClass}")
+              s"an identifier or string but was $unsupported (${unsupported.getClass}")
           }.toSet)
         }
     }
