@@ -56,7 +56,7 @@ object AggregateEstimation {
         sizeInBytes = getOutputSize(agg.output, outputRows, outputAttrStats),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
-        isBroadcastable = childStats.isBroadcastable))
+        hints = childStats.hints))
     } else {
       None
     }
