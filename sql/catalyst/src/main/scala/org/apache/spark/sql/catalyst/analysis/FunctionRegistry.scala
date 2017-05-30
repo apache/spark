@@ -95,7 +95,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
 
   // Resolution of the function name is always case insensitive, but the database name
   // depends on the caller
-  private def toLowerCase(name: FunctionIdentifier): FunctionIdentifier = {
+  private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
     FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT), name.database)
   }
 
@@ -103,12 +103,12 @@ class SimpleFunctionRegistry extends FunctionRegistry {
       name: FunctionIdentifier,
       info: ExpressionInfo,
       builder: FunctionBuilder): Unit = synchronized {
-    functionBuilders.put(toLowerCase(name), (info, builder))
+    functionBuilders.put(normalizeFuncName(name), (info, builder))
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     val func = synchronized {
-      functionBuilders.get(toLowerCase(name)).map(_._2).getOrElse {
+      functionBuilders.get(normalizeFuncName(name)).map(_._2).getOrElse {
         throw new AnalysisException(s"undefined function $name")
       }
     }
@@ -126,16 +126,16 @@ class SimpleFunctionRegistry extends FunctionRegistry {
   }
 
   override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = synchronized {
-    functionBuilders.get(toLowerCase(name)).map(_._1)
+    functionBuilders.get(normalizeFuncName(name)).map(_._1)
   }
 
   override def lookupFunctionBuilder(
       name: FunctionIdentifier): Option[FunctionBuilder] = synchronized {
-    functionBuilders.get(toLowerCase(name)).map(_._2)
+    functionBuilders.get(normalizeFuncName(name)).map(_._2)
   }
 
   override def dropFunction(name: FunctionIdentifier): Boolean = synchronized {
-    functionBuilders.remove(toLowerCase(name)).isDefined
+    functionBuilders.remove(normalizeFuncName(name)).isDefined
   }
 
   override def clear(): Unit = synchronized {
