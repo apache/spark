@@ -602,9 +602,10 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         case Literal(v, _: StringType) => quoteStringLiteral(v.toString)
       }
 
-    def convert(filter: Expression): String =
-      filter match {
-        case In(a: Attribute, exprs) if exprs.forall(isExtractable) =>
+    lazy val convert: PartialFunction[Expression, String] =
+      {
+        case In(a: Attribute, exprs)
+            if !varcharKeys.contains(a.name) && exprs.forall(isExtractable) =>
           val or =
             exprs
               .map(expr => s"${a.name} = ${extractValue(expr)}")
