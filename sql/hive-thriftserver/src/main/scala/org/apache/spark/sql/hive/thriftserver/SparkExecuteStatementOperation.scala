@@ -22,6 +22,8 @@ import java.sql.{Date, Timestamp}
 import java.util.{Arrays, Map => JMap, UUID}
 import java.util.concurrent.RejectedExecutionException
 
+import org.apache.hadoop.hive.common.`type`.HiveDecimal
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -89,7 +91,7 @@ private[hive] class SparkExecuteStatementOperation(
       case FloatType =>
         to += from.getFloat(ordinal)
       case DecimalType() =>
-        to += from.getDecimal(ordinal)
+        to += HiveDecimal.create(from.getDecimal(ordinal))
       case LongType =>
         to += from.getLong(ordinal)
       case ByteType =>
