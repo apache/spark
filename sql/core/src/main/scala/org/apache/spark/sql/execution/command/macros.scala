@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types.StructType
@@ -43,52 +44,50 @@ case class CreateMacroCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val columns = funcWrapper.columns
-    val columnAttrs = columns.toAttributes
-    def formatName: (String => String) =
-      if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
+    val columns = funcWrapper.columns.map(_.name)
+    val columnAttrs = funcWrapper.columns.toAttributes
+    def formatName = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
         (name: String) => name
       } else {
         (name: String) => name.toLowerCase
       }
-    val colToIndex: Map[String, Int] = columnAttrs.map(_.name).map(formatName).zipWithIndex.toMap
+    val colToIndex: Map[String, Int] = columns.map(formatName).zipWithIndex.toMap
     if (colToIndex.size != columns.size) {
-      throw new AnalysisException(s"Cannot support duplicate colNames " +
-        s"for CREATE TEMPORARY MACRO $macroName, actual columns: ${columns.mkString(",")}")
+      throw new AnalysisException(s"Failed to CREATE TEMPORARY MACRO $macroName, because " +
+        s"at least one parameter name was used more than once : ${columns.mkString(",")}")
     }
 
-    try {
+    val resolvedMacroFunction = try {
       val plan = Project(Seq(Alias(funcWrapper.macroFunction, "m")()), LocalRelation(columnAttrs))
-      val analyzed = sparkSession.sessionState.analyzer.execute(plan)
+      val analyzed @ Project(Seq(named), _) = sparkSession.sessionState.analyzer.execute(plan)
       sparkSession.sessionState.analyzer.checkAnalysis(analyzed)
+      named.children.head
     } catch {
       case a: AnalysisException =>
-        throw new AnalysisException(s"CREATE TEMPORARY MACRO $macroName " +
-          s"with exception: ${a.getMessage}")
+        throw new AnalysisException(s"Failed to CREATE TEMPORARY MACRO $macroName, because of " +
+          s"exception: ${a.getMessage}")
     }
 
-    val macroFunction = funcWrapper.macroFunction.transform {
-      case u: UnresolvedAttribute =>
+    val foundColumns: mutable.Set[String] = new mutable.HashSet()
+    val macroFunction = resolvedMacroFunction.transform {
+      case u: AttributeReference =>
         val index = colToIndex.get(formatName(u.name)).getOrElse(
-          throw new AnalysisException(s"Cannot find colName: ${u} " +
-            s"for CREATE TEMPORARY MACRO $macroName, actual columns: ${columns.mkString(",")}"))
-        BoundReference(index, columns(index).dataType, columns(index).nullable)
-      case u: UnresolvedFunction =>
-        sparkSession.sessionState.catalog.lookupFunction(u.name, u.children)
-      case s: SubqueryExpression =>
-        throw new AnalysisException(s"Cannot support Subquery: ${s} " +
-          s"for CREATE TEMPORARY MACRO $macroName")
-      case u: UnresolvedGenerator =>
-        throw new AnalysisException(s"Cannot support Generator: ${u} " +
-          s"for CREATE TEMPORARY MACRO $macroName")
+          throw new AnalysisException(s"Failed to CREATE TEMPORARY MACRO $macroName, because " +
+            s"it cannot find colName: ${u.name}, actual columns: ${columns.mkString(",")}"))
+        foundColumns.add(formatName(u.name))
+        BoundReference(index, u.dataType, u.nullable)
+    }
+    if (foundColumns.size != columns.size) {
+      throw new AnalysisException(s"Failed to CREATE TEMPORARY MACRO $macroName, because " +
+        s"expected columns ${foundColumns.mkString(",")} but found ${columns.mkString(",")}")
     }
 
     val columnLength: Int = columns.length
     val info = new ExpressionInfo(macroName, macroName)
     val builder = (children: Seq[Expression]) => {
       if (children.size != columnLength) {
-        throw new AnalysisException(s"Actual number of columns: ${children.size} != " +
-          s"expected number of columns: ${columnLength} for Macro $macroName")
+        throw new AnalysisException(s"Arguments length: ${children.size} != " +
+          s"expected number: ${columnLength} of arguments for Macro $macroName")
       }
       macroFunction.transform {
         // Skip to validate the input type because check it before.

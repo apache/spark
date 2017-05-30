@@ -49,8 +49,17 @@ CREATE TEMPORARY MACRO fixed_number() 42;
 DROP TEMPORARY FUNCTION fixed_number;
 DROP TEMPORARY MACRO IF EXISTS fixed_number;
 
+CREATE TEMPORARY MACRO add_bigint_int(x bigint, y int) x + y;
+SELECT add_bigint_int(1, 1.5);
+DROP TEMPORARY MACRO add_bigint_int;
+
 -- invalid queries
 CREATE TEMPORARY MACRO simple_add_error(x int) x + y;
 CREATE TEMPORARY MACRO simple_add_error(x int, x int) x + y;
 CREATE TEMPORARY MACRO simple_add_error(x int) x NOT IN (select c2);
 DROP TEMPORARY MACRO SOME_MACRO;
+CREATE TEMPORARY MACRO macro_add(x int, y int, z int) x + y;
+CREATE TEMPORARY MACRO macro_add(x int, x int) x + x;
+CREATE TEMPORARY MACRO macro_add(x int, y int) x + y;
+SELECT macro_add(1, 2, 3);
+DROP TEMPORARY MACRO macro_add;
