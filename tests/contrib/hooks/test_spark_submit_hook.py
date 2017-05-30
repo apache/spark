@@ -90,6 +90,16 @@ class TestSparkSubmitHook(unittest.TestCase):
                 conn_id='spark_home_not_set', conn_type='spark',
                 host='yarn://yarn-master')
         )
+        db.merge_conn(
+            models.Connection(
+                conn_id='spark_binary_set', conn_type='spark',
+                host='yarn', extra='{"spark-binary": "custom-spark-submit"}')
+        )
+        db.merge_conn(
+            models.Connection(
+                conn_id='spark_binary_and_home_set', conn_type='spark',
+                host='yarn', extra='{"spark-home": "/path/to/spark_home", "spark-binary": "custom-spark-submit"}')
+        )
 
     def test_build_command(self):
         # Given
@@ -123,10 +133,8 @@ class TestSparkSubmitHook(unittest.TestCase):
         ]
         self.assertEquals(expected_build_cmd, cmd)
 
-
-
     @patch('subprocess.Popen')
-    def test_SparkProcess_runcmd(self, mock_popen):
+    def test_spark_process_runcmd(self, mock_popen):
         # Given
         mock_popen.return_value.stdout = StringIO(u'stdout')
         mock_popen.return_value.stderr = StringIO(u'stderr')
@@ -150,7 +158,12 @@ class TestSparkSubmitHook(unittest.TestCase):
 
         # Then
         dict_cmd = self.cmd_args_to_dict(cmd)
-        self.assertSequenceEqual(connection, ('yarn', None, None, None))
+        expected_spark_connection = {"master": "yarn",
+                                     "spark_binary": "spark-submit",
+                                     "deploy_mode": None,
+                                     "queue": None,
+                                     "spark_home": None}
+        self.assertEqual(connection, expected_spark_connection)
         self.assertEqual(dict_cmd["--master"], "yarn")
 
     def test_resolve_connection_yarn_default_connection(self):
@@ -163,7 +176,12 @@ class TestSparkSubmitHook(unittest.TestCase):
 
         # Then
         dict_cmd = self.cmd_args_to_dict(cmd)
-        self.assertSequenceEqual(connection, ('yarn', 'root.default', None, None))
+        expected_spark_connection = {"master": "yarn",
+                                     "spark_binary": "spark-submit",
+                                     "deploy_mode": None,
+                                     "queue": "root.default",
+                                     "spark_home": None}
+        self.assertEqual(connection, expected_spark_connection)
         self.assertEqual(dict_cmd["--master"], "yarn")
         self.assertEqual(dict_cmd["--queue"], "root.default")
 
@@ -177,7 +195,12 @@ class TestSparkSubmitHook(unittest.TestCase):
 
         # Then
         dict_cmd = self.cmd_args_to_dict(cmd)
-        self.assertSequenceEqual(connection, ('mesos://host:5050', None, None, None))
+        expected_spark_connection = {"master": "mesos://host:5050",
+                                     "spark_binary": "spark-submit",
+                                     "deploy_mode": None,
+                                     "queue": None,
+                                     "spark_home": None}
+        self.assertEqual(connection, expected_spark_connection)
         self.assertEqual(dict_cmd["--master"], "mesos://host:5050")
 
     def test_resolve_connection_spark_yarn_cluster_connection(self):
@@ -190,7 +213,12 @@ class TestSparkSubmitHook(unittest.TestCase):
 
         # Then
         dict_cmd = self.cmd_args_to_dict(cmd)
-        self.assertSequenceEqual(connection, ('yarn://yarn-master', 'root.etl', 'cluster', None))
+        expected_spark_connection = {"master": "yarn://yarn-master",
+                                     "spark_binary": "spark-submit",
+                                     "deploy_mode": "cluster",
+                                     "queue": "root.etl",
+                                     "spark_home": None}
+        self.assertEqual(connection, expected_spark_connection)
         self.assertEqual(dict_cmd["--master"], "yarn://yarn-master")
         self.assertEqual(dict_cmd["--queue"], "root.etl")
         self.assertEqual(dict_cmd["--deploy-mode"], "cluster")
@@ -204,7 +232,12 @@ class TestSparkSubmitHook(unittest.TestCase):
         cmd = hook._build_command(self._spark_job_file)
 
         # Then
-        self.assertSequenceEqual(connection, ('yarn://yarn-master', None, None, '/opt/myspark'))
+        expected_spark_connection = {"master": "yarn://yarn-master",
+                                     "spark_binary": "spark-submit",
+                                     "deploy_mode": None,
+                                     "queue": None,
+                                     "spark_home": "/opt/myspark"}
+        self.assertEqual(connection, expected_spark_connection)
         self.assertEqual(cmd[0], '/opt/myspark/bin/spark-submit')
 
     def test_resolve_connection_spark_home_not_set_connection(self):
@@ -216,8 +249,47 @@ class TestSparkSubmitHook(unittest.TestCase):
         cmd = hook._build_command(self._spark_job_file)
 
         # Then
-        self.assertSequenceEqual(connection, ('yarn://yarn-master', None, None, None))
+        expected_spark_connection = {"master": "yarn://yarn-master",
+                                     "spark_binary": "spark-submit",
+                                     "deploy_mode": None,
+                                     "queue": None,
+                                     "spark_home": None}
+        self.assertEqual(connection, expected_spark_connection)
         self.assertEqual(cmd[0], 'spark-submit')
+
+    def test_resolve_connection_spark_binary_set_connection(self):
+        # Given
+        hook = SparkSubmitHook(conn_id='spark_binary_set')
+
+        # When
+        connection = hook._resolve_connection()
+        cmd = hook._build_command(self._spark_job_file)
+
+        # Then
+        expected_spark_connection = {"master": "yarn",
+                                     "spark_binary": "custom-spark-submit",
+                                     "deploy_mode": None,
+                                     "queue": None,
+                                     "spark_home": None}
+        self.assertEqual(connection, expected_spark_connection)
+        self.assertEqual(cmd[0], 'custom-spark-submit')
+
+    def test_resolve_connection_spark_binary_and_home_set_connection(self):
+        # Given
+        hook = SparkSubmitHook(conn_id='spark_binary_and_home_set')
+
+        # When
+        connection = hook._resolve_connection()
+        cmd = hook._build_command(self._spark_job_file)
+
+        # Then
+        expected_spark_connection = {"master": "yarn",
+                                     "spark_binary": "custom-spark-submit",
+                                     "deploy_mode": None,
+                                     "queue": None,
+                                     "spark_home": "/path/to/spark_home"}
+        self.assertEqual(connection, expected_spark_connection)
+        self.assertEqual(cmd[0], '/path/to/spark_home/bin/custom-spark-submit')
 
     def test_process_log(self):
         # Given
@@ -235,6 +307,31 @@ class TestSparkSubmitHook(unittest.TestCase):
         # Then
 
         self.assertEqual(hook._yarn_application_id, 'application_1486558679801_1820')
+
+    @patch('subprocess.Popen')
+    def test_spark_process_on_kill(self, mock_popen):
+        # Given
+        mock_popen.return_value.stdout = StringIO(u'stdout')
+        mock_popen.return_value.stderr = StringIO(u'stderr')
+        mock_popen.return_value.returncode = 0
+        mock_popen.return_value.poll.return_value = None
+        mock_popen.return_value.communicate.return_value = [StringIO(u'stderr\nstderr'), StringIO(u'stderr\nstderr')]
+        log_lines = [
+            'SPARK_MAJOR_VERSION is set to 2, using Spark2',
+            'WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable',
+            'WARN DomainSocketFactory: The short-circuit local reads feature cannot be used because libhadoop cannot be loaded.',
+            'INFO Client: Requesting a new application from cluster with 10 NodeManagerapplication_1486558679801_1820s',
+            'INFO Client: Submitting application application_1486558679801_1820 to ResourceManager'
+        ]
+        hook = SparkSubmitHook(conn_id='spark_yarn_cluster')
+        hook._process_log(log_lines)
+        hook.submit()
+
+        # When
+        hook.on_kill()
+
+        # Then
+        self.assertIn(call(['yarn', 'application', '-kill', 'application_1486558679801_1820'], stderr=-1, stdout=-1), mock_popen.mock_calls)
 
 
 if __name__ == '__main__':
