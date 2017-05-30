@@ -26,6 +26,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.ExpressionInfo.FunctionType
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
@@ -59,9 +60,6 @@ trait FunctionRegistry {
 
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: String): Boolean
-
-  /** Drop a macro and return whether the macro existed. */
-  def dropMacro(name: String): Boolean
 
   /** Checks if a function with a given name exists. */
   def functionExists(name: String): Boolean = lookupFunction(name).isDefined
@@ -110,12 +108,55 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.remove(name).isDefined
   }
 
-  override def dropMacro(name: String): Boolean = synchronized {
-    if (functionBuilders.get(name).map(_._1).filter(_.isMacro).isDefined) {
-      functionBuilders.remove(name).isDefined
-    } else {
-      false
+  override def clear(): Unit = synchronized {
+    functionBuilders.clear()
+  }
+
+  override def clone(): SimpleFunctionRegistry = synchronized {
+    val registry = new SimpleFunctionRegistry
+    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+      registry.registerFunction(name, info, builder)
     }
+    registry
+  }
+}
+
+class SystemFunctionRegistry(builtin: SimpleFunctionRegistry) extends SimpleFunctionRegistry {
+
+  override def registerFunction(
+    name: String,
+    info: ExpressionInfo,
+    builder: FunctionBuilder): Unit = synchronized {
+    if (info.getFunctionType.equals(FunctionType.BUILTIN)) {
+      builtin.registerFunction(name, info, builder)
+    } else {
+      functionBuilders.put(name, (info, builder))
+    }
+  }
+
+  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+    val func = synchronized {
+      functionBuilders.get(name).map(_._2).orElse(builtin.lookupFunctionBuilder(name)).getOrElse {
+        throw new AnalysisException(s"undefined function $name")
+      }
+    }
+    func(children)
+  }
+
+  override def listFunction(): Seq[String] = synchronized {
+    (functionBuilders.iterator.map(_._1).toList ++ builtin.listFunction()).sorted
+  }
+
+  override def lookupFunction(name: String): Option[ExpressionInfo] = synchronized {
+    functionBuilders.get(name).map(_._1).orElse(builtin.lookupFunction(name))
+  }
+
+  override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = synchronized {
+    functionBuilders.get(name).map(_._2).orElse(builtin.lookupFunctionBuilder(name))
+  }
+
+  override def dropFunction(name: String): Boolean = synchronized {
+    functionBuilders.remove(name).isDefined
   }
 
   override def clear(): Unit = synchronized {
@@ -123,7 +164,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
   }
 
   override def clone(): SimpleFunctionRegistry = synchronized {
-    val registry = new SimpleFunctionRegistry
+    val registry = new SystemFunctionRegistry(builtin.clone())
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
       registry.registerFunction(name, info, builder)
     }
@@ -154,10 +195,6 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   }
 
   override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = {
-    throw new UnsupportedOperationException
-  }
-
-  override def dropMacro(name: String): Boolean = {
     throw new UnsupportedOperationException
   }
 
@@ -471,6 +508,8 @@ object FunctionRegistry {
     fr
   }
 
+  val systemRegistry = new SystemFunctionRegistry(builtin)
+
   val functionSet: Set[String] = builtin.listFunction().toSet
 
   /** See usage above. */
@@ -534,7 +573,8 @@ object FunctionRegistry {
     }
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
-    (name, (new ExpressionInfo(clazz.getCanonicalName, null, name, usage, null), builder))
+    (name, (new ExpressionInfo(clazz.getCanonicalName, null, name, usage, null,
+      FunctionType.BUILTIN), builder))
   }
 
   /**
@@ -544,9 +584,10 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+      new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended(),
+        ExpressionInfo.FunctionType.BUILTIN)
     } else {
-      new ExpressionInfo(clazz.getCanonicalName, name)
+      new ExpressionInfo(clazz.getCanonicalName, name, ExpressionInfo.FunctionType.BUILTIN)
     }
   }
 

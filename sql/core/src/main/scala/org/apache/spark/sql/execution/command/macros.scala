@@ -65,7 +65,7 @@ case class CreateMacroCommand(
     }
 
     val macroInfo = columns.mkString(",") + " -> " + funcWrapper.macroFunction.toString
-    val info = new ExpressionInfo(macroInfo, macroName, true)
+    val info = new ExpressionInfo(macroInfo, macroName)
     val builder = (children: Seq[Expression]) => {
       if (children.size != columns.size) {
         throw new AnalysisException(s"Actual number of columns: ${children.size} != " +

@@ -21,12 +21,16 @@ package org.apache.spark.sql.catalyst.expressions;
  * Expression information, will be used to describe a expression.
  */
 public class ExpressionInfo {
+
+    public enum FunctionType {
+        BUILTIN, PERSISTENT, TEMPORARY;
+    }
     private String className;
     private String usage;
     private String name;
     private String extended;
     private String db;
-    private boolean macro;
+    private FunctionType functionType;
 
     public String getClassName() {
         return className;
@@ -48,32 +52,36 @@ public class ExpressionInfo {
         return db;
     }
 
-    public boolean isMacro() {
-        return macro;
+    public FunctionType getFunctionType() {
+        return functionType;
     }
 
-    public ExpressionInfo(String className, String db, String name, String usage, String extended, boolean macro) {
+    public ExpressionInfo(String className, String db, String name, String usage, String extended, FunctionType functionType) {
         this.className = className;
         this.db = db;
         this.name = name;
         this.usage = usage;
         this.extended = extended;
-        this.macro = macro;
+        this.functionType = functionType;
     }
 
     public ExpressionInfo(String className, String db, String name, String usage, String extended) {
-        this(className, db, name, usage, extended, false);
+        this(className, db, name, usage, extended, FunctionType.TEMPORARY);
     }
 
     public ExpressionInfo(String className, String name) {
-        this(className, null, name, null, null, false);
+        this(className, null, name, null, null, FunctionType.TEMPORARY);
     }
 
-    public ExpressionInfo(String className, String name, boolean macro) {
-        this(className, null, name, null, null, macro);
+    public ExpressionInfo(String className, String name, FunctionType functionType) {
+        this(className, null, name, null, null, functionType);
     }
 
     public ExpressionInfo(String className, String db, String name) {
-        this(className, db, name, null, null, false);
+        this(className, db, name, null, null, FunctionType.TEMPORARY);
+    }
+
+    public ExpressionInfo(String className, String db, String name, FunctionType functionType) {
+        this(className, db, name, null, null, functionType);
     }
 }

@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.ExpressionInfo.FunctionType
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -1095,15 +1096,12 @@ class SessionCatalog(
       name: String,
       info: ExpressionInfo,
       functionBuilder: FunctionBuilder): Unit = {
-    if (functionRegistry.functionExists(name)) {
-      throw new AnalysisException(s"Function $name already exists")
-    }
     functionRegistry.registerFunction(name, info, functionBuilder)
   }
 
   /** Drop a temporary macro. */
   def dropTempMacro(name: String, ignoreIfNotExists: Boolean): Unit = {
-    if (!functionRegistry.dropMacro(name) && !ignoreIfNotExists) {
+    if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
       throw new NoSuchTempMacroException(name)
     }
   }
@@ -1144,7 +1142,8 @@ class SessionCatalog(
           new ExpressionInfo(
             metadata.className,
             qualifiedName.database.orNull,
-            qualifiedName.identifier)
+            qualifiedName.identifier,
+            FunctionType.PERSISTENT)
         } else {
           failFunctionLookup(name.funcName)
         }
@@ -1266,7 +1265,11 @@ class SessionCatalog(
       if (func.database.isDefined) {
         dropFunction(func, ignoreIfNotExists = false)
       } else {
-        dropTempFunction(func.funcName, ignoreIfNotExists = false)
+        val functionType = functionRegistry.lookupFunction(func.funcName).map(_.getFunctionType)
+          .getOrElse(FunctionType.TEMPORARY)
+        if (!functionType.equals(FunctionType.BUILTIN)) {
+          dropTempFunction(func.funcName, ignoreIfNotExists = false)
+        }
       }
     }
     clearTempTables()

@@ -260,7 +260,8 @@ object CreateStruct extends FunctionBuilder {
       null,
       "struct",
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
-      "")
+      "",
+      ExpressionInfo.FunctionType.BUILTIN)
     ("struct", (info, this))
   }
 }
