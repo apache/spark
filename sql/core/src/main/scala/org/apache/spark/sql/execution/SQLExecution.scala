@@ -21,11 +21,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd,
-  SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 
-object SQLExecution {
+object SQLExecution extends Logging {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
 
@@ -37,6 +37,32 @@ object SQLExecution {
 
   def getQueryExecution(executionId: Long): QueryExecution = {
     executionIdToQueryExecution.get(executionId)
+  }
+
+  private val testing = sys.props.contains("spark.testing")
+
+  private[sql] def checkSQLExecutionId(sparkSession: SparkSession): Unit = {
+    // only throw an exception during tests. a missing execution ID should not fail a job.
+    if (testing && sparkSession.sparkContext.getLocalProperty(EXECUTION_ID_KEY) == null) {
+      // Attention testers: when a test fails with this exception, it means that the action that
+      // started execution of a query didn't call withNewExecutionId. The execution ID should be
+      // set by calling withNewExecutionId in the action that begins execution, like
+      // Dataset.collect or DataFrameWriter.insertInto.
+      throw new IllegalStateException("Execution ID should be set")
+    }
+  }
+
+  private val ALLOW_NESTED_EXECUTION = "spark.sql.execution.nested"
+
+  private[sql] def nested[T](sparkSession: SparkSession)(body: => T): T = {
+    val sc = sparkSession.sparkContext
+    val allowNestedPreviousValue = sc.getLocalProperty(SQLExecution.ALLOW_NESTED_EXECUTION)
+    try {
+      sc.setLocalProperty(SQLExecution.ALLOW_NESTED_EXECUTION, "true")
+      body
+    } finally {
+      sc.setLocalProperty(SQLExecution.ALLOW_NESTED_EXECUTION, allowNestedPreviousValue)
+    }
   }
 
   /**
@@ -73,21 +99,35 @@ object SQLExecution {
       }
       r
     } else {
-      // Don't support nested `withNewExecutionId`. This is an example of the nested
-      // `withNewExecutionId`:
+      // Nesting `withNewExecutionId` may be incorrect; log a warning.
+      //
+      // This is an example of the nested `withNewExecutionId`:
       //
       // class DataFrame {
+      //   // Note: `collect` will call withNewExecutionId
       //   def foo: T = withNewExecutionId { something.createNewDataFrame().collect() }
       // }
       //
-      // Note: `collect` will call withNewExecutionId
       // In this case, only the "executedPlan" for "collect" will be executed. The "executedPlan"
-      // for the outer DataFrame won't be executed. So it's meaningless to create a new Execution
-      // for the outer DataFrame. Even if we track it, since its "executedPlan" doesn't run,
+      // for the outer Dataset won't be executed. So it's meaningless to create a new Execution
+      // for the outer Dataset. Even if we track it, since its "executedPlan" doesn't run,
       // all accumulator metrics will be 0. It will confuse people if we show them in Web UI.
       //
-      // A real case is the `DataFrame.count` method.
-      throw new IllegalArgumentException(s"$EXECUTION_ID_KEY is already set")
+      // Some operations will start nested executions. For example, CacheTableCommand will uses
+      // Dataset#count to materialize cached records when caching is not lazy. Because there are
+      // legitimate reasons to nest executions in withNewExecutionId, this logs a warning but does
+      // not throw an exception to avoid failing at runtime. Exceptions will be thrown for tests
+      // to ensure that nesting is avoided.
+      //
+      // To avoid this warning, use nested { ... }
+      if (!Option(sc.getLocalProperty(ALLOW_NESTED_EXECUTION)).exists(_.toBoolean)) {
+        if (testing) {
+          throw new IllegalArgumentException(s"$EXECUTION_ID_KEY is already set: $oldExecutionId")
+        } else {
+          logWarning(s"$EXECUTION_ID_KEY is already set")
+        }
+      }
+      body
     }
   }
 

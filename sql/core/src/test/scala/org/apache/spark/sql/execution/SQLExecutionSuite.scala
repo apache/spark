@@ -25,33 +25,9 @@ import org.apache.spark.sql.SparkSession
 
 class SQLExecutionSuite extends SparkFunSuite {
 
-  test("concurrent query execution (SPARK-10548)") {
-    // Try to reproduce the issue with the old SparkContext
-    val conf = new SparkConf()
-      .setMaster("local[*]")
-      .setAppName("test")
-    val badSparkContext = new BadSparkContext(conf)
-    try {
-      testConcurrentQueryExecution(badSparkContext)
-      fail("unable to reproduce SPARK-10548")
-    } catch {
-      case e: IllegalArgumentException =>
-        assert(e.getMessage.contains(SQLExecution.EXECUTION_ID_KEY))
-    } finally {
-      badSparkContext.stop()
-    }
-
-    // Verify that the issue is fixed with the latest SparkContext
-    val goodSparkContext = new SparkContext(conf)
-    try {
-      testConcurrentQueryExecution(goodSparkContext)
-    } finally {
-      goodSparkContext.stop()
-    }
-  }
-
   test("concurrent query execution with fork-join pool (SPARK-13747)") {
     val spark = SparkSession.builder
+      .config("spark.testing", "1") // required to throw an error for concurrent withNewExecutionId
       .master("local[*]")
       .appName("test")
       .getOrCreate()
@@ -71,7 +47,9 @@ class SQLExecutionSuite extends SparkFunSuite {
    * Trigger SPARK-10548 by mocking a parent and its child thread executing queries concurrently.
    */
   private def testConcurrentQueryExecution(sc: SparkContext): Unit = {
-    val spark = SparkSession.builder.getOrCreate()
+    val spark = SparkSession.builder
+        .config("spark.testing", "1")// required to throw an error for concurrent withNewExecutionId
+        .getOrCreate()
     import spark.implicits._
 
     // Initialize local properties. This is necessary for the test to pass.

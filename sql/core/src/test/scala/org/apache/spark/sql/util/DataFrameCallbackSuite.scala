@@ -183,21 +183,22 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     }
 
     withTable("tab") {
-      sql("CREATE TABLE tab(i long) using parquet")
+      sql("CREATE TABLE tab(i long) using parquet") // adds commands(1) via onSuccess
       spark.range(10).write.insertInto("tab")
-      assert(commands.length == 2)
-      assert(commands(1)._1 == "insertInto")
-      assert(commands(1)._2.isInstanceOf[InsertIntoTable])
-      assert(commands(1)._2.asInstanceOf[InsertIntoTable].table
+      assert(commands.length == 3)
+      assert(commands(2)._1 == "insertInto")
+      assert(commands(2)._2.isInstanceOf[InsertIntoTable])
+      assert(commands(2)._2.asInstanceOf[InsertIntoTable].table
         .asInstanceOf[UnresolvedRelation].tableIdentifier.table == "tab")
     }
+    // exiting withTable adds commands(3) via onSuccess (drops tab)
 
     withTable("tab") {
       spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
-      assert(commands.length == 3)
-      assert(commands(2)._1 == "saveAsTable")
-      assert(commands(2)._2.isInstanceOf[CreateTable])
-      assert(commands(2)._2.asInstanceOf[CreateTable].tableDesc.partitionColumnNames == Seq("p"))
+      assert(commands.length == 5)
+      assert(commands(4)._1 == "saveAsTable")
+      assert(commands(4)._2.isInstanceOf[CreateTable])
+      assert(commands(4)._2.asInstanceOf[CreateTable].tableDesc.partitionColumnNames == Seq("p"))
     }
 
     withTable("tab") {

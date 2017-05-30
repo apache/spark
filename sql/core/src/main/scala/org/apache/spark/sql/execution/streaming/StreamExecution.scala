@@ -34,7 +34,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -287,44 +287,57 @@ class StreamExecution(
         // Unblock `awaitInitialization`
         initializationLatch.countDown()
 
-        triggerExecutor.execute(() => {
-          startTrigger()
+        // execution hasn't started, so lastExecution isn't defined. create an IncrementalExecution
+        // with the logical plan for the SQL listener using the current initialized values.
+        val genericStreamExecution = new IncrementalExecution(
+          sparkSessionToRunBatches,
+          logicalPlan,
+          outputMode,
+          checkpointFile("state"),
+          currentBatchId,
+          offsetSeqMetadata)
 
-          if (isActive) {
-            reportTimeTaken("triggerExecution") {
-              if (currentBatchId < 0) {
-                // We'll do this initialization only once
-                populateStartOffsets(sparkSessionToRunBatches)
-                sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
-                logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-              } else {
-                constructNextBatch()
+        SQLExecution.withNewExecutionId(sparkSessionToRunBatches, genericStreamExecution) {
+          triggerExecutor.execute(() => {
+            startTrigger()
+
+            if (isActive) {
+              reportTimeTaken("triggerExecution") {
+                if (currentBatchId < 0) {
+                  // We'll do this initialization only once
+                  populateStartOffsets(sparkSessionToRunBatches)
+                  sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
+                  logDebug(s"Stream running from $committedOffsets to $availableOffsets")
+                } else {
+                  constructNextBatch()
+                }
+                if (dataAvailable) {
+                  currentStatus = currentStatus.copy(isDataAvailable = true)
+                  updateStatusMessage("Processing new data")
+                  runBatch(sparkSessionToRunBatches)
+                }
               }
+              // Report trigger as finished and construct progress object.
+              finishTrigger(dataAvailable)
               if (dataAvailable) {
-                currentStatus = currentStatus.copy(isDataAvailable = true)
-                updateStatusMessage("Processing new data")
-                runBatch(sparkSessionToRunBatches)
+                // Update committed offsets.
+                batchCommitLog.add(currentBatchId)
+                committedOffsets ++= availableOffsets
+                logDebug(s"batch ${currentBatchId} committed")
+                // We'll increase currentBatchId after we complete processing current batch's data
+                currentBatchId += 1
+                sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
+              } else {
+                currentStatus = currentStatus.copy(isDataAvailable = false)
+                updateStatusMessage("Waiting for data to arrive")
+                Thread.sleep(pollingDelayMs)
               }
             }
-            // Report trigger as finished and construct progress object.
-            finishTrigger(dataAvailable)
-            if (dataAvailable) {
-              // Update committed offsets.
-              batchCommitLog.add(currentBatchId)
-              committedOffsets ++= availableOffsets
-              logDebug(s"batch ${currentBatchId} committed")
-              // We'll increase currentBatchId after we complete processing current batch's data
-              currentBatchId += 1
-              sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
-            } else {
-              currentStatus = currentStatus.copy(isDataAvailable = false)
-              updateStatusMessage("Waiting for data to arrive")
-              Thread.sleep(pollingDelayMs)
-            }
-          }
-          updateStatusMessage("Waiting for next trigger")
-          isActive
-        })
+            updateStatusMessage("Waiting for next trigger")
+            isActive
+          })
+        }
+
         updateStatusMessage("Stopped")
       } else {
         // `stop()` is already called. Let `finally` finish the cleanup.

@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -547,7 +547,10 @@ private[hive] class TestHiveQueryExecution(
         logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
     val referencedTestTables = referencedTables.filter(sparkSession.testTables.contains)
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
-    referencedTestTables.foreach(sparkSession.loadTestTable)
+    // this lazy value may be computed inside another SQLExecution.withNewExecutionId block
+    SQLExecution.nested(sparkSession) {
+      referencedTestTables.foreach(sparkSession.loadTestTable)
+    }
     // Proceed with analysis.
     sparkSession.sessionState.analyzer.execute(logical)
   }
