@@ -510,8 +510,8 @@ test_that("spark.survreg", {
     rData <- as.data.frame(rData)
     rData$sex2 <- c("female", "male")[rData$sex + 1]
     df <- createDataFrame(rData)
-
-    rModel <- survreg(Surv(time, status) ~ x + sex2, rData)
+    expect_error(
+      rModel <- survival::survreg(survival::Surv(time, status) ~ x + sex2, rData), NA)
     rCoefs <- as.numeric(summary(rModel)$table[, 1])
     model <- spark.survreg(df, Surv(time, status) ~ x + sex2)
     coefs <- as.vector(summary(model)$coefficients[, 1])

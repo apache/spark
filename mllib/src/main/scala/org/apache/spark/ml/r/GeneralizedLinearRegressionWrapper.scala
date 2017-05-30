@@ -64,6 +64,7 @@ private[r] class GeneralizedLinearRegressionWrapper private (
 
 private[r] object GeneralizedLinearRegressionWrapper
   extends MLReadable[GeneralizedLinearRegressionWrapper] {
+
   // scalastyle:off
   def fit(
       formula: String,
