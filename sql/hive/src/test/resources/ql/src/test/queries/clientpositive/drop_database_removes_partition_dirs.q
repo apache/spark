@@ -16,12 +16,12 @@ LOCATION 'file:${system:test.tmp.dir}/drop_database_removes_partition_dirs_table
 INSERT OVERWRITE TABLE test_table PARTITION (part = '1')
 SELECT * FROM default.src;
 
-dfs -ls ${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2;
+dfs -ls file:${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2;
 
 USE default;
 
 DROP DATABASE test_database CASCADE;
 
-dfs -ls ${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2;
+dfs -ls file:${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2;
 
-dfs -rmr ${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2;
+dfs -rmr file:${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2;

@@ -12,10 +12,10 @@ LOCATION 'file:${system:test.tmp.dir}/drop_table_removes_partition_dirs_table2/p
 INSERT OVERWRITE TABLE test_table PARTITION (part = '1')
 SELECT * FROM src;
 
-dfs -ls ${system:test.tmp.dir}/drop_table_removes_partition_dirs_table2;
+dfs -ls file:${system:test.tmp.dir}/drop_table_removes_partition_dirs_table2;
 
 DROP TABLE test_table;
 
-dfs -ls ${system:test.tmp.dir}/drop_table_removes_partition_dirs_table2;
+dfs -ls file:${system:test.tmp.dir}/drop_table_removes_partition_dirs_table2;
 
-dfs -rmr ${system:test.tmp.dir}/drop_table_removes_partition_dirs_table2;
+dfs -rmr file:${system:test.tmp.dir}/drop_table_removes_partition_dirs_table2;
