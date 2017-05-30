@@ -313,8 +313,6 @@ case class StateStoreSaveExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
-
-
 }
 
 /** Physical operator for executing streaming Deduplicate. */
