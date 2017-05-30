@@ -404,7 +404,7 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the weekday index for date/timestamp (1 = Sunday, 2 = Monday, ..., 7 = Saturday).",
+  usage = "_FUNC_(date) - Returns the day of the week for date/timestamp (1 = Sunday, 2 = Monday, ..., 7 = Saturday).",
   extended = """
     Examples:
       > SELECT _FUNC_('2009-07-30');
