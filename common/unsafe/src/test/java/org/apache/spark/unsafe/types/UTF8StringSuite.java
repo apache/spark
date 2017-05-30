@@ -358,6 +358,15 @@ public class UTF8StringSuite {
     assertEquals(fromString("数据砖"), fromString("数据砖头").lpad(3, EMPTY_UTF8));
     assertEquals(null, EMPTY_UTF8.lpad(3, EMPTY_UTF8));
 
+    assertEquals(null, fromString("数据砖头").rpad(-10, fromString("孙行者")));
+    assertEquals(null, fromString("数据砖头").rpad(-10, EMPTY_UTF8));
+    assertEquals(null, fromString("数据砖头").rpad(5, EMPTY_UTF8));
+    assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, EMPTY_UTF8));
+    assertEquals(null, EMPTY_UTF8.rpad(3, EMPTY_UTF8));
+  }
+
+  @Test
+  public void padWithEmptyPad() {
     assertEquals(null, fromString("hello").lpad(-2, EMPTY_UTF8));
     assertEquals(null, fromString("hello").lpad(-1, EMPTY_UTF8));
     assertEquals(EMPTY_UTF8, fromString("hello").lpad(0, EMPTY_UTF8));
@@ -369,12 +378,6 @@ public class UTF8StringSuite {
     assertEquals(EMPTY_UTF8, EMPTY_UTF8.lpad(0, EMPTY_UTF8));
     assertEquals(null, EMPTY_UTF8.lpad(1, EMPTY_UTF8));
 
-    assertEquals(null, fromString("数据砖头").rpad(-10, fromString("孙行者")));
-    assertEquals(null, fromString("数据砖头").rpad(-10, EMPTY_UTF8));
-    assertEquals(null, fromString("数据砖头").rpad(5, EMPTY_UTF8));
-    assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, EMPTY_UTF8));
-    assertEquals(null, EMPTY_UTF8.rpad(3, EMPTY_UTF8));
-
     assertEquals(null, fromString("hello").rpad(-2, EMPTY_UTF8));
     assertEquals(null, fromString("hello").rpad(-1, EMPTY_UTF8));
     assertEquals(EMPTY_UTF8, fromString("hello").rpad(0, EMPTY_UTF8));
@@ -385,7 +388,6 @@ public class UTF8StringSuite {
     assertEquals(null, EMPTY_UTF8.rpad(-1, EMPTY_UTF8));
     assertEquals(EMPTY_UTF8, EMPTY_UTF8.rpad(0, EMPTY_UTF8));
     assertEquals(null, EMPTY_UTF8.rpad(1, EMPTY_UTF8));
-
   }
 
   @Test

@@ -162,17 +162,25 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
 
   test("lpad, rpad") {
     def padding(origin: String, pad: String, length: Int, isLPad: Boolean): String = {
-      if (length <= 0) return ""
-      if (length <= origin.length) {
-        if (length <= 0) "" else origin.substring(0, length)
+      if (length < 0) {
+        null
+      } else if (length == 0) {
+        ""
       } else {
-        if (pad.length == 0) return origin
-        val toPad = length - origin.length
-        val partPad = if (toPad % pad.length == 0) "" else pad.substring(0, toPad % pad.length)
-        if (isLPad) {
-          pad * (toPad / pad.length) + partPad + origin
+        val spaces = length - origin.length
+        if (spaces > 0 && pad.isEmpty) {
+          null
+        } else if (spaces <= 0) {
+          origin.substring(0, length)
         } else {
-          origin + pad * (toPad / pad.length) + partPad
+          if (pad.length == 0) return origin
+          val toPad = length - origin.length
+          val partPad = if (toPad % pad.length == 0) "" else pad.substring(0, toPad % pad.length)
+          if (isLPad) {
+            pad * (toPad / pad.length) + partPad + origin
+          } else {
+            origin + pad * (toPad / pad.length) + partPad
+          }
         }
       }
     }
