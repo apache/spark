@@ -345,9 +345,7 @@ private[spark] object UIUtils extends Logging {
           <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
         } else {
           val toolTip = toolTipOption.get
-          // scalastyle:off line.size.limit
           <th width={colWidthAttr} class={getClass(x._2)} data-toggle="tooltip" title={toolTip._1} data-placement={toolTip._2}>{getHeaderContent(x._1)}</th>
-          // scalastyle:on line.size.limit
         }
 
       }
