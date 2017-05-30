@@ -195,6 +195,24 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def fill(value: String, cols: Seq[String]): DataFrame = fillValue(value, cols)
 
   /**
+    * Returns a new `DataFrame` that replaces null values in string columns with `value`.
+    */
+  def fill(value: Boolean): DataFrame = fill(value, df.columns)
+
+  /**
+    * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
+    * numeric columns. If a specified column is not a numeric column, it is ignored.
+    */
+  def fill(value: Boolean, cols: Seq[String]): DataFrame = fillValue(value, cols)
+
+  /**
+    * Returns a new `DataFrame` that replaces null values in specified string columns.
+    * If a specified column is not a string column, it is ignored.
+    */
+  def fill(value: Boolean, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
+
+
+  /**
    * Returns a new `DataFrame` that replaces null values.
    *
    * The key of the map is the column name, and the value of the map is the replacement value.
@@ -451,6 +469,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     val targetType = value match {
       case _: Double | _: Long => NumericType
       case _: String => StringType
+      case _: Boolean => BooleanType
       case _ => throw new IllegalArgumentException(
         s"Unsupported value type ${value.getClass.getName} ($value).")
     }
@@ -460,6 +479,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       val typeMatches = (targetType, f.dataType) match {
         case (NumericType, dt) => dt.isInstanceOf[NumericType]
         case (StringType, dt) => dt == StringType
+        case (BooleanType, dt) => dt == BooleanType
       }
       // Only fill if the column is part of the cols list.
       if (typeMatches && cols.exists(col => columnEquals(f.name, col))) {
