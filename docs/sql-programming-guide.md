@@ -297,6 +297,9 @@ reflection and become the names of the columns. Case classes can also be nested 
 types such as `Seq`s or `Array`s. This RDD can be implicitly converted to a DataFrame and then be
 registered as a table. Tables can be used in subsequent SQL statements.
 
+Spark Encoders are used to convert a JVM object to Spark SQL representation. To create a Dataset, Spark requires an encoder which takes the form of `Encoder[T]` where `T` is the type which has to be encoded.
+Considering an object of class `DemoObj(id: Int, name: String)` as a type of the Dataset to be created, may result into java.lang.UnsupportedOperationException: No Encoder found for DemoObj. To overcome this problem, the kryo encoder is used. It generally tells Spark SQL to encode object of `DemoObj`, so that the operation could find the encoded `DemoObj`.
+
 {% include_example schema_inferring scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
