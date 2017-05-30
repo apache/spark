@@ -770,10 +770,10 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
   """,
   extended = """
     Examples:
-     > SELECT _FUNC_('hi', 5, '??');
-      hi???
-     > SELECT _FUNC_('hi', 1, '??');
-      h
+      > SELECT _FUNC_('hi', 5, '??');
+       hi???
+      > SELECT _FUNC_('hi', 1, '??');
+       h
   """)
 case class StringRPad(str: Expression, len: Expression, pad: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {

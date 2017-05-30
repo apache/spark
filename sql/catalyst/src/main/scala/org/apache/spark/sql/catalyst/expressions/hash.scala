@@ -524,7 +524,7 @@ abstract class InterpretedHashFunction {
   extended = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
-        -1321691492
+       -1321691492
   """)
 case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
   def this(arguments: Seq[Expression]) = this(arguments, 42)

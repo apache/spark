@@ -116,9 +116,9 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
   extended = """
-   Examples:
-     > SELECT _FUNC_(2, 2);
-      NULL
+    Examples:
+      > SELECT _FUNC_(2, 2);
+       NULL
   """)
 case class NullIf(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
