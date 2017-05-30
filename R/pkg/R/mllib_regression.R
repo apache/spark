@@ -73,9 +73,9 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
 #'                               decide the base level of a string feature as the last category after
 #'                               ordering is dropped when encoding strings. Supported options are
-#'                               'frequencyDesc', 'frequencyAsc', 'alphabetDesc', 'alphabetAsc'.
-#'                               The default value is 'frequencyDesc'. When the ordering is set to
-#'                               'alphabetDesc', this drops the same category as R when encoding strings.
+#'                               "frequencyDesc", "frequencyAsc", "alphabetDes", and "alphabetAsc".
+#'                               The default value is "frequencyDesc". When the ordering is set to
+#'                               "alphabetDesc", this drops the same category as R when encoding strings.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model.
@@ -187,9 +187,9 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
 #'                               decide the base level of a string feature as the last category after
 #'                               ordering is dropped when encoding strings. Supported options are
-#'                               'frequencyDesc', 'frequencyAsc', 'alphabetDesc', 'alphabetAsc'.
-#'                               The default value is 'frequencyDesc'. When the ordering is set to
-#'                               'alphabetDesc', this drops the same category as R when encoding strings.
+#'                               "frequencyDesc", "frequencyAsc", "alphabetDes", and "alphabetAsc".
+#'                               The default value is "frequencyDesc". When the ordering is set to
+#'                               "alphabetDesc", this drops the same category as R when encoding strings.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
@@ -446,9 +446,9 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
 #'                               decide the base level of a string feature as the last category after
 #'                               ordering is dropped when encoding strings. Supported options are
-#'                               'frequencyDesc', 'frequencyAsc', 'alphabetDesc', 'alphabetAsc'.
-#'                               The default value is 'frequencyDesc'. When the ordering is set to
-#'                               'alphabetDesc', this drops the same category as R when encoding strings.
+#'                               "frequencyDesc", "frequencyAsc", "alphabetDes", and "alphabetAsc".
+#'                               The default value is "frequencyDesc". When the ordering is set to
+#'                               "alphabetDesc", this drops the same category as R when encoding strings.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
