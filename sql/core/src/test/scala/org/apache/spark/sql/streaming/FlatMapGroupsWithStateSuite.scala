@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, GroupStateImpl, MemoryStream}
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StoreUpdate}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, UnsafeRowPair}
 import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.MemoryStateStore
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -507,22 +507,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     priorTimeoutTimestamp = beforeTimeoutThreshold,
     expectedState = Some(5),                                  // state should change
     expectedTimeoutTimestamp = 5000)                          // timestamp should change
-
-  test("StateStoreUpdater - rows are cloned before writing to StateStore") {
-    // function for running count
-    val func = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
-      state.update(state.getOption.getOrElse(0) + values.size)
-      Iterator.empty
-    }
-    val store = newStateStore()
-    val plan = newFlatMapGroupsWithStateExec(func)
-    val updater = new plan.StateStoreUpdater(store)
-    val data = Seq(1, 1, 2)
-    val returnIter = updater.updateStateForKeysWithData(data.iterator.map(intToRow))
-    returnIter.size // consume the iterator to force store updates
-    val storeData = store.iterator.map { case (k, v) => (rowToInt(k), rowToInt(v)) }.toSet
-    assert(storeData === Set((1, 2), (2, 1)))
-  }
 
   test("flatMapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
@@ -1016,11 +1000,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       callFunction()
       val updatedStateRow = store.get(key)
       assert(
-        updater.getStateObj(updatedStateRow).map(_.toString.toInt) === expectedState,
+        Option(updater.getStateObj(updatedStateRow)).map(_.toString.toInt) === expectedState,
         "final state not as expected")
-      if (updatedStateRow.nonEmpty) {
+      if (updatedStateRow != null) {
         assert(
-          updater.getTimeoutTimestamp(updatedStateRow.get) === expectedTimeoutTimestamp,
+          updater.getTimeoutTimestamp(updatedStateRow) === expectedTimeoutTimestamp,
           "final timeout timestamp not as expected")
       }
     }
@@ -1080,25 +1064,19 @@ object FlatMapGroupsWithStateSuite {
     import scala.collection.JavaConverters._
     private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-    override def iterator(): Iterator[(UnsafeRow, UnsafeRow)] = {
-      map.entrySet.iterator.asScala.map { case e => (e.getKey, e.getValue) }
+    override def iterator(): Iterator[UnsafeRowPair] = {
+      map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
     }
 
-    override def filter(c: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
-      iterator.filter { case (k, v) => c(k, v) }
+    override def get(key: UnsafeRow): UnsafeRow = map.get(key)
+    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = {
+      map.put(key.copy(), newValue.copy())
     }
-
-    override def get(key: UnsafeRow): Option[UnsafeRow] = Option(map.get(key))
-    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = map.put(key, newValue)
     override def remove(key: UnsafeRow): Unit = { map.remove(key) }
-    override def remove(condition: (UnsafeRow) => Boolean): Unit = {
-      iterator.map(_._1).filter(condition).foreach(map.remove)
-    }
     override def commit(): Long = version + 1
     override def abort(): Unit = { }
     override def id: StateStoreId = null
     override def version: Long = 0
-    override def updates(): Iterator[StoreUpdate] = { throw new UnsupportedOperationException }
     override def numKeys(): Long = map.size
     override def hasCommitted: Boolean = true
   }

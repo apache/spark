@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -31,6 +32,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
@@ -614,6 +616,30 @@ class StreamSuite extends StreamTest {
     assertDescContainsQueryNameAnd(batch = 2)
     query.stop()
   }
+
+  testQuietly("specify custom state store provider") {
+    val queryName = "memStream"
+    val providerClassName = classOf[TestStateStoreProvider].getCanonicalName
+    withSQLConf("spark.sql.streaming.stateStore.providerClass" -> providerClassName) {
+      val input = MemoryStream[Int]
+      val query = input
+        .toDS()
+        .groupBy()
+        .count()
+        .writeStream
+        .outputMode("complete")
+        .format("memory")
+        .queryName(queryName)
+        .start()
+      input.addData(1, 2, 3)
+      val e = intercept[Exception] {
+        query.awaitTermination()
+      }
+
+      assert(e.getMessage.contains(providerClassName))
+      assert(e.getMessage.contains("instantiated"))
+    }
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {
@@ -718,4 +744,23 @@ object ThrowingInterruptedIOException {
    * called.
    */
   @volatile var createSourceLatch: CountDownLatch = null
+}
+
+class TestStateStoreProvider extends StateStoreProvider {
+
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int],
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration): Unit = {
+    throw new Exception("Successfully instantiated")
+  }
+
+  override def id: StateStoreId = null
+
+  override def close(): Unit = { }
+
+  override def getStore(version: Long): StateStore = null
 }
