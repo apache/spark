@@ -1105,8 +1105,9 @@ class SessionCatalog(
       !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
   }
 
-  protected def failFunctionLookup(name: String): Nothing = {
-    throw new NoSuchFunctionException(db = currentDb, func = name)
+  protected def failFunctionLookup(name: FunctionIdentifier): Nothing = {
+    throw new NoSuchFunctionException(
+      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
   }
 
   /**
@@ -1128,7 +1129,7 @@ class SessionCatalog(
             qualifiedName.database.orNull,
             qualifiedName.identifier)
         } else {
-          failFunctionLookup(name.funcName)
+          failFunctionLookup(name)
         }
       }
   }
@@ -1174,8 +1175,8 @@ class SessionCatalog(
     val catalogFunction = try {
       externalCatalog.getFunction(database, name.funcName)
     } catch {
-      case e: AnalysisException => failFunctionLookup(name.funcName)
-      case e: NoSuchPermanentFunctionException => failFunctionLookup(name.funcName)
+      case _: AnalysisException => failFunctionLookup(name)
+      case _: NoSuchPermanentFunctionException => failFunctionLookup(name)
     }
     loadFunctionResources(catalogFunction.resources)
     // Please note that qualifiedName is provided by the user. However,
