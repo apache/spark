@@ -539,7 +539,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       ctx: HintContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     var plan = query
-    ctx.hintStatements.asScala.foreach { case stmt =>
+    ctx.hintStatements.asScala.reverse.foreach { case stmt =>
       plan = UnresolvedHint(stmt.hintName.getText, stmt.parameters.asScala.map(expression), plan)
     }
     plan

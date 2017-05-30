@@ -381,12 +381,12 @@ querySpecification
     ;
 
 hint
-    : '/*+' hintStatements+=hintStatement (hintStatements+=hintStatement)* '*/'
+    : '/*+' hintStatements+=hintStatement (','? hintStatements+=hintStatement)* '*/'
     ;
 
 hintStatement
     : hintName=identifier
-    | hintName=identifier '(' parameters+=primaryExpression (','? parameters+=primaryExpression)* ')'
+    | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
     ;
 
 fromClause

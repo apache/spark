@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -602,8 +602,8 @@ class PlanParserSuite extends PlanTest {
   test("SPARK-20854: multiple hints") {
     comparePlans(
       parsePlan("SELECT /*+ HINT1(a, 1) hint2(b, 2) */ * from t"),
-      UnresolvedHint("hint2", Seq($"b", Literal(2)),
-        UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+      UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+        UnresolvedHint("hint2", Seq($"b", Literal(2)),
           table("t").select(star())
         )
       )
@@ -611,8 +611,8 @@ class PlanParserSuite extends PlanTest {
 
     comparePlans(
       parsePlan("SELECT /*+ HINT1(a, 1),hint2(b, 2) */ * from t"),
-      UnresolvedHint("hint2", Seq($"b", Literal(2)),
-        UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+      UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+        UnresolvedHint("hint2", Seq($"b", Literal(2)),
           table("t").select(star())
         )
       )
