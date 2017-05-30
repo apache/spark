@@ -61,9 +61,8 @@ else:
 from pyspark import keyword_only
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
-from pyspark.files import SparkFiles
-from pyspark.ml.feature import RFormula
 from pyspark.rdd import RDD
+from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
     CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer, \
     PairDeserializer, CartesianDeserializer, AutoBatchedSerializer, AutoSerializer, \
@@ -2205,24 +2204,6 @@ class KeywordOnlyTests(unittest.TestCase):
         a.set(x=1, other=b, other_x=2)
         self.assertEqual(a._x, 1)
         self.assertEqual(b._x, 2)
-
-
-class SparkMLTests(ReusedPySparkTestCase):
-
-    def test_rformula(self):
-        df = self.sc.parallelize([
-            (1.0, 1.0, "a"),
-            (0.0, 2.0, "b"),
-            (0.0, 0.0, "a")
-        ]).toDF(["y", "x", "s"])
-        rf = RFormula(formula="y ~ x + s", stringIndexerOrderType="alphabetDesc")
-        self.assertEqual(rf.getStringIndexerOrderType(), 'alphabetDesc')
-
-        result = rf.fit(df).transform(df)
-        observed = result.select("features").collect()
-        expected = [[1.0, 0.0], [2.0, 1.0], [0.0, 0.0]]
-        for i in range(0, len(expected)):
-            self.assertEqual(observed[i]["features"].toArray(), expected[i])
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")

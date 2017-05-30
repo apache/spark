@@ -538,6 +538,19 @@ class FeatureTests(SparkSessionTestCase):
         transformedDF2 = model2.transform(df)
         self.assertEqual(transformedDF2.head().label, 0.0)
 
+    def test_rformula_string_indexer_order_type(self):
+        df = self.spark.createDataFrame([
+            (1.0, 1.0, "a"),
+            (0.0, 2.0, "b"),
+            (1.0, 0.0, "a")], ["y", "x", "s"])
+        rf = RFormula(formula="y ~ x + s", stringIndexerOrderType="alphabetDesc")
+        self.assertEqual(rf.getStringIndexerOrderType(), 'alphabetDesc')
+        transformedDF = rf.fit(df).transform(df)
+        observed = transformedDF.select("features").collect()
+        expected = [[1.0, 0.0], [2.0, 1.0], [0.0, 0.0]]
+        for i in range(0, len(expected)):
+            self.assertTrue((observed[i]["features"].toArray() == expected[i]).all())
+
 
 class HasInducedError(Params):
 
