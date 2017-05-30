@@ -258,9 +258,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
    */
   def refresh(): Unit = children.foreach(_.refresh())
-
-  // Record the original sql text in the top logical plan for checking in the web UI.
-  var sqlText: Option[String] = None
 }
 
 /**

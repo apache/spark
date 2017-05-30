@@ -253,6 +253,11 @@ abstract class BaseSessionStateBuilder(
     new QueryExecution(session, plan)
   }
 
+  protected def createQueryExecution(plan: LogicalPlan, sqlText: Option[String])
+  : QueryExecution = {
+    new QueryExecution(session, plan, sqlText)
+  }
+
   /**
    * Interface to start and stop streaming queries.
    */

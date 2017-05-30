@@ -61,8 +61,26 @@ private[sql] object Dataset {
     new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
   }
 
-  def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
-    val qe = sparkSession.sessionState.executePlan(logicalPlan)
+  def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan, sqlText: Option[String] = None)
+  : DataFrame = {
+
+    // Record the original sql text in the execute plan for checking in the web UI.
+    // Truncate the text to avoid downing browsers or web UI servers by running out of memory.
+    val text = sqlText.get;
+    val maxLength = 1000
+    val suffix = " ... (truncated)"
+    val truncateLength = maxLength - suffix.length
+    val truncatedSqlText: Option[String] = sqlText match {
+      case None => None
+      case Some(text) => Some(
+        if (text.length <= maxLength) {
+          text
+        } else {
+          text.substring(0, truncateLength) + suffix
+        })
+    }
+
+    val qe = sparkSession.sessionState.executePlan(logicalPlan, truncatedSqlText)
     qe.assertAnalyzed()
     new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema))
   }
@@ -2945,10 +2963,7 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */
   @inline private def withTypedPlan[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
-    val dataset: Dataset[U] = Dataset(sparkSession, logicalPlan)
-    // Copy the original sql text for checking in the web UI.
-    dataset.logicalPlan.sqlText = queryExecution.logical.sqlText
-    dataset
+    Dataset(sparkSession, logicalPlan)
   }
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */
