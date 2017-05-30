@@ -21,12 +21,11 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
-import org.apache.commons.lang3.exception.ExceptionUtils
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
