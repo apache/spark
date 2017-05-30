@@ -247,7 +247,7 @@ class CodegenContext {
 
   // Adds a new class. Requires the class' name, and its instance name.
   private def addClass(className: String, classInstance: String): Unit = {
-    classes.prepend(Tuple2(className, classInstance))
+    classes.prepend(className -> classInstance)
     classSize += className -> 0
     classFunctions += className -> mutable.ListBuffer.empty[String]
   }
@@ -268,14 +268,14 @@ class CodegenContext {
    *         nested sub-class
    */
   def addNewFunction(
-    funcName: String,
-    funcCode: String,
-    inlineToOuterClass: Boolean = false): String = {
+      funcName: String,
+      funcCode: String,
+      inlineToOuterClass: Boolean = false): String = {
     // The number of named constants that can exist in the class is limited by the Constant Pool
     // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
     // threshold of 1600k bytes to determine when a function should be inlined to a private, nested
     // sub-class.
-    val classInfo = if (inlineToOuterClass) {
+    val (className, classInstance) = if (inlineToOuterClass) {
       "OuterClass" -> ""
     } else if (currClassSize > 1600000) {
       val className = freshName("NestedClass")
@@ -287,15 +287,13 @@ class CodegenContext {
     } else {
       currClass()
     }
-    val name = classInfo._1
 
-    classSize.update(name, classSize(name) + funcCode.length)
-    classFunctions(name).append(funcCode)
+    classSize(className) += funcCode.length
+    classFunctions(className) += funcCode
 
-    if (name.equals("OuterClass")) {
+    if (className.equals("OuterClass")) {
       funcName
     } else {
-      val classInstance = classInfo._2
 
       s"$classInstance.$funcName"
     }

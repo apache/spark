@@ -222,6 +222,9 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           unsafeRow.setTotalSize(bufferHolder.totalSize());
           return unsafeRow;
         }
+
+        ${ctx.initNestedClasses()}
+        ${ctx.declareNestedClasses()}
       }"""
 
     val code = CodeFormatter.stripOverlappingComments(
