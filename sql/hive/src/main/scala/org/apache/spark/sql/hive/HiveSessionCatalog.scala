@@ -129,7 +129,7 @@ private[sql] class HiveSessionCatalog(
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(funcName.unquotedString)) {
+        if (functionRegistry.functionExists(funcName)) {
           // If the function actually exists in functionRegistry, it means that there is an
           // error when we create the Expression using the given children.
           // We need to throw the original exception.
@@ -163,7 +163,7 @@ private[sql] class HiveSessionCatalog(
           // Put this Hive built-in function to our function registry.
           registerFunction(func, ignoreIfExists = false)
           // Now, we need to create the Expression.
-          functionRegistry.lookupFunction(functionName, children)
+          functionRegistry.lookupFunction(functionIdentifier, children)
         }
     }
   }

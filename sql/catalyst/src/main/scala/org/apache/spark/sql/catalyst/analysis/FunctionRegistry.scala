@@ -17,51 +17,68 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.lang.reflect.Modifier
+import java.util.Locale
+import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.mutable
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 import org.apache.spark.sql.types._
 
 
 /**
  * A catalog for looking up user defined functions, used by an [[Analyzer]].
  *
- * Note: The implementation should be thread-safe to allow concurrent access.
+ * Note:
+ *   1) The implementation should be thread-safe to allow concurrent access.
+ *   2) the database name is always case-sensitive here, callers are responsible to
+ *      format the database name w.r.t. case-sensitive config.
  */
 trait FunctionRegistry {
 
-  final def registerFunction(name: String, builder: FunctionBuilder): Unit = {
-    registerFunction(name, new ExpressionInfo(builder.getClass.getCanonicalName, name), builder)
+  final def createOrReplaceTempFunction(name: String, builder: FunctionBuilder): Unit = {
+    registerFunction(
+      FunctionIdentifier(name),
+      new ExpressionInfo(builder.getClass.getCanonicalName, name),
+      builder)
   }
 
-  def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder): Unit
+  def registerFunction(
+    name: FunctionIdentifier,
+    info: ExpressionInfo,
+    builder: FunctionBuilder): Unit
 
   @throws[AnalysisException]("If function does not exist")
-  def lookupFunction(name: String, children: Seq[Expression]): Expression
+  def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression
 
   /* List all of the registered function names. */
-  def listFunction(): Seq[String]
+  def listFunction(): Seq[FunctionIdentifier]
+
+  /**
+   * List all of the registered functions in the specified database.
+   * This includes all temporary functions.
+   */
+  def listFunction(db: String): Seq[FunctionIdentifier]
 
   /* Get the class of the registered function by specified name. */
-  def lookupFunction(name: String): Option[ExpressionInfo]
+  def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo]
 
   /* Get the builder of the registered function by specified name. */
-  def lookupFunctionBuilder(name: String): Option[FunctionBuilder]
+  def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder]
 
   /** Drop a function and return whether the function existed. */
-  def dropFunction(name: String): Boolean
+  def dropFunction(name: FunctionIdentifier): Boolean
 
   /** Checks if a function with a given name exists. */
-  def functionExists(name: String): Boolean = lookupFunction(name).isDefined
+  def functionExists(name: FunctionIdentifier): Boolean = lookupFunction(name).isDefined
 
   /** Clear all registered functions. */
   def clear(): Unit
@@ -72,39 +89,53 @@ trait FunctionRegistry {
 
 class SimpleFunctionRegistry extends FunctionRegistry {
 
-  protected val functionBuilders =
-    StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
+  @GuardedBy("this")
+  private val functionBuilders =
+    new mutable.HashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
 
-  override def registerFunction(
-      name: String,
-      info: ExpressionInfo,
-      builder: FunctionBuilder): Unit = synchronized {
-    functionBuilders.put(name, (info, builder))
+  // Resolution of the function name is always case insensitive, but the database name
+  // depends on the caller
+  private def toLowerCase(name: FunctionIdentifier): FunctionIdentifier = {
+    FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT), name.database)
   }
 
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+  override def registerFunction(
+      name: FunctionIdentifier,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = synchronized {
+    functionBuilders.put(toLowerCase(name), (info, builder))
+  }
+
+  override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     val func = synchronized {
-      functionBuilders.get(name).map(_._2).getOrElse {
+      functionBuilders.get(toLowerCase(name)).map(_._2).getOrElse {
         throw new AnalysisException(s"undefined function $name")
       }
     }
     func(children)
   }
 
-  override def listFunction(): Seq[String] = synchronized {
-    functionBuilders.iterator.map(_._1).toList.sorted
+  override def listFunction(): Seq[FunctionIdentifier] = synchronized {
+    functionBuilders.iterator.map(_._1).toList
   }
 
-  override def lookupFunction(name: String): Option[ExpressionInfo] = synchronized {
-    functionBuilders.get(name).map(_._1)
+  override def listFunction(db: String): Seq[FunctionIdentifier] = synchronized {
+    functionBuilders.iterator.map(_._1).filter { name =>
+      name.database.isEmpty || name.database == Some(db)
+    }.toList
   }
 
-  override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = synchronized {
-    functionBuilders.get(name).map(_._2)
+  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = synchronized {
+    functionBuilders.get(toLowerCase(name)).map(_._1)
   }
 
-  override def dropFunction(name: String): Boolean = synchronized {
-    functionBuilders.remove(name).isDefined
+  override def lookupFunctionBuilder(
+      name: FunctionIdentifier): Option[FunctionBuilder] = synchronized {
+    functionBuilders.get(toLowerCase(name)).map(_._2)
+  }
+
+  override def dropFunction(name: FunctionIdentifier): Boolean = synchronized {
+    functionBuilders.remove(toLowerCase(name)).isDefined
   }
 
   override def clear(): Unit = synchronized {
@@ -125,28 +156,32 @@ class SimpleFunctionRegistry extends FunctionRegistry {
  * functions are already filled in and the analyzer needs only to resolve attribute references.
  */
 object EmptyFunctionRegistry extends FunctionRegistry {
-  override def registerFunction(name: String, info: ExpressionInfo, builder: FunctionBuilder)
-  : Unit = {
+  override def registerFunction(
+      name: FunctionIdentifier, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
     throw new UnsupportedOperationException
   }
 
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
+  override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     throw new UnsupportedOperationException
   }
 
-  override def listFunction(): Seq[String] = {
+  override def listFunction(): Seq[FunctionIdentifier] = {
     throw new UnsupportedOperationException
   }
 
-  override def lookupFunction(name: String): Option[ExpressionInfo] = {
+  override def listFunction(db: String): Seq[FunctionIdentifier] = {
     throw new UnsupportedOperationException
   }
 
-  override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = {
+  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = {
     throw new UnsupportedOperationException
   }
 
-  override def dropFunction(name: String): Boolean = {
+  override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def dropFunction(name: FunctionIdentifier): Boolean = {
     throw new UnsupportedOperationException
   }
 
@@ -452,11 +487,13 @@ object FunctionRegistry {
 
   val builtin: SimpleFunctionRegistry = {
     val fr = new SimpleFunctionRegistry
-    expressions.foreach { case (name, (info, builder)) => fr.registerFunction(name, info, builder) }
+    expressions.foreach {
+      case (name, (info, builder)) => fr.registerFunction(FunctionIdentifier(name), info, builder)
+    }
     fr
   }
 
-  val functionSet: Set[String] = builtin.listFunction().toSet
+  val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 
   /** See usage above. */
   private def expression[T <: Expression](name: String)
