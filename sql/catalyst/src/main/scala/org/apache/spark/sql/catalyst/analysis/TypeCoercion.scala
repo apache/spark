@@ -653,7 +653,7 @@ object TypeCoercion {
    * Coerces NullTypes in the Stack expression to the column types of the corresponding positions.
    */
   object StackCoercion extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s @ Stack(children) if s.childrenResolved && s.hasFoldableRowNums =>
         Stack(children.zipWithIndex.map {
           case (e, 0) => e
