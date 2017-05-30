@@ -58,7 +58,7 @@ case object TERMINATED extends State
 class StreamExecution(
     override val sparkSession: SparkSession,
     override val name: String,
-    val checkpointRoot: String,
+    private val checkpointRoot: String,
     analyzedPlan: LogicalPlan,
     val sink: Sink,
     val trigger: Trigger,
@@ -83,6 +83,12 @@ class StreamExecution(
   private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
+
+  val resolvedCheckpointRoot = {
+    val checkpointPath = new Path(checkpointRoot)
+    val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    checkpointPath.makeQualified(fs.getUri(), fs.getWorkingDirectory()).toUri.toString
+  }
 
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
@@ -154,7 +160,7 @@ class StreamExecution(
       case streamingRelation@StreamingRelation(dataSource, _, output) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
           // Materialize source to avoid creating it in every batch
-          val metadataPath = s"$checkpointRoot/sources/$nextSourceId"
+          val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           val source = dataSource.createSource(metadataPath)
           nextSourceId += 1
           // We still need to use the previous `output` instead of `source.schema` as attributes in
@@ -233,14 +239,14 @@ class StreamExecution(
 
   /** Returns the path of a file with `name` in the checkpoint directory. */
   private def checkpointFile(name: String): String =
-    new Path(new Path(checkpointRoot), name).toUri.toString
+    new Path(new Path(resolvedCheckpointRoot), name).toUri.toString
 
   /**
    * Starts the execution. This returns only after the thread has started and [[QueryStartedEvent]]
    * has been posted to all the listeners.
    */
   def start(): Unit = {
-    logInfo(s"Starting $prettyIdString. Use $checkpointRoot to store the query checkpoint.")
+    logInfo(s"Starting $prettyIdString. Use $resolvedCheckpointRoot to store the query checkpoint.")
     microBatchThread.setDaemon(true)
     microBatchThread.start()
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
@@ -374,7 +380,7 @@ class StreamExecution(
 
         // Delete the temp checkpoint only when the query didn't fail
         if (deleteCheckpointOnStop && exception.isEmpty) {
-          val checkpointPath = new Path(checkpointRoot)
+          val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
             val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
             fs.delete(checkpointPath, true)
@@ -595,6 +601,7 @@ class StreamExecution(
 
   /**
    * Processes any data available between `availableOffsets` and `committedOffsets`.
+   *
    * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
    */
   private def runBatch(sparkSessionToRunBatch: SparkSession): Unit = {
