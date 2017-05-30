@@ -443,6 +443,12 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
 #'                         or the number of partitions are large, this param could be adjusted to a larger size.
 #'                         This is an expert parameter. Default value should be good for most cases.
+#' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
+#'                               decide the base level of a string feature as the last category after
+#'                               ordering is dropped when encoding strings. Supported options are
+#'                               'frequencyDesc', 'frequencyAsc', 'alphabetDesc', 'alphabetAsc'.
+#'                               The default value is 'frequencyDesc'. When the ordering is set to
+#'                               'alphabetDesc', this drops the same category as R when encoding strings.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
@@ -468,10 +474,11 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' }
 #' @note spark.survreg since 2.0.0
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, aggregationDepth = 2) {
+          function(data, formula, aggregationDepth = 2, stringIndexerOrderType = "frequencyDesc") {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
-                                "fit", formula, data@sdf, as.integer(aggregationDepth))
+                                "fit", formula, data@sdf, as.integer(aggregationDepth),
+                                as.character(stringIndexerOrderType))
             new("AFTSurvivalRegressionModel", jobj = jobj)
           })
 
