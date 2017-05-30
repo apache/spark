@@ -964,9 +964,9 @@ private[spark] object SparkSubmitUtils {
     // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
     // other spark-streaming utility components. Underscore is there to differentiate between
     // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
-    val components = Seq("catalyst_", "core_", "graphx_", "hive_", "hive-thriftserver_",
-      "launcher_", "mesos_", "mllib_", "mllib-local_", "network-common_", "network-shuffle_",
-      "network-yarn_", "repl_", "sketch_", "sql_", "streaming_", "tags_", "unsafe_", "yarn_")
+    val components = Seq("catalyst_", "core_", "graphx_", "launcher_", "mllib_", "mllib-local_",
+      "network-common_", "network-shuffle_", "repl_", "sketch_", "sql_", "streaming_", "tags_",
+      "unsafe_")
 
     components.foreach { comp =>
       md.addExcludeRule(createExclusion(s"org.apache.spark:spark-$comp*:*", ivySettings,
