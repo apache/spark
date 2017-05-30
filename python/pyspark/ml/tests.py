@@ -549,7 +549,7 @@ class FeatureTests(SparkSessionTestCase):
         observed = transformedDF.select("features").collect()
         expected = [[1.0, 0.0], [2.0, 1.0], [0.0, 0.0]]
         for i in range(0, len(expected)):
-            self.assertTrue((observed[i]["features"].toArray() == expected[i]).all())
+            self.assertTrue(all(observed[i]["features"].toArray() == expected[i]))
 
 
 class HasInducedError(Params):
