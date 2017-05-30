@@ -191,6 +191,23 @@ class DataFrame(object):
         """
         self._jdf.createGlobalTempView(name)
 
+    @since(2.2)
+    def createOrReplaceGlobalTempView(self, name):
+        """Creates or replaces a global temporary view using the given name.
+
+        The lifetime of this temporary view is tied to this Spark application.
+
+        >>> df.createOrReplaceGlobalTempView("people")
+        >>> df2 = df.filter(df.age > 3)
+        >>> df2.createOrReplaceGlobalTempView("people")
+        >>> df3 = spark.sql("select * from people")
+        >>> sorted(df3.collect()) == sorted(df2.collect())
+        True
+        >>> spark.catalog.dropGlobalTempView("people")
+
+        """
+        self._jdf.createOrReplaceGlobalTempView(name)
+
     @property
     @since(1.4)
     def write(self):

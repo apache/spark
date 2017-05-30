@@ -2758,6 +2758,7 @@ class Dataset[T] private[sql](
    * view, e.g. `SELECT * FROM _global_temp.view1`.
    *
    * @group basic
+   * @since 2.2.0
    */
   def createOrReplaceGlobalTempView(viewName: String): Unit = withPlan {
     createTempViewCommand(viewName, replace = true, global = true)
