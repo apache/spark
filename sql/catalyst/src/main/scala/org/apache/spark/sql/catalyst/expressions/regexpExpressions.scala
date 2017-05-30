@@ -99,7 +99,7 @@ abstract class StringRegexExpression extends BinaryExpression
 
     See also:
       Use RLIKE to match with standard regular expressions.
-""")
+  """)
 case class Like(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
@@ -175,7 +175,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
 
     See also:
       Use LIKE to match with simple string pattern.
-""")
+  """)
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v

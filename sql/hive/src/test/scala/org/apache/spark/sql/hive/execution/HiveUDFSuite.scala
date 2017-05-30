@@ -603,7 +603,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
-  test("Case sensitive database names") {
+  test("Call the function registered in the not-current database") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
         withDatabase("dAtABaSe1") {
@@ -612,6 +612,11 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
             sql(s"CREATE FUNCTION dAtABaSe1.test_avg AS '${classOf[GenericUDAFAverage].getName}'")
             checkAnswer(sql("SELECT dAtABaSe1.test_avg(1)"), Row(1.0))
           }
+          val message = intercept[AnalysisException] {
+            sql("SELECT dAtABaSe1.unknownFunc(1)")
+          }.getMessage
+          assert(message.contains("Undefined function: 'unknownFunc'") &&
+            message.contains("nor a permanent function registered in the database 'dAtABaSe1'"))
         }
       }
     }
