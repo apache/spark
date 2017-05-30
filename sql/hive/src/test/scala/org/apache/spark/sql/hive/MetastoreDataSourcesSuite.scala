@@ -1374,7 +1374,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         checkAnswer(spark.table("old"), Row(1, "a"))
 
         val expectedSchema = StructType(Seq(
-          StructField("i", IntegerType, nullable = true),
+          StructField("i", IntegerType, nullable = false),
           StructField("j", StringType, nullable = true)))
         assert(table("old").schema === expectedSchema)
       }
