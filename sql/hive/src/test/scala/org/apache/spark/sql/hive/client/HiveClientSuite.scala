@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog._
@@ -27,15 +28,14 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.types.{ByteType, IntegerType, StringType}
 
-class HiveClientSuite extends SparkFunSuite {
+// TODO: Refactor this to `HivePartitionFilteringSuite`
+class HiveClientSuite(version: String)
+    extends HiveVersionSuite(version) with BeforeAndAfterAll {
   import CatalystSqlParser._
-
-  private val clientBuilder = new HiveClientBuilder
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
 
   private val testPartitionCount = 3 * 24 * 4
-  private val client = init(true)
 
   private def init(tryDirectSql: Boolean): HiveClient = {
     val storageFormat = CatalogStorageFormat(
@@ -48,7 +48,7 @@ class HiveClientSuite extends SparkFunSuite {
 
     val hadoopConf = new Configuration()
     hadoopConf.setBoolean(tryDirectSqlKey, tryDirectSql)
-    val client = clientBuilder.buildClient(HiveUtils.hiveExecutionVersion, hadoopConf)
+    val client = buildClient(hadoopConf)
     client
       .runSqlHive("CREATE TABLE test (value INT) PARTITIONED BY (ds INT, h INT, chunk STRING)")
 
@@ -67,6 +67,10 @@ class HiveClientSuite extends SparkFunSuite {
     client.createPartitions(
       "default", "test", partitions, ignoreIfExists = false)
     client
+  }
+
+  override def beforeAll() {
+    client = init(true)
   }
 
   test(s"getPartitionsByFilter returns all partitions when $tryDirectSqlKey=false") {
