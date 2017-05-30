@@ -534,10 +534,12 @@ private[spark] class ApplicationMaster(
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
       if (!preserveFiles) {
-        stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
-        if (stagingDirPath == null) {
-          logError("Staging directory is null")
-          return
+        try {
+          stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
+        } catch {
+          case e: IllegalArgumentException =>
+            logError("Staging directory is null")
+            return
         }
         logInfo("Deleting staging directory " + stagingDirPath)
         fs.delete(stagingDirPath, true)
