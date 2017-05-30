@@ -85,8 +85,13 @@ private[spark] object RetrofitClientFactoryImpl extends RetrofitClientFactory wi
       okHttpClientBuilder.sslSocketFactory(sslContext.getSocketFactory,
         trustManagers(0).asInstanceOf[X509TrustManager])
     }
+    val resolvedBaseUrl = if (!baseUrl.endsWith("/")) {
+      s"$baseUrl/"
+    } else {
+      baseUrl
+    }
     new Retrofit.Builder()
-      .baseUrl(baseUrl)
+      .baseUrl(resolvedBaseUrl)
       .addConverterFactory(ScalarsConverterFactory.create())
       .addConverterFactory(JacksonConverterFactory.create(OBJECT_MAPPER))
       .client(okHttpClientBuilder.build())
