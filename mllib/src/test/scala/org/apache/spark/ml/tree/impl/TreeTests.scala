@@ -25,6 +25,7 @@ import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericA
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.tree._
+import org.apache.spark.mllib.tree.impurity.{Entropy, Impurity}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -101,6 +102,25 @@ private[ml] object TreeTests extends SparkFunSuite {
     }
     val labelMetadata = labelAttribute.toMetadata()
     data.select(data(featuresColName), data(labelColName).as(labelColName, labelMetadata))
+  }
+
+  /** Returns a DecisionTreeMetadata instance with hard-coded values for use in tests */
+  def getMetadata(
+      numExamples: Int,
+      numFeatures: Int,
+      numClasses: Int,
+      featureArity: Map[Int, Int],
+      impurity: Impurity = Entropy): DecisionTreeMetadata = {
+    // Assume all categorical features within tests
+    // have small enough arity to be treated as unordered
+    val unordered = featureArity.keys.toSet
+    val maxBins = 4
+    val numBins = 0.until(numFeatures).toArray.map(_ => maxBins)
+    new DecisionTreeMetadata(numFeatures = numFeatures, numExamples = numExamples,
+      numClasses = numClasses, maxBins = maxBins, minInfoGain = 0.0, featureArity = featureArity,
+      unorderedFeatures = unordered, numBins = numBins, impurity = impurity,
+      quantileStrategy = null, maxDepth = 5, minInstancesPerNode = 1, numTrees = 1,
+      numFeaturesPerNode = 2)
   }
 
   /**
