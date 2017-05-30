@@ -213,12 +213,11 @@ setMethod("showDF",
           signature(x = "SparkDataFrame"),
           function(x, numRows = 20, truncate = TRUE, vertical = FALSE) {
             if (is.logical(truncate) && truncate) {
-              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20),
-                               vertical, FALSE)
+              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20), vertical)
             } else {
               truncate2 <- as.numeric(truncate)
               s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate2),
-                               vertical, FALSE)
+                               vertical)
             }
             cat(s)
           })

@@ -102,6 +102,7 @@ case class AnalyzeColumnCommand(
 
     val rowCount = statsRow.getLong(0)
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>
+      // according to `ColumnStat.statExprs`, the stats struct always have 6 fields.
       (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1, 6), attr))
     }.toMap
     (rowCount, columnStats)

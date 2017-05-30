@@ -209,7 +209,7 @@ class DataFrame(object):
         Interface for saving the content of the streaming :class:`DataFrame` out into external
         storage.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :return: :class:`DataStreamWriter`
         """
@@ -285,7 +285,7 @@ class DataFrame(object):
         :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
         source present.
 
-        .. note:: Experimental
+        .. note:: Evolving
         """
         return self._jdf.isStreaming()
 
@@ -325,9 +325,9 @@ class DataFrame(object):
          name | Bob
         """
         if isinstance(truncate, bool) and truncate:
-            print(self._jdf.showString(n, 20, vertical, False))
+            print(self._jdf.showString(n, 20, vertical))
         else:
-            print(self._jdf.showString(n, int(truncate), vertical, False))
+            print(self._jdf.showString(n, int(truncate), vertical))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -368,7 +368,7 @@ class DataFrame(object):
             latest record that has been processed in the form of an interval
             (e.g. "1 minute" or "5 hours").
 
-        .. note:: Experimental
+        .. note:: Evolving
 
         >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]

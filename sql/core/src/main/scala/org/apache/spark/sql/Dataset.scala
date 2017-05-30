@@ -242,14 +242,16 @@ class Dataset[T] private[sql](
    * @param vertical If set to true, prints output rows vertically (one line per column value).
    */
   private[sql] def showString(
-      _numRows: Int,
-      truncate: Int = 20,
-      vertical: Boolean = false,
-      isInternal: Boolean = false): String = {
+      _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0)
-    val takeResult = if (isInternal) toDF().takeInternal(numRows + 1) else toDF().take(numRows + 1)
-    val hasMoreData = takeResult.length > numRows
-    val data = takeResult.take(numRows)
+    val takeResult = toDF().take(numRows + 1)
+    showString(takeResult, numRows, truncate, vertical)
+  }
+
+  private def showString(
+      dataWithOneMoreRow: Array[Row], numRows: Int, truncate: Int, vertical: Boolean): String = {
+    val hasMoreData = dataWithOneMoreRow.length > numRows
+    val data = dataWithOneMoreRow.take(numRows)
 
     lazy val timeZone =
       DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
@@ -684,14 +686,17 @@ class Dataset[T] private[sql](
   } else {
     println(showString(numRows, truncate = 0))
   }
-  // scalastyle:on println
 
-  // scalastyle:off println
   // An internal version of `show`, which won't set execution id and trigger listeners.
-  private[sql] def showInternal(numRows: Int, truncate: Boolean): Unit = if (truncate) {
-    println(showString(numRows, truncate = 20, isInternal = true))
-  } else {
-    println(showString(numRows, truncate = 0, isInternal = true))
+  private[sql] def showInternal(_numRows: Int, truncate: Boolean): Unit = {
+    val numRows = _numRows.max(0)
+    val takeResult = toDF().takeInternal(numRows + 1)
+
+    if (truncate) {
+      println(showString(takeResult, numRows, truncate = 20, vertical = false))
+    } else {
+      println(showString(takeResult, numRows, truncate = 0, vertical = false))
+    }
   }
   // scalastyle:on println
 
