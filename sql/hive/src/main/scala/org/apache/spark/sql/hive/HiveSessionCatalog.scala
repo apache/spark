@@ -140,7 +140,7 @@ private[sql] class HiveSessionCatalog(
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
           if (!hiveFunctions.contains(functionName)) {
-            failFunctionLookup(funcName.unquotedString)
+            failFunctionLookup(funcName)
           }
 
           // TODO: Remove this fallback path once we implement the list of fallback functions
@@ -148,12 +148,12 @@ private[sql] class HiveSessionCatalog(
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                failFunctionLookup(funcName.unquotedString))
+                failFunctionLookup(funcName))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => failFunctionLookup(funcName.unquotedString)
+              case NonFatal(e) => failFunctionLookup(funcName)
             }
           }
           val className = functionInfo.getFunctionClass.getName
