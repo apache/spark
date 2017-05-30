@@ -269,14 +269,16 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       ds.groupByKey(_._1).agg(
         typed.min(_._2), typed.minLong(_._2), typed.max(_._2), typed.maxLong(_._2)),
       ("a", 1.0, 1L, 3.0, 3L), ("b", -4.0, -4L, 4.0, 4L))
+  }
 
+  test("typed aggregate: empty") {
     val empty = Seq.empty[(Double, Double)].toDS
     val f = (x: (Double, Double)) => x._2
     val g = (x: (Long, Long)) => x._2
-    empty.agg(typed.min(f)).show()
     checkDataset(
-      empty.agg(typed.min(f), typed.minLong(g), typed.max(f), typed.maxLong(g)),
-      Row(null, null, null, null))
+      empty.agg(typed.sum(f), typed.sumLong(g), typed.avg(f),
+        typed.min(f), typed.minLong(g), typed.max(f), typed.maxLong(g)),
+      Row(null, null, null, null, null, null, null))
   }
 
   test("SPARK-12555 - result should not be corrupted after input columns are reordered") {
@@ -335,7 +337,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-15204 improve nullability inference for Aggregator") {
     val ds1 = Seq(1, 3, 2, 5).toDS()
-    assert(ds1.select(typed.sum((i: Int) => i)).schema.head.nullable === false)
+    assert(ds1.select(typed.sum((i: Int) => i)).schema.head.nullable === true)
     val ds2 = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
     assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
     val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]

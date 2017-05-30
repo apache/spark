@@ -42,7 +42,7 @@ public class typed {
    * @since 2.0.0
    */
   public static <T> TypedColumn<T, Double> avg(MapFunction<T, Double> f) {
-    return new TypedAverage<T>(f).toColumnJava();
+    return new TypedAverage<T>(f).toColumn();
   }
 
   /**
@@ -60,7 +60,7 @@ public class typed {
    * @since 2.0.0
    */
   public static <T> TypedColumn<T, Double> sum(MapFunction<T, Double> f) {
-    return new TypedSumDouble<T>(f).toColumnJava();
+    return new TypedSumDouble<T>(f).toColumn();
   }
 
   /**
@@ -69,7 +69,7 @@ public class typed {
    * @since 2.0.0
    */
   public static <T> TypedColumn<T, Long> sumLong(MapFunction<T, Long> f) {
-    return new TypedSumLong<T>(f).toColumnJava();
+    return new TypedSumLong<T>(f).toColumn();
   }
 
   /**

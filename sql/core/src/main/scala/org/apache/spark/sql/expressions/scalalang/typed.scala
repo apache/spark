@@ -54,7 +54,7 @@ object typed {
    *
    * @since 2.0.0
    */
-  def avg[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedAverage(f).toColumn
+  def avg[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedAverage(f).toColumnScala
 
   /**
    * Count aggregate function.
@@ -68,22 +68,21 @@ object typed {
    *
    * @since 2.0.0
    */
-  def sum[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedSumDouble[IN](f).toColumn
+  def sum[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedSumDouble[IN](f).toColumnScala
 
   /**
    * Sum aggregate function for integral (long, i.e. 64 bit integer) type.
    *
    * @since 2.0.0
    */
-  def sumLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedSumLong[IN](f).toColumn
+  def sumLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedSumLong[IN](f).toColumnScala
 
   /**
    * Min aggregate function for floating point (double) type.
    *
    * @since 2.3.0
    */
-  def min[IN](f: IN => Double): TypedColumn[IN, Double] =
-    new TypedMinDouble[IN](f).toColumnScala
+  def min[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedMinDouble[IN](f).toColumnScala
 
   /**
    * Min aggregate function for integral (long, i.e. 64 bit integer) type.
