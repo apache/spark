@@ -276,6 +276,8 @@ object FunctionRegistry {
 
     // string functions
     expression[Ascii]("ascii"),
+    expression[Chr]("char"),
+    expression[Chr]("chr"),
     expression[Base64]("base64"),
     expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
@@ -302,6 +304,7 @@ object FunctionRegistry {
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
+    expression[StringReplace]("replace"),
     expression[StringReverse]("reverse"),
     expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
@@ -357,6 +360,7 @@ object FunctionRegistry {
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
+    expression[DayOfWeek]("dayofweek"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
