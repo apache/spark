@@ -724,12 +724,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitCreateMacro(ctx: CreateMacroContext): LogicalPlan = withOrigin(ctx) {
-    val arguments = Option(ctx.colTypeList).map(visitColTypeList(_))
-      .getOrElse(Seq.empty[StructField])
+    val columns = createSchema(ctx.colTypeList)
     val e = expression(ctx.expression)
     CreateMacroCommand(
       ctx.macroName.getText,
-      MacroFunctionWrapper(arguments, e))
+      MacroFunctionWrapper(columns, e))
   }
 
   /**

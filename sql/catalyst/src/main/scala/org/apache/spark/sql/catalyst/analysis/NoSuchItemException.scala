@@ -52,6 +52,3 @@ class NoSuchPartitionsException(db: String, table: String, specs: Seq[TableParti
 
 class NoSuchTempFunctionException(func: String)
   extends AnalysisException(s"Temporary function '$func' not found")
-
-class NoSuchTempMacroException(func: String)
-  extends AnalysisException(s"Temporary macro '$func' not found")

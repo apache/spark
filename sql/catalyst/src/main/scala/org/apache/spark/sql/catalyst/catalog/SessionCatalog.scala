@@ -1102,7 +1102,7 @@ class SessionCatalog(
   /** Drop a temporary macro. */
   def dropTempMacro(name: String, ignoreIfNotExists: Boolean): Unit = {
     if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
-      throw new NoSuchTempMacroException(name)
+      throw AnalysisException.noSuchTempMacroException(name)
     }
   }
 
@@ -1265,8 +1265,8 @@ class SessionCatalog(
       if (func.database.isDefined) {
         dropFunction(func, ignoreIfNotExists = false)
       } else {
-        val functionType = functionRegistry.lookupFunction(func.funcName).map(_.getFunctionType)
-          .getOrElse(FunctionType.TEMPORARY)
+        val functionType = functionRegistry.lookupFunction(func.funcName)
+          .map(_.getFunctionType).getOrElse(FunctionType.TEMPORARY)
         if (!functionType.equals(FunctionType.BUILTIN)) {
           dropTempFunction(func.funcName, ignoreIfNotExists = false)
         }

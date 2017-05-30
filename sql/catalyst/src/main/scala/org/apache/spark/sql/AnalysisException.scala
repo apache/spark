@@ -55,3 +55,12 @@ class AnalysisException protected[sql] (
     s"$message;$lineAnnotation$positionAnnotation"
   }
 }
+
+object AnalysisException {
+  /**
+   * Create a no such temporary macro exception.
+   */
+  def noSuchTempMacroException(func: String): AnalysisException = {
+    new AnalysisException(s"Temporary macro '$func' not found")
+  }
+}

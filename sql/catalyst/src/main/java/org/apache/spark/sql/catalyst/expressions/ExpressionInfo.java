@@ -25,6 +25,7 @@ public class ExpressionInfo {
     public enum FunctionType {
         BUILTIN, PERSISTENT, TEMPORARY;
     }
+
     private String className;
     private String usage;
     private String name;
@@ -63,10 +64,6 @@ public class ExpressionInfo {
         this.usage = usage;
         this.extended = extended;
         this.functionType = functionType;
-    }
-
-    public ExpressionInfo(String className, String db, String name, String usage, String extended) {
-        this(className, db, name, usage, extended, FunctionType.TEMPORARY);
     }
 
     public ExpressionInfo(String className, String name) {

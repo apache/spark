@@ -20,12 +20,14 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.StructField
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.types.StructType
 
 /**
  * This class provides arguments and body expression of the macro function.
  */
-case class MacroFunctionWrapper(columns: Seq[StructField], macroFunction: Expression)
+case class MacroFunctionWrapper(columns: StructType, macroFunction: Expression)
+
 
 /**
  * The DDL command that creates a macro.
@@ -41,16 +43,33 @@ case class CreateMacroCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val columns = funcWrapper.columns.map { col =>
-      AttributeReference(col.name, col.dataType, col.nullable, col.metadata)() }
-    val colToIndex: Map[String, Int] = columns.map(_.name).zipWithIndex.toMap
+    val columns = funcWrapper.columns
+    val columnAttrs = columns.toAttributes
+    def formatName: (String => String) =
+      if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
+        (name: String) => name
+      } else {
+        (name: String) => name.toLowerCase
+      }
+    val colToIndex: Map[String, Int] = columnAttrs.map(_.name).map(formatName).zipWithIndex.toMap
     if (colToIndex.size != columns.size) {
       throw new AnalysisException(s"Cannot support duplicate colNames " +
         s"for CREATE TEMPORARY MACRO $macroName, actual columns: ${columns.mkString(",")}")
     }
+
+    try {
+      val plan = Project(Seq(Alias(funcWrapper.macroFunction, "m")()), LocalRelation(columnAttrs))
+      val analyzed = sparkSession.sessionState.analyzer.execute(plan)
+      sparkSession.sessionState.analyzer.checkAnalysis(analyzed)
+    } catch {
+      case a: AnalysisException =>
+        throw new AnalysisException(s"CREATE TEMPORARY MACRO $macroName " +
+          s"with exception: ${a.getMessage}")
+    }
+
     val macroFunction = funcWrapper.macroFunction.transform {
       case u: UnresolvedAttribute =>
-        val index = colToIndex.get(u.name).getOrElse(
+        val index = colToIndex.get(formatName(u.name)).getOrElse(
           throw new AnalysisException(s"Cannot find colName: ${u} " +
             s"for CREATE TEMPORARY MACRO $macroName, actual columns: ${columns.mkString(",")}"))
         BoundReference(index, columns(index).dataType, columns(index).nullable)
@@ -64,15 +83,15 @@ case class CreateMacroCommand(
           s"for CREATE TEMPORARY MACRO $macroName")
     }
 
-    val macroInfo = columns.mkString(",") + " -> " + funcWrapper.macroFunction.toString
-    val info = new ExpressionInfo(macroInfo, macroName)
+    val columnLength: Int = columns.length
+    val info = new ExpressionInfo(macroName, macroName)
     val builder = (children: Seq[Expression]) => {
-      if (children.size != columns.size) {
+      if (children.size != columnLength) {
         throw new AnalysisException(s"Actual number of columns: ${children.size} != " +
-          s"expected number of columns: ${columns.size} for Macro $macroName")
+          s"expected number of columns: ${columnLength} for Macro $macroName")
       }
       macroFunction.transform {
-        // Skip to validate the input type because check it at runtime.
+        // Skip to validate the input type because check it before.
         case b: BoundReference => children(b.ordinal)
       }
     }

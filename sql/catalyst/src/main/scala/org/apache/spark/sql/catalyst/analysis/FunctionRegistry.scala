@@ -144,7 +144,7 @@ class SystemFunctionRegistry(builtin: SimpleFunctionRegistry) extends SimpleFunc
   }
 
   override def listFunction(): Seq[String] = synchronized {
-    (functionBuilders.iterator.map(_._1).toList ++ builtin.listFunction()).sorted
+    (functionBuilders.iterator.map(_._1).toList ++ builtin.listFunction()).distinct.sorted
   }
 
   override def lookupFunction(name: String): Option[ExpressionInfo] = synchronized {
@@ -160,6 +160,7 @@ class SystemFunctionRegistry(builtin: SimpleFunctionRegistry) extends SimpleFunc
   }
 
   override def clear(): Unit = synchronized {
+    builtin.clear()
     functionBuilders.clear()
   }
 
