@@ -44,17 +44,23 @@ import org.apache.spark.sql.types._
  */
 trait FunctionRegistry {
 
-  final def createOrReplaceTempFunction(name: String, builder: FunctionBuilder): Unit = {
-    registerFunction(
-      FunctionIdentifier(name),
-      new ExpressionInfo(builder.getClass.getCanonicalName, name),
-      builder)
+  final def registerFunction(name: FunctionIdentifier, builder: FunctionBuilder): Unit = {
+    val info = new ExpressionInfo(
+      builder.getClass.getCanonicalName, name.database.orNull, name.funcName)
+    registerFunction(name, info, builder)
   }
 
   def registerFunction(
     name: FunctionIdentifier,
     info: ExpressionInfo,
     builder: FunctionBuilder): Unit
+
+  /* Create or replace a temporary function. */
+  final def createOrReplaceTempFunction(name: String, builder: FunctionBuilder): Unit = {
+    registerFunction(
+      FunctionIdentifier(name),
+      builder)
+  }
 
   @throws[AnalysisException]("If function does not exist")
   def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression
