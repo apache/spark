@@ -46,13 +46,13 @@ trait StateStore {
 
   /**
    * Get the current value of a non-null key.
+   * @return a non-null row if the key exists in the store, otherwise null.
    */
   def get(key: UnsafeRow): UnsafeRow
 
   /**
    * Put a new value for a non-null key. Implementations must be aware that the UnsafeRows in
    * the params can be reused, and must make copies of the data as needed for persistence.
-   * @note put cannot be done once
    */
   def put(key: UnsafeRow, value: UnsafeRow): Unit
 
@@ -165,17 +165,15 @@ object StateStoreProvider {
    * The instance will be already initialized.
    */
   def instantiate(
-      providerClass: String,
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
       indexOrdinal: Option[Int], // for sorting the data
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
-    val provider = Utils.getContextOrSparkClassLoader
-      .loadClass(providerClass)
-      .newInstance()
-      .asInstanceOf[StateStoreProvider]
+    val providerClass = storeConf.providerClass.map(Utils.classForName)
+        .getOrElse(classOf[HDFSBackedStateStoreProvider])
+    val provider = providerClass.newInstance().asInstanceOf[StateStoreProvider]
     provider.init(stateStoreId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
     provider
   }
@@ -189,8 +187,8 @@ case class StateStoreId(
     partitionId: Int,
     name: String = "")
 
-/** Mutable, and reusable class for representing a pair of UnsafeRows */
-case class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
+/** Mutable, and reusable class for representing a pair of UnsafeRows. */
+class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
   def withRows(key: UnsafeRow, value: UnsafeRow): UnsafeRowPair = {
     this.key = key
     this.value = value
@@ -255,7 +253,6 @@ object StateStore extends Logging {
 
   /** Get or create a store associated with the id. */
   def get(
-      providerClass: String,
       storeId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
@@ -269,7 +266,7 @@ object StateStore extends Logging {
       val provider = loadedProviders.getOrElseUpdate(
         storeId,
         StateStoreProvider.instantiate(
-          providerClass, storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
+          storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
       )
       reportActiveStoreInstance(storeId)
       provider

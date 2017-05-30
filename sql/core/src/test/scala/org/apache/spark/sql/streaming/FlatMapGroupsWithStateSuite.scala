@@ -1065,7 +1065,7 @@ object FlatMapGroupsWithStateSuite {
     private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
     override def iterator(): Iterator[UnsafeRowPair] = {
-      map.entrySet.iterator.asScala.map { case e => UnsafeRowPair(e.getKey, e.getValue) }
+      map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
     }
 
     override def get(key: UnsafeRow): UnsafeRow = map.get(key)

@@ -33,7 +33,6 @@ import org.apache.spark.util.SerializableConfiguration
 class StateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
-    providerClass: String,
     checkpointLocation: String,
     operatorId: Long,
     storeName: String,
@@ -48,7 +47,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
   private val storeConf = new StateStoreConf(sessionState.conf)
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val confBroadcast = dataRDD.context.broadcast(
+  private val hadoopConfBroadcast = dataRDD.context.broadcast(
     new SerializableConfiguration(sessionState.newHadoopConf()))
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
@@ -62,8 +61,8 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     var store: StateStore = null
     val storeId = StateStoreId(checkpointLocation, operatorId, partition.index, storeName)
     store = StateStore.get(
-      providerClass, storeId, keySchema, valueSchema, indexOrdinal, storeVersion,
-      storeConf, confBroadcast.value.value)
+      storeId, keySchema, valueSchema, indexOrdinal, storeVersion,
+      storeConf, hadoopConfBroadcast.value.value)
     val inputIter = dataRDD.iterator(partition, ctxt)
     storeUpdateFunction(store, inputIter)
   }

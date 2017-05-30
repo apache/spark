@@ -49,7 +49,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
   val keySchema = StructType(Seq(StructField("key", StringType, true)))
   val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
-  val providerClass = classOf[HDFSBackedStateStoreProvider].getCanonicalName
 
   before {
     StateStore.stop()
@@ -191,31 +190,31 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // Verify that trying to get incorrect versions throw errors
       intercept[IllegalArgumentException] {
         StateStore.get(
-          providerClass, storeId, keySchema, valueSchema, None, -1, storeConf, hadoopConf)
+          storeId, keySchema, valueSchema, None, -1, storeConf, hadoopConf)
       }
       assert(!StateStore.isLoaded(storeId)) // version -1 should not attempt to load the store
 
       intercept[IllegalStateException] {
         StateStore.get(
-          providerClass, storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
+          storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
       }
 
       // Increase version of the store and try to get again
       val store0 = StateStore.get(
-        providerClass, storeId, keySchema, valueSchema, None, 0, storeConf, hadoopConf)
+        storeId, keySchema, valueSchema, None, 0, storeConf, hadoopConf)
       assert(store0.version === 0)
       put(store0, "a", 1)
       store0.commit()
 
       val store1 = StateStore.get(
-        providerClass, storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
+        storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
       assert(StateStore.isLoaded(storeId))
       assert(store1.version === 1)
       assert(rowsToSet(store1.iterator()) === Set("a" -> 1))
 
       // Verify that you can also load older version
       val store0reloaded = StateStore.get(
-        providerClass, storeId, keySchema, valueSchema, None, 0, storeConf, hadoopConf)
+        storeId, keySchema, valueSchema, None, 0, storeConf, hadoopConf)
       assert(store0reloaded.version === 0)
       assert(rowsToSet(store0reloaded.iterator()) === Set.empty)
 
@@ -224,7 +223,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assert(!StateStore.isLoaded(storeId))
 
       val store1reloaded = StateStore.get(
-        providerClass, storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
+        storeId, keySchema, valueSchema, None, 1, storeConf, hadoopConf)
       assert(StateStore.isLoaded(storeId))
       assert(store1reloaded.version === 1)
       put(store1reloaded, "a", 2)
@@ -255,8 +254,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     def generateStoreVersions() {
       for (i <- 1 to 20) {
-        val store = StateStore.get(
-          providerClass, storeId, keySchema, valueSchema, None,
+        val store = StateStore.get(storeId, keySchema, valueSchema, None,
           latestStoreVersion, storeConf, hadoopConf)
         put(store, "a", i)
         store.commit()
@@ -305,7 +303,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
           }
 
           // Reload the store and verify
-          StateStore.get(providerClass, storeId, keySchema, valueSchema, indexOrdinal = None,
+          StateStore.get(storeId, keySchema, valueSchema, indexOrdinal = None,
             latestStoreVersion, storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
 
@@ -316,7 +314,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
           }
 
           // Reload the store and verify
-          StateStore.get(providerClass, storeId, keySchema, valueSchema, indexOrdinal = None,
+          StateStore.get(storeId, keySchema, valueSchema, indexOrdinal = None,
             latestStoreVersion, storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
         }
@@ -372,8 +370,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     // Getting the store should not create temp file
     val store0 = shouldNotCreateTempFile {
-      StateStore.get(providerClass, storeId, keySchema, valueSchema, indexOrdinal = None,
-        version = 0, storeConf, hadoopConf)
+      StateStore.get(
+        storeId, keySchema, valueSchema, indexOrdinal = None, version = 0, storeConf, hadoopConf)
     }
 
     // Put should create a temp file
@@ -388,8 +386,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     // Remove should create a temp file
     val store1 = shouldNotCreateTempFile {
-      StateStore.get(providerClass, storeId, keySchema, valueSchema, indexOrdinal = None,
-        version = 1, storeConf, hadoopConf)
+      StateStore.get(
+        storeId, keySchema, valueSchema, indexOrdinal = None, version = 1, storeConf, hadoopConf)
     }
     remove(store1, _ == "a")
     assert(numTempFiles === 1)
@@ -402,8 +400,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     // Commit without any updates should create a delta file
     val store2 = shouldNotCreateTempFile {
-      StateStore.get(providerClass, storeId, keySchema, valueSchema, indexOrdinal = None,
-        version = 2, storeConf, hadoopConf)
+      StateStore.get(
+        storeId, keySchema, valueSchema, indexOrdinal = None, version = 2, storeConf, hadoopConf)
     }
     store2.commit()
     assert(numTempFiles === 0)
@@ -660,8 +658,8 @@ object StateStoreTestsHelper {
   }
 
   def remove(store: StateStore, condition: String => Boolean): Unit = {
-    store.getRange(None, None).foreach { case UnsafeRowPair(key, _) =>
-      if (condition(rowToString(key))) store.remove(key)
+    store.getRange(None, None).foreach { rowPair =>
+      if (condition(rowToString(rowPair.key))) store.remove(rowPair.key)
     }
   }
 

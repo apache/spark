@@ -75,15 +75,10 @@ package object state {
         })
         cleanedF(store, iter)
       }
-      val providerClass = sessionState
-        .conf
-        .stateStoreProviderClass
-        .getOrElse(classOf[HDFSBackedStateStoreProvider].getCanonicalName)
 
       new StateStoreRDD(
         dataRDD,
         wrappedF,
-        providerClass,
         checkpointLocation,
         operatorId,
         storeName,

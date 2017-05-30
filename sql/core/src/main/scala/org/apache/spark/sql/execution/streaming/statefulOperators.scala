@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.concurrent.TimeUnit._
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -73,10 +75,10 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
 
   /** Records the duration of running `body` for the next query progress update. */
   protected def timeTakenMs(body: => Unit): Long = {
-    val startTime = System.currentTimeMillis
+    val startTime = System.nanoTime()
     val result = body
-    val endTime = System.currentTimeMillis
-    math.max(endTime - startTime, 0)
+    val endTime = System.nanoTime()
+    math.max(NANOSECONDS.toMillis(endTime - startTime), 0)
   }
 }
 
@@ -123,9 +125,9 @@ trait WatermarkSupport extends UnaryExecNode {
 
   protected def removeKeysOlderThanWatermark(store: StateStore): Unit = {
     if (watermarkPredicateForKeys.nonEmpty) {
-      store.getRange(None, None).foreach { case UnsafeRowPair(key, _) =>
-        if (watermarkPredicateForKeys.get.eval(key)) {
-          store.remove(key)
+      store.getRange(None, None).foreach { rowPair =>
+        if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
+          store.remove(rowPair.key)
         }
       }
     }
@@ -220,9 +222,9 @@ case class StateStoreSaveExec(
               store.commit()
             }
             numTotalStateRows += store.numKeys()
-            store.iterator().map { case UnsafeRowPair(_, v) =>
+            store.iterator().map { rowPair =>
               numOutputRows += 1
-              v.asInstanceOf[InternalRow]
+              rowPair.value
             }
 
           // Update and output only rows being evicted from the StateStore
@@ -238,17 +240,17 @@ case class StateStoreSaveExec(
               }
             }
 
-            val removalStartTime = System.currentTimeMillis
+            val removalStartTimeNs = System.nanoTime
             val rangeIter = store.getRange(None, None)
 
             new NextIterator[InternalRow] {
               override protected def getNext(): InternalRow = {
                 var removedValueRow: InternalRow = null
                 while(rangeIter.hasNext && removedValueRow == null) {
-                  val UnsafeRowPair(keyRow, valueRow) = rangeIter.next()
-                  if (watermarkPredicateForKeys.get.eval(keyRow)) {
-                    store.remove(keyRow)
-                    removedValueRow = valueRow
+                  val rowPair = rangeIter.next()
+                  if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
+                    store.remove(rowPair.key)
+                    removedValueRow = rowPair.value
                   }
                 }
                 if (removedValueRow == null) {
@@ -260,7 +262,7 @@ case class StateStoreSaveExec(
               }
 
               override protected def close(): Unit = {
-                allRemovalsTimeMs += System.currentTimeMillis - removalStartTime
+                allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
                 commitTimeMs += timeTakenMs { store.commit() }
                 numTotalStateRows += store.numKeys()
               }
@@ -269,7 +271,7 @@ case class StateStoreSaveExec(
           // Update and output modified rows from the StateStore.
           case Some(Update) =>
 
-            val updatesStartTimeMs = System.currentTimeMillis
+            val updatesStartTimeNs = System.nanoTime
 
             new Iterator[InternalRow] {
 
@@ -281,7 +283,7 @@ case class StateStoreSaveExec(
 
               override def hasNext: Boolean = {
                 if (!baseIterator.hasNext) {
-                  allUpdatesTimeMs += System.currentTimeMillis - updatesStartTimeMs
+                  allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
 
                   // Remove old aggregates if watermark specified
                   allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
@@ -353,7 +355,7 @@ case class StreamingDeduplicateExec(
         case None => iter
       }
 
-      val updatesStartTimeMs = System.currentTimeMillis
+      val updatesStartTimeNs = System.nanoTime
 
       val result = baseIterator.filter { r =>
         val row = r.asInstanceOf[UnsafeRow]
@@ -371,7 +373,7 @@ case class StreamingDeduplicateExec(
       }
 
       CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
-        allUpdatesTimeMs += System.currentTimeMillis - updatesStartTimeMs
+        allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
         allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
         commitTimeMs += timeTakenMs { store.commit() }
         numTotalStateRows += store.numKeys()

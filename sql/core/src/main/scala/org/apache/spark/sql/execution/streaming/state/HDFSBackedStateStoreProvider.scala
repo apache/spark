@@ -166,7 +166,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
      * This can be called only after committing all the updates made in the current thread.
      */
     override def iterator(): Iterator[UnsafeRowPair] = {
-      val unsafeRowPair = UnsafeRowPair()
+      val unsafeRowPair = new UnsafeRowPair()
       mapToUpdate.entrySet.asScala.iterator.map { entry =>
         unsafeRowPair.withRows(entry.getKey, entry.getValue)
       }
@@ -281,7 +281,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     val versionsInFiles = fetchFiles().map(_.version).toSet
     val versionsLoaded = loadedMaps.keySet
     val allKnownVersions = versionsInFiles ++ versionsLoaded
-    val unsafeRowTuple = UnsafeRowPair()
+    val unsafeRowTuple = new UnsafeRowPair()
     if (allKnownVersions.nonEmpty) {
       loadMap(allKnownVersions.max).entrySet().iterator().asScala.map { entry =>
         unsafeRowTuple.withRows(entry.getKey, entry.getValue)

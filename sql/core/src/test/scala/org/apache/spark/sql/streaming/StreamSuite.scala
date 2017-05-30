@@ -756,7 +756,6 @@ class TestStateStoreProvider extends StateStoreProvider {
       storeConfs: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     throw new Exception("Successfully instantiated")
-
   }
 
   override def id: StateStoreId = null
