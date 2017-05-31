@@ -481,6 +481,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
           function(data, formula, aggregationDepth = 2,
                    stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
                                               "alphabetDesc", "alphabetAsc")) {
+            stringIndexerOrderType <- match.arg(stringIndexerOrderType)
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
                                 "fit", formula, data@sdf, as.integer(aggregationDepth),
