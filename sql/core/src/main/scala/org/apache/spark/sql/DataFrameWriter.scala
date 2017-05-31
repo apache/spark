@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.sources.BaseRelation
@@ -231,12 +232,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotBucketed("save")
 
     runCommand(df.sparkSession, "save") {
-      SaveIntoDataSourceCommand(
-        query = df.logicalPlan,
-        provider = source,
+      DataSource(
+        sparkSession = df.sparkSession,
+        className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap,
-        mode = mode)
+        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
     }
   }
 
@@ -607,7 +607,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     try {
       val start = System.nanoTime()
       // call `QueryExecution.toRDD` to trigger the execution of commands.
-      qe.toRdd
+      SQLExecution.withNewExecutionId(session, qe)(qe.toRdd)
       val end = System.nanoTime()
       session.listenerManager.onSuccess(name, qe, end - start)
     } catch {
