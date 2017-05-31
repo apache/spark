@@ -1015,7 +1015,9 @@ object functions {
    * @since 2.3
    */
   @scala.annotation.varargs
-  def map(colName: String, colNames: String*): Column = map((colName +: colNames).map(col) : _*)
+  def map(colName: String, colNames: String*): Column = {
+    map((colName +: colNames).map(col) : _*)
+  }
 
   /**
    * Marks a DataFrame as small enough for use in broadcast joins.
