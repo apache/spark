@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
@@ -25,12 +24,13 @@ import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{CBO_ENABLED, JOIN_REORDER_ENABLED}
 
 
 class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
 
-  override val conf = SimpleCatalystConf(
-    caseSensitiveAnalysis = true, cboEnabled = true, joinReorderEnabled = true)
+  override val conf = new SQLConf().copy(CBO_ENABLED -> true, JOIN_REORDER_ENABLED -> true)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -194,6 +194,63 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
         .join(t4.join(t3, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100"))),
           Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
+
+    assertEqualPlans(originalPlan, bestPlan)
+  }
+
+  test("keep the order of attributes in the final output") {
+    val outputLists = Seq("t1.k-1-2", "t1.v-1-10", "t3.v-1-100").permutations
+    while (outputLists.hasNext) {
+      val expectedOrder = outputLists.next().map(nameToAttr)
+      val expectedPlan =
+        t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+          .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+          .select(expectedOrder: _*)
+      // The plan should not change after optimization
+      assertEqualPlans(expectedPlan, expectedPlan)
+    }
+  }
+
+  test("reorder recursively") {
+    // Original order:
+    //          Join
+    //          / \
+    //      Union  t5
+    //       / \
+    //     Join t4
+    //     / \
+    //   Join t3
+    //   / \
+    //  t1  t2
+    val bottomJoins =
+      t1.join(t2).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
+        (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .select(nameToAttr("t1.v-1-10"))
+
+    val originalPlan = bottomJoins
+      .union(t4.select(nameToAttr("t4.v-1-10")))
+      .join(t5, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t5.v-1-5")))
+
+    // Should be able to reorder the bottom part.
+    // Best order:
+    //          Join
+    //          / \
+    //      Union  t5
+    //       / \
+    //     Join t4
+    //     / \
+    //   Join t2
+    //   / \
+    //  t1  t3
+    val bestBottomPlan =
+      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(nameToAttr("t1.v-1-10"))
+
+    val bestPlan = bestBottomPlan
+      .union(t4.select(nameToAttr("t4.v-1-10")))
+      .join(t5, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t5.v-1-5")))
 
     assertEqualPlans(originalPlan, bestPlan)
   }

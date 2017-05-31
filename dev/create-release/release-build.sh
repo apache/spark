@@ -163,9 +163,9 @@ if [[ "$1" == "package" ]]; then
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
 
-    # Write out the NAME and VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
-    # to dev0 to be closer to PEP440. We use the NAME as a "local version".
-    PYSPARK_VERSION=`echo "$SPARK_VERSION+$NAME" |  sed -r "s/-/./" | sed -r "s/SNAPSHOT/dev0/"`
+    # Write out the VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
+    # to dev0 to be closer to PEP440.
+    PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -r "s/-/./" | sed -r "s/SNAPSHOT/dev0/"`
     echo "__version__='$PYSPARK_VERSION'" > python/pyspark/version.py
 
     # Get maven home set by MVN
@@ -246,7 +246,7 @@ if [[ "$1" == "package" ]]; then
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-bin"
   echo "Copying release tarballs to $dest_dir"
   # Put to new directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mput -O $dest_dir 'spark-*'
   LFTP mput -O $dest_dir 'pyspark-*'
   LFTP mput -O $dest_dir 'SparkR_*'
@@ -254,7 +254,7 @@ if [[ "$1" == "package" ]]; then
   LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mput -O $dest_dir 'spark-*'
   LFTP mput -O $dest_dir 'pyspark-*'
   LFTP mput -O $dest_dir 'SparkR_*'
@@ -271,13 +271,13 @@ if [[ "$1" == "docs" ]]; then
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" jekyll build
   echo "Copying release documentation to $dest_dir"
   # Put to new directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mirror -R _site $dest_dir
   # Delete /latest directory and rename new upload to /latest
   LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mirror -R _site $dest_dir
   cd ..
   exit 0

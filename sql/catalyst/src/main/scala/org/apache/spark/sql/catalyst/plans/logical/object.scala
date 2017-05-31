@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.streaming.{KeyedStateTimeout, OutputMode }
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode }
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -41,7 +41,10 @@ object CatalystSerde {
   }
 
   def generateObjAttr[T : Encoder]: Attribute = {
-    AttributeReference("obj", encoderFor[T].deserializer.dataType, nullable = false)()
+    val enc = encoderFor[T]
+    val dataType = enc.deserializer.dataType
+    val nullable = !enc.clsTag.runtimeClass.isPrimitive
+    AttributeReference("obj", dataType, nullable)()
   }
 }
 
@@ -351,21 +354,22 @@ case class MapGroups(
     child: LogicalPlan) extends UnaryNode with ObjectProducer
 
 /** Internal class representing State */
-trait LogicalKeyedState[S]
+trait LogicalGroupState[S]
 
-/** Possible types of timeouts used in FlatMapGroupsWithState */
-case object NoTimeout extends KeyedStateTimeout
-case object ProcessingTimeTimeout extends KeyedStateTimeout
+/** Types of timeouts used in FlatMapGroupsWithState */
+case object NoTimeout extends GroupStateTimeout
+case object ProcessingTimeTimeout extends GroupStateTimeout
+case object EventTimeTimeout extends GroupStateTimeout
 
 /** Factory for constructing new `MapGroupsWithState` nodes. */
 object FlatMapGroupsWithState {
   def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
-      func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
+      func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       outputMode: OutputMode,
       isMapGroupsWithState: Boolean,
-      timeout: KeyedStateTimeout,
+      timeout: GroupStateTimeout,
       child: LogicalPlan): LogicalPlan = {
     val encoder = encoderFor[S]
 
@@ -403,7 +407,7 @@ object FlatMapGroupsWithState {
  * @param timeout used to timeout groups that have not received data in a while
  */
 case class FlatMapGroupsWithState(
-    func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
+    func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
@@ -412,7 +416,7 @@ case class FlatMapGroupsWithState(
     stateEncoder: ExpressionEncoder[Any],
     outputMode: OutputMode,
     isMapGroupsWithState: Boolean = false,
-    timeout: KeyedStateTimeout,
+    timeout: GroupStateTimeout,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
 
   if (isMapGroupsWithState) {

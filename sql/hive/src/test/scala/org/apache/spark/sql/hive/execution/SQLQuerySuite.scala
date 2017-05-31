@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.Locale
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
@@ -363,79 +364,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("describe partition") {
-    withTable("partitioned_table") {
-      sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
-      sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
-
-      checkKeywordsExist(sql("DESC partitioned_table PARTITION (c='Us', d=1)"),
-        "# Partition Information",
-        "# col_name")
-
-      checkKeywordsExist(sql("DESC EXTENDED partitioned_table PARTITION (c='Us', d=1)"),
-        "# Partition Information",
-        "# col_name",
-        "Detailed Partition Information CatalogPartition(",
-        "Partition Values: [c=Us, d=1]",
-        "Storage(Location:",
-        "Partition Parameters")
-
-      checkKeywordsExist(sql("DESC FORMATTED partitioned_table PARTITION (c='Us', d=1)"),
-        "# Partition Information",
-        "# col_name",
-        "# Detailed Partition Information",
-        "Partition Value:",
-        "Database:",
-        "Table:",
-        "Location:",
-        "Partition Parameters:",
-        "# Storage Information")
-    }
-  }
-
-  test("describe partition - error handling") {
-    withTable("partitioned_table", "datasource_table") {
-      sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
-      sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
-
-      val m = intercept[NoSuchPartitionException] {
-        sql("DESC partitioned_table PARTITION (c='Us', d=2)")
-      }.getMessage()
-      assert(m.contains("Partition not found in table"))
-
-      val m2 = intercept[AnalysisException] {
-        sql("DESC partitioned_table PARTITION (c='Us')")
-      }.getMessage()
-      assert(m2.contains("Partition spec is invalid"))
-
-      val m3 = intercept[ParseException] {
-        sql("DESC partitioned_table PARTITION (c='Us', d)")
-      }.getMessage()
-      assert(m3.contains("PARTITION specification is incomplete: `d`"))
-
-      spark
-        .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
-        .partitionBy("d")
-        .saveAsTable("datasource_table")
-
-      sql("DESC datasource_table PARTITION (d=0)")
-
-      val m5 = intercept[AnalysisException] {
-        spark.range(10).select('id as 'a, 'id as 'b).createTempView("view1")
-        sql("DESC view1 PARTITION (c='Us', d=1)")
-      }.getMessage()
-      assert(m5.contains("DESC PARTITION is not allowed on a temporary view"))
-
-      withView("permanent_view") {
-        val m = intercept[AnalysisException] {
-          sql("CREATE VIEW permanent_view AS SELECT * FROM partitioned_table")
-          sql("DESC permanent_view PARTITION (c='Us', d=1)")
-        }.getMessage()
-        assert(m.contains("DESC PARTITION is not allowed on a view"))
-      }
-    }
-  }
-
   test("SPARK-5371: union with null and sum") {
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.createOrReplaceTempView("table1")
@@ -548,13 +476,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           case None => // OK.
         }
         // Also make sure that the format and serde are as desired.
-        assert(catalogTable.storage.inputFormat.get.toLowerCase.contains(format))
-        assert(catalogTable.storage.outputFormat.get.toLowerCase.contains(format))
+        assert(catalogTable.storage.inputFormat.get.toLowerCase(Locale.ROOT).contains(format))
+        assert(catalogTable.storage.outputFormat.get.toLowerCase(Locale.ROOT).contains(format))
         val serde = catalogTable.storage.serde.get
         format match {
           case "sequence" | "text" => assert(serde.contains("LazySimpleSerDe"))
           case "rcfile" => assert(serde.contains("LazyBinaryColumnarSerDe"))
-          case _ => assert(serde.toLowerCase.contains(format))
+          case _ => assert(serde.toLowerCase(Locale.ROOT).contains(format))
         }
     }
 
@@ -676,7 +604,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("CTAS with serde") {
-    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect()
+    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     sql(
       """CREATE TABLE ctas2
         | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
@@ -686,86 +614,76 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         | AS
         |   SELECT key, value
         |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect()
+        |   ORDER BY key, value""".stripMargin)
+
+    val storageCtas2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("ctas2")).storage
+    assert(storageCtas2.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+    assert(storageCtas2.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+    assert(storageCtas2.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
+
     sql(
       """CREATE TABLE ctas3
         | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
         | STORED AS textfile AS
         |   SELECT key, value
         |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect()
+        |   ORDER BY key, value""".stripMargin)
 
     // the table schema may like (key: integer, value: string)
     sql(
       """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect()
+        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin)
     // do nothing cause the table ctas4 already existed.
     sql(
       """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
+        | SELECT key, value FROM src ORDER BY key, value""".stripMargin)
 
     checkAnswer(
       sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
-      sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+      sql("SELECT key, value FROM src ORDER BY key, value"))
     checkAnswer(
       sql("SELECT key, value FROM ctas2 ORDER BY key, value"),
       sql(
         """
           SELECT key, value
           FROM src
-          ORDER BY key, value""").collect().toSeq)
+          ORDER BY key, value"""))
     checkAnswer(
       sql("SELECT key, value FROM ctas3 ORDER BY key, value"),
       sql(
         """
           SELECT key, value
           FROM src
-          ORDER BY key, value""").collect().toSeq)
+          ORDER BY key, value"""))
     intercept[AnalysisException] {
       sql(
         """CREATE TABLE ctas4 AS
-          | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
+          | SELECT key, value FROM src ORDER BY key, value""".stripMargin)
     }
     checkAnswer(
       sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
       sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
-
-    /*
-    Disabled because our describe table does not output the serde information right now.
-    checkKeywordsExist(sql("DESC EXTENDED ctas2"),
-      "name:key", "type:string", "name:value", "ctas2",
-      "org.apache.hadoop.hive.ql.io.RCFileInputFormat",
-      "org.apache.hadoop.hive.ql.io.RCFileOutputFormat",
-      "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
-      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22", "MANAGED_TABLE"
-    )
-    */
 
     sql(
       """CREATE TABLE ctas5
         | STORED AS parquet AS
         |   SELECT key, value
         |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect()
+        |   ORDER BY key, value""".stripMargin)
+    val storageCtas5 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("ctas5")).storage
+    assert(storageCtas5.inputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+    assert(storageCtas5.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+    assert(storageCtas5.serde ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
 
-    /*
-    Disabled because our describe table does not output the serde information right now.
-    withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-      checkKeywordsExist(sql("DESC EXTENDED ctas5"),
-        "name:key", "type:string", "name:value", "ctas5",
-        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
-        "MANAGED_TABLE"
-      )
-    }
-    */
 
     // use the Hive SerDe for parquet tables
     withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
       checkAnswer(
         sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
-        sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+        sql("SELECT key, value FROM src ORDER BY key, value"))
     }
   }
 
@@ -1047,14 +965,20 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("sanity test for SPARK-6618") {
-    (1 to 100).par.map { i =>
-      val tableName = s"SPARK_6618_table_$i"
-      sql(s"CREATE TABLE $tableName (col1 string)")
-      sessionState.catalog.lookupRelation(TableIdentifier(tableName))
-      table(tableName)
-      tables()
-      sql(s"DROP TABLE $tableName")
+    val threads: Seq[Thread] = (1 to 10).map { i =>
+      new Thread("test-thread-" + i) {
+        override def run(): Unit = {
+          val tableName = s"SPARK_6618_table_$i"
+          sql(s"CREATE TABLE $tableName (col1 string)")
+          sessionState.catalog.lookupRelation(TableIdentifier(tableName))
+          table(tableName)
+          tables()
+          sql(s"DROP TABLE $tableName")
+        }
+      }
     }
+    threads.foreach(_.start())
+    threads.foreach(_.join(10000))
   }
 
   test("SPARK-5203 union with different decimal precision") {
@@ -2054,6 +1978,30 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         checkAnswer(spark.table("bar"), Row(0) :: Nil)
         val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
         assert(tableMetadata.provider == Some("hive"), "the expected table is a Hive serde table")
+      }
+    }
+  }
+
+  test("Auto alias construction of get_json_object") {
+    val df = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
+    val expectedMsg = "Cannot create a table having a column whose name contains commas " +
+      "in Hive metastore. Table: `default`.`t`; Column: get_json_object(jstring, $.f1)"
+
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        df.select($"key", functions.get_json_object($"jstring", "$.f1"))
+          .write.format("hive").saveAsTable("t")
+      }.getMessage
+      assert(e.contains(expectedMsg))
+    }
+
+    withTempView("tempView") {
+      withTable("t") {
+        df.createTempView("tempView")
+        val e = intercept[AnalysisException] {
+          sql("CREATE TABLE t AS SELECT key, get_json_object(jstring, '$.f1') FROM tempView")
+        }.getMessage
+        assert(e.contains(expectedMsg))
       }
     }
   }

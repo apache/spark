@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
@@ -32,7 +32,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   private var _analyzed: Boolean = false
 
   /**
-   * Marks this plan as already analyzed.  This should only be called by CheckAnalysis.
+   * Marks this plan as already analyzed. This should only be called by [[CheckAnalysis]].
    */
   private[catalyst] def setAnalyzed(): Unit = { _analyzed = true }
 
@@ -90,7 +90,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * first time. If the configuration changes, the cache can be invalidated by calling
    * [[invalidateStatsCache()]].
    */
-  final def stats(conf: CatalystConf): Statistics = statsCache.getOrElse {
+  final def stats(conf: SQLConf): Statistics = statsCache.getOrElse {
     statsCache = Some(computeStats(conf))
     statsCache.get
   }
@@ -108,7 +108,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    *
    * [[LeafNode]]s must override this.
    */
-  protected def computeStats(conf: CatalystConf): Statistics = {
+  protected def computeStats(conf: SQLConf): Statistics = {
     if (children.isEmpty) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
@@ -142,8 +142,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * Returns true if all its children of this query plan have been resolved.
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
-
-  override lazy val canonicalized: LogicalPlan = EliminateSubqueryAliases(this)
 
   /**
    * Resolves a given schema to concrete [[Attribute]] references in this query plan. This function
@@ -335,7 +333,7 @@ abstract class UnaryNode extends LogicalPlan {
 
   override protected def validConstraints: Set[Expression] = child.constraints
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     // There should be some overhead in Row object, the size should not be zero when there is
     // no columns, this help to prevent divide-by-zero error.
     val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
@@ -349,7 +347,7 @@ abstract class UnaryNode extends LogicalPlan {
     }
 
     // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = child.stats(conf).isBroadcastable)
+    Statistics(sizeInBytes = sizeInBytes, hints = child.stats(conf).hints)
   }
 }
 

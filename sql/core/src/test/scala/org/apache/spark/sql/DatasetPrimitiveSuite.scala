@@ -96,6 +96,16 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(dsBoolean.map(e => !e), false, true)
   }
 
+  test("mapPrimitiveArray") {
+    val dsInt = Seq(Array(1, 2), Array(3, 4)).toDS()
+    checkDataset(dsInt.map(e => e), Array(1, 2), Array(3, 4))
+    checkDataset(dsInt.map(e => null: Array[Int]), null, null)
+
+    val dsDouble = Seq(Array(1D, 2D), Array(3D, 4D)).toDS()
+    checkDataset(dsDouble.map(e => e), Array(1D, 2D), Array(3D, 4D))
+    checkDataset(dsDouble.map(e => null: Array[Double]), null, null)
+  }
+
   test("filter") {
     val ds = Seq(1, 2, 3, 4).toDS()
     checkDataset(
@@ -246,6 +256,11 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     // Complex
     checkDataset(Seq(ListClass(List(1)) -> Queue("test" -> SeqClass(Seq(2)))).toDS(),
       ListClass(List(1)) -> Queue("test" -> SeqClass(Seq(2))))
+  }
+
+  test("nested sequences") {
+    checkDataset(Seq(Seq(Seq(1))).toDS(), Seq(Seq(1)))
+    checkDataset(Seq(List(Queue(1))).toDS(), List(Queue(1)))
   }
 
   test("package objects") {

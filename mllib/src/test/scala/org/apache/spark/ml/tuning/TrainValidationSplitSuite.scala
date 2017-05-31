@@ -45,18 +45,18 @@ class TrainValidationSplitSuite
       .addGrid(lr.maxIter, Array(0, 10))
       .build()
     val eval = new BinaryClassificationEvaluator
-    val cv = new TrainValidationSplit()
+    val tvs = new TrainValidationSplit()
       .setEstimator(lr)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
       .setSeed(42L)
-    val cvModel = cv.fit(dataset)
-    val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
-    assert(cv.getTrainRatio === 0.5)
+    val tvsModel = tvs.fit(dataset)
+    val parent = tvsModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(tvs.getTrainRatio === 0.5)
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
-    assert(cvModel.validationMetrics.length === lrParamMaps.length)
+    assert(tvsModel.validationMetrics.length === lrParamMaps.length)
   }
 
   test("train validation with linear regression") {
@@ -71,28 +71,27 @@ class TrainValidationSplitSuite
       .addGrid(trainer.maxIter, Array(0, 10))
       .build()
     val eval = new RegressionEvaluator()
-    val cv = new TrainValidationSplit()
+    val tvs = new TrainValidationSplit()
       .setEstimator(trainer)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
       .setSeed(42L)
-    val cvModel = cv.fit(dataset)
+    val tvsModel = tvs.fit(dataset)
 
-    // copied model must have the same paren.
-    MLTestingUtils.checkCopy(cvModel)
+    MLTestingUtils.checkCopyAndUids(tvs, tvsModel)
 
-    val parent = cvModel.bestModel.parent.asInstanceOf[LinearRegression]
+    val parent = tvsModel.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
-    assert(cvModel.validationMetrics.length === lrParamMaps.length)
+    assert(tvsModel.validationMetrics.length === lrParamMaps.length)
 
       eval.setMetricName("r2")
-    val cvModel2 = cv.fit(dataset)
-    val parent2 = cvModel2.bestModel.parent.asInstanceOf[LinearRegression]
+    val tvsModel2 = tvs.fit(dataset)
+    val parent2 = tvsModel2.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent2.getRegParam === 0.001)
     assert(parent2.getMaxIter === 10)
-    assert(cvModel2.validationMetrics.length === lrParamMaps.length)
+    assert(tvsModel2.validationMetrics.length === lrParamMaps.length)
   }
 
   test("transformSchema should check estimatorParamMaps") {
@@ -104,17 +103,17 @@ class TrainValidationSplitSuite
       .addGrid(est.inputCol, Array("input1", "input2"))
       .build()
 
-    val cv = new TrainValidationSplit()
+    val tvs = new TrainValidationSplit()
       .setEstimator(est)
       .setEstimatorParamMaps(paramMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
-    cv.transformSchema(new StructType()) // This should pass.
+    tvs.transformSchema(new StructType()) // This should pass.
 
     val invalidParamMaps = paramMaps :+ ParamMap(est.inputCol -> "")
-    cv.setEstimatorParamMaps(invalidParamMaps)
+    tvs.setEstimatorParamMaps(invalidParamMaps)
     intercept[IllegalArgumentException] {
-      cv.transformSchema(new StructType())
+      tvs.transformSchema(new StructType())
     }
   }
 

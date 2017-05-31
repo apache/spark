@@ -18,6 +18,8 @@
 context("functions in sparkR.R")
 
 test_that("sparkCheckInstall", {
+  skip_on_cran()
+
   # "local, yarn-client, mesos-client" mode, SPARK_HOME was set correctly,
   # and the SparkR job was submitted by "spark-submit"
   sparkHome <- paste0(tempdir(), "/", "sparkHome")

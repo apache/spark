@@ -286,6 +286,12 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     assert(testPool.getSchedulableByName(taskSetManager.name) === taskSetManager)
   }
 
+  test("Pool should throw IllegalArgumentException when schedulingMode is not supported") {
+    intercept[IllegalArgumentException] {
+      new Pool("TestPool", SchedulingMode.NONE, 0, 1)
+    }
+  }
+
   private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,
                          expectedInitWeight: Int, expectedSchedulingMode: SchedulingMode): Unit = {
     val selectedPool = rootPool.getSchedulableByName(poolName)

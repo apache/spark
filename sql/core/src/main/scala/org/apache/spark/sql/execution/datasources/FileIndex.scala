@@ -72,4 +72,14 @@ trait FileIndex {
 
   /** Schema of the partitioning columns, or the empty schema if the table is not partitioned. */
   def partitionSchema: StructType
+
+  /**
+   * Returns an optional metadata operation time, in nanoseconds, for listing files.
+   *
+   * We do file listing in query optimization (in order to get the proper statistics) and we want
+   * to account for file listing time in physical execution (as metrics). To do that, we save the
+   * file listing time in some implementations and physical execution calls it in this method
+   * to update the metrics.
+   */
+  def metadataOpsTimeNs: Option[Long] = None
 }

@@ -143,6 +143,24 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
   }
 
+  test("ObjectHashAggregate metrics") {
+    // Assume the execution plan is
+    // ... -> ObjectHashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
+    // -> ObjectHashAggregate(nodeId = 0)
+    val df = testData2.groupBy().agg(collect_set('a)) // 2 partitions
+    testSparkPlanMetrics(df, 1, Map(
+      2L -> ("ObjectHashAggregate", Map("number of output rows" -> 2L)),
+      0L -> ("ObjectHashAggregate", Map("number of output rows" -> 1L)))
+    )
+
+    // 2 partitions and each partition contains 2 keys
+    val df2 = testData2.groupBy('a).agg(collect_set('a))
+    testSparkPlanMetrics(df2, 1, Map(
+      2L -> ("ObjectHashAggregate", Map("number of output rows" -> 4L)),
+      0L -> ("ObjectHashAggregate", Map("number of output rows" -> 3L)))
+    )
+  }
+
   test("Sort metrics") {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
@@ -272,10 +290,13 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("save metrics") {
     withTempPath { file =>
+      // person creates a temporary view. get the DF before listing previous execution IDs
+      val data = person.select('name)
+      sparkContext.listenerBus.waitUntilEmpty(10000)
       val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
-      person.select('name).write.format("json").save(file.getAbsolutePath)
+      data.write.format("json").save(file.getAbsolutePath)
       sparkContext.listenerBus.waitUntilEmpty(10000)
       val executionIds =
         spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)

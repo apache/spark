@@ -21,7 +21,7 @@ import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, GenericArrayData, ParseModes}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -38,6 +38,10 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       |"email":"amy@only_for_json_udf_test.net","owner":"amy","zip code":"94025",
       |"fb:testid":"1234"}
       |""".stripMargin
+
+  /* invalid json with leading nulls would trigger java.io.CharConversionException
+   in Jackson's JsonFactory.createParser(byte[]) due to RFC-4627 encoding detection */
+  val badJson = "\u0000\u0000\u0000A\u0001AAA"
 
   test("$.store.bicycle") {
     checkEvaluation(
@@ -224,6 +228,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
   }
 
+  test("SPARK-16548: character conversion") {
+    checkEvaluation(
+      GetJsonObject(Literal(badJson), Literal("$.a")),
+      null
+    )
+  }
+
   test("non foldable literal") {
     checkEvaluation(
       GetJsonObject(NonFoldableLiteral(json), NonFoldableLiteral("$.fb:testid")),
@@ -340,6 +351,12 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       InternalRow(null, null, null, null, null))
   }
 
+  test("SPARK-16548: json_tuple - invalid json with leading nulls") {
+    checkJsonTuple(
+      JsonTuple(Literal(badJson) :: jsonTupleQuery),
+      InternalRow(null, null, null, null, null))
+  }
+
   test("json_tuple - preserve newlines") {
     checkJsonTuple(
       JsonTuple(Literal("{\"a\":\"b\nc\"}") :: Literal("a") :: Nil),
@@ -367,7 +384,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Other modes should still return `null`.
     checkEvaluation(
-      JsonToStructs(schema, Map("mode" -> ParseModes.PERMISSIVE_MODE), Literal(jsonData), gmtId),
+      JsonToStructs(schema, Map("mode" -> PermissiveMode.name), Literal(jsonData), gmtId),
       null
     )
   }
@@ -434,6 +451,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       JsonToStructs(schema, Map.empty, Literal.create(null, StringType), gmtId),
       null
     )
+  }
+
+  test("SPARK-20549: from_json bad UTF-8") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStructs(schema, Map.empty, Literal(badJson), gmtId),
+      null)
   }
 
   test("from_json with timestamp") {

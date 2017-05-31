@@ -212,4 +212,10 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
       }
     }
   }
+
+  test("SPARK-20341: support BigInt's value does not fit in long value range") {
+    val bigInt = scala.math.BigInt("9223372036854775808")
+    val decimal = Decimal.apply(bigInt)
+    assert(decimal.toJavaBigDecimal.unscaledValue.toString === "9223372036854775808")
+  }
 }

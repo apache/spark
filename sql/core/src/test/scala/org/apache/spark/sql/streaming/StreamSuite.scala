@@ -24,15 +24,21 @@ import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
+import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 class StreamSuite extends StreamTest {
 
@@ -65,6 +71,27 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two")),
       AddData(inputData, 4),
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two"), Row(4, 4, "four")))
+  }
+
+  test("SPARK-20432: union one stream with itself") {
+    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load().select("a")
+    val unioned = df.union(df)
+    withTempDir { outputDir =>
+      withTempDir { checkpointDir =>
+        val query =
+          unioned
+            .writeStream.format("parquet")
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .start(outputDir.getAbsolutePath)
+        try {
+          query.processAllAvailable()
+          val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
+          checkDatasetUnorderly[Long](outputDf, (0L to 10L).union((0L to 10L)).toArray: _*)
+        } finally {
+          query.stop()
+        }
+      }
+    }
   }
 
   test("union two streams") {
@@ -118,6 +145,33 @@ class StreamSuite extends StreamTest {
     assertDF(df)
   }
 
+  test("Within the same streaming query, one StreamingRelation should only be transformed to one " +
+    "StreamingExecutionRelation") {
+    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
+    var query: StreamExecution = null
+    try {
+      query =
+        df.union(df)
+          .writeStream
+          .format("memory")
+          .queryName("memory")
+          .start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+      query.awaitInitialization(streamingTimeout.toMillis)
+      val executionRelations =
+        query
+          .logicalPlan
+          .collect { case ser: StreamingExecutionRelation => ser }
+      assert(executionRelations.size === 2)
+      assert(executionRelations.distinct.size === 1)
+    } finally {
+      if (query != null) {
+        query.stop()
+      }
+    }
+  }
+
   test("unsupported queries") {
     val streamInput = MemoryStream[Int]
     val batchInput = Seq(1, 2, 3).toDS()
@@ -155,6 +209,15 @@ class StreamSuite extends StreamTest {
       AssertOnQuery(_.offsetLog.getLatest().get._1 == expectedId,
         s"offsetLog's latest should be $expectedId")
 
+    // Check the latest batchid in the commit log
+    def CheckCommitLogLatestBatchId(expectedId: Int): AssertOnQuery =
+      AssertOnQuery(_.batchCommitLog.getLatest().get._1 == expectedId,
+        s"commitLog's latest should be $expectedId")
+
+    // Ensure that there has not been an incremental execution after restart
+    def CheckNoIncrementalExecutionCurrentBatchId(): AssertOnQuery =
+      AssertOnQuery(_.lastExecution == null, s"lastExecution not expected to run")
+
     // For each batch, we would log the state change during the execution
     // This checks whether the key of the state change log is the expected batch id
     def CheckIncrementalExecutionCurrentBatchId(expectedId: Int): AssertOnQuery =
@@ -180,6 +243,7 @@ class StreamSuite extends StreamTest {
       // Check the results of batch 0
       CheckAnswer(1, 2, 3),
       CheckIncrementalExecutionCurrentBatchId(0),
+      CheckCommitLogLatestBatchId(0),
       CheckOffsetLogLatestBatchId(0),
       CheckSinkLatestBatchId(0),
       // Add some data in batch 1
@@ -190,6 +254,7 @@ class StreamSuite extends StreamTest {
       // Check the results of batch 1
       CheckAnswer(1, 2, 3, 4, 5, 6),
       CheckIncrementalExecutionCurrentBatchId(1),
+      CheckCommitLogLatestBatchId(1),
       CheckOffsetLogLatestBatchId(1),
       CheckSinkLatestBatchId(1),
 
@@ -202,6 +267,7 @@ class StreamSuite extends StreamTest {
       // the currentId does not get logged (e.g. as 2) even if the clock has advanced many times
       CheckAnswer(1, 2, 3, 4, 5, 6),
       CheckIncrementalExecutionCurrentBatchId(1),
+      CheckCommitLogLatestBatchId(1),
       CheckOffsetLogLatestBatchId(1),
       CheckSinkLatestBatchId(1),
 
@@ -209,14 +275,15 @@ class StreamSuite extends StreamTest {
       StopStream,
       StartStream(ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
 
-      /* -- batch 1 rerun ----------------- */
-      // this batch 1 would re-run because the latest batch id logged in offset log is 1
+      /* -- batch 1 no rerun ----------------- */
+      // batch 1 would not re-run because the latest batch id logged in commit log is 1
       AdvanceManualClock(10 * 1000),
+      CheckNoIncrementalExecutionCurrentBatchId(),
 
       /* -- batch 2 ----------------------- */
       // Check the results of batch 1
       CheckAnswer(1, 2, 3, 4, 5, 6),
-      CheckIncrementalExecutionCurrentBatchId(1),
+      CheckCommitLogLatestBatchId(1),
       CheckOffsetLogLatestBatchId(1),
       CheckSinkLatestBatchId(1),
       // Add some data in batch 2
@@ -227,6 +294,7 @@ class StreamSuite extends StreamTest {
       // Check the results of batch 2
       CheckAnswer(1, 2, 3, 4, 5, 6, 7, 8, 9),
       CheckIncrementalExecutionCurrentBatchId(2),
+      CheckCommitLogLatestBatchId(2),
       CheckOffsetLogLatestBatchId(2),
       CheckSinkLatestBatchId(2))
   }
@@ -411,7 +479,7 @@ class StreamSuite extends StreamTest {
       CheckAnswer((1, 2), (2, 2), (3, 2)))
   }
 
-  test("recover from a Spark v2.1 checkpoint") {
+  testQuietly("recover from a Spark v2.1 checkpoint") {
     var inputData: MemoryStream[Int] = null
     var query: DataStreamWriter[Row] = null
 
@@ -438,54 +506,138 @@ class StreamSuite extends StreamTest {
 
     // 1 - Test if recovery from the checkpoint is successful.
     prepareMemoryStream()
-    withTempDir { dir =>
-      // Copy the checkpoint to a temp dir to prevent changes to the original.
-      // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-      FileUtils.copyDirectory(checkpointDir, dir)
+    val dir1 = Utils.createTempDir().getCanonicalFile // not using withTempDir {}, makes test flaky
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(checkpointDir, dir1)
+    // Checkpoint data was generated by a query with 10 shuffle partitions.
+    // In order to test reading from the checkpoint, the checkpoint must have two or more batches,
+    // since the last batch may be rerun.
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      var streamingQuery: StreamingQuery = null
+      try {
+        streamingQuery =
+          query.queryName("counts").option("checkpointLocation", dir1.getCanonicalPath).start()
+        streamingQuery.processAllAvailable()
+        inputData.addData(9)
+        streamingQuery.processAllAvailable()
 
-      // Checkpoint data was generated by a query with 10 shuffle partitions.
-      // In order to test reading from the checkpoint, the checkpoint must have two or more batches,
-      // since the last batch may be rerun.
-      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
-        var streamingQuery: StreamingQuery = null
-        try {
-          streamingQuery =
-            query.queryName("counts").option("checkpointLocation", dir.getCanonicalPath).start()
-          streamingQuery.processAllAvailable()
-          inputData.addData(9)
-          streamingQuery.processAllAvailable()
-
-          QueryTest.checkAnswer(spark.table("counts").toDF(),
-            Row("1", 1) :: Row("2", 1) :: Row("3", 2) :: Row("4", 2) ::
-            Row("5", 2) :: Row("6", 2) :: Row("7", 1) :: Row("8", 1) :: Row("9", 1) :: Nil)
-        } finally {
-          if (streamingQuery ne null) {
-            streamingQuery.stop()
-          }
+        QueryTest.checkAnswer(spark.table("counts").toDF(),
+          Row("1", 1) :: Row("2", 1) :: Row("3", 2) :: Row("4", 2) ::
+          Row("5", 2) :: Row("6", 2) :: Row("7", 1) :: Row("8", 1) :: Row("9", 1) :: Nil)
+      } finally {
+        if (streamingQuery ne null) {
+          streamingQuery.stop()
         }
       }
     }
 
     // 2 - Check recovery with wrong num shuffle partitions
     prepareMemoryStream()
-    withTempDir { dir =>
-      FileUtils.copyDirectory(checkpointDir, dir)
-
-      // Since the number of partitions is greater than 10, should throw exception.
-      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "15") {
-        var streamingQuery: StreamingQuery = null
-        try {
-          intercept[StreamingQueryException] {
-            streamingQuery =
-              query.queryName("badQuery").option("checkpointLocation", dir.getCanonicalPath).start()
-            streamingQuery.processAllAvailable()
-          }
-        } finally {
-          if (streamingQuery ne null) {
-            streamingQuery.stop()
-          }
+    val dir2 = Utils.createTempDir().getCanonicalFile
+    FileUtils.copyDirectory(checkpointDir, dir2)
+    // Since the number of partitions is greater than 10, should throw exception.
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "15") {
+      var streamingQuery: StreamingQuery = null
+      try {
+        intercept[StreamingQueryException] {
+          streamingQuery =
+            query.queryName("badQuery").option("checkpointLocation", dir2.getCanonicalPath).start()
+          streamingQuery.processAllAvailable()
+        }
+      } finally {
+        if (streamingQuery ne null) {
+          streamingQuery.stop()
         }
       }
+    }
+  }
+
+  test("calling stop() on a query cancels related jobs") {
+    val input = MemoryStream[Int]
+    val query = input
+      .toDS()
+      .map { i =>
+        while (!org.apache.spark.TaskContext.get().isInterrupted()) {
+          // keep looping till interrupted by query.stop()
+          Thread.sleep(100)
+        }
+        i
+      }
+      .writeStream
+      .format("console")
+      .start()
+
+    input.addData(1)
+    // wait for jobs to start
+    eventually(timeout(streamingTimeout)) {
+      assert(sparkContext.statusTracker.getActiveJobIds().nonEmpty)
+    }
+
+    query.stop()
+    // make sure jobs are stopped
+    eventually(timeout(streamingTimeout)) {
+      assert(sparkContext.statusTracker.getActiveJobIds().isEmpty)
+    }
+  }
+
+  test("batch id is updated correctly in the job description") {
+    val queryName = "memStream"
+    @volatile var jobDescription: String = null
+    def assertDescContainsQueryNameAnd(batch: Integer): Unit = {
+      // wait for listener event to be processed
+      spark.sparkContext.listenerBus.waitUntilEmpty(streamingTimeout.toMillis)
+      assert(jobDescription.contains(queryName) && jobDescription.contains(s"batch = $batch"))
+    }
+
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobDescription = jobStart.properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+      }
+    })
+
+    val input = MemoryStream[Int]
+    val query = input
+      .toDS()
+      .map(_ + 1)
+      .writeStream
+      .format("memory")
+      .queryName(queryName)
+      .start()
+
+    input.addData(1)
+    query.processAllAvailable()
+    assertDescContainsQueryNameAnd(batch = 0)
+    input.addData(2, 3)
+    query.processAllAvailable()
+    assertDescContainsQueryNameAnd(batch = 1)
+    input.addData(4)
+    query.processAllAvailable()
+    assertDescContainsQueryNameAnd(batch = 2)
+    query.stop()
+  }
+
+  testQuietly("specify custom state store provider") {
+    val queryName = "memStream"
+    val providerClassName = classOf[TestStateStoreProvider].getCanonicalName
+    withSQLConf("spark.sql.streaming.stateStore.providerClass" -> providerClassName) {
+      val input = MemoryStream[Int]
+      val query = input
+        .toDS()
+        .groupBy()
+        .count()
+        .writeStream
+        .outputMode("complete")
+        .format("memory")
+        .queryName(queryName)
+        .start()
+      input.addData(1, 2, 3)
+      val e = intercept[Exception] {
+        query.awaitTermination()
+      }
+
+      assert(e.getMessage.contains(providerClassName))
+      assert(e.getMessage.contains("instantiated"))
     }
   }
 }
@@ -557,7 +709,7 @@ class ThrowingIOExceptionLikeHadoop12074 extends FakeSource {
 
 object ThrowingIOExceptionLikeHadoop12074 {
   /**
-   * A latch to allow the user to wait until [[ThrowingIOExceptionLikeHadoop12074.createSource]] is
+   * A latch to allow the user to wait until `ThrowingIOExceptionLikeHadoop12074.createSource` is
    * called.
    */
   @volatile var createSourceLatch: CountDownLatch = null
@@ -588,8 +740,27 @@ class ThrowingInterruptedIOException extends FakeSource {
 
 object ThrowingInterruptedIOException {
   /**
-   * A latch to allow the user to wait until [[ThrowingInterruptedIOException.createSource]] is
+   * A latch to allow the user to wait until `ThrowingInterruptedIOException.createSource` is
    * called.
    */
   @volatile var createSourceLatch: CountDownLatch = null
+}
+
+class TestStateStoreProvider extends StateStoreProvider {
+
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int],
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration): Unit = {
+    throw new Exception("Successfully instantiated")
+  }
+
+  override def id: StateStoreId = null
+
+  override def close(): Unit = { }
+
+  override def getStore(version: Long): StateStore = null
 }

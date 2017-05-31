@@ -95,8 +95,10 @@ private[kafka010] class KafkaOffsetReader(
    * Closes the connection to Kafka, and cleans up state.
    */
   def close(): Unit = {
-    consumer.close()
-    kafkaReaderThread.shutdownNow()
+    runUninterruptibly {
+      consumer.close()
+    }
+    kafkaReaderThread.shutdown()
   }
 
   /**
