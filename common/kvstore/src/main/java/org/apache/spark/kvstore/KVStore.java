@@ -20,6 +20,7 @@ package org.apache.spark.kvstore;
 import java.io.Closeable;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 /**
  * Abstraction for a local key/value store for storing app data.
@@ -31,10 +32,10 @@ import java.util.Map;
  * <h3>Serialization</h3>
  *
  * <p>
- * Data will be serialized to and deserialized from the underlying data store using a
- * {@link KVStoreSerializer}, which can be customized by the application. The serializer is
- * based on Jackson, so it supports all the Jackson annotations for controlling the serialization
- * of app-defined types.
+ * If the underlying data store requires serialization, data will be serialized to and deserialized
+ * using a {@link KVStoreSerializer}, which can be customized by the application. The serializer is
+ * based on Jackson, so it supports all the Jackson annotations for controlling the serialization of
+ * app-defined types.
  * </p>
  *
  * <p>
@@ -80,6 +81,10 @@ public interface KVStore extends Closeable {
 
   /**
    * Read a specific instance of an object.
+   *
+   * @param naturalKey The object's "natural key", which uniquely identifies it. Null keys
+   *                   are not allowed.
+   * @throws NoSuchElementException If an element with the given key does not exist.
    */
   <T> T read(Class<T> klass, Object naturalKey) throws Exception;
 
@@ -100,7 +105,9 @@ public interface KVStore extends Closeable {
    * Removes an object and all data related to it, like index entries, from the store.
    *
    * @param type The object's type.
-   * @param naturalKey The object's "natural key", which uniquely identifies it.
+   * @param naturalKey The object's "natural key", which uniquely identifies it. Null keys
+   *                   are not allowed.
+   * @throws NoSuchElementException If an element with the given key does not exist.
    */
   void delete(Class<?> type, Object naturalKey) throws Exception;
 

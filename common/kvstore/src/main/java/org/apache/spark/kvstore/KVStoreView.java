@@ -31,7 +31,7 @@ import com.google.common.base.Preconditions;
  * </p>
  *
  * <p>
- * The iterators returns by this view are of type {@link KVStoreIterator}; they auto-close
+ * The iterators returned by this view are of type {@link KVStoreIterator}; they auto-close
  * when used in a for loop that exhausts their contents, but when used manually, they need
  * to be closed explicitly unless all elements are read.
  * </p>
@@ -83,7 +83,7 @@ public abstract class KVStoreView<T> implements Iterable<T> {
   }
 
   /**
-   * Iterates starting at the given value of the chosen index.
+   * Iterates starting at the given value of the chosen index (inclusive).
    */
   public KVStoreView<T> first(Object value) {
     this.first = value;
@@ -91,7 +91,7 @@ public abstract class KVStoreView<T> implements Iterable<T> {
   }
 
   /**
-   * Stops iteration at the given value of the chosen index.
+   * Stops iteration at the given value of the chosen index (inclusive).
    */
   public KVStoreView<T> last(Object value) {
     this.last = value;

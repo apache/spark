@@ -41,22 +41,24 @@ public class KVTypeInfo {
     this.accessors = new HashMap<>();
     this.indices = new HashMap<>();
 
-    for (Field f : type.getFields()) {
+    for (Field f : type.getDeclaredFields()) {
       KVIndex idx = f.getAnnotation(KVIndex.class);
       if (idx != null) {
         checkIndex(idx, indices);
         indices.put(idx.value(), idx);
+        f.setAccessible(true);
         accessors.put(idx.value(), new FieldAccessor(f));
       }
     }
 
-    for (Method m : type.getMethods()) {
+    for (Method m : type.getDeclaredMethods()) {
       KVIndex idx = m.getAnnotation(KVIndex.class);
       if (idx != null) {
         checkIndex(idx, indices);
         Preconditions.checkArgument(m.getParameterTypes().length == 0,
           "Annotated method %s::%s should not have any parameters.", type.getName(), m.getName());
         indices.put(idx.value(), idx);
+        m.setAccessible(true);
         accessors.put(idx.value(), new MethodAccessor(m));
       }
     }

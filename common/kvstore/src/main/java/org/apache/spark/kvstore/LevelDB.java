@@ -57,6 +57,11 @@ public class LevelDB implements KVStore {
   final AtomicReference<DB> _db;
   final KVStoreSerializer serializer;
 
+  /**
+   * Keep a mapping of class names to a shorter, unique ID managed by the store. This serves two
+   * purposes: make the keys stored on disk shorter, and spread out the keys, since class names
+   * will often have a long, redundant prefix (think "org.apache.spark.").
+   */
   private final ConcurrentMap<String, byte[]> typeAliases;
   private final ConcurrentMap<Class<?>, LevelDBTypeInfo> types;
 
