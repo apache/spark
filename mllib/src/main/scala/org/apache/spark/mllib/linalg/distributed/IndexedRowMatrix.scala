@@ -113,12 +113,13 @@ class IndexedRowMatrix @Since("1.0.0") (
     require(colsPerBlock > 0,
       s"colsPerBlock needs to be greater than 0. colsPerBlock: $colsPerBlock")
 
-    // Since block matrices require an integer row index
-    require(numRows() / rowsPerBlock.toDouble <= Int.MaxValue,
-      "Number of rows divided by rowsPerBlock cannot exceed maximum integer.")
-
     val m = numRows()
     val n = numCols()
+
+    // Since block matrices require an integer row index
+    require(math.ceil(m.toDouble / rowsPerBlock) <= Int.MaxValue,
+      "Number of rows divided by rowsPerBlock cannot exceed maximum integer.")
+
     // The remainder calculations only matter when m % rowsPerBlock != 0 or n % colsPerBlock != 0
     val remainderRowBlockIndex = m / rowsPerBlock
     val remainderColBlockIndex = n / colsPerBlock
@@ -170,7 +171,7 @@ class IndexedRowMatrix @Since("1.0.0") (
 
         ((blockRow, blockColumn), finalMatrix)
     }
-    new BlockMatrix(blocks, rowsPerBlock, colsPerBlock, this.numRows(), this.numCols())
+    new BlockMatrix(blocks, rowsPerBlock, colsPerBlock, m, n)
   }
 
   /**
