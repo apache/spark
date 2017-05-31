@@ -263,6 +263,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Ascii(Literal.create(null, StringType)), null, create_row("abdef"))
   }
 
+  test("string for ascii") {
+    val a = 'a.long.at(0)
+    checkEvaluation(Chr(Literal(48L)), "0", create_row("abdef"))
+    checkEvaluation(Chr(a), "a", create_row(97L))
+    checkEvaluation(Chr(a), "a", create_row(97L + 256L))
+    checkEvaluation(Chr(a), "", create_row(-9L))
+    checkEvaluation(Chr(a), Character.MIN_VALUE.toString, create_row(0L))
+    checkEvaluation(Chr(a), Character.MIN_VALUE.toString, create_row(256L))
+    checkEvaluation(Chr(a), null, create_row(null))
+    checkEvaluation(Chr(a), 149.toChar.toString, create_row(149L))
+    checkEvaluation(Chr(Literal.create(null, LongType)), null, create_row("abdef"))
+  }
+
   test("base64/unbase64 for string") {
     val a = 'a.string.at(0)
     val b = 'b.binary.at(0)
@@ -357,6 +370,26 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(SoundEx(Literal("Moskovitz")), "M213")
     checkEvaluation(SoundEx(Literal("relyheewsgeessg")), "R422")
     checkEvaluation(SoundEx(Literal("!!")), "!!")
+  }
+
+  test("replace") {
+    checkEvaluation(
+      StringReplace(Literal("replace"), Literal("pl"), Literal("123")), "re123ace")
+    checkEvaluation(StringReplace(Literal("replace"), Literal("pl"), Literal("")), "reace")
+    checkEvaluation(StringReplace(Literal("replace"), Literal(""), Literal("123")), "replace")
+    checkEvaluation(StringReplace(Literal.create(null, StringType),
+      Literal("pl"), Literal("123")), null)
+    checkEvaluation(StringReplace(Literal("replace"),
+      Literal.create(null, StringType), Literal("123")), null)
+    checkEvaluation(StringReplace(Literal("replace"),
+      Literal("pl"), Literal.create(null, StringType)), null)
+    // test for multiple replace
+    checkEvaluation(StringReplace(Literal("abcabc"), Literal("b"), Literal("12")), "a12ca12c")
+    checkEvaluation(StringReplace(Literal("abcdabcd"), Literal("bc"), Literal("")), "adad")
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(StringReplace(Literal("花花世界"), Literal("花世"), Literal("ab")), "花ab界")
+    // scalastyle:on
   }
 
   test("translate") {

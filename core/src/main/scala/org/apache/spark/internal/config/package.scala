@@ -151,9 +151,11 @@ package object config {
       .createOptional
   // End blacklist confs
 
-  private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =
-    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.size")
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
+    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
+      .withAlternative("spark.scheduler.listenerbus.eventqueue.size")
       .intConf
+      .checkValue(_ > 0, "The capacity of listener bus event queue must not be negative")
       .createWithDefault(10000)
 
   // This property sets the root namespace for metrics reporting
