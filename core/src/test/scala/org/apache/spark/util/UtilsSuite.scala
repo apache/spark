@@ -463,6 +463,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assume(before.split(",").length === 1)
       // Repeated invocations of resolveURI should yield the same result
       def resolve(uri: String): String = Utils.resolveURI(uri).toString
+      assert(resolve(before) === after)
       assert(resolve(after) === after)
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
@@ -473,7 +474,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val rawCwd = System.getProperty("user.dir")
     val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
-    assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
+    assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:///root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
     assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
     assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
@@ -482,7 +483,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assertResolves("C:\\path to\\file.txt", "file:/C:/path%20to/file.txt")
     }
     assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt")
-    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt")
+    assertResolves("file:///C:/path/to/file.txt", "file:///C:/path/to/file.txt")
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt")
     assertResolves("file:foo", s"file:foo")
     assertResolves("file:foo:baby", s"file:foo:baby")
