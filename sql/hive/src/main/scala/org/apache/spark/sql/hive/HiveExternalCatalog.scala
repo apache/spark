@@ -167,6 +167,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withClient {
+    // Unregister the functions as well.
+    // Note: This is a bug for Hive's API design, so we only do this explicit dropping for
+    // HiveExternalCatalog only. See HIVE-12304.
+    if (cascade) {
+      client.listFunctions(db, "*").foreach {
+        case functionName => client.dropFunction(db, functionName)
+      }
+    }
     client.dropDatabase(db, ignoreIfNotExists, cascade)
   }
 

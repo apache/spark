@@ -873,6 +873,24 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       "db2", "tbl1", Seq(part1.spec), ignoreIfNotExists = false, purge = false, retainData = false)
     assert(fs.exists(partPath))
   }
+
+  test("drop database cascade with function defined") {
+    import org.apache.spark.sql.catalyst.expressions.Lower
+
+    val catalog = newEmptyCatalog()
+    val dbName = "dbCascade"
+    val path = newUriForDatabase()
+    catalog.createDatabase(CatalogDatabase(dbName, "", path, Map.empty), ignoreIfExists = false)
+    // create a permanent function in catalog
+    catalog.createFunction(dbName, CatalogFunction(
+      FunctionIdentifier("func1", Some(dbName)), classOf[Lower].getName, Nil))
+    assert(catalog.functionExists(dbName, "func1"))
+    catalog.dropDatabase(dbName, ignoreIfNotExists = false, cascade = true)
+    // create the db again because `functionExists` requires db to exist
+    catalog.createDatabase(CatalogDatabase(dbName, "", path, Map.empty), ignoreIfExists = false)
+    assert(!catalog.functionExists(dbName, "func1"))
+    catalog.dropDatabase(dbName, ignoreIfNotExists = true, cascade = true)
+  }
 }
 
 
