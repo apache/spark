@@ -195,20 +195,20 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def fill(value: String, cols: Seq[String]): DataFrame = fillValue(value, cols)
 
   /**
-    * Returns a new `DataFrame` that replaces null values in string columns with `value`.
-    */
+   * Returns a new `DataFrame` that replaces null values in boolean columns with `value`.
+   */
   def fill(value: Boolean): DataFrame = fill(value, df.columns)
 
   /**
-    * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
-    * numeric columns. If a specified column is not a numeric column, it is ignored.
-    */
+   * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
+   * boolean columns. If a specified column is not a boolean column, it is ignored.
+   */
   def fill(value: Boolean, cols: Seq[String]): DataFrame = fillValue(value, cols)
 
   /**
-    * Returns a new `DataFrame` that replaces null values in specified string columns.
-    * If a specified column is not a string column, it is ignored.
-    */
+   * Returns a new `DataFrame` that replaces null values in specified boolean columns.
+   * If a specified column is not a boolean column, it is ignored.
+   */
   def fill(value: Boolean, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
 
@@ -457,8 +457,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in specified
-   * numeric, string columns. If a specified column is not a numeric, string column,
-   * it is ignored.
+   * numeric, string columns. If a specified column is not a numeric, string
+   * or boolean column it is ignored.
    */
   private def fillValue[T](value: T, cols: Seq[String]): DataFrame = {
     // the fill[T] which T is  Long/Double,

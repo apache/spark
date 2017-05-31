@@ -1232,11 +1232,11 @@ class DataFrame(object):
         """Replace null values, alias for ``na.fill()``.
         :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
 
-        :param value: int, long, float, string, or dict.
+        :param value: int, long, float, string, bool or dict.
             Value to replace null values with.
             If the value is a dict, then `subset` is ignored and `value` must be a mapping
             from column name (string) to replacement value. The replacement value must be
-            an int, long, float, or string.
+            an int, long, float, bool or string.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
@@ -1252,6 +1252,15 @@ class DataFrame(object):
         | 50|    50| null|
         +---+------+-----+
 
+        >>> df5.na.fill(False).show()
+        +----+-------+-----+
+        | age|   name|  spy|
+        +----+-------+-----+
+        |  10|  Alice|false|
+        |   5|    Bob|false|
+        |null|Mallory| true|
+        +----+-------+-----+
+
         >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
         +---+------+-------+
         |age|height|   name|
@@ -1263,9 +1272,11 @@ class DataFrame(object):
         +---+------+-------+
         """
         if not isinstance(value, (float, int, long, basestring, dict)):
-            raise ValueError("value should be a float, int, long, string, or dict")
+            raise ValueError("value should be a float, int, long, string, boolean or dict")
 
-        if isinstance(value, (int, long)):
+        if isinstance(value, bool):
+            pass
+        elif isinstance(value, (int, long)):
             value = float(value)
 
         if isinstance(value, dict):
@@ -1733,6 +1744,9 @@ def _test():
                                    Row(name='Bob', age=5, height=None),
                                    Row(name='Tom', age=None, height=None),
                                    Row(name=None, age=None, height=None)]).toDF()
+    globs['df5'] = sc.parallelize([Row(name='Alice', spy=False, age=10),
+                                   Row(name='Bob', spy=None, age=5),
+                                   Row(name='Mallory', spy=True, age=None)]).toDF()
     globs['sdf'] = sc.parallelize([Row(name='Tom', time=1479441846),
                                    Row(name='Bob', time=1479442946)]).toDF()
 
