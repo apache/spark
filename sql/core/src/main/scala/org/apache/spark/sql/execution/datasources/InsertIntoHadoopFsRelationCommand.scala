@@ -53,12 +53,15 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex])
-  extends RunnableCommand {
+  extends WriteOutFileCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
-  override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
+  override def run(
+      sparkSession: SparkSession,
+      children: Seq[SparkPlan],
+      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
     assert(children.length == 1)
 
     // Most formats don't do well with duplicate columns, so lets not allow that
@@ -123,8 +126,16 @@ case class InsertIntoHadoopFsRelationCommand(
 
     if (doInsertion) {
 
-      // Callback for updating metastore partition metadata after the insertion job completes.
-      def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
+      // Callback for updating metric and metastore partition metadata
+      // after the insertion job completes.
+      def refreshCallback(summary: Seq[ExecutedWriteSummary]): Unit = {
+        val updatedPartitions = summary.flatMap(_.updatedPartitions)
+          .distinct.map(PartitioningUtils.parsePathFragment)
+
+        // Updating metrics.
+        metricsCallback(summary)
+
+        // Updating metastore partition metadata.
         if (partitionsTrackedByCatalog) {
           val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
           if (newPartitions.nonEmpty) {
@@ -154,7 +165,7 @@ case class InsertIntoHadoopFsRelationCommand(
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
-        refreshFunction = refreshPartitionsCallback,
+        refreshFunction = refreshCallback,
         options = options)
 
       // refresh cached files in FileIndex

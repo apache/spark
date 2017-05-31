@@ -37,8 +37,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.execution.datasources.FileFormatWriter
+import org.apache.spark.sql.execution.command.WriteOutFileCommand
+import org.apache.spark.sql.execution.datasources.{ExecutedWriteSummary, FileFormatWriter}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.{HiveClientImpl, HiveVersion}
@@ -80,7 +80,7 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends RunnableCommand {
+    ifPartitionNotExists: Boolean) extends WriteOutFileCommand {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
@@ -231,7 +231,10 @@ case class InsertIntoHiveTable(
    * `org.apache.hadoop.hive.serde2.SerDe` and the
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
    */
-  override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
+  override def run(
+      sparkSession: SparkSession,
+      children: Seq[SparkPlan],
+      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
     assert(children.length == 1)
 
     val sessionState = sparkSession.sessionState
@@ -354,7 +357,7 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
-      refreshFunction = _ => (),
+      refreshFunction = metricsCallback,
       options = Map.empty)
 
     if (partition.nonEmpty) {

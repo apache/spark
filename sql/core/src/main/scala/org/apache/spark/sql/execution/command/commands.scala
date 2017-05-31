@@ -24,31 +24,44 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.datasources.ExecutedWriteSummary
 import org.apache.spark.sql.execution.debug._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
+
+/**
+ * A logical command specialized for writing data out. `WriteOutFileCommand`s are
+ * wrapped in `WrittenFileCommandExec` during execution.
+ */
+trait WriteOutFileCommand extends logical.Command {
+  def run(
+      sparkSession: SparkSession,
+      children: Seq[SparkPlan],
+      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
+    throw new NotImplementedError
+  }
+}
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
  * wrapped in `ExecutedCommand` during execution.
  */
 trait RunnableCommand extends logical.Command {
-  def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
-    throw new NotImplementedError
-  }
-
   def run(sparkSession: SparkSession): Seq[Row] = {
     throw new NotImplementedError
   }
 }
 
 /**
- * A physical operator that executes the run method of a `RunnableCommand` and
+ * A physical operator that executes the run method of a `logical.Command` and
  * saves the result to prevent multiple executions.
  */
-case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) extends SparkPlan {
+trait CommandExec extends SparkPlan {
+  val cmd: logical.Command
+
   /**
    * A concrete command should override this lazy field to wrap up any side effects caused by the
    * command or any other computation that should be evaluated exactly once. The value of this field
@@ -58,15 +71,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) e
    * The `execute()` method of all the physical command classes should reference `sideEffectResult`
    * so that the command can be executed eagerly right after the command query is created.
    */
-  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
-    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val rows = if (children.isEmpty) {
-      cmd.run(sqlContext.sparkSession)
-    } else {
-      cmd.run(sqlContext.sparkSession, children)
-    }
-    rows.map(converter(_).asInstanceOf[InternalRow])
-  }
+  protected[sql] val sideEffectResult: Seq[InternalRow]
 
   override def innerChildren: Seq[QueryPlan[_]] = cmd.innerChildren
 
@@ -83,6 +88,80 @@ case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) e
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
+}
+
+/**
+ * A physical operator specialized to execute the run method of a `WriteOutFileCommand`,
+ * save the result to prevent multiple executions, and record necessary metrics for UI.
+ */
+case class WrittenFileCommandExec(
+    cmd: WriteOutFileCommand,
+    children: Seq[SparkPlan]) extends CommandExec {
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of output rows"),
+    "writingTime" -> SQLMetrics.createMetric(sqlContext.sparkContext, "writing data out time (ms)"),
+    "dynamicPartNum" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of dynamic part"),
+    "fileNum" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of written files"),
+    "fileBytes" -> SQLMetrics.createMetric(sqlContext.sparkContext, "bytes of written files"))
+
+  // Callback used to update metrics returned from the operation of writing data out.
+  private def updateDriverMetrics(writeTaskSummary: Seq[ExecutedWriteSummary]): Unit = {
+    var partitionNum = 0
+    var fileNum = 0
+    var fileBytes: Long = 0L
+    var numOutput: Long = 0L
+
+    writeTaskSummary.foreach { summary =>
+      partitionNum += summary.updatedPartitions.size
+      fileNum += summary.writtenFileNum
+      fileBytes += summary.writtenBytes
+      numOutput += summary.numOutputRows
+    }
+
+    val partitionMetric = metrics("dynamicPartNum")
+    val fileNumMetric = metrics("fileNum")
+    val fileBytesMetric = metrics("fileBytes")
+    val numOutputRows = metrics("numOutputRows")
+    partitionMetric.add(partitionNum)
+    fileNumMetric.add(fileNum)
+    fileBytesMetric.add(fileBytes)
+    numOutputRows.add(numOutput)
+
+    val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId,
+      partitionMetric :: fileNumMetric :: fileBytesMetric :: numOutputRows :: Nil)
+  }
+
+  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
+    assert(children.nonEmpty)
+
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val startTime = System.nanoTime()
+    val rows = cmd.run(sqlContext.sparkSession, children, updateDriverMetrics)
+    val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
+    val writingTime = metrics("writingTime")
+    writingTime.add(timeTakenMs)
+
+    val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId,
+      writingTime :: Nil)
+    rows.map(converter(_).asInstanceOf[InternalRow])
+  }
+}
+
+/**
+ * A physical operator specialized to execute the run method of a `RunnableCommand` and
+ * save the result to prevent multiple executions.
+ */
+case class ExecutedCommandExec(cmd: RunnableCommand) extends CommandExec {
+  override protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val rows = cmd.run(sqlContext.sparkSession)
+    rows.map(converter(_).asInstanceOf[InternalRow])
+  }
+
+  override def children: Seq[SparkPlan] = Nil
 }
 
 /**
