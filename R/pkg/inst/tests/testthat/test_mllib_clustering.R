@@ -28,6 +28,8 @@ absoluteSparkPath <- function(x) {
 }
 
 test_that("spark.bisectingKmeans", {
+  skip_on_cran()
+
   newIris <- iris
   newIris$Species <- NULL
   training <- suppressWarnings(createDataFrame(newIris))

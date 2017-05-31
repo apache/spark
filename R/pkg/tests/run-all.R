@@ -21,6 +21,12 @@ library(SparkR)
 # Turn all warnings into errors
 options("warn" = 2)
 
+if (.Platform$OS.type == "windows") {
+  Sys.setenv(TZ = "GMT")
+}
+message("--- Start test ", as.POSIXct(Sys.time(), tz = "GMT"))
+timer_ptm <- proc.time()
+
 # Setup global test environment
 # Install Spark first to set SPARK_HOME
 install.spark()
