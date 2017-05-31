@@ -167,6 +167,16 @@
        <version>${jersey-1.version}</version>
      </dependency>
 
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libthrift</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libfb303</artifactId>
+      <scope>test</scope>
+    </dependency>
 
   </dependencies>
 
