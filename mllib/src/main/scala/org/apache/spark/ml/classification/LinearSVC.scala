@@ -47,7 +47,8 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
   /**
    * Param for threshold in binary classification prediction.
    * For LinearSVC, this threshold is applied to the rawPrediction, rather than a probability.
-   * This threshold can be any real number.
+   * This threshold can be any real number, where Inf will make all predictions 0.0
+   * and -Inf will make all predictions 1.0.
    * Default: 0.0
    *
    * @group param
