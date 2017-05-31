@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedGenerator, UnresolvedInlineTable, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -448,13 +448,15 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("aliased subquery") {
+    val errMsg = "The unaliased subqueries in the FROM clause are not supported"
+
     assertEqual("select a from (select id as a from t0) tt",
       table("t0").select('id.as("a")).as("tt").select('a))
-    intercept("select a from (select id as a from t0)", "mismatched input")
+    intercept("select a from (select id as a from t0)", errMsg)
 
     assertEqual("from (select id as a from t0) tt select a",
       table("t0").select('id.as("a")).as("tt").select('a))
-    intercept("from (select id as a from t0) select a", "extraneous input 'a'")
+    intercept("from (select id as a from t0) select a", errMsg)
   }
 
   test("scalar sub-query") {
@@ -490,6 +492,13 @@ class PlanParserSuite extends PlanTest {
     assertEqual(
       "SELECT * FROM range(7) AS t(a)",
       SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(7) :: Nil, "a" :: Nil))
+        .select(star()))
+  }
+
+  test("SPARK-20841 Support table column aliases in FROM clause") {
+    assertEqual(
+      "SELECT * FROM testData AS t(col1, col2)",
+      SubqueryAlias("t", UnresolvedRelation(TableIdentifier("testData"), Seq("col1", "col2")))
         .select(star()))
   }
 

@@ -340,6 +340,48 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   }
 }
 
+/**
+ * Replace all occurrences with string.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str, search[, replace]) - Replaces all occurrences of `search` with `replace`.",
+  extended = """
+    Arguments:
+      str - a string expression
+      search - a string expression. If `search` is not found in `str`, `str` is returned unchanged.
+      replace - a string expression. If `replace` is not specified or is an empty string, nothing replaces
+                the string that is removed from `str`.
+
+    Examples:
+      > SELECT _FUNC_('ABCabc', 'abc', 'DEF');
+       ABCDEF
+  """)
+// scalastyle:on line.size.limit
+case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExpr: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
+
+  def this(srcExpr: Expression, searchExpr: Expression) = {
+    this(srcExpr, searchExpr, Literal(""))
+  }
+
+  override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
+    srcEval.asInstanceOf[UTF8String].replace(
+      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (src, search, replace) => {
+      s"""${ev.value} = $src.replace($search, $replace);"""
+    })
+  }
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
+  override def children: Seq[Expression] = srcExpr :: searchExpr :: replaceExpr :: Nil
+  override def prettyName: String = "replace"
+}
+
 object StringTranslate {
 
   def buildDict(matchingString: UTF8String, replaceString: UTF8String)
@@ -728,10 +770,10 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
   """,
   extended = """
     Examples:
-     > SELECT _FUNC_('hi', 5, '??');
-      hi???
-     > SELECT _FUNC_('hi', 1, '??');
-      h
+      > SELECT _FUNC_('hi', 5, '??');
+       hi???
+      > SELECT _FUNC_('hi', 1, '??');
+       h
   """)
 case class StringRPad(str: Expression, len: Expression, pad: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
