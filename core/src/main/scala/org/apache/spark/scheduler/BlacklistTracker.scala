@@ -151,7 +151,7 @@ private[scheduler] class BlacklistTracker (
       allocationClient match {
         case Some(a) =>
           logInfo(s"Killing blacklisted executor id $exec " +
-            s"since spark.blacklist.killBlacklistedExecutors is set.")
+            s"since ${config.BLACKLIST_KILL_ENABLED.key} is set.")
           a.killExecutors(Seq(exec), true, true)
         case None =>
           logWarning(s"Not attempting to kill blacklisted executor id $exec " +
@@ -165,7 +165,7 @@ private[scheduler] class BlacklistTracker (
       allocationClient match {
         case Some(a) =>
           logInfo(s"Killing all executors on blacklisted host $node " +
-            s"since spark.blacklist.killBlacklistedExecutors is set.")
+            s"since ${config.BLACKLIST_KILL_ENABLED.key} is set.")
           if (a.killExecutorsOnHost(node) == false) {
             logError(s"Killing executors on node $node failed.")
           }
@@ -179,7 +179,9 @@ private[scheduler] class BlacklistTracker (
   def updateBlacklistForFetchFailure(host: String, exec: String): Unit = {
     if (BLACKLIST_FETCH_FAILURE_ENABLED) {
       // If we blacklist on fetch failures, we are implicitly saying that we believe the failure is
-      // non-transient, and can't be recovered from (even if this is the first fetch failure).
+      // non-transient, and can't be recovered from (even if this is the first fetch failure,
+      // stage is retried after just one failure, so we don't always get a chance to collect
+      // multiple fetch failures).
       // If the external shuffle-service is on, then every other executor on this node would
       // be suffering from the same issue, so we should blacklist (and potentially kill) all
       // of them immediately.

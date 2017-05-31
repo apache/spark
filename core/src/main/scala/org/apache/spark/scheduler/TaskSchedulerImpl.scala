@@ -51,31 +51,19 @@ import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
-private[spark] class TaskSchedulerImpl private[scheduler](
+private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    mockBlacklistTracker: Option[BlacklistTracker] = None,
     isLocal: Boolean = false)
   extends TaskScheduler with Logging {
 
   import TaskSchedulerImpl._
 
   def this(sc: SparkContext) = {
-    this(
-      sc,
-      sc.conf.get(config.MAX_TASK_FAILURES))
+    this(sc, sc.conf.get(config.MAX_TASK_FAILURES))
   }
 
-  def this(sc: SparkContext, maxTaskFailures: Int, isLocal: Boolean) = {
-    this(
-      sc,
-      maxTaskFailures,
-      mockBlacklistTracker = None,
-      isLocal = isLocal)
-  }
-
-  private[scheduler] lazy val blacklistTrackerOpt =
-    mockBlacklistTracker.orElse(maybeCreateBlacklistTracker(sc))
+  private[scheduler] lazy val blacklistTrackerOpt = maybeCreateBlacklistTracker(sc)
 
   val conf = sc.conf
 
