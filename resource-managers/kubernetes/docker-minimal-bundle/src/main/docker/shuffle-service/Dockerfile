@@ -22,7 +22,7 @@ FROM openjdk:8-alpine
 # docker build -t spark-shuffle:latest -f dockerfiles/shuffle/Dockerfile .
 
 RUN apk upgrade --update
-RUN apk add --update bash
+RUN apk add --update bash tini
 RUN mkdir -p /opt/spark
 RUN touch /opt/spark/RELEASE
 
@@ -36,4 +36,4 @@ ENV SPARK_HOME /opt/spark
 
 WORKDIR /opt/spark
 
-CMD ["/bin/sh","-c","/opt/spark/bin/spark-class org.apache.spark.deploy.ExternalShuffleService 1"]
+ENTRYPOINT [ "/sbin/tini", "--", "bin/spark-class", "org.apache.spark.deploy.ExternalShuffleService", "1" ]

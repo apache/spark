@@ -22,7 +22,7 @@ FROM openjdk:8-alpine
 # docker build -t spark-executor:latest -f dockerfiles/executor/Dockerfile .
 
 RUN apk upgrade --update
-RUN apk add --update bash
+RUN apk add --update bash tini
 RUN mkdir -p /opt/spark
 RUN touch /opt/spark/RELEASE
 
@@ -35,4 +35,4 @@ ENV SPARK_HOME /opt/spark
 
 WORKDIR /opt/spark
 
-ENTRYPOINT [ "bin/spark-class", "org.apache.spark.deploy.rest.kubernetes.KubernetesSparkDependencyDownloadInitContainer" ]
+ENTRYPOINT [ "/sbin/tini", "--", "bin/spark-class", "org.apache.spark.deploy.rest.kubernetes.KubernetesSparkDependencyDownloadInitContainer" ]
