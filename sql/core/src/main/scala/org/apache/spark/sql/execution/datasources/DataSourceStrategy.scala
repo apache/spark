@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.concurrent.Callable
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -356,8 +354,8 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
 
     // A set of column attributes that are only referenced by pushed down filters.  We can eliminate
     // them from requested columns.
+    val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
     val handledSet = {
-      val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
       val unhandledSet = AttributeSet(unhandledPredicates.flatMap(_.references))
       AttributeSet(handledPredicates.flatMap(_.references)) --
         (projectSet ++ unhandledSet).map(relation.attributeMap)
@@ -370,18 +368,26 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
     // These metadata values make scan plans uniquely identifiable for equality checking.
     // TODO(SPARK-17701) using strings for equality checking is brittle
     val metadata: Map[String, String] = {
-      val pairs = ArrayBuffer.empty[(String, String)]
-
+      val schemaString = StructType.fromAttributes(projects.map(_.toAttribute)).catalogString
       // Mark filters which are handled by the underlying DataSource with an Astrisk
-      if (pushedFilters.nonEmpty) {
-        val markedFilters = for (filter <- pushedFilters) yield {
+      relation match {
+        case LogicalRelation(_: CatalystScan, _, _) if candidatePredicates.nonEmpty =>
+          val markedPredicates = for (predicate <- candidatePredicates) yield {
+            if (handledPredicates.contains(predicate)) s"*$predicate" else s"$predicate"
+          }
+          Map(
+            "PushedCatalystFilters" -> markedPredicates.mkString("[", ", ", "]"),
+            "ReadSchema" -> schemaString)
+        case _ if pushedFilters.nonEmpty =>
+          val markedFilters = for (filter <- pushedFilters) yield {
             if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
-        }
-        pairs += ("PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
+          }
+          Map(
+            "PushedFilters" -> markedFilters.mkString("[", ", ", "]"),
+            "ReadSchema" -> schemaString)
+        case _ =>
+          Map("ReadSchema" -> schemaString)
       }
-      pairs += ("ReadSchema" ->
-        StructType.fromAttributes(projects.map(_.toAttribute)).catalogString)
-      pairs.toMap
     }
 
     if (projects.map(_.toAttribute) == projects &&

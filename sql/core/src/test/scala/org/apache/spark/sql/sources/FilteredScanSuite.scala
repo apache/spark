@@ -298,6 +298,21 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
     Set("a", "b"),
     Set(LessThan("b", 16)))
 
+  test("Metadata should keep the pushed filters in PushedFilters") {
+    val df = spark.read
+      .format(classOf[FilteredScanSource].getCanonicalName)
+      .option("from", 0).option("to", 10).load()
+      .filter("b == 1 and a < 3")
+    val maybeMetadata = df.queryExecution.executedPlan.collectFirst {
+      case p: execution.DataSourceScanExec => p.metadata
+    }
+    assert(maybeMetadata.isDefined)
+    val metadata = maybeMetadata.get
+    assert(metadata.contains("PushedFilters"))
+    assert(metadata("PushedFilters") == "[EqualTo(b,1), *LessThan(a,3)]")
+    assert(!metadata.contains("PushedCatalystFilters"))
+  }
+
   def testPushDown(
     sqlString: String,
     expectedCount: Int,
