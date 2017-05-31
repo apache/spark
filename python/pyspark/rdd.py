@@ -216,6 +216,20 @@ class RDD(object):
         """
         return self.ctx
 
+    @property
+    def name(self):
+        """
+        A friendly name for this RDD
+        """
+        return self._jrdd.name()
+
+    @name.setter
+    def name(self, name):
+        """
+        Sets the friendly name for this RDD
+        """
+        return self._jrdd.setName(name)
+
     def cache(self):
         """
         Persist this RDD with the default storage level (C{MEMORY_ONLY}).
