@@ -504,46 +504,8 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override def prettyName: String = "find_in_set"
 }
 
-/**
- * A function that takes a character string, removes the leading and/or trailing characters matching with the characters
- * in the trim string, returns the new string. If LEADING/TRAILING/BOTH and trimStr keywords are not specified, it
- * defaults to remove space character from both ends.
- * trimStr: A character string to be trimmed from the source string, if it has multiple characters, the function
- * searches for each character in the source string, removes the characters from the source string until it
- * encounters the first non-match character.
- * LEADING: removes any characters from the left end of the source string that matches characters in the trim string.
- * TRAILING: removes any characters from the right end of the source string that matches characters in the trim string.
- * BOTH: removes any characters from both ends of the source string that matches characters in the trim string.
-  */
-@ExpressionDescription(
-  usage = """
-    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
-    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing trimString from `str`
-    _FUNC_(LEADING trimStr FROM str) - Remove the leading trimString from `str`
-    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing trimString from `str`
-  """,
-  extended = """
-    Arguments:
-      str - a string expression
-      trimString - the trim string
-      BOTH, FROM - these are keyword to specify for trim string from both ends of the string
-      LEADING, FROM - these are keyword to specify for trim string from left end of the string
-      TRAILING, FROM - these are keyword to specify for trim string from right end of the string
-    Examples:
-      > SELECT _FUNC_('    SparkSQL   ');
-       SparkSQL
-      > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
-       parkSQ
-      > SELECT _FUNC_(LEADING 'paS' FROM 'SSparkSQLS');
-       rkSQLS
-      > SELECT _FUNC_(TRAILING 'SLQ' FROM 'SSparkSQLS');
-       SSparkS
-  """)
-case class StringTrim(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes {
-
-  require(children.size <= 2 && children.nonEmpty,
-    s"$prettyName requires at least one argument and no more than two.")
+trait String2TrimExpression extends ImplicitCastInputTypes {
+  self: Expression =>
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
@@ -551,11 +513,54 @@ case class StringTrim(children: Seq[Expression])
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def sql: String = {
+    if (children.size == 1) {
+      val childrenSQL = children.map(_.sql).mkString(", ")
+      s"$prettyName($childrenSQL)"
+    } else {
+      val trimSQL = children(0).map(_.sql).mkString(", ")
+      val tarSQL = children(1).map(_.sql).mkString(", ")
+      s"$prettyName($trimSQL, $tarSQL)"
+    }
+  }
+}
+
+/**
+ * A function that takes a character string, removes the leading and/or trailing characters matching with the characters
+ * in the trim string, returns the new string. If BOTH and trimStr keywords are not specified, it defaults to remove
+ * space character from both ends.
+ * trimStr: A character string to be trimmed from the source string, if it has multiple characters, the function
+ * searches for each character in the source string, removes the characters from the source string until it
+ * encounters the first non-match character.
+ * BOTH: removes any characters from both ends of the source string that matches characters in the trim string.
+  */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
+    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing trimString from `str`
+  """,
+  extended = """
+    Arguments:
+      str - a string expression
+      trimString - the trim string
+      BOTH, FROM - these are keyword to specify for trim string from both ends of the string
+    Examples:
+      > SELECT _FUNC_('    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
+       parkSQ
+  """)
+case class StringTrim(children: Seq[Expression])
+  extends Expression with String2TrimExpression {
+
+  require(children.size <= 2 && children.nonEmpty,
+    s"$prettyName requires at least one argument and no more than two.")
+
   override def prettyName: String = "trim"
 
   // trim function can take one or two arguments.
-  // For one argument(children size is 1), it is the trim space function.
-  // For two arguments(children size is 2), it is the trim function with one of these options: BOTH/LEADING/TRAILING.
+  // Specify one child, it is for the trim space function.
+  // Specify the two children, it is for the trim function with BOTH option.
   override def eval(input: InternalRow): Any = {
     val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
     if (inputs(0) != null) {
@@ -579,39 +584,29 @@ case class StringTrim(children: Seq[Expression])
     val getTrimFunction = if (children.size == 1) {
       s"UTF8String ${ev.value} = ${inputs(0)}.trim();"
     } else {
-      s"UTF8String ${ev.value} = ${inputs(1)}.trim(${inputs(0)});".stripMargin
+      s"UTF8String ${ev.value} = ${inputs(1)}.trim(${inputs(0)});"
     }
     ev.copy(evals.map(_.code).mkString("\n") + s"""
-      boolean ${ev.isNull} = false;
-      ${getTrimFunction};
+      boolean ${ev.isNull} = false
+      $getTrimFunction
       if (${ev.value} == null) {
         ${ev.isNull} = true;
       }
     """)
-    }
-
-  override def sql: String = {
-    if (children.size == 1) {
-      val childrenSQL = children.map(_.sql).mkString(", ")
-      s"$prettyName($childrenSQL)"
-    } else {
-      val trimSQL = children(0).map(_.sql).mkString(", ")
-      val tarSQL = children(1).map(_.sql).mkString(", ")
-      s"$prettyName($trimSQL, $tarSQL)"
-    }
   }
 }
 
 /**
- * A function that trims the characters from left end for a given string, if the trimStr is not specified, it defaults
- * to trim the spaces from the left end of the source string.
+ * A function that trims the characters from left end for a given string, If LEADING and trimStr keywords are not
+ * specified, it defaults to remove space character from the left end.
  * trimStr: the function removes any characters from the left end of the source string which matches with the characters
  * from trimStr, it stops at the first non-match character.
+ * LEADING: removes any characters from the left end of the source string that matches characters in the trim string.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
-    _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string from the `str`
+    _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string
   """,
   extended = """
     Arguments:
@@ -624,22 +619,16 @@ case class StringTrim(children: Seq[Expression])
        arkSQLS
   """)
 case class StringTrimLeft(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression with String2TrimExpression {
 
   require (children.size <= 2 && children.nonEmpty,
     "$prettyName requires at least one argument and no more than two.")
 
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
-  override def dataType: DataType = StringType
-
-  override def nullable: Boolean = children.exists(_.nullable)
-  override def foldable: Boolean = children.forall(_.foldable)
-
   override def prettyName: String = "ltrim"
 
   // ltrim function can take one or two arguments.
-  // For one argument(children size is 1), it is the ltrim space function.
-  // For two arguments(children size is 2), it is the trim function with option LEADING.
+  // Specify one child, it is for the ltrim space function.
+  // Specify the two children, it is for the trim function with option LEADING.
   override def eval(input: InternalRow): Any = {
     val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
     if (inputs(0) != null) {
@@ -667,31 +656,21 @@ case class StringTrimLeft(children: Seq[Expression])
     }
 
     ev.copy(evals.map(_.code).mkString("\n") + s"""
-      boolean ${ev.isNull} = false;
-      ${getTrimLeftFunction};
+      boolean ${ev.isNull} = false
+      $getTrimLeftFunction
       if (${ev.value} == null) {
         ${ev.isNull} = true;
       }
     """)
   }
-
-  override def sql: String = {
-    if (children.size == 1) {
-      val childrenSQL = children.map(_.sql).mkString(", ")
-      s"$prettyName($childrenSQL)"
-    } else {
-      val trimSQL = children(0).map(_.sql).mkString(", ")
-      val tarSQL = children(1).map(_.sql).mkString(", ")
-      s"$prettyName($trimSQL, $tarSQL)"
-    }
-  }
 }
 
 /**
- * A function that trims the characters from right end for a given string, if the trimStr is not specified, it defaults
- * to trim the spaces from the right end of the source string.
+ * A function that trims the characters from right end for a given string, If TRAILING and trimStr keywords are not
+ * specified, it defaults to remove space character from the right end.
  * trimStr: the function removes any characters from the right end of source string which matches with the characters
  * from trimStr, it stops at the first non-match character.
+ * TRAILING: removes any characters from the right end of the source string that matches characters in the trim string.
  */
 @ExpressionDescription(
   usage = """
@@ -709,22 +688,16 @@ case class StringTrimLeft(children: Seq[Expression])
        SSpark
   """)
 case class StringTrimRight(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression with String2TrimExpression {
 
   require (children.size <= 2 && children.nonEmpty,
     "$prettyName requires at least one argument and no more than two.")
 
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
-  override def dataType: DataType = StringType
-
-  override def nullable: Boolean = children.exists(_.nullable)
-  override def foldable: Boolean = children.forall(_.foldable)
-
   override def prettyName: String = "rtrim"
 
   // rtrim function can take one or two arguments.
-  // For one argument(children size is 1), it is the rtrim space function.
-  // For two arguments(children size is 2), it is the trim function with option TRAILING.
+  // Specify one child, it is for the rtrim space function.
+  // Specify the two children, it is for the trim function with option TRAILING.
   override def eval(input: InternalRow): Any = {
     val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
     if (inputs(0) != null) {
@@ -751,23 +724,12 @@ case class StringTrimRight(children: Seq[Expression])
       s"UTF8String ${ev.value} = ${inputs(1)}.trimRight(${inputs(0)});"
     }
     ev.copy(evals.map(_.code).mkString("\n") + s"""
-      boolean ${ev.isNull} = false;
-      ${getTrimRightFunction};
+      boolean ${ev.isNull} = false
+      $getTrimRightFunction
       if (${ev.value} == null) {
         ${ev.isNull} = true;
       }
     """)
-  }
-
-  override def sql: String = {
-    if (children.size == 1) {
-      val childrenSQL = children.map(_.sql).mkString(", ")
-      s"$prettyName($childrenSQL)"
-    } else {
-      val trimSQL = children(0).map(_.sql).mkString(", ")
-      val tarSQL = children(1).map(_.sql).mkString(", ")
-      s"$prettyName($trimSQL, $tarSQL)"
-    }
   }
 }
 

@@ -426,8 +426,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringTrim(Seq("a@#( )", s)), "花花世界花花", create_row("aa()花花世界花花@ #"))
     checkEvaluation(StringTrim(Seq("花 ", Literal("花trim"))), "trim", create_row(" abdef "))
     // scalastyle:on
-    checkEvaluation(StringTrim(Seq((Literal("a")),
-      (Literal.create(null, StringType)))), null)
+    checkEvaluation(StringTrim(Seq(Literal("a"), Literal.create(null, StringType))), null)
   }
 
   test("LTRIM") {
@@ -450,8 +449,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringTrimLeft(Seq("a花界", s)), "世界花花aa", create_row("aa花花世界花花aa"))
     checkEvaluation(StringTrimLeft(Seq("a世界", s)), "花花世界花花", create_row("花花世界花花"))
     // scalastyle:on
-    checkEvaluation(StringTrimLeft(Seq((Literal("a")),
-      (Literal.create(null, StringType)))), null)
+    checkEvaluation(StringTrimLeft(Seq(Literal("a"), Literal.create(null, StringType))), null)
   }
 
   test("RTRIM") {
@@ -475,8 +473,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringTrimRight(Seq("花", s)), "", create_row("花花花花"))
     checkEvaluation(StringTrimRight(Seq("花 界b@", s)), " 花花世", create_row(" 花花世 b界@花花 "))
     // scalastyle:on
-    checkEvaluation(StringTrimRight(Seq((Literal("a")),
-      (Literal.create(null, StringType)))), null)
+    checkEvaluation(StringTrimRight(Seq(Literal("a"), Literal.create(null, StringType))), null)
   }
 
   test("FORMAT") {

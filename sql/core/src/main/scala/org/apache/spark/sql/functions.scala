@@ -2498,7 +2498,7 @@ object functions {
    * @group string_funcs
    * @since 2.2.0
    */
-  def trim(trimString: String, e: Column): Column =
+  def trim(e: Column, trimString: String): Column =
     withExpr { StringTrim(Seq(Literal(trimString), e.expr))}
 
   /**

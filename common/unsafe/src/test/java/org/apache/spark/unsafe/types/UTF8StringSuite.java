@@ -234,6 +234,10 @@ public class UTF8StringSuite {
     assertEquals(fromString("数据砖头 "), fromString("  数据砖头 ").trimLeft());
     assertEquals(fromString("  数据砖头"), fromString("  数据砖头 ").trimRight());
 
+    assertEquals(fromString("数据砖头"), fromString("数据砖头").trim());
+    assertEquals(fromString("数据砖头"), fromString("数据砖头").trimLeft());
+    assertEquals(fromString("数据砖头"), fromString("数据砖头").trimRight());
+
     char[] charsLessThan0x20 = new char[10];
     Arrays.fill(charsLessThan0x20, (char)(' ' - 1));
     String stringStartingWithSpace =
@@ -726,6 +730,7 @@ public class UTF8StringSuite {
       assertFalse(negativeInput, UTF8String.fromString(negativeInput).toLong(wrapper));
     }
   }
+
   @Test
   public void trim() {
     assertEquals(fromString("hello"), fromString("  hello ").trim(fromString(" ")));
@@ -746,10 +751,6 @@ public class UTF8StringSuite {
 
   @Test
   public void trimLeft() {
-    assertEquals(fromString("  hello "), fromString("  hello ").trimLeft(fromString("")));
-    assertEquals(fromString(""), fromString("a").trimLeft(fromString("a")));
-    assertEquals(fromString("b"), fromString("b").trimLeft(fromString("a")));
-    assertEquals(fromString("b"), fromString("b").trimLeft(fromString("a")));
     assertEquals(fromString("ba"), fromString("ba").trimLeft(fromString("a")));
     assertEquals(fromString(""), fromString("aaaaaaa").trimLeft(fromString("a")));
     assertEquals(fromString("trim"), fromString("oabtrim").trimLeft(fromString("bao")));
@@ -765,6 +766,7 @@ public class UTF8StringSuite {
     assertEquals(fromString("据砖头数数"), fromString("aa数数数据砖头数数").trimLeft(fromString("a数砖")));
     assertEquals(fromString("$S,.$BR"), fromString(",,,,%$S,.$BR").trimLeft(fromString("%,")));
   }
+
   @Test
   public void trimRight() {
     assertEquals(fromString("  hello "), fromString("  hello ").trimRight(fromString("")));

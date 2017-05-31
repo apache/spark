@@ -580,9 +580,8 @@ primaryExpression
     | '(' query ')'                                                                            #subqueryExpression
     | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
-    | qualifiedName '(' trimOperator=(BOTH | LEADING | TRAILING) trimChar=namedExpression
+    | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) trimChar=namedExpression
       FROM namedExpression ')'                                                                 #functionCall
-
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference

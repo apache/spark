@@ -511,7 +511,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes the given trim string from both ends of a string
+   * Removes the given source string starting from both ends
    * This method searches for each character in the source string, removes the character if it is found
    * in the trim string, stops at the first not found. It calls the trimLeft first, then trimRight.
    * It returns a new string in which both ends trim characters have been removed.
@@ -534,14 +534,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes the given trim string from the beginning of a string
+   * Removes the given source string from the left end
    * This method searches each character in the source string starting from the left end, removes the character if it
    * is in the trim string, stops at the first character which is not in the trim string, returns the new string.
    * @param trimString the trim character string
    */
   public UTF8String trimLeft(UTF8String trimString) {
-    int srchIdx = 0; // the searching byte position of the input string
-    int trimIdx = 0; // the first beginning byte position of a non-matching character
+    // the searching byte position in the source string
+    int srchIdx = 0;
+    // the first beginning byte position of a non-matching character
+    int trimIdx = 0;
 
     while (srchIdx < numBytes) {
       UTF8String searchChar = copyUTF8String(srchIdx, srchIdx + numBytesForFirstByte(this.getByte(srchIdx)) - 1);
@@ -560,7 +562,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // empty string
       return EMPTY_UTF8;
     } else {
-      return copyUTF8String(trimIdx, numBytes -1);
+      return copyUTF8String(trimIdx, numBytes - 1);
     }
   }
 
@@ -578,28 +580,29 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes the given trim string from the ending of a string
+   * Removes the given source string from the right end
    * This method searches each character in the source string starting from the right end, removes the character if it
    * is in the trim string, stops at the first character which is not in the trim string, returns the new string.
    * @param trimString the trim character string
    */
   public UTF8String trimRight(UTF8String trimString) {
-    // index trimEnd points to first no matching byte position in the input string from right side,
-    // it moves the number of bytes of the trimming character.
-    int trimEnd;
-    int trimIdx = 0;
-    int numChars = 0; // number of characters from the input string
-    int[] stringCharLen = new int[numBytes]; // array of character length for the input string
-    int[] stringCharPos = new int[numBytes]; // array of the first byte position for each character in the input string
-    //build the position and length array
-    while (trimIdx < numBytes) {
-      stringCharPos[numChars] = trimIdx;
-      stringCharLen[numChars]= numBytesForFirstByte(getByte(trimIdx));
-      trimIdx += stringCharLen[numChars];
+    int charIdx = 0;
+    // number of characters from the source string
+    int numChars = 0;
+    // array of character length for the source string
+    int[] stringCharLen = new int[numBytes];
+    // array of the first byte position for each character in the source string
+    int[] stringCharPos = new int[numBytes];
+    // build the position and length array
+    while (charIdx < numBytes) {
+      stringCharPos[numChars] = charIdx;
+      stringCharLen[numChars]= numBytesForFirstByte(getByte(charIdx));
+      charIdx += stringCharLen[numChars];
       numChars ++;
     }
 
-    trimEnd = numBytes - 1;
+    // index trimEnd points to the first no matching byte position from the right side of the source string.
+    int trimEnd = numBytes - 1;
     while (numChars > 0) {
       UTF8String searchChar =
         copyUTF8String(stringCharPos[numChars - 1], stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);

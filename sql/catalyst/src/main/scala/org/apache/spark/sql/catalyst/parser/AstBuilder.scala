@@ -1181,9 +1181,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
     // Create the function call.
     val name = ctx.qualifiedName.getText
-    val trimFuncName = Option(ctx.trimOperator).map {
-      o => visitTrimFuncName(ctx, o)
-    }
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     val arguments = ctx.argument.asScala.map(expression) match {
       case Seq(UnresolvedStar(None))
@@ -1193,8 +1190,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case expressions =>
         expressions
     }
-    val function = UnresolvedFunction(visitFunctionName(ctx.qualifiedName, trimFuncName),
-      arguments, isDistinct)
+    val function = UnresolvedFunction(
+      replaceTrimFunction(visitFunctionName(ctx.qualifiedName), ctx),
+      arguments,
+      isDistinct)
+
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1207,19 +1207,26 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a name LTRIM for TRIM(Leading), RTRIM for TRIM(Trailing), TRIM for TRIM(BOTH)
+   * Create a function name LTRIM for TRIM(Leading), RTRIM for TRIM(Trailing), TRIM for TRIM(BOTH),
+   * otherwise, returnthe original funcID.
    */
-  private def visitTrimFuncName(ctx: FunctionCallContext, opt: Token): String = {
-    if (ctx.qualifiedName.getText.toLowerCase != "trim") {
-      throw new ParseException(s"The specified function ${ctx.qualifiedName.getText} " +
-        s"doesn't support with option ${opt.getText}.", ctx)
-    }
-    opt.getType match {
-      case SqlBaseParser.BOTH => "trim"
-      case SqlBaseParser.LEADING => "ltrim"
-      case SqlBaseParser.TRAILING => "rtrim"
-      case _ => throw new ParseException(s"Function trim doesn't support with" +
-        s"type ${opt.getType}. Please use BOTH, LEADING or Trailing as trim type", ctx)
+  private def replaceTrimFunction(funcID: FunctionIdentifier, ctx: FunctionCallContext)
+    : FunctionIdentifier = {
+    val opt = ctx.trimOption
+    if (opt != null) {
+      if (ctx.qualifiedName.getText.toLowerCase != "trim") {
+        throw new ParseException(s"The specified function ${ctx.qualifiedName.getText} " +
+          s"doesn't support with option ${opt.getText}.", ctx)
+      }
+      opt.getType match {
+        case SqlBaseParser.BOTH => funcID
+        case SqlBaseParser.LEADING => funcID.copy(funcName = "ltrim")
+        case SqlBaseParser.TRAILING => funcID.copy(funcName = "rtrim")
+        case _ => throw new ParseException(s"Function trim doesn't support with" +
+          s"type ${opt.getType}. Please use BOTH, LEADING or Trailing as trim type", ctx)
+      }
+    } else {
+      funcID
     }
   }
 
@@ -1239,22 +1246,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create a function database (optional) and name pair.
    */
-  protected def visitFunctionName(
-      ctx: QualifiedNameContext,
-      trimFuncName: Option[String] = None): FunctionIdentifier = {
+  protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
     ctx.identifier().asScala.map(_.getText) match {
-      case Seq(db, fn) =>
-        if (trimFuncName.isDefined) {
-          FunctionIdentifier(trimFuncName.get, Option(db))
-        } else {
-          FunctionIdentifier(fn, Option(db))
-        }
-      case Seq(fn) =>
-        if (trimFuncName.isDefined) {
-          FunctionIdentifier(trimFuncName.get, None)
-        } else {
-          FunctionIdentifier(fn, None)
-        }
+      case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
+      case Seq(fn) => FunctionIdentifier(fn, None)
       case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
   }
