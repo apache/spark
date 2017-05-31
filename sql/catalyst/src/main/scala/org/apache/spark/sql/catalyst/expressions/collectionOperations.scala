@@ -287,3 +287,110 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def prettyName: String = "array_contains"
 }
+
+/**
+  * Returns the value of index n (right) of the array/map (left).
+  */
+@ExpressionDescription(
+  usage = "_FUNC_(array/map, n) - Returns the value of index n (right) of the array/map (left).",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 2);
+       3
+  """)
+case class Index(left: Expression, right: Expression) extends BinaryExpression {
+
+  lazy val isArray = left.dataType.isInstanceOf[ArrayType]
+  lazy val elementType = left.dataType.asInstanceOf[ArrayType].elementType
+  val rightTypeMatchArray = right.dataType.sameType(IntegerType)
+
+  lazy val isMap = left.dataType.isInstanceOf[MapType]
+  lazy val keyType = left.dataType.asInstanceOf[MapType].keyType
+  lazy val valueType = left.dataType.asInstanceOf[MapType].valueType
+  lazy val rightTypeMatchMap = right.dataType.sameType(keyType)
+
+  val rightIsAtomicType = right.dataType.isInstanceOf[AtomicType]
+  val rightIsNull = right.dataType.isInstanceOf[NullType]
+
+  override def dataType: DataType = {
+    if (isArray) elementType else valueType
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if ((isArray || isMap) && (rightIsAtomicType || rightIsNull)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else
+      TypeCheckResult.TypeCheckFailure("The first arguments must be an array or a map")
+  }
+
+  override def nullable: Boolean = true
+
+  /* Both Map and Array can be regarded as HashTable, since Array can be ragarded as a HashTable
+  *  which has (0, 1, ..., array.length-1) as key list */
+  override def nullSafeEval(hashTable: Any, key: Any): Any = {
+    if (rightIsNull) {
+      null
+    }
+    else if (isArray) {
+      val arrayData: ArrayData  = hashTable.asInstanceOf[ArrayData]
+      if(key.isInstanceOf[Int] && key.asInstanceOf[Int] < arrayData.numElements()) {
+        arrayData.get(key.asInstanceOf[Int], elementType)
+      } else {
+        null
+      }
+    } else {
+      val mapData: MapData = hashTable.asInstanceOf[MapData]
+      if (left.dataType.asInstanceOf[MapType].keyType.sameType(right.dataType)) {
+        mapData.foreach(keyType, valueType, (k, v) =>
+          if (k == key) {
+            return v
+          }
+        )
+      }
+      else {
+        null
+      }
+      null
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (isArray && rightTypeMatchArray) {
+      nullSafeCodeGen(ctx, ev, (arr, index) => {
+        val i = ctx.freshName("i")
+        val getValue = ctx.getValue(arr, elementType, index)
+        s"""
+          if ($arr.numElements() <= $index)  {
+            ${ev.isNull} = true;
+          } else {
+          ${ev.isNull} = false;
+          ${ev.value} = ${getValue};
+          }
+        """
+      })
+    } else if (isMap && rightTypeMatchMap) {
+      nullSafeCodeGen(ctx, ev, (map, key) => {
+        val i = ctx.freshName("i")
+        val getKey = ctx.getValue(s"$map.keyArray()", keyType, i)
+        val getValue = ctx.getValue(s"$map.valueArray()", valueType, i)
+        s"""
+          ${ev.isNull} = true;
+          for (int $i = 0; $i < $map.numElements(); $i ++) {
+            if (${ctx.genEqual(keyType, getKey, key)}) {
+              ${ev.isNull} = false;
+              ${ev.value} = $getValue;
+              break;
+            }
+          }
+      """
+      })
+    } else {
+        ev.copy(code = s"""
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        """)
+    }
+  }
+
+  override def prettyName: String = "index"
+}
