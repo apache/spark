@@ -63,6 +63,11 @@ object HiveThriftServer2 extends Logging {
 
     server.init(executionHive.conf)
     server.start()
+    if (SparkSQLEnv.hiveContext.hiveconf.getBoolVar(
+      ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY)) {
+      invoke(classOf[HiveServer2], server, "addServerInstanceToZooKeeper",
+        classOf[HiveConf] -> SparkSQLEnv.hiveContext.hiveconf)
+    }
     listener = new HiveThriftServer2Listener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
     uiTab = if (sqlContext.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
@@ -93,6 +98,11 @@ object HiveThriftServer2 extends Logging {
       val server = new HiveThriftServer2(SparkSQLEnv.sqlContext)
       server.init(executionHive.conf)
       server.start()
+      if (SparkSQLEnv.hiveContext.hiveconf.getBoolVar(
+        ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY)) {
+        invoke(classOf[HiveServer2], server, "addServerInstanceToZooKeeper",
+          classOf[HiveConf] -> SparkSQLEnv.hiveContext.hiveconf)
+      }
       logInfo("HiveThriftServer2 started")
       listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sqlContext.conf)
       SparkSQLEnv.sparkContext.addSparkListener(listener)
