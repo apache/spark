@@ -1152,7 +1152,7 @@ class Column(val expr: Expression) extends Logging {
   def bitwiseXOR(other: Any): Column = withExpr { BitwiseXor(expr, lit(other).expr) }
 
   /**
-   * Define a windowing column.
+   * Defines a windowing column.
    *
    * {{{
    *   val w = Window.partitionBy("name").orderBy("id")
@@ -1168,7 +1168,7 @@ class Column(val expr: Expression) extends Logging {
   def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
 
   /**
-   * Define a empty analytic clause. In this case the analytic function is applied
+   * Defines an empty analytic clause. In this case the analytic function is applied
    * and presented for all rows in the result set.
    *
    * {{{

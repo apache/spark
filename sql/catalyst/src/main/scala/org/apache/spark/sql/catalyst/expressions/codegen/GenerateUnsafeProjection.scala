@@ -23,11 +23,11 @@ import org.apache.spark.sql.types._
 /**
  * Generates a [[Projection]] that returns an [[UnsafeRow]].
  *
- * It generates the code for all the expressions, compute the total length for all the columns
- * (can be accessed via variables), and then copy the data into a scratch buffer space in the
+ * It generates the code for all the expressions, computes the total length for all the columns
+ * (can be accessed via variables), and then copies the data into a scratch buffer space in the
  * form of UnsafeRow (the scratch buffer will grow as needed).
  *
- * Note: The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
+ * @note The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
  */
 object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
 
