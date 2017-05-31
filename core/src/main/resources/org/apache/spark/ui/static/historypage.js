@@ -171,6 +171,13 @@ $(document).ready(function() {
           }
         }
 
+        if (requestedIncomplete) {
+          var completedCells = document.getElementsByClassName("completedColumn");
+          for (i = 0; i < completedCells.length; i++) {
+            completedCells[i].style.display='none';
+          }
+        }
+
         var durationCells = document.getElementsByClassName("durationClass");
         for (i = 0; i < durationCells.length; i++) {
           var timeInMilliseconds = parseInt(durationCells[i].title);
