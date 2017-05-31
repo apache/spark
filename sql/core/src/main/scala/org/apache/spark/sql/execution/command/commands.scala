@@ -134,8 +134,6 @@ case class WrittenFileCommandExec(
   }
 
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
-    assert(children.nonEmpty)
-
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     val startTime = System.nanoTime()
     val rows = cmd.run(sqlContext.sparkSession, children, updateDriverMetrics)

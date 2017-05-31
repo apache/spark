@@ -91,51 +91,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  /**
-   * Run the given function and return latest execution id.
-   *
-   * @param func the given function to run.
-   */
-  private def getLatestExecutionId(func: () => Unit): Long = {
-    val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
-    // Run the given function to trigger query execution.
-    func()
-    sparkContext.listenerBus.waitUntilEmpty(10000)
-    val executionIds =
-      spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)
-    assert(executionIds.size === 1)
-    executionIds.head
-  }
-
-  /**
-   * Get execution metrics for the given execution id and verify metrics values.
-   *
-   * @param executionId the given execution id.
-   * @param verifyFuncs functions used to verify the values of metrics.
-   */
-  private def verifyWriteDataMetrics(executionId: Long, verifyFuncs: Seq[Int => Boolean]): Unit = {
-    val executionData = spark.sharedState.listener.getExecution(executionId).get
-    val executedNode = executionData.physicalPlanGraph.nodes.head
-
-    val metricsNames = Seq(
-      "number of written files",
-      "number of dynamic part",
-      "bytes of written files",
-      "number of output rows",
-      "writing data out time (ms)")
-
-    val metrics =
-      spark.sharedState.listener.getExecutionMetrics(executionId)
-
-    metricsNames.zip(verifyFuncs).foreach { case (metricsName, verifyFunc) =>
-      val sqlMetric = executedNode.metrics.find(_.name == metricsName)
-      assert(sqlMetric.isDefined)
-      val accumulatorId = sqlMetric.get.accumulatorId
-      val metricValue = metrics(accumulatorId).replaceAll(",", "").toInt
-      assert(verifyFunc(metricValue))
-    }
-  }
-
   test("LocalTableScanExec computes metrics in collect and take") {
     val df1 = spark.createDataset(Seq(1, 2, 3))
     val logical = df1.queryExecution.logical
@@ -334,40 +289,44 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("writing data out metrics") {
+    import SQLMetricsSuite._
+
     withTable("writeToTable") {
       // Create the table.
       Seq.empty[(Int, Int)].toDF("i", "j").write.mode("overwrite").saveAsTable("writeToTable")
 
-      val executionId1 = getLatestExecutionId { () =>
+      val executionId1 = getLatestExecutionId(spark) { () =>
         Seq((1, 2)).toDF("i", "j").write.insertInto("writeToTable")
       }
       // written 1 file, 1 row, 0 dynamic partition.
       val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ > 0, _ == 1, _ > 0)
-      verifyWriteDataMetrics(executionId1, verifyFuncs1)
+      verifyWriteDataMetrics(spark, executionId1, verifyFuncs1)
 
-      val executionId2 = getLatestExecutionId { () =>
+      val executionId2 = getLatestExecutionId(spark) { () =>
         Seq((3, 4), (5, 6), (7, 8)).toDF("i", "j").repartition(1)
           .write.insertInto("writeToTable")
       }
       // written 1 file, 3 rows, 0 dynamic partition.
       val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ > 0, _ == 3, _ > 0)
-      verifyWriteDataMetrics(executionId2, verifyFuncs2)
+      verifyWriteDataMetrics(spark, executionId2, verifyFuncs2)
 
-      val executionId3 = getLatestExecutionId { () =>
+      val executionId3 = getLatestExecutionId(spark) { () =>
         Seq((9, 10), (11, 12)).toDF("i", "j").repartition(2)
           .write.insertInto("writeToTable")
       }
       // written 2 files, 2 rows, 0 dynamic partition.
       val verifyFuncs3: Seq[Int => Boolean] = Seq(_ == 2, _ == 0, _ > 0, _ == 2, _ > 0)
-      verifyWriteDataMetrics(executionId3, verifyFuncs3)
+      verifyWriteDataMetrics(spark, executionId3, verifyFuncs3)
     }
   }
 
   test("writing data out metrics: dynamic partition") {
+    import SQLMetricsSuite._
+
     withTempDir { f =>
       val df =
         spark.range(start = 0, end = 4, step = 1, numPartitions = 1).selectExpr("id", "id id1")
-      val executionId1 = getLatestExecutionId { () =>
+      val executionId1 = getLatestExecutionId(spark) { () =>
         df
           .write
           .partitionBy("id")
@@ -378,9 +337,9 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       assert(Utils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
       // written 4 files, 4 rows, 4 dynamic partitions.
       val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ > 0, _ == 4, _ > 0)
-      verifyWriteDataMetrics(executionId1, verifyFuncs1)
+      verifyWriteDataMetrics(spark, executionId1, verifyFuncs1)
 
-      val executionId2 = getLatestExecutionId { () =>
+      val executionId2 = getLatestExecutionId(spark) { () =>
         df.union(df).repartition(2, $"id")
           .write
           .partitionBy("id")
@@ -391,7 +350,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       assert(Utils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
       // written 4 files, 8 rows, 4 dynamic partitions.
       val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ > 0, _ == 8, _ > 0)
-      verifyWriteDataMetrics(executionId2, verifyFuncs2)
+      verifyWriteDataMetrics(spark, executionId2, verifyFuncs2)
     }
   }
 
@@ -540,5 +499,59 @@ object InputOutputMetricsHelper {
       sparkContext.removeSparkListener(listener)
     }
     listener.getResults()
+  }
+}
+
+/**
+ * This object wraps few methods used to verify SQL metrics when writing data out. The methods are
+ * also used in the tests in Hive.
+ */
+object SQLMetricsSuite {
+  /**
+   * Run the given function and return latest execution id.
+   *
+   * @param func the given function to run.
+   */
+  def getLatestExecutionId(spark: SparkSession)(func: () => Unit): Long = {
+    val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
+    // Run the given function to trigger query execution.
+    func()
+    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+    val executionIds =
+      spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)
+    assert(executionIds.size == 1)
+    executionIds.head
+  }
+
+  /**
+   * Get execution metrics for the given execution id and verify metrics values.
+   *
+   * @param executionId the given execution id.
+   * @param verifyFuncs functions used to verify the values of metrics.
+   */
+  def verifyWriteDataMetrics(
+      spark: SparkSession,
+      executionId: Long,
+      verifyFuncs: Seq[Int => Boolean]): Unit = {
+    val executionData = spark.sharedState.listener.getExecution(executionId).get
+    val executedNode = executionData.physicalPlanGraph.nodes.head
+
+    val metricsNames = Seq(
+      "number of written files",
+      "number of dynamic part",
+      "bytes of written files",
+      "number of output rows",
+      "writing data out time (ms)")
+
+    val metrics =
+      spark.sharedState.listener.getExecutionMetrics(executionId)
+
+    metricsNames.zip(verifyFuncs).foreach { case (metricsName, verifyFunc) =>
+      val sqlMetric = executedNode.metrics.find(_.name == metricsName)
+      assert(sqlMetric.isDefined)
+      val accumulatorId = sqlMetric.get.accumulatorId
+      val metricValue = metrics(accumulatorId).replaceAll(",", "").toInt
+      assert(verifyFunc(metricValue))
+    }
   }
 }
