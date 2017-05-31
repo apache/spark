@@ -117,15 +117,16 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
        46707d92-02f4-4817-8116-a4c3b23e6266
   """)
 // scalastyle:on line.size.limit
-case class Uuid() extends LeafExpression with CodegenFallback {
-  override def foldable: Boolean = true
+case class Uuid() extends LeafExpression {
+
   override def nullable: Boolean = false
 
   override def dataType: DataType = StringType
 
-  override def eval(input: InternalRow): Any = {
-    UTF8String.fromString(UUID.randomUUID().toString)
-  }
+  override def eval(input: InternalRow): Any = UTF8String.fromString(UUID.randomUUID().toString)
 
-  override def prettyName: String = "uuid"
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = " +
+      s"UTF8String.fromString(java.util.UUID.randomUUID().toString());", isNull = "false")
+  }
 }

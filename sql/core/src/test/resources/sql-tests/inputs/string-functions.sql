@@ -14,4 +14,4 @@ select replace('abc', 'b', '123');
 select replace('abc', 'b');
 
 -- uuid
-select length(uuid()), (uuid() <> uuid());
+select length(uuid()), (substring(concat(uuid(), '$'), 1, 36) <> uuid());
