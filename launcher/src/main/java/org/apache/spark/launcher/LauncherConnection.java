@@ -53,7 +53,7 @@ abstract class LauncherConnection implements Closeable, Runnable {
   @Override
   public void run() {
     try {
-      ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+      FilteredObjectInputStream in = new FilteredObjectInputStream(socket.getInputStream());
       while (!closed) {
         Message msg = (Message) in.readObject();
         handle(msg);
