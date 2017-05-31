@@ -21,17 +21,27 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
 
-class DateTimeUtilsSuite extends SparkFunSuite {
+class DateTimeUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   val TimeZonePST = TimeZone.getTimeZone("PST")
 
   private[this] def getInUTCDays(timestamp: Long): Int = {
     val tz = TimeZone.getDefault
     ((timestamp + tz.getOffset(timestamp)) / MILLIS_PER_DAY).toInt
+  }
+
+  private val originalTimeZone = TimeZone.getDefault
+  override def beforeAll(): Unit = {
+    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+  }
+  override def afterAll(): Unit = {
+    TimeZone.setDefault(originalTimeZone)
   }
 
   test("timestamp and us") {
