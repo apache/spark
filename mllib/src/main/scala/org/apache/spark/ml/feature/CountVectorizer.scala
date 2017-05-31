@@ -29,6 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -154,13 +155,19 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   override def fit(dataset: Dataset[_]): CountVectorizerModel = {
     transformSchema(dataset.schema, logging = true)
     val vocSize = $(vocabSize)
+
+    val handlePersistence = $(minDF) < 1.0 &&
+      dataset.storageLevel == StorageLevel.NONE
+
     val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
+    if (handlePersistence) input.persist()
+
     val minDf = if ($(minDF) >= 1.0) {
       $(minDF)
     } else {
-      $(minDF) * input.cache().count()
+      $(minDF) * input.count()
     }
-    val wordCounts: RDD[(String, Long)] = input.flatMap { case (tokens) =>
+    val wordCounts = input.flatMap { case (tokens) =>
       val wc = new OpenHashMap[String, Long]
       tokens.foreach { w =>
         wc.changeValue(w, 1L, _ + 1L)
@@ -172,12 +179,15 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       df >= minDf
     }.map { case (word, (count, dfCount)) =>
       (word, count)
-    }.cache()
+    }.persist()
     val fullVocabSize = wordCounts.count()
 
     val vocab = wordCounts
       .top(math.min(fullVocabSize, vocSize).toInt)(Ordering.by(_._2))
       .map(_._1)
+
+    wordCounts.unpersist(blocking = false)
+    if (handlePersistence) input.unpersist(blocking = false)
 
     require(vocab.length > 0, "The vocabulary size should be > 0. Lower minDF as necessary.")
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
