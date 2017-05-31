@@ -73,7 +73,7 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
 #'                               decide the base level of a string feature as the last category after
 #'                               ordering is dropped when encoding strings. Supported options are
-#'                               "frequencyDesc", "frequencyAsc", "alphabetDes", and "alphabetAsc".
+#'                               "frequencyDesc", "frequencyAsc", "alphabetDesc", and "alphabetAsc".
 #'                               The default value is "frequencyDesc". When the ordering is set to
 #'                               "alphabetDesc", this drops the same category as R when encoding strings.
 #' @param ... additional arguments passed to the method.
@@ -126,8 +126,10 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
                    regParam = 0.0, var.power = 0.0, link.power = 1.0 - var.power,
-                   stringIndexerOrderType = "frequencyDesc") {
+                   stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
+                                              "alphabetDesc", "alphabetAsc")) {
 
+            stringIndexerOrderType <- match.arg(stringIndexerOrderType)
             if (is.character(family)) {
               # Handle when family = "tweedie"
               if (tolower(family) == "tweedie") {
@@ -187,7 +189,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
 #'                               decide the base level of a string feature as the last category after
 #'                               ordering is dropped when encoding strings. Supported options are
-#'                               "frequencyDesc", "frequencyAsc", "alphabetDes", and "alphabetAsc".
+#'                               "frequencyDesc", "frequencyAsc", "alphabetDesc", and "alphabetAsc".
 #'                               The default value is "frequencyDesc". When the ordering is set to
 #'                               "alphabetDesc", this drops the same category as R when encoding strings.
 #' @return \code{glm} returns a fitted generalized linear model.
@@ -206,7 +208,9 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL,
                    var.power = 0.0, link.power = 1.0 - var.power,
-                   stringIndexerOrderType = "frequencyDesc") {
+                   stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
+                                              "alphabetDesc", "alphabetAsc")) {
+            stringIndexerOrderType <- match.arg(stringIndexerOrderType)
             spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol,
                       var.power = var.power, link.power = link.power,
                       stringIndexerOrderType = stringIndexerOrderType)
@@ -446,7 +450,7 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' @param stringIndexerOrderType how to order categories of a string feature column. This is used to
 #'                               decide the base level of a string feature as the last category after
 #'                               ordering is dropped when encoding strings. Supported options are
-#'                               "frequencyDesc", "frequencyAsc", "alphabetDes", and "alphabetAsc".
+#'                               "frequencyDesc", "frequencyAsc", "alphabetDesc", and "alphabetAsc".
 #'                               The default value is "frequencyDesc". When the ordering is set to
 #'                               "alphabetDesc", this drops the same category as R when encoding strings.
 #' @param ... additional arguments passed to the method.
@@ -474,7 +478,9 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' }
 #' @note spark.survreg since 2.0.0
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, aggregationDepth = 2, stringIndexerOrderType = "frequencyDesc") {
+          function(data, formula, aggregationDepth = 2,
+                   stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
+                                              "alphabetDesc", "alphabetAsc")) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
                                 "fit", formula, data@sdf, as.integer(aggregationDepth),
