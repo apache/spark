@@ -205,6 +205,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
       checkConsistencyBetweenInterpretedAndCodegen(Abs, tpe)
     }
+
+    checkEvaluation(Abs(Literal("-1.2")), 1.2)
+    checkEvaluation(Abs(Literal("-1")), 1.0)
+    checkEvaluation(Abs(Literal("1.11")), 1.11)
   }
 
   test("pmod") {
