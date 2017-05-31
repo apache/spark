@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -198,6 +199,9 @@ private[spark] class BlockManager(
   private var lastPeerFetchTime = 0L
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
+
+  // Record the removable block.
+  private lazy val removableBlocks = ConcurrentHashMap.newKeySet[BlockId]()
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
@@ -690,23 +694,54 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Get a block from the block manager (either local or remote).
+    * Get a block from the block manager (either local or remote).
+    *
+    * This acquires a read lock on the block if the block was stored locally and does not acquire
+    * any locks if the block was fetched from a remote block manager. The read lock will
+    * automatically be freed once the result's `data` iterator is fully consumed.
+    */
+  def get[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
+    getOrCacheRemote(blockId, false, Some(StorageLevel.NONE))
+  }
+
+  /**
+   * Get a block from the block manager (either local or remote). And also can cache the block
+   * fetched from remote in local.
    *
    * This acquires a read lock on the block if the block was stored locally and does not acquire
    * any locks if the block was fetched from a remote block manager. The read lock will
    * automatically be freed once the result's `data` iterator is fully consumed.
+   * @param blockId the block under fetching.
+   * @param cacheRemote whether cache the block fetched remotely.
+   * @param storageLevel if the cacheRemote enabled, this should be set.
    */
-  def get[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
+  def getOrCacheRemote[T: ClassTag](
+      blockId: BlockId,
+      cacheRemote: Boolean = false,
+      storageLevel: Option[StorageLevel] = None): Option[BlockResult] = {
     val local = getLocalValues(blockId)
     if (local.isDefined) {
       logInfo(s"Found block $blockId locally")
       return local
     }
     val remote = getRemoteValues[T](blockId)
-    if (remote.isDefined) {
-      logInfo(s"Found block $blockId remotely")
-      return remote
+    remote match {
+      case Some(blockResult) =>
+        logInfo(s"Found block $blockId remotely")
+        if (cacheRemote) {
+          assert(storageLevel.isDefined && storageLevel.get.isValid,
+            "The storage level is invalid.")
+          val putResult = putIterator(blockId, blockResult.data, storageLevel.get) match {
+            case true => "success"
+            case false => "fail"
+          }
+
+          logInfo(s"Cache bock $blockId fetched from remotely $putResult")
+        }
+        return remote
+      case None =>
     }
+
     None
   }
 
@@ -754,10 +789,11 @@ private[spark] class BlockManager(
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[T],
-      makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
+      makeIterator: () => Iterator[T],
+      cacheRemote: Boolean = false): Either[BlockResult, Iterator[T]] = {
     // Attempt to read the block from local or remote storage. If it's present, then we don't need
     // to go through the local-get-or-put path.
-    get[T](blockId)(classTag) match {
+    getOrCacheRemote[T](blockId, cacheRemote, Some(level))(classTag) match {
       case Some(block) =>
         return Left(block)
       case _ =>
@@ -1471,6 +1507,41 @@ private[spark] class BlockManager(
     }
   }
 
+  /**
+   * Whether the block is removable.
+   */
+  def isRemovable(blockId: BlockId): Boolean = {
+    removableBlocks.contains(blockId)
+  }
+
+  /**
+   * Try to remove the block without blocking. Mark it as removable if it is in use.
+   */
+  def removeOrMarkAsRemovable(blockId: BlockId, tellMaster: Boolean = true): Unit = {
+    // Try to lock for writing without blocking.
+    blockInfoManager.lockForWriting(blockId, false) match {
+      case None =>
+        // Because lock in unblocking manner, so the block may not exist or be used by other tasks.
+        blockInfoManager.synchronized {
+          blockInfoManager.get(blockId) match {
+            case None =>
+              // The block has already been removed; do nothing.
+              logWarning(s"Asked to remove block $blockId, which does not exist")
+              removableBlocks.remove(blockId)
+            case Some(_) =>
+              // The block is in use, mark it as removable.
+              logDebug(s"Marking block $blockId as removable")
+              removableBlocks.add(blockId)
+          }
+        }
+      case Some(info) =>
+        logDebug(s"Removing block $blockId")
+        removableBlocks.remove(blockId)
+        removeBlockInternal(blockId, tellMaster = tellMaster && info.tellMaster)
+        addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
+    }
+  }
+
   private def addUpdatedBlockStatusToTaskMetrics(blockId: BlockId, status: BlockStatus): Unit = {
     Option(TaskContext.get()).foreach { c =>
       c.taskMetrics().incUpdatedBlockStatuses(blockId -> status)
@@ -1491,6 +1562,7 @@ private[spark] class BlockManager(
       // Closing should be idempotent, but maybe not for the NioBlockTransferService.
       shuffleClient.close()
     }
+    removableBlocks.clear()
     diskBlockManager.stop()
     rpcEnv.stop(slaveEndpoint)
     blockInfoManager.clear()

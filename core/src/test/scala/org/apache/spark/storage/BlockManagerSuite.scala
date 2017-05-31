@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -26,13 +27,11 @@ import scala.concurrent.Future
 import scala.language.implicitConversions
 import scala.language.postfixOps
 import scala.reflect.ClassTag
-
 import org.mockito.{Matchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
-
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
@@ -100,6 +99,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     memManager.setMemoryStore(blockManager.memoryStore)
     blockManager.initialize("app-id")
     blockManager
+  }
+
+  private def withTaskId[T](taskAttemptId: Long)(block: => T): T = {
+    try {
+      TaskContext.setTaskContext(
+        new TaskContextImpl(0, 0, taskAttemptId, 0, null, new Properties, null))
+      block
+    } finally {
+      TaskContext.unset()
+    }
   }
 
   override def beforeEach(): Unit = {
@@ -1279,6 +1288,77 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations("item").nonEmpty)
     assert(store2.getRemoteBytes("item").isEmpty)
     assert(master.getLocations("item").isEmpty)
+  }
+
+  test("cache block fetch remotely") {
+    store = makeBlockManager(8000, "executor1")
+    store2 = makeBlockManager(8000, "executor2")
+    val arr = new Array[Byte](4000)
+    store.putSingle("block1", arr, StorageLevel.MEMORY_AND_DISK, true)
+    assert(store.getSingleAndReleaseLock("block1").isDefined, "block1 was not in store")
+
+    // default not cache the remotely block
+    store2.getOrCacheRemote("block1")
+    assert(!store2.getLocalAndReleaseLock("block1").isDefined,
+      "block1 should not be cached by store2")
+
+    // cache remotely block
+    store2.getOrCacheRemote("block1", true, Some(StorageLevel.MEMORY_AND_DISK))
+    assert(store2.getLocalAndReleaseLock("block1").isDefined,
+      "block1 should be cached by store2")
+    assert(master.getLocations("block1").size == 2,
+      "master did not report 2 locations for block1")
+  }
+
+  test("remote block with blocking") {
+    store = makeBlockManager(8000, "executor1")
+    val arr = new Array[Byte](4000)
+    store.putSingle("block", arr, StorageLevel.MEMORY_AND_DISK, true)
+    withTaskId(0) {
+      store.get("block")
+    }
+    val future = Future {
+      withTaskId(1) {
+        store.removeBlock("block")
+        master.getLocations("block").isEmpty
+      }
+    }
+    Thread.sleep(300)
+    assert(store.getStatus("block").isDefined, "block was not in store")
+    withTaskId(0) {
+      store.releaseLock("block")
+    }
+    assert(ThreadUtils.awaitResult(future, 1.seconds))
+  }
+
+  test("remote block without blocking") {
+    store = makeBlockManager(8000, "executor1")
+    val arr = new Array[Byte](4000)
+    store.putSingle("block", arr, StorageLevel.MEMORY_AND_DISK, true)
+    withTaskId(0) {
+      // lock the block with read lock
+      store.get("block")
+    }
+    val future = Future {
+      withTaskId(1) {
+        store.removeOrMarkAsRemovable("block")
+        store.isRemovable("block")
+      }
+    }
+    Thread.sleep(300)
+    assert(store.getStatus("block").isDefined, "block should not be removed")
+    assert(ThreadUtils.awaitResult(future, 1.seconds), "block should be marked as removable")
+    withTaskId(0) {
+      store.releaseLock("block")
+    }
+    val future1 = Future {
+      withTaskId(1) {
+        store.removeOrMarkAsRemovable("block")
+        !store.isRemovable("block")
+      }
+    }
+    assert(ThreadUtils.awaitResult(future1, 1.seconds), "block should not be marked as removable")
+    assert(master.getLocations("block").isEmpty, "block should be removed")
   }
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {

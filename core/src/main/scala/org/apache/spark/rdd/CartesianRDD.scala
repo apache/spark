@@ -19,10 +19,11 @@ package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
 
-import scala.reflect.ClassTag
+import scala.reflect._
 
 import org.apache.spark._
-import org.apache.spark.util.Utils
+import org.apache.spark.storage.{BlockId, RDDBlockId, StorageLevel}
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 private[spark]
 class CartesianPartition(
@@ -72,8 +73,60 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
     val currSplit = split.asInstanceOf[CartesianPartition]
-    for (x <- rdd1.iterator(currSplit.s1, context);
-         y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
+    val (iter2, readCachedBlock) =
+      getOrCacheBlock(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK)
+    val resultIter = for (x <- rdd1.iterator(currSplit.s1, context); y <- iter2) yield (x, y)
+
+    CompletionIterator[(T, U), Iterator[(T, U)]](resultIter,
+      removeBlock(RDDBlockId(rdd2.id, currSplit.s2.index), readCachedBlock))
+  }
+
+  /**
+   * Try to get the block from the local, if not local, then get from the remote and cache it in
+   * local.
+   *
+   * Because the Block may be used by another task in the same executor, so when the task is
+   * complete, we try to remove the block in a non-blocking manner, otherwise it will be marked
+   * as removable.
+    */
+  private def getOrCacheBlock(
+      rdd: RDD[U],
+      partition: Partition,
+      context: TaskContext,
+      level: StorageLevel): (Iterator[U], Boolean) = {
+    val blockId = RDDBlockId(rdd.id, partition.index)
+    var readCachedBlock = true
+    // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
+    val iterator = SparkEnv.get.blockManager.getOrElseUpdate(blockId, level, classTag[U], () => {
+      readCachedBlock = false
+      rdd.computeOrReadCheckpoint(partition, context)
+    }, true) match {
+      case Left(blockResult) =>
+        if (readCachedBlock) {
+          val existingMetrics = context.taskMetrics().inputMetrics
+          existingMetrics.incBytesRead(blockResult.bytes)
+          new InterruptibleIterator[U](context, blockResult.data.asInstanceOf[Iterator[U]]) {
+            override def next(): U = {
+              existingMetrics.incRecordsRead(1)
+              delegate.next()
+            }
+          }
+        } else {
+          new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[U]])
+        }
+      case Right(iter) =>
+        new InterruptibleIterator(context, iter.asInstanceOf[Iterator[U]])
+    }
+
+    (iterator, readCachedBlock)
+  }
+
+  private def removeBlock(blockId: BlockId,
+                  readCachedBlock: Boolean): Unit = {
+    val blockManager = SparkEnv.get.blockManager
+    if (!readCachedBlock || blockManager.isRemovable(blockId)) {
+      blockManager.removeOrMarkAsRemovable(blockId, true)
+    }
   }
 
   override def getDependencies: Seq[Dependency[_]] = List(
