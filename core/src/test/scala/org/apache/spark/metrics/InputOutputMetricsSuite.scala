@@ -34,7 +34,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   with BeforeAndAfter {
@@ -324,13 +324,9 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     val bytesRead = runAndReturnBytesRead {
       sc.textFile(tmpFilePath, 4).mapPartitions { iter =>
         val buf = new ArrayBuffer[String]()
-        val thread = new Thread() {
-          override def run(): Unit = {
-            iter.flatMap(_.split(" ")).foreach(buf.append(_))
-          }
+        ThreadUtils.runInNewThread("testThread", false) {
+          iter.flatMap(_.split(" ")).foreach(buf.append(_))
         }
-        thread.start()
-        thread.join()
 
         buf.iterator
       }.count()
@@ -344,13 +340,9 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
       sc.newAPIHadoopFile(tmpFilePath, classOf[NewTextInputFormat], classOf[LongWritable],
         classOf[Text]).mapPartitions { iter =>
         val buf = new ArrayBuffer[String]()
-        val thread = new Thread() {
-          override def run(): Unit = {
-            iter.map(_._2.toString).flatMap(_.split(" ")).foreach(buf.append(_))
-          }
+        ThreadUtils.runInNewThread("testThread", false) {
+          iter.map(_._2.toString).flatMap(_.split(" ")).foreach(buf.append(_))
         }
-        thread.start()
-        thread.join()
 
         buf.iterator
       }.count()
