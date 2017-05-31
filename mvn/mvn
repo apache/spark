@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Setup Zinc.
+
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+
+OUTDIR="$FWDIR"/mvn/target/
+
+mkdir -p $OUTDIR
+
+acquire_zinc_tar () {
+
+    URL="http://downloads.typesafe.com/zinc/0.3.5.3/zinc-0.3.5.3.tgz"
+
+    TAR="$FWDIR"/mvn/target/zinc-0.3.5.3.tgz
+
+  if [[ ! -f "$TAR" ]]; then
+    # Download Tar if it hasn't been downloaded yet
+    printf "Attempting to fetch zinc\n"
+    TAR_DL="${TAR}.part"
+    if hash curl 2>/dev/null; then
+      curl --silent "${URL}" > "$TAR_DL" && mv "$TAR_DL" "$TAR"
+    elif hash wget 2>/dev/null; then
+      wget --quiet ${URL} -O "$TAR_DL" && mv "$TAR_DL" "$TAR"
+    else
+      printf "We could not download zinc, please install it manually.\n"
+      exit -1
+    fi
+
+    tar -xf $TAR -C $OUTDIR &>/dev/null 
+    if [ $? -ne 0 ]; then
+      # We failed to download
+      printf "We could not download zinc at ${TAR}, please install it manually.\n"
+      exit -1
+    fi
+
+  fi
+}
+
+acquire_zinc_tar
+
+ZINC=$OUTDIR/zinc-0.3.5.3/bin/zinc
+chmod +x $ZINC
+
+# Start Zinc if not running.
+
+$ZINC -status | grep -q "running"
+if [ $? -eq 0 ] ;then
+    echo "Zinc is already running, skipping zinc -start."
+else
+    echo "Starting zinc ..."
+    if [[ -z $SCALA_HOME ]]; then
+        echo -e "Please download scala SDK and point to it with SCALA_HOME environment variable."
+    else
+        echo -e "SCALA_HOME found:$SCALA_HOME. "
+    fi
+    cd $FWDIR
+    $ZINC -nailed -nameHashing -scala-home $SCALA_HOME -start 1>&2
+fi
+
+
+# # Run Maven.
+mvn $*
