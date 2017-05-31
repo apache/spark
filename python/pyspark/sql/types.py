@@ -187,11 +187,12 @@ class TimestampType(AtomicType):
 
     def toInternal(self, dt):
         if dt is not None:
-            seconds = calendar.timegm(dt.utctimetuple())
             # Avoiding the invalid range of years (100-1899) for mktime in Python < 3
             if dt.year > 1899 or dt.year <= 100:
                 seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
                            else time.mktime(dt.timetuple()))
+            else:
+                seconds = calendar.timegm(dt.utctimetuple())
             return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts):
