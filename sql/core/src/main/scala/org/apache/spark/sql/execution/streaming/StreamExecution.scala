@@ -34,7 +34,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -655,7 +655,9 @@ class StreamExecution(
       new Dataset(sparkSessionToRunBatch, lastExecution, RowEncoder(lastExecution.analyzed.schema))
 
     reportTimeTaken("addBatch") {
-      sink.addBatch(currentBatchId, nextBatch)
+      SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
+        sink.addBatch(currentBatchId, nextBatch)
+      }
     }
 
     awaitBatchLock.lock()
