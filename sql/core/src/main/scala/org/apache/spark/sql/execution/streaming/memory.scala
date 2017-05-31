@@ -196,11 +196,11 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
       logDebug(s"Committing batch $batchId to $this")
       outputMode match {
         case Append | Update =>
-          val rows = AddedData(batchId, data.collect())
+          val rows = AddedData(batchId, data.collectInternal())
           synchronized { batches += rows }
 
         case Complete =>
-          val rows = AddedData(batchId, data.collect())
+          val rows = AddedData(batchId, data.collectInternal())
           synchronized {
             batches.clear()
             batches += rows

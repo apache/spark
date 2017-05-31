@@ -46,8 +46,8 @@ class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
     println("-------------------------------------------")
     // scalastyle:off println
     data.sparkSession.createDataFrame(
-      data.sparkSession.sparkContext.parallelize(data.collect()), data.schema)
-      .show(numRowsToShow, isTruncated)
+      data.sparkSession.sparkContext.parallelize(data.collectInternal()), data.schema)
+      .showInternal(numRowsToShow, isTruncated)
   }
 }
 
