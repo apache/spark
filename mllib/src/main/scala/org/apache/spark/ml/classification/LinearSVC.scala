@@ -42,7 +42,22 @@ import org.apache.spark.sql.functions.{col, lit}
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasThreshold with HasAggregationDepth
+  with HasAggregationDepth {
+
+  /**
+   * Param for threshold in binary classification prediction.
+   * For LinearSVC, this threshold is applied to the rawPrediction, rather than a probability.
+   * This threshold can be any real number.
+   * Default: 0.0
+   *
+   * @group param
+   */
+  final val threshold: DoubleParam = new DoubleParam(this, "threshold",
+    "threshold in binary classification prediction applied to rawPrediction")
+
+  /** @group getParam */
+  def getThreshold: Double = $(threshold)
+}
 
 /**
  * :: Experimental ::
@@ -126,7 +141,7 @@ class LinearSVC @Since("2.2.0") (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
-   * Set threshold in binary classification, in range [0, 1].
+   * Set threshold in binary classification.
    *
    * @group setParam
    */
@@ -284,6 +299,7 @@ class LinearSVCModel private[classification] (
 
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
+  setDefault(threshold, 0.0)
 
   @Since("2.2.0")
   def setWeightCol(value: Double): this.type = set(threshold, value)

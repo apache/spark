@@ -127,6 +127,14 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     MLTestingUtils.checkCopyAndUids(lsvc, model)
   }
 
+  test("LinearSVC threshold can be any real value") {
+    val lsvc = new LinearSVC()
+    lsvc.setThreshold(2.0)
+    lsvc.setThreshold(-2.0)
+    lsvc.setThreshold(Double.PositiveInfinity)
+    lsvc.setThreshold(Double.NegativeInfinity)
+  }
+
   test("linear svc doesn't fit intercept when fitIntercept is off") {
     val lsvc = new LinearSVC().setFitIntercept(false).setMaxIter(5)
     val model = lsvc.fit(smallBinaryDataset)
