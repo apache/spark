@@ -118,7 +118,7 @@ object MimaExcludes {
       ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.storage.StorageStatus.this"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.StorageStatus.this"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.RDDDataDistribution.this")
-    ) 
+    )
 
   // Exclude rules for 2.1.x
   lazy val v21excludes = v20excludes ++ {
