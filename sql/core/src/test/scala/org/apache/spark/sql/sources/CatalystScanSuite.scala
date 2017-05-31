@@ -64,7 +64,10 @@ class CatalystScanSuite extends DataSourceTest with SharedSQLContext with Predic
     assert(maybeMetadata.isDefined)
     val metadata = maybeMetadata.get
     assert(metadata.contains("PushedCatalystFilters"))
-    assert(metadata("PushedCatalystFilters") == "[(cast(a#0L as string) = 1), *(a#0L < 3)]")
+    assert(
+      metadata("PushedCatalystFilters").contains("cast") &&
+      metadata("PushedCatalystFilters").contains("= 1") &&
+      metadata("PushedCatalystFilters").contains("< 3"))
     assert(!metadata.contains("PushedFilters"))
   }
 }
