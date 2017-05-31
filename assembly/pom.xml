@@ -85,6 +85,10 @@
       <artifactId>guava</artifactId>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
+    <dependency>
+      <groupId>com.palantir.spark.influx</groupId>
+      <artifactId>spark-influx-sink</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

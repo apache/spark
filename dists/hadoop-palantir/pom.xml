@@ -192,5 +192,9 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-yarn_${scala.binary.version}</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.palantir.spark.influx</groupId>
+      <artifactId>spark-influx-sink</artifactId>
+    </dependency>
   </dependencies>
 </project>
