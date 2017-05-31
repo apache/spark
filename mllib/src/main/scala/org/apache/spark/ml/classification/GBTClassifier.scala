@@ -146,10 +146,6 @@ class GBTClassifier @Since("1.4.0") (
   @Since("1.4.0")
   def setLossType(value: String): this.type = set(lossType, value)
 
-
-
-
-
   override protected def train(dataset: Dataset[_]): GBTClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))

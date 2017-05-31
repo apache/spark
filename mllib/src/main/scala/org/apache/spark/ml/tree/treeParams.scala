@@ -305,7 +305,7 @@ private[ml] object TreeRegressorParams {
 }
 
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
-  with TreeRegressorParams with HasVarianceCol  {
+  with TreeRegressorParams with HasVarianceCol {
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -399,8 +399,8 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
     (value: String) =>
       TreeEnsembleParams.supportedFeatureSubsetStrategies.contains(
         value.toLowerCase(Locale.ROOT))
-        || Try(value.toInt).filter(_ > 0).isSuccess
-        || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
+      || Try(value.toInt).filter(_ > 0).isSuccess
+      || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
 
   setDefault(featureSubsetStrategy -> "auto")
 
@@ -447,11 +447,7 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 
   /** @group getParam */
   final def getNumTrees: Int = $(numTrees)
-
-
 }
-
-
 
 private[ml] trait RandomForestClassifierParams
   extends RandomForestParams with TreeClassifierParams
