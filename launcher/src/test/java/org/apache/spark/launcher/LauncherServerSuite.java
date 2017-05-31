@@ -255,8 +255,7 @@ public class LauncherServerSuite extends BaseSuite {
     // message.
     private List<String> notAllowedField = Arrays.asList("disallowed");
 
-    private void readObject(ObjectInputStream stream)
-       throws IOException, ClassNotFoundException {
+    private void readObject(ObjectInputStream stream) throws IOException, ClassNotFoundException {
       stream.defaultReadObject();
       EVIL_BIT = 1;
     }
