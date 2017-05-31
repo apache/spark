@@ -259,9 +259,8 @@ class BlockManagerMasterEndpoint(
         val blockManager = blockManagerInfo.get(blockManagerId)
         if (blockManager.isDefined) {
           // Remove the block from the slave's BlockManager.
-          // Doesn't actually wait for a confirmation and the message might get lost.
-          // If message loss becomes frequent, we should add retry logic here.
-          blockManager.get.slaveEndpoint.ask[Boolean](RemoveBlock(blockId))
+          // wait for confirmation.
+          blockManager.get.slaveEndpoint.askWithRetry[Boolean](RemoveBlock(blockId))
         }
       }
     }
