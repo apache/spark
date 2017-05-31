@@ -127,12 +127,25 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     MLTestingUtils.checkCopyAndUids(lsvc, model)
   }
 
-  test("LinearSVC threshold can be any real value") {
-    val lsvc = new LinearSVC()
-    lsvc.setThreshold(2.0)
-    lsvc.setThreshold(-2.0)
-    lsvc.setThreshold(Double.PositiveInfinity)
-    lsvc.setThreshold(Double.NegativeInfinity)
+  test("LinearSVC threshold acts on rawPrediction") {
+    val lsvc =
+      new LinearSVCModel(uid = "myLSVCM", coefficients = Vectors.dense(1.0), intercept = 0.0)
+    val df = spark.createDataFrame(Seq(
+      (1, Vectors.dense(1e-7)),
+      (0, Vectors.dense(0.0)),
+      (-1, Vectors.dense(-1e-7)))).toDF("id", "features")
+
+    def checkResults(threshold: Double, expected: Set[(Int, Double)]): Unit = {
+      lsvc.setThreshold(threshold)
+      val results = lsvc.transform(df).select("id", "prediction").collect()
+        .map(r => (r.getInt(0), r.getDouble(1)))
+        .toSet
+      assert(results === expected, s"Failed for threshold = $threshold")
+    }
+
+    checkResults(0.0, Set((1, 1.0), (0, 0.0), (-1, 0.0)))
+    checkResults(Double.PositiveInfinity, Set((1, 0.0), (0, 0.0), (-1, 0.0)))
+    checkResults(Double.NegativeInfinity, Set((1, 1.0), (0, 1.0), (-1, 1.0)))
   }
 
   test("linear svc doesn't fit intercept when fitIntercept is off") {

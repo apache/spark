@@ -318,6 +318,10 @@ class LinearSVCModel private[classification] (
     Vectors.dense(-m, m)
   }
 
+  override protected def raw2prediction(rawPrediction: Vector): Double = {
+    if (rawPrediction(1) > $(threshold)) 1.0 else 0.0
+  }
+
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVCModel = {
     copyValues(new LinearSVCModel(uid, coefficients, intercept), extra).setParent(parent)
