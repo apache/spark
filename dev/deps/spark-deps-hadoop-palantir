@@ -32,7 +32,7 @@ calcite-core-1.2.0-incubating.jar
 calcite-linq4j-1.2.0-incubating.jar
 chill-java-0.8.0.jar
 chill_2.11-0.8.0.jar
-commons-beanutils-1.7.0.jar
+commons-beanutils-1.9.3.jar
 commons-beanutils-core-1.8.0.jar
 commons-cli-1.2.jar
 commons-codec-1.10.jar
@@ -169,7 +169,7 @@ mx4j-3.0.2.jar
 netty-3.10.6.Final.jar
 netty-all-4.1.9.Final.jar
 nimbus-jose-jwt-3.9.jar
-objenesis-2.1.jar
+objenesis-2.5.1.jar
 okhttp-2.7.5.jar
 okhttp-3.7.0.jar
 okio-1.12.0.jar

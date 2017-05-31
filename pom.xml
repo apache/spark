@@ -152,6 +152,7 @@
     <aws.java.sdk.version>1.11.76</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
+    <commons-beanutils.version>1.9.3</commons-beanutils.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.3</commons.httpclient.version>
     <commons.httpcore.version>4.4.6</commons.httpcore.version>
@@ -174,6 +175,8 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.5</commons-lang3.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
+    <javax-activation.version>1.1.1</javax-activation.version>
+    <objenesis.version>2.5.1</objenesis.version>
     <janino.version>3.0.0</janino.version>
     <jersey.version>2.25.1</jersey.version>
     <joda.version>2.9.9</joda.version>
@@ -447,12 +450,22 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
+        <groupId>org.objenesis</groupId>
+        <artifactId>objenesis</artifactId>
+        <version>${objenesis.version}</version>
+      </dependency>
+      <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>14.0.1</version>
         <scope>provided</scope>
       </dependency>
       <!-- End of shaded deps -->
+      <dependency>
+        <groupId>commons-beanutils</groupId>
+        <artifactId>commons-beanutils</artifactId>
+        <version>${commons-beanutils.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
@@ -732,6 +745,11 @@
         <groupId>org.glassfish.jersey</groupId>
         <artifactId>jersey-client</artifactId>
         <version>${jersey.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>javax.inject</groupId>
+        <artifactId>activation</artifactId>
+        <version>${javax-activation.version}</version>
       </dependency>
       <dependency>
         <groupId>javax.ws.rs</groupId>
