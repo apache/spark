@@ -200,7 +200,7 @@ class DataFrame(object):
         >>> df.createOrReplaceGlobalTempView("people")
         >>> df2 = df.filter(df.age > 3)
         >>> df2.createOrReplaceGlobalTempView("people")
-        >>> df3 = spark.sql("select * from people")
+        >>> df3 = spark.sql("select * from global_temp.people")
         >>> sorted(df3.collect()) == sorted(df2.collect())
         True
         >>> spark.catalog.dropGlobalTempView("people")
