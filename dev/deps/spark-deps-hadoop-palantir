@@ -171,8 +171,8 @@ netty-all-4.1.9.Final.jar
 nimbus-jose-jwt-3.9.jar
 objenesis-2.5.1.jar
 okhttp-2.7.5.jar
-okhttp-3.7.0.jar
-okio-1.12.0.jar
+okhttp-3.8.0.jar
+okio-1.13.0.jar
 opencsv-2.3.jar
 oro-2.0.8.jar
 osgi-resource-locator-1.0.1.jar

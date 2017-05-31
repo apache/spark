@@ -134,9 +134,9 @@
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.9.1-palantir1</parquet.version>
     <feign.version>8.18.0</feign.version>
-    <okhttp3.version>3.7.0</okhttp3.version>
+    <okhttp3.version>3.8.0</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
-    <okio.version>1.12.0</okio.version>
+    <okio.version>1.13.0</okio.version>
     <bouncycastle.version>1.54</bouncycastle.version>
     <jetty.version>9.4.5.v20170502</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
