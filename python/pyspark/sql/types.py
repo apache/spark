@@ -189,7 +189,7 @@ class TimestampType(AtomicType):
         if dt is not None:
             seconds = calendar.timegm(dt.utctimetuple())
             # Avoiding the invalid range of years (100-1899) for mktime in Python < 3
-            if dt.year not in range(100, 1900):
+            if dt.year > 1899 or dt.year <= 100:
                 seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
                            else time.mktime(dt.timetuple()))
             return int(seconds) * 1000000 + dt.microsecond
