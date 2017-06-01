@@ -552,6 +552,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.subquery.reuse")
+    .internal()
+    .doc("When true, the planner will try to find out duplicated subqueries and re-use them.")
+    .booleanConf
+    .createWithDefault(true)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -931,6 +937,8 @@ class SQLConf extends Serializable with Logging {
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
+
+  def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
