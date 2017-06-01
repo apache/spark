@@ -587,7 +587,7 @@ case class StringTrim(children: Seq[Expression])
       s"UTF8String ${ev.value} = ${inputs(1)}.trim(${inputs(0)});"
     }
     ev.copy(evals.map(_.code).mkString("\n") + s"""
-      boolean ${ev.isNull} = false
+      boolean ${ev.isNull} = false;
       $getTrimFunction
       if (${ev.value} == null) {
         ${ev.isNull} = true;
@@ -656,7 +656,7 @@ case class StringTrimLeft(children: Seq[Expression])
     }
 
     ev.copy(evals.map(_.code).mkString("\n") + s"""
-      boolean ${ev.isNull} = false
+      boolean ${ev.isNull} = false;
       $getTrimLeftFunction
       if (${ev.value} == null) {
         ${ev.isNull} = true;
@@ -724,7 +724,7 @@ case class StringTrimRight(children: Seq[Expression])
       s"UTF8String ${ev.value} = ${inputs(1)}.trimRight(${inputs(0)});"
     }
     ev.copy(evals.map(_.code).mkString("\n") + s"""
-      boolean ${ev.isNull} = false
+      boolean ${ev.isNull} = false;
       $getTrimRightFunction
       if (${ev.value} == null) {
         ${ev.isNull} = true;
