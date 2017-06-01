@@ -467,9 +467,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assert(resolve(after) === after)
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
-      // Also test resolveURIs with single paths
-      assert(new URI(Utils.resolveURIs(before)) === new URI(after))
-      assert(new URI(Utils.resolveURIs(after)) === new URI(after))
+
     }
     val rawCwd = System.getProperty("user.dir")
     val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
@@ -512,6 +510,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
     }
     assertResolves(",jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
+    // Also test resolveURIs with single paths
+    assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
   }
 
   test("nonLocalPaths") {
