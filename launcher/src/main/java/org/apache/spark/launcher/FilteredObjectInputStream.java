@@ -42,7 +42,13 @@ class FilteredObjectInputStream extends ObjectInputStream {
   protected Class<?> resolveClass(ObjectStreamClass desc)
       throws IOException, ClassNotFoundException {
 
-    boolean isValid = ALLOWED_PACKAGES.stream().anyMatch(p -> desc.getName().startsWith(p));
+    boolean isValid = false;
+    for (String p : ALLOWED_PACKAGES) {
+      if (desc.getName().startsWith(p)) {
+        isValid = true;
+        break;
+      }
+    }
     if (!isValid) {
       throw new IllegalArgumentException(
         String.format("Unexpected class in stream: %s", desc.getName()));
