@@ -42,7 +42,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   private final long max;
 
   private boolean checkedNext;
-  private T next;
+  private byte[] next;
   private boolean closed;
   private long count;
 
@@ -128,7 +128,20 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       throw new NoSuchElementException();
     }
     checkedNext = false;
-    return next;
+
+    try {
+      T ret;
+      if (index == null || index.isCopy()) {
+        ret = db.serializer.deserialize(next, type);
+      } else {
+        byte[] key = ti.buildKey(false, ti.naturalIndex().keyPrefix(null), next);
+        ret = db.get(key, type);
+      }
+      next = null;
+      return ret;
+    } catch (Exception e) {
+      throw Throwables.propagate(e);
+    }
   }
 
   @Override
@@ -149,9 +162,16 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   public boolean skip(long n) {
     long skipped = 0;
     while (skipped < n) {
-      next = null;
+      if (next != null) {
+        checkedNext = false;
+        next = null;
+        skipped++;
+        continue;
+      }
+
       boolean hasNext = ascending ? it.hasNext() : it.hasPrev();
       if (!hasNext) {
+        checkedNext = true;
         return false;
       }
 
@@ -161,7 +181,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       }
     }
 
-    return true;
+    return hasNext();
   }
 
   @Override
@@ -172,7 +192,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     }
   }
 
-  private T loadNext() {
+  private byte[] loadNext() {
     if (count >= max) {
       return null;
     }
@@ -214,12 +234,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
         count++;
 
         // Next element is part of the iteration, return it.
-        if (index == null || index.isCopy()) {
-          return db.serializer.deserialize(nextEntry.getValue(), type);
-        } else {
-          byte[] key = ti.buildKey(false, ti.naturalIndex().keyPrefix(null), nextEntry.getValue());
-          return db.get(key, type);
-        }
+        return nextEntry.getValue();
       }
     } catch (Exception e) {
       throw Throwables.propagate(e);

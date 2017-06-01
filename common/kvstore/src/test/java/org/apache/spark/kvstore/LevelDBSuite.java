@@ -221,6 +221,27 @@ public class LevelDBSuite {
     assertEquals(0, db.count(t.getClass(), "name", "name"));
   }
 
+  @Test
+  public void testSkip() throws Exception {
+    for (int i = 0; i < 10; i++) {
+      CustomType1 t = new CustomType1();
+      t.key = "key" + i;
+      t.id = "id" + i;
+      t.name = "name" + i;
+      t.child = "child" + i;
+
+      db.write(t);
+    }
+
+    KVStoreIterator<CustomType1> it = db.view(CustomType1.class).closeableIterator();
+    assertTrue(it.hasNext());
+    assertTrue(it.skip(5));
+    assertEquals("key5", it.next().key);
+    assertTrue(it.skip(3));
+    assertEquals("key9", it.next().key);
+    assertFalse(it.hasNext());
+  }
+
   private int countKeys(Class<?> type) throws Exception {
     byte[] prefix = db.getTypeInfo(type).keyPrefix();
     int count = 0;
