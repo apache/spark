@@ -461,13 +461,12 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     def assertResolves(before: String, after: String): Unit = {
       // This should test only single paths
       assume(before.split(",").length === 1)
-      // Repeated invocations of resolveURI should yield the same result
       def resolve(uri: String): String = Utils.resolveURI(uri).toString
       assert(resolve(before) === after)
       assert(resolve(after) === after)
+      // Repeated invocations of resolveURI should yield the same result
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
-
     }
     val rawCwd = System.getProperty("user.dir")
     val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
@@ -483,18 +482,17 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt")
     assertResolves("file:///C:/path/to/file.txt", "file:///C:/path/to/file.txt")
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt")
-    assertResolves("file:foo", s"file:foo")
-    assertResolves("file:foo:baby", s"file:foo:baby")
+    assertResolves("file:foo", "file:foo")
+    assertResolves("file:foo:baby", "file:foo:baby")
   }
 
   test("resolveURIs with multiple paths") {
     def assertResolves(before: String, after: String): Unit = {
       assume(before.split(",").length > 1)
-      assert(Utils.resolveURIs(before) === after)
-      assert(Utils.resolveURIs(after) === after)
-      // Repeated invocations of resolveURIs should yield the same result
       def resolve(uri: String): String = Utils.resolveURIs(uri)
+      assert(resolve(before) === after)
       assert(resolve(after) === after)
+      // Repeated invocations of resolveURIs should yield the same result
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
     }
