@@ -56,7 +56,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   }
 
   test("check types for unary arithmetic") {
-    assertError(UnaryMinus('stringField), "(numeric or calendarinterval) type")
     assertError(Abs('stringField), "requires numeric type")
     assertError(BitwiseNot('stringField), "requires integral type")
   }
