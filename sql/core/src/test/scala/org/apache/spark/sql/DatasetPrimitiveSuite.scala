@@ -17,9 +17,20 @@
 
 package org.apache.spark.sql
 
+import scala.collection.immutable.Queue
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class IntClass(value: Int)
+
+case class SeqClass(s: Seq[Int])
+
+case class ListClass(l: List[Int])
+
+case class QueueClass(q: Queue[Int])
+
+case class ComplexClass(seq: SeqClass, list: ListClass, queue: QueueClass)
 
 package object packageobject {
   case class PackageClass(value: Int)
@@ -51,11 +62,72 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
       2, 3, 4)
   }
 
+  test("mapPrimitive") {
+    val dsInt = Seq(1, 2, 3).toDS()
+    checkDataset(dsInt.map(_ > 1), false, true, true)
+    checkDataset(dsInt.map(_ + 1), 2, 3, 4)
+    checkDataset(dsInt.map(_ + 8589934592L), 8589934593L, 8589934594L, 8589934595L)
+    checkDataset(dsInt.map(_ + 1.1F), 2.1F, 3.1F, 4.1F)
+    checkDataset(dsInt.map(_ + 1.23D), 2.23D, 3.23D, 4.23D)
+
+    val dsLong = Seq(1L, 2L, 3L).toDS()
+    checkDataset(dsLong.map(_ > 1), false, true, true)
+    checkDataset(dsLong.map(e => (e + 1).toInt), 2, 3, 4)
+    checkDataset(dsLong.map(_ + 8589934592L), 8589934593L, 8589934594L, 8589934595L)
+    checkDataset(dsLong.map(_ + 1.1F), 2.1F, 3.1F, 4.1F)
+    checkDataset(dsLong.map(_ + 1.23D), 2.23D, 3.23D, 4.23D)
+
+    val dsFloat = Seq(1F, 2F, 3F).toDS()
+    checkDataset(dsFloat.map(_ > 1), false, true, true)
+    checkDataset(dsFloat.map(e => (e + 1).toInt), 2, 3, 4)
+    checkDataset(dsFloat.map(e => (e + 123456L).toLong), 123457L, 123458L, 123459L)
+    checkDataset(dsFloat.map(_ + 1.1F), 2.1F, 3.1F, 4.1F)
+    checkDataset(dsFloat.map(_ + 1.23D), 2.23D, 3.23D, 4.23D)
+
+    val dsDouble = Seq(1D, 2D, 3D).toDS()
+    checkDataset(dsDouble.map(_ > 1), false, true, true)
+    checkDataset(dsDouble.map(e => (e + 1).toInt), 2, 3, 4)
+    checkDataset(dsDouble.map(e => (e + 8589934592L).toLong),
+      8589934593L, 8589934594L, 8589934595L)
+    checkDataset(dsDouble.map(e => (e + 1.1F).toFloat), 2.1F, 3.1F, 4.1F)
+    checkDataset(dsDouble.map(_ + 1.23D), 2.23D, 3.23D, 4.23D)
+
+    val dsBoolean = Seq(true, false).toDS()
+    checkDataset(dsBoolean.map(e => !e), false, true)
+  }
+
+  test("mapPrimitiveArray") {
+    val dsInt = Seq(Array(1, 2), Array(3, 4)).toDS()
+    checkDataset(dsInt.map(e => e), Array(1, 2), Array(3, 4))
+    checkDataset(dsInt.map(e => null: Array[Int]), null, null)
+
+    val dsDouble = Seq(Array(1D, 2D), Array(3D, 4D)).toDS()
+    checkDataset(dsDouble.map(e => e), Array(1D, 2D), Array(3D, 4D))
+    checkDataset(dsDouble.map(e => null: Array[Double]), null, null)
+  }
+
   test("filter") {
     val ds = Seq(1, 2, 3, 4).toDS()
     checkDataset(
       ds.filter(_ % 2 == 0),
       2, 4)
+  }
+
+  test("filterPrimitive") {
+    val dsInt = Seq(1, 2, 3).toDS()
+    checkDataset(dsInt.filter(_ > 1), 2, 3)
+
+    val dsLong = Seq(1L, 2L, 3L).toDS()
+    checkDataset(dsLong.filter(_ > 1), 2L, 3L)
+
+    val dsFloat = Seq(1F, 2F, 3F).toDS()
+    checkDataset(dsFloat.filter(_ > 1), 2F, 3F)
+
+    val dsDouble = Seq(1D, 2D, 3D).toDS()
+    checkDataset(dsDouble.filter(_ > 1), 2D, 3D)
+
+    val dsBoolean = Seq(true, false).toDS()
+    checkDataset(dsBoolean.filter(e => !e), false)
   }
 
   test("foreach") {
@@ -128,6 +200,67 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(Array(true)).toDS(), Array(true))
     checkDataset(Seq(Array("test")).toDS(), Array("test"))
     checkDataset(Seq(Array(Tuple1(1))).toDS(), Array(Tuple1(1)))
+  }
+
+  test("arbitrary sequences") {
+    checkDataset(Seq(Queue(1)).toDS(), Queue(1))
+    checkDataset(Seq(Queue(1.toLong)).toDS(), Queue(1.toLong))
+    checkDataset(Seq(Queue(1.toDouble)).toDS(), Queue(1.toDouble))
+    checkDataset(Seq(Queue(1.toFloat)).toDS(), Queue(1.toFloat))
+    checkDataset(Seq(Queue(1.toByte)).toDS(), Queue(1.toByte))
+    checkDataset(Seq(Queue(1.toShort)).toDS(), Queue(1.toShort))
+    checkDataset(Seq(Queue(true)).toDS(), Queue(true))
+    checkDataset(Seq(Queue("test")).toDS(), Queue("test"))
+    checkDataset(Seq(Queue(Tuple1(1))).toDS(), Queue(Tuple1(1)))
+
+    checkDataset(Seq(ArrayBuffer(1)).toDS(), ArrayBuffer(1))
+    checkDataset(Seq(ArrayBuffer(1.toLong)).toDS(), ArrayBuffer(1.toLong))
+    checkDataset(Seq(ArrayBuffer(1.toDouble)).toDS(), ArrayBuffer(1.toDouble))
+    checkDataset(Seq(ArrayBuffer(1.toFloat)).toDS(), ArrayBuffer(1.toFloat))
+    checkDataset(Seq(ArrayBuffer(1.toByte)).toDS(), ArrayBuffer(1.toByte))
+    checkDataset(Seq(ArrayBuffer(1.toShort)).toDS(), ArrayBuffer(1.toShort))
+    checkDataset(Seq(ArrayBuffer(true)).toDS(), ArrayBuffer(true))
+    checkDataset(Seq(ArrayBuffer("test")).toDS(), ArrayBuffer("test"))
+    checkDataset(Seq(ArrayBuffer(Tuple1(1))).toDS(), ArrayBuffer(Tuple1(1)))
+  }
+
+  test("sequence and product combinations") {
+    // Case classes
+    checkDataset(Seq(SeqClass(Seq(1))).toDS(), SeqClass(Seq(1)))
+    checkDataset(Seq(Seq(SeqClass(Seq(1)))).toDS(), Seq(SeqClass(Seq(1))))
+    checkDataset(Seq(List(SeqClass(Seq(1)))).toDS(), List(SeqClass(Seq(1))))
+    checkDataset(Seq(Queue(SeqClass(Seq(1)))).toDS(), Queue(SeqClass(Seq(1))))
+
+    checkDataset(Seq(ListClass(List(1))).toDS(), ListClass(List(1)))
+    checkDataset(Seq(Seq(ListClass(List(1)))).toDS(), Seq(ListClass(List(1))))
+    checkDataset(Seq(List(ListClass(List(1)))).toDS(), List(ListClass(List(1))))
+    checkDataset(Seq(Queue(ListClass(List(1)))).toDS(), Queue(ListClass(List(1))))
+
+    checkDataset(Seq(QueueClass(Queue(1))).toDS(), QueueClass(Queue(1)))
+    checkDataset(Seq(Seq(QueueClass(Queue(1)))).toDS(), Seq(QueueClass(Queue(1))))
+    checkDataset(Seq(List(QueueClass(Queue(1)))).toDS(), List(QueueClass(Queue(1))))
+    checkDataset(Seq(Queue(QueueClass(Queue(1)))).toDS(), Queue(QueueClass(Queue(1))))
+
+    val complex = ComplexClass(SeqClass(Seq(1)), ListClass(List(2)), QueueClass(Queue(3)))
+    checkDataset(Seq(complex).toDS(), complex)
+    checkDataset(Seq(Seq(complex)).toDS(), Seq(complex))
+    checkDataset(Seq(List(complex)).toDS(), List(complex))
+    checkDataset(Seq(Queue(complex)).toDS(), Queue(complex))
+
+    // Tuples
+    checkDataset(Seq(Seq(1) -> Seq(2)).toDS(), Seq(1) -> Seq(2))
+    checkDataset(Seq(List(1) -> Queue(2)).toDS(), List(1) -> Queue(2))
+    checkDataset(Seq(List(Seq("test1") -> List(Queue("test2")))).toDS(),
+      List(Seq("test1") -> List(Queue("test2"))))
+
+    // Complex
+    checkDataset(Seq(ListClass(List(1)) -> Queue("test" -> SeqClass(Seq(2)))).toDS(),
+      ListClass(List(1)) -> Queue("test" -> SeqClass(Seq(2))))
+  }
+
+  test("nested sequences") {
+    checkDataset(Seq(Seq(Seq(1))).toDS(), Seq(Seq(1)))
+    checkDataset(Seq(List(Queue(1))).toDS(), List(Queue(1)))
   }
 
   test("package objects") {

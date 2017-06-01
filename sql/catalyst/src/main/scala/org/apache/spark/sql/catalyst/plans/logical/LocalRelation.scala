@@ -21,6 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object LocalRelation {
@@ -66,16 +67,9 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     }
   }
 
-  override def sameResult(plan: LogicalPlan): Boolean = {
-    plan.canonicalized match {
-      case LocalRelation(otherOutput, otherData) =>
-        otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
-      case _ => false
-    }
-  }
-
-  override lazy val statistics =
-    Statistics(sizeInBytes = output.map(_.dataType.defaultSize).sum * data.length)
+  override def computeStats(conf: SQLConf): Statistics =
+    Statistics(sizeInBytes =
+      output.map(n => BigInt(n.dataType.defaultSize)).sum * data.length)
 
   def toSQL(inlineTableName: String): String = {
     require(data.nonEmpty)

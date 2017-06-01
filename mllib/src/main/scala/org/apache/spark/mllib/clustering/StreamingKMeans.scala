@@ -145,7 +145,7 @@ class StreamingKMeansModel @Since("1.2.0") (
       }
     }
 
-    this
+    new StreamingKMeansModel(clusterCenters, clusterWeights)
   }
 }
 

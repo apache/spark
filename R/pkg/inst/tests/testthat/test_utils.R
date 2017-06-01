@@ -18,11 +18,12 @@
 context("functions in utils.R")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("convertJListToRList() gives back (deserializes) the original JLists
           of strings and integers", {
+  skip_on_cran()
   # It's hard to manually create a Java List using rJava, since it does not
   # support generics well. Instead, we rely on collectRDD() returning a
   # JList.
@@ -40,6 +41,7 @@ test_that("convertJListToRList() gives back (deserializes) the original JLists
 })
 
 test_that("serializeToBytes on RDD", {
+  skip_on_cran()
   # File content
   mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
@@ -134,7 +136,7 @@ test_that("cleanClosure on R functions", {
 
   # Test for broadcast variables.
   a <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
-  aBroadcast <- broadcast(sc, a)
+  aBroadcast <- broadcastRDD(sc, a)
   normMultiply <- function(x) { norm(aBroadcast$value) * x }
   newnormMultiply <- SparkR:::cleanClosure(normMultiply)
   env <- environment(newnormMultiply)
@@ -167,16 +169,20 @@ test_that("convertToJSaveMode", {
 })
 
 test_that("captureJVMException", {
-  method <- "getSQLDataType"
+  skip_on_cran()
+
+  method <- "createStructField"
   expect_error(tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", method,
-                                    "unknown"),
+                                    "col", "unknown", TRUE),
                         error = function(e) {
                           captureJVMException(e, method)
                         }),
-               "Error in getSQLDataType : illegal argument - Invalid type unknown")
+               "parse error - .*DataType unknown.*not supported.")
 })
 
 test_that("hashCode", {
+  skip_on_cran()
+
   expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
 })
 
@@ -228,4 +234,15 @@ test_that("varargsToStrEnv", {
   expect_warning(varargsToStrEnv(1, 2, 3, 4), "Unnamed arguments ignored: 1, 2, 3, 4.")
 })
 
+test_that("basenameSansExtFromUrl", {
+  x <- paste0("http://people.apache.org/~pwendell/spark-nightly/spark-branch-2.1-bin/spark-2.1.1-",
+              "SNAPSHOT-2016_12_09_11_08-eb2d9bf-bin/spark-2.1.1-SNAPSHOT-bin-hadoop2.7.tgz")
+  expect_equal(basenameSansExtFromUrl(x), "spark-2.1.1-SNAPSHOT-bin-hadoop2.7")
+  z <- "http://people.apache.org/~pwendell/spark-releases/spark-2.1.0--hive.tar.gz"
+  expect_equal(basenameSansExtFromUrl(z), "spark-2.1.0--hive")
+})
+
 sparkR.session.stop()
+
+message("--- End test (utils) ", as.POSIXct(Sys.time(), tz = "GMT"))
+message("elapsed ", (proc.time() - timer_ptm)[3])

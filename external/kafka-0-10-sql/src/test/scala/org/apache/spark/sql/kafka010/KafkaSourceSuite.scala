@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.Properties
+import java.nio.file.{Files, Paths}
+import java.util.{Locale, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -31,11 +33,15 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
+import org.apache.spark.util.Utils
 
 abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
@@ -140,6 +146,114 @@ class KafkaSourceSuite extends KafkaSourceTest {
 
   private val topicId = new AtomicInteger(0)
 
+  testWithUninterruptibleThread(
+    "deserialization of initial offset with Spark 2.1.0") {
+    withTempDir { metadataPath =>
+      val topic = newTopic
+      testUtils.createTopic(topic, partitions = 3)
+
+      val provider = new KafkaSourceProvider
+      val parameters = Map(
+        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
+        "subscribe" -> topic
+      )
+      val source = provider.createSource(spark.sqlContext, metadataPath.getAbsolutePath, None,
+        "", parameters)
+      source.getOffset.get // Write initial offset
+
+      // Make sure Spark 2.1.0 will throw an exception when reading the new log
+      intercept[java.lang.IllegalArgumentException] {
+        // Simulate how Spark 2.1.0 reads the log
+        Utils.tryWithResource(new FileInputStream(metadataPath.getAbsolutePath + "/0")) { in =>
+          val length = in.read()
+          val bytes = new Array[Byte](length)
+          in.read(bytes)
+          KafkaSourceOffset(SerializedOffset(new String(bytes, UTF_8)))
+        }
+      }
+    }
+  }
+
+  testWithUninterruptibleThread("deserialization of initial offset written by Spark 2.1.0") {
+    withTempDir { metadataPath =>
+      val topic = "kafka-initial-offset-2-1-0"
+      testUtils.createTopic(topic, partitions = 3)
+
+      val provider = new KafkaSourceProvider
+      val parameters = Map(
+        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
+        "subscribe" -> topic
+      )
+
+      val from = new File(
+        getClass.getResource("/kafka-source-initial-offset-version-2.1.0.bin").toURI).toPath
+      val to = Paths.get(s"${metadataPath.getAbsolutePath}/0")
+      Files.copy(from, to)
+
+      val source = provider.createSource(
+        spark.sqlContext, metadataPath.toURI.toString, None, "", parameters)
+      val deserializedOffset = source.getOffset.get
+      val referenceOffset = KafkaSourceOffset((topic, 0, 0L), (topic, 1, 0L), (topic, 2, 0L))
+      assert(referenceOffset == deserializedOffset)
+    }
+  }
+
+  testWithUninterruptibleThread("deserialization of initial offset written by future version") {
+    withTempDir { metadataPath =>
+      val futureMetadataLog =
+        new HDFSMetadataLog[KafkaSourceOffset](sqlContext.sparkSession,
+          metadataPath.getAbsolutePath) {
+          override def serialize(metadata: KafkaSourceOffset, out: OutputStream): Unit = {
+            out.write(0)
+            val writer = new BufferedWriter(new OutputStreamWriter(out, UTF_8))
+            writer.write(s"v99999\n${metadata.json}")
+            writer.flush
+          }
+        }
+
+      val topic = newTopic
+      testUtils.createTopic(topic, partitions = 3)
+      val offset = KafkaSourceOffset((topic, 0, 0L), (topic, 1, 0L), (topic, 2, 0L))
+      futureMetadataLog.add(0, offset)
+
+      val provider = new KafkaSourceProvider
+      val parameters = Map(
+        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
+        "subscribe" -> topic
+      )
+      val source = provider.createSource(spark.sqlContext, metadataPath.getAbsolutePath, None,
+        "", parameters)
+
+      val e = intercept[java.lang.IllegalStateException] {
+        source.getOffset.get // Read initial offset
+      }
+
+      Seq(
+        s"maximum supported log version is v${KafkaSource.VERSION}, but encountered v99999",
+        "produced by a newer version of Spark and cannot be read by this version"
+      ).foreach { message =>
+        assert(e.getMessage.contains(message))
+      }
+    }
+  }
+
+  test("(de)serialization of initial offsets") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 64)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+
+    testStream(reader.load)(
+      makeSureGetOffsetCalled,
+      StopStream,
+      StartStream(),
+      StopStream)
+  }
+
   test("maxOffsetsPerTrigger") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
@@ -187,8 +301,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
       ),
       StopStream,
       StartStream(ProcessingTime(100), clock),
-      waitUntilBatchProcessed,
-      AdvanceManualClock(100),
       waitUntilBatchProcessed,
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
@@ -379,9 +491,12 @@ class KafkaSourceSuite extends KafkaSourceTest {
         reader.load()
       }
       expectedMsgs.foreach { m =>
-        assert(ex.getMessage.toLowerCase.contains(m.toLowerCase))
+        assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
       }
     }
+
+    // Specifying an ending offset
+    testBadOptions("endingOffsets" -> "latest")("Ending offset not valid in streaming queries")
 
     // No strategy specified
     testBadOptions()("options must be specified", "subscribe", "subscribePattern")
@@ -409,7 +524,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
           .option(s"$key", value)
         reader.load()
       }
-      assert(ex.getMessage.toLowerCase.contains("not supported"))
+      assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("not supported"))
     }
 
     testUnsupportedConfig("kafka.group.id")
@@ -447,7 +562,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
       AssertOnQuery { query =>
-        val recordsRead = query.recentProgresses.map(_.numInputRows).sum
+        val recordsRead = query.recentProgress.map(_.numInputRows).sum
         recordsRead == 3
       }
     )
@@ -494,6 +609,24 @@ class KafkaSourceSuite extends KafkaSourceTest {
     query.stop()
     // `failOnDataLoss` is `false`, we should not fail the query
     assert(query.exception.isEmpty)
+  }
+
+  test("get offsets from case insensitive parameters") {
+    for ((optionKey, optionValue, answer) <- Seq(
+      (STARTING_OFFSETS_OPTION_KEY, "earLiEst", EarliestOffsetRangeLimit),
+      (ENDING_OFFSETS_OPTION_KEY, "laTest", LatestOffsetRangeLimit),
+      (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
+        SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
+      val offset = getKafkaOffsetRangeLimit(Map(optionKey -> optionValue), optionKey, answer)
+      assert(offset === answer)
+    }
+
+    for ((optionKey, answer) <- Seq(
+      (STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit),
+      (ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit))) {
+      val offset = getKafkaOffsetRangeLimit(Map.empty, optionKey, answer)
+      assert(offset === answer)
+    }
   }
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
@@ -811,6 +944,11 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
 
   private def newTopic(): String = s"failOnDataLoss-${topicId.getAndIncrement()}"
 
+  override def createSparkSession(): TestSparkSession = {
+    // Set maxRetries to 3 to handle NPE from `poll` when deleting a topic
+    new TestSparkSession(new SparkContext("local[2,3]", "test-sql-context", sparkConf))
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     testUtils = new KafkaTestUtils {
@@ -839,7 +977,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
     }
   }
 
-  ignore("stress test for failOnDataLoss=false") {
+  test("stress test for failOnDataLoss=false") {
     val reader = spark
       .readStream
       .format("kafka")
@@ -848,6 +986,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
       .option("subscribePattern", "failOnDataLoss.*")
       .option("startingOffsets", "earliest")
       .option("failOnDataLoss", "false")
+      .option("fetchOffset.retryIntervalMs", "3000")
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]

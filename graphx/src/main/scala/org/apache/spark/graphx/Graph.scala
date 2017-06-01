@@ -331,7 +331,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
 
   /**
    * Merges multiple edges between two vertices into a single edge. For correct results, the graph
-   * must have been partitioned using [[partitionBy]].
+   * must have been partitioned using `partitionBy`.
    *
    * @param merge the user-supplied commutative associative function to merge edge attributes
    *              for duplicate edges.

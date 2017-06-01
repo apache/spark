@@ -17,17 +17,15 @@
 
 package org.apache.spark.network.util;
 
+import java.util.Locale;
+import java.util.Properties;
+
 import com.google.common.primitives.Ints;
 
 /**
  * A central location that tracks all the settings we expose to users.
  */
 public class TransportConf {
-
-  static {
-    // Set this due to Netty PR #5661 for Netty 4.0.37+ to work
-    System.setProperty("io.netty.maxDirectMemory", "0");
-  }
 
   private final String SPARK_NETWORK_IO_MODE_KEY;
   private final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY;
@@ -73,8 +71,14 @@ public class TransportConf {
     return "spark." + module + "." + suffix;
   }
 
+  public String getModuleName() {
+    return module;
+  }
+
   /** IO mode: nio or epoll */
-  public String ioMode() { return conf.get(SPARK_NETWORK_IO_MODE_KEY, "NIO").toUpperCase(); }
+  public String ioMode() {
+    return conf.get(SPARK_NETWORK_IO_MODE_KEY, "NIO").toUpperCase(Locale.ROOT);
+  }
 
   /** If true, we will prefer allocating off-heap byte buffers within Netty. */
   public boolean preferDirectBufs() {
@@ -116,9 +120,10 @@ public class TransportConf {
   /** Send buffer size (SO_SNDBUF). */
   public int sendBuf() { return conf.getInt(SPARK_NETWORK_IO_SENDBUFFER_KEY, -1); }
 
-  /** Timeout for a single round trip of SASL token exchange, in milliseconds. */
-  public int saslRTTimeoutMs() {
-    return (int) JavaUtils.timeStringAsSec(conf.get(SPARK_NETWORK_SASL_TIMEOUT_KEY, "30s")) * 1000;
+  /** Timeout for a single round trip of auth message exchange, in milliseconds. */
+  public int authRTTimeoutMs() {
+    return (int) JavaUtils.timeStringAsSec(conf.get("spark.network.auth.rpcTimeout",
+      conf.get(SPARK_NETWORK_SASL_TIMEOUT_KEY, "30s"))) * 1000;
   }
 
   /**
@@ -161,7 +166,77 @@ public class TransportConf {
   }
 
   /**
-   * Maximum number of bytes to be encrypted at a time when SASL encryption is enabled.
+   * Enables strong encryption. Also enables the new auth protocol, used to negotiate keys.
+   */
+  public boolean encryptionEnabled() {
+    return conf.getBoolean("spark.network.crypto.enabled", false);
+  }
+
+  /**
+   * The cipher transformation to use for encrypting session data.
+   */
+  public String cipherTransformation() {
+    return conf.get("spark.network.crypto.cipher", "AES/CTR/NoPadding");
+  }
+
+  /**
+   * The key generation algorithm. This should be an algorithm that accepts a "PBEKeySpec"
+   * as input. The default value (PBKDF2WithHmacSHA1) is available in Java 7.
+   */
+  public String keyFactoryAlgorithm() {
+    return conf.get("spark.network.crypto.keyFactoryAlgorithm", "PBKDF2WithHmacSHA1");
+  }
+
+  /**
+   * How many iterations to run when generating keys.
+   *
+   * See some discussion about this at: http://security.stackexchange.com/q/3959
+   * The default value was picked for speed, since it assumes that the secret has good entropy
+   * (128 bits by default), which is not generally the case with user passwords.
+   */
+  public int keyFactoryIterations() {
+    return conf.getInt("spark.networy.crypto.keyFactoryIterations", 1024);
+  }
+
+  /**
+   * Encryption key length, in bits.
+   */
+  public int encryptionKeyLength() {
+    return conf.getInt("spark.network.crypto.keyLength", 128);
+  }
+
+  /**
+   * Initial vector length, in bytes.
+   */
+  public int ivLength() {
+    return conf.getInt("spark.network.crypto.ivLength", 16);
+  }
+
+  /**
+   * The algorithm for generated secret keys. Nobody should really need to change this,
+   * but configurable just in case.
+   */
+  public String keyAlgorithm() {
+    return conf.get("spark.network.crypto.keyAlgorithm", "AES");
+  }
+
+  /**
+   * Whether to fall back to SASL if the new auth protocol fails. Enabled by default for
+   * backwards compatibility.
+   */
+  public boolean saslFallback() {
+    return conf.getBoolean("spark.network.crypto.saslFallback", true);
+  }
+
+  /**
+   * Whether to enable SASL-based encryption when authenticating using SASL.
+   */
+  public boolean saslEncryption() {
+    return conf.getBoolean("spark.authenticate.enableSaslEncryption", false);
+  }
+
+  /**
+   * Maximum number of bytes to be encrypted at a time when SASL encryption is used.
    */
   public int maxSaslEncryptedBlockSize() {
     return Ints.checkedCast(JavaUtils.byteStringAsBytes(
@@ -176,24 +251,10 @@ public class TransportConf {
   }
 
   /**
-   * The trigger for enabling AES encryption.
+   * The commons-crypto configuration for the module.
    */
-  public boolean aesEncryptionEnabled() {
-    return conf.getBoolean("spark.authenticate.encryption.aes.enabled", false);
+  public Properties cryptoConf() {
+    return CryptoUtils.toCryptoConf("spark.network.crypto.config.", conf.getAll());
   }
 
-  /**
-   * The implementation class for crypto cipher
-   */
-  public String aesCipherClass() {
-    return conf.get("spark.authenticate.encryption.aes.cipher.class", null);
-  }
-
-  /**
-   * The bytes of AES cipher key which is effective when AES cipher is enabled. Notice that
-   * the length should be 16, 24 or 32 bytes.
-   */
-  public int aesCipherKeySize() {
-    return conf.getInt("spark.authenticate.encryption.aes.cipher.keySize", 16);
-  }
 }

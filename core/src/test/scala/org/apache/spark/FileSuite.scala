@@ -18,10 +18,12 @@
 package org.apache.spark
 
 import java.io._
+import java.nio.ByteBuffer
 import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
 
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
 import org.apache.hadoop.mapred.{FileAlreadyExistsException, FileSplit, JobConf, TextInputFormat, TextOutputFormat}
@@ -29,7 +31,6 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
-import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.config.IGNORE_CORRUPT_FILES
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.storage.StorageLevel
@@ -236,184 +237,82 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     assert(output.map(_.toString).collect().toList === List("(1,a)", "(2,aa)", "(3,aaa)"))
   }
 
-  test("binary file input as byte array") {
-    sc = new SparkContext("local", "test")
+  private def writeBinaryData(testOutput: Array[Byte], testOutputCopies: Int): File = {
     val outFile = new File(tempDir, "record-bytestream-00000.bin")
-    val outFileName = outFile.getAbsolutePath()
-
-    // create file
-    val testOutput = Array[Byte](1, 2, 3, 4, 5, 6)
-    val bbuf = java.nio.ByteBuffer.wrap(testOutput)
-    // write data to file
-    val file = new java.io.FileOutputStream(outFile)
+    val file = new FileOutputStream(outFile)
     val channel = file.getChannel
-    channel.write(bbuf)
+    for (i <- 0 until testOutputCopies) {
+      // Shift values by i so that they're different in the output
+      val alteredOutput = testOutput.map(b => (b + i).toByte)
+      channel.write(ByteBuffer.wrap(alteredOutput))
+    }
     channel.close()
     file.close()
+    outFile
+  }
 
-    val inRdd = sc.binaryFiles(outFileName)
-    val (infile: String, indata: PortableDataStream) = inRdd.collect.head
-
+  test("binary file input as byte array") {
+    sc = new SparkContext("local", "test")
+    val testOutput = Array[Byte](1, 2, 3, 4, 5, 6)
+    val outFile = writeBinaryData(testOutput, 1)
+    val inRdd = sc.binaryFiles(outFile.getAbsolutePath)
+    val (infile, indata) = inRdd.collect().head
     // Make sure the name and array match
-    assert(infile.contains(outFileName)) // a prefix may get added
+    assert(infile.contains(outFile.toURI.getPath)) // a prefix may get added
     assert(indata.toArray === testOutput)
   }
 
   test("portabledatastream caching tests") {
     sc = new SparkContext("local", "test")
-    val outFile = new File(tempDir, "record-bytestream-00000.bin")
-    val outFileName = outFile.getAbsolutePath()
-
-    // create file
     val testOutput = Array[Byte](1, 2, 3, 4, 5, 6)
-    val bbuf = java.nio.ByteBuffer.wrap(testOutput)
-    // write data to file
-    val file = new java.io.FileOutputStream(outFile)
-    val channel = file.getChannel
-    channel.write(bbuf)
-    channel.close()
-    file.close()
-
-    val inRdd = sc.binaryFiles(outFileName).cache()
-    inRdd.foreach{
-      curData: (String, PortableDataStream) =>
-       curData._2.toArray() // force the file to read
-    }
-    val mappedRdd = inRdd.map {
-      curData: (String, PortableDataStream) =>
-        (curData._2.getPath(), curData._2)
-    }
-    val (infile: String, indata: PortableDataStream) = mappedRdd.collect.head
-
+    val outFile = writeBinaryData(testOutput, 1)
+    val inRdd = sc.binaryFiles(outFile.getAbsolutePath).cache()
+    inRdd.foreach(_._2.toArray()) // force the file to read
     // Try reading the output back as an object file
-
-    assert(indata.toArray === testOutput)
+    assert(inRdd.values.collect().head.toArray === testOutput)
   }
 
   test("portabledatastream persist disk storage") {
     sc = new SparkContext("local", "test")
-    val outFile = new File(tempDir, "record-bytestream-00000.bin")
-    val outFileName = outFile.getAbsolutePath()
-
-    // create file
     val testOutput = Array[Byte](1, 2, 3, 4, 5, 6)
-    val bbuf = java.nio.ByteBuffer.wrap(testOutput)
-    // write data to file
-    val file = new java.io.FileOutputStream(outFile)
-    val channel = file.getChannel
-    channel.write(bbuf)
-    channel.close()
-    file.close()
-
-    val inRdd = sc.binaryFiles(outFileName).persist(StorageLevel.DISK_ONLY)
-    inRdd.foreach{
-      curData: (String, PortableDataStream) =>
-        curData._2.toArray() // force the file to read
-    }
-    val mappedRdd = inRdd.map {
-      curData: (String, PortableDataStream) =>
-        (curData._2.getPath(), curData._2)
-    }
-    val (infile: String, indata: PortableDataStream) = mappedRdd.collect.head
-
-    // Try reading the output back as an object file
-
-    assert(indata.toArray === testOutput)
+    val outFile = writeBinaryData(testOutput, 1)
+    val inRdd = sc.binaryFiles(outFile.getAbsolutePath).persist(StorageLevel.DISK_ONLY)
+    inRdd.foreach(_._2.toArray()) // force the file to read
+    assert(inRdd.values.collect().head.toArray === testOutput)
   }
 
   test("portabledatastream flatmap tests") {
     sc = new SparkContext("local", "test")
-    val outFile = new File(tempDir, "record-bytestream-00000.bin")
-    val outFileName = outFile.getAbsolutePath()
-
-    // create file
     val testOutput = Array[Byte](1, 2, 3, 4, 5, 6)
+    val outFile = writeBinaryData(testOutput, 1)
+    val inRdd = sc.binaryFiles(outFile.getAbsolutePath)
     val numOfCopies = 3
-    val bbuf = java.nio.ByteBuffer.wrap(testOutput)
-    // write data to file
-    val file = new java.io.FileOutputStream(outFile)
-    val channel = file.getChannel
-    channel.write(bbuf)
-    channel.close()
-    file.close()
-
-    val inRdd = sc.binaryFiles(outFileName)
-    val mappedRdd = inRdd.map {
-      curData: (String, PortableDataStream) =>
-        (curData._2.getPath(), curData._2)
-    }
-    val copyRdd = mappedRdd.flatMap {
-      curData: (String, PortableDataStream) =>
-        for (i <- 1 to numOfCopies) yield (i, curData._2)
-    }
-
-    val copyArr: Array[(Int, PortableDataStream)] = copyRdd.collect()
-
-    // Try reading the output back as an object file
+    val copyRdd = inRdd.flatMap(curData => (0 until numOfCopies).map(_ => curData._2))
+    val copyArr = copyRdd.collect()
     assert(copyArr.length == numOfCopies)
-    copyArr.foreach{
-      cEntry: (Int, PortableDataStream) =>
-        assert(cEntry._2.toArray === testOutput)
+    for (i <- copyArr.indices) {
+      assert(copyArr(i).toArray === testOutput)
     }
-
   }
 
   test("fixed record length binary file as byte array") {
-    // a fixed length of 6 bytes
-
     sc = new SparkContext("local", "test")
-
-    val outFile = new File(tempDir, "record-bytestream-00000.bin")
-    val outFileName = outFile.getAbsolutePath()
-
-    // create file
     val testOutput = Array[Byte](1, 2, 3, 4, 5, 6)
     val testOutputCopies = 10
-
-    // write data to file
-    val file = new java.io.FileOutputStream(outFile)
-    val channel = file.getChannel
-    for(i <- 1 to testOutputCopies) {
-      val bbuf = java.nio.ByteBuffer.wrap(testOutput)
-      channel.write(bbuf)
-    }
-    channel.close()
-    file.close()
-
-    val inRdd = sc.binaryRecords(outFileName, testOutput.length)
-    // make sure there are enough elements
+    val outFile = writeBinaryData(testOutput, testOutputCopies)
+    val inRdd = sc.binaryRecords(outFile.getAbsolutePath, testOutput.length)
     assert(inRdd.count == testOutputCopies)
-
-    // now just compare the first one
-    val indata: Array[Byte] = inRdd.collect.head
-    assert(indata === testOutput)
+    val inArr = inRdd.collect()
+    for (i <- inArr.indices) {
+      assert(inArr(i) === testOutput.map(b => (b + i).toByte))
+    }
   }
 
   test ("negative binary record length should raise an exception") {
-    // a fixed length of 6 bytes
     sc = new SparkContext("local", "test")
-
-    val outFile = new File(tempDir, "record-bytestream-00000.bin")
-    val outFileName = outFile.getAbsolutePath()
-
-    // create file
-    val testOutput = Array[Byte](1, 2, 3, 4, 5, 6)
-    val testOutputCopies = 10
-
-    // write data to file
-    val file = new java.io.FileOutputStream(outFile)
-    val channel = file.getChannel
-    for(i <- 1 to testOutputCopies) {
-      val bbuf = java.nio.ByteBuffer.wrap(testOutput)
-      channel.write(bbuf)
-    }
-    channel.close()
-    file.close()
-
-    val inRdd = sc.binaryRecords(outFileName, -1)
-
+    val outFile = writeBinaryData(Array[Byte](1, 2, 3, 4, 5, 6), 1)
     intercept[SparkException] {
-      inRdd.count
+      sc.binaryRecords(outFile.getAbsolutePath, -1).count()
     }
   }
 
@@ -502,7 +401,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     job.setOutputKeyClass(classOf[String])
     job.setOutputValueClass(classOf[String])
     job.set("mapred.output.format.class", classOf[TextOutputFormat[String, String]].getName)
-    job.set("mapred.output.dir", tempDir.getPath + "/outputDataset_old")
+    job.set("mapreduce.output.fileoutputformat.outputdir", tempDir.getPath + "/outputDataset_old")
     randomRDD.saveAsHadoopDataset(job)
     assert(new File(tempDir.getPath + "/outputDataset_old/part-00000").exists() === true)
   }
@@ -516,7 +415,8 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     job.setOutputValueClass(classOf[String])
     job.setOutputFormatClass(classOf[NewTextOutputFormat[String, String]])
     val jobConfig = job.getConfiguration
-    jobConfig.set("mapred.output.dir", tempDir.getPath + "/outputDataset_new")
+    jobConfig.set("mapreduce.output.fileoutputformat.outputdir",
+      tempDir.getPath + "/outputDataset_new")
     randomRDD.saveAsNewAPIHadoopDataset(jobConfig)
     assert(new File(tempDir.getPath + "/outputDataset_new/part-r-00000").exists() === true)
   }
@@ -532,7 +432,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
         .mapPartitionsWithInputSplit { (split, part) =>
           Iterator(split.asInstanceOf[FileSplit].getPath.toUri.getPath)
         }.collect()
-    assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
+    val outPathOne = new Path(outDir, "part-00000").toUri.getPath
+    val outPathTwo = new Path(outDir, "part-00001").toUri.getPath
+    assert(inputPaths.toSet === Set(outPathOne, outPathTwo))
   }
 
   test("Get input files via new Hadoop API") {
@@ -546,7 +448,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
         .mapPartitionsWithInputSplit { (split, part) =>
           Iterator(split.asInstanceOf[NewFileSplit].getPath.toUri.getPath)
         }.collect()
-    assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
+    val outPathOne = new Path(outDir, "part-00000").toUri.getPath
+    val outPathTwo = new Path(outDir, "part-00001").toUri.getPath
+    assert(inputPaths.toSet === Set(outPathOne, outPathTwo))
   }
 
   test("spark.files.ignoreCorruptFiles should work both HadoopRDD and NewHadoopRDD") {

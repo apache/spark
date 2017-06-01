@@ -19,32 +19,42 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.SparkSession
 
 /**
- * :: Experimental ::
  * A handle to a query that is executing continuously in the background as new data arrives.
  * All these methods are thread-safe.
  * @since 2.0.0
  */
-@Experimental
+@InterfaceStability.Evolving
 trait StreamingQuery {
 
   /**
-   * Returns the name of the query. This name is unique across all active queries. This can be
-   * set in the `org.apache.spark.sql.streaming.DataStreamWriter` as
-   * `dataframe.writeStream.queryName("query").start()`.
+   * Returns the user-specified name of the query, or null if not specified.
+   * This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
+   * as `dataframe.writeStream.queryName("query").start()`.
+   * This name, if set, must be unique across all active queries.
    *
    * @since 2.0.0
    */
   def name: String
 
   /**
-   * Returns the unique id of this query.
+   * Returns the unique id of this query that persists across restarts from checkpoint data.
+   * That is, this id is generated when a query is started for the first time, and
+   * will be the same every time it is restarted from checkpoint data. Also see [[runId]].
+   *
    * @since 2.1.0
    */
   def id: UUID
+
+  /**
+   * Returns the unique id of this run of the query. That is, every start/restart of a query will
+   * generated a unique runId. Therefore, every time a query is restarted from
+   * checkpoint, it will have the same [[id]] but different [[runId]]s.
+   */
+  def runId: UUID
 
   /**
    * Returns the `SparkSession` associated with `this`.
@@ -76,11 +86,11 @@ trait StreamingQuery {
   /**
    * Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
    * The number of progress updates retained for each stream is configured by Spark session
-   * configuration `spark.sql.streaming.numRecentProgresses`.
+   * configuration `spark.sql.streaming.numRecentProgressUpdates`.
    *
    * @since 2.1.0
    */
-  def recentProgresses: Array[StreamingQueryProgress]
+  def recentProgress: Array[StreamingQueryProgress]
 
   /**
    * Returns the most recent [[StreamingQueryProgress]] update of this streaming query.
@@ -125,7 +135,7 @@ trait StreamingQuery {
    * Blocks until all available data in the source has been processed and committed to the sink.
    * This method is intended for testing. Note that in the case of continually arriving data, this
    * method may block forever. Additionally, this method is only guaranteed to block until data that
-   * has been synchronously appended data to a [[org.apache.spark.sql.execution.streaming.Source]]
+   * has been synchronously appended data to a `org.apache.spark.sql.execution.streaming.Source`
    * prior to invocation. (i.e. `getOffset` must immediately reflect the addition).
    * @since 2.0.0
    */

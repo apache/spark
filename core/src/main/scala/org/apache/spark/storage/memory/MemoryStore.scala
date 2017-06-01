@@ -331,12 +331,20 @@ private[spark] class MemoryStore(
     var unrollMemoryUsedByThisBlock = 0L
     // Underlying buffer for unrolling the block
     val redirectableStream = new RedirectableOutputStream
-    val bbos = new ChunkedByteBufferOutputStream(initialMemoryThreshold.toInt, allocator)
+    val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
+      logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
+        s"is too large to be set as chunk size. Chunk size has been capped to " +
+        s"${Utils.bytesToString(Int.MaxValue)}")
+      Int.MaxValue
+    } else {
+      initialMemoryThreshold.toInt
+    }
+    val bbos = new ChunkedByteBufferOutputStream(chunkSize, allocator)
     redirectableStream.setOutputStream(bbos)
     val serializationStream: SerializationStream = {
       val autoPick = !blockId.isInstanceOf[StreamBlockId]
       val ser = serializerManager.getSerializer(classTag, autoPick).newInstance()
-      ser.serializeStream(serializerManager.wrapStream(blockId, redirectableStream))
+      ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
     }
 
     // Request enough memory to begin unrolling
@@ -694,7 +702,7 @@ private[storage] class PartiallyUnrolledIterator[T](
   }
 
   override def next(): T = {
-    if (unrolled == null) {
+    if (unrolled == null || !unrolled.hasNext) {
       rest.next()
     } else {
       unrolled.next()

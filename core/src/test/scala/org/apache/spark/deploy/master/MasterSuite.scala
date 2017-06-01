@@ -34,7 +34,7 @@ import other.supplier.{CustomPersistenceEngine, CustomRecoveryModeFactory}
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy._
 import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv}
 
 class MasterSuite extends SparkFunSuite
   with Matchers with Eventually with PrivateMethodTester with BeforeAndAfter {
@@ -432,7 +432,7 @@ class MasterSuite extends SparkFunSuite
     val master = makeMaster()
     master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
     eventually(timeout(10.seconds)) {
-      val masterState = master.self.askWithRetry[MasterStateResponse](RequestMasterState)
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
       assert(masterState.status === RecoveryState.ALIVE, "Master is not alive")
     }
 
@@ -447,8 +447,15 @@ class MasterSuite extends SparkFunSuite
       }
     })
 
-    master.self.ask(
-      RegisterWorker("1", "localhost", 9999, fakeWorker, 10, 1024, "http://localhost:8080"))
+    master.self.send(RegisterWorker(
+      "1",
+      "localhost",
+      9999,
+      fakeWorker,
+      10,
+      1024,
+      "http://localhost:8080",
+      RpcAddress("localhost", 9999)))
     val executors = (0 until 3).map { i =>
       new ExecutorDescription(appId = i.toString, execId = i, 2, ExecutorState.RUNNING)
     }
@@ -457,6 +464,39 @@ class MasterSuite extends SparkFunSuite
     eventually(timeout(10.seconds)) {
       assert(killedExecutors.asScala.toList.sorted === List("0" -> 0, "1" -> 1, "2" -> 2))
       assert(killedDrivers.asScala.toList.sorted === List("0", "1", "2"))
+    }
+  }
+
+  test("SPARK-20529: Master should reply the address received from worker") {
+    val master = makeMaster()
+    master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
+    eventually(timeout(10.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.status === RecoveryState.ALIVE, "Master is not alive")
+    }
+
+    @volatile var receivedMasterAddress: RpcAddress = null
+    val fakeWorker = master.rpcEnv.setupEndpoint("worker", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = master.rpcEnv
+
+      override def receive: PartialFunction[Any, Unit] = {
+        case RegisteredWorker(_, _, masterAddress) =>
+          receivedMasterAddress = masterAddress
+      }
+    })
+
+    master.self.send(RegisterWorker(
+      "1",
+      "localhost",
+      9999,
+      fakeWorker,
+      10,
+      1024,
+      "http://localhost:8080",
+      RpcAddress("localhost2", 10000)))
+
+    eventually(timeout(10.seconds)) {
+      assert(receivedMasterAddress === RpcAddress("localhost2", 10000))
     }
   }
 }

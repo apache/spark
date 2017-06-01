@@ -49,6 +49,8 @@ class Window(object):
 
     _JAVA_MIN_LONG = -(1 << 63)  # -9223372036854775808
     _JAVA_MAX_LONG = (1 << 63) - 1  # 9223372036854775807
+    _PRECEDING_THRESHOLD = max(-sys.maxsize, _JAVA_MIN_LONG)
+    _FOLLOWING_THRESHOLD = min(sys.maxsize, _JAVA_MAX_LONG)
 
     unboundedPreceding = _JAVA_MIN_LONG
 
@@ -98,9 +100,9 @@ class Window(object):
                     The frame is unbounded if this is ``Window.unboundedFollowing``, or
                     any value greater than or equal to 9223372036854775807.
         """
-        if start <= Window._JAVA_MIN_LONG:
+        if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
-        if end >= Window._JAVA_MAX_LONG:
+        if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
@@ -123,14 +125,14 @@ class Window(object):
 
         :param start: boundary start, inclusive.
                       The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to -9223372036854775808.
+                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
                     The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to 9223372036854775807.
+                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if start <= Window._JAVA_MIN_LONG:
+        if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
-        if end >= Window._JAVA_MAX_LONG:
+        if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
@@ -185,14 +187,14 @@ class WindowSpec(object):
 
         :param start: boundary start, inclusive.
                       The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to -9223372036854775808.
+                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
                     The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to 9223372036854775807.
+                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if start <= Window._JAVA_MIN_LONG:
+        if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
-        if end >= Window._JAVA_MAX_LONG:
+        if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
@@ -211,14 +213,14 @@ class WindowSpec(object):
 
         :param start: boundary start, inclusive.
                       The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to -9223372036854775808.
+                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
                     The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to 9223372036854775807.
+                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if start <= Window._JAVA_MIN_LONG:
+        if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
-        if end >= Window._JAVA_MAX_LONG:
+        if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rangeBetween(start, end))
 

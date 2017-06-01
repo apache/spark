@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.lang.reflect.Modifier
+
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
@@ -64,6 +66,8 @@ trait FunctionRegistry {
   /** Clear all registered functions. */
   def clear(): Unit
 
+  /** Create a copy of this registry with identical functions as this registry. */
+  override def clone(): FunctionRegistry = throw new CloneNotSupportedException()
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -107,7 +111,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.clear()
   }
 
-  def copy(): SimpleFunctionRegistry = synchronized {
+  override def clone(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
       registry.registerFunction(name, info, builder)
@@ -150,6 +154,7 @@ object EmptyFunctionRegistry extends FunctionRegistry {
     throw new UnsupportedOperationException
   }
 
+  override def clone(): FunctionRegistry = this
 }
 
 
@@ -163,9 +168,11 @@ object FunctionRegistry {
     expression[Abs]("abs"),
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
+    expressionGeneratorOuter[Explode]("explode_outer"),
     expression[Greatest]("greatest"),
     expression[If]("if"),
     expression[Inline]("inline"),
+    expressionGeneratorOuter[Inline]("inline_outer"),
     expression[IsNaN]("isnan"),
     expression[IfNull]("ifnull"),
     expression[IsNull]("isnull"),
@@ -176,6 +183,7 @@ object FunctionRegistry {
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
     expression[PosExplode]("posexplode"),
+    expressionGeneratorOuter[PosExplode]("posexplode_outer"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[Stack]("stack"),
@@ -226,6 +234,7 @@ object FunctionRegistry {
     expression[StringToMap]("str_to_map"),
     expression[Sqrt]("sqrt"),
     expression[Tan]("tan"),
+    expression[Cot]("cot"),
     expression[Tanh]("tanh"),
 
     expression[Add]("+"),
@@ -252,6 +261,7 @@ object FunctionRegistry {
     expression[Percentile]("percentile"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
+    expression[ApproximatePercentile]("approx_percentile"),
     expression[StddevSamp]("std"),
     expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
@@ -266,6 +276,8 @@ object FunctionRegistry {
 
     // string functions
     expression[Ascii]("ascii"),
+    expression[Chr]("char"),
+    expression[Chr]("chr"),
     expression[Base64]("base64"),
     expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
@@ -292,6 +304,7 @@ object FunctionRegistry {
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
+    expression[StringReplace]("replace"),
     expression[StringReverse]("reverse"),
     expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
@@ -341,11 +354,13 @@ object FunctionRegistry {
     expression[CurrentTimestamp]("now"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
-    expression[ToDate]("to_date"),
+    expression[ParseToTimestamp]("to_timestamp"),
+    expression[ParseToDate]("to_date"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
+    expression[DayOfWeek]("dayofweek"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
@@ -371,6 +386,8 @@ object FunctionRegistry {
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
+    expression[InputFileBlockStart]("input_file_block_start"),
+    expression[InputFileBlockLength]("input_file_block_length"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
     expression[CallMethodViaReflection]("reflect"),
@@ -414,6 +431,12 @@ object FunctionRegistry {
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
 
+    // json
+    expression[StructsToJson]("to_json"),
+    expression[JsonToStructs]("from_json"),
+
+    // cast
+    expression[Cast]("cast"),
     // Cast aliases (SPARK-16730)
     castAlias("boolean", BooleanType),
     castAlias("tinyint", ByteType),
@@ -441,8 +464,17 @@ object FunctionRegistry {
   private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
+    // For `RuntimeReplaceable`, skip the constructor with most arguments, which is the main
+    // constructor and contains non-parameter `child` and should not be used as function builder.
+    val constructors = if (classOf[RuntimeReplaceable].isAssignableFrom(tag.runtimeClass)) {
+      val all = tag.runtimeClass.getConstructors
+      val maxNumArgs = all.map(_.getParameterCount).max
+      all.filterNot(_.getParameterCount == maxNumArgs)
+    } else {
+      tag.runtimeClass.getConstructors
+    }
     // See if we can find a constructor that accepts Seq[Expression]
-    val varargCtor = Try(tag.runtimeClass.getDeclaredConstructor(classOf[Seq[_]])).toOption
+    val varargCtor = constructors.find(_.getParameterTypes.toSeq == Seq(classOf[Seq[_]]))
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
@@ -456,11 +488,8 @@ object FunctionRegistry {
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
-          case Success(e) =>
-            e
-          case Failure(e) =>
-            throw new AnalysisException(s"Invalid number of arguments for function $name")
+        val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
+          throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
@@ -490,7 +519,9 @@ object FunctionRegistry {
       }
       Cast(args.head, dataType)
     }
-    (name, (expressionInfo[Cast](name), builder))
+    val clazz = scala.reflect.classTag[Cast].runtimeClass
+    val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
+    (name, (new ExpressionInfo(clazz.getCanonicalName, null, name, usage, null), builder))
   }
 
   /**
@@ -504,5 +535,14 @@ object FunctionRegistry {
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }
+  }
+
+  private def expressionGeneratorOuter[T <: Generator : ClassTag](name: String)
+    : (String, (ExpressionInfo, FunctionBuilder)) = {
+    val (_, (info, generatorBuilder)) = expression[T](name)
+    val outerBuilder = (args: Seq[Expression]) => {
+      GeneratorOuter(generatorBuilder(args).asInstanceOf[Generator])
+    }
+    (name, (info, outerBuilder))
   }
 }

@@ -44,6 +44,7 @@ private[r] class RandomForestClassifierWrapper private (
   lazy val featureImportances: Vector = rfcModel.featureImportances
   lazy val numTrees: Int = rfcModel.getNumTrees
   lazy val treeWeights: Array[Double] = rfcModel.treeWeights
+  lazy val maxDepth: Int = rfcModel.getMaxDepth
 
   def summary: String = rfcModel.toDebugString
 
@@ -76,7 +77,6 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
       featureSubsetStrategy: String,
       seed: String,
       subsamplingRate: Double,
-      probabilityCol: String,
       maxMemoryInMB: Int,
       cacheNodeIds: Boolean): RandomForestClassifierWrapper = {
 
@@ -102,7 +102,6 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
       .setSubsamplingRate(subsamplingRate)
       .setMaxMemoryInMB(maxMemoryInMB)
       .setCacheNodeIds(cacheNodeIds)
-      .setProbabilityCol(probabilityCol)
       .setFeaturesCol(rFormula.getFeaturesCol)
       .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)

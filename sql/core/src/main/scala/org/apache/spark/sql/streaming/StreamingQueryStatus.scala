@@ -22,6 +22,8 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.annotation.InterfaceStability
+
 /**
  * Reports information about the instantaneous status of a streaming query.
  *
@@ -32,10 +34,11 @@ import org.json4s.jackson.JsonMethods._
  *
  * @since 2.1.0
  */
+@InterfaceStability.Evolving
 class StreamingQueryStatus protected[sql](
     val message: String,
     val isDataAvailable: Boolean,
-    val isTriggerActive: Boolean) {
+    val isTriggerActive: Boolean) extends Serializable {
 
   /** The compact JSON representation of this status. */
   def json: String = compact(render(jsonValue))

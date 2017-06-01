@@ -18,7 +18,7 @@
 package org.apache.spark
 
 /**
- * Spark's scheduling components. This includes the [[org.apache.spark.scheduler.DAGScheduler]] and
- * lower level [[org.apache.spark.scheduler.TaskScheduler]].
+ * Spark's scheduling components. This includes the `org.apache.spark.scheduler.DAGScheduler` and
+ * lower level `org.apache.spark.scheduler.TaskScheduler`.
  */
 package object scheduler

@@ -20,25 +20,26 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 class InsertSuite extends DataSourceTest with SharedSQLContext {
+  import testImplicits._
+
   protected override lazy val sql = spark.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     path = Utils.createTempDir()
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-    spark.read.json(rdd).createOrReplaceTempView("jt")
+    val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str$i"}""").toDS()
+    spark.read.json(ds).createOrReplaceTempView("jt")
     sql(
       s"""
-        |CREATE TEMPORARY TABLE jsonTable (a int, b string)
+        |CREATE TEMPORARY VIEW jsonTable (a int, b string)
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path '${path.toString}'
+        |  path '${path.toURI.toString}'
         |)
       """.stripMargin)
   }
@@ -114,7 +115,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
         |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
       """.stripMargin)
     }.getMessage
-    assert(message.contains("the number of columns are different")
+    assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)")
     )
   }
 
@@ -130,7 +131,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     // Writing the table to less part files.
     val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 5)
-    spark.read.json(rdd1).createOrReplaceTempView("jt1")
+    spark.read.json(rdd1.toDS()).createOrReplaceTempView("jt1")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt1
@@ -142,7 +143,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     // Writing the table to more part files.
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 10)
-    spark.read.json(rdd2).createOrReplaceTempView("jt2")
+    spark.read.json(rdd1.toDS()).createOrReplaceTempView("jt2")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
@@ -280,21 +281,21 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       """.stripMargin)
     // jsonTable should be recached.
     assertCached(sql("SELECT * FROM jsonTable"))
-    // TODO we need to invalidate the cached data in InsertIntoHadoopFsRelation
-//    // The cached data is the new data.
-//    checkAnswer(
-//      sql("SELECT a, b FROM jsonTable"),
-//      sql("SELECT a * 2, b FROM jt").collect())
-//
-//    // Verify uncaching
-//    spark.catalog.uncacheTable("jsonTable")
-//    assertCached(sql("SELECT * FROM jsonTable"), 0)
+
+    // The cached data is the new data.
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      sql("SELECT a * 2, b FROM jt").collect())
+
+    // Verify uncaching
+    spark.catalog.uncacheTable("jsonTable")
+    assertCached(sql("SELECT * FROM jsonTable"), 0)
   }
 
   test("it's not allowed to insert into a relation that is not an InsertableRelation") {
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTen
+        |CREATE TEMPORARY VIEW oneToTen
         |USING org.apache.spark.sql.sources.SimpleScanSource
         |OPTIONS (
         |  From '1',

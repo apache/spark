@@ -71,6 +71,10 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
 
+  override def setNullAt(ordinal: Int): Unit = array(ordinal) = null
+
+  override def update(ordinal: Int, value: Any): Unit = array(ordinal) = value
+
   override def toString(): String = array.mkString("[", ",", "]")
 
   override def equals(o: Any): Boolean = {

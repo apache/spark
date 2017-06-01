@@ -40,7 +40,7 @@ import org.apache.spark.sql.SparkSession
  * doing a compaction, it will read all old log files and merge them with the new batch.
  */
 abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
-    metadataLogVersion: String,
+    metadataLogVersion: Int,
     sparkSession: SparkSession,
     path: String)
   extends HDFSMetadataLog[Array[T]](sparkSession, path) {
@@ -51,6 +51,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   /** Needed to serialize type T into JSON when using Jackson */
   private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
+
+  protected val minBatchesToRetain = sparkSession.sessionState.conf.minBatchesToRetain
 
   /**
    * If we delete the old files after compaction at once, there is a race condition in S3: other
@@ -132,7 +134,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   override def serialize(logData: Array[T], out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(metadataLogVersion.getBytes(UTF_8))
+    out.write(("v" + metadataLogVersion).getBytes(UTF_8))
     logData.foreach { data =>
       out.write('\n')
       out.write(Serialization.write(data).getBytes(UTF_8))
@@ -144,19 +146,21 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
-    val version = lines.next()
-    if (version != metadataLogVersion) {
-      throw new IllegalStateException(s"Unknown log version: ${version}")
-    }
+    val version = parseVersion(lines.next(), metadataLogVersion)
     lines.map(Serialization.read[T]).toArray
   }
 
   override def add(batchId: Long, logs: Array[T]): Boolean = {
-    if (isCompactionBatch(batchId, compactInterval)) {
-      compact(batchId, logs)
-    } else {
-      super.add(batchId, logs)
+    val batchAdded =
+      if (isCompactionBatch(batchId, compactInterval)) {
+        compact(batchId, logs)
+      } else {
+        super.add(batchId, logs)
+      }
+    if (batchAdded && isDeletingExpiredLog) {
+      deleteExpiredLog(batchId)
     }
+    batchAdded
   }
 
   /**
@@ -167,9 +171,6 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
     val allLogs = validBatches.flatMap(batchId => super.get(batchId)).flatten ++ logs
     if (super.add(batchId, compactLogs(allLogs).toArray)) {
-      if (isDeletingExpiredLog) {
-        deleteExpiredLog(batchId)
-      }
       true
     } else {
       // Return false as there is another writer.
@@ -210,26 +211,41 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   }
 
   /**
-   * Since all logs before `compactionBatchId` are compacted and written into the
-   * `compactionBatchId` log file, they can be removed. However, due to the eventual consistency of
-   * S3, the compaction file may not be seen by other processes at once. So we only delete files
-   * created `fileCleanupDelayMs` milliseconds ago.
+   * Delete expired log entries that proceed the currentBatchId and retain
+   * sufficient minimum number of batches (given by minBatchsToRetain). This
+   * equates to retaining the earliest compaction log that proceeds
+   * batch id position currentBatchId + 1 - minBatchesToRetain. All log entries
+   * prior to the earliest compaction log proceeding that position will be removed.
+   * However, due to the eventual consistency of S3, the compaction file may not
+   * be seen by other processes at once. So we only delete files created
+   * `fileCleanupDelayMs` milliseconds ago.
    */
-  private def deleteExpiredLog(compactionBatchId: Long): Unit = {
-    val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
-    fileManager.list(metadataPath, new PathFilter {
-      override def accept(path: Path): Boolean = {
-        try {
-          val batchId = getBatchIdFromFileName(path.getName)
-          batchId < compactionBatchId
-        } catch {
-          case _: NumberFormatException =>
-            false
+  private def deleteExpiredLog(currentBatchId: Long): Unit = {
+    if (compactInterval <= currentBatchId + 1 - minBatchesToRetain) {
+      // Find the first compaction batch id that maintains minBatchesToRetain
+      val minBatchId = currentBatchId + 1 - minBatchesToRetain
+      val minCompactionBatchId = minBatchId - (minBatchId % compactInterval) - 1
+      assert(isCompactionBatch(minCompactionBatchId, compactInterval),
+        s"$minCompactionBatchId is not a compaction batch")
+
+      logInfo(s"Current compact batch id = $currentBatchId " +
+        s"min compaction batch id to delete = $minCompactionBatchId")
+
+      val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
+      fileManager.list(metadataPath, new PathFilter {
+        override def accept(path: Path): Boolean = {
+          try {
+            val batchId = getBatchIdFromFileName(path.getName)
+            batchId < minCompactionBatchId
+          } catch {
+            case _: NumberFormatException =>
+              false
+          }
         }
-      }
-    }).foreach { f =>
-      if (f.getModificationTime <= expiredTime) {
-        fileManager.delete(f.getPath)
+      }).foreach { f =>
+        if (f.getModificationTime <= expiredTime) {
+          fileManager.delete(f.getPath)
+        }
       }
     }
   }

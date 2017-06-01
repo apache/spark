@@ -21,7 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
-import java.util.List;
+import java.util.Iterator;
 import java.util.Map;
 
 import com.codahale.metrics.Gauge;
@@ -30,7 +30,6 @@ import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,14 +92,25 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         OpenBlocks msg = (OpenBlocks) msgObj;
         checkAuth(client, msg.appId);
 
-        List<ManagedBuffer> blocks = Lists.newArrayList();
-        long totalBlockSize = 0;
-        for (String blockId : msg.blockIds) {
-          final ManagedBuffer block = blockManager.getBlockData(msg.appId, msg.execId, blockId);
-          totalBlockSize += block != null ? block.size() : 0;
-          blocks.add(block);
-        }
-        long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
+        Iterator<ManagedBuffer> iter = new Iterator<ManagedBuffer>() {
+          private int index = 0;
+
+          @Override
+          public boolean hasNext() {
+            return index < msg.blockIds.length;
+          }
+
+          @Override
+          public ManagedBuffer next() {
+            final ManagedBuffer block = blockManager.getBlockData(msg.appId, msg.execId,
+              msg.blockIds[index]);
+            index++;
+            metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
+            return block;
+          }
+        };
+
+        long streamId = streamManager.registerStream(client.getClientId(), iter);
         if (logger.isTraceEnabled()) {
           logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
                        streamId,
@@ -109,7 +119,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
                        getRemoteAddress(client.getChannel()));
         }
         callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
-        metrics.blockTransferRateBytes.mark(totalBlockSize);
       } finally {
         responseDelayContext.stop();
       }
@@ -190,12 +199,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatencyMillis);
       allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
       allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
-      allMetrics.put("registeredExecutorsSize", new Gauge<Integer>() {
-        @Override
-        public Integer getValue() {
-          return blockManager.getRegisteredExecutorsSize();
-        }
-      });
+      allMetrics.put("registeredExecutorsSize",
+                     (Gauge<Integer>) () -> blockManager.getRegisteredExecutorsSize());
     }
 
     @Override

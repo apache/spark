@@ -66,9 +66,9 @@ private[feature] trait QuantileDiscretizerBase extends Params
   def getRelativeError: Double = getOrDefault(relativeError)
 
   /**
-   * Param for how to handle invalid entries. Options are skip (filter out rows with
-   * invalid values), error (throw an error), or keep (keep invalid values in a special additional
-   * bucket).
+   * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
+   * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
+   * additional bucket).
    * Default: "error"
    * @group param
    */
@@ -93,8 +93,8 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * are too few distinct values of the input to create enough distinct quantiles.
  *
  * NaN handling:
- * NaN values will be removed from the column during `QuantileDiscretizer` fitting. This will
- * produce a `Bucketizer` model for making predictions. During the transformation,
+ * null and NaN values will be ignored from the column during `QuantileDiscretizer` fitting. This
+ * will produce a `Bucketizer` model for making predictions. During the transformation,
  * `Bucketizer` will raise an error when it finds NaN values in the dataset, but the user can
  * also choose to either keep or remove NaN values within the dataset by setting `handleInvalid`.
  * If the user chooses to keep NaN values, they will be handled specially and placed into their own

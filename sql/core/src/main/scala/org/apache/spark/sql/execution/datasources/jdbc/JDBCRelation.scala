@@ -129,12 +129,14 @@ private[sql] case class JDBCRelation(
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
-    val url = jdbcOptions.url
-    val table = jdbcOptions.table
-    val properties = jdbcOptions.asConnectionProperties
-    data.write
-      .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
-      .jdbc(url, table, properties)
+    import scala.collection.JavaConverters._
+
+    val options = jdbcOptions.asProperties.asScala +
+      ("url" -> jdbcOptions.url, "dbtable" -> jdbcOptions.table)
+    val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
+
+    new JdbcRelationProvider().createRelation(
+      data.sparkSession.sqlContext, mode, options.toMap, data)
   }
 
   override def toString: String = {

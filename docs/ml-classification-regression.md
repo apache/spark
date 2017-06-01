@@ -75,6 +75,13 @@ More details on parameters can be found in the [Python API documentation](api/py
 {% include_example python/ml/logistic_regression_with_elastic_net.py %}
 </div>
 
+<div data-lang="r" markdown="1">
+
+More details on parameters can be found in the [R API documentation](api/R/spark.logit.html).
+
+{% include_example binomial r/ml/logit.R %}
+</div>
+
 </div>
 
 The `spark.ml` implementation of logistic regression also supports
@@ -114,9 +121,15 @@ Continuing the earlier example:
 {% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionSummaryExample.java %}
 </div>
 
-<!--- TODO: Add python model summaries once implemented -->
 <div data-lang="python" markdown="1">
-Logistic regression model summary is not yet supported in Python.
+[`LogisticRegressionTrainingSummary`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionSummary)
+provides a summary for a
+[`LogisticRegressionModel`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionModel).
+Currently, only binary classification is supported. Support for multiclass model summaries will be added in the future.
+
+Continuing the earlier example:
+
+{% include_example python/ml/logistic_regression_summary_example.py %}
 </div>
 
 </div>
@@ -163,6 +176,13 @@ model with elastic net regularization.
 
 <div data-lang="python" markdown="1">
 {% include_example python/ml/multiclass_logistic_regression_with_elastic_net.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+More details on parameters can be found in the [R API documentation](api/R/spark.logit.html).
+
+{% include_example multinomial r/ml/logit.R %}
 </div>
 
 </div>
@@ -236,6 +256,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 {% include_example python/ml/random_forest_classifier_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.randomForest.html) for more details.
+
+{% include_example classification r/ml/randomForest.R %}
+</div>
+
 </div>
 
 ## Gradient-boosted tree classifier
@@ -269,6 +297,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 {% include_example python/ml/gradient_boosted_tree_classifier_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.gbt.html) for more details.
+
+{% include_example classification r/ml/gbt.R %}
+</div>
+
 </div>
 
 ## Multilayer perceptron classifier
@@ -318,8 +354,59 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 {% include_example python/ml/multilayer_perceptron_classification.py %}
 </div>
 
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.mlp.html) for more details.
+
+{% include_example r/ml/mlp.R %}
 </div>
 
+</div>
+
+## Linear Support Vector Machine
+
+A [support vector machine](https://en.wikipedia.org/wiki/Support_vector_machine) constructs a hyperplane
+or set of hyperplanes in a high- or infinite-dimensional space, which can be used for classification,
+regression, or other tasks. Intuitively, a good separation is achieved by the hyperplane that has
+the largest distance to the nearest training-data points of any class (so-called functional margin),
+since in general the larger the margin the lower the generalization error of the classifier. LinearSVC
+in Spark ML supports binary classification with linear SVM. Internally, it optimizes the 
+[Hinge Loss](https://en.wikipedia.org/wiki/Hinge_loss) using OWLQN optimizer.
+
+
+**Examples**
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.LinearSVC) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/LinearSVCExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/LinearSVC.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaLinearSVCExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.LinearSVC) for more details.
+
+{% include_example python/ml/linearsvc.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.svmLinear.html) for more details.
+
+{% include_example r/ml/svmLinear.R %}
+</div>
+
+</div>
 
 ## One-vs-Rest classifier (a.k.a. One-vs-All)
 
@@ -389,6 +476,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 {% include_example python/ml/naive_bayes_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.naiveBayes.html) for more details.
+
+{% include_example r/ml/naiveBayes.R %}
+</div>
+
 </div>
 
 
@@ -534,6 +629,11 @@ others.
       <td>Continuous</td>
       <td>Inverse*, Idenity, Log</td>
     </tr>
+    <tr>
+      <td>Tweedie</td>
+      <td>Zero-inflated continuous</td>
+      <td>Power link function</td>
+    </tr>
     <tfoot><tr><td colspan="4">* Canonical Link</td></tr></tfoot>
   </tbody>
 </table>
@@ -564,6 +664,13 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/Generalized
 Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
 
 {% include_example python/ml/generalized_linear_regression_example.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.glm.html) for more details.
+
+{% include_example r/ml/glm.R %}
 </div>
 
 </div>
@@ -601,6 +708,13 @@ More details on parameters can be found in the [Python API documentation](api/py
 {% include_example python/ml/decision_tree_regression_example.py %}
 </div>
 
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
+
+{% include_example regression r/ml/decisionTree.R %}
+</div>
+
 </div>
 
 
@@ -635,6 +749,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 
 {% include_example python/ml/random_forest_regressor_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.randomForest.html) for more details.
+
+{% include_example regression r/ml/randomForest.R %}
+</div>
+
 </div>
 
 ## Gradient-boosted tree regression
@@ -668,6 +790,14 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 
 {% include_example python/ml/gradient_boosted_tree_regressor_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.gbt.html) for more details.
+
+{% include_example regression r/ml/gbt.R %}
+</div>
+
 </div>
 
 
@@ -755,6 +885,13 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 {% include_example python/ml/aft_survival_regression.py %}
 </div>
 
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.survreg.html) for more details.
+
+{% include_example r/ml/survreg.R %}
+</div>
+
 </div>
 
 
@@ -825,6 +962,14 @@ Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.ml.html#pyspa
 
 {% include_example python/ml/isotonic_regression_example.py %}
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [`IsotonicRegression` R API docs](api/R/spark.isoreg.html) for more details on the API.
+
+{% include_example r/ml/isoreg.R %}
+</div>
+
 </div>
 
 # Linear methods
