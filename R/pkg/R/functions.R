@@ -193,7 +193,7 @@ setMethod("atan",
 #' @examples
 #'
 #' \dontrun{
-#' head(select(df, avg(df$mpg), mean(df$mpg), min(df$wt), max(df$qsec)))
+#' head(select(df, avg(df$mpg), mean(df$mpg), sum(df$mpg), min(df$wt), max(df$qsec)))
 #'
 #' # metrics by num of cylinders
 #' tmp <- agg(groupBy(df, "cyl"), avg(df$mpg), avg(df$hp), avg(df$wt), avg(df$qsec))
@@ -1099,7 +1099,7 @@ setMethod("md5",
           })
 
 #' @section Details:
-#' \code{mean}: Returns the average of the values in a group. Alias for avg.
+#' \code{mean}: Returns the average of the values in a group. Alias for \code{avg}.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases mean mean,Column-method
