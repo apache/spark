@@ -1570,8 +1570,8 @@ class SQLTests(ReusedPySparkTestCase):
 
     # regression test for SPARK-20787
     def test_datetype_accepts_calendar_dates(self):
-        df1 = self.spark.createDataFrame(self.sc.parallelize([[datetime.datetime(1899,12,31)]]))
-        df2 = self.spark.createDataFrame(self.sc.parallelize([[datetime.datetime(100,1,1)]]))
+        df1 = self.spark.createDataFrame(self.sc.parallelize([[datetime.datetime(1899, 12, 31)]]))
+        df2 = self.spark.createDataFrame(self.sc.parallelize([[datetime.datetime(100, 1, 1)]]))
         try:
             counted1 = df1.count()
             counted2 = df2.count()
