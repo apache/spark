@@ -1047,7 +1047,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   """,
   extended = """
     Examples:
-      > SELECT initcap('sPark sql');
+      > SELECT _FUNC_('sPark sql');
        Spark Sql
   """)
 case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
