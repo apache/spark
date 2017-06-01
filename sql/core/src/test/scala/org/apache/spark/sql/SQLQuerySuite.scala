@@ -704,14 +704,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Verify spark.sql.subquery.reuse") {
-    Seq("true", "false").foreach { reuse =>
-      withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse) {
+    Seq(true, false).foreach { reuse =>
+      withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
         val df = sql(
           """
             |SELECT key, (SELECT avg(key) FROM testData)
             |FROM testData
             |WHERE key > (SELECT avg(key) FROM testData)
+            |ORDER BY key
+            |LIMIT 3
           """.stripMargin)
+
+        checkAnswer(df, Row(51, 50.5) :: Row(52, 50.5) :: Row(53, 50.5) :: Nil)
+
         val subqueries = ArrayBuffer.empty[SubqueryExec]
         df.queryExecution.executedPlan.transformAllExpressions {
           case s @ ScalarSubquery(plan: SubqueryExec, _) =>
@@ -721,7 +726,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
         assert(subqueries.size == 2, "Two ScalarSubquery are expected in the plan")
 
-        if (reuse.toBoolean) {
+        if (reuse) {
           assert(subqueries.distinct.size == 1, "Only one ScalarSubquery exists in the plan")
         } else {
           assert(subqueries.distinct.size == 2, "Reuse is not expected")
