@@ -854,7 +854,7 @@ object SparkSession {
      *
      * @since 2.2.0
      */
-    def withExtensions(f: SparkSessionExtensions => Unit): Builder = {
+    def withExtensions(f: SparkSessionExtensions => Unit): Builder = synchronized {
       f(extensions)
       this
     }
@@ -899,22 +899,14 @@ object SparkSession {
 
         // No active nor global default session. Create a new one.
         val sparkContext = userSuppliedContext.getOrElse {
-          // set app name if not given
-          val randomAppName = java.util.UUID.randomUUID().toString
           val sparkConf = new SparkConf()
-          options.foreach { case (k, v) => sparkConf.set(k, v) }
-          if (!sparkConf.contains("spark.app.name")) {
-            sparkConf.setAppName(randomAppName)
-          }
-          val sc = SparkContext.getOrCreate(sparkConf)
-          // maybe this is an existing SparkContext, update its SparkConf which maybe used
-          // by SparkSession
-          options.foreach { case (k, v) => sc.conf.set(k, v) }
-          if (!sc.conf.contains("spark.app.name")) {
-            sc.conf.setAppName(randomAppName)
-          }
-          sc
+          options.get("spark.master").foreach(sparkConf.setMaster)
+          // set a random app name if not given.
+          sparkConf.setAppName(options.getOrElse("spark.app.name",
+            java.util.UUID.randomUUID().toString))
+          SparkContext.getOrCreate(sparkConf)
         }
+        options.foreach { case (k, v) => sparkContext.conf.set(k, v) }
 
         // Initialize extensions if the user has defined a configurator class.
         val extensionConfOption = sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
@@ -935,7 +927,6 @@ object SparkSession {
         }
 
         session = new SparkSession(sparkContext, None, None, extensions)
-        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
         defaultSession.set(session)
 
         // Register a successfully instantiated context to the singleton. This should be at the
