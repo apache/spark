@@ -57,7 +57,7 @@ abstract class BaseSessionStateBuilder(
   type NewBuilder = (SparkSession, Option[SessionState]) => BaseSessionStateBuilder
 
   /**
-   * Function that produces a new instance of the SessionStateBuilder. This is used by the
+   * Function that produces a new instance of the `BaseSessionStateBuilder`. This is used by the
    * [[SessionState]]'s clone functionality. Make sure to override this when implementing your own
    * [[SessionStateBuilder]].
    */
