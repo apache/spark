@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.ExecutedWriteSummary
 import org.apache.spark.sql.execution.debug._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
@@ -37,6 +37,18 @@ import org.apache.spark.sql.types._
  * wrapped in `WrittenFileCommandExec` during execution.
  */
 trait WriteOutFileCommand extends logical.Command {
+
+  /**
+   * Those metrics will be updated once the command finishes writing data out. Those metrics will
+   * be taken by `WrittenFileCommandExe` as its metrics when showing in UI.
+   */
+  def metrics(sqlContext: SQLContext): Map[String, SQLMetric] = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of output rows"),
+    "writingTime" -> SQLMetrics.createMetric(sqlContext.sparkContext, "writing data out time (ms)"),
+    "dynamicPartNum" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of dynamic part"),
+    "fileNum" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of written files"),
+    "fileBytes" -> SQLMetrics.createMetric(sqlContext.sparkContext, "bytes of written files"))
+
   def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
@@ -98,12 +110,7 @@ case class WrittenFileCommandExec(
     cmd: WriteOutFileCommand,
     children: Seq[SparkPlan]) extends CommandExec {
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of output rows"),
-    "writingTime" -> SQLMetrics.createMetric(sqlContext.sparkContext, "writing data out time (ms)"),
-    "dynamicPartNum" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of dynamic part"),
-    "fileNum" -> SQLMetrics.createMetric(sqlContext.sparkContext, "number of written files"),
-    "fileBytes" -> SQLMetrics.createMetric(sqlContext.sparkContext, "bytes of written files"))
+  override lazy val metrics = cmd.metrics(sqlContext)
 
   // Callback used to update metrics returned from the operation of writing data out.
   private def updateDriverMetrics(writeTaskSummary: Seq[ExecutedWriteSummary]): Unit = {
@@ -138,12 +145,12 @@ case class WrittenFileCommandExec(
     val startTime = System.nanoTime()
     val rows = cmd.run(sqlContext.sparkSession, children, updateDriverMetrics)
     val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
-    val writingTime = metrics("writingTime")
-    writingTime.add(timeTakenMs)
-
-    val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId,
-      writingTime :: Nil)
+    metrics.get("writingTime").foreach { writingTime =>
+      writingTime.add(timeTakenMs)
+      val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+      SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId,
+        writingTime :: Nil)
+    }
     rows.map(converter(_).asInstanceOf[InternalRow])
   }
 }

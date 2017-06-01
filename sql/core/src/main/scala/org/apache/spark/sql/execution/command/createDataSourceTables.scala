@@ -24,7 +24,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.sources.BaseRelation
 
 /**
@@ -120,11 +122,31 @@ case class CreateDataSourceTableAsSelectCommand(
     table: CatalogTable,
     mode: SaveMode,
     query: LogicalPlan)
-  extends RunnableCommand {
+  extends WriteOutFileCommand {
+
+  /**
+   * The code path this command writes data out depends on the type of data source:
+   *
+   * For FileFormat-based data sources, `InsertIntoHadoopFsRelationCommand` is invoked and we
+   * can update metrics.
+   *
+   * For other data sources, `CreatableRelationProvider.createRelation` will be called. We can't
+   * record metrics for that. So we will return empty metrics map.
+   */
+  override def metrics(sqlContext: SQLContext): Map[String, SQLMetric] = {
+    if (DataSource.isFileFormat(table.provider.get)) {
+      super.metrics(sqlContext)
+    } else {
+      Map.empty
+    }
+  }
 
   override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(
+      sparkSession: SparkSession,
+      children: Seq[SparkPlan],
+      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
 
@@ -146,7 +168,8 @@ case class CreateDataSourceTableAsSelectCommand(
       }
 
       saveDataIntoTable(
-        sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true)
+        sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true,
+        metricsCallback = metricsCallback)
     } else {
       assert(table.schema.isEmpty)
 
@@ -156,7 +179,8 @@ case class CreateDataSourceTableAsSelectCommand(
         table.storage.locationUri
       }
       val result = saveDataIntoTable(
-        sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false)
+        sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false,
+        metricsCallback = metricsCallback)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -183,7 +207,8 @@ case class CreateDataSourceTableAsSelectCommand(
       tableLocation: Option[URI],
       data: LogicalPlan,
       mode: SaveMode,
-      tableExists: Boolean): BaseRelation = {
+      tableExists: Boolean,
+      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
     val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
@@ -195,7 +220,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, query)
+      dataSource.writeAndRead(mode, query, Some(metricsCallback))
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)

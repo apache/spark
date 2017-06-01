@@ -292,16 +292,15 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     import SQLMetricsSuite._
 
     withTable("writeToTable") {
-      // Create the table.
-      Seq.empty[(Int, Int)].toDF("i", "j").write.mode("overwrite").saveAsTable("writeToTable")
-
+      // Verifies the metrics of CreateDataSourceTableAsSelectCommand
       val executionId1 = getLatestExecutionId(spark) { () =>
-        Seq((1, 2)).toDF("i", "j").write.insertInto("writeToTable")
+        Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("writeToTable")
       }
       // written 1 file, 1 row, 0 dynamic partition.
       val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ > 0, _ == 1, _ > 0)
       verifyWriteDataMetrics(spark, executionId1, verifyFuncs1)
 
+      // Verifies the metrics of InsertIntoHadoopFsRelationCommand
       val executionId2 = getLatestExecutionId(spark) { () =>
         Seq((3, 4), (5, 6), (7, 8)).toDF("i", "j").repartition(1)
           .write.insertInto("writeToTable")
@@ -326,6 +325,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     withTempDir { f =>
       val df =
         spark.range(start = 0, end = 4, step = 1, numPartitions = 1).selectExpr("id", "id id1")
+      // Verifies the metrics of InsertIntoHadoopFsRelationCommand
       val executionId1 = getLatestExecutionId(spark) { () =>
         df
           .write
