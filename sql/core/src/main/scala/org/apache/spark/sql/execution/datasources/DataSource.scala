@@ -475,35 +475,42 @@ case class DataSource(
 
 object DataSource extends Logging {
 
-  /** A map to maintain backward compatibility in case we move data sources around. */
-  private val backwardCompatibilityMap: Map[String, String] = {
-    val jdbc = classOf[JdbcRelationProvider].getCanonicalName
-    val json = classOf[JsonFileFormat].getCanonicalName
-    val parquet = classOf[ParquetFileFormat].getCanonicalName
-    val csv = classOf[CSVFileFormat].getCanonicalName
-    val libsvm = "org.apache.spark.ml.source.libsvm.LibSVMFileFormat"
-    val orc = "org.apache.spark.sql.hive.orc.OrcFileFormat"
+  private val jdbc = classOf[JdbcRelationProvider].getCanonicalName
+  private val json = classOf[JsonFileFormat].getCanonicalName
+  private val parquet = classOf[ParquetFileFormat].getCanonicalName
+  private val csv = classOf[CSVFileFormat].getCanonicalName
+  private val libsvm = "org.apache.spark.ml.source.libsvm.LibSVMFileFormat"
+  private val orc = "org.apache.spark.sql.hive.orc.OrcFileFormat"
 
-    Map(
-      "org.apache.spark.sql.jdbc" -> jdbc,
-      "org.apache.spark.sql.jdbc.DefaultSource" -> jdbc,
-      "org.apache.spark.sql.execution.datasources.jdbc.DefaultSource" -> jdbc,
-      "org.apache.spark.sql.execution.datasources.jdbc" -> jdbc,
-      "org.apache.spark.sql.json" -> json,
-      "org.apache.spark.sql.json.DefaultSource" -> json,
-      "org.apache.spark.sql.execution.datasources.json" -> json,
-      "org.apache.spark.sql.execution.datasources.json.DefaultSource" -> json,
-      "org.apache.spark.sql.parquet" -> parquet,
-      "org.apache.spark.sql.parquet.DefaultSource" -> parquet,
-      "org.apache.spark.sql.execution.datasources.parquet" -> parquet,
-      "org.apache.spark.sql.execution.datasources.parquet.DefaultSource" -> parquet,
-      "org.apache.spark.sql.hive.orc.DefaultSource" -> orc,
-      "org.apache.spark.sql.hive.orc" -> orc,
-      "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
-      "org.apache.spark.ml.source.libsvm" -> libsvm,
-      "com.databricks.spark.csv" -> csv
-    )
-  }
+  /** A map to maintain backward compatibility in case we move data sources around. */
+  private val backwardCompatibilityMap: Map[String, String] = Map(
+    "org.apache.spark.sql.jdbc" -> jdbc,
+    "org.apache.spark.sql.jdbc.DefaultSource" -> jdbc,
+    "org.apache.spark.sql.execution.datasources.jdbc.DefaultSource" -> jdbc,
+    "org.apache.spark.sql.execution.datasources.jdbc" -> jdbc,
+    "org.apache.spark.sql.json" -> json,
+    "org.apache.spark.sql.json.DefaultSource" -> json,
+    "org.apache.spark.sql.execution.datasources.json" -> json,
+    "org.apache.spark.sql.execution.datasources.json.DefaultSource" -> json,
+    "org.apache.spark.sql.parquet" -> parquet,
+    "org.apache.spark.sql.parquet.DefaultSource" -> parquet,
+    "org.apache.spark.sql.execution.datasources.parquet" -> parquet,
+    "org.apache.spark.sql.execution.datasources.parquet.DefaultSource" -> parquet,
+    "org.apache.spark.sql.hive.orc.DefaultSource" -> orc,
+    "org.apache.spark.sql.hive.orc" -> orc,
+    "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
+    "org.apache.spark.ml.source.libsvm" -> libsvm,
+    "com.databricks.spark.csv" -> csv
+  )
+
+  private val builtinShortNamesMap: Map[String, String] = Map(
+    "jdbc" -> jdbc,
+    "json" -> json,
+    "parquet" -> parquet,
+    "csv" -> csv,
+    "libsvm" -> libsvm,
+    "orc" -> orc
+  )
 
   /**
    * Class that were removed in Spark 2.0. Used to detect incompatibility libraries for Spark 2.0.
@@ -515,7 +522,8 @@ object DataSource extends Logging {
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String): Class[_] = {
-    val provider1 = backwardCompatibilityMap.getOrElse(provider, provider)
+    val provider1 = builtinShortNamesMap.getOrElse(provider,
+      backwardCompatibilityMap.getOrElse(provider, provider))
     val provider2 = s"$provider1.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
