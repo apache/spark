@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.EliminateBarriers
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -28,7 +27,7 @@ class DataFrameHintSuite extends PlanTest with SharedSQLContext {
 
   private def check(df: Dataset[_], expected: LogicalPlan) = {
     comparePlans(
-      EliminateBarriers(df.queryExecution.logical),
+      df.queryExecution.logical,
       expected
     )
   }

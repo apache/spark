@@ -32,9 +32,7 @@ class DSLHintSuite extends AnalysisTest {
   test("various hint parameters") {
     comparePlans(
       r1.hint("hint1"),
-      UnresolvedHint("hint1", Seq(),
-        r1
-      )
+      UnresolvedHint("hint1", Seq(), r1)
     )
 
     comparePlans(
@@ -44,16 +42,12 @@ class DSLHintSuite extends AnalysisTest {
 
     comparePlans(
       r1.hint("hint1", 1, $"a"),
-      UnresolvedHint("hint1", Seq(1, $"a"),
-        r1
-      )
+      UnresolvedHint("hint1", Seq(1, $"a"), r1)
     )
 
     comparePlans(
       r1.hint("hint1", Seq(1, 2, 3), Seq($"a", $"b", $"c")),
-      UnresolvedHint("hint1", Seq(Seq(1, 2, 3), Seq($"a", $"b", $"c")),
-        r1
-      )
+      UnresolvedHint("hint1", Seq(Seq(1, 2, 3), Seq($"a", $"b", $"c")), r1)
     )
   }
 }
