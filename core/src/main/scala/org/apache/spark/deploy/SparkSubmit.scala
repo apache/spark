@@ -838,9 +838,9 @@ private[spark] object SparkSubmitUtils {
   // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
   // other spark-streaming utility components. Underscore is there to differentiate between
   // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
-  val IVY_DEFAULT_EXCLUDES = Seq("catalyst_", "core_", "graphx_", "launcher_", "mllib_", "mllib-local_",
-    "network-common_", "network-shuffle_", "repl_", "sketch_", "sql_", "streaming_", "tags_",
-    "unsafe_")
+  val IVY_DEFAULT_EXCLUDES = Seq("catalyst_", "core_", "graphx_", "launcher_", "mllib_",
+    "mllib-local_", "network-common_", "network-shuffle_", "repl_", "sketch_", "sql_", "streaming_",
+    "tags_", "unsafe_")
 
   /**
    * Represents a Maven Coordinate
