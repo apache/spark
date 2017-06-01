@@ -138,7 +138,10 @@ case class Stack(children: Seq[Expression]) extends Generator {
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
   private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
 
-  def hasFoldableRowNums: Boolean = {
+  /**
+   * Return true iff there is at least one child which is a foldable IntegerType.
+   */
+  def hasFoldableNumRows: Boolean = {
     children.nonEmpty && children.head.dataType == IntegerType && children.head.foldable
   }
 

@@ -654,7 +654,7 @@ object TypeCoercion {
    */
   object StackCoercion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case s @ Stack(children) if s.childrenResolved && s.hasFoldableRowNums =>
+      case s @ Stack(children) if s.childrenResolved && s.hasFoldableNumRows =>
         Stack(children.zipWithIndex.map {
           case (e, 0) => e
           case (Literal(null, NullType), index: Int) =>
