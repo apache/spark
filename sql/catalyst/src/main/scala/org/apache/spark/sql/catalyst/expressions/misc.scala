@@ -110,7 +110,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns a universally unique identifier (UUID) string. The value is returned as a canonical UUID 36-character string.",
+  usage = "_FUNC_() - Returns an universally unique identifier (UUID) string. The value is returned as a canonical UUID 36-character string.",
   extended = """
     Examples:
       > SELECT _FUNC_();
