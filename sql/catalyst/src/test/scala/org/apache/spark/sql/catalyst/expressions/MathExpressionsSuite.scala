@@ -258,6 +258,16 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 3))
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 0))
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(5, 0))
+
+    val doublePi: Double = 3.1415
+    val floatPi: Float = 3.1415f
+    val longLit: Long = 12345678901234567L
+    checkEvaluation(Ceil(doublePi), 4L, EmptyRow)
+    checkEvaluation(Ceil(floatPi.toDouble), 4L, EmptyRow)
+    checkEvaluation(Ceil(longLit), longLit, EmptyRow)
+    checkEvaluation(Ceil(-doublePi), -3L, EmptyRow)
+    checkEvaluation(Ceil(-floatPi.toDouble), -3L, EmptyRow)
+    checkEvaluation(Ceil(-longLit), -longLit, EmptyRow)
   }
 
   test("floor") {
@@ -268,6 +278,16 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 3))
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 0))
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(5, 0))
+
+    val doublePi: Double = 3.1415
+    val floatPi: Float = 3.1415f
+    val longLit: Long = 12345678901234567L
+    checkEvaluation(Floor(doublePi), 3L, EmptyRow)
+    checkEvaluation(Floor(floatPi.toDouble), 3L, EmptyRow)
+    checkEvaluation(Floor(longLit), longLit, EmptyRow)
+    checkEvaluation(Floor(-doublePi), -4L, EmptyRow)
+    checkEvaluation(Floor(-floatPi.toDouble), -4L, EmptyRow)
+    checkEvaluation(Floor(-longLit), -longLit, EmptyRow)
   }
 
   test("factorial") {
