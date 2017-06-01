@@ -63,6 +63,8 @@ private[spark] class TaskSchedulerImpl(
     this(sc, sc.conf.get(config.MAX_TASK_FAILURES))
   }
 
+  // Lazily initializing blackListTrackOpt to avoid getting empty ExecutorAllocationClient,
+  // because ExecutorAllocationClient is created after this TaskSchedulerImpl.
   private[scheduler] lazy val blacklistTrackerOpt = maybeCreateBlacklistTracker(sc)
 
   val conf = sc.conf
