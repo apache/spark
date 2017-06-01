@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -91,7 +92,12 @@ object ResolveHints {
           ResolvedHint(h.child, HintInfo(isBroadcastable = Option(true)))
         } else {
           // Otherwise, find within the subtree query plans that should be broadcasted.
-          applyBroadcastHint(h.child, h.parameters.toSet)
+          applyBroadcastHint(h.child, h.parameters.map {
+            case tableName: String => tableName
+            case tableId: UnresolvedAttribute => tableId.name
+            case unsupported => throw new AnalysisException("Broadcast hint parameter should be " +
+              s"an identifier or string but was $unsupported (${unsupported.getClass}")
+          }.toSet)
         }
     }
   }
