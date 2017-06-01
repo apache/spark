@@ -36,4 +36,11 @@ class Sorter[K, Buffer](private val s: SortDataFormat[K, Buffer]) {
   def sort(a: Buffer, lo: Int, hi: Int, c: Comparator[_ >: K]): Unit = {
     timSort.sort(a, lo, hi, c)
   }
+
+  /**
+    * Check of the input buffer is sorted within range [lo, hi).
+    */
+  def isSorted(a: Buffer, lo: Int, hi: Int, c: Comparator[_ >: K]): Boolean = {
+    timSort.isSorted(a, lo, hi, c)
+  }
 }

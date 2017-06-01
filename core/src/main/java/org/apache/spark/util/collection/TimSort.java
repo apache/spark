@@ -83,6 +83,27 @@ class TimSort<K, Buffer> {
     this.s = sortDataFormat;
   }
 
+
+  /**
+   * Check if the array is sorted
+   * @param a the array in which a range is to be sorted
+   * @param lo the index of the first element in the range to be sorted
+   * @param hi the index after the last element in the range to be sorted
+   * @param c comparator to used for the sort
+   */
+  public boolean isSorted(Buffer a, int lo, int hi, Comparator<? super K> c) {
+    assert lo < hi;
+    int runHi = lo + 1;
+
+    K key0 = s.newKey();
+    K key1 = s.newKey();
+
+    while (runHi < hi && c.compare(s.getKey(a, runHi, key0), s.getKey(a, runHi - 1, key1)) >= 0)
+      runHi++;
+
+    return runHi == hi;
+  }
+
   /**
    * A stable, adaptive, iterative mergesort that requires far fewer than
    * n lg(n) comparisons when running on partially sorted arrays, while
