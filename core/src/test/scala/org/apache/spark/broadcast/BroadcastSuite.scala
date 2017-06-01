@@ -72,8 +72,10 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)
-    val results = sc.parallelize(1 to numSlaves).map(x => (x, broadcast.value.sum))
-    assert(results.collect().toSet === (1 to numSlaves).map(x => (x, 10)).toSet)
+    val results = sc.parallelize(1 to numSlaves).map { x =>
+      (x, broadcast.value.sum, broadcast.asInstanceOf[TorrentBroadcast[List[Int]]].obj)
+    }
+    assert(results.collect().toSet === (1 to numSlaves).map(x => (x, 10, null)).toSet)
   }
 
   test("TorrentBroadcast's blockifyObject and unblockifyObject are inverses") {
