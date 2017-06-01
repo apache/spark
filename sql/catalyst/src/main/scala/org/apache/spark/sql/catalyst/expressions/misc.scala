@@ -126,7 +126,7 @@ case class Uuid() extends LeafExpression {
   override def eval(input: InternalRow): Any = UTF8String.fromString(UUID.randomUUID().toString)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = " +
+    ev.copy(code = s"final UTF8String ${ev.value} = " +
       s"UTF8String.fromString(java.util.UUID.randomUUID().toString());", isNull = "false")
   }
 }
