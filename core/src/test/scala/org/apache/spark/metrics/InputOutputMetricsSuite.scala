@@ -331,7 +331,6 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
         buf.iterator
       }.count()
     }
-    assert(bytesRead != 0)
     assert(bytesRead >= tmpFile.length())
   }
 
@@ -347,7 +346,6 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
         buf.iterator
       }.count()
     }
-    assert(bytesRead != 0)
     assert(bytesRead >= tmpFile.length())
   }
 }

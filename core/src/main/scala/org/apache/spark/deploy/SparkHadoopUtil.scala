@@ -149,16 +149,15 @@ class SparkHadoopUtil extends Logging {
     val f = () => FileSystem.getAllStatistics.asScala.map(_.getThreadStatistics.getBytesRead).sum
     val baseline = (Thread.currentThread().getId, f())
 
+    /**
+     * This function may be called in both spawned child threads and parent task thread (in
+     * PythonRDD), and Hadoop FileSystem uses thread local variables to track the statistics.
+     * So we need a map to track the bytes read from the child threads and parent thread,
+     * summing them together to get the bytes read of this task.
+     */
     new Function0[Long] {
       private val bytesReadMap = new mutable.HashMap[Long, Long]()
 
-      /**
-       * Returns a function that can be called to calculate Hadoop FileSystem bytes read.
-       * This function may be called in both spawned child threads and parent task thread (in
-       * PythonRDD), and Hadoop FileSystem uses thread local variables to track the statistics.
-       * So we need a map to track the bytes read from the child threads and parent thread,
-       * summing them together to get the bytes read of this task.
-       */
       override def apply(): Long = {
         bytesReadMap.synchronized {
           bytesReadMap.put(Thread.currentThread().getId, f())
