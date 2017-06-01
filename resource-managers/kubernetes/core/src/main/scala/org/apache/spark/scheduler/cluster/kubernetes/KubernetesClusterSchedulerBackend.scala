@@ -55,6 +55,23 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val executorExtraClasspath = conf.get(
     org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
   private val executorJarsDownloadDir = conf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
+
+  private val executorLabels = ConfigurationUtils.parseKeyValuePairs(
+      conf.get(KUBERNETES_EXECUTOR_LABELS),
+      KUBERNETES_EXECUTOR_LABELS.key,
+      "executor labels")
+  require(
+      !executorLabels.contains(SPARK_APP_ID_LABEL),
+      s"Custom executor labels cannot contain $SPARK_APP_ID_LABEL as it is reserved for Spark.")
+  require(
+      !executorLabels.contains(SPARK_EXECUTOR_ID_LABEL),
+      s"Custom executor labels cannot contain $SPARK_EXECUTOR_ID_LABEL as it is reserved for" +
+        s" Spark.")
+  private val executorAnnotations = ConfigurationUtils.parseKeyValuePairs(
+      conf.get(KUBERNETES_EXECUTOR_ANNOTATIONS),
+      KUBERNETES_EXECUTOR_ANNOTATIONS.key,
+      "executor annotations")
+
   private var shufflePodCache: Option[ShufflePodCache] = None
   private val executorDockerImage = conf.get(EXECUTOR_DOCKER_IMAGE)
   private val kubernetesNamespace = conf.get(KUBERNETES_NAMESPACE)
@@ -250,8 +267,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
     // executorId and applicationId
     val hostname = name.substring(Math.max(0, name.length - 63))
 
-    val selectors = Map(SPARK_EXECUTOR_ID_LABEL -> executorId,
-      SPARK_APP_ID_LABEL -> applicationId()).asJava
+    val resolvedExecutorLabels = Map(
+      SPARK_EXECUTOR_ID_LABEL -> executorId,
+      SPARK_APP_ID_LABEL -> applicationId()) ++
+      executorLabels
     val executorMemoryQuantity = new QuantityBuilder(false)
       .withAmount(s"${executorMemoryMb}M")
       .build()
@@ -300,7 +319,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val basePodBuilder = new PodBuilder()
       .withNewMetadata()
         .withName(name)
-        .withLabels(selectors)
+        .withLabels(resolvedExecutorLabels.asJava)
+        .withAnnotations(executorAnnotations.asJava)
         .withOwnerReferences()
         .addNewOwnerReference()
           .withController(true)

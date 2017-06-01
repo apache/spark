@@ -211,6 +211,22 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
+  private[spark] val KUBERNETES_EXECUTOR_LABELS =
+    ConfigBuilder("spark.kubernetes.executor.labels")
+      .doc("Custom labels that will be added to the executor pods. This should be a" +
+        " comma-separated list of label key-value pairs, where each label is in the format" +
+        " key=value.")
+      .stringConf
+      .createOptional
+
+  private[spark] val KUBERNETES_EXECUTOR_ANNOTATIONS =
+    ConfigBuilder("spark.kubernetes.executor.annotations")
+      .doc("Custom annotations that will be added to the executor pods. This should be a" +
+        " comma-separated list of annotation key-value pairs, where each annotation is in the" +
+        " format key=value.")
+      .stringConf
+      .createOptional
+
   private[spark] val KUBERNETES_DRIVER_POD_NAME =
     ConfigBuilder("spark.kubernetes.driver.pod.name")
       .doc("Name of the driver pod.")
