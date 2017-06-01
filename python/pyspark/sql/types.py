@@ -188,7 +188,7 @@ class TimestampType(AtomicType):
     def toInternal(self, dt):
         if dt is not None:
             # Avoiding the invalid range of years (100-1899) for mktime in Python < 3
-            if dt.year > 1899 or dt.year <= 100:
+            if dt.year > 1899 or dt.year < 100:
                 seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
                            else time.mktime(dt.timetuple()))
             else:
