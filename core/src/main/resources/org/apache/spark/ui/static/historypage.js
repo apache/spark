@@ -195,7 +195,7 @@ $(document).ready(function() {
         }
 
         $(selector).DataTable(conf);
-        $('#history-summary-table [data-toggle="tooltip"]').tooltip();
+        $('#history-summary [data-toggle="tooltip"]').tooltip();
       });
     });
 });
