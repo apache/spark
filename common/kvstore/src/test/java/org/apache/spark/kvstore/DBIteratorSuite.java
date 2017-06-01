@@ -96,27 +96,21 @@ public abstract class DBIteratorSuite {
 
     int count = RND.nextInt(MAX_ENTRIES) + MIN_ENTRIES;
 
-    // Instead of generating sequential IDs, generate random unique IDs to avoid the insertion
-    // order matching the natural ordering. Just in case.
-    boolean[] usedIDs = new boolean[count];
-
     allEntries = new ArrayList<>(count);
     for (int i = 0; i < count; i++) {
       CustomType1 t = new CustomType1();
-
-      int id;
-      do {
-        id = RND.nextInt(count);
-      } while (usedIDs[id]);
-
-      usedIDs[id] = true;
-      t.key = "key" + id;
+      t.key = "key" + i;
       t.id = "id" + i;
       t.name = "name" + RND.nextInt(MAX_ENTRIES);
       t.num = RND.nextInt(MAX_ENTRIES);
       t.child = "child" + (i % MIN_ENTRIES);
       allEntries.add(t);
-      db.write(t);
+    }
+
+    // Shuffle the entries to avoid the insertion order matching the natural ordering. Just in case.
+    Collections.shuffle(allEntries, RND);
+    for (CustomType1 e : allEntries) {
+      db.write(e);
     }
 
     // Pick the first generated value, and forcefully create a few entries that will clash

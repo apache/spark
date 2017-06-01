@@ -49,6 +49,11 @@ public class LevelDBTypeInfoSuite {
   }
 
   @Test(expected = IllegalArgumentException.class)
+  public void testNoNaturalIndex2() throws Exception {
+    newTypeInfo(NoNaturalIndex2.class);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
   public void testDuplicateIndex() throws Exception {
     newTypeInfo(DuplicateIndex.class);
   }
@@ -156,7 +161,17 @@ public class LevelDBTypeInfoSuite {
 
   }
 
+  public static class NoNaturalIndex2 {
+
+    @KVIndex("id")
+    public String id;
+
+  }
+
   public static class DuplicateIndex {
+
+    @KVIndex
+    public String key;
 
     @KVIndex("id")
     public String id;

@@ -91,7 +91,8 @@ import org.iq80.leveldb.WriteBatch;
  * <p>
  * Note that all indexed values are prepended with "+", even if the index itself does not have an
  * explicit end marker. This allows for easily skipping to the end of an index by telling LevelDB
- * to seek to the "phantom" end marker of the index.
+ * to seek to the "phantom" end marker of the index. Throughout the code and comments, this part
+ * of the full LevelDB key is generally referred to as the "index value" of the entity.
  * </p>
  *
  * <p>
@@ -258,6 +259,11 @@ class LevelDBTypeInfo {
       return buildKey(name, toParentKey(value));
     }
 
+    /**
+     * Gets the index value for a particular entity (which is the value of the field or method
+     * tagged with the index annotation). This is used as part of the LevelDB key where the
+     * entity (or its id) is stored.
+     */
     Object getValue(Object entity) throws Exception {
       return accessor.get(entity);
     }
@@ -276,7 +282,10 @@ class LevelDBTypeInfo {
       return (parent != null) ? buildKey(false, prefix, name) : buildKey(name);
     }
 
-    /** The key where to start ascending iteration for entries that match the given value. */
+    /**
+     * The key where to start ascending iteration for entities whose value for the indexed field
+     * match the given value.
+     */
     byte[] start(byte[] prefix, Object value) {
       checkParent(prefix);
       return (parent != null) ? buildKey(false, prefix, name, toKey(value))
@@ -290,14 +299,14 @@ class LevelDBTypeInfo {
         : buildKey(name, END_MARKER);
     }
 
-    /** The key for the end marker for index entries with the given value. */
+    /** The key for the end marker for entries with the given value. */
     byte[] end(byte[] prefix, Object value) throws Exception {
       checkParent(prefix);
       return (parent != null) ? buildKey(false, prefix, name, toKey(value), END_MARKER)
         : buildKey(name, toKey(value), END_MARKER);
     }
 
-    /** The key in the index that identifies the given entity. */
+    /** The full key in the index that identifies the given entity. */
     byte[] entityKey(byte[] prefix, Object entity) throws Exception {
       Object indexValue = getValue(entity);
       Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
@@ -336,15 +345,20 @@ class LevelDBTypeInfo {
 
       boolean needCountUpdate = (existing == null);
 
-      // Check whether the index key for the existing value matches the new value. If it doesn't,
-      // then explicitly delete the existing key, otherwise just let the "put()" call overwrite it.
+      // Check whether there's a need to update the index. The index needs to be updated in two
+      // cases:
+      //
+      // - There is no existing value for the entity, so a new index value will be added.
+      // - If there is a previously stored value for the entity, and the index value for the
+      //   current index does not match the new value, the old entry needs to be deleted and
+      //   the new one added.
+      //
+      // Natural indices don't need to be checked, because by definition both old and new entities
+      // will have the same key. The put() call is all that's needed in that case.
       //
       // Also check whether we need to update the counts. If the indexed value is changing, we
       // need to decrement the count at the old index value, and the new indexed value count needs
       // to be incremented.
-      //
-      // Natural indices don't need to be checked, because by definition both old and new elements
-      // will have the same key.
       if (existing != null && !isNatural) {
         byte[] oldPrefix = null;
         Object oldIndexedValue = getValue(existing);
