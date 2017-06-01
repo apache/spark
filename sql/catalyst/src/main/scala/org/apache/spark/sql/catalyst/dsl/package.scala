@@ -381,6 +381,9 @@ package object dsl {
 
       def analyze: LogicalPlan =
         EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))
+
+      def hint(name: String, parameters: Any*): LogicalPlan =
+        UnresolvedHint(name, parameters, logicalPlan)
     }
   }
 }
