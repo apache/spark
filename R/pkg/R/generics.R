@@ -486,9 +486,9 @@ setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 #' @rdname createGlobalTempView
 #' @export
 setGeneric("createGlobalTempView",
-function(x, viewName) {
-    standardGeneric("createGlobalTempView")
-})
+           function(x, viewName) {
+             standardGeneric("createGlobalTempView")
+           })
 
 #' @rdname createOrReplaceGlobalTempView
 #' @export
