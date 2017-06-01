@@ -119,6 +119,8 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
 // scalastyle:on line.size.limit
 case class Uuid() extends LeafExpression {
 
+  override def deterministic: Boolean = false
+
   override def nullable: Boolean = false
 
   override def dataType: DataType = StringType

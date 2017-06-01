@@ -73,8 +73,8 @@ ac
 
 
 -- !query 6
-select length(uuid()), (substring(concat(uuid(), '$'), 1, 36) <> uuid())
+select length(uuid()), (uuid() <> uuid())
 -- !query 6 schema
-struct<length(uuid()):int,(NOT (substring(concat(uuid(), $), 1, 36) = uuid())):boolean>
+struct<length(uuid()):int,(NOT (uuid() = uuid())):boolean>
 -- !query 6 output
 36	true
