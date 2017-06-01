@@ -1037,6 +1037,13 @@ Apart from these, the following properties are also available, and may be useful
     to get the replication level of the block to the initial number.
   </td>
 </tr>
+<tr>
+  <td><code>spark.storage.blockManagerSlaveTimeoutMs<code></td>
+  <td>spark.network.timeout</td>
+  <td>
+    The block manager communication waits for a timeout.
+  </td>
+</tr>
 </table>
 
 ### Execution Behavior
@@ -1240,8 +1247,8 @@ Apart from these, the following properties are also available, and may be useful
     Default timeout for all network interactions. This config will be used in place of
     <code>spark.core.connection.ack.wait.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code>,
-    <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
-    <code>spark.rpc.lookupTimeout</code> if they are not configured.
+    <code>spark.rpc.askTimeout</code> or <code>spark.rpc.lookupTimeout</code>
+    if they are not configured.
   </td>
 </tr>
 <tr>
@@ -1279,7 +1286,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.rpc.lookupTimeout</code></td>
-  <td>120s</td>
+  <td>spark.network.timeout</td>
   <td>
     Duration for an RPC remote endpoint lookup operation to wait before timing out.
   </td>
