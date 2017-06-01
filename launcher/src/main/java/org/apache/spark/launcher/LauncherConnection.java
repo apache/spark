@@ -20,7 +20,6 @@ package org.apache.spark.launcher;
 import java.io.Closeable;
 import java.io.EOFException;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.logging.Level;
