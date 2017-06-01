@@ -26,6 +26,7 @@ import org.apache.spark.graphx.Edge
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -562,6 +563,16 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val model = lda.run(distributedEmptyDocs)
     assert(model.vocabSize === vocabSize)
+  }
+
+  test("SPARK-17975: Verify EMLDA optimizer error does not occur on empty arrays") {
+    // Verifies we do not get the class cast exception "scala.Tuple2
+    // cannot be cast to org.apache.spark.graphx.Edge"
+    val documents: RDD[(Long, Vector)] =
+    sc.parallelize(Seq((0L, Vectors.sparse(236, Array[Int](), Array[Double]())),
+      (1L, Vectors.sparse(236, Array[Int](), Array[Double]()))))
+    val lda = new LDA().setOptimizer(new EMLDAOptimizer)
+    lda.run(documents)
   }
 
 }

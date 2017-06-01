@@ -102,14 +102,18 @@ object EdgeRDD {
    * @tparam VD the type of the vertex attributes that may be joined with the returned EdgeRDD
    */
   def fromEdges[ED: ClassTag, VD: ClassTag](edges: RDD[Edge[ED]]): EdgeRDDImpl[ED, VD] = {
-    val edgePartitions = edges.mapPartitionsWithIndex { (pid, iter) =>
-      val builder = new EdgePartitionBuilder[ED, VD]
-      iter.foreach { e =>
-        builder.add(e.srcId, e.dstId, e.attr)
-      }
-      Iterator((pid, builder.toEdgePartition))
+    edges match {
+      case edgeRDDImpl: EdgeRDDImpl[_, _] => edgeRDDImpl.asInstanceOf[EdgeRDDImpl[ED, VD]]
+      case _ =>
+        val edgePartitions = edges.mapPartitionsWithIndex { (pid, iter) =>
+          val builder = new EdgePartitionBuilder[ED, VD]
+          iter.foreach { e =>
+            builder.add(e.srcId, e.dstId, e.attr)
+          }
+          Iterator((pid, builder.toEdgePartition))
+        }
+        EdgeRDD.fromEdgePartitions(edgePartitions)
     }
-    EdgeRDD.fromEdgePartitions(edgePartitions)
   }
 
   /**
