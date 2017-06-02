@@ -36,15 +36,6 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
       ).toDF("name", "age", "height")
   }
 
-  def createBooleanDF(): DataFrame = {
-    Seq[(String, java.lang.Boolean)](
-      ("Bob", false),
-      ("Alice", null),
-      ("Mallory", true),
-      (null, null)
-    ).toDF("name", "spy")
-  }
-
   test("drop") {
     val input = createDF()
     val rows = input.collect()
@@ -112,7 +103,13 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("fill") {
     val input = createDF()
-    val boolInput = createBooleanDF()
+
+    val boolInput = Seq[(String, java.lang.Boolean)](
+      ("Bob", false),
+      ("Alice", null),
+      ("Mallory", true),
+      (null, null)
+    ).toDF("name", "spy")
 
     val fillNumeric = input.na.fill(50.6)
     checkAnswer(
@@ -137,8 +134,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     // boolean
     checkAnswer(
       boolInput.na.fill(true).select("spy"),
-      Row(false) :: Row(true) :: Row(true) ::
-        Row(true) :: Nil)
+      Row(false) :: Row(true) :: Row(true) :: Row(true) :: Nil)
     assert(boolInput.na.fill(true).columns.toSeq === boolInput.columns.toSeq)
 
     // fill double with subset columns

@@ -197,18 +197,24 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * Returns a new `DataFrame` that replaces null values in boolean columns with `value`.
+   *
+   * @since 2.3.0
    */
   def fill(value: Boolean): DataFrame = fill(value, df.columns)
 
   /**
-   * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
+   * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified
    * boolean columns. If a specified column is not a boolean column, it is ignored.
+   *
+   * @since 2.3.0
    */
   def fill(value: Boolean, cols: Seq[String]): DataFrame = fillValue(value, cols)
 
   /**
    * Returns a new `DataFrame` that replaces null values in specified boolean columns.
    * If a specified column is not a boolean column, it is ignored.
+   *
+   * @since 2.3.0
    */
   def fill(value: Boolean, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 

@@ -1311,12 +1311,13 @@ class DataFrame(object):
         | 50|  null|unknown|
         +---+------+-------+
         """
-        if not isinstance(value, (float, int, long, basestring, dict)):
-            raise ValueError("value should be a float, int, long, string, boolean or dict")
+        if not isinstance(value, (float, int, long, basestring, bool, dict)):
+            raise ValueError("value should be a float, int, long, string, bool or dict")
 
-        if isinstance(value, bool):
-            pass
-        elif isinstance(value, (int, long)):
+        # Note that bool validates isinstance(int), but we don't want to
+        # convert bools to floats
+
+        if not isinstance(value, bool) and isinstance(value, (int, long)):
             value = float(value)
 
         if isinstance(value, dict):
