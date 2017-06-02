@@ -345,7 +345,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = buildConf("spark.sql.columnNameOfCorruptRecord")
-    .doc("The name of internal column for storing raw/un-parsed JSON records that fail to parse.")
+    .doc("The name of internal column for storing raw/un-parsed JSON and CSV records that fail " +
+      "to parse.")
     .stringConf
     .createWithDefault("_corrupt_record")
 
