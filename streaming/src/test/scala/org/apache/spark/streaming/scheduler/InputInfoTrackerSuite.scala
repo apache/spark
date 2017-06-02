@@ -76,4 +76,34 @@ class InputInfoTrackerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(inputInfoTracker.getInfo(Time(0)).get(streamId1) === None)
     assert(inputInfoTracker.getInfo(Time(1))(streamId1) === inputInfo2)
   }
+
+  test("merge two InputInfos") {
+    val inputInfo1_1 = StreamInputInfo(1, 100L, Map("ID" -> 1))
+    val inputInfo1_2 = StreamInputInfo(1, 200L, Map("ID" -> 1))
+    val inputInfo2 = StreamInputInfo(2, 200L, Map("ID" -> 2))
+
+    val mergedInfo = inputInfo1_1.merge(inputInfo1_2)
+    assert(mergedInfo.inputStreamId == 1)
+    assert(mergedInfo.numRecords == 300L)
+    assert(mergedInfo.metadata == Map("ID" -> 1))
+
+    intercept[IllegalArgumentException]{
+      inputInfo1_1.merge(inputInfo2)
+    }
+  }
+
+  test("test get InputInfo of all specified times") {
+    val inputInfoTracker = new InputInfoTracker(ssc)
+
+    val streamId1 = 0
+    val inputInfo1 = StreamInputInfo(streamId1, 100L)
+    val inputInfo2 = StreamInputInfo(streamId1, 300L)
+    inputInfoTracker.reportInfo(Time(0), inputInfo1)
+    inputInfoTracker.reportInfo(Time(1), inputInfo2)
+
+    val times = Seq(Time(0), Time(1))
+    val mergedInfo = inputInfoTracker.getInfo(times)(streamId1)
+    assert(mergedInfo.inputStreamId == 0)
+    assert(mergedInfo.numRecords == 400L)
+  }
 }

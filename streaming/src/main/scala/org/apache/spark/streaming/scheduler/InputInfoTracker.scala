@@ -39,6 +39,12 @@ case class StreamInputInfo(
 
   def metadataDescription: Option[String] =
     metadata.get(StreamInputInfo.METADATA_KEY_DESCRIPTION).map(_.toString)
+
+  def merge(other: StreamInputInfo): StreamInputInfo = {
+    require(other.inputStreamId == inputStreamId,
+      "Can't merge two StreamInputInfo with different id")
+    StreamInputInfo(inputStreamId, numRecords + other.numRecords, metadata ++ other.metadata)
+  }
 }
 
 @DeveloperApi
@@ -77,6 +83,28 @@ private[streaming] class InputInfoTracker(ssc: StreamingContext) extends Logging
     val inputInfos = batchTimeToInputInfos.get(batchTime)
     // Convert mutable HashMap to immutable Map for the caller
     inputInfos.map(_.toMap).getOrElse(Map[Int, StreamInputInfo]())
+  }
+
+  /**
+   * Get the all the input stream's information of all specified batch times and
+   * merge results together.
+   */
+  def getInfo(batchTimes: Iterable[Time]): Map[Int, StreamInputInfo] = synchronized {
+    val inputInfosSet = batchTimes.map{ batchTime =>
+      val inputInfos = batchTimeToInputInfos.get(batchTime)
+      inputInfos.getOrElse(mutable.Map[Int, StreamInputInfo]())
+    }
+
+    val aggregatedInputInfos = mutable.Map[Int, StreamInputInfo]()
+    inputInfosSet.foreach(inputInfos => inputInfos.foreach { case (id, info) =>
+      val currentInfo = aggregatedInputInfos.get(id)
+      if (currentInfo.isEmpty) {
+        aggregatedInputInfos(id) = info
+      } else {
+        aggregatedInputInfos(id) = currentInfo.get.merge(info)
+      }
+    })
+    aggregatedInputInfos.toMap
   }
 
   /** Cleanup the tracked input information older than threshold batch time */

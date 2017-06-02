@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.scheduler
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
@@ -76,6 +77,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   // last batch whose completion,checkpointing and metadata cleanup has been completed
   private var lastProcessedBatch: Time = null
+
+  // On some batch time, a JobSet with no jobs will be submit. We record such batch time here in
+  // order to correct the input info of later jobSet with jobs.
+  private var batchTimesWithNoJob: mutable.HashSet[Time] = mutable.HashSet[Time]()
 
   /** Start generation of jobs */
   def start(): Unit = synchronized {
@@ -249,7 +254,15 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       graph.generateJobs(time) // generate jobs using allocated block
     } match {
       case Success(jobs) =>
-        val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
+        val streamIdToInputInfos = if (jobs.isEmpty) {
+          batchTimesWithNoJob.add(time)
+          Map.empty[Int, StreamInputInfo]
+        } else {
+          batchTimesWithNoJob.add(time)
+          val inputInfo = jobScheduler.inputInfoTracker.getInfo(batchTimesWithNoJob)
+          batchTimesWithNoJob.clear()
+          inputInfo
+        }
         jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)

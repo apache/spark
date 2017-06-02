@@ -50,7 +50,7 @@ case class JobSet(
 
   def hasStarted: Boolean = processingStartTime > 0
 
-  def hasCompleted: Boolean = incompleteJobs.isEmpty
+  def hasCompleted: Boolean = incompleteJobs.isEmpty && processingStartTime >= 0
 
   // Time taken to process all the jobs from the time they started processing
   // (i.e. not including the time they wait in the streaming scheduler queue)
