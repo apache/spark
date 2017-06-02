@@ -122,6 +122,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
   override def close(): Unit = {
     logInfo(s"BatchedWriteAheadLog shutting down at time: ${System.currentTimeMillis()}.")
     synchronized {
+      if (!active) return
       active = false
     }
     batchedWriterThread.interrupt()

@@ -56,7 +56,7 @@ public abstract class WriteAheadLog {
   public abstract void clean(long threshTime, boolean waitForCompletion);
 
   /**
-   * Close this log and release any resources.
+   * Close this log and release any resources. It requires to be idempotent.
    */
   public abstract void close();
 }
