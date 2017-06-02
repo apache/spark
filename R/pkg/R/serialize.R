@@ -122,10 +122,14 @@ writeRawSerialize <- function(outputCon, batch) {
 }
 
 writeRowSerialize <- function(outputCon, rows) {
-  invisible(lapply(rows, function(r) {
+  buf <- rawConnection(raw(0), "wb")
+  on.exit(close(buf))
+  lapply(rows, function(r) {
     bytes <- serializeRow(r)
-    writeRaw(outputCon, bytes)
-  }))
+    writeRaw(buf, bytes)
+  })
+  bytes <- rawConnectionValue(buf)
+  writeBin(bytes, outputCon, endian = "big") 
 }
 
 serializeRow <- function(row) {
