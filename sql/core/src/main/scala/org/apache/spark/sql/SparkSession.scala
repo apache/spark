@@ -757,6 +757,8 @@ object SparkSession {
 
     private[this] var userSuppliedContext: Option[SparkContext] = None
 
+    // The `SparkConf` inside the given `SparkContext` may get changed if you specify some options
+    // for this builder.
     private[spark] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
       userSuppliedContext = Option(sparkContext)
       this

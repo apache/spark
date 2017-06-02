@@ -43,7 +43,6 @@ private[ml] object TreeTests extends SparkFunSuite {
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
     val spark = SparkSession.builder()
-      .appName("TreeTests")
       .sparkContext(data.sparkContext)
       .getOrCreate()
     import spark.implicits._
