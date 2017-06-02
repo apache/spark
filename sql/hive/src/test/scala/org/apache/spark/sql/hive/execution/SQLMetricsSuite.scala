@@ -34,7 +34,7 @@ class SQLMetricsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton
         Seq((1, 2)).toDF("i", "j").write.format("hive").saveAsTable("writeToHiveTable")
       }
       // written 1 file, 1 row, 0 dynamic partition.
-      val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ > 0, _ == 1, _ > 0)
+      val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ > 0, _ == 1, _ >= 0)
       verifyWriteDataMetrics(spark, executionId1, verifyFuncs1)
 
       // Verifies the metrics of InsertIntoHiveTable
@@ -43,7 +43,7 @@ class SQLMetricsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton
           .write.format("hive").insertInto("writeToHiveTable")
       }
       // written 1 file, 3 rows, 0 dynamic partition.
-      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ > 0, _ == 3, _ > 0)
+      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ > 0, _ == 3, _ >= 0)
       verifyWriteDataMetrics(spark, executionId2, verifyFuncs2)
 
       val executionId3 = getLatestExecutionId(spark) { () =>
@@ -51,7 +51,7 @@ class SQLMetricsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton
           .write.format("hive").insertInto("writeToHiveTable")
       }
       // written 2 files, 2 rows, 0 dynamic partition.
-      val verifyFuncs3: Seq[Int => Boolean] = Seq(_ == 2, _ == 0, _ > 0, _ == 2, _ > 0)
+      val verifyFuncs3: Seq[Int => Boolean] = Seq(_ == 2, _ == 0, _ > 0, _ == 2, _ >= 0)
       verifyWriteDataMetrics(spark, executionId3, verifyFuncs3)
     }
   }
@@ -85,7 +85,7 @@ class SQLMetricsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton
       }
       assert(Utils.recursiveList(dir).count(_.getName.startsWith("part-")) == 4)
       // written 4 files, 4 rows, 4 dynamic partitions.
-      val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ > 0, _ == 4, _ > 0)
+      val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ > 0, _ == 4, _ >= 0)
       verifyWriteDataMetrics(spark, executionId1, verifyFuncs1)
 
       val executionId2 = getLatestExecutionId(spark) { () =>
@@ -99,7 +99,7 @@ class SQLMetricsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton
       }
       assert(Utils.recursiveList(dir).count(_.getName.startsWith("part-")) == 4)
       // written 4 files, 8 rows, 4 dynamic partitions.
-      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ > 0, _ == 8, _ > 0)
+      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ > 0, _ == 8, _ >= 0)
       verifyWriteDataMetrics(spark, executionId2, verifyFuncs2)
     }
   }
