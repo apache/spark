@@ -234,6 +234,26 @@ class ThreadingSuite extends SparkFunSuite with LocalSparkContext with Logging {
     assert(threadTestValue === originalTestValue)
   }
 
+  test("taskContext accessed from a thread pool") {
+    TaskContext.setTaskContext(TaskContext.empty())
+    assert(TaskContext.get() != null, "taskContext should have been defined")
+    var throwable: Option[Throwable] = None
+    val thread = new Thread() {
+      override def run() {
+        try {
+          assert(TaskContext.get() != null, "taskContext should have been inherited")
+        } catch {
+          case t: Throwable =>
+            throwable = Option(t)
+        }
+      }
+    }
+    thread.start()
+    thread.join()
+    throwable.foreach { t => throw improveStackTrace(t) }
+    TaskContext.unset()
+  }
+
   /**
    * Improve the stack trace of an error thrown from within a thread.
    * Otherwise it's difficult to tell which line in the test the error came from.
