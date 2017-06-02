@@ -88,6 +88,7 @@ public final class UnsafeExternalRowSorter {
       prefixComparator,
       sparkEnv.conf().getInt("spark.shuffle.sort.initialBufferSize",
                              DEFAULT_INITIAL_SORT_BUFFER_SIZE),
+      sparkEnv.conf().getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024,
       pageSizeBytes,
       SparkEnv.get().conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
         UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),

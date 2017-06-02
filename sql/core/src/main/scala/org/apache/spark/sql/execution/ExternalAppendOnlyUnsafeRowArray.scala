@@ -48,6 +48,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     serializerManager: SerializerManager,
     taskContext: TaskContext,
     initialSize: Int,
+    fileBufferSizeBytes: Long,
     pageSizeBytes: Long,
     numRowsSpillThreshold: Int) extends Logging {
 
@@ -58,6 +59,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       SparkEnv.get.serializerManager,
       TaskContext.get(),
       1024,
+      SparkEnv.get.conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024,
       SparkEnv.get.memoryManager.pageSizeBytes,
       numRowsSpillThreshold)
   }
@@ -118,6 +120,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
           null,
           null,
           initialSize,
+          fileBufferSizeBytes,
           pageSizeBytes,
           numRowsSpillThreshold,
           false)

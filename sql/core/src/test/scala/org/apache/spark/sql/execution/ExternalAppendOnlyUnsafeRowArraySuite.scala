@@ -44,6 +44,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       SparkEnv.get.serializerManager,
       taskContext,
       1024,
+      32 * 1024,
       SparkEnv.get.memoryManager.pageSizeBytes,
       spillThreshold)
     try f(array) finally {

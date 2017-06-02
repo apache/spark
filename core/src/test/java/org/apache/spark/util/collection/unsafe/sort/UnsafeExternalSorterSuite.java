@@ -157,6 +157,7 @@ public class UnsafeExternalSorterSuite {
       recordComparator,
       prefixComparator,
       /* initialSize */ 1024,
+      32 * 1024,
       pageSizeBytes,
       UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD,
       shouldUseRadixSort());
@@ -381,6 +382,7 @@ public class UnsafeExternalSorterSuite {
       null,
       null,
       /* initialSize */ 1024,
+      32 * 1024,
       pageSizeBytes,
       UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD,
       shouldUseRadixSort());
@@ -418,6 +420,7 @@ public class UnsafeExternalSorterSuite {
       recordComparator,
       prefixComparator,
       1024,
+      32 * 1024,
       pageSizeBytes,
       UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD,
       shouldUseRadixSort());

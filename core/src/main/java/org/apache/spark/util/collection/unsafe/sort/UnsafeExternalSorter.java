@@ -94,11 +94,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       RecordComparator recordComparator,
       PrefixComparator prefixComparator,
       int initialSize,
+      long fileBufferSizeBytes,
       long pageSizeBytes,
       long numElementsForSpillThreshold,
       UnsafeInMemorySorter inMemorySorter) throws IOException {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
-      serializerManager, taskContext, recordComparator, prefixComparator, initialSize,
+      serializerManager, taskContext, recordComparator, prefixComparator, initialSize, fileBufferSizeBytes,
         numElementsForSpillThreshold, pageSizeBytes, inMemorySorter, false /* ignored */);
     sorter.spill(Long.MAX_VALUE, sorter);
     // The external sorter will be used to insert records, in-memory sorter is not needed.
@@ -114,12 +115,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       RecordComparator recordComparator,
       PrefixComparator prefixComparator,
       int initialSize,
+      long fileBufferSizeBytes,
       long pageSizeBytes,
       long numElementsForSpillThreshold,
       boolean canUseRadixSort) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
-      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes,
-      numElementsForSpillThreshold, null, canUseRadixSort);
+      taskContext, recordComparator, prefixComparator, initialSize, fileBufferSizeBytes,
+      pageSizeBytes, numElementsForSpillThreshold, null, canUseRadixSort);
   }
 
   private UnsafeExternalSorter(
@@ -130,6 +132,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       RecordComparator recordComparator,
       PrefixComparator prefixComparator,
       int initialSize,
+      long fileBufferSizeBytes,
       long pageSizeBytes,
       long numElementsForSpillThreshold,
       @Nullable UnsafeInMemorySorter existingInMemorySorter,
@@ -143,7 +146,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     this.prefixComparator = prefixComparator;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024
-    this.fileBufferSizeBytes = 32 * 1024;
+    this.fileBufferSizeBytes = (int) fileBufferSizeBytes;
     // The spill metrics are stored in a new ShuffleWriteMetrics,
     // and then discarded (this fixes SPARK-16827).
     // TODO: Instead, separate spill metrics should be stored and reported (tracked in SPARK-3577).
