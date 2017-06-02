@@ -1687,7 +1687,7 @@ class SQLTests(ReusedPySparkTestCase):
 
         # fillna with subset specified for bool cols
         row = self.spark.createDataFrame(
-            [(None, None, None, None)], schema).fillna(True, subset=['name', 'age']).first()
+            [(None, None, None, None)], schema).fillna(True, subset=['name', 'spy']).first()
         self.assertEqual(row.name, None)
         self.assertEqual(row.age, None)
         self.assertEqual(row.height, None)
