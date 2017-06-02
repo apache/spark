@@ -51,19 +51,16 @@ case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
 }
 
 
-case class HintInfo(
-    isBroadcastable: Option[Boolean] = None) {
+case class HintInfo(forceBroadcast: Boolean = false) {
 
   /** Must be called when computing stats for a join operator to reset hints. */
-  def resetForJoin(): HintInfo = copy(
-    isBroadcastable = None
-  )
+  def resetForJoin(): HintInfo = copy(forceBroadcast = false)
 
   override def toString: String = {
-    if (productIterator.forall(_.asInstanceOf[Option[_]].isEmpty)) {
-      "none"
+    if (forceBroadcast) {
+      "forceBroadcast=true"
     } else {
-      isBroadcastable.map(x => s"isBroadcastable=$x").getOrElse("")
+      "none"
     }
   }
 }
