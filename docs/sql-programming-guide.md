@@ -918,6 +918,40 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.sql.planner.sortMergeJoin</code></td>
+  <td>true</td>
+  <td>
+    When true, use sort merge join (as opposed to hash join) by default for large joins.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.codegen</code></td>
+  <td>true</td>
+  <td>
+    When true, code will be dynamically generated at runtime for expression evaluation in a specific query.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.caseSensitive</code></td>
+  <td>depends</td>
+  <td>
+    Whether the query analyzer should be case sensitive or not.
+	For HiveContext, the default value is false;
+	For SQLContext, the default value is true;
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.dialect</code></td>
+  <td>depends</td>
+  <td>
+    The default SQL dialect to use. This is an experimental configuration.
+    For SQLContext, only one option, which is <code>sql</code> by default;
+    For HiveContext, the value can be either <code>sql</code> or <code>hive</code> (<code>hive</code> by default);
+    This configuration is great helpful for SQL Parser developers, to test the SQL Parser functionalities by
+    querying the tables in Hive metastore; and also can be the full class name of the Plug-able Spark SQL Parser.
+  </td>
+</tr>
+<tr>
   <td><code>spark.sql.parquet.binaryAsString</code></td>
   <td>false</td>
   <td>
