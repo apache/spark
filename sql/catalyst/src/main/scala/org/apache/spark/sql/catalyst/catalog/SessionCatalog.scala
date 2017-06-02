@@ -137,12 +137,12 @@ class SessionCatalog(
   }
 
   /** This method provides a way to get a cached plan if the key exists. */
-  def getCachedTableIfPresent(key: QualifiedTableName): LogicalPlan = {
+  def getCachedTable(key: QualifiedTableName): LogicalPlan = {
     tableRelationCache.getIfPresent(key)
   }
 
   /** This method provides a way to cache a plan. */
-  def putTableInCache(t: QualifiedTableName, l: LogicalPlan): Unit = {
+  def cacheTable(t: QualifiedTableName, l: LogicalPlan): Unit = {
     tableRelationCache.put(t, l)
   }
 

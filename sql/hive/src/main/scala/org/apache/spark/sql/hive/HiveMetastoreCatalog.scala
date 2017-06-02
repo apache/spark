@@ -61,7 +61,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val key = QualifiedTableName(
       table.database.getOrElse(sessionState.catalog.getCurrentDatabase).toLowerCase,
       table.table.toLowerCase)
-    catalogProxy.getCachedTableIfPresent(key)
+    catalogProxy.getCachedTable(key)
   }
 
   private def getCached(
@@ -71,7 +71,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       expectedFileFormat: Class[_ <: FileFormat],
       partitionSchema: Option[StructType]): Option[LogicalRelation] = {
 
-    catalogProxy.getCachedTableIfPresent(tableIdentifier) match {
+    catalogProxy.getCachedTable(tableIdentifier) match {
       case null => None // Cache miss
       case logical @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
         val cachedRelationFileFormatClass = relation.fileFormat.getClass
@@ -176,7 +176,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             fileFormat = fileFormat,
             options = options)(sparkSession = sparkSession)
           val created = LogicalRelation(fsRelation, updatedTable)
-          catalogProxy.putTableInCache(tableIdentifier, created)
+          catalogProxy.cacheTable(tableIdentifier, created)
           created
         }
 
@@ -205,7 +205,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 className = fileType).resolveRelation(),
               table = updatedTable)
 
-          catalogProxy.putTableInCache(tableIdentifier, created)
+          catalogProxy.cacheTable(tableIdentifier, created)
           created
         }
 
