@@ -45,15 +45,17 @@ class KMeans private (
     private var maxIterations: Int,
     private var initializationMode: String,
     private var initializationSteps: Int,
+    private var miniBatchFraction: Double,
     private var epsilon: Double,
     private var seed: Long) extends Serializable with Logging {
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20,
-   * initializationMode: "k-means||", initializationSteps: 2, epsilon: 1e-4, seed: random}.
+   * initializationMode: "k-means||", initializationSteps: 2, miniBatchFraction: 1.0,
+   * epsilon: 1e-4, seed: random}.
    */
   @Since("0.8.0")
-  def this() = this(2, 20, KMeans.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong())
+  def this() = this(2, 20, KMeans.K_MEANS_PARALLEL, 2, 1.0, 1e-4, Utils.random.nextLong())
 
   /**
    * Number of clusters to create (k).
@@ -148,6 +150,24 @@ class KMeans private (
     require(initializationSteps > 0,
       s"Number of initialization steps must be positive but got ${initializationSteps}")
     this.initializationSteps = initializationSteps
+    this
+  }
+
+
+  /**
+   * The fraction of data to be used for each EM iteration.
+   */
+  private[spark] def getMiniBatchFraction: Double = miniBatchFraction
+
+  /**
+   * :: Experimental ::
+   * Set fraction of data to be used for each EM iteration.
+   * Default 1.0
+   */
+  private[spark] def setMiniBatchFraction(fraction: Double): this.type = {
+    require(fraction > 0 && fraction <= 1.0,
+      s"Fraction for mini-batch EM must be in range (0, 1] but got ${fraction}")
+    this.miniBatchFraction = fraction
     this
   }
 
@@ -272,8 +292,14 @@ class KMeans private (
       val costAccum = sc.doubleAccumulator
       val bcCenters = sc.broadcast(centers)
 
+      val sampled = if (miniBatchFraction < 1) {
+        data.sample(false, miniBatchFraction, 42 + iteration)
+      } else {
+        data
+      }
+
       // Find the sum and count of points mapping to each center
-      val totalContribs = data.mapPartitions { points =>
+      val totalContribs = sampled.mapPartitions { points =>
         val thisCenters = bcCenters.value
         val dims = thisCenters.head.vector.size
 
