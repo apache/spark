@@ -137,7 +137,7 @@ private[kubernetes] class LoggingPodStatusWatcherImpl(
   }
 
   override def awaitCompletion(): Unit = {
-    podCompletedFuture.countDown()
+    podCompletedFuture.await()
     logInfo(pod.map { p =>
       s"Container final statuses:\n\n${containersDescription(p)}"
     }.getOrElse("No containers were found in the driver pod."))
