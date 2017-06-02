@@ -39,13 +39,13 @@ class YARNConfigurableCredentialManagerSuite
     hadoopConf = new Configuration()
   }
 
-  test("Correctly loads deprecated credential providers") {
+  test("Correctly loads credential providers") {
     credentialManager = new YARNConfigurableCredentialManager(
       sparkConf,
       hadoopConf,
       YarnSparkHadoopUtil.get.yarnHadoopFSsToAccess(sparkConf, hadoopConf))
 
-    credentialManager.deprecatedCredentialProviders.get("yarn-test") should not be (None)
+    credentialManager.credentialProviders.get("yarn-test") should not be (None)
   }
 }
 

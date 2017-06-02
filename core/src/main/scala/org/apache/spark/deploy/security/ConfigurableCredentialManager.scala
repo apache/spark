@@ -28,14 +28,12 @@ import org.apache.spark.internal.Logging
  * A ConfigurableCredentialManager to manage all the registered credential providers and offer
  * APIs for other modules to obtain credentials as well as renewal time. By default
  * [[HadoopFSCredentialProvider]], [[HiveCredentialProvider]] and [[HBaseCredentialProvider]] will
- * be loaded in if not explicitly disabled, any plugged-in credential provider wants to be
- * managed by ConfigurableCredentialManager needs to implement [[HadoopDelegationTokenProvider]]
- * interface and put into resources/META-INF/services to be loaded by ServiceLoader.
+ * be loaded in if not explicitly disabled.
  *
- * Also each credential provider is controlled by
- * spark.security.credentials.{service}.enabled, it will not be loaded in if set to false.
- * For example, Hive's credential provider [[HiveCredentialProvider]] can be enabled/disabled by
- * the configuration spark.security.credentials.hive.enabled.
+ * Also each credential provider is controlled by spark.security.credentials.{service}.enabled,
+ * it will not be loaded in if set to false.  For example, Hive's credential provider
+ * [[HiveCredentialProvider]] can be enabled/disabled by the configuration
+ * spark.security.credentials.hive.enabled.
  *
  * @param sparkConf Spark configuration
  * @param hadoopConf Hadoop configuration
@@ -63,8 +61,8 @@ private[spark] class ConfigurableCredentialManager(
 
     // Filter out credentials in which spark.security.credentials.{service}.enabled is false.
     providers
-      .filter(p => isServiceEnabled(p.serviceName))
-      .map(p => (p.serviceName, p))
+      .filter { p => isServiceEnabled(p.serviceName) }
+      .map { p => (p.serviceName, p) }
       .toMap
   }
 

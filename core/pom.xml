@@ -28,7 +28,6 @@
   <artifactId>spark-core_2.11</artifactId>
   <properties>
     <sbt.project.name>core</sbt.project.name>
-    <hive.deps.scope>test</hive.deps.scope>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
@@ -360,26 +359,31 @@
     </dependency>
 
     <!--
-     Testing Hive reflection needs hive on the test classpath only.
-     It doesn't need the spark hive modules, so the -Phive flag is not checked.
-      -->
+     Testing Hive reflection needs hive on the test classpath only, however, while adding hive-exec to the test
+     scope works fine in Maven, it causes the sbt build to fail.  When the scope is set to "test", SBT seems to fail to
+     associate the hive-exec dependency entry here with the dependencyManagement entry in spark-parent, resulting in
+     dependency resolution issues.  To fix this, hive-exec is instead placed in the "provided" scope.
+    -->
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
+      <scope>provided</scope>
     </dependency>
-
-    <!--<dependency>-->
-      <!--<groupId>org.apache.maven.plugins</groupId>-->
-      <!--<artifactId>maven-resources-plugin</artifactId>-->
-      <!--<version>3.0.2</version>-->
-      <!--<scope>test</scope>-->
-    <!--</dependency>-->
-
-    <!--<dependency>-->
-      <!--<groupId>${hive.group}</groupId>-->
-      <!--<artifactId>hive-metastore</artifactId>-->
-      <!--<scope>test</scope>-->
-    <!--</dependency>-->
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-metastore</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libthrift</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libfb303</artifactId>
+      <scope>test</scope>
+    </dependency>
 
   </dependencies>
   <build>

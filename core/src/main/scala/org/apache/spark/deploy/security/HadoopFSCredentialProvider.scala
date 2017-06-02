@@ -29,7 +29,6 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
-
 private[deploy] class HadoopFSCredentialProvider(fileSystems: Set[FileSystem])
     extends HadoopDelegationTokenProvider with Logging {
   // Token renewal interval, this value will be set in the first call,

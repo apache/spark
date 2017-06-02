@@ -26,7 +26,7 @@ import org.apache.hadoop.security.Credentials
 private[spark] trait HadoopDelegationTokenProvider {
 
   /**
-   * Name of the service to provide credentials. This name should unique, Spark internally will
+   * Name of the service to provide credentials. This name should be unique, Spark internally will
    * use this name to differentiate credential provider.
    */
   def serviceName: String

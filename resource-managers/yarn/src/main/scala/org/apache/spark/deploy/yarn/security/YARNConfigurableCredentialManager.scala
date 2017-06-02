@@ -32,8 +32,8 @@ import org.apache.spark.util.Utils
 
 
 /**
- * This class exists for backwards compatibility.  It loads services registered under the
- * deprecated [[ServiceCredentialProvider]].
+ * This class loads credential providers registered under the YARN-specific [[ServiceCredentialProvider]] interface,
+ * as well as the builtin credential providers defined in [[ConfigurableCredentialManager]].
  */
 private[yarn] class YARNConfigurableCredentialManager(
     sparkConf: SparkConf,
@@ -44,7 +44,7 @@ private[yarn] class YARNConfigurableCredentialManager(
     new ConfigurableCredentialManager(sparkConf, hadoopConf, fileSystems)
 
   // public for testing
-  val deprecatedCredentialProviders = getDeprecatedCredentialProviders
+  val credentialProviders = getCredentialProviders
 
   def obtainYARNCredentials(
     hadoopConf: Configuration,
@@ -54,7 +54,7 @@ private[yarn] class YARNConfigurableCredentialManager(
       hadoopConf,
       creds)
 
-    deprecatedCredentialProviders.values.flatMap { provider =>
+    credentialProviders.values.flatMap { provider =>
       if (provider.credentialsRequired(hadoopConf)) {
         provider.obtainCredentials(hadoopConf, sparkConf, creds)
       } else {
@@ -65,18 +65,17 @@ private[yarn] class YARNConfigurableCredentialManager(
     }.foldLeft(superInterval)(math.min)
   }
 
-
-  private def getDeprecatedCredentialProviders:
+  private def getCredentialProviders:
     Map[String, ServiceCredentialProvider] = {
-    val deprecatedProviders = loadDeprecatedCredentialProviders
+    val providers = loadCredentialProviders
 
-    deprecatedProviders.
-      filter(p => configurableCredentialManager.isServiceEnabled(p.serviceName))
-      .map(p => (p.serviceName, p))
+    providers.
+      filter { p => configurableCredentialManager.isServiceEnabled(p.serviceName) }
+      .map { p => (p.serviceName, p) }
       .toMap
   }
 
-  private def loadDeprecatedCredentialProviders:
+  private def loadCredentialProviders:
     List[ServiceCredentialProvider] = {
     ServiceLoader.load(
       classOf[ServiceCredentialProvider],
