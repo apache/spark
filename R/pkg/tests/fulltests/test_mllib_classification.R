@@ -249,6 +249,20 @@ test_that("spark.logit", {
   # Test lowerBoundsOnCoefficients should be matrix
   expect_error(spark.logit(training, Species ~ ., lowerBoundsOnCoefficients = as.array(c(1, 2)),
                            lowerBoundsOnIntercepts = 0.0))
+
+  # Test multinomial logistic regression with lowerBoundsOnCoefficients
+  # and lowerBoundsOnIntercepts
+  l <- matrix(c(0.0, -1.0, 0.0, -1.0, 0.0, -1.0, 0.0, -1.0), nrow = 2, ncol = 4)
+  model <- spark.logit(training, Species ~ ., family = "multinomial",
+                       lowerBoundsOnCoefficients = l,
+                       lowerBoundsOnIntercepts = as.array(c(0.0, 0.0)))
+  summary <- summary(model)
+  versicolorCoefsR <- c(42.639465, 7.258104, 14.330814, 16.298243, 11.716429)
+  virginicaCoefsR <- c(0.0002970796, 4.79274, 7.65047, 25.72793, 30.0021)
+  versicolorCoefs <- summary$coefficients[, "versicolor"]
+  virginicaCoefs <- summary$coefficients[, "virginica"]
+  expect_true(all(abs(versicolorCoefsR - versicolorCoefs) < 0.1))
+  expect_true(all(abs(virginicaCoefsR - virginicaCoefs) < 0.1))
 })
 
 test_that("spark.mlp", {

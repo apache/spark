@@ -288,9 +288,10 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                 stop("upperBoundsOnCoefficients must be a matrix.")
               }
 
-              if(!is.null(lowerBoundsOnCoefficients) & (row != nrow(upperBoundsOnCoefficients)
+              if (!is.null(lowerBoundsOnCoefficients) & (row != nrow(upperBoundsOnCoefficients)
                 | col != ncol(upperBoundsOnCoefficients))) {
-                stop("dimension of upperBoundsOnCoefficients is not the same as lowerBoundsOnCoefficients")
+                stop(paste("dimension of upperBoundsOnCoefficients ",
+                           "is not the same as lowerBoundsOnCoefficients", sep = ""))
               }
 
               if (is.null(lowerBoundsOnCoefficients)) {
