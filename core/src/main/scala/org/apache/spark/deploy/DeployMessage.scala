@@ -124,6 +124,8 @@ private[deploy] object DeployMessages {
   case class KillDriver(driverId: String) extends DeployMessage
 
   case class ApplicationFinished(id: String)
+  
+  case class MasterDisconnected(masterUrl: String) extends DeployMessage
 
   // Worker internal
 

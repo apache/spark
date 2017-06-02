@@ -586,6 +586,14 @@ private[deploy] class Worker(
     case ApplicationFinished(id) =>
       finishedApps += id
       maybeCleanupApplication(id)
+      
+    case MasterDisconnected(masterUrl) =>
+      if (masterUrl != activeMasterUrl) {
+        logWarning(s"Get message from Invalid Master ($masterUrl)." +
+          s"Valid Master is : $activeMasterUrl, so ignore the message.")
+      } else {
+        masterDisconnected()
+      }
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

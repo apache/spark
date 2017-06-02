@@ -333,8 +333,12 @@ private[deploy] class Master(
               " Asking it to re-register.")
             worker.send(ReconnectWorker(masterUrl))
           } else {
+            // Get unknown worker's heart beat, tell the worker disconnected. And worker need to
+            // register to this master first.
             logWarning(s"Got heartbeat from unregistered worker $workerId." +
-              " This worker was never registered, so ignoring the heartbeat.")
+              " This worker was never registered, tell the worker connection is disconnected." +
+              " Need to re-register if want to connect.")
+            sender ! MasterDisconnected(masterUrl)
           }
       }
 
