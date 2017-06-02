@@ -36,4 +36,4 @@ ENV SPARK_HOME /opt/spark
 
 WORKDIR /opt/spark
 
-ENTRYPOINT [ "/sbin/tini", "--", "bin/spark-class", "org.apache.spark.deploy.ExternalShuffleService", "1" ]
+ENTRYPOINT [ "/sbin/tini", "--", "bin/spark-class", "org.apache.spark.deploy.kubernetes.KubernetesExternalShuffleService", "1" ]

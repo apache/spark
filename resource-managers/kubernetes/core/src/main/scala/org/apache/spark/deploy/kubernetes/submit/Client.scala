@@ -82,10 +82,13 @@ private[spark] class Client(
       s" $SPARK_APP_ID_LABEL is not allowed as it is reserved for Spark bookkeeping operations.")
     require(!parsedCustomLabels.contains(SPARK_APP_NAME_LABEL), s"Label with key" +
       s" $SPARK_APP_NAME_LABEL is not allowed as it is reserved for Spark bookkeeping operations.")
-    val allLabels = parsedCustomLabels ++
-      Map(SPARK_APP_ID_LABEL -> kubernetesAppId, SPARK_APP_NAME_LABEL -> appName)
+    val allLabels = parsedCustomLabels ++ Map(
+        SPARK_APP_ID_LABEL -> kubernetesAppId,
+        SPARK_APP_NAME_LABEL -> appName,
+        SPARK_ROLE_LABEL -> "driver")
     val parsedCustomAnnotations = ConfigurationUtils.parseKeyValuePairs(
         customAnnotations, KUBERNETES_DRIVER_ANNOTATIONS.key, "annotations")
+
     Utils.tryWithResource(kubernetesClientProvider.get) { kubernetesClient =>
       val driverExtraClasspathEnv = driverExtraClasspath.map { classPath =>
         new EnvVarBuilder()

@@ -29,7 +29,10 @@ import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.util.ThreadUtils
 
-private[spark] class DriverPodKubernetesClientProvider(sparkConf: SparkConf, namespace: String) {
+private[spark] class DriverPodKubernetesClientProvider(
+  sparkConf: SparkConf,
+  namespace: Option[String] = None) {
+
   private val SERVICE_ACCOUNT_TOKEN = new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)
   private val SERVICE_ACCOUNT_CA_CERT = new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)
   private val oauthTokenFile = sparkConf.get(KUBERNETES_DRIVER_MOUNTED_OAUTH_TOKEN)
@@ -45,7 +48,10 @@ private[spark] class DriverPodKubernetesClientProvider(sparkConf: SparkConf, nam
     val baseClientConfigBuilder = new ConfigBuilder()
       .withApiVersion("v1")
       .withMasterUrl(KUBERNETES_MASTER_INTERNAL_URL)
-      .withNamespace(namespace)
+
+    // Build a namespaced client if specified.
+    val namespacedClientConfigBuilder = namespace
+      .map(baseClientConfigBuilder.withNamespace(_)).getOrElse(baseClientConfigBuilder)
 
     val configBuilder = oauthTokenFile
         .orElse(caCertFile)

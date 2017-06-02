@@ -38,7 +38,8 @@ spec:
           # This is an official image that is built
           # from the dockerfiles/shuffle directory
           # in the spark distribution.
-          image: kubespark/spark-shuffle:v2.1.0-kubernetes-0.1.0-alpha.3
+          image: spark-shuffle:latest
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: '/tmp'
               name: temp-volume

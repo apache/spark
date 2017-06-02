@@ -22,6 +22,7 @@ package object constants {
   private[spark] val SPARK_APP_ID_LABEL = "spark-app-id"
   private[spark] val SPARK_APP_NAME_LABEL = "spark-app-name"
   private[spark] val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
+  private[spark] val SPARK_ROLE_LABEL = "spark-role"
 
   // Credentials secrets
   private[spark] val DRIVER_CREDENTIALS_SECRETS_BASE_DIR =
