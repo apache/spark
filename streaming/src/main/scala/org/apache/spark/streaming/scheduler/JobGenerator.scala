@@ -109,6 +109,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   def stop(processReceivedData: Boolean): Unit = synchronized {
     if (eventLoop == null) return // generator has already been stopped
 
+    // set readyToShutdown flag on every DStream to do the last rddCheckpoint
+    ssc.graph.readyToShutdown()
+
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
       val timeWhenStopStarted = System.currentTimeMillis()
@@ -123,6 +126,15 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
           logWarning("Timed out while stopping the job generator (timeout = " + stopTimeoutMs + ")")
         }
         timedOut
+      }
+
+      // generate one more batch to make sure RDD in lastJob is checkpointed. As an performance
+      // optimization, if the latest info has been checkpointed in last batch, there is no need
+      // to run another round. "isCheckpointMissedLastTime" method here is in charge of collect
+      // such information from every DStream recursively.
+      if (!jobScheduler.receiverTracker.hasUnallocatedBlocks &&
+        ssc.graph.isCheckpointMissedLastTime) {
+        Thread.sleep(ssc.graph.batchDuration.milliseconds)
       }
 
       // Wait until all the received blocks in the network input tracker has
