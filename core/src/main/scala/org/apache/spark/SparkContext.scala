@@ -339,7 +339,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   // Retrieve the Conda Environment from CondaRunner if it has set one up for us
-  val condaEnvironment: Option[CondaEnvironment] = CondaRunner.condaEnvironment
+  def condaEnvironment(): Option[CondaEnvironment] = CondaRunner.condaEnvironment.get()
 
   /* ------------------------------------------------------------------------------------- *
    | Initialization. This code initializes the context in a manner that is exception-safe. |
@@ -1858,7 +1858,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def listJars(): Seq[String] = addedJars.keySet.toSeq
 
   private[this] def condaEnvironmentOrFail(): CondaEnvironment = {
-    condaEnvironment.getOrElse(sys.error("A conda environment was not set up."))
+    condaEnvironment().getOrElse(sys.error("A conda environment was not set up."))
   }
 
   /**
@@ -1875,7 +1875,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   private[spark] def buildCondaInstructions(): Option[CondaSetupInstructions] = {
-    condaEnvironment.map(_.buildSetupInstructions)
+    condaEnvironment().map(_.buildSetupInstructions)
   }
 
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy
 
+import java.util.concurrent.atomic.AtomicReference
+
 import org.apache.spark.SparkConf
 import org.apache.spark.api.conda.CondaEnvironment
 import org.apache.spark.api.conda.CondaEnvironmentManager
@@ -42,7 +44,9 @@ abstract class CondaRunner extends Logging {
 
       // Save this as a global in order for SparkContext to be able to access it later, in case we
       // are shelling out, but providing a bridge back into this JVM.
-      CondaRunner.condaEnvironment = Some(environment)
+      require(CondaRunner.condaEnvironment.compareAndSet(None, Some(environment)),
+        "Couldn't set condaEnvironment to the newly created environment, it was already set to: "
+          + CondaRunner.condaEnvironment.get())
 
       run(args, Some(environment))
     } else {
@@ -54,5 +58,6 @@ abstract class CondaRunner extends Logging {
 }
 
 object CondaRunner {
-  private[spark] var condaEnvironment: Option[CondaEnvironment] = None
+  private[spark] val condaEnvironment: AtomicReference[Option[CondaEnvironment]] =
+      new AtomicReference(None)
 }
