@@ -240,10 +240,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
         // 2. The task set manager has been created but no tasks has been scheduled. In this case,
         //    simply abort the stage.
         tsm.runningTasksSet.foreach { tid =>
-          if (taskIdToExecutorId.contains(tid)) {
-            val execId = taskIdToExecutorId(tid)
-            backend.killTask(tid, execId, interruptThread)
-          }
+            taskIdToExecutorId.get(tid).foreach(execId =>
+              backend.killTask(tid, execId, interruptThread, reason = "Stage cancelled"))
         }
         tsm.abort("Stage %s cancelled".format(stageId))
         logInfo("Stage %d was cancelled".format(stageId))
