@@ -1710,12 +1710,14 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row.height, 50.0)
 
         # fillna with double
-        row = self.spark.createDataFrame([(u'Alice', None, None, None)], schema).fillna(50.1).first()
+        row = self.spark.createDataFrame(
+            [(u'Alice', None, None, None)], schema).fillna(50.1).first()
         self.assertEqual(row.age, 50)
         self.assertEqual(row.height, 50.1)
 
         # fillna with bool
-        row = self.spark.createDataFrame([(u'Alice', None, None, None)], schema).fillna(True).first()
+        row = self.spark.createDataFrame(
+            [(u'Alice', None, None, None)], schema).fillna(True).first()
         self.assertEqual(row.age, None)
         self.assertEqual(row.spy, True)
 
