@@ -28,6 +28,7 @@
   <artifactId>spark-core_2.11</artifactId>
   <properties>
     <sbt.project.name>core</sbt.project.name>
+    <hive.deps.scope>test</hive.deps.scope>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
@@ -365,8 +366,15 @@
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
-      <scope>test</scope>
     </dependency>
+
+    <!--<dependency>-->
+      <!--<groupId>org.apache.maven.plugins</groupId>-->
+      <!--<artifactId>maven-resources-plugin</artifactId>-->
+      <!--<version>3.0.2</version>-->
+      <!--<scope>test</scope>-->
+    <!--</dependency>-->
+
     <!--<dependency>-->
       <!--<groupId>${hive.group}</groupId>-->
       <!--<artifactId>hive-metastore</artifactId>-->
