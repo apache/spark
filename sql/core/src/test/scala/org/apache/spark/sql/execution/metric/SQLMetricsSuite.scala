@@ -298,7 +298,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       }
       // For non-dynamic-partition, an empty dataset will still generate file. The size of this file
       // isn't zero because there's cost of storage format.
-      val verifyFuncs: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ > 0, _ == 0, _ >= 0)
+      val verifyFuncs: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ == 0)
       verifyWriteDataMetrics(spark, executionId1, verifyFuncs)
     }
   }
@@ -312,7 +312,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("writeToTable")
       }
       // written 1 file, 1 row, 0 dynamic partition.
-      val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ > 0, _ == 1, _ >= 0)
+      val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ == 1)
       verifyWriteDataMetrics(spark, executionId1, verifyFuncs1)
 
       // Verifies the metrics of InsertIntoHadoopFsRelationCommand
@@ -321,7 +321,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
           .write.insertInto("writeToTable")
       }
       // written 1 file, 3 rows, 0 dynamic partition.
-      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ > 0, _ == 3, _ >= 0)
+      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ == 3)
       verifyWriteDataMetrics(spark, executionId2, verifyFuncs2)
 
       val executionId3 = getLatestExecutionId(spark) { () =>
@@ -329,7 +329,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
           .write.insertInto("writeToTable")
       }
       // written 2 files, 2 rows, 0 dynamic partition.
-      val verifyFuncs3: Seq[Int => Boolean] = Seq(_ == 2, _ == 0, _ > 0, _ == 2, _ >= 0)
+      val verifyFuncs3: Seq[Int => Boolean] = Seq(_ == 2, _ == 0, _ == 2)
       verifyWriteDataMetrics(spark, executionId3, verifyFuncs3)
     }
   }
@@ -351,7 +351,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       }
       assert(Utils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
       // written 4 files, 4 rows, 4 dynamic partitions.
-      val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ > 0, _ == 4, _ >= 0)
+      val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ == 4)
       verifyWriteDataMetrics(spark, executionId1, verifyFuncs1)
 
       val executionId2 = getLatestExecutionId(spark) { () =>
@@ -364,7 +364,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       }
       assert(Utils.recursiveList(f).count(_.getAbsolutePath.endsWith("parquet")) == 4)
       // written 4 files, 8 rows, 4 dynamic partitions.
-      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ > 0, _ == 8, _ >= 0)
+      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ == 8)
       verifyWriteDataMetrics(spark, executionId2, verifyFuncs2)
     }
   }
@@ -522,9 +522,11 @@ object InputOutputMetricsHelper {
  * also used in the tests in Hive.
  */
 object SQLMetricsSuite {
+
   /**
    * Run the given function and return latest execution id.
    *
+   * @param spark the given `SparkSession` used to get execution data.
    * @param func the given function to run.
    */
   def getLatestExecutionId(spark: SparkSession)(func: () => Unit): Long = {
@@ -541,6 +543,7 @@ object SQLMetricsSuite {
   /**
    * Get execution metrics for the given execution id and verify metrics values.
    *
+   * @param spark the given `SparkSession` used to get execution data and metrics.
    * @param executionId the given execution id.
    * @param verifyFuncs functions used to verify the values of metrics.
    */
@@ -554,12 +557,9 @@ object SQLMetricsSuite {
     val metricsNames = Seq(
       "number of written files",
       "number of dynamic part",
-      "bytes of written output",
-      "number of output rows",
-      "average writing time (ms)")
+      "number of output rows")
 
-    val metrics =
-      spark.sharedState.listener.getExecutionMetrics(executionId)
+    val metrics = spark.sharedState.listener.getExecutionMetrics(executionId)
 
     metricsNames.zip(verifyFuncs).foreach { case (metricsName, verifyFunc) =>
       val sqlMetric = executedNode.metrics.find(_.name == metricsName)
@@ -568,5 +568,29 @@ object SQLMetricsSuite {
       val metricValue = metrics(accumulatorId).replaceAll(",", "").toInt
       assert(verifyFunc(metricValue))
     }
+
+    // Sanity check.
+    val numDynamicPartMetric = executedNode.metrics.find(_.name == "number of dynamic part").get
+    val totalNumBytesMetric = executedNode.metrics.find(_.name == "bytes of written output").get
+    val numDynamicPart = metrics(numDynamicPartMetric.accumulatorId).toInt
+    val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "").toInt
+    val maxOutputBytesPerPartMetric =
+      executedNode.metrics.find(_.name == "maximum written bytes per partition").get
+    if (numDynamicPart == 0) {
+      // For non-dynamic-partition, we won't update the metrics per partition.
+      val maxOutputBytesPerPart = metrics.get(maxOutputBytesPerPartMetric.accumulatorId)
+      assert(maxOutputBytesPerPart.isEmpty && totalNumBytes > 0)
+    } else {
+      val maxOutputBytesPerPart = metrics(maxOutputBytesPerPartMetric.accumulatorId)
+        .replaceAll(",", "").toInt
+
+      // Even number of output rows is zero, the output bytes still can't be zero.
+      // So if there's dynamic partitions, maximum output bytes per partition should be more than 0.
+      assert(maxOutputBytesPerPart > 0 && maxOutputBytesPerPart <= totalNumBytes)
+    }
+    // Check if the metric of writing time is updated.
+    val writingTimeMetric = executedNode.metrics.find(_.name == "average writing time (ms)").get
+    val writingTime = metrics(writingTimeMetric.accumulatorId).replaceAll(",", "").toInt
+    assert(writingTime >= 0)
   }
 }

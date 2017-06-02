@@ -151,12 +151,16 @@ case class WrittenFileCommandExec(
    * on the given metric name.
    */
   private def setMetrics(values: Seq[Long], metricName: String): Seq[SQLMetric] = {
-    val sorted = values.sorted
-    val metricValues = Seq(sorted(0), sorted(values.length / 2), sorted(values.length - 1))
-    Seq("min", "med", "max").zip(metricValues).map { case (prefix, metricValue) =>
-      val metric = metrics(prefix + metricName)
-      metric.add(metricValue)
-      metric
+    if (values.nonEmpty) {
+      val sorted = values.sorted
+      val metricValues = Seq(sorted(0), sorted(values.length / 2), sorted(values.length - 1))
+      Seq("min", "med", "max").zip(metricValues).map { case (prefix, metricValue) =>
+        val metric = metrics(prefix + metricName)
+        metric.add(metricValue)
+        metric
+      }
+    } else {
+      Seq.empty
     }
   }
 
@@ -214,13 +218,20 @@ case class WrittenFileCommandExec(
     numOutputRowsMetric.add(totalNumOutput)
     writingTimeMetric.add(avgWritingTime)
 
-    val updatedMetrics =
-      Seq(numDynamicPartsMetric, fileNumMetric, numBytesMetric, numOutputRowsMetric,
-        writingTimeMetric) ++ numBytesPerFileMetrics ++ numOutputsPerFileMetrics ++
-        numBytesPerPartMetrics ++  numOutputsPerPartMetrics
+    val generalMetrics = Seq(numDynamicPartsMetric, fileNumMetric, numBytesMetric,
+      numOutputRowsMetric, writingTimeMetric)
+    val metricsPerFile = numBytesPerFileMetrics ++ numOutputsPerFileMetrics
+    val metricsPerPart = numBytesPerPartMetrics ++ numOutputsPerPartMetrics
+
+    val finalMetrics = if (numPartitions == 0) {
+      // For non-dynamic partition, we don't need to update the metrics per partition.
+      generalMetrics ++ metricsPerFile
+    } else {
+      generalMetrics ++ metricsPerFile ++ metricsPerPart
+    }
 
     val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId, updatedMetrics)
+    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId, finalMetrics)
   }
 
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
