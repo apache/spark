@@ -380,6 +380,7 @@ object FunctionRegistry {
     expression[AssertTrue]("assert_true"),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
+    expression[Uuid]("uuid"),
     expression[Murmur3Hash]("hash"),
     expression[Sha1]("sha"),
     expression[Sha1]("sha1"),
