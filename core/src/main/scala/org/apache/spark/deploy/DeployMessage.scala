@@ -142,6 +142,8 @@ private[deploy] object DeployMessages {
 
   case object ReregisterWithMaster // used when a worker attempts to reconnect to a master
 
+  case object DecommissionSelf // Mark self for decommissioning.
+
   // AppClient to Master
 
   case class RegisterApplication(appDescription: ApplicationDescription, driver: RpcEndpointRef)

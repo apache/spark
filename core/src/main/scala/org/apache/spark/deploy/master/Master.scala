@@ -791,11 +791,9 @@ private[deploy] class Master(
         exec.id, ExecutorState.DECOMMISSIONED,
         Some("worker decommissioned"), None, workerLost = false))
       exec.state = ExecutorState.DECOMMISSIONED
+      exec.application.removeExecutor(exec)
     }
-  }
-
-  private def recommissionWorker(worker: WorkerInfo) {
-    logInfo("Recommissioning worker %d on %s:%d".format(worker.id, worker.host, worker.port))
+    persistenceEngine.removeWorker(worker)
   }
 
   private def removeWorker(worker: WorkerInfo) {

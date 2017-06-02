@@ -180,13 +180,6 @@ private[spark] class Executor(
     decommissioned = true
   }
 
-  /**
-   * Restore the executor to a running state. This can happen on decommissioning timeout.
-   */
-  private[spark] def recomission(): Unit = {
-    decommissioned = false
-  }
-
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     if (!decommissioned) {
       val tr = new TaskRunner(context, taskDescription)

@@ -71,9 +71,6 @@ private[deploy] class Worker(
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
   private val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
-  // Decommissioning timeout
-  private val DECOMMISSIONING_TIMEOUT_MILLIS =
-    conf.getLong("spark.decommissioning.timeout", 420) * 1000
 
   // Model retries to connect to the master, after Hadoop's model.
   // The first six attempts to reconnect are in shorter intervals (between 5 and 15 seconds)
@@ -688,8 +685,10 @@ private[deploy] class Worker(
     }
   }
 
-  private def decommission(): Unit = {
+  private def decommissionSelf(): Unit = {
     decommissioned = true
+    // TODO: Send decommission notification to executors & shuffle service.
+    // Also send message to master program.
 
   }
 

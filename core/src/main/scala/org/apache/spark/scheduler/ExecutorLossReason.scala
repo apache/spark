@@ -58,3 +58,11 @@ private [spark] object LossReasonPending extends ExecutorLossReason("Pending los
 private[spark]
 case class SlaveLost(_message: String = "Slave lost", workerLost: Boolean = false)
   extends ExecutorLossReason(_message)
+
+/**
+ * A loss reason that means the worker is marked for decommissioning.
+ *
+ * This is used by the task scheduler to remove state associated with the executor, but
+ * not yet fail any tasks that were running in the executor before the executor is "fully" lost.
+ */
+private [spark] object WorkerDecommission extends ExecutorLossReason("Worker Decommission.")
