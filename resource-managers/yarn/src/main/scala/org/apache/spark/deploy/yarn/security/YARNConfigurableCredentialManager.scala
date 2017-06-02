@@ -32,8 +32,9 @@ import org.apache.spark.util.Utils
 
 
 /**
- * This class loads credential providers registered under the YARN-specific [[ServiceCredentialProvider]] interface,
- * as well as the builtin credential providers defined in [[ConfigurableCredentialManager]].
+ * This class loads credential providers registered under the YARN-specific
+ * [[ServiceCredentialProvider]] interface, as well as the builtin credential providers defined
+ * in [[ConfigurableCredentialManager]].
  */
 private[yarn] class YARNConfigurableCredentialManager(
     sparkConf: SparkConf,
