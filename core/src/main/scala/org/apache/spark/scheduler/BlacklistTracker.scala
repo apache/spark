@@ -63,6 +63,8 @@ private[scheduler] class BlacklistTracker (
   private val MAX_FAILURES_PER_EXEC = conf.get(config.MAX_FAILURES_PER_EXEC)
   private val MAX_FAILED_EXEC_PER_NODE = conf.get(config.MAX_FAILED_EXEC_PER_NODE)
   val BLACKLIST_TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
+  private val DECOMMISSIONING_TIMEOUT_MILLIS =
+    conf.getLong("spark.decommissioning.timeout", 420) * 1000
 
   /**
    * A map from executorId to information on task failures.  Tracks the time of each task failure,
@@ -147,11 +149,19 @@ private[scheduler] class BlacklistTracker (
     nextExpiryTime = math.min(execMinExpiry, nodeMinExpiry)
   }
 
-  def updateBlackListForNodeShutdown(executors: Set[String]): Unit = {
-    // We allow timeout on the node shutdown so if the node ends up not actually shutting down
+  def updateBlacklistForDecommission(node: String): Unit = {
+    // We allow timeout on the node decommission so if the node ends up not actually shutting down
     // or is migrated in a way we don't notice we can start scheduling tasks on it.
-    val expiryTimeForNewBlacklists = now + BLACKLIST_TIMEOUT_MILLIS
+    val now = clock.getTimeMillis()
+    val expiryTimeForNewBlacklists = now + DECOMMISSIONING_TIMEOUT_MILLIS
+    logInfo(s"Blacklisting node $node because it is decommissioning")
 
+    // Note: we do this even if the node is already blacklisted.
+    val blacklistedExecsOnNode =
+      nodeToBlacklistedExecs.getOrElseUpdate(node, HashSet[String]())
+    nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
+    listenerBus.post(SparkListenerNodeBlacklisted(now, node, blacklistedExecsOnNode.size))
+    _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
   }
 
   def updateBlacklistForSuccessfulTaskSet(

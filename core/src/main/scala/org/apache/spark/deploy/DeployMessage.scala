@@ -58,6 +58,17 @@ private[deploy] object DeployMessages {
     assert (port > 0)
   }
 
+  case class WorkerDecommission(
+      id: String,
+      host: String,
+      port: Int,
+      worker: RpcEndpointRef)
+    extends DeployMessage {
+    Utils.checkHost(host)
+    assert (port > 0)
+  }
+
+
   case class ExecutorStateChanged(
       appId: String,
       execId: Int,

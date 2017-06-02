@@ -23,5 +23,9 @@ private[deploy] object ExecutorState extends Enumeration {
 
   type ExecutorState = Value
 
-  def isFinished(state: ExecutorState): Boolean = Seq(KILLED, FAILED, LOST, EXITED).contains(state)
+  // Decommissioned is not included as a finished state since the executor is still running but
+  // will soon become finished.
+  private val finishedStates = Seq(KILLED, FAILED, LOST, EXITED)
+
+  def isFinished(state: ExecutorState): Boolean = finishedStates.contains(state)
 }

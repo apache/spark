@@ -231,8 +231,15 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
-    case WorkerShutdown(id, workerHost, workerPort) =>
-      logInfo("Recording worker %d shutdown %s:%d".format(id, workerHost, workerPort))
+    case WorkerDecommission(id, workerHost, workerPort, workerRef) =>
+      logInfo("Recording worker %d decomissioning %s:%d".format(
+        id, workerHost, workerPort))
+      if (state == RecoveryState.STANDBY) {
+        workerRef.send(MasterInStandby)
+      } else {
+        // If a worker attempts to decomission that isn't registered ignore it.
+        idToWorker.get(id).foreach(decommissionWorker)
+      }
 
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl, masterAddress) =>
@@ -303,6 +310,7 @@ private[deploy] class Master(
             // Important note: this code path is not exercised by tests, so be very careful when
             // changing this `if` condition.
             if (!normalExit
+                && oldState != ExecutorState.DECOMMISSIONED
                 && appInfo.incrementRetryCount() >= MAX_EXECUTOR_RETRIES
                 && MAX_EXECUTOR_RETRIES >= 0) { // < 0 disables this application-killing path
               val execs = appInfo.executors.values
@@ -780,9 +788,14 @@ private[deploy] class Master(
     for (exec <- worker.executors.values) {
       logInfo("Telling app of decomission executors")
       exec.application.driver.send(ExecutorUpdated(
-        exec.id, ExecutorState.DECOMMISSIONED, Some("worker decommissioned"), None, workerLost = false))
+        exec.id, ExecutorState.DECOMMISSIONED,
+        Some("worker decommissioned"), None, workerLost = false))
       exec.state = ExecutorState.DECOMMISSIONED
     }
+  }
+
+  private def recommissionWorker(worker: WorkerInfo) {
+    logInfo("Recommissioning worker %d on %s:%d".format(worker.id, worker.host, worker.port))
   }
 
   private def removeWorker(worker: WorkerInfo) {
