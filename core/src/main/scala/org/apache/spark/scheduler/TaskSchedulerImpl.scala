@@ -503,10 +503,9 @@ private[spark] class TaskSchedulerImpl private[scheduler](
           }
         }
       } else {
-        // No task sets are active but we still got an error. Just exit since this
-        // must mean the error is during registration.
-        // It might be good to do something smarter here in the future.
-        throw new SparkException(s"Exiting due to error from cluster scheduler: $message")
+        // No task sets are active but we still got an error. Just log the error
+        // since this must mean the error is during registration.
+        logError(s"Exiting due to error from cluster scheduler: $message")
       }
     }
   }
