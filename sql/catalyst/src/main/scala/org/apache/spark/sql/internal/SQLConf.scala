@@ -535,7 +535,7 @@ object SQLConf {
 
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
-      "encountering corrupted and the contents that have been read will still be returned.")
+      "encountering corrupted files and the contents that have been read will still be returned.")
     .booleanConf
     .createWithDefault(false)
 
