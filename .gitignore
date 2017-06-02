@@ -29,6 +29,7 @@ build/*.jar
 build/apache-maven*
 build/scala*
 build/zinc*
+build/venv
 cache
 checkpoint
 conf/*.cmd
@@ -40,6 +41,7 @@ conf/java-opts
 conf/slaves
 dependency-reduced-pom.xml
 derby.log
+dev/sphinx-report.txt
 dev/create-release/*final
 dev/create-release/*txt
 dev/pr-deps/

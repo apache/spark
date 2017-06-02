@@ -84,7 +84,84 @@ enable=
 # If you would like to improve the code quality of pyspark, remove any of these disabled errors
 # run ./dev/lint-python and see if the errors raised by pylint can be fixed.
 
-disable=invalid-name,missing-docstring,protected-access,unused-argument,no-member,unused-wildcard-import,redefined-builtin,too-many-arguments,unused-variable,too-few-public-methods,bad-continuation,duplicate-code,redefined-outer-name,too-many-ancestors,import-error,superfluous-parens,unused-import,line-too-long,no-name-in-module,unnecessary-lambda,import-self,no-self-use,unidiomatic-typecheck,fixme,too-many-locals,cyclic-import,too-many-branches,bare-except,wildcard-import,dangerous-default-value,broad-except,too-many-public-methods,deprecated-lambda,anomalous-backslash-in-string,too-many-lines,reimported,too-many-statements,bad-whitespace,unpacking-non-sequence,too-many-instance-attributes,abstract-method,old-style-class,global-statement,attribute-defined-outside-init,arguments-differ,undefined-all-variable,no-init,useless-else-on-loop,super-init-not-called,notimplemented-raised,too-many-return-statements,pointless-string-statement,global-variable-undefined,bad-classmethod-argument,too-many-format-args,parse-error,no-self-argument,pointless-statement,undefined-variable,undefined-loop-variable
+# Keep one item per line in the following block!
+disable=
+        abstract-method,
+        anomalous-backslash-in-string,
+        arguments-differ,
+        attribute-defined-outside-init,
+        bad-classmethod-argument,
+        bad-continuation,
+        bad-super-call,
+        bad-whitespace,
+        bare-except,
+        broad-except,
+        consider-iterating-dictionary,
+        consider-using-enumerate,
+        cyclic-import,
+        dangerous-default-value,
+        deprecated-lambda,
+        duplicate-code,
+        eval-used,
+        exec-used,
+        fixme,
+        global-statement,
+        global-variable-undefined,
+        import-error,
+        import-self,
+        invalid-length-returned,
+        invalid-name,
+        line-too-long,
+        misplaced-comparison-constant,
+        missing-docstring,
+        no-init,
+        no-member,
+        no-name-in-module,
+        no-self-argument,
+        no-self-use,
+        notimplemented-raised,
+        old-style-class,
+        parse-error,
+        pointless-statement,
+        pointless-string-statement,
+        protected-access,
+        raising-bad-type,
+        redefined-builtin,
+        redefined-outer-name,
+        redefined-variable-type,
+        reimported,
+        super-init-not-called,
+        superfluous-parens,
+        too-few-public-methods,
+        too-many-ancestors,
+        too-many-arguments,
+        too-many-branches,
+        too-many-format-args,
+        too-many-instance-attributes,
+        too-many-lines,
+        too-many-locals,
+        too-many-public-methods,
+        too-many-return-statements,
+        too-many-statements,
+        trailing-newlines,
+        trailing-whitespace,
+        undefined-all-variable,
+        undefined-loop-variable,
+        undefined-variable,
+        ungrouped-imports,
+        unidiomatic-typecheck,
+        unnecessary-lambda,
+        unnecessary-pass,
+        unneeded-not,
+        unpacking-non-sequence,
+        unused-argument,
+        unused-import,
+        unused-variable,
+        unused-wildcard-import,
+        useless-else-on-loop,
+        wildcard-import,
+        wrong-import-order,
+        wrong-import-position,
 
 
 [REPORTS]
@@ -125,9 +202,6 @@ notes=FIXME,XXX,TODO
 
 
 [BASIC]
-
-# Required attributes for module, separated by a comma
-required-attributes=
 
 # List of builtins function names that should not be used, separated by a comma
 bad-functions=
@@ -326,10 +400,6 @@ generated-members=REQUEST,acl_users,aq_parent
 
 
 [CLASSES]
-
-# List of interface methods to ignore, separated by a comma. This is used for
-# instance to not check methods defines in Zope's Interface base class.
-ignore-iface-methods=isImplementedBy,deferred,extends,names,namesAndDescriptions,queryDescriptionFor,getBases,getDescriptionFor,getDoc,getName,getTaggedValue,getTaggedValueTags,isEqualOrExtendedBy,setTaggedValue,isImplementedByInstancesOf,adaptWith,is_implemented_by
 
 # List of method names used to declare (i.e. assign) instance attributes.
 defining-attr-methods=__init__,__new__,setUp
