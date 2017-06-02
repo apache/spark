@@ -83,4 +83,39 @@ Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.mllib.html#py
 
 {% include_example python/mllib/isotonic_regression_example.py %}
 </div>
+
+<div data-lang="python" markdown="1">
+Data are read from a file where each line has a format label,feature
+i.e. 4710.28,500.00. The data are split to training and testing set.
+Model is created using the training set and a mean squared error is calculated from the predicted
+labels and real labels in the test set.
+
+{% highlight python %}
+import math
+from pyspark.mllib.regression import IsotonicRegression, IsotonicRegressionModel
+
+data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt")
+
+# Create label, feature, weight tuples from input data with weight set to default value 1.0.
+parsedData = data.map(lambda line: tuple([float(x) for x in line.split(',')]) + (1.0,))
+
+# Split data into training (60%) and test (40%) sets.
+training, test = parsedData.randomSplit([0.6, 0.4], 11)
+
+# Create isotonic regression model from training data.
+# Isotonic parameter defaults to true so it is only shown for demonstration
+model = IsotonicRegression.train(training)
+
+# Create tuples of predicted and real labels.
+predictionAndLabel = test.map(lambda p: (model.predict(p[1]), p[0]))
+
+# Calculate mean squared error between predicted and real labels.
+meanSquaredError = predictionAndLabel.map(lambda pl: math.pow((pl[0] - pl[1]), 2)).mean()
+print("Mean Squared Error = " + str(meanSquaredError))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = IsotonicRegressionModel.load(sc, "myModelPath")
+{% endhighlight %}
+</div>
 </div>
