@@ -457,7 +457,7 @@ private[spark] class Executor(
             taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
 
         case CausedBy(cDE: CommitDeniedException) =>
-          val reason = cDE.toTaskCommitDeniedReason
+          val reason = cDE.toTaskKilled
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
