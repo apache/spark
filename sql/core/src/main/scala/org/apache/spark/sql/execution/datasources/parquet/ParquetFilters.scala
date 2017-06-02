@@ -169,14 +169,23 @@ private[parquet] object ParquetFilters {
   }
 
   /**
-   * Returns a map from name of the column to the data type, if predicate push down applies.
+   * Returns a map from name of the column to the data type, if predicate push down applies
+   * (i.e. not an optional field).
+   *
+   * SPARK-11955: The optional fields will have metadata StructType.metadataKeyForOptionalField.
+   * These fields only exist in one side of merged schemas. Due to that, we can't push down filters
+   * using such fields, otherwise Parquet library will throw exception (PARQUET-389).
+   * Here we filter out such fields.
    */
   private def getFieldMap(dataType: DataType): Map[String, DataType] = dataType match {
     case StructType(fields) =>
       // Here we don't flatten the fields in the nested schema but just look up through
       // root fields. Currently, accessing to nested fields does not push down filters
       // and it does not support to create filters for them.
-      fields.map(f => f.name -> f.dataType).toMap
+      fields.filter { f =>
+        !f.metadata.contains(StructType.metadataKeyForOptionalField) ||
+          !f.metadata.getBoolean(StructType.metadataKeyForOptionalField)
+      }.map(f => f.name -> f.dataType).toMap
     case _ => Map.empty[String, DataType]
   }
 
