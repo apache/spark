@@ -20,6 +20,8 @@ package org.apache.spark.ui.jobs
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, LinkedHashMap}
 
+import com.google.common.collect.Interners
+
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor._
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
@@ -140,6 +142,14 @@ private[spark] object UIData {
   }
 
   object TaskUIData {
+
+    private val stringInterner = Interners.newWeakInterner[String]()
+
+    /** String interning to reduce the memory usage. */
+    private def weakIntern(s: String): String = {
+      stringInterner.intern(s)
+    }
+
     def apply(taskInfo: TaskInfo): TaskUIData = {
       new TaskUIData(dropInternalAndSQLAccumulables(taskInfo))
     }
@@ -154,8 +164,8 @@ private[spark] object UIData {
         index = taskInfo.index,
         attemptNumber = taskInfo.attemptNumber,
         launchTime = taskInfo.launchTime,
-        executorId = taskInfo.executorId,
-        host = taskInfo.host,
+        executorId = weakIntern(taskInfo.executorId),
+        host = weakIntern(taskInfo.host),
         taskLocality = taskInfo.taskLocality,
         speculative = taskInfo.speculative
       )
