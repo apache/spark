@@ -1435,6 +1435,12 @@ class Row(tuple):
             # create row class or objects
             return tuple.__new__(self, args)
 
+    def __init__(self, *args, **kwargs):
+        if "count" in kwargs:
+            self.__dict__["count"] = self.__getattr__("count")
+        if "index" in kwargs:
+            self.__dict__["index"] = self.__getattr__("index")
+
     def asDict(self, recursive=False):
         """
         Return as an dict
@@ -1507,6 +1513,10 @@ class Row(tuple):
         if key != '__fields__' and key != "__from_dict__":
             raise Exception("Row is read-only")
         self.__dict__[key] = value
+        if "count" in self.__fields__:
+            self.__dict__["count"] = self.__getattr__("count")
+        if "index" in self.__fields__:
+            self.__dict__["index"] = self.__getattr__("index")
 
     def __reduce__(self):
         """Returns a tuple so Python knows how to pickle Row."""

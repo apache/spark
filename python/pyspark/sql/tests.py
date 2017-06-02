@@ -232,6 +232,12 @@ class SQLTests(ReusedPySparkTestCase):
             row2.id = 2
         self.assertRaises(Exception, foo2)
 
+    def test_row_with_special_column_names(self):
+        rdd = self.sc.parallelize([1, 2, 1, 3])
+        df = self.sqlCtx.createDataFrame(rdd.map(lambda x: Row(id=x)))
+        df = df.groupby("id").count()
+        self.assertEqual(df.map(lambda x: x.count).collect(), [2, 1, 1])
+
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
