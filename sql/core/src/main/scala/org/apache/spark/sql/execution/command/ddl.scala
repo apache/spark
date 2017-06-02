@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.Locale
+
 import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.concurrent.forkjoin.ForkJoinPool
@@ -229,8 +231,12 @@ case class AlterTableSetPropertiesCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView)
-    // This overrides old properties
-    val newTable = table.copy(properties = table.properties ++ properties)
+    // This overrides old properties and update the comment parameter of CatalogTable
+    // with the newly added/modified comment since CatalogTable also holds comment as its
+    // direct property.
+    val newTable = table.copy(
+      properties = table.properties ++ properties,
+      comment = properties.get("comment"))
     catalog.alterTable(newTable)
     Seq.empty[Row]
   }
@@ -265,8 +271,10 @@ case class AlterTableUnsetPropertiesCommand(
         }
       }
     }
+    // If comment is in the table property, we reset it to None
+    val tableComment = if (propKeys.contains("comment")) None else table.properties.get("comment")
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
-    val newTable = table.copy(properties = newProperties)
+    val newTable = table.copy(properties = newProperties, comment = tableComment)
     catalog.alterTable(newTable)
     Seq.empty[Row]
   }
@@ -764,11 +772,11 @@ object DDLUtils {
   val HIVE_PROVIDER = "hive"
 
   def isHiveTable(table: CatalogTable): Boolean = {
-    table.provider.isDefined && table.provider.get.toLowerCase == HIVE_PROVIDER
+    table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) == HIVE_PROVIDER
   }
 
   def isDatasourceTable(table: CatalogTable): Boolean = {
-    table.provider.isDefined && table.provider.get.toLowerCase != HIVE_PROVIDER
+    table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) != HIVE_PROVIDER
   }
 
   /**

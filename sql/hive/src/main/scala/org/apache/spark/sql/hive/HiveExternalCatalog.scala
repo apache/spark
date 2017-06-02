@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
 import java.util
+import java.util.Locale
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -35,7 +36,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -136,17 +137,33 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  /**
+   * Checks the validity of column names. Hive metastore disallows the table to use comma in
+   * data column names. Partition columns do not have such a restriction. Views do not have such
+   * a restriction.
+   */
+  private def verifyColumnNames(table: CatalogTable): Unit = {
+    if (table.tableType != VIEW) {
+      table.dataSchema.map(_.name).foreach { colName =>
+        if (colName.contains(",")) {
+          throw new AnalysisException("Cannot create a table having a column whose name contains " +
+            s"commas in Hive metastore. Table: ${table.identifier}; Column: $colName")
+        }
+      }
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
 
-  override def createDatabase(
+  override protected def doCreateDatabase(
       dbDefinition: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withClient {
     client.createDatabase(dbDefinition, ignoreIfExists)
   }
 
-  override def dropDatabase(
+  override protected def doDropDatabase(
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withClient {
@@ -193,7 +210,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // Tables
   // --------------------------------------------------------------------------
 
-  override def createTable(
+  override protected def doCreateTable(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
@@ -201,6 +218,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val table = tableDefinition.identifier.table
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
+    verifyColumnNames(tableDefinition)
 
     if (tableExists(db, table) && !ignoreIfExists) {
       throw new TableAlreadyExistsException(db = db, table = table)
@@ -455,7 +473,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  override def dropTable(
+  override protected def doDropTable(
       db: String,
       table: String,
       ignoreIfNotExists: Boolean,
@@ -464,7 +482,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.dropTable(db, table, ignoreIfNotExists, purge)
   }
 
-  override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
+  override protected def doRenameTable(
+      db: String,
+      oldName: String,
+      newName: String): Unit = withClient {
     val rawTable = getRawTable(db, oldName)
 
     // Note that Hive serde tables don't use path option in storage properties to store the value
@@ -499,7 +520,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
     // while `CatalogTable` should be serializable.
     val propsWithoutPath = table.storage.properties.filter {
-      case (k, v) => k.toLowerCase != "path"
+      case (k, v) => k.toLowerCase(Locale.ROOT) != "path"
     }
     table.storage.copy(properties = propsWithoutPath ++ newPath.map("path" -> _))
   }
@@ -525,8 +546,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       if (stats.rowCount.isDefined) {
         statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
       }
+      val colNameTypeMap: Map[String, DataType] =
+        tableDefinition.schema.fields.map(f => (f.name, f.dataType)).toMap
       stats.colStats.foreach { case (colName, colStat) =>
-        colStat.toMap.foreach { case (k, v) =>
+        colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
           statsProperties += (columnStatKeyPropName(colName, k) -> v)
         }
       }
@@ -608,6 +631,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireTableExists(db, table)
     val rawTable = getRawTable(db, table)
     val withNewSchema = rawTable.copy(schema = schema)
+    verifyColumnNames(withNewSchema)
     // Add table metadata such as table schema, partition columns, etc. to table properties.
     val updatedTable = withNewSchema.copy(
       properties = withNewSchema.properties ++ tableMetaToTableProps(withNewSchema))
@@ -657,9 +681,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
     }
 
-    // construct Spark's statistics from information in Hive metastore
+    // Restore Spark's statistics from information in Metastore.
     val statsProps = table.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
 
+    // Currently we have two sources of statistics: one from Hive and the other from Spark.
+    // In our design, if Spark's statistics is available, we respect it over Hive's statistics.
     if (statsProps.nonEmpty) {
       val colStats = new mutable.HashMap[String, ColumnStat]
 
@@ -1039,62 +1065,42 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
-    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
-    val nonPartitionPruningPredicates = predicates.filterNot {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-    }
 
-    if (nonPartitionPruningPredicates.nonEmpty) {
-        sys.error("Expected only partition pruning predicates: " +
-          predicates.reduceLeft(And))
-    }
+    val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
 
-    val partitionSchema = catalogTable.partitionSchema
-    val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
-
-    if (predicates.nonEmpty) {
-      val clientPrunedPartitions = client.getPartitionsByFilter(rawTable, predicates).map { part =>
+    val clientPrunedPartitions =
+      client.getPartitionsByFilter(rawTable, predicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
-      val boundPredicate =
-        InterpretedPredicate.create(predicates.reduce(And).transform {
-          case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
-            BoundReference(index, partitionSchema(index).dataType, nullable = true)
-        })
-      clientPrunedPartitions.filter { p =>
-        boundPredicate(p.toRow(partitionSchema, defaultTimeZoneId))
-      }
-    } else {
-      client.getPartitions(catalogTable).map { part =>
-        part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
-      }
-    }
+    prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)
   }
 
   // --------------------------------------------------------------------------
   // Functions
   // --------------------------------------------------------------------------
 
-  override def createFunction(
+  override protected def doCreateFunction(
       db: String,
       funcDefinition: CatalogFunction): Unit = withClient {
     requireDbExists(db)
     // Hive's metastore is case insensitive. However, Hive's createFunction does
     // not normalize the function name (unlike the getFunction part). So,
     // we are normalizing the function name.
-    val functionName = funcDefinition.identifier.funcName.toLowerCase
+    val functionName = funcDefinition.identifier.funcName.toLowerCase(Locale.ROOT)
     requireFunctionNotExists(db, functionName)
     val functionIdentifier = funcDefinition.identifier.copy(funcName = functionName)
     client.createFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
-  override def dropFunction(db: String, name: String): Unit = withClient {
+  override protected def doDropFunction(db: String, name: String): Unit = withClient {
     requireFunctionExists(db, name)
     client.dropFunction(db, name)
   }
 
-  override def renameFunction(db: String, oldName: String, newName: String): Unit = withClient {
+  override protected def doRenameFunction(
+      db: String,
+      oldName: String,
+      newName: String): Unit = withClient {
     requireFunctionExists(db, oldName)
     requireFunctionNotExists(db, newName)
     client.renameFunction(db, oldName, newName)

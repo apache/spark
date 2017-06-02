@@ -32,10 +32,11 @@ import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 // TODO(gatorsmile): combine HiveCatalogedDDLSuite and HiveDDLSuite
 class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeAndAfterEach {
@@ -50,15 +51,28 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 
   protected override def generateTable(
       catalog: SessionCatalog,
-      name: TableIdentifier): CatalogTable = {
+      name: TableIdentifier,
+      isDataSource: Boolean): CatalogTable = {
     val storage =
-      CatalogStorageFormat(
-        locationUri = Some(catalog.defaultTablePath(name)),
-        inputFormat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
-        outputFormat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
-        serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
-        compressed = false,
-        properties = Map("serialization.format" -> "1"))
+      if (isDataSource) {
+        val serde = HiveSerDe.sourceToSerDe("parquet")
+        assert(serde.isDefined, "The default format is not Hive compatible")
+        CatalogStorageFormat(
+          locationUri = Some(catalog.defaultTablePath(name)),
+          inputFormat = serde.get.inputFormat,
+          outputFormat = serde.get.outputFormat,
+          serde = serde.get.serde,
+          compressed = false,
+          properties = Map("serialization.format" -> "1"))
+      } else {
+        CatalogStorageFormat(
+          locationUri = Some(catalog.defaultTablePath(name)),
+          inputFormat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
+          outputFormat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
+          serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
+          compressed = false,
+          properties = Map("serialization.format" -> "1"))
+      }
     val metadata = new MetadataBuilder()
       .putString("key", "value")
       .build()
@@ -71,7 +85,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
         .add("col2", "string")
         .add("a", "int")
         .add("b", "int"),
-      provider = Some("hive"),
+      provider = if (isDataSource) Some("parquet") else Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
       tracksPartitionsInCatalog = true)
@@ -107,6 +121,46 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     )
   }
 
+  test("alter table: set location") {
+    testSetLocation(isDatasourceTable = false)
+  }
+
+  test("alter table: set properties") {
+    testSetProperties(isDatasourceTable = false)
+  }
+
+  test("alter table: unset properties") {
+    testUnsetProperties(isDatasourceTable = false)
+  }
+
+  test("alter table: set serde") {
+    testSetSerde(isDatasourceTable = false)
+  }
+
+  test("alter table: set serde partition") {
+    testSetSerdePartition(isDatasourceTable = false)
+  }
+
+  test("alter table: change column") {
+    testChangeColumn(isDatasourceTable = false)
+  }
+
+  test("alter table: rename partition") {
+    testRenamePartitions(isDatasourceTable = false)
+  }
+
+  test("alter table: drop partition") {
+    testDropPartitions(isDatasourceTable = false)
+  }
+
+  test("alter table: add partition") {
+    testAddPartitions(isDatasourceTable = false)
+  }
+
+  test("drop table") {
+    testDropTable(isDatasourceTable = false)
+  }
+
 }
 
 class HiveDDLSuite
@@ -128,11 +182,11 @@ class HiveDDLSuite
       dbPath: Option[String] = None): Boolean = {
     val expectedTablePath =
       if (dbPath.isEmpty) {
-        hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
+        hiveContext.sessionState.catalog.defaultTablePath(tableIdentifier)
       } else {
-        new Path(new Path(dbPath.get), tableIdentifier.table).toString
+        new Path(new Path(dbPath.get), tableIdentifier.table).toUri
       }
-    val filesystemPath = new Path(expectedTablePath)
+    val filesystemPath = new Path(expectedTablePath.toString)
     val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
     fs.exists(filesystemPath)
   }
@@ -708,23 +762,6 @@ class HiveDDLSuite
     }
   }
 
-  test("desc table for Hive table") {
-    withTable("tab1") {
-      val tabName = "tab1"
-      sql(s"CREATE TABLE $tabName(c1 int)")
-
-      assert(sql(s"DESC $tabName").collect().length == 1)
-
-      assert(
-        sql(s"DESC FORMATTED $tabName").collect()
-          .exists(_.getString(0) == "# Storage Information"))
-
-      assert(
-        sql(s"DESC EXTENDED $tabName").collect()
-          .exists(_.getString(0) == "# Detailed Table Information"))
-    }
-  }
-
   test("desc table for Hive table - partitioned table") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (b int)")
@@ -741,20 +778,23 @@ class HiveDDLSuite
     }
   }
 
-  test("desc formatted table for permanent view") {
+  test("desc table for Hive table - bucketed + sorted table") {
     withTable("tbl") {
-      withView("view1") {
-        sql("CREATE TABLE tbl(a int)")
-        sql("CREATE VIEW view1 AS SELECT * FROM tbl")
-        assert(sql("DESC FORMATTED view1").collect().containsSlice(
-          Seq(
-            Row("# View Information", "", ""),
-            Row("View Text:", "SELECT * FROM tbl", ""),
-            Row("View Default Database:", "default", ""),
-            Row("View Query Output Columns:", "[a]", "")
-          )
-        ))
-      }
+      sql(s"""
+        CREATE TABLE tbl (id int, name string)
+        PARTITIONED BY (ds string)
+        CLUSTERED BY(id)
+        SORTED BY(id, name) INTO 1024 BUCKETS
+        """)
+
+      val x = sql("DESC FORMATTED tbl").collect()
+      assert(x.containsSlice(
+        Seq(
+          Row("Num Buckets", "1024", ""),
+          Row("Bucket Columns", "[`id`]", ""),
+          Row("Sort Columns", "[`id`, `name`]", "")
+        )
+      ))
     }
   }
 
@@ -766,7 +806,7 @@ class HiveDDLSuite
 
       checkAnswer(
         sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
-        Row("a", "int", "test")
+        Row("# col_name", "data_type", "comment") :: Row("a", "int", "test") :: Nil
       )
     }
   }
@@ -1160,11 +1200,6 @@ class HiveDDLSuite
       "last_modified_by",
       "last_modified_time",
       "Owner:",
-      "COLUMN_STATS_ACCURATE",
-      "numFiles",
-      "numRows",
-      "rawDataSize",
-      "totalSize",
       "totalNumberFiles",
       "maxFileSize",
       "minFileSize"
@@ -1218,23 +1253,6 @@ class HiveDDLSuite
       sql(s"SELECT * FROM ${targetTable.identifier}"))
   }
 
-  test("desc table for data source table") {
-    withTable("tab1") {
-      val tabName = "tab1"
-      spark.range(1).write.format("json").saveAsTable(tabName)
-
-      assert(sql(s"DESC $tabName").collect().length == 1)
-
-      assert(
-        sql(s"DESC FORMATTED $tabName").collect()
-          .exists(_.getString(0) == "# Storage Information"))
-
-      assert(
-        sql(s"DESC EXTENDED $tabName").collect()
-          .exists(_.getString(0) == "# Detailed Table Information"))
-    }
-  }
-
   test("create table with the same name as an index table") {
     val tabName = "tab1"
     val indexName = tabName + "_index"
@@ -1248,6 +1266,14 @@ class HiveDDLSuite
           s"CREATE INDEX $indexName ON TABLE $tabName (a) AS 'COMPACT' WITH DEFERRED REBUILD")
         val indexTabName =
           spark.sessionState.catalog.listTables("default", s"*$indexName*").head.table
+
+        // Even if index tables exist, listTables and getTable APIs should still work
+        checkAnswer(
+          spark.catalog.listTables().toDF(),
+          Row(indexTabName, "default", null, null, false) ::
+            Row(tabName, "default", null, "MANAGED", false) :: Nil)
+        assert(spark.catalog.getTable("default", indexTabName).name === indexTabName)
+
         intercept[TableAlreadyExistsException] {
           sql(s"CREATE TABLE $indexTabName(b int)")
         }
@@ -1317,46 +1343,6 @@ class HiveDDLSuite
           assert(desc.contains(Row("id", "bigint", null)))
         }
       }
-    }
-  }
-
-  test("desc table for data source table - partitioned bucketed table") {
-    withTable("t1") {
-      spark
-        .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
-        .bucketBy(2, "b").sortBy("c").partitionBy("d")
-        .saveAsTable("t1")
-
-      val formattedDesc = sql("DESC FORMATTED t1").collect()
-
-      assert(formattedDesc.containsSlice(
-        Seq(
-          Row("a", "bigint", null),
-          Row("b", "bigint", null),
-          Row("c", "bigint", null),
-          Row("d", "bigint", null),
-          Row("# Partition Information", "", ""),
-          Row("# col_name", "data_type", "comment"),
-          Row("d", "bigint", null),
-          Row("", "", ""),
-          Row("# Detailed Table Information", "", ""),
-          Row("Database:", "default", "")
-        )
-      ))
-
-      assert(formattedDesc.containsSlice(
-        Seq(
-          Row("Table Type:", "MANAGED", "")
-        )
-      ))
-
-      assert(formattedDesc.containsSlice(
-        Seq(
-          Row("Num Buckets:", "2", ""),
-          Row("Bucket Columns:", "[b]", ""),
-          Row("Sort Columns:", "[c]", "")
-        )
-      ))
     }
   }
 
@@ -1666,7 +1652,7 @@ class HiveDDLSuite
   test("create hive table with a non-existing location") {
     withTable("t", "t1") {
       withTempPath { dir =>
-        spark.sql(s"CREATE TABLE t(a int, b int) USING hive LOCATION '$dir'")
+        spark.sql(s"CREATE TABLE t(a int, b int) USING hive LOCATION '${dir.toURI}'")
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1683,7 +1669,7 @@ class HiveDDLSuite
              |CREATE TABLE t1(a int, b int)
              |USING hive
              |PARTITIONED BY(a)
-             |LOCATION '$dir'
+             |LOCATION '${dir.toURI}'
            """.stripMargin)
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -1711,7 +1697,7 @@ class HiveDDLSuite
               s"""
                  |CREATE TABLE t
                  |USING hive
-                 |LOCATION '$dir'
+                 |LOCATION '${dir.toURI}'
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -1727,7 +1713,7 @@ class HiveDDLSuite
                  |CREATE TABLE t1
                  |USING hive
                  |PARTITIONED BY(a, b)
-                 |LOCATION '$dir'
+                 |LOCATION '${dir.toURI}'
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -1753,21 +1739,21 @@ class HiveDDLSuite
                  |CREATE TABLE t(a string, `$specialChars` string)
                  |USING $datasource
                  |PARTITIONED BY(`$specialChars`)
-                 |LOCATION '$dir'
+                 |LOCATION '${dir.toURI}'
                """.stripMargin)
 
             assert(dir.listFiles().isEmpty)
             spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`=2) SELECT 1")
             val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialChars)}=2"
             val partFile = new File(dir, partEscaped)
-            assert(partFile.listFiles().length >= 1)
+            assert(partFile.listFiles().nonEmpty)
             checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
 
             withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
               spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`) SELECT 3, 4")
               val partEscaped1 = s"${ExternalCatalogUtils.escapePathName(specialChars)}=4"
               val partFile1 = new File(dir, partEscaped1)
-              assert(partFile1.listFiles().length >= 1)
+              assert(partFile1.listFiles().nonEmpty)
               checkAnswer(spark.table("t"), Row("1", "2") :: Row("3", "4") :: Nil)
             }
           }
@@ -1778,15 +1764,22 @@ class HiveDDLSuite
 
   Seq("a b", "a:b", "a%b").foreach { specialChars =>
     test(s"hive table: location uri contains $specialChars") {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
       withTable("t") {
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
+          // The parser does not recognize the backslashes on Windows as they are.
+          // These currently should be escaped.
+          val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
             s"""
                |CREATE TABLE t(a string)
                |USING hive
-               |LOCATION '$loc'
+               |LOCATION '$escapedLoc'
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -1809,12 +1802,13 @@ class HiveDDLSuite
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
+          val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
             s"""
                |CREATE TABLE t1(a string, b string)
                |USING hive
                |PARTITIONED BY(b)
-               |LOCATION '$loc'
+               |LOCATION '$escapedLoc'
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -1825,16 +1819,20 @@ class HiveDDLSuite
           if (specialChars != "a:b") {
             spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
             val partFile = new File(loc, "b=2")
-            assert(partFile.listFiles().length >= 1)
+            assert(partFile.listFiles().nonEmpty)
             checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
 
             spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
             val partFile1 = new File(loc, "b=2017-03-03 12:13%3A14")
             assert(!partFile1.exists())
-            val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
-            assert(partFile2.listFiles().length >= 1)
-            checkAnswer(spark.table("t1"),
-              Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+
+            if (!Utils.isWindows) {
+              // Actual path becomes "b=2017-03-03%2012%3A13%253A14" on Windows.
+              val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
+              assert(partFile2.listFiles().nonEmpty)
+              checkAnswer(spark.table("t1"),
+                Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+            }
           } else {
             val e = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")

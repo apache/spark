@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 
@@ -34,6 +34,24 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
     rowCount = 10,
     // row count * (overhead + column size)
     size = Some(10 * (8 + 4)))
+
+  test("BroadcastHint estimation") {
+    val filter = Filter(Literal(true), plan)
+    val filterStatsCboOn = Statistics(sizeInBytes = 10 * (8 +4),
+      rowCount = Some(10), attributeStats = AttributeMap(Seq(attribute -> colStat)))
+    val filterStatsCboOff = Statistics(sizeInBytes = 10 * (8 +4))
+    checkStats(
+      filter,
+      expectedStatsCboOn = filterStatsCboOn,
+      expectedStatsCboOff = filterStatsCboOff)
+
+    val broadcastHint = ResolvedHint(filter, HintInfo(isBroadcastable = Option(true)))
+    checkStats(
+      broadcastHint,
+      expectedStatsCboOn = filterStatsCboOn.copy(hints = HintInfo(isBroadcastable = Option(true))),
+      expectedStatsCboOff = filterStatsCboOff.copy(hints = HintInfo(isBroadcastable = Option(true)))
+    )
+  }
 
   test("limit estimation: limit < child's rowCount") {
     val localLimit = LocalLimit(Literal(2), plan)
@@ -77,15 +95,13 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
         sizeInBytes = 40,
         rowCount = Some(10),
         attributeStats = AttributeMap(Seq(
-          AttributeReference("c1", IntegerType)() -> ColumnStat(10, Some(1), Some(10), 0, 4, 4))),
-        isBroadcastable = false)
+          AttributeReference("c1", IntegerType)() -> ColumnStat(10, Some(1), Some(10), 0, 4, 4))))
     val expectedCboStats =
       Statistics(
         sizeInBytes = 4,
         rowCount = Some(1),
         attributeStats = AttributeMap(Seq(
-          AttributeReference("c1", IntegerType)() -> ColumnStat(1, Some(5), Some(5), 0, 4, 4))),
-        isBroadcastable = false)
+          AttributeReference("c1", IntegerType)() -> ColumnStat(1, Some(5), Some(5), 0, 4, 4))))
 
     val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
     checkStats(
@@ -97,10 +113,12 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
       plan: LogicalPlan,
       expectedStatsCboOn: Statistics,
       expectedStatsCboOff: Statistics): Unit = {
-    assert(plan.stats(conf.copy(cboEnabled = true)) == expectedStatsCboOn)
     // Invalidate statistics
     plan.invalidateStatsCache()
-    assert(plan.stats(conf.copy(cboEnabled = false)) == expectedStatsCboOff)
+    assert(plan.stats(conf.copy(SQLConf.CBO_ENABLED -> true)) == expectedStatsCboOn)
+
+    plan.invalidateStatsCache()
+    assert(plan.stats(conf.copy(SQLConf.CBO_ENABLED -> false)) == expectedStatsCboOff)
   }
 
   /** Check estimated stats when it's the same whether cbo is turned on or off. */
@@ -117,6 +135,6 @@ private case class DummyLogicalPlan(
     cboStats: Statistics) extends LogicalPlan {
   override def output: Seq[Attribute] = Nil
   override def children: Seq[LogicalPlan] = Nil
-  override def computeStats(conf: CatalystConf): Statistics =
+  override def computeStats(conf: SQLConf): Statistics =
     if (conf.cboEnabled) cboStats else defaultStats
 }

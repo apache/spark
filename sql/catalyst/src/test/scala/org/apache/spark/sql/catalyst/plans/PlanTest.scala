@@ -18,18 +18,18 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Provides helper methods for comparing plans.
  */
 abstract class PlanTest extends SparkFunSuite with PredicateHelper {
 
-  protected val conf = SimpleCatalystConf(caseSensitiveAnalysis = true)
+  protected val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)
 
   /**
    * Since attribute references are given globally unique ids during analysis,
@@ -126,8 +126,8 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
       case (j1: Join, j2: Join) =>
         (sameJoinPlan(j1.left, j2.left) && sameJoinPlan(j1.right, j2.right)) ||
           (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left))
-      case _ if plan1.children.nonEmpty && plan2.children.nonEmpty =>
-        (plan1.children, plan2.children).zipped.forall { case (c1, c2) => sameJoinPlan(c1, c2) }
+      case (p1: Project, p2: Project) =>
+        p1.projectList == p2.projectList && sameJoinPlan(p1.child, p2.child)
       case _ =>
         plan1 == plan2
     }

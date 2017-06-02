@@ -267,7 +267,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<String> mapped = stream.mapPartitions(in -> {
         StringBuilder out = new StringBuilder();
         while (in.hasNext()) {
-          out.append(in.next().toUpperCase(Locale.ENGLISH));
+          out.append(in.next().toUpperCase(Locale.ROOT));
         }
         return Arrays.asList(out.toString()).iterator();
       });
@@ -1315,7 +1315,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, String> mapped =
-      pairStream.mapValues(s -> s.toUpperCase(Locale.ENGLISH));
+      pairStream.mapValues(s -> s.toUpperCase(Locale.ROOT));
 
     JavaTestUtils.attachTestOutputStream(mapped);
     List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);

@@ -21,7 +21,7 @@ context("Structured Streaming")
 
 # Tests for Structured Streaming functions in SparkR
 
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 jsonSubDir <- file.path("sparkr-test", "json", "")
 if (.Platform$OS.type == "windows") {
@@ -47,29 +47,37 @@ schema <- structType(structField("name", "string"),
                      structField("count", "double"))
 
 test_that("read.stream, write.stream, awaitTermination, stopQuery", {
+  skip_on_cran()
+
   df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
   expect_true(isStreaming(df))
   counts <- count(group_by(df, "name"))
   q <- write.stream(counts, "memory", queryName = "people", outputMode = "complete")
 
   expect_false(awaitTermination(q, 5 * 1000))
+  callJMethod(q@ssq, "processAllAvailable")
   expect_equal(head(sql("SELECT count(*) FROM people"))[[1]], 3)
 
   writeLines(mockLinesNa, jsonPathNa)
   awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
   expect_equal(head(sql("SELECT count(*) FROM people"))[[1]], 6)
 
   stopQuery(q)
   expect_true(awaitTermination(q, 1))
+  expect_error(awaitTermination(q), NA)
 })
 
 test_that("print from explain, lastProgress, status, isActive", {
+  skip_on_cran()
+
   df <- read.stream("json", path = jsonDir, schema = schema)
   expect_true(isStreaming(df))
   counts <- count(group_by(df, "name"))
   q <- write.stream(counts, "memory", queryName = "people2", outputMode = "complete")
 
   awaitTermination(q, 5 * 1000)
+  callJMethod(q@ssq, "processAllAvailable")
 
   expect_equal(capture.output(explain(q))[[1]], "== Physical Plan ==")
   expect_true(any(grepl("\"description\" : \"MemorySink\"", capture.output(lastProgress(q)))))
@@ -82,6 +90,8 @@ test_that("print from explain, lastProgress, status, isActive", {
 })
 
 test_that("Stream other format", {
+  skip_on_cran()
+
   parquetPath <- tempfile(pattern = "sparkr-test", fileext = ".parquet")
   df <- read.df(jsonPath, "json", schema)
   write.df(df, parquetPath, "parquet", "overwrite")
@@ -92,6 +102,7 @@ test_that("Stream other format", {
   q <- write.stream(counts, "memory", queryName = "people3", outputMode = "complete")
 
   expect_false(awaitTermination(q, 5 * 1000))
+  callJMethod(q@ssq, "processAllAvailable")
   expect_equal(head(sql("SELECT count(*) FROM people3"))[[1]], 3)
 
   expect_equal(queryName(q), "people3")
@@ -107,6 +118,8 @@ test_that("Stream other format", {
 })
 
 test_that("Non-streaming DataFrame", {
+  skip_on_cran()
+
   c <- as.DataFrame(cars)
   expect_false(isStreaming(c))
 
@@ -116,6 +129,8 @@ test_that("Non-streaming DataFrame", {
 })
 
 test_that("Unsupported operation", {
+  skip_on_cran()
+
   # memory sink without aggregation
   df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
   expect_error(write.stream(df, "memory", queryName = "people", outputMode = "complete"),
@@ -124,6 +139,8 @@ test_that("Unsupported operation", {
 })
 
 test_that("Terminated by error", {
+  skip_on_cran()
+
   df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = -1)
   counts <- count(group_by(df, "name"))
   # This would not fail before returning with a StreamingQuery,
@@ -131,7 +148,7 @@ test_that("Terminated by error", {
   expect_error(q <- write.stream(counts, "memory", queryName = "people4", outputMode = "complete"),
                NA)
 
-  expect_error(awaitTermination(q, 1),
+  expect_error(awaitTermination(q, 5 * 1000),
                paste0(".*(awaitTermination : streaming query error - Invalid value '-1' for option",
                       " 'maxFilesPerTrigger', must be a positive integer).*"))
 

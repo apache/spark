@@ -113,7 +113,7 @@ object Window {
    * Creates a [[WindowSpec]] with the frame boundaries defined,
    * from `start` (inclusive) to `end` (inclusive).
    *
-   * Both `start` and `end` are relative positions from the current row. For example, "0" means
+   * Both `start` and `end` are positions relative to the current row. For example, "0" means
    * "current row", while "-1" means the row before the current row, and "5" means the fifth row
    * after the current row.
    *
@@ -131,9 +131,9 @@ object Window {
    *   import org.apache.spark.sql.expressions.Window
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
    *     .toDF("id", "category")
-   *   df.withColumn("sum",
-   *       sum('id) over Window.partitionBy('category).orderBy('id).rowsBetween(0,1))
-   *     .show()
+   *   val byCategoryOrderedById =
+   *     Window.partitionBy('category).orderBy('id).rowsBetween(Window.currentRow, 1)
+   *   df.withColumn("sum", sum('id) over byCategoryOrderedById).show()
    *
    *   +---+--------+---+
    *   | id|category|sum|
@@ -150,7 +150,7 @@ object Window {
    * @param start boundary start, inclusive. The frame is unbounded if this is
    *              the minimum long value (`Window.unboundedPreceding`).
    * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  (`Window.unboundedFollowing`).
+   *            maximum long value (`Window.unboundedFollowing`).
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rowsBetween.
@@ -162,7 +162,7 @@ object Window {
    * Creates a [[WindowSpec]] with the frame boundaries defined,
    * from `start` (inclusive) to `end` (inclusive).
    *
-   * Both `start` and `end` are relative from the current row. For example, "0" means "current row",
+   * Both `start` and `end` are relative to the current row. For example, "0" means "current row",
    * while "-1" means one off before the current row, and "5" means the five off after the
    * current row.
    *
@@ -170,7 +170,7 @@ object Window {
    * and `Window.currentRow` to specify special boundary values, rather than using integral
    * values directly.
    *
-   * A range based boundary is based on the actual value of the ORDER BY
+   * A range-based boundary is based on the actual value of the ORDER BY
    * expression(s). An offset is used to alter the value of the ORDER BY expression, for
    * instance if the current order by expression has a value of 10 and the lower bound offset
    * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
@@ -183,9 +183,9 @@ object Window {
    *   import org.apache.spark.sql.expressions.Window
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
    *     .toDF("id", "category")
-   *   df.withColumn("sum",
-   *       sum('id) over Window.partitionBy('category).orderBy('id).rangeBetween(0,1))
-   *     .show()
+   *   val byCategoryOrderedById =
+   *     Window.partitionBy('category).orderBy('id).rangeBetween(Window.currentRow, 1)
+   *   df.withColumn("sum", sum('id) over byCategoryOrderedById).show()
    *
    *   +---+--------+---+
    *   | id|category|sum|
@@ -202,7 +202,7 @@ object Window {
    * @param start boundary start, inclusive. The frame is unbounded if this is
    *              the minimum long value (`Window.unboundedPreceding`).
    * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  (`Window.unboundedFollowing`).
+   *            maximum long value (`Window.unboundedFollowing`).
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rangeBetween.
@@ -221,7 +221,8 @@ object Window {
  *
  * {{{
  *   // PARTITION BY country ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
- *   Window.partitionBy("country").orderBy("date").rowsBetween(Long.MinValue, 0)
+ *   Window.partitionBy("country").orderBy("date")
+ *     .rowsBetween(Window.unboundedPreceding, Window.currentRow)
  *
  *   // PARTITION BY country ORDER BY date ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING
  *   Window.partitionBy("country").orderBy("date").rowsBetween(-3, 3)

@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 
+# To run this example use
+# ./bin/spark-submit examples/src/main/r/RSparkSQLExample.R
+
 library(SparkR)
 
 # $example on:init_session$

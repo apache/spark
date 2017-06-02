@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -140,6 +141,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("as case class - take") {
     val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
     assert(ds.take(2) === Array(ClassData("a", 1), ClassData("b", 2)))
+  }
+
+  test("as seq of case class - reorder fields by name") {
+    val df = spark.range(3).select(array(struct($"id".cast("int").as("b"), lit("a").as("a"))))
+    val ds = df.as[Seq[ClassData]]
+    assert(ds.collect() === Array(
+      Seq(ClassData("a", 0)),
+      Seq(ClassData("a", 1)),
+      Seq(ClassData("a", 2))))
   }
 
   test("map") {
@@ -1154,10 +1164,28 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(errMsg3.getMessage.startsWith("cannot have circular references in class, but got the " +
       "circular reference of class"))
   }
+
+  test("SPARK-20125: option of map") {
+    val ds = Seq(WithMapInOption(Some(Map(1 -> 1)))).toDS()
+    checkDataset(ds, WithMapInOption(Some(Map(1 -> 1))))
+  }
+
+  test("SPARK-20399: do not unescaped regex pattern when ESCAPED_STRING_LITERALS is enabled") {
+    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+      val data = Seq("\u0020\u0021\u0023", "abc")
+      val df = data.toDF()
+      val rlike1 = df.filter("value rlike '^\\x20[\\x20-\\x23]+$'")
+      val rlike2 = df.filter($"value".rlike("^\\x20[\\x20-\\x23]+$"))
+      val rlike3 = df.filter("value rlike '^\\\\x20[\\\\x20-\\\\x23]+$'")
+      checkAnswer(rlike1, rlike2)
+      assert(rlike3.count() == 0)
+    }
+  }
 }
 
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
 case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
+case class WithMapInOption(m: Option[scala.collection.Map[Int, Int]])
 
 case class Generic[T](id: T, value: Double)
 

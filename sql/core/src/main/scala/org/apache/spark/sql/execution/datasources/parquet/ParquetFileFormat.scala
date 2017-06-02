@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 class ParquetFileFormat
   extends FileFormat
@@ -124,6 +124,10 @@ class ParquetFileFormat
     conf.set(
       SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
       sparkSession.sessionState.conf.writeLegacyParquetFormat.toString)
+
+    conf.set(
+      SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
+      sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis.toString)
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
@@ -300,6 +304,9 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
+      sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis)
 
     // Try to push down filters when filter push-down is enabled.
     val pushed =
@@ -410,7 +417,8 @@ object ParquetFileFormat extends Logging {
       val converter = new ParquetSchemaConverter(
         sparkSession.sessionState.conf.isParquetBinaryAsString,
         sparkSession.sessionState.conf.isParquetBinaryAsString,
-        sparkSession.sessionState.conf.writeLegacyParquetFormat)
+        sparkSession.sessionState.conf.writeLegacyParquetFormat,
+        sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis)
 
       converter.convert(schema)
     }
@@ -471,24 +479,29 @@ object ParquetFileFormat extends Logging {
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean): Seq[Footer] = {
     val parFiles = partFiles.par
-    parFiles.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
-    parFiles.flatMap { currentFile =>
-      try {
-        // Skips row group information since we only need the schema.
-        // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
-        // when it can't read the footer.
-        Some(new Footer(currentFile.getPath(),
-          ParquetFileReader.readFooter(
-            conf, currentFile, SKIP_ROW_GROUPS)))
-      } catch { case e: RuntimeException =>
-        if (ignoreCorruptFiles) {
-          logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
-          None
-        } else {
-          throw new IOException(s"Could not read footer for file: $currentFile", e)
+    val pool = ThreadUtils.newForkJoinPool("readingParquetFooters", 8)
+    parFiles.tasksupport = new ForkJoinTaskSupport(pool)
+    try {
+      parFiles.flatMap { currentFile =>
+        try {
+          // Skips row group information since we only need the schema.
+          // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
+          // when it can't read the footer.
+          Some(new Footer(currentFile.getPath(),
+            ParquetFileReader.readFooter(
+              conf, currentFile, SKIP_ROW_GROUPS)))
+        } catch { case e: RuntimeException =>
+          if (ignoreCorruptFiles) {
+            logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
+            None
+          } else {
+            throw new IOException(s"Could not read footer for file: $currentFile", e)
+          }
         }
-      }
-    }.seq
+      }.seq
+    } finally {
+      pool.shutdown()
+    }
   }
 
   /**
@@ -510,6 +523,7 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
+    val writeTimestampInMillis = sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis
     val writeLegacyParquetFormat = sparkSession.sessionState.conf.writeLegacyParquetFormat
     val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
@@ -554,7 +568,8 @@ object ParquetFileFormat extends Logging {
             new ParquetSchemaConverter(
               assumeBinaryIsString = assumeBinaryIsString,
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
-              writeLegacyParquetFormat = writeLegacyParquetFormat)
+              writeLegacyParquetFormat = writeLegacyParquetFormat,
+              writeTimestampInMillis = writeTimestampInMillis)
 
           if (footers.isEmpty) {
             Iterator.empty

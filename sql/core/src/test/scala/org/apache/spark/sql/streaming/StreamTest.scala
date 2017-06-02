@@ -159,7 +159,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
   /** Starts the stream, resuming if data has already been processed. It must not be running. */
   case class StartStream(
-      trigger: Trigger = ProcessingTime(0),
+      trigger: Trigger = Trigger.ProcessingTime(0),
       triggerClock: Clock = new SystemClock,
       additionalConfs: Map[String, String] = Map.empty)
     extends StreamAction
@@ -214,24 +214,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       AssertOnQuery(query => { func(query); true })
   }
 
-  class StreamManualClock(time: Long = 0L) extends ManualClock(time) with Serializable {
-    private var waitStartTime: Option[Long] = None
-
-    override def waitTillTime(targetTime: Long): Long = synchronized {
-      try {
-        waitStartTime = Some(getTimeMillis())
-        super.waitTillTime(targetTime)
-      } finally {
-        waitStartTime = None
-      }
-    }
-
-    def isStreamWaitingAt(time: Long): Boolean = synchronized {
-      waitStartTime == Some(time)
-    }
-  }
-
-
   /**
    * Executes the specified actions on the given streaming DataFrame and provides helpful
    * error messages in the case of failures or incorrect answers.
@@ -242,6 +224,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   def testStream(
       _stream: Dataset[_],
       outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = synchronized {
+    import org.apache.spark.sql.streaming.util.StreamManualClock
+
     // `synchronized` is added to prevent the user from calling multiple `testStream`s concurrently
     // because this method assumes there is only one active query in its `StreamingQueryListener`
     // and it may not work correctly when multiple `testStream`s run concurrently.
@@ -293,6 +277,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
     def threadState =
       if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
+    def threadStackTrace = if (currentStream != null && currentStream.microBatchThread.isAlive) {
+      s"Thread stack trace: ${currentStream.microBatchThread.getStackTrace.mkString("\n")}"
+    } else {
+      ""
+    }
 
     def testState =
       s"""
@@ -303,6 +292,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
          |Output Mode: $outputMode
          |Stream state: $currentOffsets
          |Thread state: $threadState
+         |$threadStackTrace
          |${if (streamThreadDeathCause != null) stackTraceToString(streamThreadDeathCause) else ""}
          |
          |== Sink ==
@@ -488,8 +478,27 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
           case a: AddData =>
             try {
-              // Add data and get the source where it was added, and the expected offset of the
-              // added data.
+
+              // If the query is running with manual clock, then wait for the stream execution
+              // thread to start waiting for the clock to increment. This is needed so that we
+              // are adding data when there is no trigger that is active. This would ensure that
+              // the data gets deterministically added to the next batch triggered after the manual
+              // clock is incremented in following AdvanceManualClock. This avoid race conditions
+              // between the test thread and the stream execution thread in tests using manual
+              // clock.
+              if (currentStream != null &&
+                  currentStream.triggerClock.isInstanceOf[StreamManualClock]) {
+                val clock = currentStream.triggerClock.asInstanceOf[StreamManualClock]
+                eventually("Error while synchronizing with manual clock before adding data") {
+                  if (currentStream.isActive) {
+                    assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+                  }
+                }
+                if (!currentStream.isActive) {
+                  failTest("Query terminated while synchronizing with manual clock")
+                }
+              }
+              // Add data
               val queryToUse = Option(currentStream).orElse(Option(lastStream))
               val (source, offset) = a.addData(queryToUse)
 

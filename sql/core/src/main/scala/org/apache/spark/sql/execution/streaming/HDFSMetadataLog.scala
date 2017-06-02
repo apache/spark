@@ -106,6 +106,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    * metadata has already been stored, this method will return `false`.
    */
   override def add(batchId: Long, metadata: T): Boolean = {
+    require(metadata != null, "'null' metadata cannot written to a metadata log")
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written
       writeBatch(batchId, metadata)

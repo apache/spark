@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 import java.net.URI
+import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -48,7 +49,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
 
   protected override def generateTable(
       catalog: SessionCatalog,
-      name: TableIdentifier): CatalogTable = {
+      name: TableIdentifier,
+      isDataSource: Boolean = true): CatalogTable = {
     val storage =
       CatalogStorageFormat.empty.copy(locationUri = Some(catalog.defaultTablePath(name)))
     val metadata = new MetadataBuilder()
@@ -67,58 +69,6 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
       tracksPartitionsInCatalog = true)
-  }
-
-  test("desc table for parquet data source table using in-memory catalog") {
-    val tabName = "tab1"
-    withTable(tabName) {
-      sql(s"CREATE TABLE $tabName(a int comment 'test') USING parquet ")
-
-      checkAnswer(
-        sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
-        Row("a", "int", "test")
-      )
-    }
-  }
-
-  test("alter table: set location (datasource table)") {
-    testSetLocation(isDatasourceTable = true)
-  }
-
-  test("alter table: set properties (datasource table)") {
-    testSetProperties(isDatasourceTable = true)
-  }
-
-  test("alter table: unset properties (datasource table)") {
-    testUnsetProperties(isDatasourceTable = true)
-  }
-
-  test("alter table: set serde (datasource table)") {
-    testSetSerde(isDatasourceTable = true)
-  }
-
-  test("alter table: set serde partition (datasource table)") {
-    testSetSerdePartition(isDatasourceTable = true)
-  }
-
-  test("alter table: change column (datasource table)") {
-    testChangeColumn(isDatasourceTable = true)
-  }
-
-  test("alter table: add partition (datasource table)") {
-    testAddPartitions(isDatasourceTable = true)
-  }
-
-  test("alter table: drop partition (datasource table)") {
-    testDropPartitions(isDatasourceTable = true)
-  }
-
-  test("alter table: rename partition (datasource table)") {
-    testRenamePartitions(isDatasourceTable = true)
-  }
-
-  test("drop table - data source table") {
-    testDropTable(isDatasourceTable = true)
   }
 
   test("create a managed Hive source table") {
@@ -174,7 +124,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
   }
 
-  protected def generateTable(catalog: SessionCatalog, name: TableIdentifier): CatalogTable
+  protected def generateTable(
+      catalog: SessionCatalog,
+      name: TableIdentifier,
+      isDataSource: Boolean = true): CatalogTable
 
   private val escapedIdentifier = "`(.+)`".r
 
@@ -202,7 +155,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql(query)
     }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
   }
 
   private def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
@@ -216,8 +169,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       ignoreIfExists = false)
   }
 
-  private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
-    catalog.createTable(generateTable(catalog, name), ignoreIfExists = false)
+  private def createTable(
+      catalog: SessionCatalog,
+      name: TableIdentifier,
+      isDataSource: Boolean = true): Unit = {
+    catalog.createTable(generateTable(catalog, name, isDataSource), ignoreIfExists = false)
   }
 
   private def createTablePartition(
@@ -232,6 +188,46 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   private def getDBPath(dbName: String): URI = {
     val warehousePath = makeQualifiedPath(spark.sessionState.conf.warehousePath)
     new Path(CatalogUtils.URIToString(warehousePath), s"$dbName.db").toUri
+  }
+
+  test("alter table: set location (datasource table)") {
+    testSetLocation(isDatasourceTable = true)
+  }
+
+  test("alter table: set properties (datasource table)") {
+    testSetProperties(isDatasourceTable = true)
+  }
+
+  test("alter table: unset properties (datasource table)") {
+    testUnsetProperties(isDatasourceTable = true)
+  }
+
+  test("alter table: set serde (datasource table)") {
+    testSetSerde(isDatasourceTable = true)
+  }
+
+  test("alter table: set serde partition (datasource table)") {
+    testSetSerdePartition(isDatasourceTable = true)
+  }
+
+  test("alter table: change column (datasource table)") {
+    testChangeColumn(isDatasourceTable = true)
+  }
+
+  test("alter table: add partition (datasource table)") {
+    testAddPartitions(isDatasourceTable = true)
+  }
+
+  test("alter table: drop partition (datasource table)") {
+    testDropPartitions(isDatasourceTable = true)
+  }
+
+  test("alter table: rename partition (datasource table)") {
+    testRenamePartitions(isDatasourceTable = true)
+  }
+
+  test("drop table - data source table") {
+    testDropTable(isDatasourceTable = true)
   }
 
   test("the qualified path of a database is stored in the catalog") {
@@ -706,7 +702,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withView("testview") {
         sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
           "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
-          s"OPTIONS (PATH '$tmpFile')")
+          s"OPTIONS (PATH '${tmpFile.toURI}')")
 
         checkAnswer(
           sql("select c1, c2 from testview order by c1 limit 1"),
@@ -718,7 +714,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             s"""
                |CREATE TEMPORARY VIEW testview
                |USING org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
-               |OPTIONS (PATH '$tmpFile')
+               |OPTIONS (PATH '${tmpFile.toURI}')
              """.stripMargin)
         }
       }
@@ -846,32 +842,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("alter table: set location") {
-    testSetLocation(isDatasourceTable = false)
-  }
-
-  test("alter table: set properties") {
-    testSetProperties(isDatasourceTable = false)
-  }
-
-  test("alter table: unset properties") {
-    testUnsetProperties(isDatasourceTable = false)
-  }
-
-  // TODO: move this test to HiveDDLSuite.scala
-  ignore("alter table: set serde") {
-    testSetSerde(isDatasourceTable = false)
-  }
-
-  // TODO: move this test to HiveDDLSuite.scala
-  ignore("alter table: set serde partition") {
-    testSetSerdePartition(isDatasourceTable = false)
-  }
-
-  test("alter table: change column") {
-    testChangeColumn(isDatasourceTable = false)
-  }
-
   test("alter table: bucketing is not supported") {
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
@@ -894,10 +864,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       "(('2008-08-08', 'us'), ('2009-09-09', 'uk')) STORED AS DIRECTORIES")
     assertUnsupported("ALTER TABLE dbx.tab1 NOT SKEWED")
     assertUnsupported("ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES")
-  }
-
-  test("alter table: add partition") {
-    testAddPartitions(isDatasourceTable = false)
   }
 
   test("alter table: recover partitions (sequential)") {
@@ -968,17 +934,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assertUnsupported("ALTER VIEW dbx.tab1 ADD IF NOT EXISTS PARTITION (b='2')")
   }
 
-  test("alter table: drop partition") {
-    testDropPartitions(isDatasourceTable = false)
-  }
-
   test("alter table: drop partition is not supported for views") {
     assertUnsupported("ALTER VIEW dbx.tab1 DROP IF EXISTS PARTITION (b='2')")
   }
 
-  test("alter table: rename partition") {
-    testRenamePartitions(isDatasourceTable = false)
-  }
 
   test("show databases") {
     sql("CREATE DATABASE showdb2B")
@@ -1022,18 +981,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assert(catalog.listTables("default") == Nil)
   }
 
-  test("drop table") {
-    testDropTable(isDatasourceTable = false)
-  }
-
   protected def testDropTable(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
+    createTable(catalog, tableIdent, isDatasourceTable)
     assert(catalog.listTables("dbx") == Seq(tableIdent))
     sql("DROP TABLE dbx.tab1")
     assert(catalog.listTables("dbx") == Nil)
@@ -1057,22 +1012,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       e.getMessage.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
   }
 
-  private def convertToDatasourceTable(
-      catalog: SessionCatalog,
-      tableIdent: TableIdentifier): Unit = {
-    catalog.alterTable(catalog.getTableMetadata(tableIdent).copy(
-      provider = Some("csv")))
-    assert(catalog.getTableMetadata(tableIdent).provider == Some("csv"))
-  }
-
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
+    createTable(catalog, tableIdent, isDatasourceTable)
     def getProps: Map[String, String] = {
       if (isUsingHiveMetastore) {
         normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
@@ -1095,13 +1042,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def testUnsetProperties(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
+    createTable(catalog, tableIdent, isDatasourceTable)
     def getProps: Map[String, String] = {
       if (isUsingHiveMetastore) {
         normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
@@ -1132,15 +1079,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def testSetLocation(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val partSpec = Map("a" -> "1", "b" -> "2")
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
     createTablePartition(catalog, partSpec, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
     assert(catalog.getTableMetadata(tableIdent).storage.locationUri.isDefined)
     assert(normalizeSerdeProp(catalog.getTableMetadata(tableIdent).storage.properties).isEmpty)
     assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isDefined)
@@ -1182,13 +1129,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def testSetSerde(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
+    createTable(catalog, tableIdent, isDatasourceTable)
     def checkSerdeProps(expectedSerdeProps: Map[String, String]): Unit = {
       val serdeProp = catalog.getTableMetadata(tableIdent).storage.properties
       if (isUsingHiveMetastore) {
@@ -1198,8 +1145,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
     if (isUsingHiveMetastore) {
-      assert(catalog.getTableMetadata(tableIdent).storage.serde ==
-        Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+      val expectedSerde = if (isDatasourceTable) {
+        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+      } else {
+        "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+      }
+      assert(catalog.getTableMetadata(tableIdent).storage.serde == Some(expectedSerde))
     } else {
       assert(catalog.getTableMetadata(tableIdent).storage.serde.isEmpty)
     }
@@ -1240,18 +1191,18 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def testSetSerdePartition(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val spec = Map("a" -> "1", "b" -> "2")
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
     createTablePartition(catalog, spec, tableIdent)
     createTablePartition(catalog, Map("a" -> "1", "b" -> "3"), tableIdent)
     createTablePartition(catalog, Map("a" -> "2", "b" -> "2"), tableIdent)
     createTablePartition(catalog, Map("a" -> "2", "b" -> "3"), tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
     def checkPartitionSerdeProps(expectedSerdeProps: Map[String, String]): Unit = {
       val serdeProp = catalog.getPartition(tableIdent, spec).storage.properties
       if (isUsingHiveMetastore) {
@@ -1261,8 +1212,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
     if (isUsingHiveMetastore) {
-      assert(catalog.getPartition(tableIdent, spec).storage.serde ==
-        Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+      val expectedSerde = if (isDatasourceTable) {
+        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+      } else {
+        "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+      }
+      assert(catalog.getPartition(tableIdent, spec).storage.serde == Some(expectedSerde))
     } else {
       assert(catalog.getPartition(tableIdent, spec).storage.serde.isEmpty)
     }
@@ -1306,6 +1261,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def testAddPartitions(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val part1 = Map("a" -> "1", "b" -> "5")
@@ -1314,11 +1272,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val part4 = Map("a" -> "4", "b" -> "8")
     val part5 = Map("a" -> "9", "b" -> "9")
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
     createTablePartition(catalog, part1, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
 
     // basic add partition
@@ -1365,6 +1320,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def testDropPartitions(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val part1 = Map("a" -> "1", "b" -> "5")
@@ -1373,7 +1331,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val part4 = Map("a" -> "4", "b" -> "8")
     val part5 = Map("a" -> "9", "b" -> "9")
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
     createTablePartition(catalog, part1, tableIdent)
     createTablePartition(catalog, part2, tableIdent)
     createTablePartition(catalog, part3, tableIdent)
@@ -1381,9 +1339,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createTablePartition(catalog, part5, tableIdent)
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(part1, part2, part3, part4, part5))
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
 
     // basic drop partition
     sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (a='4', b='8'), PARTITION (a='3', b='7')")
@@ -1418,20 +1373,20 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def testRenamePartitions(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val part1 = Map("a" -> "1", "b" -> "q")
     val part2 = Map("a" -> "2", "b" -> "c")
     val part3 = Map("a" -> "3", "b" -> "p")
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
     createTablePartition(catalog, part1, tableIdent)
     createTablePartition(catalog, part2, tableIdent)
     createTablePartition(catalog, part3, tableIdent)
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
 
     // basic rename partition
     sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')")
@@ -1462,14 +1417,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def testChangeColumn(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val resolver = spark.sessionState.conf.resolver
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
+    createTable(catalog, tableIdent, isDatasourceTable)
     def getMetadata(colName: String): Metadata = {
       val column = catalog.getTableMetadata(tableIdent).schema.fields.find { field =>
         resolver(field.name, colName)
@@ -1612,13 +1567,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("drop current database") {
-    sql("CREATE DATABASE temp")
-    sql("USE temp")
-    sql("DROP DATABASE temp")
-    val e = intercept[AnalysisException] {
+    withDatabase("temp") {
+      sql("CREATE DATABASE temp")
+      sql("USE temp")
+      sql("DROP DATABASE temp")
+      val e = intercept[AnalysisException] {
         sql("CREATE TABLE t (a INT, b INT) USING parquet")
       }.getMessage
-    assert(e.contains("Database 'temp' not found"))
+      assert(e.contains("Database 'temp' not found"))
+    }
   }
 
   test("drop default database") {
@@ -1825,7 +1782,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         withTable(tabName) {
           sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
           val message = intercept[AnalysisException] {
-            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase}")
+            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
           }.getMessage
           assert(message.contains("SHOW COLUMNS with conflicting databases"))
         }
@@ -1848,22 +1805,25 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         checkAnswer(spark.table("tbl"), Row(1))
         val defaultTablePath = spark.sessionState.catalog
           .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
+        try {
+          sql(s"ALTER TABLE tbl SET LOCATION '${dir.toURI}'")
+          spark.catalog.refreshTable("tbl")
+          // SET LOCATION won't move data from previous table path to new table path.
+          assert(spark.table("tbl").count() == 0)
+          // the previous table path should be still there.
+          assert(new File(defaultTablePath).exists())
 
-        sql(s"ALTER TABLE tbl SET LOCATION '${dir.toURI}'")
-        spark.catalog.refreshTable("tbl")
-        // SET LOCATION won't move data from previous table path to new table path.
-        assert(spark.table("tbl").count() == 0)
-        // the previous table path should be still there.
-        assert(new File(defaultTablePath).exists())
+          sql("INSERT INTO tbl SELECT 2")
+          checkAnswer(spark.table("tbl"), Row(2))
+          // newly inserted data will go to the new table path.
+          assert(dir.listFiles().nonEmpty)
 
-        sql("INSERT INTO tbl SELECT 2")
-        checkAnswer(spark.table("tbl"), Row(2))
-        // newly inserted data will go to the new table path.
-        assert(dir.listFiles().nonEmpty)
-
-        sql("DROP TABLE tbl")
-        // the new table path will be removed after DROP TABLE.
-        assert(!dir.exists())
+          sql("DROP TABLE tbl")
+          // the new table path will be removed after DROP TABLE.
+          assert(!dir.exists())
+        } finally {
+          Utils.deleteRecursively(new File(defaultTablePath))
+        }
       }
     }
   }
@@ -1875,7 +1835,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           s"""
              |CREATE TABLE t(a string, b int)
              |USING parquet
-             |OPTIONS(path "$dir")
+             |OPTIONS(path "${dir.toURI}")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1893,12 +1853,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
         val newDirFile = new File(dir, "x")
-        val newDir = newDirFile.getAbsolutePath
+        val newDir = newDirFile.toURI
         spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table1.location == new URI(newDir))
+        assert(table1.location == newDir)
         assert(!newDirFile.exists)
 
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
@@ -1916,7 +1876,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |CREATE TABLE t(a int, b int, c int, d int)
              |USING parquet
              |PARTITIONED BY(a, b)
-             |LOCATION "$dir"
+             |LOCATION "${dir.toURI}"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1942,7 +1902,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           s"""
              |CREATE TABLE t(a string, b int)
              |USING parquet
-             |OPTIONS(path "$dir")
+             |OPTIONS(path "${dir.toURI}")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
 
@@ -1971,7 +1931,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |CREATE TABLE t(a int, b int, c int, d int)
              |USING parquet
              |PARTITIONED BY(a, b)
-             |LOCATION "$dir"
+             |LOCATION "${dir.toURI}"
            """.stripMargin)
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
@@ -1988,7 +1948,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("create datasource table with a non-existing location") {
     withTable("t", "t1") {
       withTempPath { dir =>
-        spark.sql(s"CREATE TABLE t(a int, b int) USING parquet LOCATION '$dir'")
+        spark.sql(s"CREATE TABLE t(a int, b int) USING parquet LOCATION '${dir.toURI}'")
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -2000,7 +1960,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
       // partition table
       withTempPath { dir =>
-        spark.sql(s"CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '$dir'")
+        spark.sql(
+          s"CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '${dir.toURI}'")
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -2025,7 +1986,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             s"""
                |CREATE TABLE t
                |USING parquet
-               |LOCATION '$dir'
+               |LOCATION '${dir.toURI}'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
              """.stripMargin)
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -2041,7 +2002,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
                |CREATE TABLE t1
                |USING parquet
                |PARTITIONED BY(a, b)
-               |LOCATION '$dir'
+               |LOCATION '${dir.toURI}'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
              """.stripMargin)
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -2058,6 +2019,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   Seq("a b", "a:b", "a%b", "a,b").foreach { specialChars =>
     test(s"data source table:partition column name containing $specialChars") {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
       withTable("t") {
         withTempDir { dir =>
           spark.sql(
@@ -2065,14 +2030,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
                |CREATE TABLE t(a string, `$specialChars` string)
                |USING parquet
                |PARTITIONED BY(`$specialChars`)
-               |LOCATION '$dir'
+               |LOCATION '${dir.toURI}'
              """.stripMargin)
 
           assert(dir.listFiles().isEmpty)
           spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`=2) SELECT 1")
           val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialChars)}=2"
           val partFile = new File(dir, partEscaped)
-          assert(partFile.listFiles().length >= 1)
+          assert(partFile.listFiles().nonEmpty)
           checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
         }
       }
@@ -2081,15 +2046,22 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   Seq("a b", "a:b", "a%b").foreach { specialChars =>
     test(s"location uri contains $specialChars for datasource table") {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
       withTable("t", "t1") {
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
+          // The parser does not recognize the backslashes on Windows as they are.
+          // These currently should be escaped.
+          val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
             s"""
                |CREATE TABLE t(a string)
                |USING parquet
-               |LOCATION '$loc'
+               |LOCATION '$escapedLoc'
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -2098,19 +2070,22 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
           assert(loc.listFiles().isEmpty)
           spark.sql("INSERT INTO TABLE t SELECT 1")
-          assert(loc.listFiles().length >= 1)
+          assert(loc.listFiles().nonEmpty)
           checkAnswer(spark.table("t"), Row("1") :: Nil)
         }
 
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
+          // The parser does not recognize the backslashes on Windows as they are.
+          // These currently should be escaped.
+          val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
             s"""
                |CREATE TABLE t1(a string, b string)
                |USING parquet
                |PARTITIONED BY(b)
-               |LOCATION '$loc'
+               |LOCATION '$escapedLoc'
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -2120,15 +2095,20 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           assert(loc.listFiles().isEmpty)
           spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
           val partFile = new File(loc, "b=2")
-          assert(partFile.listFiles().length >= 1)
+          assert(partFile.listFiles().nonEmpty)
           checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
 
           spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
           val partFile1 = new File(loc, "b=2017-03-03 12:13%3A14")
           assert(!partFile1.exists())
-          val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
-          assert(partFile2.listFiles().length >= 1)
-          checkAnswer(spark.table("t1"), Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+
+          if (!Utils.isWindows) {
+            // Actual path becomes "b=2017-03-03%2012%3A13%253A14" on Windows.
+            val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
+            assert(partFile2.listFiles().nonEmpty)
+            checkAnswer(
+              spark.table("t1"), Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+          }
         }
       }
     }
@@ -2136,11 +2116,18 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   Seq("a b", "a:b", "a%b").foreach { specialChars =>
     test(s"location uri contains $specialChars for database") {
-      try {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
+      withDatabase ("tmpdb") {
         withTable("t") {
           withTempDir { dir =>
             val loc = new File(dir, specialChars)
-            spark.sql(s"CREATE DATABASE tmpdb LOCATION '$loc'")
+            // The parser does not recognize the backslashes on Windows as they are.
+            // These currently should be escaped.
+            val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
+            spark.sql(s"CREATE DATABASE tmpdb LOCATION '$escapedLoc'")
             spark.sql("USE tmpdb")
 
             import testImplicits._
@@ -2151,8 +2138,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             assert(tblloc.listFiles().nonEmpty)
           }
         }
-      } finally {
-        spark.sql("DROP DATABASE IF EXISTS tmpdb")
       }
     }
   }
@@ -2161,11 +2146,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withTable("t", "t1") {
       withTempDir { dir =>
         assert(!dir.getAbsolutePath.startsWith("file:/"))
+        // The parser does not recognize the backslashes on Windows as they are.
+        // These currently should be escaped.
+        val escapedDir = dir.getAbsolutePath.replace("\\", "\\\\")
         spark.sql(
           s"""
              |CREATE TABLE t(a string)
              |USING parquet
-             |LOCATION '$dir'
+             |LOCATION '$escapedDir'
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location.toString.startsWith("file:/"))
@@ -2173,12 +2161,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       withTempDir { dir =>
         assert(!dir.getAbsolutePath.startsWith("file:/"))
+        // The parser does not recognize the backslashes on Windows as they are.
+        // These currently should be escaped.
+        val escapedDir = dir.getAbsolutePath.replace("\\", "\\\\")
         spark.sql(
           s"""
              |CREATE TABLE t1(a string, b string)
              |USING parquet
              |PARTITIONED BY(b)
-             |LOCATION '$dir'
+             |LOCATION '$escapedDir'
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         assert(table.location.toString.startsWith("file:/"))
@@ -2301,6 +2292,25 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
               sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
               assert(spark.table("t1").schema
                 .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
+            }
+          }
+        }
+      }
+    }
+
+    test(s"basic DDL using locale tr - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
+        withLocale("tr") {
+          val dbName = "DaTaBaSe_I"
+          withDatabase(dbName) {
+            sql(s"CREATE DATABASE $dbName")
+            sql(s"USE $dbName")
+
+            val tabName = "tAb_I"
+            withTable(tabName) {
+              sql(s"CREATE TABLE $tabName(col_I int) USING PARQUET")
+              sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1")
+              checkAnswer(sql(s"SELECT col_I FROM $tabName"), Row(1) :: Nil)
             }
           }
         }

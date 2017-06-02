@@ -498,11 +498,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @export
 #' @examples
 #' \dontrun{
-#' # nolint start
-#' # An example "path/to/file" can be
-#' # paste0(Sys.getenv("SPARK_HOME"), "/data/mllib/sample_lda_libsvm_data.txt")
-#' # nolint end
-#' text <- read.df("path/to/file", source = "libsvm")
+#' text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")
 #' model <- spark.lda(data = text, optimizer = "em")
 #'
 #' # get a summary of the model

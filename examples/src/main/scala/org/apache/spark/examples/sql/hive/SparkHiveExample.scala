@@ -76,7 +76,7 @@ object SparkHiveExample {
     // The results of SQL queries are themselves DataFrames and support all normal functions.
     val sqlDF = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
 
-    // The items in DaraFrames are of type Row, which allows you to access each column by ordinal.
+    // The items in DataFrames are of type Row, which allows you to access each column by ordinal.
     val stringsDS = sqlDF.map {
       case Row(key: Int, value: String) => s"Key: $key, Value: $value"
     }

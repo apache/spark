@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -33,7 +35,6 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 final class DataStreamReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
@@ -135,7 +136,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.0.0
    */
   def load(): DataFrame = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
     }
@@ -201,7 +202,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
@@ -238,9 +239,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
    * requires one extra pass over the data.</li>
-   * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
-   * from values being read should be skipped.</li>
-   * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
+   * <li>`ignoreLeadingWhiteSpace` (default `false`): a flag indicating whether or not leading
+   * whitespaces from values being read should be skipped.</li>
+   * <li>`ignoreTrailingWhiteSpace` (default `false`): a flag indicating whether or not trailing
    * whitespaces from values being read should be skipped.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value. Since
    * 2.0.1, this applies to all supported types including the string type.</li>
@@ -252,7 +253,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
@@ -260,7 +261,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
    * for any given value being read. By default, it is -1 meaning unlimited length</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   *    during parsing.
+   *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
    *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
    *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep

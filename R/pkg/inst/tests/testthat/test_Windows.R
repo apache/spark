@@ -17,6 +17,8 @@
 context("Windows-specific tests")
 
 test_that("sparkJars tag in SparkContext", {
+  skip_on_cran()
+
   if (.Platform$OS.type != "windows") {
     skip("This test is only for Windows, skipped")
   }
@@ -25,3 +27,6 @@ test_that("sparkJars tag in SparkContext", {
   abcPath <- testOutput[1]
   expect_equal(abcPath, "a\\b\\c")
 })
+
+message("--- End test (Windows) ", as.POSIXct(Sys.time(), tz = "GMT"))
+message("elapsed ", (proc.time() - timer_ptm)[3])

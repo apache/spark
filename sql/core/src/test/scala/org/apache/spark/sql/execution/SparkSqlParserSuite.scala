@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
@@ -224,13 +224,13 @@ class SparkSqlParserSuite extends PlanTest {
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     assertEqual("describe table t",
       DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = false))
+        TableIdentifier("t"), Map.empty, isExtended = false))
     assertEqual("describe table extended t",
       DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = true, isFormatted = false))
+        TableIdentifier("t"), Map.empty, isExtended = true))
     assertEqual("describe table formatted t",
       DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = true))
+        TableIdentifier("t"), Map.empty, isExtended = true))
 
     intercept("explain describe tables x", "Unsupported SQL statement")
   }
@@ -289,5 +289,16 @@ class SparkSqlParserSuite extends PlanTest {
         RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
           basePlan,
           numPartitions = newConf.numShufflePartitions)))
+  }
+
+  test("pipeline concatenation") {
+    val concat = Concat(
+      Concat(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil) ::
+      UnresolvedAttribute("c") ::
+      Nil
+    )
+    assertEqual(
+      "SELECT a || b || c FROM t",
+      Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))
   }
 }

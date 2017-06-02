@@ -76,8 +76,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(ova.getPredictionCol === "prediction")
     val ovaModel = ova.fit(dataset)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(ovaModel)
+    MLTestingUtils.checkCopyAndUids(ova, ovaModel)
 
     assert(ovaModel.models.length === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
