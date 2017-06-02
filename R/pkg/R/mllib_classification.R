@@ -257,10 +257,8 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                    lowerBoundsOnCoefficients = NULL, upperBoundsOnCoefficients = NULL,
                    lowerBoundsOnIntercepts = NULL, upperBoundsOnIntercepts = NULL) {
             formula <- paste(deparse(formula), collapse = "")
-            lrow <- 0
-            lcol <- 0
-            urow <- 0
-            ucol <- 0
+            row <- 0
+            col <- 0
 
             if (!is.null(weightCol) && weightCol == "") {
               weightCol <- NULL
@@ -280,8 +278,8 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
               if (class(lowerBoundsOnCoefficients) != "matrix") {
                 stop("lowerBoundsOnCoefficients must be a matrix.")
               }
-              lrow <- nrow(lowerBoundsOnCoefficients)
-              lcol <- ncol(lowerBoundsOnCoefficients)
+              row <- nrow(lowerBoundsOnCoefficients)
+              col <- ncol(lowerBoundsOnCoefficients)
               lowerBoundsOnCoefficients <- as.array(as.vector(lowerBoundsOnCoefficients))
             }
 
@@ -289,8 +287,17 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
               if (class(upperBoundsOnCoefficients) != "matrix") {
                 stop("upperBoundsOnCoefficients must be a matrix.")
               }
-              urow <- nrow(upperBoundsOnCoefficients)
-              ucol <- ncol(upperBoundsOnCoefficients)
+
+              if(!is.null(lowerBoundsOnCoefficients) & (row != nrow(upperBoundsOnCoefficients)
+                | col != ncol(upperBoundsOnCoefficients))) {
+                stop("dimension of upperBoundsOnCoefficients is not the same as lowerBoundsOnCoefficients")
+              }
+
+              if (is.null(lowerBoundsOnCoefficients)) {
+                row <- nrow(upperBoundsOnCoefficients)
+                col <- ncol(upperBoundsOnCoefficients)
+              }
+
               upperBoundsOnCoefficients <- as.array(as.vector(upperBoundsOnCoefficients))
             }
 
@@ -300,8 +307,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                                 as.numeric(tol), as.character(family),
                                 as.logical(standardization), as.array(thresholds),
                                 weightCol, as.integer(aggregationDepth),
-                                as.integer(lrow), as.integer(lcol),
-                                as.integer(urow), as.integer(ucol),
+                                as.integer(row), as.integer(col),
                                 lowerBoundsOnCoefficients, upperBoundsOnCoefficients,
                                 lowerBoundsOnIntercepts, upperBoundsOnIntercepts)
             new("LogisticRegressionModel", jobj = jobj)

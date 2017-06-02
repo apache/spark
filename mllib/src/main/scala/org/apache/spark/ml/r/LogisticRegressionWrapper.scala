@@ -98,10 +98,8 @@ private[r] object LogisticRegressionWrapper
       thresholds: Array[Double],
       weightCol: String,
       aggregationDepth: Int,
-      lrow: Int,
-      lcol: Int,
-      urow: Int,
-      ucol: Int,
+      numRowsOfBoundsOnCoefficients: Int,
+      numColsOfBoundsOnCoefficients: Int,
       lowerBoundsOnCoefficients: Array[Double],
       upperBoundsOnCoefficients: Array[Double],
       lowerBoundsOnIntercepts: Array[Double],
@@ -141,13 +139,17 @@ private[r] object LogisticRegressionWrapper
 
     if (weightCol != null) lr.setWeightCol(weightCol)
 
-    if (lrow != 0 && lcol != 0 && lowerBoundsOnCoefficients != null) {
-      val coef = Matrices.dense(lrow, lcol, lowerBoundsOnCoefficients)
+    if (numRowsOfBoundsOnCoefficients != 0 &&
+      numColsOfBoundsOnCoefficients != 0 && lowerBoundsOnCoefficients != null) {
+      val coef = Matrices.dense(numRowsOfBoundsOnCoefficients,
+        numColsOfBoundsOnCoefficients, lowerBoundsOnCoefficients)
       lr.setLowerBoundsOnCoefficients(coef)
     }
 
-    if (urow != 0 && ucol != 0 && upperBoundsOnCoefficients != null) {
-      val coef = Matrices.dense(urow, ucol, upperBoundsOnCoefficients)
+    if (numRowsOfBoundsOnCoefficients != 0 &&
+      numColsOfBoundsOnCoefficients != 0 && upperBoundsOnCoefficients != null) {
+      val coef = Matrices.dense(numRowsOfBoundsOnCoefficients,
+        numColsOfBoundsOnCoefficients, upperBoundsOnCoefficients)
       lr.setUpperBoundsOnCoefficients(coef)
     }
 
