@@ -131,37 +131,27 @@ class SessionCatalog(
     CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
   }
 
-  /**
-    * This method provides a way to get a cached plan.
-    */
+  /** This method provides a way to get a cached plan. */
   def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
     tableRelationCache.get(t, c)
   }
 
-  /**
-    * This method provides a way to get a cached plan if the key exists.
-    */
+  /** This method provides a way to get a cached plan if the key exists. */
   def getCachedTableIfPresent(key: QualifiedTableName): LogicalPlan = {
     tableRelationCache.getIfPresent(key)
   }
 
-  /**
-    * This method provides a way to cache a plan.
-    */
+  /** This method provides a way to cache a plan. */
   def putTableInCache(t: QualifiedTableName, l: LogicalPlan): Unit = {
     tableRelationCache.put(t, l)
   }
 
-  /**
-    * This method provides a way to invalidate a cached plan.
-    */
+  /** This method provides a way to invalidate a cached plan. */
   def invalidateCachedTable(key: QualifiedTableName): Unit = {
     tableRelationCache.invalidate(key)
   }
 
-  /**
-    * This method provides a way to invalidate all the cached plans.
-    */
+  /** This method provides a way to invalidate all the cached plans. */
   def invalidateAllCachedTables(): Unit = {
     tableRelationCache.invalidateAll()
   }
