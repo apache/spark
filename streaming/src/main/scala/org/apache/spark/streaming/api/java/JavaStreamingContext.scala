@@ -141,6 +141,9 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Recreate a JavaStreamingContext from a checkpoint file.
    * @param path Path to the directory that was specified as the checkpoint directory
    */
+  @deprecated("Will be removed in 2.1.0. Use JavaStreamingContext.getOrCreate() instead; see " +
+              "http://spark.apache.org/docs/latest/streaming-programming-guide.html#checkpointing",
+              "2.0.0")
   def this(path: String) = this(new StreamingContext(path, SparkHadoopUtil.get.conf))
 
   /**
@@ -148,6 +151,9 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param path Path to the directory that was specified as the checkpoint directory
    *
    */
+  @deprecated("Will be removed in 2.1.0. Use JavaStreamingContext.getOrCreate() instead; see " +
+              "http://spark.apache.org/docs/latest/streaming-programming-guide.html#checkpointing",
+              "2.0.0")
   def this(path: String, hadoopConf: Configuration) = this(new StreamingContext(path, hadoopConf))
 
   /** The underlying SparkContext */

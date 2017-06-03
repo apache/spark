@@ -108,6 +108,9 @@ class StreamingContext private[streaming] (
    * @param hadoopConf Optional, configuration object if necessary for reading from
    *                   HDFS compatible filesystems
    */
+  @deprecated("Will be removed in 2.1.0. Use StreamingContext.getOrCreate() instead; see " +
+              "http://spark.apache.org/docs/latest/streaming-programming-guide.html#checkpointing",
+              "2.0.0")
   def this(path: String, hadoopConf: Configuration) =
     this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).orNull, null)
 
@@ -115,6 +118,9 @@ class StreamingContext private[streaming] (
    * Recreate a StreamingContext from a checkpoint file.
    * @param path Path to the directory that was specified as the checkpoint directory
    */
+  @deprecated("Will be removed in 2.1.0. Use StreamingContext.getOrCreate() instead; see " +
+              "http://spark.apache.org/docs/latest/streaming-programming-guide.html#checkpointing",
+              "2.0.0")
   def this(path: String) = this(path, SparkHadoopUtil.get.conf)
 
   /**
@@ -122,6 +128,9 @@ class StreamingContext private[streaming] (
    * @param path Path to the directory that was specified as the checkpoint directory
    * @param sparkContext Existing SparkContext
    */
+  @deprecated("Will be removed in 2.1.0. Use StreamingContext.getOrCreate() instead; see " +
+              "http://spark.apache.org/docs/latest/streaming-programming-guide.html#checkpointing",
+              "2.0.0")
   def this(path: String, sparkContext: SparkContext) = {
     this(
       sparkContext,
