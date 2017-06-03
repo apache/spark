@@ -26,6 +26,7 @@ SciPy is available in their environment.
 import sys
 import array
 import struct
+import json
 
 if sys.version >= '3':
     basestring = str
@@ -313,6 +314,19 @@ class DenseVector(Vector):
             raise ValueError("Unable to parse values from %s" % s)
         return DenseVector(values)
 
+    def toJson(self):
+        """
+        Converts the vector to a JSON string.
+
+        >>> v = Vectors.dense([1, 2, 9, 0])
+        >>> v.toJson()
+        '{"type": 1, "values": [1.0, 2.0, 9.0, 0.0]}'
+        >>> Vectors.fromJson(v.toJson())
+        DenseVector([1.0, 2.0, 9.0, 0.0])
+        """
+        data = {"type": 1, "values": self.values.tolist()}
+        return json.dumps(data, sort_keys=True)
+
     def __reduce__(self):
         return DenseVector, (self.array.tostring(),)
 
@@ -580,6 +594,20 @@ class SparseVector(Vector):
         return (
             SparseVector,
             (self.size, self.indices.tostring(), self.values.tostring()))
+
+    def toJson(self):
+        """
+        Converts the vector to a JSON string.
+
+        >>> v = Vectors.sparse(2, [1], [2.0])
+        >>> v.toJson()
+        '{"indices": [1], "size": 2, "type": 0, "values": [2.0]}'
+        >>> Vectors.fromJson(v.toJson())
+        SparseVector(2, {1: 2.0})
+        """
+        data = {"type": 0, "size": self.size, "indices": self.indices.tolist(),
+                "values": self.values.tolist()}
+        return json.dumps(data, sort_keys=True)
 
     @staticmethod
     def parse(s):
@@ -950,6 +978,25 @@ class Vectors(object):
         else:
             raise ValueError(
                 "Cannot find tokens '[' or '(' from the input string.")
+
+    @staticmethod
+    def fromJson(s):
+        """Parse a JSON representation back into the Vector.
+
+        >>> Vectors.fromJson("{\\"type\\":0,\\"size\\":2,\\"indices\\":[1],\\"values\\":[2.0]}")
+        SparseVector(2, {1: 2.0})
+        >>> Vectors.fromJson("{\\"type\\":1,\\"values\\":[1.0,2.0,43.0,4.0]}")
+        DenseVector([1.0, 2.0, 43.0, 4.0])
+        """
+        # Parse the input
+        parsed = json.loads(s)
+        vectorType = parsed["type"]
+        if vectorType == 0:
+            return Vectors.sparse(parsed["size"], zip(parsed["indices"], parsed["values"]))
+        elif vectorType == 1:
+            return Vectors.dense(parsed["values"])
+        else:
+            raise ValueError("do not regonize Vector type %d" % vectorType)
 
     @staticmethod
     def zeros(size):
