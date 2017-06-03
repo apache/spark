@@ -35,6 +35,12 @@
   </properties>
 
   <dependencies>
+    <!-- Added for sbt issue, expected to be evicted -->
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+      <version>2.10.3</version>
+    </dependency>
     <!-- Added for Hive Parquet SerDe -->
     <dependency>
       <groupId>com.twitter</groupId>
