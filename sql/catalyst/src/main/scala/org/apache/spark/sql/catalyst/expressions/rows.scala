@@ -43,7 +43,10 @@ trait BaseGenericInternalRow extends InternalRow {
   override def getFloat(ordinal: Int): Float = getAs(ordinal)
   override def getDouble(ordinal: Int): Double = getAs(ordinal)
   override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = getAs(ordinal)
-  override def getUTF8String(ordinal: Int): UTF8String = getAs(ordinal)
+  override def getUTF8String(ordinal: Int): UTF8String = genericGet(ordinal) match {
+    case s: String => UTF8String.fromString(s)
+    case _ => getAs(ordinal)
+  }
   override def getBinary(ordinal: Int): Array[Byte] = getAs(ordinal)
   override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
   override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
