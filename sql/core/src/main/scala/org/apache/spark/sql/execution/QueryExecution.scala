@@ -200,11 +200,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       """.stripMargin.trim
   }
 
-  override def toString: String = completeString(appendStats = false)
-
-  def toStringWithStats: String = completeString(appendStats = true)
-
-  private def completeString(appendStats: Boolean): String = {
+  override def toString: String = {
     def output = Utils.truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
     val analyzedPlan = Seq(
@@ -212,22 +208,26 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       stringOrError(analyzed.treeString(verbose = true))
     ).filter(_.nonEmpty).mkString("\n")
 
-    val optimizedPlanString = if (appendStats) {
-      // trigger to compute stats for logical plans
-      optimizedPlan.stats(sparkSession.sessionState.conf)
-      optimizedPlan.treeString(verbose = true, addSuffix = true)
-    } else {
-      optimizedPlan.treeString(verbose = true)
-    }
-
     s"""== Parsed Logical Plan ==
        |${stringOrError(logical.treeString(verbose = true))}
        |== Analyzed Logical Plan ==
        |$analyzedPlan
        |== Optimized Logical Plan ==
-       |${stringOrError(optimizedPlanString)}
+       |${stringOrError(optimizedPlan.treeString(verbose = true))}
        |== Physical Plan ==
        |${stringOrError(executedPlan.treeString(verbose = true))}
+    """.stripMargin.trim
+  }
+
+  def stringWithStats: String = {
+    // trigger to compute stats for logical plans
+    optimizedPlan.stats(sparkSession.sessionState.conf)
+
+    // only show optimized logical plan and physical plan
+    s"""== Optimized Logical Plan ==
+        |${stringOrError(optimizedPlan.treeString(verbose = true, addSuffix = true))}
+        |== Physical Plan ==
+        |${stringOrError(executedPlan.treeString(verbose = true))}
     """.stripMargin.trim
   }
 
