@@ -2329,6 +2329,9 @@
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
               <include>com.google.guava:guava</include>
+              <include>com.fasterxml.jackson.core:jackson-databind</include>
+              <include>com.fasterxml.jackson.core:jackson-annotations</include>
+              <include>com.fasterxml.jackson.core:jackson-core</include>
             </includes>
           </artifactSet>
           <relocations>
@@ -2342,6 +2345,13 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.fasterxml.jackson.core</pattern>
+              <shadedPattern>org.spark-project.jackson</shadedPattern>
+              <includes>
+                <include>com.fasterxml.jackson.core.**</include>
+              </includes>
             </relocation>
           </relocations>
         </configuration>
