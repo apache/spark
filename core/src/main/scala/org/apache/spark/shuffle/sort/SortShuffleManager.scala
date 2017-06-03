@@ -88,7 +88,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       shuffleId: Int,
       numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    if (SortShuffleWriter.shouldBypassMergeSort(conf, dependency)) {
+    if (SortShuffleManager.shouldBypassMergeSort(conf, dependency)) {
       // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
       // need map-side aggregation, then write numPartitions files directly and just concatenate
       // them at the end. This avoids doing serialization and deserialization twice to merge
@@ -168,6 +168,20 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
 
 
 private[spark] object SortShuffleManager extends Logging {
+
+  /**
+    * Helper method for determining whether a shuffle should use BypassMergeSort path.
+    */
+  def shouldBypassMergeSort(conf: SparkConf, dep: ShuffleDependency[_, _, _]): Boolean = {
+    // We cannot bypass sorting if we need to do map-side aggregation.
+    if (dep.mapSideCombine) {
+      require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
+      false
+    } else {
+      val bypassMergeThreshold: Int = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
+      dep.partitioner.numPartitions <= bypassMergeThreshold
+    }
+  }
 
   /**
    * The maximum number of shuffle output partitions that SortShuffleManager supports when
