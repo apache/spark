@@ -41,8 +41,6 @@ case class InMemoryTableScanExec(
 
   override val supportCodegen: Boolean = relation.useColumnarBatches
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
-
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     if (relation.useColumnarBatches) {
       val schema = relation.partitionStatistics.schema
@@ -80,7 +78,7 @@ case class InMemoryTableScanExec(
     }
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override def output: Seq[Attribute] = attributes
 
