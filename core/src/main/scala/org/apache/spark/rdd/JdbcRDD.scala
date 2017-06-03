@@ -77,6 +77,7 @@ class JdbcRDD[T: ClassTag](
 
   override def compute(thePart: Partition, context: TaskContext): Iterator[T] = new NextIterator[T]
   {
+    var closed = false
     context.addTaskCompletionListener{ context => closeIfNeeded() }
     val part = thePart.asInstanceOf[JdbcPartition]
     val conn = getConnection()
@@ -110,6 +111,7 @@ class JdbcRDD[T: ClassTag](
     }
 
     override def close() {
+      if (closed) return
       try {
         if (null != rs) {
           rs.close()
@@ -132,6 +134,7 @@ class JdbcRDD[T: ClassTag](
       } catch {
         case e: Exception => logWarning("Exception closing connection", e)
       }
+      closed = true
     }
   }
 }
