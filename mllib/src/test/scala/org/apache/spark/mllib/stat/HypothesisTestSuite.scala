@@ -257,4 +257,200 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(rCompResult.statistic ~== rKSStat relTol 1e-4)
     assert(rCompResult.pValue ~== rKSPVal relTol 1e-4)
   }
+
+  test("one sample Anderson-Darling test: R implementation equivalence") {
+    /*
+      Data generated with R
+      > sessionInfo() #truncated
+        R version 3.2.0 (2015-04-16)
+        Platform: x86_64-apple-darwin13.4.0 (64-bit)
+        Running under: OS X 10.10.2 (Yosemite)
+      > set.seed(10)
+      > dataNorm <- rnorm(20)
+      > dataExp <- rexp(20)
+      > dataUnif <- runif(20)
+      > mean(dataNorm)
+      [1] -0.06053267
+      > sd(dataNorm)
+      [1] 0.7999093
+      > mean(dataExp)
+      [1] 1.044636
+      > sd(dataExp)
+      [1] 0.96727
+      > mean(dataUnif)
+      [1] 0.4420219
+      > sd(dataUnif)
+      [1] 0.2593285
+    */
+
+    val dataNorm = sc.parallelize(
+      Array(0.0187461709418264, -0.184252542069064, -1.37133054992251,
+        -0.599167715783718, 0.294545126567508, 0.389794300700167, -1.20807617542949,
+        -0.363676017470862, -1.62667268170309, -0.256478394123992, 1.10177950308713,
+        0.755781508027337, -0.238233556018718, 0.98744470341339, 0.741390128383824,
+        0.0893472664958216, -0.954943856152377, -0.195150384667239, 0.92552126209408,
+        0.482978524836611)
+    )
+
+    val dataExp = sc.parallelize(
+      Array(0.795082630547595, 1.39629918233218, 1.39810742601556, 1.11045944034578,
+        0.170421596598791, 1.91878133072498, 0.166443939786404, 0.97028998914142, 0.010571192484349,
+        2.79300971312409, 2.35461177957702, 0.667238388210535, 0.522243486717343, 0.146712897811085,
+        0.751234306178963, 2.28856621111248, 0.0688535687513649, 0.282713153399527,
+        0.0514786350540817, 3.02959313971882)
+    )
+
+    val dataUnif = sc.parallelize(
+      Array(0.545859839767218, 0.372763097286224, 0.961302414536476, 0.257341569056734,
+        0.207951683318242, 0.861382439732552, 0.464391982648522, 0.222867433447391,
+        0.623549601528794, 0.203647700604051, 0.0196734135970473, 0.797993005951867,
+        0.274318896699697, 0.166609104024246, 0.170151718193665, 0.4885059366934,
+        0.711409077281132, 0.591934921452776, 0.517156876856461, 0.381627685856074)
+    )
+
+    /* normality test in R
+      > library(nortest)
+      > ad.test(dataNorm)
+            Anderson-Darling normality test
+      data:  dataNorm
+      A = 0.27523, p-value = 0.6216
+      > ad.test(dataExp)
+             Anderson-Darling normality test
+      data:  dataExp
+      A = 0.79034, p-value = 0.03336
+      > ad.test(dataUnif)
+            Anderson-Darling normality test
+      data:  dataUnif
+      A = 0.31831, p-value = 0.5114
+    */
+
+    val rNormADStats = Map("norm" -> 0.27523, "exp" -> 0.79034, "unif" -> 0.31831)
+    val params = Map(
+      "norm" -> (-0.06053267, 0.7999093),
+      "exp" -> (1.044636, 0.96727),
+      "unif" -> (0.4420219, 0.2593285)
+    )
+
+    assert(
+      Statistics.andersonDarlingTest(
+        dataNorm,
+        "norm",
+        params("norm")._1,
+        params("norm")._2
+      ).statistic
+        ~== rNormADStats("norm") relTol 1e-4
+    )
+
+    assert(
+      Statistics.andersonDarlingTest(
+        dataExp,
+        "norm",
+        params("exp")._1,
+        params("exp")._2
+      ).statistic
+        ~== rNormADStats("exp") relTol 1e-4
+    )
+
+    assert(
+      Statistics.andersonDarlingTest(
+        dataUnif,
+        "norm",
+        params("unif")._1,
+        params("unif")._2
+      ).statistic
+        ~== rNormADStats("unif") relTol 1e-4
+    )
+  }
+
+  test("one sample Anderson-Darling test: SciPy implementation equivalence") {
+    val dataNorm = sc.parallelize(
+      Array(0.0187461709418264, -0.184252542069064, -1.37133054992251,
+        -0.599167715783718, 0.294545126567508, 0.389794300700167, -1.20807617542949,
+        -0.363676017470862, -1.62667268170309, -0.256478394123992, 1.10177950308713,
+        0.755781508027337, -0.238233556018718, 0.98744470341339, 0.741390128383824,
+        0.0893472664958216, -0.954943856152377, -0.195150384667239, 0.92552126209408,
+        0.482978524836611)
+    )
+
+    val dataExp = sc.parallelize(
+      Array(0.795082630547595, 1.39629918233218, 1.39810742601556, 1.11045944034578,
+        0.170421596598791, 1.91878133072498, 0.166443939786404, 0.97028998914142, 0.010571192484349,
+        2.79300971312409, 2.35461177957702, 0.667238388210535, 0.522243486717343, 0.146712897811085,
+        0.751234306178963, 2.28856621111248, 0.0688535687513649, 0.282713153399527,
+        0.0514786350540817, 3.02959313971882)
+    )
+
+    val params = Map("norm" -> (-0.06053267, 0.7999093))
+
+    /*
+      normality test in scipy: comparing critical values
+      >>> from scipy.stats import anderson
+      >>> # drop in values as arrays
+      ...
+      >>> anderson(dataNorm, "norm")
+      (0.27523090925717852, array([ 0.506,  0.577,  0.692,  0.807,  0.96 ]),
+      array([ 15. ,  10. ,   5. ,   2.5,   1. ]))
+      >>> anderson(dataExp, "expon")
+      (0.45714575153590431, array([ 0.895,  1.047,  1.302,  1.559,  1.9  ]),
+      array([ 15. ,  10. ,   5. ,   2.5,   1. ]))
+    */
+    val sciPyNormCVs = Array(0.506, 0.577, 0.692, 0.807, 0.96)
+    val adNormCVs = Statistics.andersonDarlingTest(
+      dataNorm,
+      "norm",
+      params("norm")._1,
+      params("norm")._2
+    ).criticalValues.values.toArray
+
+    assert(Vectors.dense(adNormCVs) ~== Vectors.dense(sciPyNormCVs) relTol 1e-3)
+
+    val sciPyExpCVs = Array(0.895, 1.047, 1.302, 1.559, 1.9)
+    val scaleParam = dataExp.mean()
+    val adExpCVs = Statistics.andersonDarlingTest(dataExp, "exp", scaleParam).criticalValues
+    assert(Vectors.dense(adExpCVs.values.toArray) ~== Vectors.dense(sciPyExpCVs) relTol 1e-3)
+
+    /*
+      >>> from scipy.stats.distributions import logistic
+      >>> logistic.fit(dataExp)
+      (0.93858397620886713, 0.55032469036705811)
+      >>> anderson(dataExp, "logistic")
+      (0.72718900969834621, array([ 0.421,  0.556,  0.652,  0.76 ,  0.895,  0.998]),
+      array([ 25. ,  10. ,   5. ,   2.5,   1. ,   0.5]))
+    */
+    val sciPyLogADStat = 0.72718900969834621
+    val sciPyLogCVs = Array(0.421, 0.556, 0.652, 0.76, 0.895, 0.998)
+    val adTestExpLog = Statistics.andersonDarlingTest(
+      dataExp,
+      "logistic",
+      0.93858397620886713,
+      0.55032469036705811)
+
+    assert(adTestExpLog.statistic ~== sciPyLogADStat relTol 1e-4)
+    assert(
+      Vectors.dense(adTestExpLog.criticalValues.values.toArray)
+        ~== Vectors.dense(sciPyLogCVs) relTol 1e-3
+    )
+  }
+
+  test("one sample Anderson-Darling test: gumbel and weibull") {
+    val dataGumbel = sc.parallelize(
+      Array(2.566070163268321, 2.797136867663637, 1.301680801603979, 4.968891406617431,
+        2.736825109869105, 1.7156182506225437, 4.849728670708153, 2.2718140406461034,
+        1.7349531624810886, 1.7220364354275257, 2.755987927298529, 1.5140172593783077,
+        1.3178298892942695, 4.031431825825987, 2.062204842676713, 1.3800199221612661,
+        3.4851421470537165, 1.8851564957011937, 3.6773776009634975, 2.5361429810121083)
+    )
+    val gumbelResult = Statistics.andersonDarlingTest(dataGumbel, "gumbel", 2, 1)
+    assert(gumbelResult.statistic < gumbelResult.criticalValues(0.25))
+
+    val dataWeibull = sc.parallelize(
+      Array(0.14611490926735415, 0.7338331105666904, 1.3064941546142883, 0.8848645072661437,
+        0.4041816812459189, 1.1742756450140364, 0.9327038477408471, 0.34414711566818174,
+        1.7224814642768693, 0.9173020785734072, 0.6353718988539053, 1.657112759681775,
+        0.5634766278998253, 1.2568957312640854, 1.7248031467826292, 0.8116808125903335,
+        1.1108852360343489, 0.2983634954239019, 0.7063880887496812, 0.6382180292078736)
+    )
+    val weibullResult = Statistics.andersonDarlingTest(dataWeibull, "weibull", 2, 1)
+    assert(weibullResult.statistic < weibullResult.criticalValues(0.25))
+  }
 }

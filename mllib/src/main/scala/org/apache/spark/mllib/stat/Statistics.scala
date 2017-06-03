@@ -25,8 +25,7 @@ import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.correlation.Correlations
-import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSqTestResult, KolmogorovSmirnovTest,
-  KolmogorovSmirnovTestResult}
+import org.apache.spark.mllib.stat.test._
 import org.apache.spark.rdd.RDD
 
 /**
@@ -230,5 +229,33 @@ object Statistics {
       distName: String,
       params: Double*): KolmogorovSmirnovTestResult = {
     kolmogorovSmirnovTest(data.rdd.asInstanceOf[RDD[Double]], distName, params: _*)
+  }
+
+  /**
+    * Conduct one-sample Anderson-Darling test for the null hypothesis that the data
+    * comes from a given theoretical distribution. The Anderson-Darling test is an alternative
+    * to the Kolmogorov-Smirnov test, and is more adequate at identifying departures from the
+    * theoretical distribution at the tails. The implementation returns an
+    * `AndersonDarlingTestResult`, which includes the statistic, the critical values at varying
+    * significance levels, and the null hypothesis. Note that the critical values are calculated
+    * assuming the parameters have been calculated from the data sample.
+    * @param data the data to be tested
+    * @param distName {"norm", "exp", "gumbel", "logistic" or "weibull"}. Name of the distribution
+    *                 to test against.
+    * @param params provides the parameters for the theoretical distribution.
+    *               The order of parameters are as follow
+    *               Normal -> [mu, sigma] (location, scale)
+    *               Exponential -> [1 / lambda] (scale)
+    *               Gumbel -> [mu, beta] (location, scale)
+    *               Logistic -> [mu, s] (location, scale)
+    *               Weibull -> [lambda, k]  (scale, shape)
+    * @return [[org.apache.spark.mllib.stat.test.AndersonDarlingTestResult]] object containing
+    *        the test statistic, various critical values at different significance levels,
+    *        and a summary of the null hypothesis
+    */
+  @varargs
+  def andersonDarlingTest(data: RDD[Double], distName: String, params: Double*)
+  : AndersonDarlingTestResult = {
+    AndersonDarlingTest.testOneSample(data, distName, params: _*)
   }
 }

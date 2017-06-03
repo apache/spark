@@ -129,3 +129,22 @@ private[stat] class StreamingTestResult @Since("1.6.0") (
   }
 }
 
+/**
+ * :: Experimental ::
+ * Object containing the test results for the Anderson-Darling test.
+ */
+@Experimental
+class AndersonDarlingTestResult private[stat] (
+    val statistic: Double,
+    val criticalValues: Map[Double, Double],
+    val nullHypothesis: String) {
+
+  override def toString: String = {
+    "Anderson-Darling test summary:\n" +
+      s"statistic = $statistic \n" +
+      s"critical-values for a given significance:\n" +
+      criticalValues.map { case (sig, cv) =>
+        "\t" + sig.toString + " -> " + cv.toString
+      }.mkString("\n") + "\n" + s"Null Hypothesis: $nullHypothesis"
+  }
+}
