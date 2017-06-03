@@ -37,7 +37,8 @@ import org.apache.spark.sql.hive.client.HiveClient
  * A persistent implementation of the system catalog using Hive.
  * All public methods must be synchronized for thread-safety.
  */
-private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configuration)
+private[spark] class HiveExternalCatalog(private[hive] val client: HiveClient,
+                                         hadoopConf: Configuration)
   extends ExternalCatalog with Logging {
 
   import CatalogTypes.TablePartitionSpec

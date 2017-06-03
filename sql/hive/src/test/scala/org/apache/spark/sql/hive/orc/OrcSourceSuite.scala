@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{QueryTest, Row}
@@ -145,6 +146,81 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
       Row.fromSeq(Seq.fill(11)(null)))
 
     sql("DROP TABLE IF EXISTS orcNullValues")
+  }
+
+  test("Read char/varchar column written by Hive") {
+    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+    val location = Utils.createTempDir()
+    val uri = location.toURI
+    try {
+      hiveClient.runSqlHive(
+        s"""
+          |CREATE EXTERNAL TABLE hive_orc(
+          |  a STRING,
+          |  b CHAR(10),
+          |  c VARCHAR(10))
+          |STORED AS orc
+          |LOCATION '$uri'""".stripMargin)
+
+      hiveClient.runSqlHive(
+        "INSERT INTO TABLE hive_orc SELECT 'a', 'b', 'c' FROM (SELECT 1) t")
+
+      // We create a different table in Spark using the same schema which points to
+      // the same location.
+      spark.sql(
+        s"""
+           |CREATE EXTERNAL TABLE spark_orc(
+           |  a STRING,
+           |  b CHAR(10),
+           |  c VARCHAR(10))
+           |STORED AS orc
+           |LOCATION '$uri'""".stripMargin)
+      val result = Row("a", "b         ", "c")
+      checkAnswer(spark.table("hive_orc"), result)
+      checkAnswer(spark.table("spark_orc"), result)
+    } finally {
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS spark_orc")
+      Utils.deleteRecursively(location)
+    }
+  }
+
+  test("Read char/varchar column written by Spark in Hive") {
+    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+    val location = Utils.createTempDir()
+    val uri = location.toURI
+
+    try {
+      spark.sql(
+        s"""
+         |CREATE EXTERNAL TABLE spark_orc(
+         |  a STRING,
+         |  b CHAR(10),
+         |  c VARCHAR(10))
+         |STORED AS orc
+         |LOCATION '$uri'""".stripMargin)
+
+      spark.sql("INSERT INTO TABLE spark_orc SELECT 'a', 'b', 'c' FROM (SELECT 1) t")
+
+      // We create a different table in Hive, using the same schema which points to
+      // the same location
+      hiveClient.runSqlHive(
+        s"""
+          |CREATE EXTERNAL TABLE hive_orc(
+          |  a STRING,
+          |  b CHAR(10),
+          |  c VARCHAR(10))
+          |STORED AS orc
+          |LOCATION '$uri'""".stripMargin)
+
+      val result = Row("a", "b         ", "c")
+      checkAnswer(spark.table("hive_orc"), result)
+      checkAnswer(spark.table("spark_orc"), result)
+    } finally {
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS spark_orc")
+      Utils.deleteRecursively(location)
+    }
   }
 }
 
