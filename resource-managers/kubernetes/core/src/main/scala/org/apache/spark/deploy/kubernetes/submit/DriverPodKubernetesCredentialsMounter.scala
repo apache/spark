@@ -53,41 +53,50 @@ private[spark] trait DriverPodKubernetesCredentialsMounter {
 }
 
 private[spark] class DriverPodKubernetesCredentialsMounterImpl(
-    kubernetesAppId: String,
-    submitterLocalDriverPodKubernetesCredentials: KubernetesCredentials,
-    maybeUserSpecifiedMountedClientKeyFile: Option[String],
-    maybeUserSpecifiedMountedClientCertFile: Option[String],
-    maybeUserSpecifiedMountedOAuthTokenFile: Option[String],
-    maybeUserSpecifiedMountedCaCertFile: Option[String])
+      kubernetesAppId: String,
+      submitterLocalDriverPodKubernetesCredentials: KubernetesCredentials,
+      maybeUserSpecifiedMountedClientKeyFile: Option[String],
+      maybeUserSpecifiedMountedClientCertFile: Option[String],
+      maybeUserSpecifiedMountedOAuthTokenFile: Option[String],
+      maybeUserSpecifiedMountedCaCertFile: Option[String])
     extends DriverPodKubernetesCredentialsMounter {
 
   override def setDriverPodKubernetesCredentialLocations(sparkConf: SparkConf): SparkConf = {
     val resolvedMountedClientKeyFile = resolveSecretLocation(
-      maybeUserSpecifiedMountedClientKeyFile,
-      submitterLocalDriverPodKubernetesCredentials.clientKeyDataBase64,
-      DRIVER_CREDENTIALS_CLIENT_KEY_PATH)
+        maybeUserSpecifiedMountedClientKeyFile,
+        submitterLocalDriverPodKubernetesCredentials.clientKeyDataBase64,
+        DRIVER_CREDENTIALS_CLIENT_KEY_PATH)
     val resolvedMountedClientCertFile = resolveSecretLocation(
-      maybeUserSpecifiedMountedClientCertFile,
-      submitterLocalDriverPodKubernetesCredentials.clientCertDataBase64,
-      DRIVER_CREDENTIALS_CLIENT_CERT_PATH)
+        maybeUserSpecifiedMountedClientCertFile,
+        submitterLocalDriverPodKubernetesCredentials.clientCertDataBase64,
+        DRIVER_CREDENTIALS_CLIENT_CERT_PATH)
     val resolvedMountedCaCertFile = resolveSecretLocation(
-      maybeUserSpecifiedMountedCaCertFile,
-      submitterLocalDriverPodKubernetesCredentials.caCertDataBase64,
-      DRIVER_CREDENTIALS_CA_CERT_PATH)
+        maybeUserSpecifiedMountedCaCertFile,
+        submitterLocalDriverPodKubernetesCredentials.caCertDataBase64,
+        DRIVER_CREDENTIALS_CA_CERT_PATH)
     val resolvedMountedOAuthTokenFile = resolveSecretLocation(
-      maybeUserSpecifiedMountedOAuthTokenFile,
-      submitterLocalDriverPodKubernetesCredentials.oauthTokenBase64,
-      DRIVER_CREDENTIALS_OAUTH_TOKEN_PATH)
+        maybeUserSpecifiedMountedOAuthTokenFile,
+        submitterLocalDriverPodKubernetesCredentials.oauthTokenBase64,
+        DRIVER_CREDENTIALS_OAUTH_TOKEN_PATH)
     val sparkConfWithCredentialLocations = sparkConf.clone()
-      .setOption(KUBERNETES_DRIVER_MOUNTED_CA_CERT_FILE, resolvedMountedCaCertFile)
-      .setOption(KUBERNETES_DRIVER_MOUNTED_CLIENT_KEY_FILE, resolvedMountedClientKeyFile)
-      .setOption(KUBERNETES_DRIVER_MOUNTED_CLIENT_CERT_FILE, resolvedMountedClientCertFile)
-      .setOption(KUBERNETES_DRIVER_MOUNTED_OAUTH_TOKEN, resolvedMountedOAuthTokenFile)
-    sparkConfWithCredentialLocations.get(KUBERNETES_DRIVER_OAUTH_TOKEN).foreach { _ =>
-      sparkConfWithCredentialLocations.set(KUBERNETES_DRIVER_OAUTH_TOKEN, "<present_but_redacted>")
-    }
-    sparkConfWithCredentialLocations.get(KUBERNETES_SUBMIT_OAUTH_TOKEN).foreach { _ =>
-      sparkConfWithCredentialLocations.set(KUBERNETES_SUBMIT_OAUTH_TOKEN, "<present_but_redacted>")
+      .setOption(
+          s"$APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX",
+          resolvedMountedCaCertFile)
+      .setOption(
+          s"$APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_KEY_FILE_CONF_SUFFIX",
+          resolvedMountedClientKeyFile)
+      .setOption(
+          s"$APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX",
+          resolvedMountedClientCertFile)
+      .setOption(
+          s"$APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$OAUTH_TOKEN_FILE_CONF_SUFFIX",
+          resolvedMountedOAuthTokenFile)
+    // Redact all OAuth token values
+    sparkConfWithCredentialLocations
+        .getAll
+        .filter(_._1.endsWith(OAUTH_TOKEN_CONF_SUFFIX)).map(_._1)
+        .foreach {
+      sparkConfWithCredentialLocations.set(_, "<present_but_redacted>")
     }
     sparkConfWithCredentialLocations
   }
@@ -141,9 +150,9 @@ private[spark] class DriverPodKubernetesCredentialsMounterImpl(
   }
 
   private def resolveSecretLocation(
-    mountedUserSpecified: Option[String],
-    valueMountedFromSubmitter: Option[String],
-    mountedCanonicalLocation: String): Option[String] = {
+      mountedUserSpecified: Option[String],
+      valueMountedFromSubmitter: Option[String],
+      mountedCanonicalLocation: String): Option[String] = {
     mountedUserSpecified.orElse(valueMountedFromSubmitter.map( _ => {
       mountedCanonicalLocation
     }))
@@ -167,7 +176,7 @@ private[spark] class DriverPodKubernetesCredentialsMounterImpl(
 }
 
 private class OptionSettableSparkConf(sparkConf: SparkConf) {
-  def setOption[T](configEntry: OptionalConfigEntry[T], option: Option[T]): SparkConf = {
+  def setOption(configEntry: String, option: Option[String]): SparkConf = {
     option.map( opt => {
       sparkConf.set(configEntry, opt)
     }).getOrElse(sparkConf)

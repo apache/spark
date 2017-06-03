@@ -22,26 +22,24 @@ import java.util.UUID
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.google.common.base.Charsets
-import com.google.common.io.Files
+import com.google.common.io.{BaseEncoding, Files}
 import okhttp3.RequestBody
 import okio.Okio
-import org.mockito.Matchers.any
-import org.mockito.Mockito
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
+import org.mockito.{ArgumentCaptor, Mockito}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar._
 import retrofit2.{Call, Response}
 
 import org.apache.spark.{SparkFunSuite, SSLOptions}
 import org.apache.spark.deploy.kubernetes.CompressionUtils
-import org.apache.spark.deploy.rest.kubernetes.{ResourceStagingServiceRetrofit, RetrofitClientFactory}
+import org.apache.spark.deploy.rest.kubernetes.{ResourceStagingServiceRetrofit, RetrofitClientFactory, StagedResourcesOwner}
 import org.apache.spark.util.Utils
 
 private[spark] class SubmittedDependencyUploaderSuite extends SparkFunSuite with BeforeAndAfter {
   import SubmittedDependencyUploaderSuite.createTempFile
 
   private val OBJECT_MAPPER = new ObjectMapper().registerModule(new DefaultScalaModule)
+  private val BASE_64 = BaseEncoding.base64()
   private val APP_ID = "app-id"
   private val LABELS = Map("label1" -> "label1value", "label2" -> "label2value")
   private val NAMESPACE = "namespace"
@@ -61,18 +59,31 @@ private[spark] class SubmittedDependencyUploaderSuite extends SparkFunSuite with
     trustStore = Some(TRUSTSTORE_FILE),
     trustStorePassword = Some(TRUSTSTORE_PASSWORD),
     trustStoreType = Some(TRUSTSTORE_TYPE))
+  private val CLIENT_KEY_FILE = createTempFile("pem")
+  private val CLIENT_CERT_FILE = createTempFile("pem")
+  private val OAUTH_TOKEN = "token"
   private var retrofitClientFactory: RetrofitClientFactory = _
   private var retrofitClient: ResourceStagingServiceRetrofit = _
+  private var resourcesOwnerCaptor: ArgumentCaptor[RequestBody] = _
+  private var resourcesDataCaptor: ArgumentCaptor[RequestBody] = _
 
   private var dependencyUploaderUnderTest: SubmittedDependencyUploader = _
 
   before {
+    resourcesOwnerCaptor = ArgumentCaptor.forClass(classOf[RequestBody])
+    resourcesDataCaptor = ArgumentCaptor.forClass(classOf[RequestBody])
     retrofitClientFactory = mock[RetrofitClientFactory]
     retrofitClient = mock[ResourceStagingServiceRetrofit]
     Mockito.when(
       retrofitClientFactory.createRetrofitClient(
         STAGING_SERVER_URI, classOf[ResourceStagingServiceRetrofit], STAGING_SERVER_SSL_OPTIONS))
       .thenReturn(retrofitClient)
+    val responseCall = mock[Call[SubmittedResourceIdAndSecret]]
+    Mockito.when(responseCall.execute()).thenReturn(
+        Response.success(SubmittedResourceIdAndSecret("resourceId", "resourceSecret")))
+    Mockito.when(retrofitClient.uploadResources(
+      resourcesDataCaptor.capture(), resourcesOwnerCaptor.capture()))
+      .thenReturn(responseCall)
     dependencyUploaderUnderTest = new SubmittedDependencyUploaderImpl(
       APP_ID,
       LABELS,
@@ -85,38 +96,24 @@ private[spark] class SubmittedDependencyUploaderSuite extends SparkFunSuite with
   }
 
   test("Uploading jars should contact the staging server with the appropriate parameters") {
-    val capturingArgumentsAnswer = new UploadDependenciesArgumentsCapturingAnswer(
-      SubmittedResourceIdAndSecret("resourceId", "resourceSecret"))
-    Mockito.when(retrofitClient.uploadResources(any(), any(), any(), any()))
-      .thenAnswer(capturingArgumentsAnswer)
     dependencyUploaderUnderTest.uploadJars()
-    testUploadSendsCorrectFiles(LOCAL_JARS, capturingArgumentsAnswer)
+    testUploadSendsCorrectFiles(LOCAL_JARS)
   }
 
   test("Uploading files should contact the staging server with the appropriate parameters") {
-    val capturingArgumentsAnswer = new UploadDependenciesArgumentsCapturingAnswer(
-      SubmittedResourceIdAndSecret("resourceId", "resourceSecret"))
-    Mockito.when(retrofitClient.uploadResources(any(), any(), any(), any()))
-      .thenAnswer(capturingArgumentsAnswer)
     dependencyUploaderUnderTest.uploadFiles()
-    testUploadSendsCorrectFiles(LOCAL_FILES, capturingArgumentsAnswer)
+    testUploadSendsCorrectFiles(LOCAL_FILES)
   }
 
-  private def testUploadSendsCorrectFiles(
-      expectedFiles: Seq[String],
-      capturingArgumentsAnswer: UploadDependenciesArgumentsCapturingAnswer) = {
-    val requestLabelsBytes = requestBodyBytes(capturingArgumentsAnswer.podLabelsArg)
-    val requestLabelsString = new String(requestLabelsBytes, Charsets.UTF_8)
-    val requestLabelsMap = OBJECT_MAPPER.readValue(
-      requestLabelsString, classOf[Map[String, String]])
-    assert(requestLabelsMap === LABELS)
-    val requestNamespaceBytes = requestBodyBytes(capturingArgumentsAnswer.podNamespaceArg)
-    val requestNamespaceString = new String(requestNamespaceBytes, Charsets.UTF_8)
-    assert(requestNamespaceString === NAMESPACE)
-
+  private def testUploadSendsCorrectFiles(expectedFiles: Seq[String]) = {
+    val resourceOwnerString = new String(
+        requestBodyBytes(resourcesOwnerCaptor.getValue), Charsets.UTF_8)
+    val resourceOwner = OBJECT_MAPPER.readValue(resourceOwnerString, classOf[StagedResourcesOwner])
+    assert(resourceOwner.ownerLabels === LABELS)
+    assert(resourceOwner.ownerNamespace === NAMESPACE)
     val unpackedFilesDir = Utils.createTempDir(namePrefix = "test-unpacked-files")
     val compressedBytesInput = new ByteArrayInputStream(
-      requestBodyBytes(capturingArgumentsAnswer.podResourcesArg))
+        requestBodyBytes(resourcesDataCaptor.getValue()))
     CompressionUtils.unpackTarStreamToDirectory(compressedBytesInput, unpackedFilesDir)
     val writtenFiles = unpackedFilesDir.listFiles
     assert(writtenFiles.size === expectedFiles.size)
@@ -145,25 +142,6 @@ private[spark] class SubmittedDependencyUploaderSuite extends SparkFunSuite with
       }
       outputStream.toByteArray
     }
-  }
-}
-
-private class UploadDependenciesArgumentsCapturingAnswer(returnValue: SubmittedResourceIdAndSecret)
-    extends Answer[Call[SubmittedResourceIdAndSecret]] {
-
-  var podLabelsArg: RequestBody = _
-  var podNamespaceArg: RequestBody = _
-  var podResourcesArg: RequestBody = _
-  var kubernetesCredentialsArg: RequestBody = _
-
-  override def answer(invocationOnMock: InvocationOnMock): Call[SubmittedResourceIdAndSecret] = {
-    podLabelsArg = invocationOnMock.getArgumentAt(0, classOf[RequestBody])
-    podNamespaceArg = invocationOnMock.getArgumentAt(1, classOf[RequestBody])
-    podResourcesArg = invocationOnMock.getArgumentAt(2, classOf[RequestBody])
-    kubernetesCredentialsArg = invocationOnMock.getArgumentAt(3, classOf[RequestBody])
-    val responseCall = mock[Call[SubmittedResourceIdAndSecret]]
-    Mockito.when(responseCall.execute()).thenReturn(Response.success(returnValue))
-    responseCall
   }
 }
 

@@ -451,6 +451,69 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.authenticate.resourceStagingServer.caCertFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the CA cert file for connecting to the Kubernetes API server over TLS from the resource staging server when
+    it monitors objects in determining when to clean up resource bundles.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.resourceStagingServer.clientKeyFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the client key file for authenticating against the Kubernetes API server from the resource staging server
+    when it monitors objects in determining when to clean up resource bundles. The resource staging server must have
+    credentials that allow it to view API objects in any namespace.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.resourceStagingServer.clientCertFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the client cert file for authenticating against the Kubernetes API server from the resource staging server
+    when it monitors objects in determining when to clean up resource bundles. The resource staging server must have
+    credentials that allow it to view API objects in any namespace.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.resourceStagingServer.oauthToken</code></td>
+  <td>(none)</td>
+  <td>
+    OAuth token value for authenticating against the Kubernetes API server from the resource staging server
+    when it monitors objects in determining when to clean up resource bundles. The resource staging server must have
+    credentials that allow it to view API objects in any namespace. Note that this cannot be set at the same time as
+    <code>spark.kubernetes.authenticate.resourceStagingServer.oauthTokenFile</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.resourceStagingServer.oauthTokenFile</code></td>
+  <td>(none)</td>
+  <td>
+    File containing the OAuth token to use when authenticating against the against the Kubernetes API server from the
+    resource staging server, when it monitors objects in determining when to clean up resource bundles. The resource
+    staging server must have credentials that allow it to view API objects in any namespace. Note that this cannot be
+    set at the same time as <code>spark.kubernetes.authenticate.resourceStagingServer.oauthToken</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.resourceStagingServer.useServiceAccountCredentials</code></td>
+  <td>true</td>
+  <td>
+    Whether or not to use a service account token and a service account CA certificate when the resource staging server
+    authenticates to Kubernetes. If this is set, interactions with Kubernetes will authenticate using a token located at
+    <code>/var/run/secrets/kubernetes.io/serviceaccount/token</code> and the CA certificate located at
+    <code>/var/run/secrets/kubernetes.io/serviceaccount/ca.crt</code>. Note that if
+    <code>spark.kubernetes.authenticate.resourceStagingServer.oauthTokenFile</code> is set, it takes precedence
+    over the usage of the service account token file. Also, if
+    <code>spark.kubernetes.authenticate.resourceStagingServer.caCertFile</code> is set, it takes precedence over using
+    the service account's CA certificate file. This generally should be set to true (the default value) when the
+    resource staging server is deployed as a Kubernetes pod, but should be set to false if the resource staging server
+    is deployed by other means (i.e. when running the staging server process outside of Kubernetes). The resource
+    staging server must have credentials that allow it to view API objects in any namespace.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.memoryOverhead</code></td>
   <td>executorMemory * 0.10, with minimum of 384</td>
   <td>

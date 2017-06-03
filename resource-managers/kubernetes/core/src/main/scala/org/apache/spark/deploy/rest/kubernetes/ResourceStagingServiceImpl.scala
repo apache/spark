@@ -31,58 +31,28 @@ import org.apache.spark.deploy.kubernetes.submit.SubmittedResourceIdAndSecret
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[spark] class ResourceStagingServiceImpl(dependenciesRootDir: File)
+private[spark] class ResourceStagingServiceImpl(
+      stagedResourcesStore: StagedResourcesStore,
+      stagedResourcesCleaner: StagedResourcesCleaner)
     extends ResourceStagingService with Logging {
 
-  private val SECURE_RANDOM = new SecureRandom()
-  // TODO clean up these resources based on the driver's lifecycle
-  private val stagedResources = TrieMap.empty[String, StagedResources]
-
   override def uploadResources(
-      podLabels: Map[String, String],
-      podNamespace: String,
       resources: InputStream,
-      kubernetesCredentials: KubernetesCredentials): SubmittedResourceIdAndSecret = {
-    val resourceId = UUID.randomUUID().toString
-    val secretBytes = new Array[Byte](1024)
-    SECURE_RANDOM.nextBytes(secretBytes)
-    val resourceSecret = resourceId + "-" + BaseEncoding.base64().encode(secretBytes)
-
-    val namespaceDir = new File(dependenciesRootDir, podNamespace)
-    val resourcesDir = new File(namespaceDir, resourceId)
-    try {
-      if (!resourcesDir.exists()) {
-        if (!resourcesDir.mkdirs()) {
-          throw new SparkException("Failed to create dependencies directory for application" +
-            s" at ${resourcesDir.getAbsolutePath}")
-        }
-      }
-      // TODO encrypt the written data with the secret.
-      val resourcesTgz = new File(resourcesDir, "resources.data")
-      Utils.tryWithResource(new FileOutputStream(resourcesTgz)) { ByteStreams.copy(resources, _) }
-      stagedResources(resourceId) = StagedResources(
-        resourceSecret,
-        podLabels,
-        podNamespace,
-        resourcesTgz,
-        kubernetesCredentials)
-      SubmittedResourceIdAndSecret(resourceId, resourceSecret)
-    } catch {
-      case e: Throwable =>
-        if (!resourcesDir.delete()) {
-          logWarning(s"Failed to delete application directory $resourcesDir.")
-        }
-        throw e
-    }
+      resourcesOwner: StagedResourcesOwner): SubmittedResourceIdAndSecret = {
+    val stagedResources = stagedResourcesStore.addResources(
+        resourcesOwner.ownerNamespace, resources)
+    stagedResourcesCleaner.registerResourceForCleaning(
+      stagedResources.resourceId, resourcesOwner)
+    SubmittedResourceIdAndSecret(stagedResources.resourceId, stagedResources.resourceSecret)
   }
 
   override def downloadResources(resourceId: String, resourceSecret: String): StreamingOutput = {
-    val resource = stagedResources
-        .get(resourceId)
+    val resource = stagedResourcesStore.getResources(resourceId)
         .getOrElse(throw new NotFoundException(s"No resource bundle found with id $resourceId"))
     if (!resource.resourceSecret.equals(resourceSecret)) {
       throw new NotAuthorizedException(s"Unauthorized to download resource with id $resourceId")
     }
+    stagedResourcesCleaner.markResourceAsUsed(resourceId)
     new StreamingOutput {
       override def write(outputStream: OutputStream) = {
         Files.copy(resource.resourcesFile, outputStream)

@@ -29,25 +29,20 @@ import org.apache.spark.internal.config.OptionalConfigEntry
 private[spark] class DriverPodKubernetesCredentialsProvider(sparkConf: SparkConf) {
 
   def get(): KubernetesCredentials = {
-    sparkConf.get(KUBERNETES_SERVICE_ACCOUNT_NAME).foreach { _ =>
-      require(sparkConf.get(KUBERNETES_DRIVER_OAUTH_TOKEN).isEmpty,
-        "Cannot specify both a service account and a driver pod OAuth token.")
-      require(sparkConf.get(KUBERNETES_DRIVER_CA_CERT_FILE).isEmpty,
-        "Cannot specify both a service account and a driver pod CA cert file.")
-      require(sparkConf.get(KUBERNETES_DRIVER_CLIENT_KEY_FILE).isEmpty,
-        "Cannot specify both a service account and a driver pod client key file.")
-      require(sparkConf.get(KUBERNETES_DRIVER_CLIENT_CERT_FILE).isEmpty,
-        "Cannot specify both a service account and a driver pod client cert file.")
-    }
-    val oauthTokenBase64 = sparkConf.get(KUBERNETES_DRIVER_OAUTH_TOKEN).map { token =>
+    val oauthTokenBase64 = sparkConf
+        .getOption(s"$APISERVER_AUTH_DRIVER_CONF_PREFIX.$OAUTH_TOKEN_CONF_SUFFIX")
+        .map { token =>
       BaseEncoding.base64().encode(token.getBytes(Charsets.UTF_8))
     }
-    val caCertDataBase64 = safeFileConfToBase64(KUBERNETES_DRIVER_CA_CERT_FILE,
-      s"Driver CA cert file provided at %s does not exist or is not a file.")
-    val clientKeyDataBase64 = safeFileConfToBase64(KUBERNETES_DRIVER_CLIENT_KEY_FILE,
-      s"Driver client key file provided at %s does not exist or is not a file.")
-    val clientCertDataBase64 = safeFileConfToBase64(KUBERNETES_DRIVER_CLIENT_CERT_FILE,
-      s"Driver client cert file provided at %s does not exist or is not a file.")
+    val caCertDataBase64 = safeFileConfToBase64(
+        s"$APISERVER_AUTH_DRIVER_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX",
+        s"Driver CA cert file provided at %s does not exist or is not a file.")
+    val clientKeyDataBase64 = safeFileConfToBase64(
+        s"$APISERVER_AUTH_DRIVER_CONF_PREFIX.$CLIENT_KEY_FILE_CONF_SUFFIX",
+        s"Driver client key file provided at %s does not exist or is not a file.")
+    val clientCertDataBase64 = safeFileConfToBase64(
+        s"$APISERVER_AUTH_DRIVER_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX",
+        s"Driver client cert file provided at %s does not exist or is not a file.")
     KubernetesCredentials(
       oauthTokenBase64 = oauthTokenBase64,
       caCertDataBase64 = caCertDataBase64,
@@ -56,9 +51,9 @@ private[spark] class DriverPodKubernetesCredentialsProvider(sparkConf: SparkConf
   }
 
   private def safeFileConfToBase64(
-      conf: OptionalConfigEntry[String],
+      conf: String,
       fileNotFoundFormatString: String): Option[String] = {
-    sparkConf.get(conf)
+    sparkConf.getOption(conf)
       .map(new File(_))
       .map { file =>
         require(file.isFile, String.format(fileNotFoundFormatString, file.getAbsolutePath))

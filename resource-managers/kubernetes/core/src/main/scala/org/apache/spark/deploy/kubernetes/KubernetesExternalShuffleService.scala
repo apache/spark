@@ -17,10 +17,11 @@
 
 package org.apache.spark.deploy.kubernetes
 
+import java.io.File
 import java.nio.ByteBuffer
 
 import io.fabric8.kubernetes.api.model.Pod
-import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watch, Watcher}
+import io.fabric8.kubernetes.client.{Config, KubernetesClient, KubernetesClientException, Watch, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 import org.apache.commons.io.IOUtils
 import scala.collection.JavaConverters._
@@ -28,13 +29,13 @@ import scala.collection.mutable
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.ExternalShuffleService
+import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterDriver}
 import org.apache.spark.network.util.TransportConf
-import org.apache.spark.scheduler.cluster.kubernetes.DriverPodKubernetesClientProvider
 
 /**
  * An RPC endpoint that receives registration requests from Spark drivers running on Kubernetes.
@@ -42,19 +43,16 @@ import org.apache.spark.scheduler.cluster.kubernetes.DriverPodKubernetesClientPr
  */
 private[spark] class KubernetesShuffleBlockHandler (
     transportConf: TransportConf,
-    kubernetesClientProvider: DriverPodKubernetesClientProvider)
+    kubernetesClient: KubernetesClient)
   extends ExternalShuffleBlockHandler(transportConf, null) with Logging {
 
   private val INIT_AND_STOP_LOCK = new Object
   private val CONNECTED_APPS_LOCK = new Object
   private val connectedApps = mutable.Set.empty[String]
   private var shuffleWatch: Option[Watch] = None
-  private var kubernetesClient: Option[KubernetesClient] = None
 
   def start(): Unit = INIT_AND_STOP_LOCK.synchronized {
-    val client = kubernetesClientProvider.get
-    shuffleWatch = startShuffleWatcher(client)
-    kubernetesClient = Some(client)
+    shuffleWatch = startShuffleWatcher()
   }
 
   override def close(): Unit = {
@@ -64,8 +62,7 @@ private[spark] class KubernetesShuffleBlockHandler (
       INIT_AND_STOP_LOCK.synchronized {
         shuffleWatch.foreach(IOUtils.closeQuietly)
         shuffleWatch = None
-        kubernetesClient.foreach(IOUtils.closeQuietly)
-        kubernetesClient = None
+        IOUtils.closeQuietly(kubernetesClient)
       }
     }
   }
@@ -90,9 +87,9 @@ private[spark] class KubernetesShuffleBlockHandler (
       }
   }
 
-  private def startShuffleWatcher(client: KubernetesClient): Option[Watch] = {
+  private def startShuffleWatcher(): Option[Watch] = {
     try {
-      Some(client
+      Some(kubernetesClient
         .pods()
         .withLabels(Map(SPARK_ROLE_LABEL -> "driver").asJava)
         .watch(new Watcher[Pod] {
@@ -137,31 +134,47 @@ private[spark] class KubernetesShuffleBlockHandler (
  */
 private[spark] class KubernetesExternalShuffleService(
     conf: SparkConf,
-    securityManager: SecurityManager,
-    kubernetesClientProvider: DriverPodKubernetesClientProvider)
+    securityManager: SecurityManager)
   extends ExternalShuffleService(conf, securityManager) {
 
   private var shuffleBlockHandlers: mutable.Buffer[KubernetesShuffleBlockHandler] = _
   protected override def newShuffleBlockHandler(
       tConf: TransportConf): ExternalShuffleBlockHandler = {
-    val newBlockHandler = new KubernetesShuffleBlockHandler(tConf, kubernetesClientProvider)
-    newBlockHandler.start()
-
-    // TODO: figure out a better way of doing this.
-    // This is necessary because the constructor is not called
-    // when this class is initialized through ExternalShuffleService.
-    if (shuffleBlockHandlers == null) {
+    val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
+        conf.get(KUBERNETES_SHUFFLE_APISERVER_URI),
+        None,
+        APISERVER_AUTH_SHUFFLE_SERVICE_CONF_PREFIX,
+        conf,
+        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH))
+            .filter( _ => conf.get(KUBERNETES_SHUFFLE_USE_SERVICE_ACCOUNT_CREDENTIALS)),
+        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH))
+            .filter( _ => conf.get(KUBERNETES_SHUFFLE_USE_SERVICE_ACCOUNT_CREDENTIALS)))
+    val newBlockHandler = new KubernetesShuffleBlockHandler(tConf, kubernetesClient)
+    try {
+      newBlockHandler.start()
+      // TODO: figure out a better way of doing this.
+      // This is necessary because the constructor is not called
+      // when this class is initialized through ExternalShuffleService.
+      if (shuffleBlockHandlers == null) {
         shuffleBlockHandlers = mutable.Buffer.empty[KubernetesShuffleBlockHandler]
+      }
+      shuffleBlockHandlers += newBlockHandler
+      newBlockHandler
+    } catch {
+      case e: Throwable =>
+        logError("Failed to create Kubernetes shuffle block handler.", e)
+        newBlockHandler.close()
+        throw e
     }
-    shuffleBlockHandlers += newBlockHandler
-    newBlockHandler
   }
 
   override def stop(): Unit = {
     try {
       super.stop()
     } finally {
-      shuffleBlockHandlers.foreach(_.close())
+      if (shuffleBlockHandlers != null) {
+        shuffleBlockHandlers.foreach(_.close())
+      }
     }
   }
 }
@@ -169,10 +182,7 @@ private[spark] class KubernetesExternalShuffleService(
 private[spark] object KubernetesExternalShuffleService extends Logging {
   def main(args: Array[String]): Unit = {
     ExternalShuffleService.main(args,
-      (conf: SparkConf, sm: SecurityManager) => {
-        val kubernetesClientProvider = new DriverPodKubernetesClientProvider(conf)
-        new KubernetesExternalShuffleService(conf, sm, kubernetesClientProvider)
-      })
+      (conf: SparkConf, sm: SecurityManager) => new KubernetesExternalShuffleService(conf, sm))
   }
 }
 

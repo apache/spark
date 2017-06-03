@@ -31,11 +31,9 @@ private[spark] trait ResourceStagingServiceRetrofit {
   @Multipart
   @retrofit2.http.POST("api/v0/resources/")
   def uploadResources(
-      @retrofit2.http.Part("podLabels") podLabels: RequestBody,
-      @retrofit2.http.Part("podNamespace") podNamespace: RequestBody,
       @retrofit2.http.Part("resources") resources: RequestBody,
-      @retrofit2.http.Part("kubernetesCredentials")
-          kubernetesCredentials: RequestBody): Call[SubmittedResourceIdAndSecret]
+      @retrofit2.http.Part("resourcesOwner") resourcesOwner: RequestBody)
+      : Call[SubmittedResourceIdAndSecret]
 
   @Streaming
   @retrofit2.http.GET("api/v0/resources/{resourceId}")

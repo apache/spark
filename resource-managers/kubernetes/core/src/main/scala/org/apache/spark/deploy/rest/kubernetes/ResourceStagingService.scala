@@ -52,13 +52,12 @@ private[spark] trait ResourceStagingService {
    *                  The tarball should contain the files laid out in a flat hierarchy, without
    *                  any directories. We take a stream here to avoid holding these entirely in
    *                  memory.
-   * @param podLabels Labels of pods to monitor. When no more pods are running with the given label,
-   *                  after some period of time, these dependencies will be cleared.
-   * @param podNamespace Namespace of pods to monitor.
-   * @param kubernetesCredentials These credentials are primarily used to monitor the progress of
-   *                              the application. When the application shuts down normally, shuts
-   *                              down abnormally and does not restart, or fails to start entirely,
-   *                              the data uploaded through this endpoint is cleared.
+   * @param resourcesOwner A description of the "owner" of a resource. A resource owner is a
+   *                       Kubernetes API object in a given namespace, with a specific set of
+   *                       labels. When there are no resources of the owner's type in the given
+   *                       namespace with the given labels, the resources are cleaned up. The owner
+   *                       bundle also includes any Kubernetes credentials that are required for
+   *                       resource staging server to watch the object's state over time.
    * @return A unique token that should be provided when retrieving these dependencies later.
    */
   @POST
@@ -66,10 +65,8 @@ private[spark] trait ResourceStagingService {
   @Produces(Array(MediaType.APPLICATION_JSON))
   @Path("/resources")
   def uploadResources(
-      @FormDataParam("podLabels") podLabels: Map[String, String],
-      @FormDataParam("podNamespace") podNamespace: String,
-      @FormDataParam("resources") resources: InputStream,
-      @FormDataParam("kubernetesCredentials") kubernetesCredentials: KubernetesCredentials)
+        @FormDataParam("resources") resources: InputStream,
+        @FormDataParam("resourcesOwner") resourcesOwner: StagedResourcesOwner)
       : SubmittedResourceIdAndSecret
 
   /**

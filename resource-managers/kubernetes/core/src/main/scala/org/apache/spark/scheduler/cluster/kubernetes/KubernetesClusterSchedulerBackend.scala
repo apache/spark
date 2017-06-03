@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
 import io.fabric8.kubernetes.api.model.{ContainerPortBuilder, EnvVarBuilder, EnvVarSourceBuilder, Pod, PodBuilder, QuantityBuilder}
-import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
+import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 import org.apache.commons.io.FilenameUtils
 import scala.collection.JavaConverters._
@@ -43,7 +43,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     val sc: SparkContext,
-    executorInitContainerBootstrap: Option[SparkPodInitContainerBootstrap])
+    executorInitContainerBootstrap: Option[SparkPodInitContainerBootstrap],
+    kubernetesClient: KubernetesClient)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
   import KubernetesClusterSchedulerBackend._
@@ -101,9 +102,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("kubernetes-executor-requests"))
-
-  private val kubernetesClient = new DriverPodKubernetesClientProvider(conf,
-    Some(kubernetesNamespace)).get
 
   private val driverPod = try {
     kubernetesClient.pods().inNamespace(kubernetesNamespace).

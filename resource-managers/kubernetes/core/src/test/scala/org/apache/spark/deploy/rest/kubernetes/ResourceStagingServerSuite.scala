@@ -24,10 +24,11 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.google.common.io.ByteStreams
 import okhttp3.{RequestBody, ResponseBody}
 import org.scalatest.BeforeAndAfter
+import org.scalatest.mock.MockitoSugar.mock
 import retrofit2.Call
 
 import org.apache.spark.{SparkFunSuite, SSLOptions}
-import org.apache.spark.deploy.kubernetes.{KubernetesCredentials, SSLUtils}
+import org.apache.spark.deploy.kubernetes.SSLUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -40,12 +41,21 @@ import org.apache.spark.util.Utils
  * receive streamed uploads and can stream downloads.
  */
 class ResourceStagingServerSuite extends SparkFunSuite with BeforeAndAfter {
+  private var serviceImpl: ResourceStagingService = _
+  private var stagedResourcesCleaner: StagedResourcesCleaner = _
+  private var server: ResourceStagingServer = _
   private val OBJECT_MAPPER = new ObjectMapper().registerModule(new DefaultScalaModule)
 
   private val serverPort = new ServerSocket(0).getLocalPort
-  private val serviceImpl = new ResourceStagingServiceImpl(Utils.createTempDir())
+
   private val sslOptionsProvider = new SettableReferenceSslOptionsProvider()
-  private val server = new ResourceStagingServer(serverPort, serviceImpl, sslOptionsProvider)
+
+  before {
+    stagedResourcesCleaner = mock[StagedResourcesCleaner]
+    serviceImpl = new ResourceStagingServiceImpl(
+      new StagedResourcesStoreImpl(Utils.createTempDir()), stagedResourcesCleaner)
+    server = new ResourceStagingServer(serverPort, serviceImpl, sslOptionsProvider)
+  }
 
   after {
     server.stop()
@@ -83,20 +93,17 @@ class ResourceStagingServerSuite extends SparkFunSuite with BeforeAndAfter {
     val resourcesBytes = Array[Byte](1, 2, 3, 4)
     val labels = Map("label1" -> "label1Value", "label2" -> "label2value")
     val namespace = "namespace"
-    val labelsJson = OBJECT_MAPPER.writer().writeValueAsString(labels)
+    val resourcesOwner = StagedResourcesOwner(
+      ownerLabels = labels,
+      ownerNamespace = namespace,
+      ownerType = StagedResourcesOwnerType.Pod)
+    val resourcesOwnerJson = OBJECT_MAPPER.writeValueAsString(resourcesOwner)
+    val resourcesOwnerRequestBody = RequestBody.create(
+        okhttp3.MediaType.parse(MediaType.APPLICATION_JSON), resourcesOwnerJson)
     val resourcesRequestBody = RequestBody.create(
-      okhttp3.MediaType.parse(MediaType.MULTIPART_FORM_DATA), resourcesBytes)
-    val labelsRequestBody = RequestBody.create(
-      okhttp3.MediaType.parse(MediaType.APPLICATION_JSON), labelsJson)
-    val namespaceRequestBody = RequestBody.create(
-      okhttp3.MediaType.parse(MediaType.TEXT_PLAIN), namespace)
-    val kubernetesCredentials = KubernetesCredentials(Some("token"), Some("ca-cert"), None, None)
-    val kubernetesCredentialsString = OBJECT_MAPPER.writer()
-      .writeValueAsString(kubernetesCredentials)
-    val kubernetesCredentialsBody = RequestBody.create(
-        okhttp3.MediaType.parse(MediaType.APPLICATION_JSON), kubernetesCredentialsString)
+        okhttp3.MediaType.parse(MediaType.MULTIPART_FORM_DATA), resourcesBytes)
     val uploadResponse = retrofitService.uploadResources(
-      labelsRequestBody, namespaceRequestBody, resourcesRequestBody, kubernetesCredentialsBody)
+      resourcesRequestBody, resourcesOwnerRequestBody)
     val resourceIdentifier = getTypedResponseResult(uploadResponse)
     checkResponseBodyBytesMatches(
       retrofitService.downloadResources(

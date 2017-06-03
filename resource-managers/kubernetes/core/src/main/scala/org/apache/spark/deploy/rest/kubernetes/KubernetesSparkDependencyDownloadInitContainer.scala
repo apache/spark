@@ -204,13 +204,6 @@ private class FileFetcherImpl(sparkConf: SparkConf, securityManager: SparkSecuri
   }
 }
 
-private case class StagedResources(
-    resourceSecret: String,
-    podLabels: Map[String, String],
-    podNamespace: String,
-    resourcesFile: File,
-    kubernetesCredentials: KubernetesCredentials)
-
 object KubernetesSparkDependencyDownloadInitContainer extends Logging {
   def main(args: Array[String]): Unit = {
     logInfo("Starting init-container to download Spark application dependencies.")

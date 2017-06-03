@@ -37,7 +37,6 @@ import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.kubernetes.KubernetesExternalShuffleClient
-import org.apache.spark.scheduler.cluster.kubernetes.DriverPodKubernetesClientProvider
 
 class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   private val JARS_RESOURCE = SubmittedResourceIdAndSecret("jarsId", "jarsSecret")
@@ -131,8 +130,6 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var initContainerComponentsProvider: DriverInitContainerComponentsProvider = _
   @Mock
-  private var kubernetesClientProvider: SubmissionKubernetesClientProvider = _
-  @Mock
   private var kubernetesClient: KubernetesClient = _
   @Mock
   private var podOps: MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]] = _
@@ -174,7 +171,6 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
       .thenReturn(INIT_CONTAINER_SECRET)
     when(initContainerConfigMapBuilder.build())
       .thenReturn(INIT_CONTAINER_CONFIG_MAP)
-    when(kubernetesClientProvider.get).thenReturn(kubernetesClient)
     when(kubernetesClient.pods()).thenReturn(podOps)
     when(podOps.create(any())).thenAnswer(new Answer[Pod] {
       override def answer(invocation: InvocationOnMock): Pod = {
@@ -302,35 +298,11 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
       SPARK_JARS,
       SPARK_FILES,
       true,
-      kubernetesClientProvider,
+      kubernetesClient,
       initContainerComponentsProvider,
       credentialsMounterProvider,
       loggingPodStatusWatcher).run()
     verify(loggingPodStatusWatcher).awaitCompletion()
-  }
-
-  test("Run kubernetes shuffle service.") {
-    expectationsForNoMountedCredentials()
-    expectationsForNoDependencyUploader()
-
-    val shuffleService = new KubernetesExternalShuffleService(
-      SPARK_CONF,
-      new SecurityManager(SPARK_CONF),
-      new DriverPodKubernetesClientProvider(SPARK_CONF))
-
-    val shuffleClient = new KubernetesExternalShuffleClient(
-      SparkTransportConf.fromSparkConf(SPARK_CONF, "shuffle"),
-      new SecurityManager(SPARK_CONF),
-      false,
-      false)
-
-    shuffleService.start()
-    shuffleClient.init("newapp")
-
-    // verifies that we can connect to the shuffle service and send
-    // it a message.
-    shuffleClient.registerDriverWithShuffleService("localhost", 7337)
-    shuffleService.stop()
   }
 
   private def expectationsForNoDependencyUploader(): Unit = {
@@ -409,7 +381,7 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
       SPARK_JARS,
       SPARK_FILES,
       false,
-      kubernetesClientProvider,
+      kubernetesClient,
       initContainerComponentsProvider,
       credentialsMounterProvider,
       loggingPodStatusWatcher).run()
