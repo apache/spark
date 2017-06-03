@@ -86,7 +86,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   val startTime = System.currentTimeMillis()
 
-  private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
+  @DeveloperApi val stopped: AtomicBoolean = new AtomicBoolean(false)
 
   private[spark] def assertNotStopped(): Unit = {
     if (stopped.get()) {
