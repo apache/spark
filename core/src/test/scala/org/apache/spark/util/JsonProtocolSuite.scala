@@ -1754,6 +1754,22 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |}
     """.stripMargin
 
+  private val applicationStartJsonWithLogUrlsString =
+    """
+      |{
+      |  "Event": "SparkListenerApplicationStart",
+      |  "App Name": "The winner of all",
+      |  "App ID": "appId",
+      |  "Timestamp": 42,
+      |  "User": "Garfield",
+      |  "App Attempt ID": "appAttempt",
+      |  "Driver Logs" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |  }
+      |}
+    """
+
   private val applicationEndJsonString =
     """
       |{
