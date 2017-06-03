@@ -290,7 +290,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
 
               if (!is.null(lowerBoundsOnCoefficients) & (row != nrow(upperBoundsOnCoefficients)
                 | col != ncol(upperBoundsOnCoefficients))) {
-                stop(paste("dimension of upperBoundsOnCoefficients ",
+                stop(paste0("dimension of upperBoundsOnCoefficients ",
                            "is not the same as lowerBoundsOnCoefficients", sep = ""))
               }
 
@@ -307,8 +307,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                                 as.numeric(elasticNetParam), as.integer(maxIter),
                                 as.numeric(tol), as.character(family),
                                 as.logical(standardization), as.array(thresholds),
-                                weightCol, as.integer(aggregationDepth),
-                                as.integer(row), as.integer(col),
+                                weightCol, as.integer(aggregationDepth), row, col,
                                 lowerBoundsOnCoefficients, upperBoundsOnCoefficients,
                                 lowerBoundsOnIntercepts, upperBoundsOnIntercepts)
             new("LogisticRegressionModel", jobj = jobj)
