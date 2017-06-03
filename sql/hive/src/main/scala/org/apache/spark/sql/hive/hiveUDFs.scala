@@ -204,6 +204,12 @@ private[hive] case class HiveGenericUDTF(
   protected lazy val inputInspectors = children.map(toInspector)
 
   @transient
+  /**
+   * [[org.apache.hadoop.hive.ql.udf.generic.GenericUDTF#initialize(ObjectInspector[])]] is
+   * deprecated in Hive v0.13.1 though, we leave this code below unchanged
+   * because the new initialization interface has meaningless field names as an argument.
+   * We need to revisit SPARK-8955 to fix the issue in future.
+   */
   protected lazy val outputInspector = function.initialize(inputInspectors.toArray)
 
   @transient
