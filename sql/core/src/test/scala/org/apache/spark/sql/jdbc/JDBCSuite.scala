@@ -48,7 +48,7 @@ class JDBCSuite extends SparkFunSuite
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
 
   val testH2Dialect = new JdbcDialect {
-    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
+    override def canHandle(options: JDBCOptions) : Boolean = options.url.startsWith("jdbc:h2")
     override def getCatalystType(
         sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
       Some(StringType)
@@ -634,18 +634,18 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("Default jdbc dialect registration") {
-    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
-    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
-    assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") == DB2Dialect)
-    assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") == MsSqlServerDialect)
-    assert(JdbcDialects.get("jdbc:derby:db") == DerbyDialect)
-    assert(JdbcDialects.get("test.invalid") == NoopDialect)
+    assert(JdbcDialects.get(new JDBCOptions("jdbc:mysql://127.0.0.1/db")) == MySQLDialect)
+    assert(JdbcDialects.get(new JDBCOptions("jdbc:postgresql://127.0.0.1/db")) == PostgresDialect)
+    assert(JdbcDialects.get(new JDBCOptions("jdbc:db2://127.0.0.1/db")) == DB2Dialect)
+    assert(JdbcDialects.get(new JDBCOptions("jdbc:sqlserver://127.0.0.1/db")) == MsSqlServerDialect)
+    assert(JdbcDialects.get(new JDBCOptions("jdbc:derby:db")) == DerbyDialect)
+    assert(JdbcDialects.get(new JDBCOptions("test.invalid")) == NoopDialect)
   }
 
   test("quote column names by jdbc dialect") {
-    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
-    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
-    val Derby = JdbcDialects.get("jdbc:derby:db")
+    val MySQL = JdbcDialects.get(new JDBCOptions("jdbc:mysql://127.0.0.1/db"))
+    val Postgres = JdbcDialects.get(new JDBCOptions("jdbc:postgresql://127.0.0.1/db"))
+    val Derby = JdbcDialects.get(new JDBCOptions("jdbc:derby:db"))
 
     val columns = Seq("abc", "key")
     val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
@@ -659,7 +659,8 @@ class JDBCSuite extends SparkFunSuite
   test("compile filters") {
     val compileFilter = PrivateMethod[Option[String]]('compileFilter)
     def doCompileFilter(f: Filter): String =
-      JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
+      JDBCRDD invokePrivate compileFilter(f,
+        JdbcDialects.get(new JDBCOptions("jdbc:"))) getOrElse("")
     assert(doCompileFilter(EqualTo("col0", 3)) === """"col0" = 3""")
     assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === """(NOT ("col1" = 'abc'))""")
     assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))
@@ -689,12 +690,12 @@ class JDBCSuite extends SparkFunSuite
   test("Dialect unregister") {
     JdbcDialects.registerDialect(testH2Dialect)
     JdbcDialects.unregisterDialect(testH2Dialect)
-    assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+    assert(JdbcDialects.get(new JDBCOptions(urlWithUserAndPass)) == NoopDialect)
   }
 
   test("Aggregated dialects") {
     val agg = new AggregatedDialect(List(new JdbcDialect {
-      override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
+      override def canHandle(options: JDBCOptions) : Boolean = options.url.startsWith("jdbc:h2:")
       override def getCatalystType(
           sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
         if (sqlType % 2 == 0) {
@@ -703,20 +704,20 @@ class JDBCSuite extends SparkFunSuite
           None
         }
     }, testH2Dialect))
-    assert(agg.canHandle("jdbc:h2:xxx"))
-    assert(!agg.canHandle("jdbc:h2"))
+    assert(agg.canHandle(new JDBCOptions("jdbc:h2:xxx")))
+    assert(!agg.canHandle(new JDBCOptions("jdbc:h2")))
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
   }
 
   test("DB2Dialect type mapping") {
-    val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val db2Dialect = JdbcDialects.get(new JDBCOptions("jdbc:db2://127.0.0.1/db"))
     assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
     assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
   }
 
   test("PostgresDialect type mapping") {
-    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get(new JDBCOptions("jdbc:postgresql://127.0.0.1/db"))
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
@@ -728,27 +729,39 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("DerbyDialect jdbc type mapping") {
-    val derbyDialect = JdbcDialects.get("jdbc:derby:db")
+    val derbyDialect = JdbcDialects.get(new JDBCOptions("jdbc:derby:db"))
     assert(derbyDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
     assert(derbyDialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
     assert(derbyDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
   }
 
   test("OracleDialect jdbc type mapping") {
-    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    val jdbcOptions = new JDBCOptions("jdbc:oracle")
+    val oracleDialect = JdbcDialects.get(jdbcOptions)
     val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
-    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ===
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
-    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ===
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+
+    val metadataN1 = new MetadataBuilder().putString("name", "test_column")
+    // number(1) to BooleanType default
+    val oracleDialectN11 = JdbcDialects.get(jdbcOptions)
+    assert(oracleDialectN11.getCatalystType(java.sql.Types.NUMERIC, "NUMBER", 1, metadataN1) ===
+      Some(BooleanType))
+    // number(1) to IntegerType
+    jdbcOptions.asProperties.put("autoConvertNumber2Boolean", "false")
+    val oracleDialect12 = JdbcDialects.get(jdbcOptions)
+    assert(oracleDialect12.getCatalystType(java.sql.Types.NUMERIC, "NUMBER", 1, metadataN1) ===
+      Some(IntegerType))
   }
 
   test("table exists query by jdbc dialect") {
-    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
-    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
-    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
-    val h2 = JdbcDialects.get(url)
-    val derby = JdbcDialects.get("jdbc:derby:db")
+    val MySQL = JdbcDialects.get(new JDBCOptions("jdbc:mysql://127.0.0.1/db"))
+    val Postgres = JdbcDialects.get(new JDBCOptions("jdbc:postgresql://127.0.0.1/db"))
+    val db2 = JdbcDialects.get(new JDBCOptions("jdbc:db2://127.0.0.1/db"))
+    val h2 = JdbcDialects.get(new JDBCOptions(url))
+    val derby = JdbcDialects.get(new JDBCOptions("jdbc:derby:db"))
     val table = "weblogs"
     val defaultQuery = s"SELECT * FROM $table WHERE 1=0"
     val limitQuery = s"SELECT 1 FROM $table LIMIT 1"
@@ -820,7 +833,7 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SPARK 12941: The data type mapping for StringType to Oracle") {
-    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val oracleDialect = JdbcDialects.get(new JDBCOptions("jdbc:oracle://127.0.0.1/db"))
     assert(oracleDialect.getJDBCType(StringType).
       map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
   }
@@ -832,7 +845,7 @@ class JDBCSuite extends SparkFunSuite
         map(_.databaseTypeDefinition).get
     }
 
-    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val oracleDialect = JdbcDialects.get(new JDBCOptions("jdbc:oracle://127.0.0.1/db"))
     assert(getJdbcType(oracleDialect, BooleanType) == "NUMBER(1)")
     assert(getJdbcType(oracleDialect, IntegerType) == "NUMBER(10)")
     assert(getJdbcType(oracleDialect, LongType) == "NUMBER(19)")
@@ -874,7 +887,7 @@ class JDBCSuite extends SparkFunSuite
 
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
-    val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
+    val schema = JdbcUtils.schemaString(df, new JDBCOptions("jdbc:mysql://localhost:3306/temp"))
     assert(schema.contains("`order` TEXT"))
   }
 
@@ -923,13 +936,13 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SPARK-15648: teradataDialect StringType data mapping") {
-    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+    val teradataDialect = JdbcDialects.get(new JDBCOptions("jdbc:teradata://127.0.0.1/db"))
     assert(teradataDialect.getJDBCType(StringType).
       map(_.databaseTypeDefinition).get == "VARCHAR(255)")
   }
 
   test("SPARK-15648: teradataDialect BooleanType data mapping") {
-    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+    val teradataDialect = JdbcDialects.get(new JDBCOptions("jdbc:teradata://127.0.0.1/db"))
     assert(teradataDialect.getJDBCType(BooleanType).
       map(_.databaseTypeDefinition).get == "CHAR(1)")
   }

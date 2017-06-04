@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 
 private object PostgresDialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
+  override def canHandle(options: JDBCOptions): Boolean = options.url.startsWith("jdbc:postgresql")
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {

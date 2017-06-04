@@ -19,17 +19,25 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.Types
 
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
 
 
 private case object OracleDialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+  private var isAutoConvertNumber2Boolean: Boolean = true
+
+  override def canHandle(options: JDBCOptions): Boolean = {
+    isAutoConvertNumber2Boolean =
+      options.asProperties.getProperty("autoConvertNumber2Boolean", true.toString).toBoolean
+    options.url.startsWith("jdbc:oracle")
+  }
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.NUMERIC) {
-      val scale = if (null != md) md.build().getLong("scale") else 0L
+      val scale =
+        if (null != md && md.build().contains("scale")) md.build().getLong("scale") else 0L
       size match {
         // Handle NUMBER fields that have no precision/scale in special way
         // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
@@ -43,7 +51,8 @@ private case object OracleDialect extends JdbcDialect {
         // Not sure if there is a more robust way to identify the field as a float (or other
         // numeric types that do not specify a scale.
         case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
-        case 1 => Option(BooleanType)
+        case 1 if isAutoConvertNumber2Boolean => Option(BooleanType)
+        case 1 if !isAutoConvertNumber2Boolean => Option(IntegerType)
         case 3 | 5 | 10 => Option(IntegerType)
         case 19 if scale == 0L => Option(LongType)
         case 19 if scale == 4L => Option(FloatType)

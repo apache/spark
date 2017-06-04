@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.{Locale, Properties}
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
@@ -32,6 +33,14 @@ class JDBCOptions(
   import JDBCOptions._
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
+
+  @DeveloperApi
+  def this(url: String) = {
+    this(CaseInsensitiveMap(Map(
+      JDBCOptions.JDBC_URL -> url,
+      JDBCOptions.JDBC_DRIVER_CLASS -> "org.h2.Driver",
+      JDBCOptions.JDBC_TABLE_NAME -> "")))
+  }
 
   def this(url: String, table: String, parameters: Map[String, String]) = {
     this(CaseInsensitiveMap(parameters ++ Map(

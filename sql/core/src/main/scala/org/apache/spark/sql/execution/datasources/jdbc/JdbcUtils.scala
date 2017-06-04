@@ -66,7 +66,7 @@ object JdbcUtils extends Logging {
    * Returns true if the table already exists in the JDBC database.
    */
   def tableExists(conn: Connection, options: JDBCOptions): Boolean = {
-    val dialect = JdbcDialects.get(options.url)
+    val dialect = JdbcDialects.get(options)
 
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems using JDBC meta data calls, considering "table" could also include
@@ -105,8 +105,8 @@ object JdbcUtils extends Logging {
     }
   }
 
-  def isCascadingTruncateTable(url: String): Option[Boolean] = {
-    JdbcDialects.get(url).isCascadingTruncateTable()
+  def isCascadingTruncateTable(options: JDBCOptions): Option[Boolean] = {
+    JdbcDialects.get(options).isCascadingTruncateTable()
   }
 
   /**
@@ -247,7 +247,7 @@ object JdbcUtils extends Logging {
    * Returns the schema if the table already exists in the JDBC database.
    */
   def getSchemaOption(conn: Connection, options: JDBCOptions): Option[StructType] = {
-    val dialect = JdbcDialects.get(options.url)
+    val dialect = JdbcDialects.get(options)
 
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(options.table))
@@ -702,10 +702,10 @@ object JdbcUtils extends Logging {
    */
   def schemaString(
       df: DataFrame,
-      url: String,
+      options: JDBCOptions,
       createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
-    val dialect = JdbcDialects.get(url)
+    val dialect = JdbcDialects.get(options)
     val userSpecifiedColTypesMap = createTableColumnTypes
       .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
       .getOrElse(Map.empty[String, String])
@@ -772,9 +772,8 @@ object JdbcUtils extends Logging {
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
       options: JDBCOptions): Unit = {
-    val url = options.url
     val table = options.table
-    val dialect = JdbcDialects.get(url)
+    val dialect = JdbcDialects.get(options)
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(options)
     val batchSize = options.batchSize
@@ -801,7 +800,7 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       options: JDBCOptions): Unit = {
     val strSchema = schemaString(
-      df, options.url, options.createTableColumnTypes)
+      df, options, options.createTableColumnTypes)
     val table = options.table
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
