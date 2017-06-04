@@ -21,22 +21,21 @@ import java.io.IOException
 import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-
 
 /**
  * Determine the database, serde/format and schema of the Hive serde table, according to the storage
@@ -136,6 +135,54 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
       val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
       relation.copy(tableMeta = withStats)
+  }
+}
+
+case class DeterminePartitionedTableStats(
+    session: SparkSession) extends Rule[LogicalPlan] with PredicateHelper {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case filter @ Filter(condition, relation: CatalogRelation)
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.isPartitioned =>
+      val predicates = splitConjunctivePredicates(condition)
+      val normalizedFilters = predicates.map { e =>
+        e transform {
+          case a: AttributeReference =>
+            a.withName(relation.output.find(_.semanticEquals(a)).get.name)
+        }
+      }
+      val partitionSet = AttributeSet(relation.partitionCols)
+      val pruningPredicates = normalizedFilters.filter { predicate =>
+        !predicate.references.isEmpty &&
+          predicate.references.subsetOf(partitionSet)
+      }
+      if (pruningPredicates.nonEmpty && session.sessionState.conf.fallBackToHdfsForStatsEnabled &&
+        session.sessionState.conf.metastorePartitionPruning) {
+        val prunedPartitions = session.sharedState.externalCatalog.listPartitionsByFilter(
+          relation.tableMeta.database,
+          relation.tableMeta.identifier.table,
+          pruningPredicates,
+          session.sessionState.conf.sessionLocalTimeZone)
+        val hiveTable = HiveClientImpl.toHiveTable(relation.tableMeta)
+        val partitions = prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveTable))
+        val sizeInBytes = try {
+          val hadoopConf = session.sessionState.newHadoopConf()
+          partitions.map { partition =>
+            val fs: FileSystem = partition.getDataLocation.getFileSystem(hadoopConf)
+            fs.getContentSummary(partition.getDataLocation).getLength
+          }.sum
+        } catch {
+          case e: IOException =>
+            logWarning("Failed to get table size from hdfs.", e)
+            session.sessionState.conf.defaultSizeInBytes
+        }
+        val withStats = relation.tableMeta.copy(
+          stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+        val prunedCatalogRelation = relation.copy(tableMeta = withStats)
+        val filterExpression = predicates.reduceLeft(And)
+        Filter(filterExpression, prunedCatalogRelation)
+      } else {
+        filter
+      }
   }
 }
 
