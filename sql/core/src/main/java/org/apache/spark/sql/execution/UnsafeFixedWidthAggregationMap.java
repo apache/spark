@@ -235,6 +235,16 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
+   * Gets the average hash map probe per looking up for the underlying `BytesToBytesMap`.
+   */
+  public double getAverageProbesPerLookup() {
+    if (!enablePerfMetrics) {
+      throw new IllegalStateException("Perf metrics not enabled");
+    }
+    return map.getAverageProbesPerLookup();
+  }
+
+  /**
    * Sorts the map's records in place, spill them to disk, and returns an [[UnsafeKVExternalSorter]]
    *
    * Note that the map will be reset for inserting new records, and the returned sorter can NOT be

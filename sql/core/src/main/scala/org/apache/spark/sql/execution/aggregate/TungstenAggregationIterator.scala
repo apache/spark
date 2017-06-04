@@ -88,7 +88,8 @@ class TungstenAggregationIterator(
     testFallbackStartsAt: Option[(Int, Int)],
     numOutputRows: SQLMetric,
     peakMemory: SQLMetric,
-    spillSize: SQLMetric)
+    spillSize: SQLMetric,
+    avgHashmapProbe: Option[SQLMetric])
   extends AggregationIterator(
     groupingExpressions,
     originalInputAttributes,
@@ -163,7 +164,7 @@ class TungstenAggregationIterator(
     TaskContext.get().taskMemoryManager(),
     1024 * 16, // initial capacity
     TaskContext.get().taskMemoryManager().pageSizeBytes,
-    false // disable tracking of performance metrics
+    avgHashmapProbe.isDefined // whether tracking of performance metrics
   )
 
   // The function used to read and process input rows. When processing input rows,
@@ -420,6 +421,12 @@ class TungstenAggregationIterator(
         peakMemory += maxMemory
         spillSize += metrics.memoryBytesSpilled - spillSizeBefore
         metrics.incPeakExecutionMemory(maxMemory)
+
+        // Update average hashmap probe if this is the last record.
+        avgHashmapProbe.foreach { metrics =>
+          val averageProbes = hashMap.getAverageProbesPerLookup()
+          metrics.add(averageProbes.ceil.toLong)
+        }
       }
       numOutputRows += 1
       res

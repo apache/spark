@@ -654,6 +654,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val TRACK_HASHMAP_PROBE = buildConf("spark.sql.execution.trackhashMapProbe")
+    .internal()
+    .doc("When enabled, we will track average hash map probe metric in aggregate operator and " +
+      "hash join operator. The tracking might have minor performance impact.")
+    .booleanConf
+    .createWithDefault(false)
+
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -1043,6 +1050,8 @@ class SQLConf extends Serializable with Logging {
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
+
+  def trackHashMapProbe: Boolean = getConf(SQLConf.TRACK_HASHMAP_PROBE)
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
