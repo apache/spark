@@ -40,10 +40,10 @@ trait WriteOutFileCommand extends logical.Command {
     Map(
       // General metrics.
       "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "numDynamicParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
+      "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
       "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
-      "writingTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)")
+      "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)")
     )
 
   def run(

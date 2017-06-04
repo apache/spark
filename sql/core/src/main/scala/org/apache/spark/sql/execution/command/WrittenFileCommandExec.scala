@@ -48,34 +48,15 @@ case class WrittenFileCommandExec(
       totalNumOutput += summary.numOutputRows
     }
 
-    // Metrics of writing time in ms.
-    // We only count for the non-zero writing time when computing average.
-    val writingTimePerFile: Seq[Long] = writeSummaries.flatMap(_.writingTimePerFile)
-    val nonZeroCount = writingTimePerFile.filter(_ > 0).size
-    val avgWritingTime = if (nonZeroCount == 0) {
-      0
-    } else {
-      writingTimePerFile.sum / nonZeroCount
-    }
+    val avgWritingTime = writeSummaries.flatMap(_.writingTimePerFile).sum / numFiles
 
-    // Updates metrics.
-    val numDynamicPartsMetric = metrics("numDynamicParts")
-    val fileNumMetric = metrics("numFiles")
-    val numBytesMetric = metrics("numOutputBytes")
-    val numOutputRowsMetric = metrics("numOutputRows")
-    val writingTimeMetric = metrics("writingTime")
-
-    numDynamicPartsMetric.add(numPartitions)
-    fileNumMetric.add(numFiles)
-    numBytesMetric.add(totalNumBytes)
-    numOutputRowsMetric.add(totalNumOutput)
-    writingTimeMetric.add(avgWritingTime)
-
-    val generalMetrics = Seq(numDynamicPartsMetric, fileNumMetric, numBytesMetric,
-      numOutputRowsMetric, writingTimeMetric)
+    val metricsNames = Seq("numParts", "numFiles", "numOutputBytes", "numOutputRows", "avgTime")
+    val metricsValues = Seq(numPartitions, numFiles, totalNumBytes, totalNumOutput, avgWritingTime)
+    metricsNames.zip(metricsValues).foreach(x => metrics(x._1).add(x._2))
 
     val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId, generalMetrics)
+    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId,
+      metricsNames.map(metrics(_)))
   }
 
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
