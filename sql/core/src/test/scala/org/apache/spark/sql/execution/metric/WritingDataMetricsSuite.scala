@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.metric
 
+import java.io.File
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -75,7 +77,6 @@ trait BaseWritingDataMetricsSuite extends SparkFunSuite with SQLTestUtils {
     val totalNumBytesMetric = executedNode.metrics.find(_.name == "bytes of written output").get
     val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "").toInt
     assert(totalNumBytes > 0)
-
     val writingTimeMetric = executedNode.metrics.find(_.name == "average writing time (ms)").get
     val writingTime = metrics(writingTimeMetric.accumulatorId).replaceAll(",", "").toInt
     assert(writingTime >= 0)
@@ -90,16 +91,21 @@ trait BaseWritingDataMetricsSuite extends SparkFunSuite with SQLTestUtils {
         Seq((1, 2)).toDF("i", "j")
           .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
       }
-      // written 1 file, 1 row, 0 dynamic partition.
+      val tableLocation =
+        new File(spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).location)
+
+      assert(Utils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 1)
+      // 1 file, 1 row, 0 dynamic partition.
       val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ == 1)
       verifyWriteDataMetrics(spark, executionId1, verifyFuncs1)
 
       val executionId2 = getLatestExecutionId(spark) { () =>
-        Seq((9, 10), (11, 12)).toDF("i", "j").repartition(2)
-          .write.format(dataFormat).insertInto(tableName)
+        (0 until 100).map(i => (i, i + 1)).toDF("i", "j").repartition(2)
+          .write.format(dataFormat).mode("overwrite").insertInto(tableName)
       }
-      // written 2 files, 2 rows, 0 dynamic partition.
-      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 2, _ == 0, _ == 2)
+      assert(Utils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
+      // 2 files, 100 rows, 0 dynamic partition.
+      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 2, _ == 0, _ == 100)
       verifyWriteDataMetrics(spark, executionId2, verifyFuncs2)
     }
   }
@@ -112,16 +118,16 @@ trait BaseWritingDataMetricsSuite extends SparkFunSuite with SQLTestUtils {
     withTempPath { dir =>
       spark.sql(
         s"""
-           |CREATE TABLE t1(a int, b int)
+           |CREATE TABLE $tableName(a int, b int)
            |USING $provider
            |PARTITIONED BY(a)
            |LOCATION '${dir.toURI}'
          """.stripMargin)
 
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
       assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
-      val df = spark.range(start = 0, end = 4, step = 1, numPartitions = 1)
+      val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
         .selectExpr("id a", "id b")
       sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
@@ -129,13 +135,12 @@ trait BaseWritingDataMetricsSuite extends SparkFunSuite with SQLTestUtils {
         df.union(df).repartition(2, $"a")
           .write
           .format(dataFormat)
-          .option("maxRecordsPerFile", 2)
           .mode("overwrite")
           .insertInto(tableName)
       }
-      assert(Utils.recursiveList(dir).count(_.getName.startsWith("part-")) == 4)
-      // written 4 files, 8 rows, 4 dynamic partitions.
-      val verifyFuncs: Seq[Int => Boolean] = Seq(_ == 4, _ == 4, _ == 8)
+      assert(Utils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
+      // 40 files, 80 rows, 40 dynamic partitions.
+      val verifyFuncs: Seq[Int => Boolean] = Seq(_ == 40, _ == 40, _ == 80)
       verifyWriteDataMetrics(spark, executionId, verifyFuncs)
     }
   }

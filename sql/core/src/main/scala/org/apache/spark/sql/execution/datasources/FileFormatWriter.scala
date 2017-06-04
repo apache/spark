@@ -273,6 +273,9 @@ object FileFormatWriter extends Logging {
      * The data structures used to measure metrics during writing.
      */
     protected val writingTimePerFile: mutable.ArrayBuffer[Long] = mutable.ArrayBuffer.empty
+    protected var timeOnCurrentFile: Long = 0L
+    protected var numOutputRows: Long = 0L
+    protected var numOutputBytes: Long = 0L
 
     /**
      * Writes data out to files, and then returns the summary of relative information which
@@ -294,15 +297,6 @@ object FileFormatWriter extends Logging {
       } else {
         0L
       }
-    }
-
-    /**
-     * Runs the given function and measures the time spent in ms.
-     */
-    protected def measureTimeInMs(f: => Unit): Long = {
-      val startTime = System.nanoTime()
-      f
-      (System.nanoTime() - startTime) / 1000 / 1000
     }
   }
 
@@ -331,9 +325,6 @@ object FileFormatWriter extends Logging {
     override def execute(iter: Iterator[InternalRow]): ExecutedWriteSummary = {
       var fileCounter = 0
       var recordsInFile: Long = 0L
-      var writingTime: Long = 0L
-      var numOutputRows: Long = 0L
-      var numOutputBytes: Long = 0L
       newOutputWriter(fileCounter)
 
       while (iter.hasNext) {
@@ -342,32 +333,20 @@ object FileFormatWriter extends Logging {
           assert(fileCounter < MAX_FILE_COUNTER,
             s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
 
-          numOutputRows += recordsInFile
           recordsInFile = 0
-
-          writingTime += measureTimeInMs {
-            releaseResources()
-          }
-          writingTimePerFile += writingTime
-          writingTime = 0
-
-          numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
+          releaseResources()
+          numOutputRows += recordsInFile
           newOutputWriter(fileCounter)
         }
 
         val internalRow = iter.next()
-        writingTime += measureTimeInMs {
-          currentWriter.write(internalRow)
-        }
+        val startTime = System.nanoTime()
+        currentWriter.write(internalRow)
+        timeOnCurrentFile += (System.nanoTime() - startTime)
         recordsInFile += 1
       }
-      writingTime += measureTimeInMs {
-        releaseResources()
-      }
-      // Record the metrics for last file.
-      writingTimePerFile += writingTime
+      releaseResources()
       numOutputRows += recordsInFile
-      numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
 
       ExecutedWriteSummary(
         updatedPartitions = Set.empty,
@@ -380,7 +359,11 @@ object FileFormatWriter extends Logging {
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
         try {
+          val startTime = System.nanoTime()
           currentWriter.close()
+          writingTimePerFile += (timeOnCurrentFile + System.nanoTime() - startTime) / 1000 / 1000
+          timeOnCurrentFile = 0
+          numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
         } finally {
           currentWriter = null
         }
@@ -483,74 +466,52 @@ object FileFormatWriter extends Logging {
       // If anything below fails, we should abort the task.
       var recordsInFile: Long = 0L
       var fileCounter = 0
-      var numOutputBytes: Long = 0L
-      var numOutputRows: Long = 0L
       var totalFileCounter = 0
-      var writingTime: Long = 0L
       var currentPartColsAndBucketId: UnsafeRow = null
       val updatedPartitions = mutable.Set[String]()
 
       for (row <- iter) {
         val nextPartColsAndBucketId = getPartitionColsAndBucketId(row)
         if (currentPartColsAndBucketId != nextPartColsAndBucketId) {
-          writingTime += measureTimeInMs {
-            releaseResources()
-          }
-
-          // Only update metrics when this is not the first partition. Otherwise, it generates
-          // a metrics record with zero values for a non-existing file.
           if (currentPartColsAndBucketId != null) {
             totalFileCounter += (fileCounter + 1)
-            numOutputRows += recordsInFile
-            writingTimePerFile += writingTime
-            numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
           }
 
           // See a new partition or bucket - write to a new partition dir (or a new bucket file).
           currentPartColsAndBucketId = nextPartColsAndBucketId.copy()
           logDebug(s"Writing partition: $currentPartColsAndBucketId")
 
-          writingTime = 0
+          numOutputRows += recordsInFile
           recordsInFile = 0
           fileCounter = 0
 
+          releaseResources()
           newOutputWriter(currentPartColsAndBucketId, getPartPath, fileCounter, updatedPartitions)
         } else if (desc.maxRecordsPerFile > 0 &&
             recordsInFile >= desc.maxRecordsPerFile) {
           // Exceeded the threshold in terms of the number of records per file.
           // Create a new file by increasing the file counter.
 
-          writingTime += measureTimeInMs {
-            releaseResources()
-          }
-          writingTimePerFile += writingTime
           numOutputRows += recordsInFile
-          numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
-
           recordsInFile = 0
-          writingTime = 0
           fileCounter += 1
           assert(fileCounter < MAX_FILE_COUNTER,
             s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
 
+          releaseResources()
           newOutputWriter(currentPartColsAndBucketId, getPartPath, fileCounter, updatedPartitions)
         }
-        writingTime += measureTimeInMs {
-          currentWriter.write(getOutputRow(row))
-        }
+        val startTime = System.nanoTime()
+        currentWriter.write(getOutputRow(row))
+        timeOnCurrentFile += (System.nanoTime() - startTime)
         recordsInFile += 1
       }
-
-      writingTime += measureTimeInMs {
-        releaseResources()
-      }
-      // Record the metrics of last file/partition if any.
       if (currentPartColsAndBucketId != null) {
         totalFileCounter += (fileCounter + 1)
-        writingTimePerFile += writingTime
-        numOutputRows += recordsInFile
-        numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
       }
+      releaseResources()
+      numOutputRows += recordsInFile
+
       ExecutedWriteSummary(
         updatedPartitions = updatedPartitions.toSet,
         numOutputFile = totalFileCounter,
@@ -562,7 +523,11 @@ object FileFormatWriter extends Logging {
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
         try {
+          val startTime = System.nanoTime()
           currentWriter.close()
+          writingTimePerFile += (timeOnCurrentFile + System.nanoTime() - startTime) / 1000 / 1000
+          timeOnCurrentFile = 0
+          numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
         } finally {
           currentWriter = null
         }
@@ -572,7 +537,7 @@ object FileFormatWriter extends Logging {
 }
 
 /**
- * Wrapper class for the information of writing data out.
+ * Wrapper class for the metrics of writing data out.
  *
  * @param updatedPartitions the partitions updated during writing data out. Only valid
  *                          for dynamic partition.

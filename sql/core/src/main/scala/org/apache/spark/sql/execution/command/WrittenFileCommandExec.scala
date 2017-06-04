@@ -48,7 +48,12 @@ case class WrittenFileCommandExec(
       totalNumOutput += summary.numOutputRows
     }
 
-    val avgWritingTime = writeSummaries.flatMap(_.writingTimePerFile).sum / numFiles
+    val times = writeSummaries.flatMap(_.writingTimePerFile.filter(_ > 0))
+    val avgWritingTime = if (times.size > 0) {
+      times.sum / times.size
+    } else {
+      0
+    }
 
     val metricsNames = Seq("numParts", "numFiles", "numOutputBytes", "numOutputRows", "avgTime")
     val metricsValues = Seq(numPartitions, numFiles, totalNumBytes, totalNumOutput, avgWritingTime)
