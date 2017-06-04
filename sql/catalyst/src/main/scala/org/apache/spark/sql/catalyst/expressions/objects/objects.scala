@@ -857,28 +857,28 @@ case class CollectObjectsToMap private(
       case cls if classOf[java.util.Map[_, _]] == cls ||
         classOf[java.util.AbstractMap[_, _]] == cls =>
         val builderClass = classOf[java.util.HashMap[_, _]].getName
-        s"$builderClass $builderValue = new $builderClass($dataLength);"
+        s"${collClass.getName} $builderValue = new $builderClass($dataLength);"
       // Java SortedMap, NavigableMap => TreeMap
       case cls if classOf[java.util.SortedMap[_, _]] == cls ||
         classOf[java.util.NavigableMap[_, _]] == cls =>
         val builderClass = classOf[java.util.TreeMap[_, _]].getName
-        s"$builderClass $builderValue = new $builderClass();"
+        s"${collClass.getName} $builderValue = new $builderClass();"
       // Java ConcurrentMap => ConcurrentHashMap
       case cls if classOf[java.util.concurrent.ConcurrentMap[_, _]] == cls =>
         val builderClass = classOf[java.util.concurrent.ConcurrentHashMap[_, _]].getName
-        s"$builderClass $builderValue = new $builderClass();"
+        s"${collClass.getName} $builderValue = new $builderClass();"
       // Java ConcurrentNavigableMap => ConcurrentSkipListMap
       case cls if classOf[java.util.concurrent.ConcurrentNavigableMap[_, _]] == cls =>
         val builderClass = classOf[java.util.concurrent.ConcurrentSkipListMap[_, _]].getName
-        s"$builderClass $builderValue = new $builderClass();"
+        s"${collClass.getName} $builderValue = new $builderClass();"
       // Java concrete Map implementation
       case cls =>
         val builderClass = classOf[java.util.Map[_, _]].getName
         // Check for constructor with capacity specification
         if (Try(cls.getConstructor(Integer.TYPE)).isSuccess) {
-          s"$builderClass $builderValue = new ${cls.getName}($dataLength);"
+          s"${collClass.getName} $builderValue = new ${cls.getName}($dataLength);"
         } else {
-          s"$builderClass $builderValue = new ${cls.getName}();"
+          s"${collClass.getName} $builderValue = new ${cls.getName}();"
         }
     }
 
@@ -898,7 +898,7 @@ case class CollectObjectsToMap private(
          """ -> s"${ev.value} = (${collClass.getName}) $builderValue.result();"
       } else {
         s"$builderValue.put($genKeyFunctionValue, $genValueFunctionValue);" ->
-          s"${ev.value} = (${collClass.getName}) $builderValue;"
+          s"${ev.value} = $builderValue;"
       }
 
     val code = s"""

@@ -335,7 +335,8 @@ object ScalaReflection extends ScalaReflection {
 
         CollectObjectsToMap(
           p => deserializerFor(keyType, Some(p), walkedTypePath),
-          Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType)),
+          Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType),
+            returnNullable = false),
           schemaFor(keyType).dataType,
           p => deserializerFor(valueType, Some(p), walkedTypePath),
           Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType)),
