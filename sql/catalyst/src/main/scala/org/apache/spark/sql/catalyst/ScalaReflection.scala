@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -335,12 +335,8 @@ object ScalaReflection extends ScalaReflection {
 
         CollectObjectsToMap(
           p => deserializerFor(keyType, Some(p), walkedTypePath),
-          Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType),
-            returnNullable = false),
-          schemaFor(keyType).dataType,
           p => deserializerFor(valueType, Some(p), walkedTypePath),
-          Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType)),
-          schemaFor(valueType).dataType,
+          getPath,
           mirror.runtimeClass(t.typeSymbol.asClass)
         )
 
