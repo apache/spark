@@ -17,10 +17,41 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.ExecutedWriteSummary
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+
+/**
+ * A logical command specialized for writing data out. `WriteOutFileCommand`s are
+ * wrapped in `WrittenFileCommandExec` during execution.
+ */
+trait WriteOutFileCommand extends logical.Command {
+
+  /**
+   * Those metrics will be updated once the command finishes writing data out. Those metrics will
+   * be taken by `WrittenFileCommandExe` as its metrics when showing in UI.
+   */
+  def metrics(sparkContext: SparkContext): Map[String, SQLMetric] =
+    Map(
+      // General metrics.
+      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
+      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
+      "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
+      "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)")
+    )
+
+  def run(
+      sparkSession: SparkSession,
+      children: Seq[SparkPlan],
+      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
+    throw new NotImplementedError
+  }
+}
 
 /**
  * A physical operator specialized to execute the run method of a `WriteOutFileCommand`,

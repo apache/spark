@@ -599,15 +599,6 @@ object DataSource extends Logging {
     }
   }
 
-  /** Given a provider name, returns if the provider is a `FileFormat`-based data source. */
-  def isFileFormat(provider: String): Boolean = {
-    if (classOf[FileFormat].isAssignableFrom(lookupDataSource(provider))) {
-      true
-    } else {
-      false
-    }
-  }
-
   /**
    * When creating a data source table, the `path` option has a special meaning: the table location.
    * This method extracts the `path` option and treat it as table location to build a

@@ -135,7 +135,7 @@ case class CreateDataSourceTableAsSelectCommand(
    * record metrics for that. So we will return empty metrics map.
    */
   override def metrics(sparkContext: SparkContext): Map[String, SQLMetric] = {
-    if (DataSource.isFileFormat(table.provider.get)) {
+    if (classOf[FileFormat].isAssignableFrom(DataSource.lookupDataSource(table.provider.get))) {
       super.metrics(sparkContext)
     } else {
       Map.empty
