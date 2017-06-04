@@ -30,31 +30,23 @@ trait BaseWritingDataMetricsSuite extends SparkFunSuite with SQLTestUtils {
   import testImplicits._
 
   /**
-   * Run the given function and return latest execution id.
+   * Get execution metrics for the SQL execution and verify metrics values.
    *
-   * @param func the given function to run.
+   * @param metricsValues the expected metric values (numFiles, numPartitions, numOutputRows).
+   * @param func the function can produce execution id after running.
    */
-  def getLatestExecutionId(spark: SparkSession)(func: () => Unit): Long = {
+  def verifyWriteDataMetrics(
+      spark: SparkSession,
+      metricsValues: Seq[Int])(func: => Unit): Unit = {
     val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
     // Run the given function to trigger query execution.
-    func()
+    func
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     val executionIds =
       spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)
     assert(executionIds.size == 1)
-    executionIds.head
-  }
+    val executionId = executionIds.head
 
-  /**
-   * Get execution metrics for the given execution id and verify metrics values.
-   *
-   * @param executionId the given execution id.
-   * @param verifyFuncs functions used to verify the values of metrics.
-   */
-  def verifyWriteDataMetrics(
-      spark: SparkSession,
-      executionId: Long,
-      verifyFuncs: Seq[Int => Boolean]): Unit = {
     val executionData = spark.sharedState.listener.getExecution(executionId).get
     val executedNode = executionData.physicalPlanGraph.nodes.head
 
@@ -65,15 +57,14 @@ trait BaseWritingDataMetricsSuite extends SparkFunSuite with SQLTestUtils {
 
     val metrics = spark.sharedState.listener.getExecutionMetrics(executionId)
 
-    metricsNames.zip(verifyFuncs).foreach { case (metricsName, verifyFunc) =>
+    metricsNames.zip(metricsValues).foreach { case (metricsName, expected) =>
       val sqlMetric = executedNode.metrics.find(_.name == metricsName)
       assert(sqlMetric.isDefined)
       val accumulatorId = sqlMetric.get.accumulatorId
       val metricValue = metrics(accumulatorId).replaceAll(",", "").toInt
-      assert(verifyFunc(metricValue))
+      assert(metricValue == expected)
     }
 
-    // Sanity check.
     val totalNumBytesMetric = executedNode.metrics.find(_.name == "bytes of written output").get
     val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "").toInt
     assert(totalNumBytes > 0)
@@ -87,26 +78,21 @@ trait BaseWritingDataMetricsSuite extends SparkFunSuite with SQLTestUtils {
       dataFormat: String,
       tableName: String): Unit = {
     withTable(tableName) {
-      val executionId1 = getLatestExecutionId(spark) { () =>
+      // 1 file, 1 row, 0 dynamic partition.
+      verifyWriteDataMetrics(spark, Seq(1, 0, 1)) {
         Seq((1, 2)).toDF("i", "j")
           .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
       }
       val tableLocation =
         new File(spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).location)
-
       assert(Utils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 1)
-      // 1 file, 1 row, 0 dynamic partition.
-      val verifyFuncs1: Seq[Int => Boolean] = Seq(_ == 1, _ == 0, _ == 1)
-      verifyWriteDataMetrics(spark, executionId1, verifyFuncs1)
 
-      val executionId2 = getLatestExecutionId(spark) { () =>
+      // 2 files, 100 rows, 0 dynamic partition.
+      verifyWriteDataMetrics(spark, Seq(2, 0, 100)) {
         (0 until 100).map(i => (i, i + 1)).toDF("i", "j").repartition(2)
           .write.format(dataFormat).mode("overwrite").insertInto(tableName)
       }
       assert(Utils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
-      // 2 files, 100 rows, 0 dynamic partition.
-      val verifyFuncs2: Seq[Int => Boolean] = Seq(_ == 2, _ == 0, _ == 100)
-      verifyWriteDataMetrics(spark, executionId2, verifyFuncs2)
     }
   }
 
@@ -123,15 +109,14 @@ trait BaseWritingDataMetricsSuite extends SparkFunSuite with SQLTestUtils {
            |PARTITIONED BY(a)
            |LOCATION '${dir.toURI}'
          """.stripMargin)
-
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
       assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
       val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
         .selectExpr("id a", "id b")
-      sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
-      val executionId = getLatestExecutionId(spark) { () =>
+      // 40 files, 80 rows, 40 dynamic partitions.
+      verifyWriteDataMetrics(spark, Seq(40, 40, 80)) {
         df.union(df).repartition(2, $"a")
           .write
           .format(dataFormat)
@@ -139,9 +124,6 @@ trait BaseWritingDataMetricsSuite extends SparkFunSuite with SQLTestUtils {
           .insertInto(tableName)
       }
       assert(Utils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
-      // 40 files, 80 rows, 40 dynamic partitions.
-      val verifyFuncs: Seq[Int => Boolean] = Seq(_ == 40, _ == 40, _ == 80)
-      verifyWriteDataMetrics(spark, executionId, verifyFuncs)
     }
   }
 }

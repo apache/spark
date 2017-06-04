@@ -26,6 +26,7 @@ class SQLMetricsSuite extends BaseWritingDataMetricsSuite with TestHiveSingleton
   }
 
   test("writing data out metrics: dynamic partition") {
+    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
     testMetricsDynamicPartition(spark, "hive", "hive", "t1")
   }
 }
