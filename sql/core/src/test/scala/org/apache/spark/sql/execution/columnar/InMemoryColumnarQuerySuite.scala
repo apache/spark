@@ -332,6 +332,19 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     assert(cached.batchStats.value === expectedAnswer.size * INT.defaultSize)
   }
 
+  test("ColumnarBatch with many columns") {
+    val length1 = 9000
+    val schema = StructType((1 to length1).map { case i =>
+      StructField(s"col$i", IntegerType, true)
+    })
+    val cachedBatch1 = new GenerateColumnarBatch(schema, 10000, MEMORY_ONLY).
+      generate(Iterator.single(new GenericInternalRow((1 to length1).toArray[Any])))
+
+    val length2 = 9000
+    val columnTypes2 = List.fill(length2)(IntegerType)
+    val columnarIterator2 = new GenerateColumnAccessor(false).generate(columnTypes2)
+  }
+
   test("access primitive-type columns in CachedBatch without whole stage codegen") {
     // whole stage codegen is not applied to a row with more than WHOLESTAGE_MAX_NUM_FIELDS fields
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "2") {

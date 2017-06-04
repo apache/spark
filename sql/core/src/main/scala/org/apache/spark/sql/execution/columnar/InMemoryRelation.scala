@@ -88,18 +88,6 @@ case class InMemoryRelation(
     val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator)
   extends logical.LeafNode with MultiInstanceRelation {
 
-  /**
-   * If true, store the input rows using [[CachedColumnarBatch]]es, which are generally faster.
-   * If false, store the input rows using [[CachedBatchBytes]].
-   */
-  private def numOfNestedFields(dataType: DataType): Int = dataType match {
-    case dt: StructType => dt.fields.map(f => numOfNestedFields(f.dataType)).sum
-    case m: MapType => numOfNestedFields(m.keyType) + numOfNestedFields(m.valueType)
-    case a: ArrayType => numOfNestedFields(a.elementType)
-    case u: UserDefinedType[_] => numOfNestedFields(u.sqlType)
-    case _ => 1
-  }
-
   private[columnar] val useColumnarBatches: Boolean = {
     // In the initial implementation, for ease of review
     // support only integer and double and # of fields is less than wholeStageMaxNumFields
@@ -108,9 +96,7 @@ case class InMemoryRelation(
       case IntegerType => false
       case DoubleType => false
       case _ => true
-    }).isEmpty &&
-    !(children.map(p => numOfNestedFields(p.schema))
-      .exists(_ > child.sqlContext.conf.wholeStageMaxNumFields)) &&
+    }).isEmpty
     child.sqlContext.conf.getConf(SQLConf.CACHE_CODEGEN)
   }
 
