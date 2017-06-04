@@ -1945,8 +1945,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .json(path)
       }
       assert(exceptionOne.getMessage.contains("Malformed records are detected in schema " +
-        "inference. Parse Mode: FAILFAST. Reasons: Failed to infer a common schema. Struct " +
-        "types are expected, but `string` was found."))
+        "inference. Parse Mode: FAILFAST. Reasons"))
 
       val exceptionTwo = intercept[SparkException] {
         spark.read
@@ -1957,8 +1956,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .collect()
       }
       assert(exceptionTwo.getMessage.contains(" Malformed records are detected in record " +
-        "parsing. Parse Mode: FAILFAST. Reasons: java.lang.RuntimeException: Failed to " +
-        "parse a value for data type struct<dummy:string> (current token: VALUE_STRING)"))
+        "parsing. Parse Mode: FAILFAST. Reasons"))
     }
   }
 
