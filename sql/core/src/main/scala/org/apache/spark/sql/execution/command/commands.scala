@@ -17,79 +17,18 @@
 
 package org.apache.spark.sql.execution.command
 
-import scala.collection.mutable
-
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.datasources.ExecutedWriteSummary
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
-
-/**
- * A logical command specialized for writing data out. `WriteOutFileCommand`s are
- * wrapped in `WrittenFileCommandExec` during execution.
- */
-trait WriteOutFileCommand extends logical.Command {
-
-  /**
-   * Those metrics will be updated once the command finishes writing data out. Those metrics will
-   * be taken by `WrittenFileCommandExe` as its metrics when showing in UI.
-   */
-  def metrics(sqlContext: SQLContext): Map[String, SQLMetric] = {
-    val sparkContext = sqlContext.sparkContext
-
-    Map(
-      // General metrics.
-      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "numDynamicParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
-      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
-      "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
-      "writingTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
-      // Detailed metrics per file.
-      "minOutputRowsPerFile" ->
-        SQLMetrics.createMetric(sparkContext, "minimum number of output rows per file"),
-      "maxOutputRowsPerFile" ->
-        SQLMetrics.createMetric(sparkContext, "maximum number of output rows per file"),
-      "medOutputRowsPerFile" ->
-        SQLMetrics.createMetric(sparkContext, "median number of output rows per file"),
-      "minOutputBytesPerFile" ->
-        SQLMetrics.createMetric(sparkContext, "minimum written bytes per file"),
-      "maxOutputBytesPerFile" ->
-        SQLMetrics.createMetric(sparkContext, "maximum written bytes per file"),
-      "medOutputBytesPerFile" ->
-        SQLMetrics.createMetric(sparkContext, "median written bytes per file"),
-      // Detailed metrics per partition.
-      "minOutputRowsPerPart" ->
-        SQLMetrics.createMetric(sparkContext, "minimum number of output rows per partition"),
-      "maxOutputRowsPerPart" ->
-        SQLMetrics.createMetric(sparkContext, "maximum number of output rows per partition"),
-      "medOutputRowsPerPart" ->
-        SQLMetrics.createMetric(sparkContext, "median number of output rows per partition"),
-      "minOutputBytesPerPart" ->
-        SQLMetrics.createMetric(sparkContext, "minimum written bytes per partition"),
-      "maxOutputBytesPerPart" ->
-        SQLMetrics.createMetric(sparkContext, "maximum written bytes per partition"),
-      "medOutputBytesPerPart" ->
-        SQLMetrics.createMetric(sparkContext, "median written bytes per partition")
-    )
-  }
-
-  def run(
-      sparkSession: SparkSession,
-      children: Seq[SparkPlan],
-      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
-    throw new NotImplementedError
-  }
-}
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -133,111 +72,6 @@ trait CommandExec extends SparkPlan {
 
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
-  }
-}
-
-/**
- * A physical operator specialized to execute the run method of a `WriteOutFileCommand`,
- * save the result to prevent multiple executions, and record necessary metrics for UI.
- */
-case class WrittenFileCommandExec(
-    cmd: WriteOutFileCommand,
-    children: Seq[SparkPlan]) extends CommandExec {
-
-  override lazy val metrics = cmd.metrics(sqlContext)
-
-  /**
-   * A helper function used to compute median/minimum/maximum values and update metrics based
-   * on the given metric name.
-   */
-  private def setMetrics(values: Seq[Long], metricName: String): Seq[SQLMetric] = {
-    if (values.nonEmpty) {
-      val sorted = values.sorted
-      val metricValues = Seq(sorted(0), sorted(values.length / 2), sorted(values.length - 1))
-      Seq("min", "med", "max").zip(metricValues).map { case (prefix, metricValue) =>
-        val metric = metrics(prefix + metricName)
-        metric.add(metricValue)
-        metric
-      }
-    } else {
-      Seq.empty
-    }
-  }
-
-  /**
-   * The callback function used to update metrics returned from the operation of writing data out.
-   */
-  private def updateDriverMetrics(writeSummaries: Seq[ExecutedWriteSummary]): Unit = {
-    var numPartitions = 0
-    var numFiles = 0
-
-    val (numBytesPerFilePart, numOutputRowsPerFilePart) = writeSummaries.map { summary =>
-      numPartitions += summary.updatedPartitions.size
-      numFiles += summary.writtenFileNum
-
-      (summary.writtenBytesPerPart.flatten, summary.numOutputRowsPerPart.flatten)
-    }.unzip
-
-    val numBytesPerFile = numBytesPerFilePart.flatten
-    val numOutputRowsPerFile = numOutputRowsPerFilePart.flatten
-
-    val totalNumBytes: Long = numBytesPerFile.sum
-    val totalNumOutput: Long = numOutputRowsPerFile.sum
-
-    // Computes number of bytes/rows per file.
-    val numBytesPerFileMetrics = setMetrics(numBytesPerFile, "OutputBytesPerFile")
-    val numOutputsPerFileMetrics = setMetrics(numOutputRowsPerFile, "OutputRowsPerFile")
-
-    // Computes number of bytes/rows per partition.
-    val numBytesPerPart = numBytesPerFilePart.map(_.sum)
-    val numOutputRowsPerPart = numOutputRowsPerFilePart.map(_.sum)
-
-    val numBytesPerPartMetrics = setMetrics(numBytesPerPart, "OutputBytesPerPart")
-    val numOutputsPerPartMetrics = setMetrics(numOutputRowsPerPart, "OutputRowsPerPart")
-
-    // Metrics of writing time in ms.
-    // We only count for the non-zero writing time when computing average.
-    val writingTimePerFile: Seq[Long] = writeSummaries.flatMap(_.writingTimePerPart.flatten)
-    val nonZeroCount = writingTimePerFile.filter(_ > 0).size
-    val avgWritingTime = if (nonZeroCount == 0) {
-      0
-    } else {
-      writingTimePerFile.sum / nonZeroCount
-    }
-
-    // Updates metrics.
-    val numDynamicPartsMetric = metrics("numDynamicParts")
-    val fileNumMetric = metrics("numFiles")
-    val numBytesMetric = metrics("numOutputBytes")
-    val numOutputRowsMetric = metrics("numOutputRows")
-    val writingTimeMetric = metrics("writingTime")
-
-    numDynamicPartsMetric.add(numPartitions)
-    fileNumMetric.add(numFiles)
-    numBytesMetric.add(totalNumBytes)
-    numOutputRowsMetric.add(totalNumOutput)
-    writingTimeMetric.add(avgWritingTime)
-
-    val generalMetrics = Seq(numDynamicPartsMetric, fileNumMetric, numBytesMetric,
-      numOutputRowsMetric, writingTimeMetric)
-    val metricsPerFile = numBytesPerFileMetrics ++ numOutputsPerFileMetrics
-    val metricsPerPart = numBytesPerPartMetrics ++ numOutputsPerPartMetrics
-
-    val finalMetrics = if (numPartitions == 0) {
-      // For non-dynamic partition, we don't need to update the metrics per partition.
-      generalMetrics ++ metricsPerFile
-    } else {
-      generalMetrics ++ metricsPerFile ++ metricsPerPart
-    }
-
-    val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId, finalMetrics)
-  }
-
-  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
-    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val rows = cmd.run(sqlContext.sparkSession, children, updateDriverMetrics)
-    rows.map(converter(_).asInstanceOf[InternalRow])
   }
 }
 

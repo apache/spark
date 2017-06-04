@@ -21,6 +21,7 @@ import java.net.URI
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -133,9 +134,9 @@ case class CreateDataSourceTableAsSelectCommand(
    * For other data sources, `CreatableRelationProvider.createRelation` will be called. We can't
    * record metrics for that. So we will return empty metrics map.
    */
-  override def metrics(sqlContext: SQLContext): Map[String, SQLMetric] = {
+  override def metrics(sparkContext: SparkContext): Map[String, SQLMetric] = {
     if (DataSource.isFileFormat(table.provider.get)) {
-      super.metrics(sqlContext)
+      super.metrics(sparkContext)
     } else {
       Map.empty
     }

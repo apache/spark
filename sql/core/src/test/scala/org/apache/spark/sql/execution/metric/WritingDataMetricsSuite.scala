@@ -72,25 +72,10 @@ trait BaseWritingDataMetricsSuite extends SparkFunSuite with SQLTestUtils {
     }
 
     // Sanity check.
-    val numDynamicPartMetric = executedNode.metrics.find(_.name == "number of dynamic part").get
     val totalNumBytesMetric = executedNode.metrics.find(_.name == "bytes of written output").get
-    val numDynamicPart = metrics(numDynamicPartMetric.accumulatorId).toInt
     val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "").toInt
-    val maxOutputBytesPerPartMetric =
-      executedNode.metrics.find(_.name == "maximum written bytes per partition").get
-    if (numDynamicPart == 0) {
-      // For non-dynamic-partition, we won't update the metrics per partition.
-      val maxOutputBytesPerPart = metrics.get(maxOutputBytesPerPartMetric.accumulatorId)
-      assert(maxOutputBytesPerPart.isEmpty && totalNumBytes > 0)
-    } else {
-      val maxOutputBytesPerPart = metrics(maxOutputBytesPerPartMetric.accumulatorId)
-        .replaceAll(",", "").toInt
+    assert(totalNumBytes > 0)
 
-      // Even number of output rows is zero, the output bytes still can't be zero.
-      // So if there's dynamic partitions, maximum output bytes per partition should be more than 0.
-      assert(maxOutputBytesPerPart > 0 && maxOutputBytesPerPart <= totalNumBytes)
-    }
-    // Check if the metric of writing time is updated.
     val writingTimeMetric = executedNode.metrics.find(_.name == "average writing time (ms)").get
     val writingTime = metrics(writingTimeMetric.accumulatorId).replaceAll(",", "").toInt
     assert(writingTime >= 0)
