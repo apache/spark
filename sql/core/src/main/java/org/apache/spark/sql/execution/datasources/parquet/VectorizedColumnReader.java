@@ -169,7 +169,7 @@ public class VectorizedColumnReader {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
-          column.setDictionary(dictionary);
+          column.setDictionary(new ParquetDictionary(dictionary));
         } else {
           decodeDictionaryIds(rowId, num, column, dictionaryIds);
         }
