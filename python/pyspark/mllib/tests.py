@@ -240,6 +240,38 @@ class VectorTests(MLlibTestCase):
         self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 3., 0., 2.]))
         self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 1., 3., 2., 2.]))
 
+    def test_hash(self):
+        v1 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
+        v3 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        v4 = SparseVector(4, [(1, 1.0), (3, 2.5)])
+        self.assertEquals(hash(v1), hash(v2))
+        self.assertEquals(hash(v1), hash(v3))
+        self.assertEquals(hash(v2), hash(v3))
+        self.assertFalse(hash(v1) == hash(v4))
+        self.assertFalse(hash(v2) == hash(v4))
+
+    def test_eq(self):
+        v1 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
+        v3 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        v4 = SparseVector(6, [(1, 1.0), (3, 5.5)])
+        v5 = DenseVector([0.0, 1.0, 0.0, 2.5])
+        v6 = SparseVector(4, [(1, 1.0), (3, 2.5)])
+        self.assertEquals(v1, v2)
+        self.assertEquals(v1, v3)
+        self.assertFalse(v2 == v4)
+        self.assertFalse(v1 == v5)
+        self.assertFalse(v1 == v6)
+
+    def test_equals(self):
+        indices = [1, 2, 4]
+        values = [1., 3., 2.]
+        self.assertTrue(Vectors._equals(indices, values, list(range(5)), [0., 1., 3., 0., 2.]))
+        self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 3., 1., 0., 2.]))
+        self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 3., 0., 2.]))
+        self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 1., 3., 2., 2.]))
+
     def test_conversion(self):
         # numpy arrays should be automatically upcast to float64
         # tests for fix of [SPARK-5089]
