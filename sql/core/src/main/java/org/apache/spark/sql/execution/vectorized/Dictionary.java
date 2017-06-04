@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.vectorized;
 
 /**
- * The general interface for dictionary in `ColumnVector`, defines how to decode a dictionary id to
- * actual value.
+ * The interface for dictionary in ColumnVector to decode dictionary encoded values.
  */
 public interface Dictionary {
 
