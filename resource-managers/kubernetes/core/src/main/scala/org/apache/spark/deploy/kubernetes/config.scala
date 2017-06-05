@@ -47,6 +47,12 @@ package object config extends Logging {
       .stringConf
       .createWithDefault(s"spark-executor:$sparkVersion")
 
+  private[spark] val DOCKER_IMAGE_PULL_POLICY =
+    ConfigBuilder("spark.kubernetes.docker.image.pullPolicy")
+      .doc("Docker image pull policy when pulling any docker image in Kubernetes integration")
+      .stringConf
+      .createWithDefault("IfNotPresent")
+
   private[spark] val APISERVER_AUTH_SUBMISSION_CONF_PREFIX =
       "spark.kubernetes.authenticate.submission"
   private[spark] val APISERVER_AUTH_DRIVER_CONF_PREFIX =

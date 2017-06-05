@@ -104,6 +104,7 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
   private val configMapName = s"$kubernetesAppId-init-config"
   private val configMapKey = s"$kubernetesAppId-init-config-key"
   private val initContainerImage = sparkConf.get(INIT_CONTAINER_DOCKER_IMAGE)
+  private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)
   private val downloadTimeoutMinutes = sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT)
 
   override def provideInitContainerConfigMapBuilder(
@@ -196,6 +197,7 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
     }
     new SparkPodInitContainerBootstrapImpl(
       initContainerImage,
+      dockerImagePullPolicy,
       jarsDownloadPath,
       filesDownloadPath,
       downloadTimeoutMinutes,

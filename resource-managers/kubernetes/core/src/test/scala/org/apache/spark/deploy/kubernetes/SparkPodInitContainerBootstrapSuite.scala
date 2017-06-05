@@ -27,6 +27,7 @@ import org.apache.spark.deploy.kubernetes.constants._
 class SparkPodInitContainerBootstrapSuite extends SparkFunSuite with BeforeAndAfter {
   private val OBJECT_MAPPER = new ObjectMapper()
   private val INIT_CONTAINER_IMAGE = "spark-init:latest"
+  private val DOCKER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val JARS_DOWNLOAD_PATH = "/var/data/spark-jars"
   private val FILES_DOWNLOAD_PATH = "/var/data/spark-files"
   private val DOWNLOAD_TIMEOUT_MINUTES = 5
@@ -137,6 +138,7 @@ class SparkPodInitContainerBootstrapSuite extends SparkFunSuite with BeforeAndAf
   private def bootstrapPodWithoutSubmittedDependencies(): Pod = {
     val bootstrapUnderTest = new SparkPodInitContainerBootstrapImpl(
       INIT_CONTAINER_IMAGE,
+      DOCKER_IMAGE_PULL_POLICY,
       JARS_DOWNLOAD_PATH,
       FILES_DOWNLOAD_PATH,
       DOWNLOAD_TIMEOUT_MINUTES,
@@ -150,6 +152,7 @@ class SparkPodInitContainerBootstrapSuite extends SparkFunSuite with BeforeAndAf
   private def bootstrapPodWithSubmittedDependencies(): Pod = {
     val bootstrapUnderTest = new SparkPodInitContainerBootstrapImpl(
       INIT_CONTAINER_IMAGE,
+      DOCKER_IMAGE_PULL_POLICY,
       JARS_DOWNLOAD_PATH,
       FILES_DOWNLOAD_PATH,
       DOWNLOAD_TIMEOUT_MINUTES,

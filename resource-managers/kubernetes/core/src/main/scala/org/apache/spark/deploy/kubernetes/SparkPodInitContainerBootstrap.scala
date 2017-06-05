@@ -36,6 +36,7 @@ private[spark] trait SparkPodInitContainerBootstrap {
 
 private[spark] class SparkPodInitContainerBootstrapImpl(
     initContainerImage: String,
+    dockerImagePullPolicy: String,
     jarsDownloadPath: String,
     filesDownloadPath: String,
     downloadTimeoutMinutes: Long,
@@ -60,7 +61,7 @@ private[spark] class SparkPodInitContainerBootstrapImpl(
     val initContainer = new ContainerBuilder()
       .withName(s"spark-init")
       .withImage(initContainerImage)
-      .withImagePullPolicy("IfNotPresent")
+      .withImagePullPolicy(dockerImagePullPolicy)
       .addNewVolumeMount()
         .withName(INIT_CONTAINER_PROPERTIES_FILE_VOLUME)
         .withMountPath(INIT_CONTAINER_PROPERTIES_FILE_DIR)

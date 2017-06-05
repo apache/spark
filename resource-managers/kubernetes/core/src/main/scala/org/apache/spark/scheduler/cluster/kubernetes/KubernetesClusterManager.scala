@@ -46,7 +46,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val maybeExecutorInitContainerSecretName =
       sparkConf.get(EXECUTOR_INIT_CONTAINER_SECRET)
     val maybeExecutorInitContainerSecretMount =
-        sparkConf.get(EXECUTOR_INIT_CONTAINER_SECRET_MOUNT_DIR)
+      sparkConf.get(EXECUTOR_INIT_CONTAINER_SECRET_MOUNT_DIR)
     val executorInitContainerSecretVolumePlugin = for {
       initContainerSecretName <- maybeExecutorInitContainerSecretName
       initContainerSecretMountPath <- maybeExecutorInitContainerSecretMount
@@ -65,6 +65,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     } yield {
       new SparkPodInitContainerBootstrapImpl(
         sparkConf.get(INIT_CONTAINER_DOCKER_IMAGE),
+        sparkConf.get(DOCKER_IMAGE_PULL_POLICY),
         sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION),
         sparkConf.get(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION),
         sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT),
@@ -95,4 +96,3 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     scheduler.asInstanceOf[TaskSchedulerImpl].initialize(backend)
   }
 }
-

@@ -77,6 +77,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private var shufflePodCache: Option[ShufflePodCache] = None
   private val executorDockerImage = conf.get(EXECUTOR_DOCKER_IMAGE)
+  private val dockerImagePullPolicy = conf.get(DOCKER_IMAGE_PULL_POLICY)
   private val kubernetesNamespace = conf.get(KUBERNETES_NAMESPACE)
   private val executorPort = conf.getInt("spark.executor.port", DEFAULT_STATIC_PORT)
   private val blockmanagerPort = conf
@@ -354,7 +355,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         .addNewContainer()
           .withName(s"executor")
           .withImage(executorDockerImage)
-          .withImagePullPolicy("IfNotPresent")
+          .withImagePullPolicy(dockerImagePullPolicy)
           .withNewResources()
             .addToRequests("memory", executorMemoryQuantity)
             .addToLimits("memory", executorMemoryLimitQuantity)

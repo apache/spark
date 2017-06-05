@@ -60,6 +60,7 @@ private[spark] class Client(
   private val kubernetesDriverPodName = sparkConf.get(KUBERNETES_DRIVER_POD_NAME)
     .getOrElse(kubernetesAppId)
   private val driverDockerImage = sparkConf.get(DRIVER_DOCKER_IMAGE)
+  private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)
   private val driverMemoryMb = sparkConf.get(org.apache.spark.internal.config.DRIVER_MEMORY)
   private val memoryOverheadMb = sparkConf
     .get(KUBERNETES_DRIVER_MEMORY_OVERHEAD)
@@ -99,7 +100,7 @@ private[spark] class Client(
     val driverContainer = new ContainerBuilder()
       .withName(DRIVER_CONTAINER_NAME)
       .withImage(driverDockerImage)
-      .withImagePullPolicy("IfNotPresent")
+      .withImagePullPolicy(dockerImagePullPolicy)
       .addToEnv(driverExtraClasspathEnv.toSeq: _*)
       .addNewEnv()
         .withName(ENV_DRIVER_MEMORY)
