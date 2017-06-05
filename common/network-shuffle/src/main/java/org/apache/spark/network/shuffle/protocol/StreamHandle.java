@@ -24,16 +24,14 @@ import io.netty.buffer.ByteBuf;
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 /**
- * Identifier for a fixed number of chunks to read from a stream created by an "open blocks"
- * message. This is used by {@link org.apache.spark.network.shuffle.OneForOneBlockFetcher}.
+ * Identifier for a stream created by an "open blocks" message.
+ * This is used by {@link org.apache.spark.network.shuffle.OneForOneBlockFetcher}.
  */
 public class StreamHandle extends BlockTransferMessage {
   public final long streamId;
-  public final int numChunks;
 
-  public StreamHandle(long streamId, int numChunks) {
+  public StreamHandle(long streamId) {
     this.streamId = streamId;
-    this.numChunks = numChunks;
   }
 
   @Override
@@ -41,14 +39,13 @@ public class StreamHandle extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamId, numChunks);
+    return Objects.hashCode(streamId);
   }
 
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
       .add("streamId", streamId)
-      .add("numChunks", numChunks)
       .toString();
   }
 
@@ -56,26 +53,23 @@ public class StreamHandle extends BlockTransferMessage {
   public boolean equals(Object other) {
     if (other != null && other instanceof StreamHandle) {
       StreamHandle o = (StreamHandle) other;
-      return Objects.equal(streamId, o.streamId)
-        && Objects.equal(numChunks, o.numChunks);
+      return Objects.equal(streamId, o.streamId);
     }
     return false;
   }
 
   @Override
   public int encodedLength() {
-    return 8 + 4;
+    return 8;
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(streamId);
-    buf.writeInt(numChunks);
   }
 
   public static StreamHandle decode(ByteBuf buf) {
     long streamId = buf.readLong();
-    int numChunks = buf.readInt();
-    return new StreamHandle(streamId, numChunks);
+    return new StreamHandle(streamId);
   }
 }

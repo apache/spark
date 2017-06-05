@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 
 import com.codahale.metrics.Gauge;
@@ -44,7 +43,6 @@ import org.apache.spark.network.shuffle.protocol.*;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
 
-
 /**
  * RPC Handler for a server which can serve shuffle blocks from outside of an Executor process.
  *
@@ -62,8 +60,17 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
 
   public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
-    this(new OneForOneStreamManager(),
-      new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
+    this.metrics = new ShuffleMetrics();
+    this.blockManager =
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile);
+    this.streamManager = new OneForOneStreamManager(new OneForOneStreamManager.ChunkGetter() {
+      @Override
+      public ManagedBuffer getChunk(String appId, String executorId, String chunkId) {
+        final ManagedBuffer block = blockManager.getBlockData(appId, executorId, chunkId);
+        metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
+        return block;
+      }
+    });
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */
@@ -92,33 +99,14 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         OpenBlocks msg = (OpenBlocks) msgObj;
         checkAuth(client, msg.appId);
 
-        Iterator<ManagedBuffer> iter = new Iterator<ManagedBuffer>() {
-          private int index = 0;
-
-          @Override
-          public boolean hasNext() {
-            return index < msg.blockIds.length;
-          }
-
-          @Override
-          public ManagedBuffer next() {
-            final ManagedBuffer block = blockManager.getBlockData(msg.appId, msg.execId,
-              msg.blockIds[index]);
-            index++;
-            metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
-            return block;
-          }
-        };
-
-        long streamId = streamManager.registerStream(client.getClientId(), iter);
+        long streamId = streamManager.registerStream(msg.appId, msg.execId);
         if (logger.isTraceEnabled()) {
-          logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
+          logger.trace("Registered streamId {} for client {} from host {}",
                        streamId,
-                       msg.blockIds.length,
                        client.getClientId(),
                        getRemoteAddress(client.getChannel()));
         }
-        callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
+        callback.onSuccess(new StreamHandle(streamId).toByteBuffer());
       } finally {
         responseDelayContext.stop();
       }

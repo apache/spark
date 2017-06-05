@@ -32,6 +32,7 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
+import org.apache.spark.network.TestManagedBuffer;
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -172,7 +173,12 @@ public class SaslIntegrationSuite {
     // Start a new server with the correct RPC handler to serve block data.
     ExternalShuffleBlockResolver blockResolver = mock(ExternalShuffleBlockResolver.class);
     ExternalShuffleBlockHandler blockHandler = new ExternalShuffleBlockHandler(
-      new OneForOneStreamManager(), blockResolver);
+      new OneForOneStreamManager(new OneForOneStreamManager.ChunkGetter() {
+        @Override
+        public ManagedBuffer getChunk(String appId, String executorId, String chunkId) {
+          return new TestManagedBuffer(123);
+        }
+      }), blockResolver);
     TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf, secretKeyHolder);
     TransportContext blockServerContext = new TransportContext(conf, blockHandler);
     TransportServer blockServer = blockServerContext.createServer(Arrays.asList(bootstrap));
@@ -218,7 +224,7 @@ public class SaslIntegrationSuite {
 
       // Make a successful request to fetch blocks, which creates a new stream. But do not actually
       // fetch any blocks, to keep the stream open.
-      OpenBlocks openMessage = new OpenBlocks("app-1", "0", blockIds);
+      OpenBlocks openMessage = new OpenBlocks("app-1", "0");
       ByteBuffer response = client1.sendRpcSync(openMessage.toByteBuffer(), TIMEOUT_MS);
       StreamHandle stream = (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response);
       long streamId = stream.streamId;
@@ -233,18 +239,18 @@ public class SaslIntegrationSuite {
       CountDownLatch chunkReceivedLatch = new CountDownLatch(1);
       ChunkReceivedCallback callback = new ChunkReceivedCallback() {
         @Override
-        public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
+        public void onSuccess(String chunkId, ManagedBuffer buffer) {
           chunkReceivedLatch.countDown();
         }
         @Override
-        public void onFailure(int chunkIndex, Throwable t) {
+        public void onFailure(String chunkId, Throwable t) {
           exception.set(t);
           chunkReceivedLatch.countDown();
         }
       };
 
       exception.set(null);
-      client2.fetchChunk(streamId, 0, callback);
+      client2.fetchChunk(streamId, "shuffle_2_3_4", callback);
       chunkReceivedLatch.await();
       checkSecurityException(exception.get());
     } finally {

@@ -29,8 +29,8 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -138,8 +138,8 @@ public class OneForOneBlockFetcherSuite {
       BlockTransferMessage message = BlockTransferMessage.Decoder.fromByteBuffer(
         (ByteBuffer) invocationOnMock.getArguments()[0]);
       RpcResponseCallback callback = (RpcResponseCallback) invocationOnMock.getArguments()[1];
-      callback.onSuccess(new StreamHandle(123, blocks.size()).toByteBuffer());
-      assertEquals(new OpenBlocks("app-id", "exec-id", blockIds), message);
+      callback.onSuccess(new StreamHandle(123).toByteBuffer());
+      assertEquals(new OpenBlocks("app-id", "exec-id"), message);
       return null;
     }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
 
@@ -149,23 +149,23 @@ public class OneForOneBlockFetcherSuite {
     doAnswer(invocation -> {
       try {
         long streamId = (Long) invocation.getArguments()[0];
-        int myChunkIndex = (Integer) invocation.getArguments()[1];
+        String chunkId = (String) invocation.getArguments()[1];
         assertEquals(123, streamId);
-        assertEquals(expectedChunkIndex.getAndIncrement(), myChunkIndex);
+        assertEquals(blockIds[expectedChunkIndex.getAndIncrement()], chunkId);
 
         ChunkReceivedCallback callback = (ChunkReceivedCallback) invocation.getArguments()[2];
         ManagedBuffer result = blockIterator.next();
         if (result != null) {
-          callback.onSuccess(myChunkIndex, result);
+          callback.onSuccess(chunkId, result);
         } else {
-          callback.onFailure(myChunkIndex, new RuntimeException("Failed " + myChunkIndex));
+          callback.onFailure(chunkId, new RuntimeException("Failed " + chunkId));
         }
       } catch (Exception e) {
         e.printStackTrace();
         fail("Unexpected failure");
       }
       return null;
-    }).when(client).fetchChunk(anyLong(), anyInt(), any());
+    }).when(client).fetchChunk(anyLong(), anyString(), any());
 
     fetcher.start();
     return listener;

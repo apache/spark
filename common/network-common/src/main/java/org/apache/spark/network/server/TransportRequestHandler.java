@@ -122,7 +122,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     try {
       streamManager.checkAuthorization(reverseClient, req.streamChunkId.streamId);
       streamManager.registerChannel(channel, req.streamChunkId.streamId);
-      buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
+      buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkId);
     } catch (Exception e) {
       logger.error(String.format("Error opening block %s for request from %s",
         req.streamChunkId, getRemoteAddress(channel)), e);

@@ -34,7 +34,7 @@ public interface ChunkReceivedCallback {
    * call returns. You must therefore either retain() the buffer or copy its contents before
    * returning.
    */
-  void onSuccess(int chunkIndex, ManagedBuffer buffer);
+  void onSuccess(String chunkId, ManagedBuffer buffer);
 
   /**
    * Called upon failure to fetch a particular chunk. Note that this may actually be called due
@@ -43,5 +43,5 @@ public interface ChunkReceivedCallback {
    * After receiving a failure, the stream may or may not be valid. The client should not assume
    * that the server's side of the stream has been closed.
    */
-  void onFailure(int chunkIndex, Throwable e);
+  void onFailure(String chunkId, Throwable e);
 }

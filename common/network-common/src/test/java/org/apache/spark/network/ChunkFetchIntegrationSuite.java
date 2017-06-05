@@ -53,8 +53,8 @@ import org.apache.spark.network.util.TransportConf;
 
 public class ChunkFetchIntegrationSuite {
   static final long STREAM_ID = 1;
-  static final int BUFFER_CHUNK_INDEX = 0;
-  static final int FILE_CHUNK_INDEX = 1;
+  static final String BUFFER_CHUNK_ID = "0";
+  static final String FILE_CHUNK_ID = "1";
 
   static TransportServer server;
   static TransportClientFactory clientFactory;
@@ -92,14 +92,14 @@ public class ChunkFetchIntegrationSuite {
 
     streamManager = new StreamManager() {
       @Override
-      public ManagedBuffer getChunk(long streamId, int chunkIndex) {
+      public ManagedBuffer getChunk(long streamId, String chunkId) {
         assertEquals(STREAM_ID, streamId);
-        if (chunkIndex == BUFFER_CHUNK_INDEX) {
+        if (chunkId.equals(BUFFER_CHUNK_ID)) {
           return new NioManagedBuffer(buf);
-        } else if (chunkIndex == FILE_CHUNK_INDEX) {
+        } else if (chunkId.equals(FILE_CHUNK_ID)) {
           return new FileSegmentManagedBuffer(conf, testFile, 10, testFile.length() - 25);
         } else {
-          throw new IllegalArgumentException("Invalid chunk index: " + chunkIndex);
+          throw new IllegalArgumentException("Invalid chunk index: " + chunkId);
         }
       }
     };
@@ -131,8 +131,8 @@ public class ChunkFetchIntegrationSuite {
   }
 
   static class FetchResult {
-    public Set<Integer> successChunks;
-    public Set<Integer> failedChunks;
+    public Set<String> successChunks;
+    public Set<String> failedChunks;
     public List<ManagedBuffer> buffers;
 
     public void releaseBuffers() {
@@ -142,35 +142,35 @@ public class ChunkFetchIntegrationSuite {
     }
   }
 
-  private FetchResult fetchChunks(List<Integer> chunkIndices) throws Exception {
+  private FetchResult fetchChunks(List<String> chunkIds) throws Exception {
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     final Semaphore sem = new Semaphore(0);
 
     final FetchResult res = new FetchResult();
-    res.successChunks = Collections.synchronizedSet(new HashSet<Integer>());
-    res.failedChunks = Collections.synchronizedSet(new HashSet<Integer>());
+    res.successChunks = Collections.synchronizedSet(new HashSet<String>());
+    res.failedChunks = Collections.synchronizedSet(new HashSet<String>());
     res.buffers = Collections.synchronizedList(new LinkedList<ManagedBuffer>());
 
     ChunkReceivedCallback callback = new ChunkReceivedCallback() {
       @Override
-      public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
+      public void onSuccess(String chunkId, ManagedBuffer buffer) {
         buffer.retain();
-        res.successChunks.add(chunkIndex);
+        res.successChunks.add(chunkId);
         res.buffers.add(buffer);
         sem.release();
       }
 
       @Override
-      public void onFailure(int chunkIndex, Throwable e) {
-        res.failedChunks.add(chunkIndex);
+      public void onFailure(String chunkId, Throwable e) {
+        res.failedChunks.add(chunkId);
         sem.release();
       }
     };
 
-    for (int chunkIndex : chunkIndices) {
-      client.fetchChunk(STREAM_ID, chunkIndex, callback);
+    for (String chunkId : chunkIds) {
+      client.fetchChunk(STREAM_ID, chunkId, callback);
     }
-    if (!sem.tryAcquire(chunkIndices.size(), 5, TimeUnit.SECONDS)) {
+    if (!sem.tryAcquire(chunkIds.size(), 5, TimeUnit.SECONDS)) {
       fail("Timeout getting response from the server");
     }
     client.close();
@@ -179,8 +179,8 @@ public class ChunkFetchIntegrationSuite {
 
   @Test
   public void fetchBufferChunk() throws Exception {
-    FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_INDEX));
-    assertEquals(Sets.newHashSet(BUFFER_CHUNK_INDEX), res.successChunks);
+    FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_ID));
+    assertEquals(Sets.newHashSet(BUFFER_CHUNK_ID), res.successChunks);
     assertTrue(res.failedChunks.isEmpty());
     assertBufferListsEqual(Arrays.asList(bufferChunk), res.buffers);
     res.releaseBuffers();
@@ -188,8 +188,8 @@ public class ChunkFetchIntegrationSuite {
 
   @Test
   public void fetchFileChunk() throws Exception {
-    FetchResult res = fetchChunks(Arrays.asList(FILE_CHUNK_INDEX));
-    assertEquals(Sets.newHashSet(FILE_CHUNK_INDEX), res.successChunks);
+    FetchResult res = fetchChunks(Arrays.asList(FILE_CHUNK_ID));
+    assertEquals(Sets.newHashSet(FILE_CHUNK_ID), res.successChunks);
     assertTrue(res.failedChunks.isEmpty());
     assertBufferListsEqual(Arrays.asList(fileChunk), res.buffers);
     res.releaseBuffers();
@@ -197,16 +197,16 @@ public class ChunkFetchIntegrationSuite {
 
   @Test
   public void fetchNonExistentChunk() throws Exception {
-    FetchResult res = fetchChunks(Arrays.asList(12345));
+    FetchResult res = fetchChunks(Arrays.asList("12345"));
     assertTrue(res.successChunks.isEmpty());
-    assertEquals(Sets.newHashSet(12345), res.failedChunks);
+    assertEquals(Sets.newHashSet("12345"), res.failedChunks);
     assertTrue(res.buffers.isEmpty());
   }
 
   @Test
   public void fetchBothChunks() throws Exception {
-    FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX));
-    assertEquals(Sets.newHashSet(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX), res.successChunks);
+    FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_ID, FILE_CHUNK_ID));
+    assertEquals(Sets.newHashSet(BUFFER_CHUNK_ID, FILE_CHUNK_ID), res.successChunks);
     assertTrue(res.failedChunks.isEmpty());
     assertBufferListsEqual(Arrays.asList(bufferChunk, fileChunk), res.buffers);
     res.releaseBuffers();
@@ -214,9 +214,9 @@ public class ChunkFetchIntegrationSuite {
 
   @Test
   public void fetchChunkAndNonExistent() throws Exception {
-    FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_INDEX, 12345));
-    assertEquals(Sets.newHashSet(BUFFER_CHUNK_INDEX), res.successChunks);
-    assertEquals(Sets.newHashSet(12345), res.failedChunks);
+    FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_ID, "12345"));
+    assertEquals(Sets.newHashSet(BUFFER_CHUNK_ID), res.successChunks);
+    assertEquals(Sets.newHashSet("12345"), res.failedChunks);
     assertBufferListsEqual(Arrays.asList(bufferChunk), res.buffers);
     res.releaseBuffers();
   }

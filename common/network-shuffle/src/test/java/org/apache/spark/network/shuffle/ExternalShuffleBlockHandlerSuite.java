@@ -81,11 +81,7 @@ public class ExternalShuffleBlockHandlerSuite {
   public void testOpenShuffleBlocks() {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3]));
-    ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
-    when(blockResolver.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
-    when(blockResolver.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
-    ByteBuffer openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" })
+    ByteBuffer openBlocks = new OpenBlocks("app0", "exec1")
       .toByteBuffer();
     handler.receive(client, openBlocks, callback);
 
@@ -93,20 +89,14 @@ public class ExternalShuffleBlockHandlerSuite {
     verify(callback, times(1)).onSuccess(response.capture());
     verify(callback, never()).onFailure(any());
 
-    StreamHandle handle =
-      (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
-    assertEquals(2, handle.numChunks);
-
     @SuppressWarnings("unchecked")
-    ArgumentCaptor<Iterator<ManagedBuffer>> stream = (ArgumentCaptor<Iterator<ManagedBuffer>>)
-        (ArgumentCaptor<?>) ArgumentCaptor.forClass(Iterator.class);
-    verify(streamManager, times(1)).registerStream(anyString(), stream.capture());
-    Iterator<ManagedBuffer> buffers = stream.getValue();
-    assertEquals(block0Marker, buffers.next());
-    assertEquals(block1Marker, buffers.next());
-    assertFalse(buffers.hasNext());
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b0");
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b1");
+    ArgumentCaptor<String> appId = (ArgumentCaptor<String>)
+        (ArgumentCaptor<?>) ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> execId = (ArgumentCaptor<String>)
+      (ArgumentCaptor<?>) ArgumentCaptor.forClass(String.class);
+    verify(streamManager, times(1)).registerStream(appId.capture(), execId.capture());
+    assertEquals(appId.getValue(), "app0");
+    assertEquals(execId.getValue(), "exec1");
 
     // Verify open block request latency metrics
     Timer openBlockRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)
@@ -114,12 +104,6 @@ public class ExternalShuffleBlockHandlerSuite {
         .getMetrics()
         .get("openBlockRequestLatencyMillis");
     assertEquals(1, openBlockRequestLatencyMillis.getCount());
-    // Verify block transfer metrics
-    Meter blockTransferRateBytes = (Meter) ((ExternalShuffleBlockHandler) handler)
-        .getAllMetrics()
-        .getMetrics()
-        .get("blockTransferRateBytes");
-    assertEquals(10, blockTransferRateBytes.getCount());
   }
 
   @Test
