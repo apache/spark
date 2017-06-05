@@ -203,9 +203,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
       case s: Seq[_] => s.map {
-        case arg: TreeNode[_] if containsChild(arg) =>
+        case arg: TreeNode[_] if containsChild(arg) && remainingOldChildren.size > 0 =>
           val newChild = remainingNewChildren.remove(0)
           val oldChild = remainingOldChildren.remove(0)
+          assert(arg == oldChild)
           if (newChild fastEquals oldChild) {
             oldChild
           } else {
@@ -216,9 +217,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case null => null
       }
       case m: Map[_, _] => m.mapValues {
-        case arg: TreeNode[_] if containsChild(arg) =>
+        case arg: TreeNode[_] if containsChild(arg) && remainingOldChildren.size > 0 =>
           val newChild = remainingNewChildren.remove(0)
           val oldChild = remainingOldChildren.remove(0)
+          assert(arg == oldChild)
           if (newChild fastEquals oldChild) {
             oldChild
           } else {
@@ -228,9 +230,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case nonChild: AnyRef => nonChild
         case null => null
       }.view.force // `mapValues` is lazy and we need to force it to materialize
-      case arg: TreeNode[_] if containsChild(arg) =>
+      case arg: TreeNode[_] if containsChild(arg) && remainingOldChildren.size > 0 =>
         val newChild = remainingNewChildren.remove(0)
         val oldChild = remainingOldChildren.remove(0)
+        assert(arg == oldChild)
         if (newChild fastEquals oldChild) {
           oldChild
         } else {
