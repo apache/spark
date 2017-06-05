@@ -63,7 +63,7 @@ private[sql] object JsonInferSchema {
               None
             case FailFastMode =>
               throw new SparkException("Malformed records are detected in schema inference. " +
-                s"Parse Mode: ${FailFastMode.name}. Reasons: ${e.getMessage}", e)
+                s"Parse Mode: ${FailFastMode.name}.", e)
           }
         }
       }
