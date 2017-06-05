@@ -116,7 +116,7 @@ $(document).ready(function() {
           attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
           attempt["log"] = uiRoot + "/api/v1/applications/" + id + "/" +
             (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
-
+          attempt["duration"] = formatDuration(attempt["duration"]);
           var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
           array.push(app_clone);
         }
@@ -128,7 +128,7 @@ $(document).ready(function() {
         }
 
       $.get("static/historypage-template.html", function(template) {
-        historySummary.append(Mustache.render($(template).filter("#history-summary-template").html(),data));
+        var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
         var selector = "#history-summary-table";
         var conf = {
                     "columns": [
@@ -158,31 +158,26 @@ $(document).ready(function() {
 
         if (hasMultipleAttempts) {
           jQuery.extend(conf, rowGroupConf);
-          var rowGroupCells = document.getElementsByClassName("rowGroupColumn");
+          var rowGroupCells = apps.find(".rowGroupColumn");
           for (i = 0; i < rowGroupCells.length; i++) {
             rowGroupCells[i].style='background-color: #ffffff';
           }
         }
 
         if (!hasMultipleAttempts) {
-          var attemptIDCells = document.getElementsByClassName("attemptIDSpan");
+          var attemptIDCells = apps.find(".attemptIDSpan");
           for (i = 0; i < attemptIDCells.length; i++) {
             attemptIDCells[i].style.display='none';
           }
         }
 
         if (requestedIncomplete) {
-          var completedCells = document.getElementsByClassName("completedColumn");
+          var completedCells = apps.find(".completedColumn");
           for (i = 0; i < completedCells.length; i++) {
             completedCells[i].style.display='none';
           }
         }
-
-        var durationCells = document.getElementsByClassName("durationClass");
-        for (i = 0; i < durationCells.length; i++) {
-          var timeInMilliseconds = parseInt(durationCells[i].title);
-          durationCells[i].innerHTML = formatDuration(timeInMilliseconds);
-        }
+        historySummary.append(apps);
 
         if ($(selector.concat(" tr")).length < 20) {
           $.extend(conf, {paging: false});
