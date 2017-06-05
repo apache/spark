@@ -532,7 +532,7 @@ private[spark] class MapOutputTrackerMaster(
     None
   }
 
-  private def incrementEpoch() {
+  def incrementEpoch() {
     epochLock.synchronized {
       epoch += 1
       logDebug("Increasing epoch to " + epoch)
