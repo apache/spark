@@ -21,12 +21,12 @@ import scala.collection.JavaConverters._
 import scala.language.existentials
 import scala.util.Random
 import scala.util.control.Breaks._
-
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix, Vector, Vectors}
+import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -506,8 +506,8 @@ class LogisticRegressionSuite
   test("sparse coefficients in LogisticAggregator") {
     val bcCoefficientsBinary = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val binaryAgg = new LogisticAggregator(bcCoefficientsBinary, bcFeaturesStd, 2,
-      fitIntercept = true, multinomial = false)
+    val binaryAgg = new LogisticAggregator(bcFeaturesStd, 2,
+      fitIntercept = true, multinomial = false)(bcCoefficientsBinary)
     val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         binaryAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
@@ -516,8 +516,8 @@ class LogisticRegressionSuite
     assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
 
     val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
-    val multinomialAgg = new LogisticAggregator(bcCoefficientsMulti, bcFeaturesStd, 3,
-      fitIntercept = true, multinomial = true)
+    val multinomialAgg = new LogisticAggregator(bcFeaturesStd, 3,
+      fitIntercept = true, multinomial = true)(bcCoefficientsMulti)
     val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         multinomialAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))

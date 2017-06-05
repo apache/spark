@@ -17,6 +17,7 @@
 package org.apache.spark.ml.optim.loss
 
 import breeze.optimize.DiffFunction
+import org.apache.spark.ml.linalg._
 
 /**
  * A Breeze diff function which represents a cost function for differentiable regularization
@@ -28,6 +29,8 @@ private[ml] trait DifferentiableRegularization[T] extends DiffFunction[T] {
 
   /** Magnitude of the regularization penalty. */
   def regParam: Double
+
+  def getReg: Int => Double = (x: Int) => regParam
 
 }
 
@@ -44,7 +47,7 @@ private[ml] trait DifferentiableRegularization[T] extends DiffFunction[T] {
 private[ml] class L2Regularization(
     val regParam: Double,
     shouldApply: Int => Boolean,
-    featuresStd: Option[Array[Double]]) extends DifferentiableRegularization[Array[Double]] {
+    featuresStd: Option[Int => Double]) extends DifferentiableRegularization[Array[Double]] {
 
   override def calculate(coefficients: Array[Double]): (Double, Array[Double]) = {
     var sum = 0.0
@@ -52,8 +55,8 @@ private[ml] class L2Regularization(
     coefficients.indices.filter(shouldApply).foreach { j =>
       val coef = coefficients(j)
       featuresStd match {
-        case Some(stds) =>
-          val std = stds(j)
+        case Some(getStd) =>
+          val std = getStd(j)
           if (std != 0.0) {
             val temp = coef / (std * std)
             sum += coef * temp
@@ -69,3 +72,30 @@ private[ml] class L2Regularization(
     (0.5 * sum * regParam, gradient)
   }
 }
+
+//class StandardizedRegularization(val getStd: Int => Double)
+//  extends DifferentiableRegularization[Vector] {
+//  val regParam = 0.0
+//
+//  override def calculate(coefficients: Vector): (Double, Vector) = {
+//
+//
+//  }
+//}
+//
+//class Regularization(override val getReg: Int => Double)
+//  extends DifferentiableRegularization[Vector] {
+//  val regParam = 0.0
+//
+//  override def calculate(coefficients: Vector): (Double, Vector) = {
+//    var sum = 0.0
+//    // TODO: handle sparse?
+//    val gradient = new Array[Double](coefficients.size)
+//    coefficients.foreachActive { (i, v) =>
+//      val reg = getReg(i)
+//      sum += 0.5 * v * v * reg
+//      gradient(i) = v * reg
+//    }
+//    (sum, Vectors.dense(gradient))
+//  }
+//}

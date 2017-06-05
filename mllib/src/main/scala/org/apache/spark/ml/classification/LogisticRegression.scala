@@ -20,11 +20,9 @@ package org.apache.spark.ml.classification
 import java.util.Locale
 
 import scala.collection.mutable
-
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, LBFGSB => BreezeLBFGSB, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.broadcast.Broadcast
@@ -32,6 +30,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.linalg.BLAS._
+import org.apache.spark.ml.optim.aggregator.LogisticAggregator
+import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -598,8 +598,23 @@ class LogisticRegression @Since("1.2.0") (
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
         val bcFeaturesStd = instances.context.broadcast(featuresStd)
-        val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
-          $(standardization), bcFeaturesStd, regParamL2, multinomial = isMultinomial,
+//        val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
+//          $(standardization), bcFeaturesStd, regParamL2, multinomial = isMultinomial,
+//          $(aggregationDepth))
+        val getAggregatorFunc = new LogisticAggregator(bcFeaturesStd, numClasses, $(fitIntercept),
+          multinomial = isMultinomial)(_)
+        val getFeaturesStd = (j: Int) => featuresStd(j % numFeatures)
+        val regularization = if (regParamL2 != 0.0) {
+          val shouldApply = (idx: Int) => {
+            // do not apply to intercepts
+            idx >= 0 && idx < numFeatures * numClasses
+          }
+          Some(new L2Regularization(regParamL2, shouldApply,
+            if ($(standardization)) None else Some(getFeaturesStd)))
+        } else {
+          None
+        }
+        val costFun = new RDDLossFunction(instances, getAggregatorFunc, regularization,
           $(aggregationDepth))
 
         val numCoeffsPlusIntercepts = numFeaturesPlusIntercept * numCoefficientSets
@@ -1629,309 +1644,309 @@ class BinaryLogisticRegressionSummary private[classification] (
  * for speed. We convert back to row major order when we create the model,
  * since this form is optimal for the matrix operations used for prediction.
  */
-private class LogisticAggregator(
-    bcCoefficients: Broadcast[Vector],
-    bcFeaturesStd: Broadcast[Array[Double]],
-    numClasses: Int,
-    fitIntercept: Boolean,
-    multinomial: Boolean) extends Serializable with Logging {
-
-  private val numFeatures = bcFeaturesStd.value.length
-  private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
-  private val coefficientSize = bcCoefficients.value.size
-  private val numCoefficientSets = if (multinomial) numClasses else 1
-  if (multinomial) {
-    require(numClasses ==  coefficientSize / numFeaturesPlusIntercept, s"The number of " +
-      s"coefficients should be ${numClasses * numFeaturesPlusIntercept} but was $coefficientSize")
-  } else {
-    require(coefficientSize == numFeaturesPlusIntercept, s"Expected $numFeaturesPlusIntercept " +
-      s"coefficients but got $coefficientSize")
-    require(numClasses == 1 || numClasses == 2, s"Binary logistic aggregator requires numClasses " +
-      s"in {1, 2} but found $numClasses.")
-  }
-
-  private var weightSum = 0.0
-  private var lossSum = 0.0
-
-  @transient private lazy val coefficientsArray: Array[Double] = bcCoefficients.value match {
-    case DenseVector(values) => values
-    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector but " +
-      s"got type ${bcCoefficients.value.getClass}.)")
-  }
-  private lazy val gradientSumArray = new Array[Double](coefficientSize)
-
-  if (multinomial && numClasses <= 2) {
-    logInfo(s"Multinomial logistic regression for binary classification yields separate " +
-      s"coefficients for positive and negative classes. When no regularization is applied, the" +
-      s"result will be effectively the same as binary logistic regression. When regularization" +
-      s"is applied, multinomial loss will produce a result different from binary loss.")
-  }
-
-  /** Update gradient and loss using binary loss function. */
-  private def binaryUpdateInPlace(
-      features: Vector,
-      weight: Double,
-      label: Double): Unit = {
-
-    val localFeaturesStd = bcFeaturesStd.value
-    val localCoefficients = coefficientsArray
-    val localGradientArray = gradientSumArray
-    val margin = - {
-      var sum = 0.0
-      features.foreachActive { (index, value) =>
-        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-          sum += localCoefficients(index) * value / localFeaturesStd(index)
-        }
-      }
-      if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
-      sum
-    }
-
-    val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
-
-    features.foreachActive { (index, value) =>
-      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-        localGradientArray(index) += multiplier * value / localFeaturesStd(index)
-      }
-    }
-
-    if (fitIntercept) {
-      localGradientArray(numFeaturesPlusIntercept - 1) += multiplier
-    }
-
-    if (label > 0) {
-      // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
-      lossSum += weight * MLUtils.log1pExp(margin)
-    } else {
-      lossSum += weight * (MLUtils.log1pExp(margin) - margin)
-    }
-  }
-
-  /** Update gradient and loss using multinomial (softmax) loss function. */
-  private def multinomialUpdateInPlace(
-      features: Vector,
-      weight: Double,
-      label: Double): Unit = {
-    // TODO: use level 2 BLAS operations
-    /*
-      Note: this can still be used when numClasses = 2 for binary
-      logistic regression without pivoting.
-     */
-    val localFeaturesStd = bcFeaturesStd.value
-    val localCoefficients = coefficientsArray
-    val localGradientArray = gradientSumArray
-
-    // marginOfLabel is margins(label) in the formula
-    var marginOfLabel = 0.0
-    var maxMargin = Double.NegativeInfinity
-
-    val margins = new Array[Double](numClasses)
-    features.foreachActive { (index, value) =>
-      val stdValue = value / localFeaturesStd(index)
-      var j = 0
-      while (j < numClasses) {
-        margins(j) += localCoefficients(index * numClasses + j) * stdValue
-        j += 1
-      }
-    }
-    var i = 0
-    while (i < numClasses) {
-      if (fitIntercept) {
-        margins(i) += localCoefficients(numClasses * numFeatures + i)
-      }
-      if (i == label.toInt) marginOfLabel = margins(i)
-      if (margins(i) > maxMargin) {
-        maxMargin = margins(i)
-      }
-      i += 1
-    }
-
-    /**
-     * When maxMargin is greater than 0, the original formula could cause overflow.
-     * We address this by subtracting maxMargin from all the margins, so it's guaranteed
-     * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
-     */
-    val multipliers = new Array[Double](numClasses)
-    val sum = {
-      var temp = 0.0
-      var i = 0
-      while (i < numClasses) {
-        if (maxMargin > 0) margins(i) -= maxMargin
-        val exp = math.exp(margins(i))
-        temp += exp
-        multipliers(i) = exp
-        i += 1
-      }
-      temp
-    }
-
-    margins.indices.foreach { i =>
-      multipliers(i) = multipliers(i) / sum - (if (label == i) 1.0 else 0.0)
-    }
-    features.foreachActive { (index, value) =>
-      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-        val stdValue = value / localFeaturesStd(index)
-        var j = 0
-        while (j < numClasses) {
-          localGradientArray(index * numClasses + j) +=
-            weight * multipliers(j) * stdValue
-          j += 1
-        }
-      }
-    }
-    if (fitIntercept) {
-      var i = 0
-      while (i < numClasses) {
-        localGradientArray(numFeatures * numClasses + i) += weight * multipliers(i)
-        i += 1
-      }
-    }
-
-    val loss = if (maxMargin > 0) {
-      math.log(sum) - marginOfLabel + maxMargin
-    } else {
-      math.log(sum) - marginOfLabel
-    }
-    lossSum += weight * loss
-  }
-
-  /**
-   * Add a new training instance to this LogisticAggregator, and update the loss and gradient
-   * of the objective function.
-   *
-   * @param instance The instance of data point to be added.
-   * @return This LogisticAggregator object.
-   */
-  def add(instance: Instance): this.type = {
-    instance match { case Instance(label, weight, features) =>
-
-      if (weight == 0.0) return this
-
-      if (multinomial) {
-        multinomialUpdateInPlace(features, weight, label)
-      } else {
-        binaryUpdateInPlace(features, weight, label)
-      }
-      weightSum += weight
-      this
-    }
-  }
-
-  /**
-   * Merge another LogisticAggregator, and update the loss and gradient
-   * of the objective function.
-   * (Note that it's in place merging; as a result, `this` object will be modified.)
-   *
-   * @param other The other LogisticAggregator to be merged.
-   * @return This LogisticAggregator object.
-   */
-  def merge(other: LogisticAggregator): this.type = {
-
-    if (other.weightSum != 0.0) {
-      weightSum += other.weightSum
-      lossSum += other.lossSum
-
-      var i = 0
-      val localThisGradientSumArray = this.gradientSumArray
-      val localOtherGradientSumArray = other.gradientSumArray
-      val len = localThisGradientSumArray.length
-      while (i < len) {
-        localThisGradientSumArray(i) += localOtherGradientSumArray(i)
-        i += 1
-      }
-    }
-    this
-  }
-
-  def loss: Double = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
-      s"greater than 0.0, but $weightSum.")
-    lossSum / weightSum
-  }
-
-  def gradient: Matrix = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
-      s"greater than 0.0, but $weightSum.")
-    val result = Vectors.dense(gradientSumArray.clone())
-    scal(1.0 / weightSum, result)
-    new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept, result.toArray)
-  }
-}
-
-/**
- * LogisticCostFun implements Breeze's DiffFunction[T] for a multinomial (softmax) logistic loss
- * function, as used in multi-class classification (it is also used in binary logistic regression).
- * It returns the loss and gradient with L2 regularization at a particular point (coefficients).
- * It's used in Breeze's convex optimization routines.
- */
-private class LogisticCostFun(
-    instances: RDD[Instance],
-    numClasses: Int,
-    fitIntercept: Boolean,
-    standardization: Boolean,
-    bcFeaturesStd: Broadcast[Array[Double]],
-    regParamL2: Double,
-    multinomial: Boolean,
-    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
-
-  override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
-    val coeffs = Vectors.fromBreeze(coefficients)
-    val bcCoeffs = instances.context.broadcast(coeffs)
-    val featuresStd = bcFeaturesStd.value
-    val numFeatures = featuresStd.length
-    val numCoefficientSets = if (multinomial) numClasses else 1
-    val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
-
-    val logisticAggregator = {
-      val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
-      val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
-
-      instances.treeAggregate(
-        new LogisticAggregator(bcCoeffs, bcFeaturesStd, numClasses, fitIntercept,
-          multinomial)
-      )(seqOp, combOp, aggregationDepth)
-    }
-
-    val totalGradientMatrix = logisticAggregator.gradient
-    val coefMatrix = new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept, coeffs.toArray)
-    // regVal is the sum of coefficients squares excluding intercept for L2 regularization.
-    val regVal = if (regParamL2 == 0.0) {
-      0.0
-    } else {
-      var sum = 0.0
-      coefMatrix.foreachActive { case (classIndex, featureIndex, value) =>
-        // We do not apply regularization to the intercepts
-        val isIntercept = fitIntercept && (featureIndex == numFeatures)
-        if (!isIntercept) {
-          // The following code will compute the loss of the regularization; also
-          // the gradient of the regularization, and add back to totalGradientArray.
-          sum += {
-            if (standardization) {
-              val gradValue = totalGradientMatrix(classIndex, featureIndex)
-              totalGradientMatrix.update(classIndex, featureIndex, gradValue + regParamL2 * value)
-              value * value
-            } else {
-              if (featuresStd(featureIndex) != 0.0) {
-                // If `standardization` is false, we still standardize the data
-                // to improve the rate of convergence; as a result, we have to
-                // perform this reverse standardization by penalizing each component
-                // differently to get effectively the same objective function when
-                // the training dataset is not standardized.
-                val temp = value / (featuresStd(featureIndex) * featuresStd(featureIndex))
-                val gradValue = totalGradientMatrix(classIndex, featureIndex)
-                totalGradientMatrix.update(classIndex, featureIndex, gradValue + regParamL2 * temp)
-                value * temp
-              } else {
-                0.0
-              }
-            }
-          }
-        }
-      }
-      0.5 * regParamL2 * sum
-    }
-    bcCoeffs.destroy(blocking = false)
-
-    (logisticAggregator.loss + regVal, new BDV(totalGradientMatrix.toArray))
-  }
-}
+//private class LogisticAggregator(
+//    bcCoefficients: Broadcast[Vector],
+//    bcFeaturesStd: Broadcast[Array[Double]],
+//    numClasses: Int,
+//    fitIntercept: Boolean,
+//    multinomial: Boolean) extends Serializable with Logging {
+//
+//  private val numFeatures = bcFeaturesStd.value.length
+//  private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
+//  private val coefficientSize = bcCoefficients.value.size
+//  private val numCoefficientSets = if (multinomial) numClasses else 1
+//  if (multinomial) {
+//    require(numClasses ==  coefficientSize / numFeaturesPlusIntercept, s"The number of " +
+//      s"coefficients should be ${numClasses * numFeaturesPlusIntercept} but was $coefficientSize")
+//  } else {
+//    require(coefficientSize == numFeaturesPlusIntercept, s"Expected $numFeaturesPlusIntercept " +
+//      s"coefficients but got $coefficientSize")
+//    require(numClasses == 1 || numClasses == 2, s"Binary logistic aggregator requires numClasses " +
+//      s"in {1, 2} but found $numClasses.")
+//  }
+//
+//  private var weightSum = 0.0
+//  private var lossSum = 0.0
+//
+//  @transient private lazy val coefficientsArray: Array[Double] = bcCoefficients.value match {
+//    case DenseVector(values) => values
+//    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector but " +
+//      s"got type ${bcCoefficients.value.getClass}.)")
+//  }
+//  private lazy val gradientSumArray = new Array[Double](coefficientSize)
+//
+//  if (multinomial && numClasses <= 2) {
+//    logInfo(s"Multinomial logistic regression for binary classification yields separate " +
+//      s"coefficients for positive and negative classes. When no regularization is applied, the" +
+//      s"result will be effectively the same as binary logistic regression. When regularization" +
+//      s"is applied, multinomial loss will produce a result different from binary loss.")
+//  }
+//
+//  /** Update gradient and loss using binary loss function. */
+//  private def binaryUpdateInPlace(
+//      features: Vector,
+//      weight: Double,
+//      label: Double): Unit = {
+//
+//    val localFeaturesStd = bcFeaturesStd.value
+//    val localCoefficients = coefficientsArray
+//    val localGradientArray = gradientSumArray
+//    val margin = - {
+//      var sum = 0.0
+//      features.foreachActive { (index, value) =>
+//        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+//          sum += localCoefficients(index) * value / localFeaturesStd(index)
+//        }
+//      }
+//      if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
+//      sum
+//    }
+//
+//    val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
+//
+//    features.foreachActive { (index, value) =>
+//      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+//        localGradientArray(index) += multiplier * value / localFeaturesStd(index)
+//      }
+//    }
+//
+//    if (fitIntercept) {
+//      localGradientArray(numFeaturesPlusIntercept - 1) += multiplier
+//    }
+//
+//    if (label > 0) {
+//      // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
+//      lossSum += weight * MLUtils.log1pExp(margin)
+//    } else {
+//      lossSum += weight * (MLUtils.log1pExp(margin) - margin)
+//    }
+//  }
+//
+//  /** Update gradient and loss using multinomial (softmax) loss function. */
+//  private def multinomialUpdateInPlace(
+//      features: Vector,
+//      weight: Double,
+//      label: Double): Unit = {
+//    // TODO: use level 2 BLAS operations
+//    /*
+//      Note: this can still be used when numClasses = 2 for binary
+//      logistic regression without pivoting.
+//     */
+//    val localFeaturesStd = bcFeaturesStd.value
+//    val localCoefficients = coefficientsArray
+//    val localGradientArray = gradientSumArray
+//
+//    // marginOfLabel is margins(label) in the formula
+//    var marginOfLabel = 0.0
+//    var maxMargin = Double.NegativeInfinity
+//
+//    val margins = new Array[Double](numClasses)
+//    features.foreachActive { (index, value) =>
+//      val stdValue = value / localFeaturesStd(index)
+//      var j = 0
+//      while (j < numClasses) {
+//        margins(j) += localCoefficients(index * numClasses + j) * stdValue
+//        j += 1
+//      }
+//    }
+//    var i = 0
+//    while (i < numClasses) {
+//      if (fitIntercept) {
+//        margins(i) += localCoefficients(numClasses * numFeatures + i)
+//      }
+//      if (i == label.toInt) marginOfLabel = margins(i)
+//      if (margins(i) > maxMargin) {
+//        maxMargin = margins(i)
+//      }
+//      i += 1
+//    }
+//
+//    /**
+//     * When maxMargin is greater than 0, the original formula could cause overflow.
+//     * We address this by subtracting maxMargin from all the margins, so it's guaranteed
+//     * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
+//     */
+//    val multipliers = new Array[Double](numClasses)
+//    val sum = {
+//      var temp = 0.0
+//      var i = 0
+//      while (i < numClasses) {
+//        if (maxMargin > 0) margins(i) -= maxMargin
+//        val exp = math.exp(margins(i))
+//        temp += exp
+//        multipliers(i) = exp
+//        i += 1
+//      }
+//      temp
+//    }
+//
+//    margins.indices.foreach { i =>
+//      multipliers(i) = multipliers(i) / sum - (if (label == i) 1.0 else 0.0)
+//    }
+//    features.foreachActive { (index, value) =>
+//      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+//        val stdValue = value / localFeaturesStd(index)
+//        var j = 0
+//        while (j < numClasses) {
+//          localGradientArray(index * numClasses + j) +=
+//            weight * multipliers(j) * stdValue
+//          j += 1
+//        }
+//      }
+//    }
+//    if (fitIntercept) {
+//      var i = 0
+//      while (i < numClasses) {
+//        localGradientArray(numFeatures * numClasses + i) += weight * multipliers(i)
+//        i += 1
+//      }
+//    }
+//
+//    val loss = if (maxMargin > 0) {
+//      math.log(sum) - marginOfLabel + maxMargin
+//    } else {
+//      math.log(sum) - marginOfLabel
+//    }
+//    lossSum += weight * loss
+//  }
+//
+//  /**
+//   * Add a new training instance to this LogisticAggregator, and update the loss and gradient
+//   * of the objective function.
+//   *
+//   * @param instance The instance of data point to be added.
+//   * @return This LogisticAggregator object.
+//   */
+//  def add(instance: Instance): this.type = {
+//    instance match { case Instance(label, weight, features) =>
+//
+//      if (weight == 0.0) return this
+//
+//      if (multinomial) {
+//        multinomialUpdateInPlace(features, weight, label)
+//      } else {
+//        binaryUpdateInPlace(features, weight, label)
+//      }
+//      weightSum += weight
+//      this
+//    }
+//  }
+//
+//  /**
+//   * Merge another LogisticAggregator, and update the loss and gradient
+//   * of the objective function.
+//   * (Note that it's in place merging; as a result, `this` object will be modified.)
+//   *
+//   * @param other The other LogisticAggregator to be merged.
+//   * @return This LogisticAggregator object.
+//   */
+//  def merge(other: LogisticAggregator): this.type = {
+//
+//    if (other.weightSum != 0.0) {
+//      weightSum += other.weightSum
+//      lossSum += other.lossSum
+//
+//      var i = 0
+//      val localThisGradientSumArray = this.gradientSumArray
+//      val localOtherGradientSumArray = other.gradientSumArray
+//      val len = localThisGradientSumArray.length
+//      while (i < len) {
+//        localThisGradientSumArray(i) += localOtherGradientSumArray(i)
+//        i += 1
+//      }
+//    }
+//    this
+//  }
+//
+//  def loss: Double = {
+//    require(weightSum > 0.0, s"The effective number of instances should be " +
+//      s"greater than 0.0, but $weightSum.")
+//    lossSum / weightSum
+//  }
+//
+//  def gradient: Matrix = {
+//    require(weightSum > 0.0, s"The effective number of instances should be " +
+//      s"greater than 0.0, but $weightSum.")
+//    val result = Vectors.dense(gradientSumArray.clone())
+//    scal(1.0 / weightSum, result)
+//    new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept, result.toArray)
+//  }
+//}
+//
+///**
+// * LogisticCostFun implements Breeze's DiffFunction[T] for a multinomial (softmax) logistic loss
+// * function, as used in multi-class classification (it is also used in binary logistic regression).
+// * It returns the loss and gradient with L2 regularization at a particular point (coefficients).
+// * It's used in Breeze's convex optimization routines.
+// */
+//private class LogisticCostFun(
+//    instances: RDD[Instance],
+//    numClasses: Int,
+//    fitIntercept: Boolean,
+//    standardization: Boolean,
+//    bcFeaturesStd: Broadcast[Array[Double]],
+//    regParamL2: Double,
+//    multinomial: Boolean,
+//    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
+//
+//  override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
+//    val coeffs = Vectors.fromBreeze(coefficients)
+//    val bcCoeffs = instances.context.broadcast(coeffs)
+//    val featuresStd = bcFeaturesStd.value
+//    val numFeatures = featuresStd.length
+//    val numCoefficientSets = if (multinomial) numClasses else 1
+//    val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
+//
+//    val logisticAggregator = {
+//      val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
+//      val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
+//
+//      instances.treeAggregate(
+//        new LogisticAggregator(bcCoeffs, bcFeaturesStd, numClasses, fitIntercept,
+//          multinomial)
+//      )(seqOp, combOp, aggregationDepth)
+//    }
+//
+//    val totalGradientMatrix = logisticAggregator.gradient
+//    val coefMatrix = new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept, coeffs.toArray)
+//    // regVal is the sum of coefficients squares excluding intercept for L2 regularization.
+//    val regVal = if (regParamL2 == 0.0) {
+//      0.0
+//    } else {
+//      var sum = 0.0
+//      coefMatrix.foreachActive { case (classIndex, featureIndex, value) =>
+//        // We do not apply regularization to the intercepts
+//        val isIntercept = fitIntercept && (featureIndex == numFeatures)
+//        if (!isIntercept) {
+//          // The following code will compute the loss of the regularization; also
+//          // the gradient of the regularization, and add back to totalGradientArray.
+//          sum += {
+//            if (standardization) {
+//              val gradValue = totalGradientMatrix(classIndex, featureIndex)
+//              totalGradientMatrix.update(classIndex, featureIndex, gradValue + regParamL2 * value)
+//              value * value
+//            } else {
+//              if (featuresStd(featureIndex) != 0.0) {
+//                // If `standardization` is false, we still standardize the data
+//                // to improve the rate of convergence; as a result, we have to
+//                // perform this reverse standardization by penalizing each component
+//                // differently to get effectively the same objective function when
+//                // the training dataset is not standardized.
+//                val temp = value / (featuresStd(featureIndex) * featuresStd(featureIndex))
+//                val gradValue = totalGradientMatrix(classIndex, featureIndex)
+//                totalGradientMatrix.update(classIndex, featureIndex, gradValue + regParamL2 * temp)
+//                value * temp
+//              } else {
+//                0.0
+//              }
+//            }
+//          }
+//        }
+//      }
+//      0.5 * regParamL2 * sum
+//    }
+//    bcCoeffs.destroy(blocking = false)
+//
+//    (logisticAggregator.loss + regVal, new BDV(totalGradientMatrix.toArray))
+//  }
+//}
