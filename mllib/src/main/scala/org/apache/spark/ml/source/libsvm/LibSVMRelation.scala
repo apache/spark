@@ -166,7 +166,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
 
       val converter = RowEncoder(dataSchema)
       val fullOutput = dataSchema.map { f =>
-        AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
+        AttributeReference(f.name, f.dataType, f.nullable, metadata = f.metadata)()
       }
       val requiredOutput = fullOutput.filter { a =>
         requiredSchema.fieldNames.contains(a.name)

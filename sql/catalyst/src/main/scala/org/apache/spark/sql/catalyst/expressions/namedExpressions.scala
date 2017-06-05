@@ -164,7 +164,7 @@ case class Alias(child: Expression, name: String)(
 
   override def toAttribute: Attribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable, metadata)(
+      AttributeReference(name, child.dataType, child.nullable, child.deterministic, metadata)(
         exprId, qualifier, isGenerated)
     } else {
       UnresolvedAttribute(name)
@@ -213,6 +213,7 @@ case class AttributeReference(
     name: String,
     dataType: DataType,
     nullable: Boolean = true,
+    override val deterministic: Boolean = true,
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Option[String] = None,
@@ -253,7 +254,7 @@ case class AttributeReference(
   }
 
   override def newInstance(): AttributeReference =
-    AttributeReference(name, dataType, nullable, metadata)(
+    AttributeReference(name, dataType, nullable, deterministic, metadata)(
       qualifier = qualifier, isGenerated = isGenerated)
 
   /**
@@ -263,7 +264,8 @@ case class AttributeReference(
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifier, isGenerated)
+      AttributeReference(name, dataType, newNullability, deterministic, metadata)(
+        exprId, qualifier, isGenerated)
     }
   }
 
@@ -271,7 +273,8 @@ case class AttributeReference(
     if (name == newName) {
       this
     } else {
-      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifier, isGenerated)
+      AttributeReference(newName, dataType, nullable, deterministic, metadata)(
+        exprId, qualifier, isGenerated)
     }
   }
 
@@ -282,7 +285,8 @@ case class AttributeReference(
     if (newQualifier == qualifier) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifier, isGenerated)
+      AttributeReference(name, dataType, nullable, deterministic, metadata)(
+        exprId, newQualifier, isGenerated)
     }
   }
 
@@ -290,12 +294,14 @@ case class AttributeReference(
     if (exprId == newExprId) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifier, isGenerated)
+      AttributeReference(name, dataType, nullable, deterministic, metadata)(
+        newExprId, qualifier, isGenerated)
     }
   }
 
   override def withMetadata(newMetadata: Metadata): Attribute = {
-    AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier, isGenerated)
+    AttributeReference(name, dataType, nullable, deterministic, newMetadata)(
+      exprId, qualifier, isGenerated)
   }
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {

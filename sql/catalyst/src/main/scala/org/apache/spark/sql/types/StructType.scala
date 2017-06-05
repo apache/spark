@@ -297,7 +297,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   protected[sql] def toAttributes: Seq[AttributeReference] =
-    map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+    map(f => AttributeReference(f.name, f.dataType, f.nullable, metadata = f.metadata)())
 
   def treeString: String = {
     val builder = new StringBuilder

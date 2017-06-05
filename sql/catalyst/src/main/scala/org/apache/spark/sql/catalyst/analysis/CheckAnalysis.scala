@@ -389,8 +389,9 @@ trait CheckAnalysis extends PredicateHelper {
               "is " + mapCol.dataType.simpleString)
 
           case o if o.expressions.exists(!_.deterministic) &&
-            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
-            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
+              !o.isInstanceOf[LocalRelation] && !o.isInstanceOf[DeserializeToObject] &&
+              !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] && !o.isInstanceOf[Aggregate] &&
+              !o.isInstanceOf[Window] =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
               s"""nondeterministic expressions are only allowed in

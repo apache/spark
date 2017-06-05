@@ -409,7 +409,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
 
         val encodedData = try {
           row.toSeq(encoder.schema).zip(schema).map {
-            case (a: ArrayData, AttributeReference(_, ArrayType(et, _), _, _)) =>
+            case (a: ArrayData, AttributeReference(_, ArrayType(et, _), _, _, _)) =>
               a.toArray[Any](et).toSeq
             case (other, _) =>
               other
