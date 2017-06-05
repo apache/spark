@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
@@ -37,11 +38,12 @@ import org.apache.spark.util.{ManualClock, SystemClock}
  *  with 0L.
  *
  *  This source supports the following options:
- *  - `tuplesPerSecond` (default: 1): How many tuples should be generated per second.
- *  - `rampUpTimeSeconds` (default: 0): How many seconds to ramp up before the generating speed
- *    becomes `tuplesPerSecond`.
- *  - `numPartitions` (default: Spark's default parallelism): The partition number for the generated
- *    tuples.
+ *  - `tuplesPerSecond` (e.g. 100, default: 1): How many tuples should be generated per second.
+ *  - `rampUpTime` (e.g. 5s, default: 0s): How long to ramp up before the generating speed
+ *    becomes `tuplesPerSecond`. Using finer granularities than seconds will be truncated to integer
+ *    seconds.
+ *  - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for the
+ *    generated tuples.
  */
 class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
 
@@ -63,14 +65,15 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
     val tuplesPerSecond = params.get("tuplesPerSecond").map(_.toLong).getOrElse(1L)
     if (tuplesPerSecond <= 0) {
       throw new IllegalArgumentException(
-        s"Invalid value '${params("tuplesPerSecond")}' for option 'tuplesPerSecond', " +
+        s"Invalid value '${params("tuplesPerSecond")}'. The option 'tuplesPerSecond' " +
           "must be positive")
     }
 
-    val rampUpTimeSeconds = params.get("rampUpTimeSeconds").map(_.toLong).getOrElse(0L)
+    val rampUpTimeSeconds =
+      params.get("rampUpTime").map(JavaUtils.timeStringAsSec(_)).getOrElse(0L)
     if (rampUpTimeSeconds < 0) {
       throw new IllegalArgumentException(
-        s"Invalid value '${params("rampUpTimeSeconds")}' for option 'rampUpTimeSeconds', " +
+        s"Invalid value '${params("rampUpTime")}'. The option 'rampUpTime' " +
           "must not be negative")
     }
 
@@ -78,7 +81,7 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
       sqlContext.sparkContext.defaultParallelism)
     if (numPartitions <= 0) {
       throw new IllegalArgumentException(
-        s"Invalid value '${params("numPartitions")}' for option 'numPartitions', " +
+        s"Invalid value '${params("numPartitions")}'. The option 'numPartitions' " +
           "must be positive")
     }
 
@@ -117,8 +120,9 @@ class RateStreamSource(
   private val maxSeconds = Long.MaxValue / tuplesPerSecond
 
   if (rampUpTimeSeconds > maxSeconds) {
-    throw new ArithmeticException("integer overflow. Max offset with tuplesPerSecond " +
-      s"$tuplesPerSecond is $maxSeconds, but 'rampUpTimeSeconds' is $rampUpTimeSeconds.")
+    throw new ArithmeticException(
+      s"Integer overflow. Max offset with $tuplesPerSecond tuplesPerSecond" +
+        s" is $maxSeconds, but 'rampUpTimeSeconds' is $rampUpTimeSeconds.")
   }
 
   private val startTimeMs = {
@@ -175,10 +179,10 @@ class RateStreamSource(
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startSeconds = start.flatMap(LongOffset.convert(_).map(_.offset)).getOrElse(0L)
     val endSeconds = LongOffset.convert(end).map(_.offset).getOrElse(0L)
-    assert(startSeconds <= endSeconds)
+    assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")
     if (endSeconds > maxSeconds) {
-      throw new ArithmeticException("integer overflow. Max offset with " +
-        s"tuplesPerSecond $tuplesPerSecond is $maxSeconds, but it's $endSeconds now.")
+      throw new ArithmeticException("Integer overflow. Max offset with " +
+        s"$tuplesPerSecond tuplesPerSecond is $maxSeconds, but it's $endSeconds now.")
     }
     // Fix "lastTimeMs" for recovery
     if (lastTimeMs < TimeUnit.SECONDS.toMillis(endSeconds) + startTimeMs) {
@@ -188,11 +192,17 @@ class RateStreamSource(
     val rangeEnd = valueAtSecond(endSeconds, tuplesPerSecond, rampUpTimeSeconds)
     logDebug(s"startSeconds: $startSeconds, endSeconds: $endSeconds, " +
       s"rangeStart: $rangeStart, rangeEnd: $rangeEnd")
-    val localStartTimeMs = startTimeMs
-    val localPerSecond = tuplesPerSecond
+
+    if (rangeStart == rangeEnd) {
+      return sqlContext.internalCreateDataFrame(sqlContext.sparkContext.emptyRDD, schema)
+    }
+
+    val localStartTimeMs = startTimeMs + TimeUnit.SECONDS.toMillis(startSeconds)
+    val relativeMsPerValue =
+      TimeUnit.SECONDS.toMillis(endSeconds - startSeconds) / (rangeEnd - rangeStart)
 
     val rdd = sqlContext.sparkContext.range(rangeStart, rangeEnd, 1, numPartitions).map { v =>
-      val relative = v * 1000L / localPerSecond
+      val relative = (v - rangeStart) * relativeMsPerValue
       InternalRow(DateTimeUtils.fromMillis(relative + localStartTimeMs), v)
     }
     sqlContext.internalCreateDataFrame(rdd, schema)

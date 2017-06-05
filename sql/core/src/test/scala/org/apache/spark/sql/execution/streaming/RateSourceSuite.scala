@@ -39,14 +39,6 @@ class RateSourceSuite extends StreamTest {
     }
   }
 
-  private def getManualClockFromQuery(query: StreamExecution): ManualClock = {
-    val rateSource = query.logicalPlan.collect {
-      case StreamingExecutionRelation(source, _) if source.isInstanceOf[RateStreamSource] =>
-        source.asInstanceOf[RateStreamSource]
-    }.head
-    rateSource.clock.asInstanceOf[ManualClock]
-  }
-
   test("basic") {
     val input = spark.readStream
       .format("rate")
@@ -80,30 +72,31 @@ class RateSourceSuite extends StreamTest {
     assert(valueAtSecond(seconds = 5, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 30)
   }
 
-  test("rampUpTimeSeconds") {
+  test("rampUpTime") {
     val input = spark.readStream
       .format("rate")
       .option("tuplesPerSecond", "10")
-      .option("rampUpTimeSeconds", "4")
+      .option("rampUpTime", "4s")
       .option("useManualClock", "true")
       .load()
-      .select($"value")
+      .as[(java.sql.Timestamp, Long)]
+      .map(v => (v._1.getTime, v._2))
     testStream(input)(
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch(0 until 2: _*), // speed = 2
+      CheckLastBatch((0 until 2).map(v => v * 500 -> v): _*), // speed = 2
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch(2 until 6: _*), // speed = 4
+      CheckLastBatch((2 until 6).map(v => 1000 + (v - 2) * 250 -> v): _*), // speed = 4
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch(6 until 12: _*), // speed = 6
+      CheckLastBatch((6 until 12).map(v => 2000 + (v - 6) * 166 -> v): _*), // speed = 6
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch(12 until 20: _*), // speed = 8
+      CheckLastBatch((12 until 20).map(v => 3000 + (v - 12) * 125 -> v): _*), // speed = 8
       AdvanceRateManualClock(seconds = 1),
       // Now we should reach full speed
-      CheckLastBatch(20 until 30: _*), // speed = 10
+      CheckLastBatch((20 until 30).map(v => 4000 + (v - 20) * 100 -> v): _*), // speed = 10
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch(30 until 40: _*), // speed = 10
+      CheckLastBatch((30 until 40).map(v => 5000 + (v - 30) * 100 -> v): _*), // speed = 10
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch(40 until 50: _*) // speed = 10
+      CheckLastBatch((40 until 50).map(v => 6000 + (v - 40) * 100 -> v): _*) // speed = 10
     )
   }
 
