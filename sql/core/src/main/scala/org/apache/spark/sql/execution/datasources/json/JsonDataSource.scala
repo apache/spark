@@ -87,7 +87,7 @@ abstract class JsonDataSource extends Serializable {
 object JsonDataSource {
   def apply(options: JSONOptions): JsonDataSource = {
     if (options.multiLine) {
-      WholeFileJsonDataSource
+      MultiLineJsonDataSource
     } else {
       TextInputJsonDataSource
     }
@@ -147,7 +147,7 @@ object TextInputJsonDataSource extends JsonDataSource {
   }
 }
 
-object WholeFileJsonDataSource extends JsonDataSource {
+object MultiLineJsonDataSource extends JsonDataSource {
   override val isSplitable: Boolean = {
     false
   }

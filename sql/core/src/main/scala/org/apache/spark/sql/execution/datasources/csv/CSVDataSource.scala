@@ -112,7 +112,7 @@ abstract class CSVDataSource extends Serializable {
 object CSVDataSource {
   def apply(options: CSVOptions): CSVDataSource = {
     if (options.multiLine) {
-      WholeFileCSVDataSource
+      MultiLineCSVDataSource
     } else {
       TextInputCSVDataSource
     }
@@ -197,7 +197,7 @@ object TextInputCSVDataSource extends CSVDataSource {
   }
 }
 
-object WholeFileCSVDataSource extends CSVDataSource {
+object MultiLineCSVDataSource extends CSVDataSource {
   override val isSplitable: Boolean = false
 
   override def readFile(
