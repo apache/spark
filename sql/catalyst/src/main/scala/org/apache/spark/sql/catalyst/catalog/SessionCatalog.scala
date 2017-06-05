@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.util.Locale
+import java.util.concurrent.Callable
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -125,12 +126,34 @@ class SessionCatalog(
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
   }
 
-  /**
-   * A cache of qualified table names to table relation plans.
-   */
-  val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
+  private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
     val cacheSize = conf.tableRelationCacheSize
     CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
+  }
+
+  /** This method provides a way to get a cached plan. */
+  def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
+    tableRelationCache.get(t, c)
+  }
+
+  /** This method provides a way to get a cached plan if the key exists. */
+  def getCachedTable(key: QualifiedTableName): LogicalPlan = {
+    tableRelationCache.getIfPresent(key)
+  }
+
+  /** This method provides a way to cache a plan. */
+  def cacheTable(t: QualifiedTableName, l: LogicalPlan): Unit = {
+    tableRelationCache.put(t, l)
+  }
+
+  /** This method provides a way to invalidate a cached plan. */
+  def invalidateCachedTable(key: QualifiedTableName): Unit = {
+    tableRelationCache.invalidate(key)
+  }
+
+  /** This method provides a way to invalidate all the cached plans. */
+  def invalidateAllCachedTables(): Unit = {
+    tableRelationCache.invalidateAll()
   }
 
   /**
