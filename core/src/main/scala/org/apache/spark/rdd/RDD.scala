@@ -1118,9 +1118,9 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Aggregates the elements of this RDD in a multi-level tree pattern.
+   * This method is semantically identical to [[org.apache.spark.rdd.RDD#aggregate]].
    *
    * @param depth suggested depth of the tree (default: 2)
-   * @see [[org.apache.spark.rdd.RDD#aggregate]] These two methods have identical semantics.
    */
   def treeAggregate[U: ClassTag](zeroValue: U)(
       seqOp: (U, T) => U,
