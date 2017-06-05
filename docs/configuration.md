@@ -474,9 +474,18 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Path to an Ivy settings file to customize resolution of jars specified using <code>spark.jars.packages</code>
     instead of the built-in defaults, such as maven central. Additional repositories given by the command-line
-    option <code>--repositories</code> will also be included. Useful for allowing Spark to resolve artifacts from behind
-    a firewall e.g. via an in-house artifact server like Artifactory. Details on the settings file format can be
+    option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
+    Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
+    artifact server like Artifactory. Details on the settings file format can be
     found at http://ant.apache.org/ivy/history/latest-milestone/settings.html
+  </td>
+</tr>
+ <tr>
+  <td><code>spark.jars.repositories</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of additional remote repositories to search for the maven coordinates
+    given with <code>--packages</code> or <code>spark.jars.packages</code>.
   </td>
 </tr>
 <tr>
