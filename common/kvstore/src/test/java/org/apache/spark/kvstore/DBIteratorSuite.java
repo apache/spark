@@ -32,10 +32,15 @@ import com.google.common.collect.Lists;
 import org.apache.commons.io.FileUtils;
 import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import static org.junit.Assert.*;
 
 public abstract class DBIteratorSuite {
+
+  private static final Logger LOG = LoggerFactory.getLogger(DBIteratorSuite.class);
 
   private static final int MIN_ENTRIES = 42;
   private static final int MAX_ENTRIES = 1024;
@@ -79,6 +84,13 @@ public abstract class DBIteratorSuite {
    * handler.
    */
   protected abstract KVStore createStore() throws Exception;
+
+  @BeforeClass
+  public static void setupClass() {
+    long seed = RND.nextLong();
+    LOG.info("Random seed: {}", seed);
+    RND.setSeed(seed);
+  }
 
   @AfterClass
   public static void cleanupData() throws Exception {
