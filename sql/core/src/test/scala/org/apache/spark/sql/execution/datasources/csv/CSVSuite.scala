@@ -1174,4 +1174,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         }
       }
   }
+
+  test("SPARK-20978: Set null for malformed column when the number of tokens is less than schema") {
+    val df = spark.read
+      .schema("a string, b string, unparsed string")
+      .option("columnNameOfCorruptRecord", "unparsed")
+      .csv(Seq("a").toDS())
+    checkAnswer(df, Row("a", null, null))
+  }
 }
