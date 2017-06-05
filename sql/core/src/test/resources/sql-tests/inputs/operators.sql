@@ -70,3 +70,6 @@ select ceiling(1234567890123456);
 select floor(0);
 select floor(1);
 select floor(1234567890123456);
+
+-- mod
+select mod(7, 2), mod(7, 0), mod(0, 2), mod(7, null), mod(null, 2), mod(null, null);

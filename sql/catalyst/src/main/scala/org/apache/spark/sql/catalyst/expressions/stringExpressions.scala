@@ -654,6 +654,8 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   """,
   extended = """
     Examples:
+      > SELECT _FUNC_('bar', 'foobarbar');
+       4
       > SELECT _FUNC_('bar', 'foobarbar', 5);
        7
   """)
