@@ -73,7 +73,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
       val listenerAndMaybeTimer = iter.next()
       val listener = listenerAndMaybeTimer._1
       val maybeTimer = listenerAndMaybeTimer._2
-      var maybeTimerContext = if (maybeTimer != null) {
+      val maybeTimerContext = if (maybeTimer != null) {
         maybeTimer.time()
       } else {
         null

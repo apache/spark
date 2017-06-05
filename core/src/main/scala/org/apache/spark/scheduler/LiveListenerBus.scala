@@ -49,11 +49,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
 
   // Cap the capacity of the event queue so we get an explicit error (rather than
   // an OOM exception) if it's perpetually being added to more quickly than it's being drained.
-  private val eventQueue = {
-    val capacity = conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY)
-    require(capacity > 0, s"${LISTENER_BUS_EVENT_QUEUE_CAPACITY.key} must be > 0!")
-    new LinkedBlockingQueue[SparkListenerEvent](capacity)
-  }
+  private val eventQueue =
+    new LinkedBlockingQueue[SparkListenerEvent](conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
 
   private[spark] val metrics = new LiveListenerBusMetrics(eventQueue)
 
