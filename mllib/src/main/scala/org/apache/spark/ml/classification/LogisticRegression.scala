@@ -152,11 +152,13 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    */
   override def getThresholds: Array[Double] = {
     checkThresholdConsistency()
-    if (!isSet(thresholds) && isSet(threshold)) {
+    if (isSet(thresholds)) {
+      $(thresholds)
+    } else if (isSet(threshold)) {
       val t = $(threshold)
       Array(1-t, t)
     } else {
-      $(thresholds)
+      throw new SparkException("Get thresholds, but neigher thresholds nor threshold is set")
     }
   }
 
