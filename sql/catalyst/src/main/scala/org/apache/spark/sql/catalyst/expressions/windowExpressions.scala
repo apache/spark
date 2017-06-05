@@ -113,7 +113,7 @@ sealed trait FrameType
  * or a [[ValueFollowing]] is used as its [[FrameBoundary]], the value is considered
  * as a physical offset.
  * For example, `ROW BETWEEN 1 PRECEDING AND 1 FOLLOWING` represents a 3-row frame,
- * from the row precedes the current row to the row follows the current row.
+ * from the row that precedes the current row to the row that follows the current row.
  */
 case object RowFrame extends FrameType
 
@@ -126,7 +126,7 @@ case object RowFrame extends FrameType
  * `RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING` represents a frame containing rows whose values
  * `expr` are in the range of [v-1, v+1].
  *
- * If `ORDER BY` clause is not defined, all rows in the partition is considered as peers
+ * If `ORDER BY` clause is not defined, all rows in the partition are considered as peers
  * of the current row.
  */
 case object RangeFrame extends FrameType
@@ -217,11 +217,11 @@ case object UnboundedFollowing extends FrameBoundary {
 }
 
 /**
- * The trait used to represent the a Window Frame.
+ * Represents a window frame.
  */
 sealed trait WindowFrame
 
-/** Used as a place holder when a frame specification is not defined.  */
+/** Used as a placeholder when a frame specification is not defined. */
 case object UnspecifiedFrame extends WindowFrame
 
 /** A specified Window Frame. */

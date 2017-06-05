@@ -76,6 +76,14 @@ class MLWriter(object):
         """Overwrites if the output path already exists."""
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
+    def context(self, sqlContext):
+        """
+        Sets the SQL context to use for saving.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+
     def session(self, sparkSession):
         """Sets the Spark Session to use for saving."""
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
@@ -101,6 +109,16 @@ class JavaMLWriter(MLWriter):
     def overwrite(self):
         """Overwrites if the output path already exists."""
         self._jwrite.overwrite()
+        return self
+
+    def context(self, sqlContext):
+        """
+        Sets the SQL context to use for saving.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
+        self._jwrite.context(sqlContext._ssql_ctx)
         return self
 
     def session(self, sparkSession):
@@ -149,6 +167,14 @@ class MLReader(object):
         """Load the ML instance from the input path."""
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
 
+    def context(self, sqlContext):
+        """
+        Sets the SQL context to use for loading.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
+
     def session(self, sparkSession):
         """Sets the Spark Session to use for loading."""
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
@@ -173,6 +199,16 @@ class JavaMLReader(MLReader):
             raise NotImplementedError("This Java ML type cannot be loaded into Python currently: %r"
                                       % self._clazz)
         return self._clazz._from_java(java_obj)
+
+    def context(self, sqlContext):
+        """
+        Sets the SQL context to use for loading.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
+        self._jread.context(sqlContext._ssql_ctx)
+        return self
 
     def session(self, sparkSession):
         """Sets the Spark Session to use for loading."""

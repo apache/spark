@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib regression algorithms, except for tree-based algorithms")
 
 # Tests for MLlib regression algorithms in SparkR
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 test_that("formula of spark.glm", {
   skip_on_cran()
@@ -401,14 +401,16 @@ test_that("spark.isoreg", {
   expect_equal(predict_result$prediction, c(7.0, 7.0, 6.0, 5.5, 5.0, 4.0, 1.0))
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "spark-isoreg", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  expect_equal(result, summary(model2))
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-isoreg", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    expect_equal(result, summary(model2))
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 })
 
 test_that("spark.survreg", {
@@ -450,17 +452,19 @@ test_that("spark.survreg", {
                2.390146, 2.891269, 2.891269), tolerance = 1e-4)
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "spark-survreg", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
-  coefs2 <- as.vector(stats2$coefficients[, 1])
-  expect_equal(coefs, coefs2)
-  expect_equal(rownames(stats$coefficients), rownames(stats2$coefficients))
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-survreg", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    coefs2 <- as.vector(stats2$coefficients[, 1])
+    expect_equal(coefs, coefs2)
+    expect_equal(rownames(stats$coefficients), rownames(stats2$coefficients))
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   # Test survival::survreg
   if (requireNamespace("survival", quietly = TRUE)) {

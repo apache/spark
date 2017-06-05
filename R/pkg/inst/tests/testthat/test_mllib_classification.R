@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib classification algorithms, except for tree-based algorithms")
 
 # Tests for MLlib classification algorithms in SparkR
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 absoluteSparkPath <- function(x) {
   sparkHome <- sparkR.conf("spark.home")
@@ -28,6 +28,8 @@ absoluteSparkPath <- function(x) {
 }
 
 test_that("spark.svmLinear", {
+  skip_on_cran()
+
   df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
   model <- spark.svmLinear(training,  Species ~ ., regParam = 0.01, maxIter = 10)
@@ -38,9 +40,8 @@ test_that("spark.svmLinear", {
   expect_true(class(summary$coefficients[, 1]) == "numeric")
 
   coefs <- summary$coefficients[, "Estimate"]
-  expected_coefs <- c(-0.1563083, -0.460648, 0.2276626, 1.055085)
+  expected_coefs <- c(-0.06004978, -0.1563083, -0.460648, 0.2276626, 1.055085)
   expect_true(all(abs(coefs - expected_coefs) < 0.1))
-  expect_equal(summary$intercept, -0.06004978, tolerance = 1e-2)
 
   # Test prediction with string label
   prediction <- predict(model, training)
@@ -50,15 +51,17 @@ test_that("spark.svmLinear", {
   expect_equal(sort(as.list(take(select(prediction, "prediction"), 10))[[1]]), expected)
 
   # Test model save and load
-  modelPath <- tempfile(pattern = "spark-svm-linear", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  coefs <- summary(model)$coefficients
-  coefs2 <- summary(model2)$coefficients
-  expect_equal(coefs, coefs2)
-  unlink(modelPath)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-svm-linear", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    coefs <- summary(model)$coefficients
+    coefs2 <- summary(model2)$coefficients
+    expect_equal(coefs, coefs2)
+    unlink(modelPath)
+  }
 
   # Test prediction with numeric label
   label <- c(0.0, 0.0, 0.0, 1.0, 1.0)
@@ -128,15 +131,17 @@ test_that("spark.logit", {
   expect_true(all(abs(setosaCoefs - setosaCoefs) < 0.1))
 
   # Test model save and load
-  modelPath <- tempfile(pattern = "spark-logit", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  coefs <- summary(model)$coefficients
-  coefs2 <- summary(model2)$coefficients
-  expect_equal(coefs, coefs2)
-  unlink(modelPath)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-logit", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    coefs <- summary(model)$coefficients
+    coefs2 <- summary(model2)$coefficients
+    expect_equal(coefs, coefs2)
+    unlink(modelPath)
+  }
 
   # R code to reproduce the result.
   # nolint start
@@ -223,6 +228,8 @@ test_that("spark.logit", {
 })
 
 test_that("spark.mlp", {
+  skip_on_cran()
+
   df <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                 source = "libsvm")
   model <- spark.mlp(df, label ~ features, blockSize = 128, layers = c(4, 5, 4, 3),
@@ -243,19 +250,21 @@ test_that("spark.mlp", {
   expect_equal(head(mlpPredictions$prediction, 6), c("1.0", "0.0", "0.0", "0.0", "0.0", "0.0"))
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "spark-mlp", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  summary2 <- summary(model2)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-mlp", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    summary2 <- summary(model2)
 
-  expect_equal(summary2$numOfInputs, 4)
-  expect_equal(summary2$numOfOutputs, 3)
-  expect_equal(summary2$layers, c(4, 5, 4, 3))
-  expect_equal(length(summary2$weights), 64)
+    expect_equal(summary2$numOfInputs, 4)
+    expect_equal(summary2$numOfOutputs, 3)
+    expect_equal(summary2$layers, c(4, 5, 4, 3))
+    expect_equal(length(summary2$weights), 64)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   # Test default parameter
   model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3))
@@ -354,16 +363,18 @@ test_that("spark.naiveBayes", {
                                "Yes", "Yes", "No", "No"))
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "spark-naiveBayes", fileext = ".tmp")
-  write.ml(m, modelPath)
-  expect_error(write.ml(m, modelPath))
-  write.ml(m, modelPath, overwrite = TRUE)
-  m2 <- read.ml(modelPath)
-  s2 <- summary(m2)
-  expect_equal(s$apriori, s2$apriori)
-  expect_equal(s$tables, s2$tables)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-naiveBayes", fileext = ".tmp")
+    write.ml(m, modelPath)
+    expect_error(write.ml(m, modelPath))
+    write.ml(m, modelPath, overwrite = TRUE)
+    m2 <- read.ml(modelPath)
+    s2 <- summary(m2)
+    expect_equal(s$apriori, s2$apriori)
+    expect_equal(s$tables, s2$tables)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   # Test e1071::naiveBayes
   if (requireNamespace("e1071", quietly = TRUE)) {

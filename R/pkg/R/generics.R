@@ -799,6 +799,10 @@ setGeneric("write.df", function(df, path = NULL, ...) { standardGeneric("write.d
 #' @export
 setGeneric("randomSplit", function(x, weights, seed) { standardGeneric("randomSplit") })
 
+#' @rdname broadcast
+#' @export
+setGeneric("broadcast", function(x) { standardGeneric("broadcast") })
+
 ###################### Column Methods ##########################
 
 #' @rdname columnfunctions
@@ -1501,6 +1505,11 @@ setGeneric("spark.mlp", function(data, formula, ...) { standardGeneric("spark.ml
 #' @rdname spark.naiveBayes
 #' @export
 setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("spark.naiveBayes") })
+
+#' @rdname spark.decisionTree
+#' @export
+setGeneric("spark.decisionTree",
+           function(data, formula, ...) { standardGeneric("spark.decisionTree") })
 
 #' @rdname spark.randomForest
 #' @export
