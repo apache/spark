@@ -92,6 +92,10 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(counter.count === 5)
     assert(bus.metrics.numEventsPosted.getCount === 5)
 
+    // Make sure per-listener-class timers were created:
+    assert(bus.metrics.getTimerForListenerClass(
+      classOf[BasicJobCounter].asSubclass(classOf[SparkListenerInterface])).get.getCount == 5)
+
     // Listener bus must not be started twice
     intercept[IllegalStateException] {
       val bus = new LiveListenerBus(conf)

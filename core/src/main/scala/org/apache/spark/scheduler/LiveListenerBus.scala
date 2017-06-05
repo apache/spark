@@ -111,7 +111,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
   }
 
   override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
-    metrics.getTimerForListener(listener)
+    metrics.getTimerForListenerClass(listener.getClass.asSubclass(classOf[SparkListenerInterface]))
   }
 
   /**
@@ -282,9 +282,9 @@ class LiveListenerBusMetrics(queue: LinkedBlockingQueue[_]) extends Source with 
    * Returns a timer tracking the processing time of the given listener class.
    * events processed by that listener. This method is thread-safe.
    */
-  def getTimerForListener(listener: SparkListenerInterface): Option[Timer] = {
+  def getTimerForListenerClass(cls: Class[_ <: SparkListenerInterface]): Option[Timer] = {
     synchronized {
-      val className = listener.getClass.getName
+      val className = cls.getName
       val maxTimed = 128
       perListenerClassTimers.get(className).orElse {
         if (perListenerClassTimers.size == maxTimed) {
