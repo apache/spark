@@ -43,7 +43,8 @@ import org.apache.spark.util.{ManualClock, SystemClock}
  *    becomes `tuplesPerSecond`. Using finer granularities than seconds will be truncated to integer
  *    seconds.
  *  - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for the
- *    generated tuples.
+ *    generated tuples. The source will try its best to reach `tuplesPerSecond`, but the query may
+ *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
 class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
 
