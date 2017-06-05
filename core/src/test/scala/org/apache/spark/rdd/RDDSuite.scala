@@ -206,6 +206,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       c
     }
     val sum = rdd.fold(Array(0))(op)
+    assert(sum(0) === -1000)
   }
 
   test("aggregate") {
