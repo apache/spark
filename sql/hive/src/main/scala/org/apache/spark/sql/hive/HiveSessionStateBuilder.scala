@@ -89,8 +89,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   }
 
   /**
-  * Logical query plan optimizer that takes into account Hive.
-  */
+   * Logical query plan optimizer that takes into account Hive.
+   */
   override lazy val optimizer: Optimizer =
     new SparkOptimizer(catalog, conf, experimentalMethods) {
       override def postHocOptimizationBatches: Seq[Batch] = Seq(
