@@ -793,26 +793,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           assert(broadcastJoins.isEmpty)
         }
       }
-
-      sql("CREATE TABLE partTbl_parquet (col1 INT, col2 STRING) " +
-        "PARTITIONED BY (part1 STRING, part2 INT) STORED AS parquet")
-      for (part1 <- Seq("a", "b", "c", "d"); part2 <- Seq(1, 2)) {
-        sql(
-          s"""
-             |INSERT OVERWRITE TABLE partTbl_parquet PARTITION (part1='$part1',part2='$part2')
-             |select col1, col2 from tempTbl
-           """.stripMargin)
-      }
-
-      val query2 =
-        "select * from largeTbl join partTbl_parquet on (largeTbl.col1 = partTbl_parquet.col1 " +
-        "and partTbl_parquet.part1 = 'a' and partTbl_parquet.part2 = 1)"
-      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "12000") {
-        val broadcastJoins =
-          sql(query2).queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
-        assert(broadcastJoins.nonEmpty)
-      }
     }
   }
 }
