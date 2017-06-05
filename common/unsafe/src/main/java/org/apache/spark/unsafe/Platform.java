@@ -22,10 +22,14 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import sun.misc.Cleaner;
 import sun.misc.Unsafe;
 
 public final class Platform {
+  private static final Logger logger = LoggerFactory.getLogger(Platform.class);
 
   private static final Unsafe _UNSAFE;
 
@@ -44,6 +48,7 @@ public final class Platform {
   public static final int DOUBLE_ARRAY_OFFSET;
 
   private static final boolean unaligned;
+
   static {
     boolean _unaligned;
     String arch = System.getProperty("os.arch", "");
@@ -124,11 +129,11 @@ public final class Platform {
   }
 
   public static double getDouble(Object object, long offset) {
-    return _UNSAFE.getDouble(object, offset);
+    return Double.longBitsToDouble(_UNSAFE.getLong(object, offset));
   }
 
   public static void putDouble(Object object, long offset, double value) {
-    _UNSAFE.putDouble(object, offset, value);
+    _UNSAFE.putLong(object, offset, Double.doubleToRawLongBits(value));
   }
 
   public static Object getObjectVolatile(Object object, long offset) {
@@ -252,6 +257,7 @@ public final class Platform {
       LONG_ARRAY_OFFSET = 0;
       FLOAT_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
+      doubleAccessFunc = null;
     }
   }
 }

@@ -84,11 +84,13 @@ final class Platform {
   }
 
   public static double getDouble(Object object, long offset) {
-    return _UNSAFE.getDouble(object, offset);
+    // Using Long buffer for platforms requiring double byte alignment
+    return Double.longBitsToDouble(_UNSAFE.getLong(object, offset));
   }
 
   public static void putDouble(Object object, long offset, double value) {
-    _UNSAFE.putDouble(object, offset, value);
+    // Using Long buffer for platforms requiring double byte alignment
+    _UNSAFE.putLong(object, offset, Double.doubleToRawLongBits(value));
   }
 
   public static Object getObjectVolatile(Object object, long offset) {

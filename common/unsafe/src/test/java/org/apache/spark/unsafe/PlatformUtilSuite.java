@@ -17,11 +17,11 @@
 
 package org.apache.spark.unsafe;
 
-import org.apache.spark.unsafe.memory.MemoryAllocator;
-import org.apache.spark.unsafe.memory.MemoryBlock;
-
 import org.junit.Assert;
 import org.junit.Test;
+
+import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryAllocator;
 
 public class PlatformUtilSuite {
 
@@ -73,5 +73,28 @@ public class PlatformUtilSuite {
     Assert.assertEquals(
       Platform.getByte(offheap.getBaseObject(), offheap.getBaseOffset()),
       MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+  }
+
+  /**
+   * This test ensures that double access is handled correctly for the host platform.
+   * On platforms that require double access to be aligned to 8-byte boundaries, this
+   * test should pass and not cause the JVM to segfault.
+   */
+  @Test
+  public void unalignedDoublePutAndGet() {
+    MemoryBlock testBuffer = MemoryBlock.fromLongArray(new long[20]);
+
+    // write a double to an unaligned location
+    long unalignedOffset = testBuffer.getBaseOffset() + 3;
+    // double check unalignment just to be sure:
+    if (unalignedOffset % 8 == 0) {
+      unalignedOffset++;
+    }
+
+    Platform.putDouble(testBuffer.getBaseObject(), unalignedOffset, 3.14159);
+
+    double foundDouble = Platform.getDouble(testBuffer.getBaseObject(), unalignedOffset);
+
+    Assert.assertEquals(3.14159, foundDouble, 0.000001);
   }
 }
