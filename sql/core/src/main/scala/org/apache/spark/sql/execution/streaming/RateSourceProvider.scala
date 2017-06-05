@@ -110,6 +110,7 @@ class RateStreamSource(
     useManualClock: Boolean) extends Source with Logging {
 
   import RateSourceProvider._
+  import RateStreamSource._
 
   val clock = if (useManualClock) new ManualClock else new SystemClock
 
@@ -183,15 +184,8 @@ class RateStreamSource(
     if (lastTimeMs < TimeUnit.SECONDS.toMillis(endSeconds) + startTimeMs) {
       lastTimeMs = TimeUnit.SECONDS.toMillis(endSeconds) + startTimeMs
     }
-    val (rangeStart, rangeEnd) = if (rampUpTimeSeconds > endSeconds) {
-      (math.rint(tuplesPerSecond * (startSeconds * 1.0 / rampUpTimeSeconds)).toLong * startSeconds,
-        math.rint(tuplesPerSecond * (endSeconds * 1.0 / rampUpTimeSeconds)).toLong * endSeconds)
-    } else if (startSeconds < rampUpTimeSeconds) {
-      (math.rint(tuplesPerSecond * (startSeconds * 1.0 / rampUpTimeSeconds)).toLong * startSeconds,
-        endSeconds * tuplesPerSecond)
-    } else {
-      (startSeconds * tuplesPerSecond, endSeconds * tuplesPerSecond)
-    }
+    val rangeStart = valueAtSecond(startSeconds, tuplesPerSecond, rampUpTimeSeconds)
+    val rangeEnd = valueAtSecond(endSeconds, tuplesPerSecond, rampUpTimeSeconds)
     logDebug(s"startSeconds: $startSeconds, endSeconds: $endSeconds, " +
       s"rangeStart: $rangeStart, rangeEnd: $rangeEnd")
     val localStartTimeMs = startTimeMs
@@ -205,4 +199,31 @@ class RateStreamSource(
   }
 
   override def stop(): Unit = {}
+}
+
+object RateStreamSource {
+
+  /** Calculate the end value we will emit at the time `seconds`. */
+  def valueAtSecond(seconds: Long, tuplesPerSecond: Long, rampUpTimeSeconds: Long): Long = {
+    // E.g., rampUpTimeSeconds = 4, tuplesPerSecond = 10
+    // Then speedDeltaPerSecond = 2
+    //
+    // seconds   = 0 1 2  3  4  5  6
+    // speed     = 0 2 4  6  8 10 10 (speedDeltaPerSecond * seconds)
+    // end value = 0 2 6 12 20 30 40 (0 + speedDeltaPerSecond * seconds) * (seconds + 1) / 2
+    val speedDeltaPerSecond = tuplesPerSecond / (rampUpTimeSeconds + 1)
+    if (seconds <= rampUpTimeSeconds) {
+      // Calculate "(0 + speedDeltaPerSecond * seconds) * (seconds + 1) / 2" in a special way to
+      // avoid overflow
+      if (seconds % 2 == 1) {
+        (seconds + 1) / 2 * speedDeltaPerSecond * seconds
+      } else {
+        seconds / 2 * speedDeltaPerSecond * (seconds + 1)
+      }
+    } else {
+      // rampUpPart is just a special case of the above formula: rampUpTimeSeconds == seconds
+      val rampUpPart = valueAtSecond(rampUpTimeSeconds, tuplesPerSecond, rampUpTimeSeconds)
+      rampUpPart + (seconds - rampUpTimeSeconds) * tuplesPerSecond
+    }
+  }
 }

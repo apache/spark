@@ -64,27 +64,46 @@ class RateSourceSuite extends StreamTest {
     )
   }
 
+  test("valueAtSecond") {
+    import RateStreamSource._
+
+    assert(valueAtSecond(seconds = 0, tuplesPerSecond = 5, rampUpTimeSeconds = 2) === 0)
+    assert(valueAtSecond(seconds = 1, tuplesPerSecond = 5, rampUpTimeSeconds = 2) === 1)
+    assert(valueAtSecond(seconds = 2, tuplesPerSecond = 5, rampUpTimeSeconds = 2) === 3)
+    assert(valueAtSecond(seconds = 3, tuplesPerSecond = 5, rampUpTimeSeconds = 2) === 8)
+
+    assert(valueAtSecond(seconds = 0, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 0)
+    assert(valueAtSecond(seconds = 1, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 2)
+    assert(valueAtSecond(seconds = 2, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 6)
+    assert(valueAtSecond(seconds = 3, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 12)
+    assert(valueAtSecond(seconds = 4, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 20)
+    assert(valueAtSecond(seconds = 5, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 30)
+  }
+
   test("rampUpTimeSeconds") {
     val input = spark.readStream
       .format("rate")
       .option("tuplesPerSecond", "10")
-      .option("rampUpTimeSeconds", "5")
+      .option("rampUpTimeSeconds", "4")
       .option("useManualClock", "true")
       .load()
       .select($"value")
     testStream(input)(
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch((0 until 2): _*),
+      CheckLastBatch(0 until 2: _*), // speed = 2
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch((2 until 8): _*),
+      CheckLastBatch(2 until 6: _*), // speed = 4
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch((8 until 18): _*),
+      CheckLastBatch(6 until 12: _*), // speed = 6
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch((18 until 32): _*),
+      CheckLastBatch(12 until 20: _*), // speed = 8
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch((32 until 50): _*),
+      // Now we should reach full speed
+      CheckLastBatch(20 until 30: _*), // speed = 10
       AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch((50 until 60): _*)
+      CheckLastBatch(30 until 40: _*), // speed = 10
+      AdvanceRateManualClock(seconds = 1),
+      CheckLastBatch(40 until 50: _*) // speed = 10
     )
   }
 
