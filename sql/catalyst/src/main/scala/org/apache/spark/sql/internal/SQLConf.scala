@@ -345,7 +345,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = buildConf("spark.sql.columnNameOfCorruptRecord")
-    .doc("The name of internal column for storing raw/un-parsed JSON records that fail to parse.")
+    .doc("The name of internal column for storing raw/un-parsed JSON and CSV records that fail " +
+      "to parse.")
     .stringConf
     .createWithDefault("_corrupt_record")
 
@@ -535,8 +536,7 @@ object SQLConf {
 
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
-      "encountering corrupted or non-existing and contents that have been read will still be " +
-      "returned.")
+      "encountering corrupted files and the contents that have been read will still be returned.")
     .booleanConf
     .createWithDefault(false)
 
@@ -551,6 +551,21 @@ object SQLConf {
     .doc("When true, the planner will try to find out duplicated exchanges and re-use them.")
     .booleanConf
     .createWithDefault(true)
+
+  val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.subquery.reuse")
+    .internal()
+    .doc("When true, the planner will try to find out duplicated subqueries and re-use them.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val STATE_STORE_PROVIDER_CLASS =
+    buildConf("spark.sql.streaming.stateStore.providerClass")
+      .internal()
+      .doc(
+        "The class used to manage state data in stateful streaming queries. This class must " +
+          "be a subclass of StateStoreProvider, and must have a zero-arg constructor.")
+      .stringConf
+      .createOptional
 
   val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
     buildConf("spark.sql.streaming.stateStore.minDeltasForSnapshot")
@@ -828,6 +843,8 @@ class SQLConf extends Serializable with Logging {
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
+  def stateStoreProviderClass: Option[String] = getConf(STATE_STORE_PROVIDER_CLASS)
+
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
@@ -920,6 +937,8 @@ class SQLConf extends Serializable with Logging {
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
+
+  def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 

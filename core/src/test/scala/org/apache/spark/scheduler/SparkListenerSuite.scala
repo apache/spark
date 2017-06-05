@@ -27,7 +27,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.config.LISTENER_BUS_EVENT_QUEUE_SIZE
+import org.apache.spark.internal.config.LISTENER_BUS_EVENT_QUEUE_CAPACITY
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
@@ -159,7 +159,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("metrics for dropped listener events") {
-    val bus = new LiveListenerBus(new SparkConf().set(LISTENER_BUS_EVENT_QUEUE_SIZE, 1))
+    val bus = new LiveListenerBus(new SparkConf().set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 1))
 
     val listenerStarted = new Semaphore(0)
     val listenerWait = new Semaphore(0)

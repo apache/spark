@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -57,9 +58,9 @@ object ResolveHints {
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
           case u: UnresolvedRelation if toBroadcast.exists(resolver(_, u.tableIdentifier.table)) =>
-            ResolvedHint(plan, isBroadcastable = Option(true))
+            ResolvedHint(plan, HintInfo(isBroadcastable = Option(true)))
           case r: SubqueryAlias if toBroadcast.exists(resolver(_, r.alias)) =>
-            ResolvedHint(plan, isBroadcastable = Option(true))
+            ResolvedHint(plan, HintInfo(isBroadcastable = Option(true)))
 
           case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
             // Don't traverse down these nodes.
@@ -88,10 +89,15 @@ object ResolveHints {
       case h: UnresolvedHint if BROADCAST_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
         if (h.parameters.isEmpty) {
           // If there is no table alias specified, turn the entire subtree into a BroadcastHint.
-          ResolvedHint(h.child, isBroadcastable = Option(true))
+          ResolvedHint(h.child, HintInfo(isBroadcastable = Option(true)))
         } else {
           // Otherwise, find within the subtree query plans that should be broadcasted.
-          applyBroadcastHint(h.child, h.parameters.toSet)
+          applyBroadcastHint(h.child, h.parameters.map {
+            case tableName: String => tableName
+            case tableId: UnresolvedAttribute => tableId.name
+            case unsupported => throw new AnalysisException("Broadcast hint parameter should be " +
+              s"an identifier or string but was $unsupported (${unsupported.getClass}")
+          }.toSet)
         }
     }
   }
