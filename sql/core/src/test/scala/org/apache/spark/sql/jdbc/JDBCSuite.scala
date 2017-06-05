@@ -221,6 +221,39 @@ class JDBCSuite extends SparkFunSuite
     conn.prepareStatement("""insert into test."mixedCaseCols" values (null, 3)""").executeUpdate()
     conn.commit()
 
+    conn.prepareStatement(
+      "create table test.rightskewseq(id INTEGER)").executeUpdate()
+    val rightIdArrays = Array(0, 50, 80, 85, 95, 100)
+    rightIdArrays.foreach { value =>
+      conn.prepareStatement(
+        s"insert into test.rightskewseq values ($value)").executeUpdate()
+    }
+    conn.prepareStatement(
+      "insert into test.rightskewseq values (null)").executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement(
+      "create table test.leftskewseq(id INTEGER)").executeUpdate()
+    val leftIdArrays = Array(0, 15, 20, 30, 50, 100)
+    leftIdArrays.foreach { value =>
+      conn.prepareStatement(
+        s"insert into test.leftskewseq values ($value)").executeUpdate()
+    }
+    conn.prepareStatement(
+      "insert into test.leftskewseq values (null)").executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement(
+      "create table test.midskewseq(id INTEGER)").executeUpdate()
+    val midIdArrays = Array(0, 35, 42, 45, 50, 100)
+    midIdArrays.foreach { value =>
+      conn.prepareStatement(
+        s"insert into test.midskewseq values ($value)").executeUpdate()
+    }
+    conn.prepareStatement(
+      "insert into test.midskewseq values (null)").executeUpdate()
+    conn.commit()
+
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW mixedCaseCols
@@ -499,6 +532,63 @@ class JDBCSuite extends SparkFunSuite
     }.getMessage
     assert(e.contains("Operation not allowed: the lower bound of partitioning column " +
       "is larger than the upper bound. Lower bound: 5; Upper bound: 1"))
+  }
+
+  test("Partitioning on column using columnBalancePartition when data is right skew") {
+    val connectionProperties = new Properties()
+    connectionProperties.put("balance_partition", "true")
+    val res = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.rightskewseq",
+      columnName = "id",
+      lowerBound = 0,
+      upperBound = 100,
+      numPartitions = 4,
+      connectionProperties
+    )
+    val partitionsCount = res.rdd.mapPartitions(iter => Array(iter.length).iterator).collect()
+    assert(partitionsCount(0) === 2)
+    assert(partitionsCount(1) === 1)
+    assert(partitionsCount(2) === 2)
+    assert(partitionsCount(3) === 2)
+  }
+
+  test("Partitioning on column using columnBalancePartition when data is left skew") {
+    val connectionProperties = new Properties()
+    connectionProperties.put("balance_partition", "true")
+    val res = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.leftskewseq",
+      columnName = "id",
+      lowerBound = 0,
+      upperBound = 100,
+      numPartitions = 4,
+      connectionProperties
+    )
+    val partitionsCount = res.rdd.mapPartitions(iter => Array(iter.length).iterator).collect()
+    assert(partitionsCount(0) === 2)
+    assert(partitionsCount(1) === 2)
+    assert(partitionsCount(2) === 1)
+    assert(partitionsCount(3) === 2)
+  }
+
+  test("Partitioning on column using columnBalancePartition when data is mid skew") {
+    val connectionProperties = new Properties()
+    connectionProperties.put("balance_partition", "true")
+    val res = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.midskewseq",
+      columnName = "id",
+      lowerBound = 0,
+      upperBound = 100,
+      numPartitions = 4,
+      connectionProperties
+    )
+    val partitionsCount = res.rdd.mapPartitions(iter => Array(iter.length).iterator).collect()
+    assert(partitionsCount(0) === 2)
+    assert(partitionsCount(1) === 1)
+    assert(partitionsCount(2) === 2)
+    assert(partitionsCount(3) === 2)
   }
 
   test("SELECT * on partitioned table with a nullable partition column") {

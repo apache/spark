@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
+import java.sql.Connection
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
@@ -36,7 +38,14 @@ private[sql] case class JDBCPartitioningInfo(
     upperBound: Long,
     numPartitions: Int)
 
+private[sql] object BoundRange extends Enumeration {
+  type BoundRange = Value
+  val FULLRANGE, LEFTRANGE, MIDRANGE, RIGHTRANGE = Value
+}
+
 private[sql] object JDBCRelation extends Logging {
+  import BoundRange._
+
   /**
    * Given a partitioning schematic (a column of integral type, a number of
    * partitions, and upper and lower bounds on the column's value), generate
@@ -97,6 +106,160 @@ private[sql] object JDBCRelation extends Logging {
       i = i + 1
     }
     ans.toArray
+  }
+
+  def columnBalancePartition(
+    partitioning: JDBCPartitioningInfo,
+    jdbcOptions: JDBCOptions): Array[Partition] = {
+    val lowerBound = partitioning.lowerBound
+    val upperBound = partitioning.upperBound
+    require (lowerBound <= upperBound,
+      "Operation not allowed: the lower bound of partitioning column is larger than the upper " +
+        s"bound. Lower bound: $lowerBound; Upper bound: $upperBound")
+
+    val conn: Connection = JdbcUtils.createConnectionFactory(jdbcOptions)()
+    try {
+      val startTime = System.currentTimeMillis()
+      val partitionIndexes = (0 until partitioning.numPartitions).toArray
+      val parts = realColumnBalancePartition(partitioning, conn, jdbcOptions.table,
+        partitionIndexes, 0L, FULLRANGE)
+      val queryTime = System.currentTimeMillis() - startTime
+      logInfo(s"total query cost = ${queryTime} ms" )
+
+      parts
+    } finally {
+      if (!conn.isClosed) {
+        conn.close()
+      }
+    }
+  }
+
+  private def realColumnBalancePartition(
+    partitioning: JDBCPartitioningInfo,
+    conn: Connection,
+    table: String,
+    partitionIndexes: Array[Int],
+    totalCount: Long,
+    boundary: BoundRange): Array[Partition] = {
+
+    val column = partitioning.column
+    val lowerBound = partitioning.lowerBound
+    val upperBound = partitioning.upperBound
+    val numTotalPartitions = partitioning.numPartitions
+
+    require(numTotalPartitions > 0)
+    if (numTotalPartitions == 1) {
+      val whereClause = getWhereClause(boundary, column, lowerBound, upperBound)
+      return Array(JDBCPartition(whereClause, partitionIndexes(0)))
+    }
+    val midBound = upperBound / 2 + lowerBound / 2
+    val leftBoundary = boundary match {
+      case FULLRANGE => LEFTRANGE
+      case RIGHTRANGE => MIDRANGE
+      case _ => boundary
+    }
+    val rightBoundary = boundary match {
+      case FULLRANGE => RIGHTRANGE
+      case LEFTRANGE => MIDRANGE
+      case _ => boundary
+    }
+    // just an optimize, so we can reduce one more recursive call
+    if (numTotalPartitions == 2) {
+      val leftWhereClause = getWhereClause(leftBoundary, column, lowerBound, midBound)
+      val rightWhereClause = getWhereClause(rightBoundary, column, midBound, upperBound)
+      return Array(
+        JDBCPartition(leftWhereClause, partitionIndexes(0)),
+        JDBCPartition(rightWhereClause, partitionIndexes(1)))
+    }
+
+    val startTime = System.currentTimeMillis()
+    val rightCount = getRangeCountByColumn(conn, table, column,
+      midBound, upperBound, rightBoundary)
+    val countTime = System.currentTimeMillis() - startTime
+    val leftCount = boundary match {
+      case FULLRANGE =>
+        getRangeCountByColumn(conn, table, column, lowerBound, midBound, leftBoundary)
+      case _ =>
+        totalCount - rightCount
+    }
+
+    // when leftCount + rightCount = 0, the numPartitions should equals 1 beside the first calling.
+    // so it will return at above code.
+    if (boundary == FULLRANGE && leftCount == 0 && rightCount == 0) {
+      return columnPartition(partitioning)
+    }
+    // make the left part or right part owns 1 partition at least,
+    // we can guarantee recursive called n -1 times at most.
+    val numRightPartitions = Math.min(
+      Math.max(
+        Math.round(1.0 * rightCount / (rightCount + leftCount) * numTotalPartitions).toInt, 1),
+        numTotalPartitions - 1)
+    val numLeftPartitions = numTotalPartitions - numRightPartitions
+    logDebug(s"lowerBound = $lowerBound, midBound = $midBound, upperbound = $upperBound, " +
+      s"left count = $leftCount, left partitions = $numLeftPartitions, " +
+      s"right count = $rightCount, right partitions = $numRightPartitions, " +
+      s"total count = $totalCount, query cost = $countTime ms")
+
+    val leftPartitioning = JDBCPartitioningInfo(column,
+      lowerBound, midBound, numLeftPartitions)
+    val rightPartitioning = JDBCPartitioningInfo(column,
+      midBound, upperBound, numRightPartitions)
+    val leftPartitionIndexes = partitionIndexes.slice(0, numLeftPartitions)
+    val rightPartitionIndexes = partitionIndexes.slice(numLeftPartitions, partitionIndexes.length)
+    val leftResult = realColumnBalancePartition(leftPartitioning, conn, table,
+      leftPartitionIndexes, leftCount, leftBoundary)
+    val rightResult = realColumnBalancePartition(rightPartitioning, conn, table,
+      rightPartitionIndexes, rightCount, rightBoundary)
+
+    leftResult ++ rightResult
+  }
+
+  private def getRangeCountByColumn(
+    conn: Connection,
+    table: String,
+    column: String,
+    lowerBound: Long,
+    upperBound: Long,
+    boundary: BoundRange): Long = {
+    val sqlText = boundary match {
+      case BoundRange.FULLRANGE =>
+        s"SELECT count(*) from $table"
+      case BoundRange.LEFTRANGE =>
+        s"SELECT count(*) from $table WHERE $column < $upperBound OR $column is null"
+      case BoundRange.RIGHTRANGE =>
+        s"SELECT count(*) from $table WHERE $column >= $lowerBound"
+      case BoundRange.MIDRANGE =>
+        s"SELECT count(*) from $table WHERE $column >= $lowerBound AND $column < $upperBound"
+    }
+    val statement = conn.createStatement()
+    try {
+      val result = statement.executeQuery(sqlText)
+      result.next()
+      result.getLong(1)
+    } finally {
+      statement.close()
+    }
+  }
+
+  private def getWhereClause(
+    boundary: BoundRange,
+    column: String,
+    lowerBound: Long,
+    upperBound: Long) = {
+    val whereClause = boundary match {
+      case LEFTRANGE =>
+        s"$column < $upperBound OR $column is null"
+      case RIGHTRANGE =>
+        s"$column >= $lowerBound"
+      case MIDRANGE =>
+        s"$column >= $lowerBound AND $column < $upperBound"
+      case FULLRANGE =>
+        // since FULLRANGE only occur at the first time,
+        // but the numPartitions will not be 1 at the same time,
+        // since we will call the origin columnPartition.
+        throw new Exception("partition by a FullRange should not occur")
+    }
+    whereClause
   }
 }
 

@@ -43,7 +43,14 @@ class JdbcRelationProvider extends CreatableRelationProvider
       JDBCPartitioningInfo(
         partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
     }
-    val parts = JDBCRelation.columnPartition(partitionInfo)
+    val enableBalance = parameters.getOrElse("balance_partition", "false").toBoolean
+
+    val parts = if (!enableBalance || partitionInfo == null ||
+      numPartitions.get <= 1 || lowerBound.get == upperBound.get) {
+      JDBCRelation.columnPartition(partitionInfo)
+    } else {
+      JDBCRelation.columnBalancePartition(partitionInfo, jdbcOptions)
+    }
     JDBCRelation(parts, jdbcOptions)(sqlContext.sparkSession)
   }
 
