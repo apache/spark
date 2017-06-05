@@ -48,7 +48,7 @@ import org.apache.spark.util.Utils
  *
  * The reason to put Kafka test utility class in src is to test Python related Kafka APIs.
  */
-private[kafka] class KafkaTestUtils extends Logging {
+private[spark] class KafkaTestUtils extends Logging {
 
   // Zookeeper related configurations
   private val zkHost = "localhost"
