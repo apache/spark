@@ -24,7 +24,7 @@ import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 /**
  * Single-label regression
  *
- * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.mllib.linalg.Vector]]
+ * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.ml.linalg.Vector]]
  * @tparam Learner  Concrete Estimator type
  * @tparam M  Concrete Model type
  */
@@ -42,7 +42,7 @@ private[spark] abstract class Regressor[
  *
  * Model produced by a `Regressor`.
  *
- * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.mllib.linalg.Vector]]
+ * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.ml.linalg.Vector]]
  * @tparam M  Concrete Model type.
  */
 @DeveloperApi
