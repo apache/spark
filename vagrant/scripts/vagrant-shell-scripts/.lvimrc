@@ -1,0 +1,13 @@
+let s:roundup_command = 'bin/roundup'
+
+let VimuxResetSequence = "q C-c C-u"
+
+augroup runTestOnSave
+  au!
+  au BufWritePost *-test.sh call VimuxRunCommand(s:roundup_command . ' ' . expand('%:p:~:.'))
+augroup END
+
+augroup reloadLocalConfiguration
+  au!
+  au BufWritePost .lvimrc source %
+augroup END
