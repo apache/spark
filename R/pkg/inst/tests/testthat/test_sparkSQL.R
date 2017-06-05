@@ -494,6 +494,13 @@ test_that("create DataFrame from list or data.frame", {
   bytes <- as.raw(c(1, 2, 3))
   df <- createDataFrame(list(list(bytes)))
   expect_equal(collect(df)[[1]][[1]], bytes)
+
+  # check for duplicate names
+  l <- list(list(1, 2), list(3, 4))
+  expect_error(createDataFrame(l, c("a", "a")), "Duplicate column names.")
+  df <- createDataFrame(l, c("a", "b"))
+  expect_error(names(df)[2] <- "a", "Duplicate column names.")
+
 })
 
 test_that("create DataFrame with different data types", {
