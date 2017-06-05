@@ -49,7 +49,7 @@ pushd "$FWDIR" > /dev/null
 mkdir -p pkg/html
 pushd pkg/html
 
-"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/")))'
+"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; index_path = file.path(libDir, "SparkR", "html", "00Index.html"); invisible(file.copy(index_path, "00Index.html.bck")); txt = readLines(index_path); method_lines = grep("-method</a>", txt, fixed = TRUE); txt = txt[-c(method_lines, method_lines + 1)]; writeLines(txt, index_path); library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/"))); invisible(file.rename("00Index.html.bck", index_path))'
 
 popd
 
