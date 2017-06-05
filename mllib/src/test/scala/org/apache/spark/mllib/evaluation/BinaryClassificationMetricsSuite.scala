@@ -145,7 +145,7 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
 
     val numBins = 4
 
-    val downsampled = new BinaryClassificationMetrics(scoreAndLabelsRDD, numBins)
+    val downsampled = original.setBins(numBins)
     val downsampledROC = downsampled.roc().collect().sorted.toList
     assert(
       // May have to add 1 if the sample factor didn't divide evenly

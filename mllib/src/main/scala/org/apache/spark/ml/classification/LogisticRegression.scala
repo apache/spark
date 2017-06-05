@@ -1392,7 +1392,7 @@ class BinaryLogisticRegressionSummary private[classification] (
   /**
    * Returns a BinaryClassificationMetrics object.
    */
-  // TODO: Allow the user to vary the number of bins using a setBins method in
+  // User can change the number of bins using a setBins method in
   // BinaryClassificationMetrics. For now the default is set to 100.
   @transient private val binaryMetrics = new BinaryClassificationMetrics(
     predictions.select(col(probabilityCol), col(labelCol).cast(DoubleType)).rdd.map {

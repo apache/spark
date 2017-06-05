@@ -43,9 +43,12 @@ import org.apache.spark.sql.DataFrame
 @Since("1.0.0")
 class BinaryClassificationMetrics @Since("1.3.0") (
     @Since("1.3.0") val scoreAndLabels: RDD[(Double, Double)],
-    @Since("1.3.0") val numBins: Int) extends Logging {
+    @Since("1.3.0") var numBins: Int) extends Logging {
 
   require(numBins >= 0, "numBins must be nonnegative")
+
+  private var cumulativeCountsRDD: RDD[(Double, BinaryLabelCounter)] = _
+  private var confusionsRDD: RDD[(Double, BinaryConfusionMatrix)] = _
 
   /**
    * Defaults `numBins` to 0.
@@ -59,6 +62,45 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    */
   private[mllib] def this(scoreAndLabels: DataFrame) =
     this(scoreAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
+
+  /**
+   * Set the number of bins, Default 'numBins' is 0.
+   * @param numBins the number of bins to set.
+   */
+  @Since("2.1.0")
+  def setBins(numBins: Int): this.type = {
+    require(numBins >= 0, "numBins must be nonnegative")
+    if (this.numBins != numBins) {
+      this.numBins = numBins
+      cumulativeCountsRDD = null
+      confusionsRDD = null
+    }
+    this
+  }
+
+  /**
+   * Return cumulativeCountsRDD.
+   * If cumulativeCountsRDD is null, initialize it first.
+   */
+  @Since("2.1.0")
+  private[mllib] def cumulativeCounts: RDD[(Double, BinaryLabelCounter)] = {
+    if (cumulativeCountsRDD == null) {
+      initialize()
+    }
+    cumulativeCountsRDD
+  }
+
+  /**
+   * Return confusionsRDD.
+   * If confusionsRDD is null, initialize it first.
+   */
+  @Since("2.1.0")
+  private[mllib] def confusions: RDD[(Double, BinaryConfusionMatrix)] = {
+    if (confusionsRDD == null) {
+      initialize()
+    }
+    confusionsRDD
+  }
 
   /**
    * Unpersist intermediate RDDs used in the computation.
@@ -143,9 +185,11 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   @Since("1.0.0")
   def recallByThreshold(): RDD[(Double, Double)] = createCurve(Recall)
 
-  private lazy val (
-    cumulativeCounts: RDD[(Double, BinaryLabelCounter)],
-    confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
+  /**
+   * initialize confusionsRDD and cumulativeCountsRDD
+   */
+  @Since("2.1.0")
+  private[mllib] def initialize () {
     // Create a bin for each distinct score value, count positives and negatives within each bin,
     // and then sort by score values in descending order.
     val counts = scoreAndLabels.combineByKey(
@@ -194,7 +238,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
       agg.scanLeft(new BinaryLabelCounter())((agg, c) => agg.clone() += c)
     val totalCount = partitionwiseCumulativeCounts.last
     logInfo(s"Total counts: $totalCount")
-    val cumulativeCounts = binnedCounts.mapPartitionsWithIndex(
+    cumulativeCountsRDD = binnedCounts.mapPartitionsWithIndex(
       (index: Int, iter: Iterator[(Double, BinaryLabelCounter)]) => {
         val cumCount = partitionwiseCumulativeCounts(index)
         iter.map { case (score, c) =>
@@ -202,11 +246,10 @@ class BinaryClassificationMetrics @Since("1.3.0") (
           (score, cumCount.clone())
         }
       }, preservesPartitioning = true)
-    cumulativeCounts.persist()
-    val confusions = cumulativeCounts.map { case (score, cumCount) =>
+    cumulativeCountsRDD.persist()
+    confusionsRDD = cumulativeCountsRDD.map { case (score, cumCount) =>
       (score, BinaryConfusionMatrixImpl(cumCount, totalCount).asInstanceOf[BinaryConfusionMatrix])
     }
-    (cumulativeCounts, confusions)
   }
 
   /** Creates a curve of (threshold, metric). */
