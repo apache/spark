@@ -111,7 +111,7 @@ abstract class CSVDataSource extends Serializable {
 
 object CSVDataSource {
   def apply(options: CSVOptions): CSVDataSource = {
-    if (options.wholeFile) {
+    if (options.multiLine) {
       WholeFileCSVDataSource
     } else {
       TextInputCSVDataSource

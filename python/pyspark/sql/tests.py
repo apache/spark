@@ -463,9 +463,9 @@ class SQLTests(ReusedPySparkTestCase):
                                             wholeFile=True)
         self.assertEqual(people1.collect(), people_array.collect())
 
-    def test_wholefile_csv(self):
+    def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
-            "python/test_support/sql/ages_newlines.csv", wholeFile=True)
+            "python/test_support/sql/ages_newlines.csv", multiLine=True)
         expected = [Row(_c0=u'Joe', _c1=u'20', _c2=u'Hi,\nI am Jeo'),
                     Row(_c0=u'Tom', _c1=u'30', _c2=u'My name is Tom'),
                     Row(_c0=u'Hyukjin', _c1=u'25', _c2=u'I am Hyukjin\n\nI love Spark!')]

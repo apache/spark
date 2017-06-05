@@ -276,7 +276,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
-   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines.</li>
+   * <li>`multiLine` (default `false`): parse one record, which may span multiple lines.</li>
    * </ul>
    *
    * @since 2.0.0
