@@ -457,10 +457,10 @@ class SQLTests(ReusedPySparkTestCase):
             df.select(add_three("id").alias("plus_three")).collect()
         )
 
-    def test_wholefile_json(self):
+    def test_multiLine_json(self):
         people1 = self.spark.read.json("python/test_support/sql/people.json")
         people_array = self.spark.read.json("python/test_support/sql/people_array.json",
-                                            wholeFile=True)
+                                            multiLine=True)
         self.assertEqual(people1.collect(), people_array.collect())
 
     def test_multiline_csv(self):

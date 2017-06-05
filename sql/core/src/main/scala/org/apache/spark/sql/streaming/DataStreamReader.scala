@@ -163,7 +163,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * Loads a JSON file stream and returns the results as a `DataFrame`.
    *
    * <a href="http://jsonlines.org/">JSON Lines</a> (newline-delimited JSON) is supported by
-   * default. For JSON (one record per file), set the `wholeFile` option to true.
+   * default. For JSON (one record per file), set the `multiLine` option to true.
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -205,7 +205,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
+   * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
    * </ul>
    *

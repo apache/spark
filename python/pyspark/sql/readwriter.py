@@ -174,12 +174,12 @@ class DataFrameReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             wholeFile=None):
+             multiLine=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
         `JSON Lines <http://jsonlines.org/>`_ (newline-delimited JSON) is supported by default.
-        For JSON (one record per file), set the ``wholeFile`` parameter to ``true``.
+        For JSON (one record per file), set the ``multiLine`` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -230,7 +230,7 @@ class DataFrameReader(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
-        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
+        :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
@@ -248,7 +248,7 @@ class DataFrameReader(OptionUtils):
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
-            timestampFormat=timestampFormat, wholeFile=wholeFile)
+            timestampFormat=timestampFormat, multiLine=multiLine)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:

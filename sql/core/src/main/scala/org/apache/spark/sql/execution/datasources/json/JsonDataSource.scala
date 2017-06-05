@@ -86,7 +86,7 @@ abstract class JsonDataSource extends Serializable {
 
 object JsonDataSource {
   def apply(options: JSONOptions): JsonDataSource = {
-    if (options.wholeFile) {
+    if (options.multiLine) {
       WholeFileJsonDataSource
     } else {
       TextInputJsonDataSource
