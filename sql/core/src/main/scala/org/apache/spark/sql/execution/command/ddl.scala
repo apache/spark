@@ -587,7 +587,7 @@ case class AlterTableRecoverPartitionsCommand(
     val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
     val hadoopConf = spark.sparkContext.hadoopConfiguration
     val pathFilter = getPathFilter(hadoopConf)
-    
+
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
     val partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)] =
       try {
