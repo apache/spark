@@ -35,9 +35,7 @@ import org.apache.spark.sql.types._
  * wrapped in `ExecutedCommand` during execution.
  */
 trait RunnableCommand extends logical.Command {
-  def run(sparkSession: SparkSession): Seq[Row] = {
-    throw new NotImplementedError
-  }
+  def run(sparkSession: SparkSession): Seq[Row]
 }
 
 /**
@@ -56,7 +54,12 @@ trait CommandExec extends SparkPlan {
    * The `execute()` method of all the physical command classes should reference `sideEffectResult`
    * so that the command can be executed eagerly right after the command query is created.
    */
-  protected[sql] val sideEffectResult: Seq[InternalRow]
+  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    invokeCommand.map(converter(_).asInstanceOf[InternalRow])
+  }
+
+  protected[sql] val invokeCommand: Seq[Row]
 
   override def innerChildren: Seq[QueryPlan[_]] = cmd.innerChildren
 
@@ -80,12 +83,7 @@ trait CommandExec extends SparkPlan {
  * save the result to prevent multiple executions.
  */
 case class ExecutedCommandExec(cmd: RunnableCommand) extends CommandExec {
-  override protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
-    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val rows = cmd.run(sqlContext.sparkSession)
-    rows.map(converter(_).asInstanceOf[InternalRow])
-  }
-
+  protected[sql] lazy val invokeCommand: Seq[Row] = cmd.run(sqlContext.sparkSession)
   override def children: Seq[SparkPlan] = Nil
 }
 

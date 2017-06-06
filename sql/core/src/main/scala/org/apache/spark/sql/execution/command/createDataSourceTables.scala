@@ -123,7 +123,7 @@ case class CreateDataSourceTableAsSelectCommand(
     table: CatalogTable,
     mode: SaveMode,
     query: LogicalPlan)
-  extends WriteOutFileCommand {
+  extends FileWritingCommand {
 
   /**
    * The code path this command writes data out depends on the type of data source:

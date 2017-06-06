@@ -346,7 +346,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case w: WriteOutFileCommand => WrittenFileCommandExec(w, w.children.map(planLater)) :: Nil
+      case f: FileWritingCommand => FileWritingCommandExec(f, f.children.map(planLater)) :: Nil
 
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 

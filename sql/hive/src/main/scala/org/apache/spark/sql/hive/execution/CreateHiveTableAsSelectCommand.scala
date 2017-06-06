@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.{WriteOutFileCommand, WrittenFileCommandExec}
+import org.apache.spark.sql.execution.command.{FileWritingCommand, FileWritingCommandExec}
 import org.apache.spark.sql.execution.datasources.ExecutedWriteSummary
 
 
@@ -39,7 +39,7 @@ case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
     mode: SaveMode)
-  extends WriteOutFileCommand {
+  extends FileWritingCommand {
 
   private val tableIdentifier = tableDesc.identifier
 
@@ -69,7 +69,7 @@ case class CreateHiveTableAsSelectCommand(
           overwrite = false,
           ifPartitionNotExists = false))
       val insertCommand = qe.executedPlan.collect {
-        case w: WrittenFileCommandExec => w
+        case f: FileWritingCommandExec => f
       }.head
       insertCommand.cmd.run(sparkSession, insertCommand.children, metricsCallback)
     } else {
@@ -89,7 +89,7 @@ case class CreateHiveTableAsSelectCommand(
             overwrite = true,
             ifPartitionNotExists = false))
         val insertCommand = qe.executedPlan.collect {
-          case w: WrittenFileCommandExec => w
+          case f: FileWritingCommandExec => f
         }.head
         insertCommand.cmd.run(sparkSession, insertCommand.children, metricsCallback)
       } catch {

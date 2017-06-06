@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.command.WrittenFileCommandExec
+import org.apache.spark.sql.execution.command.FileWritingCommandExec
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -452,7 +452,7 @@ case class DataSource(
       case format: FileFormat =>
         val qe = sparkSession.sessionState.executePlan(planForWritingFileFormat(format, mode, data))
         val insertCommand = qe.executedPlan.collect {
-          case w: WrittenFileCommandExec => w
+          case f: FileWritingCommandExec => f
         }.head
         insertCommand.cmd.run(sparkSession, insertCommand.children,
           metricsCallback.getOrElse(_ => ()))

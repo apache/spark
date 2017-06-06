@@ -37,8 +37,9 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.WriteOutFileCommand
+import org.apache.spark.sql.execution.command.FileWritingCommand
 import org.apache.spark.sql.execution.datasources.{ExecutedWriteSummary, FileFormatWriter}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.{HiveClientImpl, HiveVersion}
@@ -80,7 +81,9 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends WriteOutFileCommand {
+    ifPartitionNotExists: Boolean,
+    override val externalMetrics: Option[Map[String, SQLMetric]] = None)
+  extends FileWritingCommand {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 

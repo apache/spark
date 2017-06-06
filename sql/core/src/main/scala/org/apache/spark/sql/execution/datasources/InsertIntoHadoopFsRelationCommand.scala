@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
@@ -40,6 +41,8 @@ import org.apache.spark.sql.execution.command._
  *                         the prefix are overwritten.
  * @param ifPartitionNotExists If true, only write if the partition does not exist.
  *                             Only valid for static partitions.
+ * @param externalMetrics If given, it will replace the inherited `metrics` as the actual metrics
+ *                        destination when running this command.
  */
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
@@ -52,8 +55,9 @@ case class InsertIntoHadoopFsRelationCommand(
     query: LogicalPlan,
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
-    fileIndex: Option[FileIndex])
-  extends WriteOutFileCommand {
+    fileIndex: Option[FileIndex],
+    override val externalMetrics: Option[Map[String, SQLMetric]] = None)
+  extends FileWritingCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
   override def children: Seq[LogicalPlan] = query :: Nil

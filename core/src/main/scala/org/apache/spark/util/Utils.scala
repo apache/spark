@@ -2668,6 +2668,13 @@ private[spark] object Utils extends Logging {
     redact(redactionPattern, kvs.toArray)
   }
 
+  def average[T](ts: Iterable[T])(implicit num: Numeric[T]): Double = {
+    if (ts.size > 0) {
+      num.toDouble(ts.sum) / ts.size
+    } else {
+      0
+    }
+  }
 }
 
 private[util] object CallerContext extends Logging {
