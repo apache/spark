@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.{AbstractService, Service, ServiceException}
@@ -47,6 +48,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
     var sparkServiceUGI: UserGroupInformation = null
+    var httpUGI: UserGroupInformation = null
 
     if (UserGroupInformation.isSecurityEnabled) {
       try {
@@ -57,7 +59,24 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
         case e @ (_: IOException | _: LoginException) =>
           throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)
       }
-    }
+
+    // Also try creating a UGI object for the SPNego principal
+      val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL)
+      val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB)
+      if (principal.isEmpty() || keyTabFile.isEmpty()) {
+           getAncestorField[Log](this, 3, "LOG").info(
+            s"SPNego httpUGI not created, spNegoPrincipal: $principal , ketabFile: $keyTabFile")
+      } else {
+        try {
+          httpUGI = HiveAuthFactory.loginFromSpnegoKeytabAndReturnUGI(hiveConf)
+          setSuperField(this, "httpUGI", httpUGI)
+          getAncestorField[Log](this, 3, "LOG").info("SPNego httpUGI successfully created.")
+        } catch {
+          case e : IOException =>
+            getAncestorField[Log](this, 3, "LOG").warn(s"SPNego httpUGI creation failed: $e")
+        }
+      }
+     }
 
     initCompositeService(hiveConf)
   }
