@@ -352,7 +352,7 @@ object SQLConf {
 
   val BROADCAST_TIMEOUT = buildConf("spark.sql.broadcastTimeout")
     .doc("Timeout in seconds for the broadcast wait time in broadcast joins.")
-    .intConf
+    .timeConf(TimeUnit.SECONDS)
     .createWithDefault(5 * 60)
 
   // This is only used for the thriftserver
@@ -991,7 +991,7 @@ class SQLConf extends Serializable with Logging {
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
-  def broadcastTimeout: Int = getConf(BROADCAST_TIMEOUT)
+  def broadcastTimeout: Long = getConf(BROADCAST_TIMEOUT)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 
