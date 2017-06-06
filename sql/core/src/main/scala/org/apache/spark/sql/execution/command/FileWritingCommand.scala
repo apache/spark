@@ -31,20 +31,23 @@ import org.apache.spark.util.Utils
  * wrapped in `FileWritingCommandExec` during execution.
  */
 trait FileWritingCommand extends logical.Command {
+  def run(
+    sparkSession: SparkSession,
+    children: Seq[SparkPlan],
+    fileCommandExec: FileWritingCommandExec): Seq[Row]
+}
 
-  // The caller of `FileWritingCommand` can replace the metrics location by providing this external
-  // metrics structure.
-  private var _externalMetrics: Option[Map[String, SQLMetric]] = None
-  private[sql] def withExternalMetrics(map: Map[String, SQLMetric]): this.type = {
-    _externalMetrics = Option(map)
-    this
-  }
+/**
+ * A physical operator specialized to execute the run method of a `FileWritingCommand`,
+ * save the result to prevent multiple executions, and record necessary metrics for UI.
+ */
+case class FileWritingCommandExec(
+    cmd: FileWritingCommand,
+    children: Seq[SparkPlan],
+    givenMetrics: Option[Map[String, SQLMetric]] = None) extends CommandExec {
 
-  /**
-   * Those metrics will be updated once the command finishes writing data out. Those metrics will
-   * be taken by `FileWritingCommandExec` as its metrics when showing in UI.
-   */
-  def metrics(sparkContext: SparkContext): Map[String, SQLMetric] = _externalMetrics.getOrElse {
+  override val metrics = givenMetrics.getOrElse {
+    val sparkContext = sqlContext.sparkContext
     Map(
       // General metrics.
       "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
@@ -58,8 +61,7 @@ trait FileWritingCommand extends logical.Command {
   /**
    * Callback function that update metrics collected from the writing operation.
    */
-  private[sql] def postDriverMetrics(sparkContext: SparkContext, metrics: Map[String, SQLMetric])
-      (writeSummaries: Seq[ExecutedWriteSummary]): Unit = {
+  private[sql] def postDriverMetrics(writeSummaries: Seq[ExecutedWriteSummary]): Unit = {
     var numPartitions = 0
     var numFiles = 0
     var totalNumBytes: Long = 0L
@@ -73,36 +75,19 @@ trait FileWritingCommand extends logical.Command {
     }
 
     // The time for writing individual file can be zero if it's less than 1 ms. Zero values can
-    // lower actual time of writing when calculating average, so excluding them.
-    val writingTime =
+    // lower actual time of writing to zero when calculating average, so excluding them.
+    val avgWritingTime =
       Utils.average(writeSummaries.flatMap(_.writingTimePerFile.filter(_ > 0))).toLong
-
+    // Note: for simplifying metric values assignment, we put the values as the alphabetically
+    // sorted of the metric keys.
     val metricsNames = metrics.keys.toSeq.sorted
-    val metricsValues = Seq(writingTime, numFiles, totalNumBytes, totalNumOutput, numPartitions)
+    val metricsValues = Seq(avgWritingTime, numFiles, totalNumBytes, totalNumOutput, numPartitions)
     metricsNames.zip(metricsValues).foreach(x => metrics(x._1).add(x._2))
 
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metricsNames.map(metrics(_)))
+    val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId,
+      metricsNames.map(metrics(_)))
   }
 
-  def run(
-    sparkSession: SparkSession,
-    children: Seq[SparkPlan],
-    metrics: Map[String, SQLMetric],
-    metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row]
-}
-
-/**
- * A physical operator specialized to execute the run method of a `FileWritingCommand`,
- * save the result to prevent multiple executions, and record necessary metrics for UI.
- */
-case class FileWritingCommandExec(
-    cmd: FileWritingCommand,
-    children: Seq[SparkPlan]) extends CommandExec {
-
-  override lazy val metrics = cmd.metrics(sqlContext.sparkContext)
-
-  protected[sql] lazy val invokeCommand: Seq[Row] =
-    cmd.run(sqlContext.sparkSession, children, metrics,
-      cmd.postDriverMetrics(sqlContext.sparkContext, metrics))
+  protected[sql] lazy val invokeCommand: Seq[Row] = cmd.run(sqlContext.sparkSession, children, this)
 }

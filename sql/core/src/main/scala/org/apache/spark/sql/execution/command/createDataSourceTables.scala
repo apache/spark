@@ -125,29 +125,12 @@ case class CreateDataSourceTableAsSelectCommand(
     query: LogicalPlan)
   extends FileWritingCommand {
 
-  /**
-   * The code path this command writes data out depends on the type of data source:
-   *
-   * For FileFormat-based data sources, `InsertIntoHadoopFsRelationCommand` is invoked and we
-   * can update metrics.
-   *
-   * For other data sources, `CreatableRelationProvider.createRelation` will be called. We can't
-   * record metrics for that. So we will return empty metrics map.
-   */
-  override def metrics(sparkContext: SparkContext): Map[String, SQLMetric] =
-    if (classOf[FileFormat].isAssignableFrom(DataSource.lookupDataSource(table.provider.get))) {
-      super.metrics(sparkContext)
-    } else {
-      Map.empty
-    }
-
   override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
-      metrics: Map[String, SQLMetric],
-      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
+      fileCommandExec: FileWritingCommandExec): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
 
@@ -170,7 +153,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
       saveDataIntoTable(
         sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true,
-        metrics = metrics)
+        metrics = fileCommandExec.metrics)
     } else {
       assert(table.schema.isEmpty)
 
@@ -181,7 +164,7 @@ case class CreateDataSourceTableAsSelectCommand(
       }
       val result = saveDataIntoTable(
         sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false,
-        metrics = metrics)
+        metrics = fileCommandExec.metrics)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of

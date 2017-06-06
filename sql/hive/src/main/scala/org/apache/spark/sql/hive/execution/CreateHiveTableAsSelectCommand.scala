@@ -48,8 +48,7 @@ case class CreateHiveTableAsSelectCommand(
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
-      metrics: Map[String, SQLMetric],
-      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
+      fileCommandExec: FileWritingCommandExec): Seq[Row] = {
     if (sparkSession.sessionState.catalog.tableExists(tableIdentifier)) {
       assert(mode != SaveMode.Overwrite,
         s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
@@ -61,7 +60,6 @@ case class CreateHiveTableAsSelectCommand(
         // Since the table already exists and the save mode is Ignore, we will just return.
         return Seq.empty
       }
-
       val qe = sparkSession.sessionState.executePlan(
         InsertIntoTable(
           UnresolvedRelation(tableIdentifier),
@@ -69,10 +67,11 @@ case class CreateHiveTableAsSelectCommand(
           query,
           overwrite = false,
           ifPartitionNotExists = false))
+      // We need to replace the invoked command's metrics with the caller's. So we can update
+      // the correct metrics for showing on UI.
       qe.executedPlan.transform {
-        case f: FileWritingCommandExec =>
-          val newCmd = f.cmd.withExternalMetrics(metrics)
-          FileWritingCommandExec(newCmd, f.children)
+        case FileWritingCommandExec(cmd, children, None) =>
+          FileWritingCommandExec(cmd, children, Some(fileCommandExec.metrics))
       }.execute()
     } else {
       // TODO ideally, we should get the output data ready first and then
@@ -90,10 +89,11 @@ case class CreateHiveTableAsSelectCommand(
             query,
             overwrite = true,
             ifPartitionNotExists = false))
+        // We need to replace the invoked command's metrics with the caller's. So we can update
+        // the correct metrics for showing on UI.
         qe.executedPlan.transform {
-          case f: FileWritingCommandExec =>
-            val newCmd = f.cmd.withExternalMetrics(metrics)
-            FileWritingCommandExec(newCmd, f.children)
+          case FileWritingCommandExec(cmd, children, None) =>
+            FileWritingCommandExec(cmd, children, Some(fileCommandExec.metrics))
         }.execute()
       } catch {
         case NonFatal(e) =>

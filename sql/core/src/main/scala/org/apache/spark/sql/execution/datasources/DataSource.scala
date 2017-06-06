@@ -452,10 +452,11 @@ case class DataSource(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
         val qe = sparkSession.sessionState.executePlan(planForWritingFileFormat(format, mode, data))
+        // We need to replace the invoked command's metrics with the caller's if any. So we can
+        // update the correct metrics for showing on UI.
         qe.executedPlan.transform {
-          case f: FileWritingCommandExec =>
-            val newCmd = f.cmd.withExternalMetrics(externalMetrics.getOrElse(null))
-            FileWritingCommandExec(newCmd, f.children)
+          case FileWritingCommandExec(cmd, children, None) =>
+            FileWritingCommandExec(cmd, children, externalMetrics)
         }.execute()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()

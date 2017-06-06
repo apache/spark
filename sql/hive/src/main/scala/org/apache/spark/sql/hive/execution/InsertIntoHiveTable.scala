@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.FileWritingCommand
+import org.apache.spark.sql.execution.command.{FileWritingCommand, FileWritingCommandExec}
 import org.apache.spark.sql.execution.datasources.{ExecutedWriteSummary, FileFormatWriter}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.hive._
@@ -235,8 +235,7 @@ case class InsertIntoHiveTable(
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
-      metrics: Map[String, SQLMetric],
-      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
+      fileCommandExec: FileWritingCommandExec): Seq[Row] = {
     assert(children.length == 1)
 
     val sessionState = sparkSession.sessionState
@@ -359,7 +358,7 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
-      refreshFunction = metricsCallback,
+      refreshFunction = fileCommandExec.postDriverMetrics,
       options = Map.empty)
 
     if (partition.nonEmpty) {
