@@ -625,6 +625,28 @@ private[spark] class Client(
     val remoteFs = FileSystem.get(remoteConfArchivePath.toUri(), hadoopConf)
     sparkConf.set(CACHED_CONF_ARCHIVE, remoteConfArchivePath.toString())
 
+    // If the topology scripts / related data are set in the Hadoop configuration, and they
+    // point to the Hadoop / YARN configuration paths, then modify them so that when they are
+    // used on the cluster, they point to the application's working directory.
+    //
+    // The modified values are read in the AM (see ApplicationMaster.scala) and written to the
+    // Hadoop configuration there.
+    val configDirs = hadoopConfDirs()
+    TOPOLOGY_CONFIG_MAPPING.foreach { case (key, entry) =>
+      Option(yarnConf.get(key)).foreach { path =>
+        configDirs.foreach { dir =>
+          // This assumes that the config directory does not contain subdirectories, which is
+          // the same assumption made by createConfArchive().
+          val fileName = new File(path).getName()
+          if (new File(dir, fileName).isFile()) {
+            val envVar = if (Utils.isWindows) "CD" else "PWD"
+            val relocated = s"$${env:$envVar}/${LOCALIZED_CONF_DIR}/$fileName"
+            sparkConf.set(entry, relocated)
+          }
+        }
+      }
+    }
+
     val localConfArchive = new Path(createConfArchive().toURI())
     copyFileToRemote(destDir, localConfArchive, replication, symlinkCache, force = true,
       destName = Some(LOCALIZED_CONF_ARCHIVE))
@@ -678,19 +700,14 @@ private[spark] class Client(
       hadoopConfFiles(prop) = new File(url.getPath)
     }
 
-    Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
-      sys.env.get(envKey).foreach { path =>
-        val dir = new File(path)
-        if (dir.isDirectory()) {
-          val files = dir.listFiles()
-          if (files == null) {
-            logWarning("Failed to list files under directory " + dir)
-          } else {
-            files.foreach { file =>
-              if (file.isFile && !hadoopConfFiles.contains(file.getName())) {
-                hadoopConfFiles(file.getName()) = file
-              }
-            }
+    hadoopConfDirs().foreach { dir =>
+      val files = dir.listFiles()
+      if (files == null) {
+        logWarning("Failed to list files under directory " + dir)
+      } else {
+        files.foreach { file =>
+          if (file.isFile && !hadoopConfFiles.contains(file.getName())) {
+            hadoopConfFiles(file.getName()) = file
           }
         }
       }
@@ -725,6 +742,13 @@ private[spark] class Client(
       confStream.close()
     }
     confArchive
+  }
+
+  private def hadoopConfDirs(): Seq[File] = {
+    Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR")
+      .flatMap { envKey => Option(sparkConf.getenv(envKey)) }
+      .map(new File(_))
+      .filter(_.isDirectory())
   }
 
   /**

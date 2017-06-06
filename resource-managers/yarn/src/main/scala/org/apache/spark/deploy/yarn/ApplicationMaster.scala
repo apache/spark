@@ -58,8 +58,16 @@ private[spark] class ApplicationMaster(
   // optimal as more containers are available. Might need to handle this better.
 
   private val sparkConf = new SparkConf()
-  private val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    .asInstanceOf[YarnConfiguration]
+  private val yarnConf: YarnConfiguration = {
+    val _conf = SparkHadoopUtil.get.newConfiguration(sparkConf).asInstanceOf[YarnConfiguration]
+    TOPOLOGY_CONFIG_MAPPING.foreach { case (key, entry) =>
+      sparkConf.get(entry).foreach { value =>
+        logDebug(s"Setting topology script $key to $value")
+        _conf.set(key, value)
+      }
+    }
+    _conf
+  }
   private val isClusterMode = args.userClass != null
 
   // Default to twice the number of executors (twice the maximum number of executors if dynamic

@@ -375,6 +375,39 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
 
+  test("localize topology scripts") {
+    assume(TOPOLOGY_CONFIG_MAPPING.nonEmpty)
+
+    val confDir = Utils.createTempDir()
+    val script = new File(confDir, "topologyScript")
+    val scriptDep = new File(confDir, "topologyScript.dep")
+    new FileOutputStream(script).close()
+    new FileOutputStream(scriptDep).close()
+
+    val hadoopConf = new Configuration()
+    TOPOLOGY_CONFIG_MAPPING.keys.foreach { key =>
+      val file = new File(confDir, key)
+      new FileOutputStream(file).close()
+      hadoopConf.set(key, file.getAbsolutePath())
+    }
+
+    val envVar = if (Utils.isWindows) "CD" else "PWD"
+    val sparkConf = new SparkConfWithEnv(Map(
+      "HADOOP_CONF_DIR" -> confDir.getAbsolutePath,
+      envVar -> "TEST_PATH"))
+    sparkConf.set(SPARK_JARS, Seq("local:" + confDir.getAbsolutePath()))
+
+    val client = createClient(sparkConf, conf = hadoopConf)
+    val tempDir = Utils.createTempDir()
+    client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
+
+    TOPOLOGY_CONFIG_MAPPING.values.foreach { entry =>
+      val localized = sparkConf.get(entry).get
+      assert(!localized.startsWith(confDir.getAbsolutePath()))
+      assert(localized.startsWith("TEST_PATH/"))
+    }
+  }
+
   object Fixtures {
 
     val knownDefYarnAppCP: Seq[String] =

@@ -19,6 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic
+
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 
@@ -350,5 +352,48 @@ package object config {
     CACHED_FILES_VISIBILITIES,
     CACHED_FILES_TYPES,
     CACHED_CONF_ARCHIVE)
+
+
+  /**
+   * Mirror for Hadoop's NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY to allow for variable expansion.
+   */
+  private[spark] val TOPOLOGY_SCRIPT_FILE = ConfigBuilder("spark.yarn.net.topology.script")
+    .internal()
+    .stringConf
+    .createOptional
+
+  /**
+   * Mirror for Hadoop's NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY to allow for variable expansion.
+   */
+  private[spark] val TOPOLOGY_DEPENDENCY_SCRIPT_FILE =
+    ConfigBuilder("spark.yarn.net.topology.dependency.script")
+      .internal()
+      .stringConf
+      .createOptional
+
+  /**
+   * Mirror for Hadoop's NET_TOPOLOGY_TABLE_MAPPING_FILE_KEY to allow for variable expansion.
+   */
+  private[spark] val TOPOLOGY_TABLE_MAPPING_FILE =
+    ConfigBuilder("spark.yarn.net.topology.table.mapping.file")
+      .internal()
+      .stringConf
+      .createOptional
+
+  /**
+   * Maps the original Hadoop configuration key to the Spark mirror config entry defined above.
+   */
+  private[spark] val TOPOLOGY_CONFIG_MAPPING = Map(
+      "NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY" -> TOPOLOGY_SCRIPT_FILE,
+      "NET_DEPENDENCY_SCRIPT_FILE_NAME_KEY" -> TOPOLOGY_DEPENDENCY_SCRIPT_FILE,
+      "NET_TOPOLOGY_TABLE_MAPPING_FILE_KEY" -> TOPOLOGY_TABLE_MAPPING_FILE)
+    .flatMap { case (k, e) =>
+      try {
+        val field = classOf[CommonConfigurationKeysPublic].getField(k)
+        Some(field.get(null).asInstanceOf[String], e)
+      } catch {
+        case e: NoSuchFieldException => None
+      }
+    }.toMap
 
 }
