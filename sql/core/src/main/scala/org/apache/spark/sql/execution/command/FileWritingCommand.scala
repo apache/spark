@@ -34,13 +34,17 @@ trait FileWritingCommand extends logical.Command {
 
   // The caller of `FileWritingCommand` can replace the metrics location by providing this external
   // metrics structure.
-  val externalMetrics: Option[Map[String, SQLMetric]] = None
+  private var _externalMetrics: Option[Map[String, SQLMetric]] = None
+  private[sql] def withExternalMetrics(map: Map[String, SQLMetric]): this.type = {
+    _externalMetrics = Option(map)
+    this
+  }
 
   /**
    * Those metrics will be updated once the command finishes writing data out. Those metrics will
    * be taken by `FileWritingCommandExec` as its metrics when showing in UI.
    */
-  def metrics(sparkContext: SparkContext): Map[String, SQLMetric] = externalMetrics.getOrElse {
+  def metrics(sparkContext: SparkContext): Map[String, SQLMetric] = _externalMetrics.getOrElse {
     Map(
       // General metrics.
       "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
@@ -84,6 +88,7 @@ trait FileWritingCommand extends logical.Command {
   def run(
     sparkSession: SparkSession,
     children: Seq[SparkPlan],
+    metrics: Map[String, SQLMetric],
     metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row]
 }
 
@@ -98,6 +103,6 @@ case class FileWritingCommandExec(
   override lazy val metrics = cmd.metrics(sqlContext.sparkContext)
 
   protected[sql] lazy val invokeCommand: Seq[Row] =
-    cmd.run(sqlContext.sparkSession, children,
+    cmd.run(sqlContext.sparkSession, children, metrics,
       cmd.postDriverMetrics(sqlContext.sparkContext, metrics))
 }

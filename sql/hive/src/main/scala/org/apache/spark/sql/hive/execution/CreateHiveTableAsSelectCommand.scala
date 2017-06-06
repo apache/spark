@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{FileWritingCommand, FileWritingCommandExec}
 import org.apache.spark.sql.execution.datasources.ExecutedWriteSummary
-
+import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
  * Create table and insert the query result into it.
@@ -48,6 +48,7 @@ case class CreateHiveTableAsSelectCommand(
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
+      metrics: Map[String, SQLMetric],
       metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
     if (sparkSession.sessionState.catalog.tableExists(tableIdentifier)) {
       assert(mode != SaveMode.Overwrite,
@@ -68,10 +69,11 @@ case class CreateHiveTableAsSelectCommand(
           query,
           overwrite = false,
           ifPartitionNotExists = false))
-      val insertCommand = qe.executedPlan.collect {
-        case f: FileWritingCommandExec => f
-      }.head
-      insertCommand.cmd.run(sparkSession, insertCommand.children, metricsCallback)
+      qe.executedPlan.transform {
+        case f: FileWritingCommandExec =>
+          val newCmd = f.cmd.withExternalMetrics(metrics)
+          FileWritingCommandExec(newCmd, f.children)
+      }.execute()
     } else {
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
@@ -88,10 +90,11 @@ case class CreateHiveTableAsSelectCommand(
             query,
             overwrite = true,
             ifPartitionNotExists = false))
-        val insertCommand = qe.executedPlan.collect {
-          case f: FileWritingCommandExec => f
-        }.head
-        insertCommand.cmd.run(sparkSession, insertCommand.children, metricsCallback)
+        qe.executedPlan.transform {
+          case f: FileWritingCommandExec =>
+            val newCmd = f.cmd.withExternalMetrics(metrics)
+            FileWritingCommandExec(newCmd, f.children)
+        }.execute()
       } catch {
         case NonFatal(e) =>
           // drop the created table.

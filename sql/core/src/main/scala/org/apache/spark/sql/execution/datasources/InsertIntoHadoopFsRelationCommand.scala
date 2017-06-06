@@ -41,8 +41,6 @@ import org.apache.spark.sql.execution.metric.SQLMetric
  *                         the prefix are overwritten.
  * @param ifPartitionNotExists If true, only write if the partition does not exist.
  *                             Only valid for static partitions.
- * @param externalMetrics If given, it will replace the inherited `metrics` as the actual metrics
- *                        destination when running this command.
  */
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
@@ -55,9 +53,7 @@ case class InsertIntoHadoopFsRelationCommand(
     query: LogicalPlan,
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
-    fileIndex: Option[FileIndex],
-    override val externalMetrics: Option[Map[String, SQLMetric]] = None)
-  extends FileWritingCommand {
+    fileIndex: Option[FileIndex]) extends FileWritingCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
   override def children: Seq[LogicalPlan] = query :: Nil
@@ -65,6 +61,7 @@ case class InsertIntoHadoopFsRelationCommand(
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
+      metrics: Map[String, SQLMetric],
       metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
     assert(children.length == 1)
 

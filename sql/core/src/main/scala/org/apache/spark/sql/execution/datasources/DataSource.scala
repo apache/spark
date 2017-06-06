@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
@@ -440,7 +441,7 @@ case class DataSource(
   def writeAndRead(
       mode: SaveMode,
       data: LogicalPlan,
-      metricsCallback: Option[Seq[ExecutedWriteSummary] => Unit] = None): BaseRelation = {
+      externalMetrics: Option[Map[String, SQLMetric]] = None): BaseRelation = {
     if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
@@ -451,11 +452,11 @@ case class DataSource(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
         val qe = sparkSession.sessionState.executePlan(planForWritingFileFormat(format, mode, data))
-        val insertCommand = qe.executedPlan.collect {
-          case f: FileWritingCommandExec => f
-        }.head
-        insertCommand.cmd.run(sparkSession, insertCommand.children,
-          metricsCallback.getOrElse(_ => ()))
+        qe.executedPlan.transform {
+          case f: FileWritingCommandExec =>
+            val newCmd = f.cmd.withExternalMetrics(externalMetrics.getOrElse(null))
+            FileWritingCommandExec(newCmd, f.children)
+        }.execute()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
       case _ =>

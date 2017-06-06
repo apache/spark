@@ -81,9 +81,7 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean,
-    override val externalMetrics: Option[Map[String, SQLMetric]] = None)
-  extends FileWritingCommand {
+    ifPartitionNotExists: Boolean) extends FileWritingCommand {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
@@ -237,6 +235,7 @@ case class InsertIntoHiveTable(
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
+      metrics: Map[String, SQLMetric],
       metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
     assert(children.length == 1)
 

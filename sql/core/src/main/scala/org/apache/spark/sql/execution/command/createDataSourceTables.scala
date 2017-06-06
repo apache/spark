@@ -134,19 +134,19 @@ case class CreateDataSourceTableAsSelectCommand(
    * For other data sources, `CreatableRelationProvider.createRelation` will be called. We can't
    * record metrics for that. So we will return empty metrics map.
    */
-  override def metrics(sparkContext: SparkContext): Map[String, SQLMetric] = {
+  override def metrics(sparkContext: SparkContext): Map[String, SQLMetric] =
     if (classOf[FileFormat].isAssignableFrom(DataSource.lookupDataSource(table.provider.get))) {
       super.metrics(sparkContext)
     } else {
       Map.empty
     }
-  }
 
   override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
+      metrics: Map[String, SQLMetric],
       metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
@@ -170,7 +170,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
       saveDataIntoTable(
         sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true,
-        metricsCallback = metricsCallback)
+        metrics = metrics)
     } else {
       assert(table.schema.isEmpty)
 
@@ -181,7 +181,7 @@ case class CreateDataSourceTableAsSelectCommand(
       }
       val result = saveDataIntoTable(
         sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false,
-        metricsCallback = metricsCallback)
+        metrics = metrics)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -209,7 +209,7 @@ case class CreateDataSourceTableAsSelectCommand(
       data: LogicalPlan,
       mode: SaveMode,
       tableExists: Boolean,
-      metricsCallback: (Seq[ExecutedWriteSummary]) => Unit): BaseRelation = {
+      metrics: Map[String, SQLMetric]): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
     val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
@@ -221,7 +221,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, query, Some(metricsCallback))
+      dataSource.writeAndRead(mode, query, Some(metrics))
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)
