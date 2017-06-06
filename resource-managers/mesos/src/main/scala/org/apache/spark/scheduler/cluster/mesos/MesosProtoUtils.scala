@@ -85,7 +85,10 @@ object MesosProtoUtils extends Logging {
       i += 1
     }
 
-    addLabel()
+    if (key.isDefined) {
+      addLabel()
+    }
+
     labels
   }
 }
