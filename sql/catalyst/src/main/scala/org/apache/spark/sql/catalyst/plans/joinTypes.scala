@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 object JoinType {
   def apply(typ: String): JoinType = typ.toLowerCase(Locale.ROOT).replace("_", "") match {
     case "inner" => Inner
-    case "outer" | "full" | "fullouter" | "full_outer" => FullOuter
+    case "outer" | "full" | "fullouter" => FullOuter
     case "leftouter" | "left" => LeftOuter
     case "rightouter" | "right" => RightOuter
     case "leftsemi" => LeftSemi
@@ -34,10 +34,10 @@ object JoinType {
       val supported = Seq(
         "inner",
         "outer", "full", "fullouter", "full_outer",
-        "leftouter", "left",
-        "rightouter", "right",
-        "leftsemi",
-        "leftanti",
+        "leftouter", "left", "left_outer",
+        "rightouter", "right", "right_outer",
+        "leftsemi", "left_semi",
+        "leftanti", "left_anti",
         "cross")
 
       throw new IllegalArgumentException(s"Unsupported join type '$typ'. " +
