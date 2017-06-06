@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructField, StructType}
 
 /**
  * A test suite to test DataFrame/SQL functionalities with complex types (i.e. array, struct, map).
@@ -58,6 +59,15 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
     assert(nullStringRow == org.apache.spark.sql.Row(null))
     val nullIntRow = df.selectExpr("i[1]").collect()(0)
     assert(nullIntRow == org.apache.spark.sql.Row(null))
+  }
+
+  test("SPARK-15642 extracting from struct preserves metadata") {
+    val metadata = new MetadataBuilder().putString("key", "value").build()
+
+    val df = spark.createDataFrame(sparkContext.parallelize(Seq(Row(Row("foo")))),
+      StructType(Seq(StructField("struct", StructType(
+        Seq(StructField("str", StringType, false, metadata)))))))
+    assert(df.select(df("struct")("str")).schema.fields(0).metadata === metadata)
   }
 
   test("SPARK-15285 Generated SpecificSafeProjection.apply method grows beyond 64KB") {
