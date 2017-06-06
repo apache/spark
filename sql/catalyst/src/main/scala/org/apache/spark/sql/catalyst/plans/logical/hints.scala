@@ -51,16 +51,17 @@ case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
 }
 
 
-case class HintInfo(forceBroadcast: Boolean = false) {
+case class HintInfo(broadcast: Boolean = false) {
 
   /** Must be called when computing stats for a join operator to reset hints. */
-  def resetForJoin(): HintInfo = copy(forceBroadcast = false)
+  def resetForJoin(): HintInfo = copy(broadcast = false)
 
   override def toString: String = {
-    if (forceBroadcast) {
-      "forceBroadcast=true"
-    } else {
-      "none"
+    val hints = scala.collection.mutable.ArrayBuffer.empty[String]
+    if (broadcast) {
+      hints += "broadcast"
     }
+
+    if (hints.isEmpty) "none" else hints.mkString("(", ", ", ")")
   }
 }
