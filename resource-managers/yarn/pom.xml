@@ -167,6 +167,8 @@
        <version>${jersey-1.version}</version>
      </dependency>
 
+    <!-- These dependencies are duplicated from core, because dependencies in the "provided"
+    scope are not transitive.-->
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
