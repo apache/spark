@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 
@@ -80,9 +81,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Executors we have requested the cluster manager to kill that have not died yet; maps
   // the executor ID to whether it was explicitly killed by the driver (and thus shouldn't
-  // be considered an app-related failure).
+  // be considered an app-related failure), is draining resources before being killed, or died
+  // on its own.
+  private sealed trait PendingStatus
+  private case object KilledByDriver extends PendingStatus
+  private case object Died extends PendingStatus
+  private case object Draining extends PendingStatus
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
-  private val executorsPendingToRemove = new HashMap[String, Boolean]
+  private val executorsPendingToRemove = new HashMap[String, PendingStatus]
 
   // A map to store hostname with its possible task number running on it
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
@@ -320,15 +326,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         case Some(executorInfo) =>
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
-          val killed = CoarseGrainedSchedulerBackend.this.synchronized {
+          val removeStatus = CoarseGrainedSchedulerBackend.this.synchronized {
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingLossReason -= executorId
-            executorsPendingToRemove.remove(executorId).getOrElse(false)
+            executorsPendingToRemove.remove(executorId).getOrElse(Died)
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
-          scheduler.executorLost(executorId, if (killed) ExecutorKilled else reason)
+          scheduler.executorLost(executorId,
+            if (removeStatus == KilledByDriver) ExecutorKilled else reason)
           listenerBus.post(
             SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
         case None =>
@@ -602,16 +609,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     val response = synchronized {
       val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
-      unknownExecutors.foreach { id =>
-        logWarning(s"Executor to kill $id does not exist!")
-      }
+      unknownExecutors.foreach { id => logWarning(s"Executor to kill $id does not exist!") }
 
       // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
       // If this executor is busy, do not kill it unless we are told to force kill it (SPARK-9552)
       val executorsToKill = knownExecutors
-        .filter { id => !executorsPendingToRemove.contains(id) }
+        .filter { id =>
+          !executorsPendingToRemove.contains(id) || executorsPendingToRemove(id) == Draining
+        }
         .filter { id => force || !scheduler.isExecutorBusy(id) }
-      executorsToKill.foreach { id => executorsPendingToRemove(id) = !countFailures }
+
+      executorsToKill.foreach { id =>
+        executorsPendingToRemove(id) = if (!adjustTargetNumExecutors) Died else KilledByDriver
+      }
 
       logInfo(s"Actual list of executor(s) to be killed is ${executorsToKill.mkString(", ")}")
 
@@ -637,18 +647,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           Future.successful(true)
         }
 
-      val killExecutors: Boolean => Future[Boolean] =
-        if (!executorsToKill.isEmpty) {
-          _ => doKillExecutors(executorsToKill)
-        } else {
-          _ => Future.successful(false)
-        }
+      val killResponse = if (executorsToKill.nonEmpty) {
+        adjustTotalExecutors.flatMap { _ =>
+          doKillExecutors(executorsToKill)
+        }(ThreadUtils.sameThread)
+      } else {
+        Future.successful(false)
+      }
 
-      val killResponse = adjustTotalExecutors.flatMap(killExecutors)(ThreadUtils.sameThread)
-
-      killResponse.flatMap(killSuccessful =>
-        Future.successful (if (killSuccessful) executorsToKill else Seq.empty[String])
-      )(ThreadUtils.sameThread)
+      killResponse.map { successful =>
+        if (successful) executorsToKill else Seq.empty
+      }(ThreadUtils.sameThread)
     }
 
     defaultAskTimeout.awaitResult(response)
@@ -678,6 +687,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   protected def fetchHadoopDelegationTokens(): Option[Array[Byte]] = { None }
+
+  override def markPendingToRemove(executorIds: Seq[String]): Unit = synchronized {
+    logDebug(s"marking executors (${executorIds.mkString(", ")}) pending to remove")
+    executorIds.foreach { id => executorsPendingToRemove.getOrElseUpdate(id, Draining) }
+  }
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {

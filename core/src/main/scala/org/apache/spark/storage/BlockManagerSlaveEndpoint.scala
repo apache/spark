@@ -75,9 +75,9 @@ class BlockManagerSlaveEndpoint(
     case TriggerThreadDump =>
       context.reply(Utils.getThreadDump())
 
-    case ReplicateBlock(blockId, replicas, maxReplicas) =>
-      context.reply(blockManager.replicateBlock(blockId, replicas.toSet, maxReplicas))
-
+    case ReplicateBlock(blockId, replicas, excluding, maxReplicas) =>
+      blockManager.replicateBlock(blockId, replicas.toSet, excluding.toSet, maxReplicas)
+      context.reply(true)
   }
 
   private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T) {

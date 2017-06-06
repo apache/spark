@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import scala.collection.mutable
+import scala.concurrent.Future
 
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, never, verify, when}
@@ -285,20 +286,20 @@ class ExecutorAllocationManagerSuite
 
     // Keep removing until the limit is reached
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(removeExecutor(manager, "1"))
+    removeExecutor(manager, "1")
     assert(executorsPendingToRemove(manager).size === 1)
     assert(executorsPendingToRemove(manager).contains("1"))
-    assert(removeExecutor(manager, "2"))
-    assert(removeExecutor(manager, "3"))
+    removeExecutor(manager, "2")
+    removeExecutor(manager, "3")
     assert(executorsPendingToRemove(manager).size === 3)
     assert(executorsPendingToRemove(manager).contains("2"))
     assert(executorsPendingToRemove(manager).contains("3"))
-    assert(!removeExecutor(manager, "100")) // remove non-existent executors
-    assert(!removeExecutor(manager, "101"))
+    removeExecutor(manager, "100") // remove non-existent executors
+    removeExecutor(manager, "101")
     assert(executorsPendingToRemove(manager).size === 3)
-    assert(removeExecutor(manager, "4"))
-    assert(removeExecutor(manager, "5"))
-    assert(!removeExecutor(manager, "6")) // reached the limit of 5
+    removeExecutor(manager, "4")
+    removeExecutor(manager, "5")
+    removeExecutor(manager, "6") // reached the limit of 5
     assert(executorsPendingToRemove(manager).size === 5)
     assert(executorsPendingToRemove(manager).contains("4"))
     assert(executorsPendingToRemove(manager).contains("5"))
@@ -322,9 +323,9 @@ class ExecutorAllocationManagerSuite
 
     // Try removing again
     // This should still fail because the number pending + running is still at the limit
-    assert(!removeExecutor(manager, "7"))
+    removeExecutor(manager, "7")
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(!removeExecutor(manager, "8"))
+    removeExecutor(manager, "8")
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
@@ -335,19 +336,19 @@ class ExecutorAllocationManagerSuite
 
     // Keep removing until the limit is reached
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(removeExecutors(manager, Seq("1")) === Seq("1"))
+    removeExecutors(manager, Seq("1"))
     assert(executorsPendingToRemove(manager).size === 1)
     assert(executorsPendingToRemove(manager).contains("1"))
-    assert(removeExecutors(manager, Seq("2", "3")) === Seq("2", "3"))
+    removeExecutors(manager, Seq("2", "3"))
     assert(executorsPendingToRemove(manager).size === 3)
     assert(executorsPendingToRemove(manager).contains("2"))
     assert(executorsPendingToRemove(manager).contains("3"))
-    assert(!removeExecutor(manager, "100")) // remove non-existent executors
-    assert(removeExecutors(manager, Seq("101", "102")) !== Seq("101", "102"))
+    removeExecutor(manager, "100") // remove non-existent executors
+    removeExecutors(manager, Seq("101", "102"))
     assert(executorsPendingToRemove(manager).size === 3)
-    assert(removeExecutor(manager, "4"))
-    assert(removeExecutors(manager, Seq("5")) === Seq("5"))
-    assert(!removeExecutor(manager, "6")) // reached the limit of 5
+    removeExecutor(manager, "4")
+    removeExecutors(manager, Seq("5"))
+    removeExecutor(manager, "6") // reached the limit of 5
     assert(executorsPendingToRemove(manager).size === 5)
     assert(executorsPendingToRemove(manager).contains("4"))
     assert(executorsPendingToRemove(manager).contains("5"))
@@ -371,9 +372,9 @@ class ExecutorAllocationManagerSuite
 
     // Try removing again
     // This should still fail because the number pending + running is still at the limit
-    assert(!removeExecutor(manager, "7"))
+    removeExecutor(manager, "7")
     assert(executorsPendingToRemove(manager).isEmpty)
-    assert(removeExecutors(manager, Seq("8")) !== Seq("8"))
+    removeExecutors(manager, Seq("8"))
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
@@ -391,7 +392,8 @@ class ExecutorAllocationManagerSuite
     assert(executorIds(manager).size === 8)
     assert(numExecutorsTarget(manager) === 8)
     assert(maxNumExecutorsNeeded(manager) == 8)
-    assert(!removeExecutor(manager, "1")) // won't work since numExecutorsTarget == numExecutors
+    removeExecutor(manager, "1") // won't work since numExecutorsTarget == numExecutors
+    assert(!executorsPendingToRemove(manager).contains("1"))
 
     // Remove executors when numExecutorsTarget is lower than current number of executors
     (1 to 3).map { i => createTaskInfo(i, i, s"$i") }.foreach { info =>
@@ -401,8 +403,11 @@ class ExecutorAllocationManagerSuite
     assert(executorIds(manager).size === 8)
     assert(numExecutorsTarget(manager) === 5)
     assert(maxNumExecutorsNeeded(manager) == 5)
-    assert(removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3"))=== Seq("2", "3"))
+    removeExecutor(manager, "1")
+    assert(executorsPendingToRemove(manager).contains("1"))
+    removeExecutors(manager, Seq("2", "3"))
+    assert(executorsPendingToRemove(manager).contains("2"))
+    assert(executorsPendingToRemove(manager).contains("3"))
     onExecutorRemoved(manager, "1")
     onExecutorRemoved(manager, "2")
     onExecutorRemoved(manager, "3")
@@ -413,7 +418,8 @@ class ExecutorAllocationManagerSuite
     assert(executorIds(manager).size === 5)
     assert(numExecutorsTarget(manager) === 5)
     assert(maxNumExecutorsNeeded(manager) == 4)
-    assert(!removeExecutor(manager, "4")) // lower limit
+    removeExecutor(manager, "4") // lower limit
+    assert(!executorsPendingToRemove(manager).contains("4"))
     assert(addExecutors(manager) === 0) // upper limit
   }
 
@@ -436,10 +442,12 @@ class ExecutorAllocationManagerSuite
     assert(executorIds(manager).size === 8)
     assert(numExecutorsTarget(manager) === 8)
 
-
     // Remove when numTargetExecutors is equal to the current number of executors
-    assert(!removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3")) !== Seq("2", "3"))
+    removeExecutor(manager, "1")
+    assert(!executorsPendingToRemove(manager).contains("1"))
+    removeExecutors(manager, Seq("2", "3"))
+    assert(!executorsPendingToRemove(manager).contains("2"))
+    assert(!executorsPendingToRemove(manager).contains("3"))
 
     // Remove until limit
     onExecutorAdded(manager, "9")
@@ -449,10 +457,17 @@ class ExecutorAllocationManagerSuite
     assert(executorIds(manager).size === 12)
     assert(numExecutorsTarget(manager) === 8)
 
-    assert(removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3", "4")) === Seq("2", "3", "4"))
-    assert(!removeExecutor(manager, "5")) // lower limit reached
-    assert(!removeExecutor(manager, "6"))
+    removeExecutor(manager, "1")
+    assert(executorsPendingToRemove(manager).contains("1"))
+    removeExecutors(manager, Seq("2", "3", "4"))
+    assert(executorsPendingToRemove(manager).contains("2"))
+    assert(executorsPendingToRemove(manager).contains("3"))
+    assert(executorsPendingToRemove(manager).contains("4"))
+    removeExecutor(manager, "5") // lower limit reached
+    assert(!executorsPendingToRemove(manager).contains("5"))
+    removeExecutor(manager, "6")
+    assert(!executorsPendingToRemove(manager).contains("6"))
+    removeExecutor(manager, "5") // lower limit reached
     onExecutorRemoved(manager, "1")
     onExecutorRemoved(manager, "2")
     onExecutorRemoved(manager, "3")
@@ -460,7 +475,8 @@ class ExecutorAllocationManagerSuite
     assert(executorIds(manager).size === 8)
 
     // Add until limit
-    assert(!removeExecutor(manager, "7")) // still at lower limit
+    removeExecutor(manager, "7") // still at lower limit
+    assert(!executorsPendingToRemove(manager).contains("7"))
     assert((manager, Seq("8")) !== Seq("8"))
     onExecutorAdded(manager, "13")
     onExecutorAdded(manager, "14")
@@ -469,8 +485,12 @@ class ExecutorAllocationManagerSuite
     assert(executorIds(manager).size === 12)
 
     // Remove succeeds again, now that we are no longer at the lower limit
-    assert(removeExecutors(manager, Seq("5", "6", "7")) === Seq("5", "6", "7"))
-    assert(removeExecutor(manager, "8"))
+    removeExecutors(manager, Seq("5", "6", "7"))
+    assert(executorsPendingToRemove(manager).contains("5"))
+    assert(executorsPendingToRemove(manager).contains("6"))
+    assert(executorsPendingToRemove(manager).contains("7"))
+    removeExecutor(manager, "8")
+    assert(executorsPendingToRemove(manager).contains("8"))
     assert(executorIds(manager).size === 12)
     onExecutorRemoved(manager, "5")
     onExecutorRemoved(manager, "6")
@@ -1238,11 +1258,11 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _updateAndSyncNumExecutorsTarget(0L)
   }
 
-  private def removeExecutor(manager: ExecutorAllocationManager, id: String): Boolean = {
-    manager invokePrivate _removeExecutor(id)
+  private def removeExecutor(manager: ExecutorAllocationManager, id: String): Unit = {
+    manager invokePrivate _removeExecutors(Seq(id))
   }
 
-  private def removeExecutors(manager: ExecutorAllocationManager, ids: Seq[String]): Seq[String] = {
+  private def removeExecutors(manager: ExecutorAllocationManager, ids: Seq[String]): Unit = {
     manager invokePrivate _removeExecutors(ids)
   }
 
@@ -1346,4 +1366,6 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
   override def killExecutorsOnHost(host: String): Boolean = {
     false
   }
+
+  override def markPendingToRemove(executorIds: Seq[String]): Unit = Seq.empty
 }

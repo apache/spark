@@ -85,4 +85,10 @@ private[spark] trait ExecutorAllocationClient {
       countFailures = false)
     killedExecutors.nonEmpty && killedExecutors(0).equals(executorId)
   }
+
+  /**
+   * Mark these executors as pending to be removed
+   * @param executorIds Executors that will be removed and should not accept new work.
+   */
+  def markPendingToRemove(executorIds: Seq[String]): Unit
 }

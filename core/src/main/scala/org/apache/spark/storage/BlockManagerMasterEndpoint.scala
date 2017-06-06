@@ -124,6 +124,9 @@ class BlockManagerMasterEndpoint(
       removeExecutor(execId)
       context.reply(true)
 
+    case RecoverLatestRDDBlock(execId, excluded) =>
+      recoverLatestRDDBlock(execId, excluded, context)
+
     case StopBlockManagerMaster =>
       context.reply(true)
       stop()
@@ -151,6 +154,7 @@ class BlockManagerMasterEndpoint(
     // Find all blocks for the given RDD, remove the block from both blockLocations and
     // the blockManagerInfo that is tracking the blocks.
     val blocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
+
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId)
       bms.foreach(bm => blockManagerInfo.get(bm).foreach(_.removeBlock(blockId)))
@@ -236,7 +240,8 @@ class BlockManagerMasterEndpoint(
         val candidateBMId = blockLocations(i)
         blockManagerInfo.get(candidateBMId).foreach { bm =>
           val remainingLocations = locations.toSeq.filter(bm => bm != candidateBMId)
-          val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
+          val replicateMsg =
+            ReplicateBlock(blockId, remainingLocations, Seq.empty[BlockManagerId], maxReplicas)
           bm.slaveEndpoint.ask[Boolean](replicateMsg)
         }
       }
@@ -250,6 +255,44 @@ class BlockManagerMasterEndpoint(
   private def removeExecutor(execId: String) {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
+  }
+
+  private def recoverLatestRDDBlock(
+      execId: String,
+      excludeExecutors: Seq[String],
+      context: RpcCallContext): Unit = {
+    logDebug(s"Replicating first cached block on $execId")
+    val excluded = excludeExecutors.flatMap(blockManagerIdByExecutor.get)
+    val response: Option[Future[Boolean]] = for {
+      blockManagerId <- blockManagerIdByExecutor.get(execId)
+      info <- blockManagerInfo.get(blockManagerId)
+      blocks = info.cachedBlocks.collect { case r: RDDBlockId => r }
+      // As a heuristic, prioritize replicating the latest rdd. If this succeeds,
+      // CacheRecoveryManager will try to replicate the remaining rdds.
+      firstBlock <- if (blocks.isEmpty) None else Some(blocks.maxBy(_.rddId))
+      replicaSet <- blockLocations.asScala.get(firstBlock)
+      // Add 2 to force this block to be replicated to one new executor.
+      maxReps = replicaSet.size + 2
+      isMem = info.getStatus(firstBlock).exists { _.storageLevel.useMemory }
+    } yield {
+      if (isMem) {
+        val msg = ReplicateBlock(firstBlock, replicaSet.toSeq, excluded, maxReps)
+        info.slaveEndpoint.ask[Boolean](msg)
+          .flatMap { _ =>
+            logTrace(s"Replicated block $firstBlock on executor $execId")
+            replicaSet -= blockManagerId
+            updateBlockInfo(blockManagerId, firstBlock, StorageLevel.NONE, 0, 0)
+            info.slaveEndpoint.ask[Boolean](RemoveBlock(firstBlock))
+          }
+      } else {
+        logTrace(s"Did not replicate block $firstBlock on executor $execId")
+        replicaSet -= blockManagerId
+        updateBlockInfo(blockManagerId, firstBlock, StorageLevel.NONE, 0, 0)
+        info.slaveEndpoint.ask[Boolean](RemoveBlock(firstBlock))
+      }
+    }
+
+    response.getOrElse(Future.successful(false)).foreach(context.reply)
   }
 
   /**

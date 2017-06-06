@@ -1815,6 +1815,26 @@ Apart from these, the following properties are also available, and may be useful
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
 </tr>
+<tr>
+  <td><code>spark.dynamicAllocation.recoverCachedData</code></td>
+  <td><code>false</code></td>
+  <td>
+    If dynamic allocation is enabled, and
+    <code>spark.dynamicAllocation.cachedExecutorIdleTimeout</code> is set, then idle executors with
+    cached data will attempt to replicate their cached data to other remaining executors before they
+    are shut down. If there is not enough memory on the cluster then the executor will be immediately
+    shut down.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.recoverCachedData.timeout</code></td>
+  <td><code>120s</code></td>
+  <td>
+    After this duration, we will give up trying to recover cached data and shut down idle executors.
+    Any data that has been replicated will be usable, but the rest of the data will be lost.
+  </td>
+</tr>
+
 </table>
 
 ### Security

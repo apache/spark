@@ -130,6 +130,16 @@ package object config {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("3s")
 
+  private[spark] val DYN_ALLOCATION_CACHE_RECOVERY =
+    ConfigBuilder("spark.dynamicAllocation.cacheRecovery.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val DYN_ALLOCATION_CACHE_RECOVERY_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.cacheRecovery.timeout")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(120)
+
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
 
