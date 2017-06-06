@@ -769,7 +769,9 @@ class DAGScheduler(
     logTrace(s"Checking if any dependencies of $parent are now runnable")
     logTrace("running: " + runningStages)
     logTrace("waiting: " + waitingStages)
-    logTrace("failed: " + failedStages)
+    if (!failedStages.isEmpty) {
+      logTrace("failed: " + failedStages)
+    }
     val childStages = waitingStages.filter(_.parents.contains(parent)).toArray
     waitingStages --= childStages
     for (stage <- childStages.sortBy(_.firstJobId)) {
@@ -1232,7 +1234,9 @@ class DAGScheduler(
               logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
               logInfo("waiting: " + waitingStages)
-              logInfo("failed: " + failedStages)
+              if (!failedStages.isEmpty) {
+                logInfo("failed: " + failedStages)
+              }
 
               // We supply true to increment the epoch number here in case this is a
               // recomputation of the map outputs. In that case, some nodes may have cached
