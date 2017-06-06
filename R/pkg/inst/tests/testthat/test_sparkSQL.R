@@ -1395,6 +1395,8 @@ test_that("column operators", {
 })
 
 test_that("column functions", {
+  skip_on_cran()
+
   c <- column("a")
   c1 <- abs(c) + acos(c) + approxCountDistinct(c) + ascii(c) + asin(c) + atan(c)
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
@@ -1780,6 +1782,8 @@ test_that("when(), otherwise() and ifelse() with column on a DataFrame", {
 })
 
 test_that("group by, agg functions", {
+  skip_on_cran()
+
   df <- read.json(jsonPath)
   df1 <- agg(df, name = "max", age = "sum")
   expect_equal(1, count(df1))
@@ -2121,6 +2125,8 @@ test_that("filter() on a DataFrame", {
 })
 
 test_that("join(), crossJoin() and merge() on a DataFrame", {
+  skip_on_cran()
+
   df <- read.json(jsonPath)
 
   mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
@@ -2978,6 +2984,7 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
 })
 
 test_that("dapplyCollect() on DataFrame with a binary column", {
+  skip_on_cran()
 
   df <- data.frame(key = 1:3)
   df$bytes <- lapply(df$key, serialize, connection = NULL)
@@ -2999,6 +3006,8 @@ test_that("dapplyCollect() on DataFrame with a binary column", {
 })
 
 test_that("repartition by columns on DataFrame", {
+  skip_on_cran()
+
   df <- createDataFrame(
     list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
@@ -3037,6 +3046,8 @@ test_that("repartition by columns on DataFrame", {
 })
 
 test_that("coalesce, repartition, numPartitions", {
+  skip_on_cran()
+
   df <- as.DataFrame(cars, numPartitions = 5)
   expect_equal(getNumPartitions(df), 5)
   expect_equal(getNumPartitions(coalesce(df, 3)), 3)
@@ -3056,6 +3067,8 @@ test_that("coalesce, repartition, numPartitions", {
 })
 
 test_that("gapply() and gapplyCollect() on a DataFrame", {
+  skip_on_cran()
+
   df <- createDataFrame (
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
@@ -3208,6 +3221,8 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
 })
 
 test_that("randomSplit", {
+  skip_on_cran()
+
   num <- 4000
   df <- createDataFrame(data.frame(id = 1:num))
   weights <- c(2, 3, 5)
