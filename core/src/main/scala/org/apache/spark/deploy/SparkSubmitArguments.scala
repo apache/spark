@@ -29,6 +29,8 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
 import scala.util.Try
 
+import org.apache.hadoop.security.SecurityUtil
+
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.network.util.JavaUtils
@@ -198,7 +200,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
-
+    if (principal != null) {
+      principal = SecurityUtil.getServerPrincipal(principal, "0.0.0.0")
+    }
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && !isR && primaryResource != null) {
       val uri = new URI(primaryResource)
