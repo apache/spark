@@ -199,13 +199,52 @@ class RateStreamSource(
     }
 
     val localStartTimeMs = startTimeMs + TimeUnit.SECONDS.toMillis(startSeconds)
-    val relativeMsPerValue =
-      TimeUnit.SECONDS.toMillis(endSeconds - startSeconds) / (rangeEnd - rangeStart)
+    val timeIntervalSizeMs = TimeUnit.SECONDS.toMillis(endSeconds - startSeconds)
 
-    val rdd = sqlContext.sparkContext.range(rangeStart, rangeEnd, 1, numPartitions).map { v =>
-      val relative = (v - rangeStart) * relativeMsPerValue
-      InternalRow(DateTimeUtils.fromMillis(relative + localStartTimeMs), v)
-    }
+    val func =
+      if (timeIntervalSizeMs < rangeEnd - rangeStart) {
+        // Different rows may have the same timestamp
+        val valueSizePerMs = (rangeEnd - rangeStart) / timeIntervalSizeMs
+        val remainderValue = (rangeEnd - rangeStart) % timeIntervalSizeMs
+
+        (v: Long) => {
+          val relativeValue = v - rangeStart
+          val relativeMs = {
+            // Increase the timestamp per "valueSizePerMs + 1" values before
+            // "(valueSizePerMs + 1) * remainderValue", and increase the timestamp per
+            // "valueSizePerMs" values for remaining values.
+
+            // The following condition is the same as
+            // "relativeValue < (valueSizePerMs + 1) * remainderValue", just rewrite it to avoid
+            // overflow.
+            if (relativeValue - remainderValue < valueSizePerMs * remainderValue) {
+              relativeValue / (valueSizePerMs + 1)
+            } else {
+              (relativeValue - remainderValue) / valueSizePerMs
+            }
+          }
+          InternalRow(DateTimeUtils.fromMillis(relativeMs + localStartTimeMs), v)
+        }
+      } else {
+        // Different rows never have the same timestamp
+        val relativeMsPerValue = timeIntervalSizeMs / (rangeEnd - rangeStart)
+        val remainderMs = timeIntervalSizeMs % (rangeEnd - rangeStart)
+
+        (v: Long) => {
+          val relativeValue = v - rangeStart
+          // The interval size for the first "remainderMs" values will be "relativeMsPerValue + 1",
+          // and the interval size for remaining values will be "relativeMsPerValue".
+          val relativeMs =
+            if (relativeValue < remainderMs) {
+              relativeValue * (relativeMsPerValue + 1)
+            } else {
+              remainderMs + relativeValue * relativeMsPerValue
+            }
+          InternalRow(DateTimeUtils.fromMillis(relativeMs + localStartTimeMs), v)
+        }
+      }
+
+    val rdd = sqlContext.sparkContext.range(rangeStart, rangeEnd, 1, numPartitions).map(func)
     sqlContext.internalCreateDataFrame(rdd, schema)
   }
 
