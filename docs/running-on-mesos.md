@@ -382,8 +382,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Set the Mesos labels to add to each task. Labels are free-form key-value pairs.
-    Key-value pairs should be separated by a colon, and commas used to list more than one.
-    Ex. key:value,key2:value2.
+    Key-value pairs should be separated by a colon, and commas used to
+    list more than one.  If your label includes a colon or comma, you
+    can escape it with a backslash.  Ex. key:value,key2:a\:b.
   </td>
 </tr>
 <tr>
@@ -472,9 +473,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.driver.labels</code></td>
   <td><code>(none)</code></td>
   <td>
-    Mesos labels to add to the driver.  Labels are free-form key-value
-    pairs.  Key-value pairs should be separated by a colon, and commas used to
-    list more than one.  Ex. key:value,key2:value2.
+    Mesos labels to add to the driver.  See spark.mesos.task.labels
+    for formatting information.
   </td>
 </tr>
 

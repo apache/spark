@@ -535,7 +535,7 @@ private[spark] class MesosClusterScheduler(
       .setCommand(buildDriverCommand(desc))
       .addAllResources(cpuResourcesToUse.asJava)
       .addAllResources(memResourcesToUse.asJava)
-      .setLabels(buildMesosLabels(desc.conf.get(config.DRIVER_LABELS).getOrElse("")))
+      .setLabels(MesosProtoUtils.mesosLabels(desc.conf.get(config.DRIVER_LABELS).getOrElse("")))
       .setContainer(MesosSchedulerBackendUtil.containerInfo(desc.conf))
       .build
   }
