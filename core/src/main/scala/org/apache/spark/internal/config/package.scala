@@ -102,7 +102,7 @@ package object config {
   private[spark] val BLACKLIST_ENABLED =
     ConfigBuilder("spark.blacklist.enabled")
       .booleanConf
-      .createOptional
+      .createWithDefault(false)
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerExecutor")
