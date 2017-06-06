@@ -176,7 +176,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    *          The returned RDD may be zipped with the given RDD, where each returned vector
    *          is a multinomial distribution over topics.
    */
-  // def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)]
+  def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)]
 
 }
 
@@ -344,7 +344,7 @@ class LocalLDAModel private[spark] (
    */
   @Since("1.3.0")
   // TODO: declare in LDAModel and override once implemented in DistributedLDAModel
-  def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
+  override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
     // Double transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
@@ -779,6 +779,10 @@ class DistributedLDAModel private[clustering] (
   @Since("1.4.1")
   def javaTopicDistributions: JavaPairRDD[java.lang.Long, Vector] = {
     JavaPairRDD.fromRDD(topicDistributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
+  }
+
+  override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
+    throw new NotImplementedError("Convert to LocalLDAModel or use online optimizer.")
   }
 
   /**

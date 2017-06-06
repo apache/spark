@@ -972,6 +972,20 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
             topics = self.call("describeTopics", maxTermsPerTopic)
         return topics
 
+    def topicDistributions(self, documents):
+        """
+        Compute the estimated topic distribution for each document.
+        This is often called 'theta' in the literature.
+        :param documents:
+          RDD of document id and features.
+        :return:
+          RDD where each row is a tuple of document id and array of
+          estimated topic distribution for k topics.
+        """
+        if not isinstance(documents, RDD):
+            raise TypeError("documents should be rdd, got type %s" % type(documents))
+        return self.call("topicDistributions", documents)
+
     @classmethod
     @since('1.5.0')
     def load(cls, sc, path):
