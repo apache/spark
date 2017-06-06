@@ -448,6 +448,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       rand(Random.nextLong()), randn(Random.nextLong())
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
   }
+
+  private def assertNoExceptions(c: Column): Unit = {
+    for (wholeStage <- Seq(true, false)) {
+      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString)) {
+        spark.range(0, 5).toDF("a").agg(sum("a")).withColumn("v", c).collect()
+      }
+    }
+  }
+
+  test("[SPARK-19471] AggregationIterator does not initialize the generated result projection" +
+    " before using it") {
+    Seq(
+      monotonically_increasing_id(), spark_partition_id(),
+      rand(Random.nextLong()), randn(Random.nextLong())
+    ).foreach(assertNoExceptions(_))
+  }
 }
 
 object DataFrameFunctionsSuite {

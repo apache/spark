@@ -98,7 +98,7 @@ case class ObjectHashAggregateExec(
     val numOutputRows = longMetric("numOutputRows")
     val fallbackCountThreshold = sqlContext.conf.objectAggSortBasedFallbackThreshold
 
-    child.execute().mapPartitionsInternal { iter =>
+    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val hasInput = iter.hasNext
       if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input kvIterator is empty,
@@ -107,6 +107,7 @@ case class ObjectHashAggregateExec(
       } else {
         val aggregationIterator =
           new ObjectAggregationIterator(
+            index,
             child.output,
             groupingExpressions,
             aggregateExpressions,
