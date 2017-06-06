@@ -426,6 +426,16 @@ private[spark] class SecurityManager(
    * we throw an exception.
    */
   private def generateSecretKey(): String = {
+
+    def generate(): String = {
+      val rnd = new SecureRandom()
+      val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
+      val secret = new Array[Byte](length)
+      rnd.nextBytes(secret)
+
+      HashCodes.fromBytes(secret).toString
+    }
+
     if (!isAuthenticationEnabled) {
       null
     } else if (SparkHadoopUtil.get.isYarnMode) {
@@ -435,12 +445,7 @@ private[spark] class SecurityManager(
       val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(SECRET_LOOKUP_KEY)
       if (secretKey == null || secretKey.length == 0) {
         logDebug("generateSecretKey: yarn mode, secret key from credentials is null")
-        val rnd = new SecureRandom()
-        val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
-        val secret = new Array[Byte](length)
-        rnd.nextBytes(secret)
-
-        val cookie = HashCodes.fromBytes(secret).toString()
+        val cookie = generate()
         SparkHadoopUtil.get.addSecretKeyToUserCredentials(SECRET_LOOKUP_KEY, cookie)
         cookie
       } else {
@@ -452,6 +457,10 @@ private[spark] class SecurityManager(
       Option(sparkConf.getenv(SecurityManager.ENV_AUTH_SECRET))
         .orElse(sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF)) match {
         case Some(value) => value
+        case None if sparkConf.getOption("spark.master").exists(_.startsWith("nomad")) =>
+          val secret = generate()
+          sparkConf.set(SecurityManager.SPARK_AUTH_SECRET_CONF, secret)
+          secret
         case None =>
           throw new IllegalArgumentException(
             "Error: a secret key must be specified via the " +

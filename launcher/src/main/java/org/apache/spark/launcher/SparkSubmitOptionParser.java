@@ -58,6 +58,8 @@ class SparkSubmitOptionParser {
   protected final String REPOSITORIES = "--repositories";
   protected final String STATUS = "--status";
   protected final String TOTAL_EXECUTOR_CORES = "--total-executor-cores";
+  protected final String EXECUTOR_CORES = "--executor-cores";
+  protected final String NUM_EXECUTORS = "--num-executors";
 
   // Options that do not take arguments.
   protected final String HELP = "--help";
@@ -68,11 +70,18 @@ class SparkSubmitOptionParser {
 
   // Standalone-only options.
 
+  // Nomad-only options.
+  protected final String DISTRIBUTION = "--distribution";
+  protected final String DOCKER_IMAGE = "--docker-image";
+  protected final String DRIVER_CPU = "--driver-cpu";
+  protected final String EXECUTOR_CPU = "--executor-cpu";
+  protected final String MONITOR_UNTIL = "--monitor-until";
+  protected final String NOMAD_DRY_RUN = "--nomad-dry-run";
+  protected final String NOMAD_TEMPLATE = "--nomad-template";
+
   // YARN-only options.
   protected final String ARCHIVES = "--archives";
-  protected final String EXECUTOR_CORES = "--executor-cores";
   protected final String KEYTAB = "--keytab";
-  protected final String NUM_EXECUTORS = "--num-executors";
   protected final String PRINCIPAL = "--principal";
   protected final String QUEUE = "--queue";
 
@@ -90,20 +99,26 @@ class SparkSubmitOptionParser {
     { ARCHIVES },
     { CLASS },
     { CONF, "-c" },
+    { DISTRIBUTION },
     { DEPLOY_MODE },
+    { DOCKER_IMAGE },
     { DRIVER_CLASS_PATH },
     { DRIVER_CORES },
+    { DRIVER_CPU },
     { DRIVER_JAVA_OPTIONS },
     { DRIVER_LIBRARY_PATH },
     { DRIVER_MEMORY },
     { EXECUTOR_CORES },
+    { EXECUTOR_CPU },
     { EXECUTOR_MEMORY },
     { FILES },
     { JARS },
     { KEYTAB },
     { KILL_SUBMISSION },
     { MASTER },
+    { MONITOR_UNTIL },
     { NAME },
+    { NOMAD_TEMPLATE },
     { NUM_EXECUTORS },
     { PACKAGES },
     { PACKAGES_EXCLUDE },
@@ -121,6 +136,7 @@ class SparkSubmitOptionParser {
    * List of switches (command line options that do not take parameters) recognized by spark-submit.
    */
   final String[][] switches = {
+    { NOMAD_DRY_RUN },
     { HELP, "-h" },
     { SUPERVISE },
     { USAGE_ERROR },

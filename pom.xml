@@ -157,7 +157,7 @@
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.6.5</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.7.9</fasterxml.jackson.version>
     <snappy.version>1.1.2.6</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
@@ -2536,6 +2536,14 @@
       <id>mesos</id>
       <modules>
         <module>resource-managers/mesos</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>nomad</id>
+      <modules>
+        <module>resource-managers/nomad/test-apps</module>
+        <module>resource-managers/nomad</module>
       </modules>
     </profile>
 

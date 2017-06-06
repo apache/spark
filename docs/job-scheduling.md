@@ -24,8 +24,8 @@ different options to manage allocation, depending on the cluster manager.
 
 The simplest option, available on all cluster managers, is _static partitioning_ of resources. With
 this approach, each application is given a maximum amount of resources it can use, and holds onto them
-for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.html)
-and [YARN](running-on-yarn.html) modes, as well as the
+for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.html),
+[YARN](running-on-yarn.html) and [Nomad](running-on-nomad.html) modes, as well as the
 [coarse-grained Mesos mode](running-on-mesos.html#mesos-run-modes).
 Resource allocation can be configured as follows, based on the cluster type:
 
@@ -38,11 +38,11 @@ Resource allocation can be configured as follows, based on the cluster type:
 * **Mesos:** To use static partitioning on Mesos, set the `spark.mesos.coarse` configuration property to `true`,
   and optionally set `spark.cores.max` to limit each application's resource share as in the standalone mode.
   You should also set `spark.executor.memory` to control the executor memory.
-* **YARN:** The `--num-executors` option to the Spark YARN client controls how many executors it will allocate
+* **YARN or Nomad:** The `--num-executors` option to `spark-submit` controls how many executors it will allocate
   on the cluster (`spark.executor.instances` as configuration property), while `--executor-memory`
   (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
   property) control the resources per executor. For more information, see the
-  [YARN Spark Properties](running-on-yarn.html).
+  [YARN Spark Properties](running-on-yarn.html) or [Running on Nomad](running-on-nomad.html).
 
 A second option available on Mesos is _dynamic sharing_ of CPU cores. In this mode, each Spark application
 still has a fixed and independent memory allocation (set by `spark.executor.memory`), but when the
@@ -64,8 +64,9 @@ are no longer used and request them again later when there is demand. This featu
 useful if multiple applications share resources in your Spark cluster.
 
 This feature is disabled by default and available on all coarse-grained cluster managers, i.e.
-[standalone mode](spark-standalone.html), [YARN mode](running-on-yarn.html), and
-[Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes).
+[standalone mode](spark-standalone.html), [YARN mode](running-on-yarn.html),
+[Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes), and
+[Nomad mode](running-on-nomade.html#dynamic-allocation-of-executors).
 
 ### Configuration and Setup
 
@@ -84,6 +85,8 @@ slave nodes with `spark.shuffle.service.enabled` set to `true`. For instance, yo
 through Marathon.
 
 In YARN mode, follow the instructions [here](running-on-yarn.html#configuring-the-external-shuffle-service).
+
+In Nomad mode, start the application with `spark.shuffle.service.enabled` set to `true`.
 
 All other relevant configurations are optional and under the `spark.dynamicAllocation.*` and
 `spark.shuffle.service.*` namespaces. For more detail, see the

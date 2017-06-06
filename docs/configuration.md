@@ -1064,7 +1064,7 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.executor.cores</code></td>
   <td>
-    1 in YARN mode, all the available cores on the worker in
+    1 in YARN and Nomad modes, all the available cores on the worker in
     standalone and Mesos coarse-grained modes.
   </td>
   <td>
@@ -1355,10 +1355,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
-  <td>0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
+  <td>0.8 for YARN and Nomad mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode, CPU cores in standalone mode and Mesos coarsed-grained
+    (resources are executors in yarn and Nomad mode, CPU cores in standalone mode and Mesos coarsed-grained
      mode ['spark.cores.max' value is total expected resources for Mesos coarse-grained mode] )
     to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
@@ -1696,7 +1696,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether Spark authenticates its internal connections. See
-    <code>spark.authenticate.secret</code> if not running on YARN.
+    <code>spark.authenticate.secret</code> if not running on YARN or Nomad.
   </td>
 </tr>
 <tr>
@@ -1704,7 +1704,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>None</td>
   <td>
     Set the secret key used for Spark to authenticate between components. This needs to be set if
-    not running on YARN and authentication is enabled.
+    not running on YARN or Nomad and authentication is enabled.
   </td>
 </tr>
 <tr>
@@ -2220,6 +2220,8 @@ can be found on the pages for each mode:
 #### [YARN](running-on-yarn.html#configuration)
 
 #### [Mesos](running-on-mesos.html#configuration)
+
+#### [Nomad](running-on-nomad.html#configuration)
 
 #### [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
 

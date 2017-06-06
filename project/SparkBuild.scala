@@ -56,9 +56,9 @@ object BuildCommons {
     "tags", "sketch"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
-  val optionallyEnabledProjects@Seq(mesos, yarn, sparkGangliaLgpl,
+  val optionallyEnabledProjects@Seq(mesos, nomad, yarn, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests, hadoopCloud) =
-    Seq("mesos", "yarn", "ganglia-lgpl", "streaming-kinesis-asl",
+    Seq("mesos", "nomad", "yarn", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests", "hadoop-cloud").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =

@@ -167,7 +167,7 @@ sc = SparkContext(conf=conf)
 </div>
 
 The `appName` parameter is a name for your application to show on the cluster UI.
-`master` is a [Spark, Mesos or YARN cluster URL](submitting-applications.html#master-urls),
+`master` is a [Spark, Mesos, YARN or Nomad cluster URL](submitting-applications.html#master-urls),
 or a special "local" string to run in local mode.
 In practice, when running on a cluster, you will not want to hardcode `master` in the program,
 but rather [launch the application with `spark-submit`](submitting-applications.html) and

@@ -1,0 +1,182 @@
+{
+    "Job": {
+        "Region": null,
+        "ID": "template",
+        "ParentID": null,
+        "Name": "template",
+        "Type": null,
+        "Priority": null,
+        "AllAtOnce": null,
+        "Datacenters": null,
+        "Constraints": null,
+        "TaskGroups": [
+            {
+                "Name": "driver",
+                "Count": null,
+                "Constraints": null,
+                "Tasks": [
+                    {
+                        "Name": "drive",
+                        "Driver": "",
+                        "User": "",
+                        "Config": null,
+                        "Constraints": null,
+                        "Env": null,
+                        "Services": null,
+                        "Resources": null,
+                        "Meta": {
+                            "spark.nomad.role": "driver"
+                        },
+                        "KillTimeout": null,
+                        "LogConfig": null,
+                        "Artifacts": null,
+                        "Vault": null,
+                        "Templates": null,
+                        "DispatchPayload": null,
+                        "Leader": false
+                    },
+                    {
+                        "Name": "some-driver-sidecar",
+                        "Driver": "exec",
+                        "User": "",
+                        "Config": {
+                            "args": [
+                                "-c",
+                                "echo hi"
+                            ],
+                            "command": "/bin/bash"
+                        },
+                        "Constraints": null,
+                        "Env": null,
+                        "Services": null,
+                        "Resources": {
+                            "CPU": 20,
+                            "MemoryMB": 10,
+                            "DiskMB": null,
+                            "IOPS": null,
+                            "Networks": [
+                                {
+                                    "Public": false,
+                                    "CIDR": "",
+                                    "ReservedPorts": null,
+                                    "DynamicPorts": [
+                                        {
+                                            "Label": "foo",
+                                            "Value": 0
+                                        }
+                                    ],
+                                    "IP": "",
+                                    "MBits": 1
+                                }
+                            ]
+                        },
+                        "Meta": null,
+                        "KillTimeout": null,
+                        "LogConfig": {
+                            "MaxFiles": 1,
+                            "MaxFileSizeMB": 1
+                        },
+                        "Artifacts": null,
+                        "Vault": null,
+                        "Templates": null,
+                        "DispatchPayload": null,
+                        "Leader": false
+                    }
+                ],
+                "RestartPolicy": null,
+                "EphemeralDisk": null,
+                "Meta": null
+            },
+            {
+                "Name": "executor",
+                "Count": null,
+                "Constraints": null,
+                "Tasks": [
+                    {
+                        "Name": "executor",
+                        "Driver": "",
+                        "User": "",
+                        "Config": null,
+                        "Constraints": null,
+                        "Env": null,
+                        "Services": null,
+                        "Resources": null,
+                        "Meta": {
+                            "spark.nomad.role": "executor"
+                        },
+                        "KillTimeout": null,
+                        "LogConfig": null,
+                        "Artifacts": null,
+                        "Vault": null,
+                        "Templates": null,
+                        "DispatchPayload": null,
+                        "Leader": false
+                    },
+                    {
+                        "Name": "some-executor-sidecar",
+                        "Driver": "exec",
+                        "User": "",
+                        "Config": {
+                            "args": [
+                                "-c",
+                                "echo hi"
+                            ],
+                            "command": "/bin/bash"
+                        },
+                        "Constraints": null,
+                        "Env": null,
+                        "Services": null,
+                        "Resources": {
+                            "CPU": 20,
+                            "MemoryMB": 10,
+                            "DiskMB": null,
+                            "IOPS": null,
+                            "Networks": [
+                                {
+                                    "Public": false,
+                                    "CIDR": "",
+                                    "ReservedPorts": null,
+                                    "DynamicPorts": [
+                                        {
+                                            "Label": "bar",
+                                            "Value": 0
+                                        }
+                                    ],
+                                    "IP": "",
+                                    "MBits": 1
+                                }
+                            ]
+                        },
+                        "Meta": null,
+                        "KillTimeout": null,
+                        "LogConfig": {
+                            "MaxFiles": 1,
+                            "MaxFileSizeMB": 1
+                        },
+                        "Artifacts": null,
+                        "Vault": null,
+                        "Templates": null,
+                        "DispatchPayload": null,
+                        "Leader": false
+                    }
+                ],
+                "RestartPolicy": null,
+                "EphemeralDisk": null,
+                "Meta": null
+            }
+        ],
+        "Update": null,
+        "Periodic": null,
+        "ParameterizedJob": null,
+        "Payload": null,
+        "Meta": {
+            "hi": "there"
+        },
+        "VaultToken": null,
+        "Status": null,
+        "StatusDescription": null,
+        "CreateIndex": null,
+        "ModifyIndex": null,
+        "JobModifyIndex": null
+    }
+}

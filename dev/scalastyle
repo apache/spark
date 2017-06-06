@@ -23,6 +23,7 @@ ERRORS=$(echo -e "q\n" \
     | build/sbt \
         -Pkinesis-asl \
         -Pmesos \
+        -Pnomad \
         -Pyarn \
         -Phive \
         -Phive-thriftserver \

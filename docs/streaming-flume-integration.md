@@ -68,7 +68,7 @@ configuring Flume agents.
 	</div>
 
 	Note that the hostname should be the same as the one used by the resource manager in the
-    cluster (Mesos, YARN or Spark Standalone), so that resource allocation can match the names and launch
+    cluster (Mesos, YARN, Nomad or Spark Standalone), so that resource allocation can match the names and launch
     the receiver in the right machine.
 
 3. **Deploying:** As with any Spark applications, `spark-submit` is used to launch your application. However, the details are slightly different for Scala/Java applications and Python applications.

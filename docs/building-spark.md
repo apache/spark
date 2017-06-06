@@ -32,7 +32,7 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 **Note:**
 
 * If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
-* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.    
+* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
 
 ### build/mvn
 
@@ -55,10 +55,10 @@ This will build Spark distribution along with Python pip and R packages. For mor
 
 ## Specifying the Hadoop Version and Enabling YARN
 
-You can specify the exact version of Hadoop to compile against through the `hadoop.version` property. 
+You can specify the exact version of Hadoop to compile against through the `hadoop.version` property.
 If unset, Spark will build against Hadoop 2.6.X by default.
 
-You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different 
+You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different
 from `hadoop.version`.
 
 Examples:
@@ -90,6 +90,10 @@ like ZooKeeper and Hadoop itself.
 ## Building with Mesos support
 
     ./build/mvn -Pmesos -DskipTests clean package
+
+## Building with Nomad support
+
+    ./build/mvn -Pnomad -DskipTests clean package
 
 ## Building for Scala 2.10
 To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` property:

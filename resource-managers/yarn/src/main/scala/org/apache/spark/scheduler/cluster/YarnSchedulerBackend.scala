@@ -49,6 +49,9 @@ private[spark] abstract class YarnSchedulerBackend(
 
   protected var totalExpectedExecutors = 0
 
+  // The num of current max ExecutorId used to re-register appMaster
+  @volatile protected var currentExecutorIdCounter = 0
+
   private val yarnSchedulerEndpoint = new YarnSchedulerEndpoint(rpcEnv)
 
   private val yarnSchedulerEndpointRef = rpcEnv.setupEndpoint(
@@ -192,6 +195,11 @@ private[spark] abstract class YarnSchedulerBackend(
    */
   private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
       extends DriverEndpoint(rpcEnv, sparkProperties) {
+
+    override protected def synchronizedOnNewExecutorId(executorId: String): Unit =
+      if (currentExecutorIdCounter < executorId.toInt) {
+        currentExecutorIdCounter = executorId.toInt
+      }
 
     /**
      * When onDisconnected is received at the driver endpoint, the superclass DriverEndpoint
