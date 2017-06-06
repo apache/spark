@@ -527,6 +527,23 @@ trait MesosSchedulerUtils extends Logging {
     case TaskState.LOST => MesosTaskState.TASK_LOST
   }
 
+  def buildMesosLabels(labelsStr: String): Labels.Builder = {
+    val labels = labelsStr.split(",").flatMap(label =>
+      label.split(":") match {
+        case Array(key, value) =>
+          Some(Label.newBuilder()
+            .setKey(key)
+            .setValue(value)
+            .build())
+        case _ =>
+          logWarning(s"Unable to parse $label into a key:value label for the task.")
+          None
+      }
+    ).toList.asJava
+
+    Labels.newBuilder().addAllLabels(labels)
+  }
+
   protected def declineOffer(
     driver: org.apache.mesos.SchedulerDriver,
     offer: Offer,
