@@ -1959,6 +1959,10 @@ Apart from these, the following properties are also available, and may be useful
     </tr>
 </table>
 
+All password-related SSL options can also be set using environment variables, which take precedence
+over the configuration when both are set. The names of the environment variables match the name of
+the configuration key, with all capital letters and periods replaced with underscores. So, for
+example, <code>spark.ssl.keyStorePassword</code> becomes <code>SPARK_SSL_KEYSTOREPASSWORD</code>.
 
 ### Spark SQL
 

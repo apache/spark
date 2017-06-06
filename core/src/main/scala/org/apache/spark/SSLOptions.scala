@@ -175,10 +175,10 @@ private[spark] object SSLOptions extends Logging {
     val keyStore = conf.getOption(s"$ns.keyStore").map(new File(_))
         .orElse(defaults.flatMap(_.keyStore))
 
-    val keyStorePassword = conf.getOption(s"$ns.keyStorePassword")
+    val keyStorePassword = getFromEnv(conf, s"$ns.keyStorePassword")
         .orElse(defaults.flatMap(_.keyStorePassword))
 
-    val keyPassword = conf.getOption(s"$ns.keyPassword")
+    val keyPassword = getFromEnv(conf, s"$ns.keyPassword")
         .orElse(defaults.flatMap(_.keyPassword))
 
     val keyStoreType = conf.getOption(s"$ns.keyStoreType")
@@ -190,7 +190,7 @@ private[spark] object SSLOptions extends Logging {
     val trustStore = conf.getOption(s"$ns.trustStore").map(new File(_))
         .orElse(defaults.flatMap(_.trustStore))
 
-    val trustStorePassword = conf.getOption(s"$ns.trustStorePassword")
+    val trustStorePassword = getFromEnv(conf, s"$ns.trustStorePassword")
         .orElse(defaults.flatMap(_.trustStorePassword))
 
     val trustStoreType = conf.getOption(s"$ns.trustStoreType")
@@ -219,5 +219,15 @@ private[spark] object SSLOptions extends Logging {
       enabledAlgorithms)
   }
 
-}
+  /**
+   * Returns the value of a config key. The value is first looked up in the system environment,
+   * translating the key by making it all upper case and replacing periods with underscores; if
+   * it's not set in the environment, then the config is tried. This is to be used for password
+   * configuration keys so that they can be read from the environment, which is more secure.
+   */
+  def getFromEnv(conf: SparkConf, confKey: String): Option[String] = {
+    val envKey = confKey.toUpperCase().replaceAll("\\.", "_")
+    Option(conf.getenv(envKey)).orElse(conf.getOption(confKey))
+  }
 
+}
