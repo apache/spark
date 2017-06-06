@@ -44,6 +44,7 @@ import org.apache.spark.executor.OutputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
@@ -1129,7 +1130,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           recordsWritten += 1
         }
       }(finallyBlock = writer.close(hadoopContext))
-      committer.commitTask(hadoopContext)
+      SparkHadoopMapRedUtil.commitTask(committer, hadoopContext,
+        context.stageId, context.partitionId)
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
         om.setBytesWritten(callback())
         om.setRecordsWritten(recordsWritten)
