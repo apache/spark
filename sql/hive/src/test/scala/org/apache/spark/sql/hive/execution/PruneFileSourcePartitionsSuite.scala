@@ -69,30 +69,32 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("SPARK-20986 Reset table's statistics after PruneFileSourcePartitions rule") {
-    withTempView("tempTbl", "partTbl") {
-      spark.range(1000).selectExpr("id").createOrReplaceTempView("tempTbl")
-      sql("CREATE TABLE partTbl (id INT) PARTITIONED BY (part INT) STORED AS parquet")
-      for (part <- Seq(1, 2, 3)) {
-        sql(
-          s"""
-             |INSERT OVERWRITE TABLE partTbl PARTITION (part='$part')
-             |select id from tempTbl
+    withTempView("tempTbl") {
+      withTable("partTbl") {
+        spark.range(1000).selectExpr("id").createOrReplaceTempView("tempTbl")
+        sql("CREATE TABLE partTbl (id INT) PARTITIONED BY (part INT) STORED AS parquet")
+        for (part <- Seq(1, 2, 3)) {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE partTbl PARTITION (part='$part')
+               |select id from tempTbl
             """.stripMargin)
-      }
+        }
 
-      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
-        val df = sql("SELECT * FROM partTbl where part = 1")
-        val query = df.queryExecution.analyzed.analyze
-        val sizes1 = query.collect {
-          case relation: LogicalRelation => relation.computeStats(conf).sizeInBytes
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+          val df = sql("SELECT * FROM partTbl where part = 1")
+          val query = df.queryExecution.analyzed.analyze
+          val sizes1 = query.collect {
+            case relation: LogicalRelation => relation.computeStats(conf).sizeInBytes
+          }
+          assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
+          assert(sizes1(0) > 5000, s"expected > 5000 for test table 'src', got: ${sizes1(0)}")
+          val sizes2 = Optimize.execute(query).collect {
+            case relation: LogicalRelation => relation.computeStats(conf).sizeInBytes
+          }
+          assert(sizes2.size === 1, s"Size wrong for:\n ${df.queryExecution}")
+          assert(sizes2(0) < 5000, s"expected < 5000 for test table 'src', got: ${sizes2(0)}")
         }
-        assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-        assert(sizes1(0) > 5000, s"expected > 5000 for test table 'src', got: ${sizes1(0)}")
-        val sizes2 = Optimize.execute(query).collect {
-          case relation: LogicalRelation => relation.computeStats(conf).sizeInBytes
-        }
-        assert(sizes2.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-        assert(sizes2(0) < 5000, s"expected < 5000 for test table 'src', got: ${sizes2(0)}")
       }
     }
   }
