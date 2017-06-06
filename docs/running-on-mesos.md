@@ -469,6 +469,16 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.driver.labels</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Mesos labels to add to the driver.  Labels are free-form key-value
+    pairs.  Key-value pairs should be separated by a colon, and commas used to
+    list more than one.  Ex. key:value,key2:value2.
+  </td>
+</tr>
+
+<tr>
   <td><code>spark.mesos.driverEnv.[EnvironmentVariableName]</code></td>
   <td><code>(none)</code></td>
   <td>
