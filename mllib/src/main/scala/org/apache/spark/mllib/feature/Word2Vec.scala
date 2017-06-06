@@ -418,19 +418,21 @@ class Word2Vec extends Serializable with Logging {
         val syn0Local = model._1
         val syn1Local = model._2
         // Only output modified vectors.
-        Iterator.tabulate(vocabSize) { index =>
+        val modifiedSize = syn0Modify.count(_ > 0) + syn1Modify.count(_ > 0)
+        val modified = new Array[(Int, Array[Float])](modifiedSize)
+        var mi = 0
+        (0 until vocabSize).foreach { index =>
           if (syn0Modify(index) > 0) {
-            Some((index, syn0Local.slice(index * vectorSize, (index + 1) * vectorSize)))
-          } else {
-            None
+            modified(mi) = (index, syn0Local.slice(index * vectorSize, (index + 1) * vectorSize))
+            mi += 1
           }
-        }.flatten ++ Iterator.tabulate(vocabSize) { index =>
           if (syn1Modify(index) > 0) {
-            Some((index + vocabSize, syn1Local.slice(index * vectorSize, (index + 1) * vectorSize)))
-          } else {
-            None
+            modified(mi) =
+              (index + vocabSize, syn1Local.slice(index * vectorSize, (index + 1) * vectorSize))
+            mi += 1
           }
-        }.flatten
+        }
+        modified.iterator
       }
       val synAgg = partial.reduceByKey { case (v1, v2) =>
           blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
