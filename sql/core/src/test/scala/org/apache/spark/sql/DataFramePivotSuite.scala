@@ -200,11 +200,21 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
 
   test("pivot preserves aliases if given") {
     assertResult(
-      Array("year", "dotNET_foo", "dotNET_avg(earnings)", "Java_foo", "Java_avg(earnings)")
+      Seq("year", "dotNET_foo", "dotNET_avg(earnings)", "Java_foo", "Java_avg(earnings)")
     )(
       courseSales.groupBy($"year")
         .pivot("course", Seq("dotNET", "Java"))
         .agg(sum($"earnings").as("foo"), avg($"earnings")).columns
+    )
+  }
+
+  test("pivot preserves qualifiers if given") {
+    Seq((1, 2)).toDF("id", "v1").createOrReplaceTempView("s")
+    Seq((1, 0)).toDF("id", "v2").createOrReplaceTempView("t")
+    val df1 = sql("SELECT * FROM s")
+    val df2 = sql("SELECT * FROM t")
+    assertResult(Seq("id", "1_max(s.v1)", "1_max(t.v2)"))(
+      df1.join(df2, "id" :: Nil).groupBy("id").pivot("id").max("v1", "v2").columns
     )
   }
 
