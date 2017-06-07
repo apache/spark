@@ -26,6 +26,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasInputCols
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -134,41 +135,28 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
     transformSchema(dataset.schema, logging = true)
     val spark = dataset.sparkSession
 
-    val surrogates = $(strategy) match {
+    val summaries = $(strategy) match {
       case Imputer.mean =>
-        val numInputCols = $(inputCols).length
-        val missing = $(missingValue)
-        val (_, avgs) = dataset.select($(inputCols).map(col(_).cast("double")): _*).rdd
-          .treeAggregate((Array.ofDim[Long](numInputCols), Array.ofDim[Double](numInputCols)))(
-            seqOp = { case ((counts, avgs), row) =>
-              counts.indices.foreach { i =>
-                if (!row.isNullAt(i)) {
-                  val v = row.getDouble(i)
-                  if (v != missing && !v.isNaN) {
-                    val diff = v - avgs(i)
-                    counts(i) += 1
-                    avgs(i) += diff / counts(i)
-                  }
-                }
-              }
-              (counts, avgs)
-            }, combOp = { case ((counts1, avgs1), (counts2, avgs2)) =>
-              counts1.indices.foreach { i =>
-                if (counts2(i) > 0) {
-                  val diff = avgs2(i) - avgs1(i)
-                  counts1(i) += counts2(i)
-                  avgs1(i) += diff * counts2(i) / counts1(i)
-                }
-              }
-              (counts1, avgs1)
-            })
-        avgs
+        val emptySummaries = new Imputer.MeanSummaries($(inputCols).length, $(missingValue))
+        dataset.select($(inputCols).map(col(_).cast("double")): _*).rdd
+          .treeAggregate(emptySummaries)(
+            seqOp = { case (sum, row) => sum.update(row) },
+            combOp = { case (sum1, sum2) => sum1.merge(sum2) })
 
       case Imputer.median =>
-        dataset.stat.approxQuantile($(inputCols), Array(0.5), 0.001).map(_.head)
+        val emptySummaries = new Imputer.MedianSummaries($(inputCols).length, $(missingValue))
+        dataset.select($(inputCols).map(col(_).cast("double")): _*).rdd
+          .treeAggregate(emptySummaries)(
+            seqOp = { case (sum, row) => sum.update(row) },
+            combOp = { case (sum1, sum2) => sum1.merge(sum2) })
     }
 
-    val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(surrogates)))
+    val emptyCols = ($(inputCols) zip summaries.counts).filter(_._2 == 0).map(_._1)
+    require(emptyCols.isEmpty, s"surrogate cannot be computed. " +
+      s"All the values in ${emptyCols.mkString(",")} are Null, Nan or " +
+      s"missingValue(${$(missingValue)})")
+
+    val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(summaries.values)))
     val schema = StructType($(inputCols).map(col => StructField(col, DoubleType, nullable = false)))
     val surrogateDF = spark.createDataFrame(rows, schema)
     copyValues(new ImputerModel(uid, surrogateDF).setParent(this))
@@ -190,6 +178,78 @@ object Imputer extends DefaultParamsReadable[Imputer] {
 
   @Since("2.2.0")
   override def load(path: String): Imputer = super.load(path)
+
+  private trait ImputerSummaries extends Serializable {
+    def counts: Array[Long]
+    def values: Array[Double]
+  }
+
+  private class MeanSummaries(val numCols: Int, val missingValue: Double)
+    extends ImputerSummaries {
+    val counts = Array.ofDim[Long](numCols)
+    val values = Array.ofDim[Double](numCols)
+
+    def update(row: Row): MeanSummaries = {
+      var i = 0
+      while (i < numCols) {
+        if (!row.isNullAt(i)) {
+          val v = row.getDouble(i)
+          if (v != missingValue && !v.isNaN) {
+            val diff = v - values(i)
+            counts(i) += 1
+            values(i) += diff / counts(i)
+          }
+        }
+        i += 1
+      }
+      this
+    }
+
+    def merge(o: MeanSummaries): MeanSummaries = {
+      var i = 0
+      while (i < numCols) {
+        if (o.counts(i) > 0) {
+          val diff = o.values(i) - values(i)
+          counts(i) += o.counts(i)
+          values(i) += diff * o.counts(i) / counts(i)
+        }
+        i += 1
+      }
+      this
+    }
+  }
+
+  private class MedianSummaries(val numCols: Int, val missingValue: Double)
+    extends ImputerSummaries {
+    val summaries = Array.fill(numCols)(
+      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, 0.001))
+
+    override def counts: Array[Long] = summaries.map(_.count)
+    override def values: Array[Double] = summaries.map(_.query(0.5).get)
+
+    def update(row: Row): MedianSummaries = {
+      var i = 0
+      while (i < numCols) {
+        if (!row.isNullAt(i)) {
+          val v = row.getDouble(i)
+          if (v != missingValue && !v.isNaN) {
+            summaries(i) = summaries(i).insert(v)
+          }
+        }
+        i += 1
+      }
+      this
+    }
+
+    def merge(o: MedianSummaries): MedianSummaries = {
+      var i = 0
+      while (i < numCols) {
+        summaries(i) = summaries(i).compress().merge(o.summaries(i).compress())
+        i += 1
+      }
+      this
+    }
+  }
 }
 
 /**
