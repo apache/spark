@@ -107,6 +107,7 @@ spark-warehouse
 circle.yml
 .credentials
 publish.sh
+publish-local.sh
 structured-streaming/*
 kafka-source-initial-offset-version-2.1.0.bin
 org.apache.spark.deploy.rest.kubernetes.DriverServiceManager
