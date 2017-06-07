@@ -153,12 +153,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       BigInt(0) -> ("0.0 B", "0"),
       BigInt(100) -> ("100.0 B", "100"),
       BigInt(2047) -> ("2047.0 B", "2.05E+3"),
-      BigInt(2048) -> ("2.0 KB", "2.05E+3"),
-      BigInt(3333333) -> ("3.2 MB", "3.33E+6"),
-      BigInt(4444444444L) -> ("4.1 GB", "4.44E+9"),
-      BigInt(5555555555555L) -> ("5.1 TB", "5.56E+12"),
-      BigInt(6666666666666666L) -> ("5.9 PB", "6.67E+15"),
-      BigInt(1L << 10 ) * (1L << 60) -> ("1024.0 EB", "1.18E+21"),
+      BigInt(2048) -> ("2.0 KiB", "2.05E+3"),
+      BigInt(3333333) -> ("3.2 MiB", "3.33E+6"),
+      BigInt(4444444444L) -> ("4.1 GiB", "4.44E+9"),
+      BigInt(5555555555555L) -> ("5.1 TiB", "5.56E+12"),
+      BigInt(6666666666666666L) -> ("5.9 PiB", "6.67E+15"),
+      BigInt(1L << 10 ) * (1L << 60) -> ("1024.0 EiB", "1.18E+21"),
       BigInt(1L << 11) * (1L << 60) -> ("2.36E+21 B", "2.36E+21")
     )
     numbers.foreach { case (input, (expectedSize, expectedRows)) =>
