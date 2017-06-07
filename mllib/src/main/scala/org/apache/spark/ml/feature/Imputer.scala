@@ -135,20 +135,20 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
     transformSchema(dataset.schema, logging = true)
     val spark = dataset.sparkSession
 
+    val selected = dataset.select($(inputCols).map(col(_).cast("double")): _*).rdd
+
     val summaries = $(strategy) match {
       case Imputer.mean =>
         val emptySummaries = new Imputer.MeanSummaries($(inputCols).length, $(missingValue))
-        dataset.select($(inputCols).map(col(_).cast("double")): _*).rdd
-          .treeAggregate(emptySummaries)(
-            seqOp = { case (sum, row) => sum.update(row) },
-            combOp = { case (sum1, sum2) => sum1.merge(sum2) })
+        selected.treeAggregate(emptySummaries)(
+          seqOp = { case (sum, row) => sum.update(row) },
+          combOp = { case (sum1, sum2) => sum1.merge(sum2) })
 
       case Imputer.median =>
         val emptySummaries = new Imputer.MedianSummaries($(inputCols).length, $(missingValue))
-        dataset.select($(inputCols).map(col(_).cast("double")): _*).rdd
-          .treeAggregate(emptySummaries)(
-            seqOp = { case (sum, row) => sum.update(row) },
-            combOp = { case (sum1, sum2) => sum1.merge(sum2) })
+        selected.treeAggregate(emptySummaries)(
+          seqOp = { case (sum, row) => sum.update(row) },
+          combOp = { case (sum1, sum2) => sum1.merge(sum2) })
     }
 
     val emptyCols = ($(inputCols) zip summaries.counts).filter(_._2 == 0).map(_._1)
