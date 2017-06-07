@@ -17,19 +17,25 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.collection.JavaConverters._
+import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
+import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId, NodeState, QueueInfo}
+import org.apache.hadoop.yarn.client.api.YarnClient
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.ui.JettyUtils
-import org.apache.spark.util.{RpcUtils, ThreadUtils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -54,6 +60,8 @@ private[spark] abstract class YarnSchedulerBackend(
   private val yarnSchedulerEndpointRef = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, yarnSchedulerEndpoint)
 
+  private val yarnClient = YarnClient.createYarnClient
+
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
   /** Application ID. */
@@ -67,6 +75,8 @@ private[spark] abstract class YarnSchedulerBackend(
 
   // Flag to specify whether this schedulerBackend should be reset.
   private var shouldResetOnAmRegister = false
+
+  private var isUserSetMaxExecutors = false
 
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
@@ -83,6 +93,12 @@ private[spark] abstract class YarnSchedulerBackend(
     require(appId.isDefined, "application ID unset")
     val binding = SchedulerExtensionServiceBinding(sc, appId.get, attemptId)
     services.start(binding)
+
+    isUserSetMaxExecutors = DYN_ALLOCATION_MAX_EXECUTORS.defaultValue.get !=
+      conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
+    yarnClient.init(SparkHadoopUtil.get.newConfiguration(conf).asInstanceOf[YarnConfiguration])
+    yarnClient.start()
+
     super.start()
   }
 
@@ -91,6 +107,7 @@ private[spark] abstract class YarnSchedulerBackend(
       // SPARK-12009: To prevent Yarn allocator from requesting backup for the executors which
       // was Stopped by SchedulerBackend.
       requestTotalExecutors(0, 0, Map.empty)
+      yarnClient.stop()
       super.stop()
     } finally {
       services.stop()
@@ -135,6 +152,9 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
+    if (Utils.isDynamicAllocationEnabled(conf) && !isUserSetMaxExecutors) {
+      setMaxNumExecutors()
+    }
     yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(requestedTotal))
   }
 
@@ -147,6 +167,38 @@ private[spark] abstract class YarnSchedulerBackend(
 
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
+  }
+
+  private def setMaxNumExecutors(): Unit = {
+    val executorCores = conf.get(EXECUTOR_CORES)
+    val runningNodes = yarnClient.getNodeReports().asScala.
+      filter(_.getNodeState == NodeState.RUNNING)
+    val absMaxCapacity = getAbsMaxCapacity(conf.get(QUEUE_NAME))
+
+    val maxNumExecutors = (runningNodes.map(_.getCapability.getVirtualCores).
+      sum * absMaxCapacity / executorCores).toInt
+    conf.set(DYN_ALLOCATION_MAX_EXECUTORS, maxNumExecutors)
+  }
+
+  /**
+   * Get the absolute max capacity for a given queue.
+   */
+  private def getAbsMaxCapacity(queueName: String): Float = {
+    var maxCapacity = 1F
+    for (queue <- yarnClient.getRootQueueInfos.asScala) {
+      getQueueInfo(queue, queue.getMaximumCapacity)
+    }
+
+    def getQueueInfo(queueInfo: QueueInfo, capacity: Float): Unit = {
+      if (queueInfo.getQueueName.equals(queueName)) {
+        maxCapacity = capacity
+      } else {
+        for (child <- queueInfo.getChildQueues.asScala) {
+          getQueueInfo(child, child.getMaximumCapacity * capacity)
+        }
+      }
+    }
+    maxCapacity
   }
 
   /**
