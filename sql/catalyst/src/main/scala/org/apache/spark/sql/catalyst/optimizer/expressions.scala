@@ -54,6 +54,62 @@ object ConstantFolding extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Substitutes [[Attribute Attributes]] which can be statically evaluated with their corresponding
+ * value in conjunctive [[Expression Expressions]]
+ * eg.
+ * {{{
+ *   SELECT * FROM table WHERE i = 5 AND j = i + 3
+ *   ==>  SELECT * FROM table WHERE i = 5 AND j = 8
+ * }}}
+ *
+ * Approach used:
+ * - Start from AND operator as the root
+ * - Get all the children conjunctive predicates which are EqualTo / EqualNullSafe such that they
+ *   don't have a `NOT` or `OR` operator in them
+ * - Populate a mapping of attribute => constant value by looking at all the equals predicates
+ * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
+ *   in the AND node.
+ */
+object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
+  private def containsNonConjunctionPredicates(expression: Expression): Boolean = expression.find {
+    case _: Not | _: Or => true
+    case _ => false
+  }.isDefined
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f: Filter => f transformExpressionsUp {
+      case and: And =>
+        val conjunctivePredicates =
+          splitConjunctivePredicates(and)
+            .filter(expr => expr.isInstanceOf[EqualTo] || expr.isInstanceOf[EqualNullSafe])
+            .filterNot(expr => containsNonConjunctionPredicates(expr))
+
+        val equalityPredicates = conjunctivePredicates.collect {
+          case e @ EqualTo(left: AttributeReference, right: Literal) => ((left, right), e)
+          case e @ EqualTo(left: Literal, right: AttributeReference) => ((right, left), e)
+          case e @ EqualNullSafe(left: AttributeReference, right: Literal) => ((left, right), e)
+          case e @ EqualNullSafe(left: Literal, right: AttributeReference) => ((right, left), e)
+        }
+
+        val constantsMap = AttributeMap(equalityPredicates.map(_._1))
+        val predicates = equalityPredicates.map(_._2).toSet
+
+        def replaceConstants(expression: Expression) = expression transform {
+          case a: AttributeReference =>
+            constantsMap.get(a) match {
+              case Some(literal) => literal
+              case None => a
+            }
+        }
+
+        and transform {
+          case e @ EqualTo(_, _) if !predicates.contains(e) => replaceConstants(e)
+          case e @ EqualNullSafe(_, _) if !predicates.contains(e) => replaceConstants(e)
+        }
+    }
+  }
+}
 
 /**
  * Reorder associative integral-type operators and fold all constants into one.
@@ -478,7 +534,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     case _: Distinct => true
     case _: AppendColumns => true
     case _: AppendColumnsWithObject => true
-    case _: BroadcastHint => true
+    case _: ResolvedHint => true
     case _: RepartitionByExpression => true
     case _: Repartition => true
     case _: Sort => true

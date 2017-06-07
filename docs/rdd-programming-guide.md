@@ -247,7 +247,7 @@ $ PYSPARK_DRIVER_PYTHON=ipython ./bin/pyspark
 To use the Jupyter notebook (previously known as the IPython notebook),
 
 {% highlight bash %}
-$ PYSPARK_DRIVER_PYTHON=jupyter ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=jupyter PYSPARK_DRIVER_PYTHON_OPTS=notebook ./bin/pyspark
 {% endhighlight %}
 
 You can customize the `ipython` or `jupyter` commands by setting `PYSPARK_DRIVER_PYTHON_OPTS`.

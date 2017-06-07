@@ -94,7 +94,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the label distribution to be used in the " +
       s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
-    ParamValidators.inArray[String](supportedFamilyNames))
+    (value: String) => supportedFamilyNames.contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("2.1.0")
@@ -267,8 +267,12 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 }
 
 /**
- * Logistic regression. Supports multinomial logistic (softmax) regression and binomial logistic
- * regression.
+ * Logistic regression. Supports:
+ *  - Multinomial logistic (softmax) regression.
+ *  - Binomial logistic regression.
+ *
+ * This class supports fitting traditional logistic regression model by LBFGS/OWLQN and
+ * bound (box) constrained logistic regression model by LBFGSB.
  */
 @Since("1.2.0")
 class LogisticRegression @Since("1.2.0") (
@@ -526,7 +530,7 @@ class LogisticRegression @Since("1.2.0") (
       case None => histogram.length
     }
 
-    val isMultinomial = $(family) match {
+    val isMultinomial = getFamily.toLowerCase(Locale.ROOT) match {
       case "binomial" =>
         require(numClasses == 1 || numClasses == 2, s"Binomial family only supports 1 or 2 " +
         s"outcome classes but found $numClasses.")

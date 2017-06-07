@@ -61,7 +61,11 @@ unsetHiveContext <- function() {
 # Tests for SparkSQL functions in SparkR
 
 filesBefore <- list.files(path = sparkRDir, all.files = TRUE)
-sparkSession <- sparkR.session(master = sparkRTestMaster)
+sparkSession <- if (not_cran_or_windows_with_hadoop()) {
+    sparkR.session(master = sparkRTestMaster)
+  } else {
+    sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
+  }
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 mockLines <- c("{\"name\":\"Michael\"}",
@@ -326,51 +330,53 @@ test_that("createDataFrame uses files for large objects", {
 })
 
 test_that("read/write csv as DataFrame", {
-  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
-  mockLinesCsv <- c("year,make,model,comment,blank",
-                   "\"2012\",\"Tesla\",\"S\",\"No comment\",",
-                   "1997,Ford,E350,\"Go get one now they are going fast\",",
-                   "2015,Chevy,Volt",
-                   "NA,Dummy,Placeholder")
-  writeLines(mockLinesCsv, csvPath)
+  if (not_cran_or_windows_with_hadoop()) {
+    csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+    mockLinesCsv <- c("year,make,model,comment,blank",
+                     "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+                     "1997,Ford,E350,\"Go get one now they are going fast\",",
+                     "2015,Chevy,Volt",
+                     "NA,Dummy,Placeholder")
+    writeLines(mockLinesCsv, csvPath)
 
-  # default "header" is false, inferSchema to handle "year" as "int"
-  df <- read.df(csvPath, "csv", header = "true", inferSchema = "true")
-  expect_equal(count(df), 4)
-  expect_equal(columns(df), c("year", "make", "model", "comment", "blank"))
-  expect_equal(sort(unlist(collect(where(df, df$year == 2015)))),
-               sort(unlist(list(year = 2015, make = "Chevy", model = "Volt"))))
+    # default "header" is false, inferSchema to handle "year" as "int"
+    df <- read.df(csvPath, "csv", header = "true", inferSchema = "true")
+    expect_equal(count(df), 4)
+    expect_equal(columns(df), c("year", "make", "model", "comment", "blank"))
+    expect_equal(sort(unlist(collect(where(df, df$year == 2015)))),
+                 sort(unlist(list(year = 2015, make = "Chevy", model = "Volt"))))
 
-  # since "year" is "int", let's skip the NA values
-  withoutna <- na.omit(df, how = "any", cols = "year")
-  expect_equal(count(withoutna), 3)
+    # since "year" is "int", let's skip the NA values
+    withoutna <- na.omit(df, how = "any", cols = "year")
+    expect_equal(count(withoutna), 3)
 
-  unlink(csvPath)
-  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
-  mockLinesCsv <- c("year,make,model,comment,blank",
-                   "\"2012\",\"Tesla\",\"S\",\"No comment\",",
-                   "1997,Ford,E350,\"Go get one now they are going fast\",",
-                   "2015,Chevy,Volt",
-                   "Empty,Dummy,Placeholder")
-  writeLines(mockLinesCsv, csvPath)
+    unlink(csvPath)
+    csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+    mockLinesCsv <- c("year,make,model,comment,blank",
+                     "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+                     "1997,Ford,E350,\"Go get one now they are going fast\",",
+                     "2015,Chevy,Volt",
+                     "Empty,Dummy,Placeholder")
+    writeLines(mockLinesCsv, csvPath)
 
-  df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings = "Empty")
-  expect_equal(count(df2), 4)
-  withoutna2 <- na.omit(df2, how = "any", cols = "year")
-  expect_equal(count(withoutna2), 3)
-  expect_equal(count(where(withoutna2, withoutna2$make == "Dummy")), 0)
+    df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings = "Empty")
+    expect_equal(count(df2), 4)
+    withoutna2 <- na.omit(df2, how = "any", cols = "year")
+    expect_equal(count(withoutna2), 3)
+    expect_equal(count(where(withoutna2, withoutna2$make == "Dummy")), 0)
 
-  # writing csv file
-  csvPath2 <- tempfile(pattern = "csvtest2", fileext = ".csv")
-  write.df(df2, path = csvPath2, "csv", header = "true")
-  df3 <- read.df(csvPath2, "csv", header = "true")
-  expect_equal(nrow(df3), nrow(df2))
-  expect_equal(colnames(df3), colnames(df2))
-  csv <- read.csv(file = list.files(csvPath2, pattern = "^part", full.names = T)[[1]])
-  expect_equal(colnames(df3), colnames(csv))
+    # writing csv file
+    csvPath2 <- tempfile(pattern = "csvtest2", fileext = ".csv")
+    write.df(df2, path = csvPath2, "csv", header = "true")
+    df3 <- read.df(csvPath2, "csv", header = "true")
+    expect_equal(nrow(df3), nrow(df2))
+    expect_equal(colnames(df3), colnames(df2))
+    csv <- read.csv(file = list.files(csvPath2, pattern = "^part", full.names = T)[[1]])
+    expect_equal(colnames(df3), colnames(csv))
 
-  unlink(csvPath)
-  unlink(csvPath2)
+    unlink(csvPath)
+    unlink(csvPath2)
+  }
 })
 
 test_that("Support other types for options", {
@@ -601,48 +607,50 @@ test_that("Collect DataFrame with complex types", {
 })
 
 test_that("read/write json files", {
-  # Test read.df
-  df <- read.df(jsonPath, "json")
-  expect_is(df, "SparkDataFrame")
-  expect_equal(count(df), 3)
+  if (not_cran_or_windows_with_hadoop()) {
+    # Test read.df
+    df <- read.df(jsonPath, "json")
+    expect_is(df, "SparkDataFrame")
+    expect_equal(count(df), 3)
 
-  # Test read.df with a user defined schema
-  schema <- structType(structField("name", type = "string"),
-                       structField("age", type = "double"))
+    # Test read.df with a user defined schema
+    schema <- structType(structField("name", type = "string"),
+                         structField("age", type = "double"))
 
-  df1 <- read.df(jsonPath, "json", schema)
-  expect_is(df1, "SparkDataFrame")
-  expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
+    df1 <- read.df(jsonPath, "json", schema)
+    expect_is(df1, "SparkDataFrame")
+    expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
 
-  # Test loadDF
-  df2 <- loadDF(jsonPath, "json", schema)
-  expect_is(df2, "SparkDataFrame")
-  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
+    # Test loadDF
+    df2 <- loadDF(jsonPath, "json", schema)
+    expect_is(df2, "SparkDataFrame")
+    expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
 
-  # Test read.json
-  df <- read.json(jsonPath)
-  expect_is(df, "SparkDataFrame")
-  expect_equal(count(df), 3)
+    # Test read.json
+    df <- read.json(jsonPath)
+    expect_is(df, "SparkDataFrame")
+    expect_equal(count(df), 3)
 
-  # Test write.df
-  jsonPath2 <- tempfile(pattern = "jsonPath2", fileext = ".json")
-  write.df(df, jsonPath2, "json", mode = "overwrite")
+    # Test write.df
+    jsonPath2 <- tempfile(pattern = "jsonPath2", fileext = ".json")
+    write.df(df, jsonPath2, "json", mode = "overwrite")
 
-  # Test write.json
-  jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
-  write.json(df, jsonPath3)
+    # Test write.json
+    jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
+    write.json(df, jsonPath3)
 
-  # Test read.json()/jsonFile() works with multiple input paths
-  jsonDF1 <- read.json(c(jsonPath2, jsonPath3))
-  expect_is(jsonDF1, "SparkDataFrame")
-  expect_equal(count(jsonDF1), 6)
-  # Suppress warnings because jsonFile is deprecated
-  jsonDF2 <- suppressWarnings(jsonFile(c(jsonPath2, jsonPath3)))
-  expect_is(jsonDF2, "SparkDataFrame")
-  expect_equal(count(jsonDF2), 6)
+    # Test read.json()/jsonFile() works with multiple input paths
+    jsonDF1 <- read.json(c(jsonPath2, jsonPath3))
+    expect_is(jsonDF1, "SparkDataFrame")
+    expect_equal(count(jsonDF1), 6)
+    # Suppress warnings because jsonFile is deprecated
+    jsonDF2 <- suppressWarnings(jsonFile(c(jsonPath2, jsonPath3)))
+    expect_is(jsonDF2, "SparkDataFrame")
+    expect_equal(count(jsonDF2), 6)
 
-  unlink(jsonPath2)
-  unlink(jsonPath3)
+    unlink(jsonPath2)
+    unlink(jsonPath3)
+  }
 })
 
 test_that("read/write json files - compression option", {
@@ -736,33 +744,35 @@ test_that("test cache, uncache and clearCache", {
 })
 
 test_that("insertInto() on a registered table", {
-  df <- read.df(jsonPath, "json")
-  write.df(df, parquetPath, "parquet", "overwrite")
-  dfParquet <- read.df(parquetPath, "parquet")
+  if (not_cran_or_windows_with_hadoop()) {
+    df <- read.df(jsonPath, "json")
+    write.df(df, parquetPath, "parquet", "overwrite")
+    dfParquet <- read.df(parquetPath, "parquet")
 
-  lines <- c("{\"name\":\"Bob\", \"age\":24}",
-             "{\"name\":\"James\", \"age\":35}")
-  jsonPath2 <- tempfile(pattern = "jsonPath2", fileext = ".tmp")
-  parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
-  writeLines(lines, jsonPath2)
-  df2 <- read.df(jsonPath2, "json")
-  write.df(df2, parquetPath2, "parquet", "overwrite")
-  dfParquet2 <- read.df(parquetPath2, "parquet")
+    lines <- c("{\"name\":\"Bob\", \"age\":24}",
+               "{\"name\":\"James\", \"age\":35}")
+    jsonPath2 <- tempfile(pattern = "jsonPath2", fileext = ".tmp")
+    parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
+    writeLines(lines, jsonPath2)
+    df2 <- read.df(jsonPath2, "json")
+    write.df(df2, parquetPath2, "parquet", "overwrite")
+    dfParquet2 <- read.df(parquetPath2, "parquet")
 
-  createOrReplaceTempView(dfParquet, "table1")
-  insertInto(dfParquet2, "table1")
-  expect_equal(count(sql("select * from table1")), 5)
-  expect_equal(first(sql("select * from table1 order by age"))$name, "Michael")
-  expect_true(dropTempView("table1"))
+    createOrReplaceTempView(dfParquet, "table1")
+    insertInto(dfParquet2, "table1")
+    expect_equal(count(sql("select * from table1")), 5)
+    expect_equal(first(sql("select * from table1 order by age"))$name, "Michael")
+    expect_true(dropTempView("table1"))
 
-  createOrReplaceTempView(dfParquet, "table1")
-  insertInto(dfParquet2, "table1", overwrite = TRUE)
-  expect_equal(count(sql("select * from table1")), 2)
-  expect_equal(first(sql("select * from table1 order by age"))$name, "Bob")
-  expect_true(dropTempView("table1"))
+    createOrReplaceTempView(dfParquet, "table1")
+    insertInto(dfParquet2, "table1", overwrite = TRUE)
+    expect_equal(count(sql("select * from table1")), 2)
+    expect_equal(first(sql("select * from table1 order by age"))$name, "Bob")
+    expect_true(dropTempView("table1"))
 
-  unlink(jsonPath2)
-  unlink(parquetPath2)
+    unlink(jsonPath2)
+    unlink(parquetPath2)
+  }
 })
 
 test_that("tableToDF() returns a new DataFrame", {
@@ -954,14 +964,16 @@ test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", 
 })
 
 test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
-  checkpointDir <- file.path(tempdir(), "cproot")
-  expect_true(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+  if (not_cran_or_windows_with_hadoop()) {
+    checkpointDir <- file.path(tempdir(), "cproot")
+    expect_true(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
 
-  setCheckpointDir(checkpointDir)
-  df <- read.json(jsonPath)
-  df <- checkpoint(df)
-  expect_is(df, "SparkDataFrame")
-  expect_false(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+    setCheckpointDir(checkpointDir)
+    df <- read.json(jsonPath)
+    df <- checkpoint(df)
+    expect_is(df, "SparkDataFrame")
+    expect_false(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+  }
 })
 
 test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
@@ -1329,45 +1341,47 @@ test_that("column calculation", {
 })
 
 test_that("test HiveContext", {
-  setHiveContext(sc)
+  if (not_cran_or_windows_with_hadoop()) {
+    setHiveContext(sc)
 
-  schema <- structType(structField("name", "string"), structField("age", "integer"),
-                       structField("height", "float"))
-  createTable("people", source = "json", schema = schema)
-  df <- read.df(jsonPathNa, "json", schema)
-  insertInto(df, "people")
-  expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age, c(16))
-  sql("DROP TABLE people")
+    schema <- structType(structField("name", "string"), structField("age", "integer"),
+                         structField("height", "float"))
+    createTable("people", source = "json", schema = schema)
+    df <- read.df(jsonPathNa, "json", schema)
+    insertInto(df, "people")
+    expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age, c(16))
+    sql("DROP TABLE people")
 
-  df <- createTable("json", jsonPath, "json")
-  expect_is(df, "SparkDataFrame")
-  expect_equal(count(df), 3)
-  df2 <- sql("select * from json")
-  expect_is(df2, "SparkDataFrame")
-  expect_equal(count(df2), 3)
+    df <- createTable("json", jsonPath, "json")
+    expect_is(df, "SparkDataFrame")
+    expect_equal(count(df), 3)
+    df2 <- sql("select * from json")
+    expect_is(df2, "SparkDataFrame")
+    expect_equal(count(df2), 3)
 
-  jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  saveAsTable(df, "json2", "json", "append", path = jsonPath2)
-  df3 <- sql("select * from json2")
-  expect_is(df3, "SparkDataFrame")
-  expect_equal(count(df3), 3)
-  unlink(jsonPath2)
+    jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+    saveAsTable(df, "json2", "json", "append", path = jsonPath2)
+    df3 <- sql("select * from json2")
+    expect_is(df3, "SparkDataFrame")
+    expect_equal(count(df3), 3)
+    unlink(jsonPath2)
 
-  hivetestDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  saveAsTable(df, "hivetestbl", path = hivetestDataPath)
-  df4 <- sql("select * from hivetestbl")
-  expect_is(df4, "SparkDataFrame")
-  expect_equal(count(df4), 3)
-  unlink(hivetestDataPath)
+    hivetestDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+    saveAsTable(df, "hivetestbl", path = hivetestDataPath)
+    df4 <- sql("select * from hivetestbl")
+    expect_is(df4, "SparkDataFrame")
+    expect_equal(count(df4), 3)
+    unlink(hivetestDataPath)
 
-  parquetDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath)
-  df5 <- sql("select * from parquetest")
-  expect_is(df5, "SparkDataFrame")
-  expect_equal(count(df5), 3)
-  unlink(parquetDataPath)
+    parquetDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+    saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath)
+    df5 <- sql("select * from parquetest")
+    expect_is(df5, "SparkDataFrame")
+    expect_equal(count(df5), 3)
+    unlink(parquetDataPath)
 
-  unsetHiveContext()
+    unsetHiveContext()
+  }
 })
 
 test_that("column operators", {
@@ -1381,6 +1395,8 @@ test_that("column operators", {
 })
 
 test_that("column functions", {
+  skip_on_cran()
+
   c <- column("a")
   c1 <- abs(c) + acos(c) + approxCountDistinct(c) + ascii(c) + asin(c) + atan(c)
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
@@ -1766,6 +1782,8 @@ test_that("when(), otherwise() and ifelse() with column on a DataFrame", {
 })
 
 test_that("group by, agg functions", {
+  skip_on_cran()
+
   df <- read.json(jsonPath)
   df1 <- agg(df, name = "max", age = "sum")
   expect_equal(1, count(df1))
@@ -2107,6 +2125,8 @@ test_that("filter() on a DataFrame", {
 })
 
 test_that("join(), crossJoin() and merge() on a DataFrame", {
+  skip_on_cran()
+
   df <- read.json(jsonPath)
 
   mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
@@ -2420,34 +2440,36 @@ test_that("read/write ORC files - compression option", {
 })
 
 test_that("read/write Parquet files", {
-  df <- read.df(jsonPath, "json")
-  # Test write.df and read.df
-  write.df(df, parquetPath, "parquet", mode = "overwrite")
-  df2 <- read.df(parquetPath, "parquet")
-  expect_is(df2, "SparkDataFrame")
-  expect_equal(count(df2), 3)
+  if (not_cran_or_windows_with_hadoop()) {
+    df <- read.df(jsonPath, "json")
+    # Test write.df and read.df
+    write.df(df, parquetPath, "parquet", mode = "overwrite")
+    df2 <- read.df(parquetPath, "parquet")
+    expect_is(df2, "SparkDataFrame")
+    expect_equal(count(df2), 3)
 
-  # Test write.parquet/saveAsParquetFile and read.parquet/parquetFile
-  parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
-  write.parquet(df, parquetPath2)
-  parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
-  suppressWarnings(saveAsParquetFile(df, parquetPath3))
-  parquetDF <- read.parquet(c(parquetPath2, parquetPath3))
-  expect_is(parquetDF, "SparkDataFrame")
-  expect_equal(count(parquetDF), count(df) * 2)
-  parquetDF2 <- suppressWarnings(parquetFile(parquetPath2, parquetPath3))
-  expect_is(parquetDF2, "SparkDataFrame")
-  expect_equal(count(parquetDF2), count(df) * 2)
+    # Test write.parquet/saveAsParquetFile and read.parquet/parquetFile
+    parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
+    write.parquet(df, parquetPath2)
+    parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
+    suppressWarnings(saveAsParquetFile(df, parquetPath3))
+    parquetDF <- read.parquet(c(parquetPath2, parquetPath3))
+    expect_is(parquetDF, "SparkDataFrame")
+    expect_equal(count(parquetDF), count(df) * 2)
+    parquetDF2 <- suppressWarnings(parquetFile(parquetPath2, parquetPath3))
+    expect_is(parquetDF2, "SparkDataFrame")
+    expect_equal(count(parquetDF2), count(df) * 2)
 
-  # Test if varargs works with variables
-  saveMode <- "overwrite"
-  mergeSchema <- "true"
-  parquetPath4 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
-  write.df(df, parquetPath3, "parquet", mode = saveMode, mergeSchema = mergeSchema)
+    # Test if varargs works with variables
+    saveMode <- "overwrite"
+    mergeSchema <- "true"
+    parquetPath4 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
+    write.df(df, parquetPath3, "parquet", mode = saveMode, mergeSchema = mergeSchema)
 
-  unlink(parquetPath2)
-  unlink(parquetPath3)
-  unlink(parquetPath4)
+    unlink(parquetPath2)
+    unlink(parquetPath3)
+    unlink(parquetPath4)
+  }
 })
 
 test_that("read/write Parquet files - compression option/mode", {
@@ -2962,6 +2984,7 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
 })
 
 test_that("dapplyCollect() on DataFrame with a binary column", {
+  skip_on_cran()
 
   df <- data.frame(key = 1:3)
   df$bytes <- lapply(df$key, serialize, connection = NULL)
@@ -2983,6 +3006,8 @@ test_that("dapplyCollect() on DataFrame with a binary column", {
 })
 
 test_that("repartition by columns on DataFrame", {
+  skip_on_cran()
+
   df <- createDataFrame(
     list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
@@ -3021,6 +3046,8 @@ test_that("repartition by columns on DataFrame", {
 })
 
 test_that("coalesce, repartition, numPartitions", {
+  skip_on_cran()
+
   df <- as.DataFrame(cars, numPartitions = 5)
   expect_equal(getNumPartitions(df), 5)
   expect_equal(getNumPartitions(coalesce(df, 3)), 3)
@@ -3040,6 +3067,8 @@ test_that("coalesce, repartition, numPartitions", {
 })
 
 test_that("gapply() and gapplyCollect() on a DataFrame", {
+  skip_on_cran()
+
   df <- createDataFrame (
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
@@ -3192,6 +3221,8 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
 })
 
 test_that("randomSplit", {
+  skip_on_cran()
+
   num <- 4000
   df <- createDataFrame(data.frame(id = 1:num))
   weights <- c(2, 3, 5)

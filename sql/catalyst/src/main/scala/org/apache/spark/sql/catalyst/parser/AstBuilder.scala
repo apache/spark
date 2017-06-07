@@ -407,7 +407,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         val withWindow = withDistinct.optionalMap(windows)(withWindows)
 
         // Hint
-        withWindow.optionalMap(hint)(withHints)
+        hints.asScala.foldRight(withWindow)(withHints)
     }
   }
 
@@ -533,13 +533,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Add a [[Hint]] to a logical plan.
+   * Add [[UnresolvedHint]]s to a logical plan.
    */
   private def withHints(
       ctx: HintContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val stmt = ctx.hintStatement
-    Hint(stmt.hintName.getText, stmt.parameters.asScala.map(_.getText), query)
+    var plan = query
+    ctx.hintStatements.asScala.reverse.foreach { case stmt =>
+      plan = UnresolvedHint(stmt.hintName.getText, stmt.parameters.asScala.map(expression), plan)
+    }
+    plan
   }
 
   /**
@@ -676,12 +679,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create an aliased table reference. This is typically used in FROM clauses.
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
-    val table = UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier))
-
-    val tableWithAlias = Option(ctx.strictIdentifier).map(_.getText) match {
-      case Some(strictIdentifier) =>
-        SubqueryAlias(strictIdentifier, table)
-      case _ => table
+    val tableId = visitTableIdentifier(ctx.tableIdentifier)
+    val table = if (ctx.tableAlias.identifierList != null) {
+      UnresolvedRelation(tableId, visitIdentifierList(ctx.tableAlias.identifierList))
+    } else {
+      UnresolvedRelation(tableId)
+    }
+    val tableWithAlias = if (ctx.tableAlias.strictIdentifier != null) {
+      SubqueryAlias(ctx.tableAlias.strictIdentifier.getText, table)
+    } else {
+      table
     }
     tableWithAlias.optionalMap(ctx.sample)(withSample)
   }
@@ -745,9 +752,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * hooks.
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryNoWith)
-      .optionalMap(ctx.sample)(withSample)
-      .optionalMap(ctx.strictIdentifier)(aliasPlan)
+    // The unaliased subqueries in the FROM clause are disallowed. Instead of rejecting it in
+    // parser rules, we handle it here in order to provide better error message.
+    if (ctx.strictIdentifier == null) {
+      throw new ParseException("The unaliased subqueries in the FROM clause are not supported.",
+        ctx)
+    }
+
+    aliasPlan(ctx.strictIdentifier,
+      plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample))
   }
 
   /**
