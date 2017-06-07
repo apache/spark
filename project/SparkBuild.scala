@@ -318,8 +318,8 @@ object SparkBuild extends PomBuild {
     enable(MimaBuild.mimaSettings(sparkHome, x))(x)
   }
 
-  /* Generate and pick the spark build info from extra-resources */
-  enable(Core.settings)(core)
+  /* Generate and pick the spark build info from extra-resources and override a dependency */
+  enable(Core.settings ++ CoreDependencyOverrides.settings)(core)
 
   /* Unsafe settings */
   enable(Unsafe.settings)(unsafe)
@@ -441,6 +441,16 @@ object DockerIntegrationTests {
     resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/",
     libraryDependencies += "com.oracle" % "ojdbc6" % "11.2.0.1.0" from "https://app.camunda.com/nexus/content/repositories/public/com/oracle/ojdbc6/11.2.0.1.0/ojdbc6-11.2.0.1.0.jar" // scalastyle:ignore
   )
+}
+
+/**
+ * Overrides to work around sbt's dependency resolution being different from Maven's in Unidoc.
+ *
+ * Note that, this is a hack that should be removed in the future. See SPARK-20343
+ */
+object CoreDependencyOverrides {
+  lazy val settings = Seq(
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.7.7")
 }
 
 /**
