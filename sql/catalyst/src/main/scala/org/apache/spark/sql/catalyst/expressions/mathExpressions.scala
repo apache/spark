@@ -1058,7 +1058,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
         if (f.isNaN || f.isInfinite) {
           f
         } else {
-          BigDecimal(f.toDouble).setScale(_scale, mode).toFloat
+          BigDecimal(f.toString).setScale(_scale, mode).toFloat
         }
       case DoubleType =>
         val d = input1.asInstanceOf[Double]
@@ -1119,7 +1119,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
           if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})) {
             ${ev.value} = ${ce.value};
           } else {
-            ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
+            ${ev.value} = new java.math.BigDecimal(Float.toString(${ce.value})).
               setScale(${_scale}, java.math.BigDecimal.${modeStr}).floatValue();
           }"""
       case DoubleType => // if child eval to NaN or Infinity, just return it.

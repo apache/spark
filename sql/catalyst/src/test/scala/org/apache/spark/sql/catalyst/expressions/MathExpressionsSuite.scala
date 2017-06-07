@@ -541,9 +541,13 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val intPi: Int = 314159265
     val longPi: Long = 31415926535897932L
     val bdPi: BigDecimal = BigDecimal(31415927L, 7)
+    val floatPi: Float = 3.1415f
 
     val doubleResults: Seq[Double] = Seq(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.1, 3.14, 3.142,
       3.1416, 3.14159, 3.141593)
+
+    val floatResults: Seq[Float] = Seq(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 3.0f, 3.1f, 3.14f,
+      3.142f, 3.1415f, 3.1415f, 3.1415f)
 
     val shortResults: Seq[Short] = Seq[Short](0, 0, 30000, 31000, 31400, 31420) ++
       Seq.fill[Short](7)(31415)
@@ -563,10 +567,12 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Round(shortPi, scale), shortResults(i), EmptyRow)
       checkEvaluation(Round(intPi, scale), intResults(i), EmptyRow)
       checkEvaluation(Round(longPi, scale), longResults(i), EmptyRow)
+      checkEvaluation(Round(floatPi, scale), floatResults(i), EmptyRow)
       checkEvaluation(BRound(doublePi, scale), doubleResults(i), EmptyRow)
       checkEvaluation(BRound(shortPi, scale), shortResults(i), EmptyRow)
       checkEvaluation(BRound(intPi, scale), intResultsB(i), EmptyRow)
       checkEvaluation(BRound(longPi, scale), longResults(i), EmptyRow)
+      checkEvaluation(BRound(floatPi, scale), floatResults(i), EmptyRow)
     }
 
     val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3.0), BigDecimal(3.1), BigDecimal(3.14),
