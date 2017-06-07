@@ -838,7 +838,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   /**
    * In this test, we create a job with two consecutive shuffles, and simulate 2 failures for each
-   * shuffle fetch. In total In total, the job has had four failures overall but not four failures
+   * shuffle fetch. In total, the job has had four failures overall but not four failures
    * for a particular stage, and as such should not be aborted.
    */
   test("Failures in different stages should not trigger an overall abort") {
@@ -1041,7 +1041,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     runEvent(ResubmitFailedStages)
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(countSubmittedMapStageAttempts() === 2)
-
   }
 
   /**
@@ -1978,7 +1977,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // Resubmit the map stage; this should also just work
     submitMapStage(shuffleDep)
     assert(results.size === 1)
-    results.clear()
     assertDataStructuresEmpty()
   }
 
