@@ -40,7 +40,7 @@ function formatDuration(milliseconds) {
 function formatBytes(bytes, type) {
     if (type !== 'display') return bytes;
     if (bytes == 0) return '0.0 B';
-    var k = 1000;
+    var k = 1024;
     var dm = 1;
     var sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
     var i = Math.floor(Math.log(bytes) / Math.log(k));
