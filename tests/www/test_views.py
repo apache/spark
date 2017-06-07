@@ -15,9 +15,79 @@
 import unittest
 
 from airflow import configuration
-from airflow.models import Pool
+from airflow import models
 from airflow.settings import Session
 from airflow.www import app as application
+
+
+class TestKnownEventView(unittest.TestCase):
+
+    CREATE_ENDPOINT = '/admin/knownevent/new/?url=/admin/knownevent/'
+
+    @classmethod
+    def setUpClass(cls):
+        super(TestKnownEventView, cls).setUpClass()
+        session = Session()
+        session.query(models.KnownEvent).delete()
+        session.query(models.User).delete()
+        session.commit()
+        user = models.User(username='airflow')
+        session.add(user)
+        session.commit()
+        cls.user_id = user.id
+        session.close()
+
+    def setUp(self):
+        super(TestKnownEventView, self).setUp()
+        configuration.load_test_config()
+        app = application.create_app(testing=True)
+        app.config['WTF_CSRF_METHODS'] = []
+        self.app = app.test_client()
+        self.session = Session()
+        self.known_event = {
+            'label': 'event-label',
+            'event_type': '1',
+            'start_date': '2017-06-05 12:00:00',
+            'end_date': '2017-06-05 13:00:00',
+            'reported_by': self.user_id,
+            'description': '',
+        }
+
+    def tearDown(self):
+        self.session.query(models.KnownEvent).delete()
+        self.session.commit()
+        self.session.close()
+        super(TestKnownEventView, self).tearDown()
+
+    @classmethod
+    def tearDownClass(cls):
+        session = Session()
+        session.query(models.User).delete()
+        session.commit()
+        session.close()
+        super(TestKnownEventView, cls).tearDownClass()
+
+    def test_create_known_event(self):
+        response = self.app.post(
+            self.CREATE_ENDPOINT,
+            data=self.known_event,
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.session.query(models.KnownEvent).count(), 1)
+
+    def test_create_known_event_with_end_data_earlier_than_start_date(self):
+        self.known_event['end_date'] = '2017-06-05 11:00:00'
+        response = self.app.post(
+            self.CREATE_ENDPOINT,
+            data=self.known_event,
+            follow_redirects=True,
+        )
+        self.assertIn(
+            'Field must be greater than or equal to Start Date.',
+            response.data.decode('utf-8'),
+        )
+        self.assertEqual(self.session.query(models.KnownEvent).count(), 0)
 
 
 class TestPoolModelView(unittest.TestCase):
@@ -28,7 +98,7 @@ class TestPoolModelView(unittest.TestCase):
     def setUpClass(cls):
         super(TestPoolModelView, cls).setUpClass()
         session = Session()
-        session.query(Pool).delete()
+        session.query(models.Pool).delete()
         session.commit()
         session.close()
 
@@ -46,7 +116,7 @@ class TestPoolModelView(unittest.TestCase):
         }
 
     def tearDown(self):
-        self.session.query(Pool).delete()
+        self.session.query(models.Pool).delete()
         self.session.commit()
         self.session.close()
         super(TestPoolModelView, self).tearDown()
@@ -58,7 +128,7 @@ class TestPoolModelView(unittest.TestCase):
             follow_redirects=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.session.query(Pool).count(), 1)
+        self.assertEqual(self.session.query(models.Pool).count(), 1)
 
     def test_create_pool_with_same_name(self):
         # create test pool
@@ -74,7 +144,7 @@ class TestPoolModelView(unittest.TestCase):
             follow_redirects=True,
         )
         self.assertIn('Already exists.', response.data.decode('utf-8'))
-        self.assertEqual(self.session.query(Pool).count(), 1)
+        self.assertEqual(self.session.query(models.Pool).count(), 1)
 
     def test_create_pool_with_empty_name(self):
         self.pool['pool'] = ''
@@ -84,7 +154,7 @@ class TestPoolModelView(unittest.TestCase):
             follow_redirects=True,
         )
         self.assertIn('This field is required.', response.data.decode('utf-8'))
-        self.assertEqual(self.session.query(Pool).count(), 0)
+        self.assertEqual(self.session.query(models.Pool).count(), 0)
 
 
 if __name__ == '__main__':
