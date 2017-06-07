@@ -21,10 +21,12 @@ import java.util.{Collection => JCollection, Map => JMap}
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.generic.{GenericFixed, IndexedRecord}
-import org.apache.avro.mapred.AvroWrapper
+import org.apache.avro.generic.{GenericFixed, IndexedRecord, GenericRecordBuilder}
+import org.apache.avro.mapred.{AvroWrapper, AvroKey}
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type._
+
+
 
 import org.apache.spark.api.python.Converter
 import org.apache.spark.SparkException
@@ -144,5 +146,40 @@ class AvroWrapperToJavaConverter extends Converter[Any, Any] {
       case other => throw new SparkException(
         s"Unsupported top-level Avro data type ${other.getClass.getName}")
     }
+  }
+}
+
+/**
+ * Implementation of [[org.apache.spark.api.python.Converter]] that converts 
+ * a Java Map to an Avro Record wrapped in an AvroKey.
+ * Requires [[org.apache.avro.generic.GenericRecordBuilder]] initialized with 
+ * specific Avro schema.
+ * With current Spark API it's not possible to pass schema directly to Converter, 
+ * so we need a concrete Converter implementation for each given schema. 
+ */
+abstract class JavaToAvroKeyConverter extends Converter[Any, Any] {
+  
+  final override def convert(obj: Any): Any = {
+    if (obj == null) {
+      return null
+    }
+    val recordBuilder = getRecordBuilder()
+    obj.asInstanceOf[JMap[_, _]].map { 
+      case (key, value) => recordBuilder.set(key.toString, value)
+    }
+    new AvroKey(recordBuilder.build)
+  }
+  
+  def getRecordBuilder(): GenericRecordBuilder //Override in subclass
+}
+
+object UserToAvroKeyConverter {
+  //Schema stays in companion object to avoid task serialization problems
+  val schema = new Schema.Parser().parse(getClass.getResourceAsStream("/user.avsc"));  
+}
+
+class UserToAvroKeyConverter extends JavaToAvroKeyConverter {
+  override def getRecordBuilder(): GenericRecordBuilder = {
+    new GenericRecordBuilder(UserToAvroKeyConverter.schema)
   }
 }
