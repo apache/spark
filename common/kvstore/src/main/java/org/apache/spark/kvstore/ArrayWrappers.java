@@ -74,9 +74,9 @@ class ArrayWrappers {
     public int hashCode() {
       int code = 0;
       for (int i = 0; i < array.length; i++) {
-        code += array[i];
+        code = (code * 31) + array[i];
       }
-      return 31 * code;
+      return code;
     }
 
     @Override
@@ -113,9 +113,9 @@ class ArrayWrappers {
     public int hashCode() {
       int code = 0;
       for (int i = 0; i < array.length; i++) {
-        code += (int) array[i];
+        code = (code * 31) + (int) array[i];
       }
-      return 31 * code;
+      return code;
     }
 
     @Override
@@ -152,9 +152,9 @@ class ArrayWrappers {
     public int hashCode() {
       int code = 0;
       for (int i = 0; i < array.length; i++) {
-        code += array[i];
+        code = (code * 31) + array[i];
       }
-      return 31 * code;
+      return code;
     }
 
     @Override
@@ -191,9 +191,9 @@ class ArrayWrappers {
     public int hashCode() {
       int code = 0;
       for (int i = 0; i < array.length; i++) {
-        code += array[i].hashCode();
+        code = (code * 31) + array[i].hashCode();
       }
-      return 31 * code;
+      return code;
     }
 
     @Override
