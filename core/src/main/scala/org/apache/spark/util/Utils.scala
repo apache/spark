@@ -40,6 +40,7 @@ import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 import scala.util.matching.Regex
+import scala.math.pow
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
@@ -1127,17 +1128,18 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a quantity in bytes to a human-readable string such as "4.0 MB".
+   * Convert a quantity in bytes to a human-readable string such as "4.0 MiB".
+   * The result is in MebiBytes instead of Megabytes
    */
   def bytesToString(size: Long): String = bytesToString(BigInt(size))
 
   def bytesToString(size: BigInt): String = {
-    val EB = 1L << 60
-    val PB = 1L << 50
-    val TB = 1L << 40
-    val GB = 1L << 30
-    val MB = 1L << 20
-    val KB = 1L << 10
+    val EB = pow(1024, 6)
+    val PB = pow(1024, 5)
+    val TB = pow(1024, 4)
+    val GB = pow(1024, 3)
+    val MB = pow(1024, 2)
+    val KB = 1024
 
     if (size >= BigInt(1L << 11) * EB) {
       // The number is too large, show it in scientific notation.
@@ -1145,17 +1147,17 @@ private[spark] object Utils extends Logging {
     } else {
       val (value, unit) = {
         if (size >= 2 * EB) {
-          (BigDecimal(size) / EB, "EB")
+          (BigDecimal(size) / EB, "EiB")
         } else if (size >= 2 * PB) {
-          (BigDecimal(size) / PB, "PB")
+          (BigDecimal(size) / PB, "PiB")
         } else if (size >= 2 * TB) {
-          (BigDecimal(size) / TB, "TB")
+          (BigDecimal(size) / TB, "TiB")
         } else if (size >= 2 * GB) {
-          (BigDecimal(size) / GB, "GB")
+          (BigDecimal(size) / GB, "GiB")
         } else if (size >= 2 * MB) {
-          (BigDecimal(size) / MB, "MB")
+          (BigDecimal(size) / MB, "MiB")
         } else if (size >= 2 * KB) {
-          (BigDecimal(size) / KB, "KB")
+          (BigDecimal(size) / KB, "KiB")
         } else {
           (BigDecimal(size), "B")
         }
