@@ -137,13 +137,14 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
     val surrogates = $(strategy) match {
       case Imputer.mean =>
         val numInputCols = $(inputCols).length
+        val missing = $(missingValue)
         val (_, avgs) = dataset.select($(inputCols).map(col(_).cast("double")): _*).rdd
           .treeAggregate((Array.ofDim[Long](numInputCols), Array.ofDim[Double](numInputCols)))(
             seqOp = { case ((counts, avgs), row) =>
               counts.indices.foreach { i =>
                 if (!row.isNullAt(i)) {
                   val v = row.getDouble(i)
-                  if (!v.isNaN) {
+                  if (v != missing && !v.isNaN) {
                     val diff = v - avgs(i)
                     counts(i) += 1
                     avgs(i) += diff / counts(i)
