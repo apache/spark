@@ -230,22 +230,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
       batchInfo.totalDelay.map(batchInfo.batchTime.milliseconds -> _)
     })
 
-    // Use the max value of "schedulingDelay", "processingTime", and "totalDelay" to make the
-    // Y axis ranges same.
-    val _maxTime =
-      (for (m1 <- schedulingDelay.max; m2 <- processingTime.max; m3 <- totalDelay.max) yield
-        m1 max m2 max m3).getOrElse(0L)
-    // Should start at 0
-    val minTime = 0L
-    val (maxTime, normalizedUnit) = UIUtils.normalizeDuration(_maxTime)
-    val formattedUnit = UIUtils.shortTimeUnitString(normalizedUnit)
-
     // Use the max input rate for all InputDStreams' graphs to make the Y axis ranges same.
     // If it's not an integral number, just use its ceil integral number.
     val maxRecordRate = recordRateForAllStreams.max.map(_.ceil.toLong).getOrElse(0L)
     val minRecordRate = 0L
-
-    val batchInterval = UIUtils.convertToTimeUnit(listener.batchDuration, normalizedUnit)
 
     val jsCollector = new JsCollector
 
@@ -261,40 +249,16 @@ private[ui] class StreamingPage(parent: StreamingTab)
         "records/sec")
     graphUIDataForRecordRateOfAllStreams.generateDataJs(jsCollector)
 
-    val graphUIDataForSchedulingDelay =
-      new GraphUIData(
-        "scheduling-delay-timeline",
-        "scheduling-delay-histogram",
-        schedulingDelay.timelineData(normalizedUnit),
-        minBatchTime,
-        maxBatchTime,
-        minTime,
-        maxTime,
-        formattedUnit)
+    val graphUIDataForSchedulingDelay = generateGraphUIData("scheduling-delay-timeline",
+      "scheduling-delay-histogram", minBatchTime, maxBatchTime, schedulingDelay)
     graphUIDataForSchedulingDelay.generateDataJs(jsCollector)
 
-    val graphUIDataForProcessingTime =
-      new GraphUIData(
-        "processing-time-timeline",
-        "processing-time-histogram",
-        processingTime.timelineData(normalizedUnit),
-        minBatchTime,
-        maxBatchTime,
-        minTime,
-        maxTime,
-        formattedUnit, Some(batchInterval))
+    val graphUIDataForProcessingTime = generateGraphUIData("processing-time-timeline",
+      "processing-time-histogram", minBatchTime, maxBatchTime, processingTime, true)
     graphUIDataForProcessingTime.generateDataJs(jsCollector)
 
-    val graphUIDataForTotalDelay =
-      new GraphUIData(
-        "total-delay-timeline",
-        "total-delay-histogram",
-        totalDelay.timelineData(normalizedUnit),
-        minBatchTime,
-        maxBatchTime,
-        minTime,
-        maxTime,
-        formattedUnit)
+    val graphUIDataForTotalDelay = generateGraphUIData("total-delay-timeline",
+      "total-delay-histogram", minBatchTime, maxBatchTime, totalDelay)
     graphUIDataForTotalDelay.generateDataJs(jsCollector)
 
     // It's false before the user registers the first InputDStream
@@ -502,6 +466,35 @@ private[ui] class StreamingPage(parent: StreamingTab)
     }
 
     activeBatchesContent ++ completedBatchesContent
+  }
+
+  private def generateGraphUIData(
+      timelineDivId: String,
+      histogramDivId: String,
+      minX: Long,
+      maxX: Long,
+      statUIData: MillisecondsStatUIData,
+      hasBatchInterval: Boolean = false): GraphUIData = {
+    val minTime = 0L
+    val (maxTime, normalizedUnit) = UIUtils.normalizeDuration(statUIData.max.getOrElse(0L))
+    val formattedUnit = UIUtils.shortTimeUnitString(normalizedUnit)
+    val data = statUIData.timelineData(normalizedUnit)
+    val batchInterval = if (hasBatchInterval) {
+      Some(UIUtils.convertToTimeUnit(listener.batchDuration, normalizedUnit))
+    } else {
+      None
+    }
+
+    new GraphUIData(
+      timelineDivId,
+      histogramDivId,
+      data,
+      minX,
+      maxX,
+      minTime,
+      maxTime,
+      formattedUnit,
+      batchInterval)
   }
 }
 
