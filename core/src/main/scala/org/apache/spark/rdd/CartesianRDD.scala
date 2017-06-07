@@ -21,11 +21,12 @@ import java.io.{IOException, ObjectOutputStream}
 
 import scala.reflect.ClassTag
 
-import org.apache.spark._
+import org.apache.spark.{Dependency, Partition, Partitioner, ShuffleDependency, SparkContext,
+    SparkEnv, TaskContext}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 
-private[spark]
-class CartesianPartition(
+private[spark] class CartesianPartition(
     idx: Int,
     @transient private val rdd1: RDD[_],
     @transient private val rdd2: RDD[_],
@@ -53,6 +54,9 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
+  var rdd1WithPid = rdd1.mapPartitionsWithIndex((pid, iter) => iter.map(x => (pid, x)))
+  var rdd2WithPid = rdd2.mapPartitionsWithIndex((pid, iter) => iter.map(x => (pid, x)))
+
   val numPartitionsInRdd2 = rdd2.partitions.length
 
   override def getPartitions: Array[Partition] = {
@@ -70,24 +74,46 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     (rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)).distinct
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
-    val currSplit = split.asInstanceOf[CartesianPartition]
-    for (x <- rdd1.iterator(currSplit.s1, context);
-         y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
+  private def getParititionIterator[T: ClassTag](
+      dependency: ShuffleDependency[Int, T, T], partitionIndex: Int, context: TaskContext) = {
+    SparkEnv.get.shuffleManager
+      .getReader[Int, T](dependency.shuffleHandle, partitionIndex, partitionIndex + 1, context)
+      .read().map(x => x._2)
   }
 
-  override def getDependencies: Seq[Dependency[_]] = List(
-    new NarrowDependency(rdd1) {
-      def getParents(id: Int): Seq[Int] = List(id / numPartitionsInRdd2)
-    },
-    new NarrowDependency(rdd2) {
-      def getParents(id: Int): Seq[Int] = List(id % numPartitionsInRdd2)
+  override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
+    val currSplit = split.asInstanceOf[CartesianPartition]
+    for (x <- getParititionIterator[T](dependencies(0).asInstanceOf[ShuffleDependency[Int, T, T]],
+          currSplit.s1.index, context);
+         y <- getParititionIterator[U](dependencies(1).asInstanceOf[ShuffleDependency[Int, U, U]],
+           currSplit.s2.index, context))
+      yield (x, y)
+  }
+
+  private def getShufflePartitioner(numParts: Int): Partitioner = {
+    return new Partitioner {
+      require(numPartitions > 0)
+      override def getPartition(key: Any): Int = key.asInstanceOf[Int]
+      override def numPartitions: Int = numParts
     }
+  }
+
+  private var serializer: Serializer = SparkEnv.get.serializer
+
+  override def getDependencies: Seq[Dependency[_]] = List(
+    new ShuffleDependency[Int, T, T](
+      rdd1WithPid.asInstanceOf[RDD[_ <: Product2[Int, T]]],
+      getShufflePartitioner(rdd1WithPid.getNumPartitions), serializer),
+    new ShuffleDependency[Int, U, U](
+      rdd2WithPid.asInstanceOf[RDD[_ <: Product2[Int, U]]],
+      getShufflePartitioner(rdd2WithPid.getNumPartitions), serializer)
   )
 
   override def clearDependencies() {
     super.clearDependencies()
     rdd1 = null
     rdd2 = null
+    rdd1WithPid = null
+    rdd2WithPid = null
   }
 }

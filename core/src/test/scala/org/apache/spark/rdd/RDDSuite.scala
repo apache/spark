@@ -230,6 +230,23 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("cartesian") {
+    val seq1 = Seq(1, 2, 3, 4)
+    val seq2 = Seq('a', 'b', 'c', 'd', 'e', 'f')
+
+    val rdd1 = sc.makeRDD(seq1, 2)
+    val rdd2 = sc.makeRDD(seq2, 3)
+
+    val result = rdd1.cartesian(rdd2).collect().sortWith((x, y) => {
+      if (x._1 != y._1) x._1 < y._1
+      else x._2 < y._2
+    }).toList
+
+    val expectedResult = (for (i <- seq1; j <- seq2) yield (i, j)).toList
+
+    assert(result === expectedResult)
+  }
+
   test("basic caching") {
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
     assert(rdd.collect().toList === List(1, 2, 3, 4))
