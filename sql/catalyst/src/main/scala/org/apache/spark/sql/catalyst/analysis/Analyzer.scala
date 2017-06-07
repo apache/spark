@@ -582,9 +582,9 @@ class Analyzer(
     //     |- view2 (defaultDatabase = db2)
     //        |- view3 (defaultDatabase = db3)
     //   |- view4 (defaultDatabase = db4)
-    // In this case, the view `view1` is a nested view, it directly references `table2`, `view2`
+    // In this case, the view `view1` is a nested view, it directly references `table2`、`view2`
     // and `view4`, the view `view2` references `view3`. On resolving the table, we look up the
-    // relations `table2`, `view2`, `view4` using the default database `db1`, and look up the
+    // relations `table2`、`view2`、`view4` using the default database `db1`, and look up the
     // relation `view3` using the default database `db2`.
     //
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
