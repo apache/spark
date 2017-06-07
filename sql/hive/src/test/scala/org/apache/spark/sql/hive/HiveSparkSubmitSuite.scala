@@ -157,6 +157,7 @@ class HiveSparkSubmitSuite
     val jarDir = getTestResourcePath("regression-test-SPARK-8489")
     val testJar = s"$jarDir/test-$version.jar"
     val args = Seq(
+      "--master", "local",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",

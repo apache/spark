@@ -440,7 +440,6 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val mainJar = "dummy-jar-not-used.jar"
     val commandLineArgs = Array(
       "--deploy-mode", "cluster",
-      "--master", masterUrl,
       "--name", mainClass,
       "--class", mainClass,
       mainJar) ++ appArgs

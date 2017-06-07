@@ -186,7 +186,9 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
 
       withSparkSession(
         SparkSession.builder
-          .config(sparkConf.setMaster("local-cluster[2, 1, 1024]"))
+          // (trick) avoid SPARK-19482.
+          // remove the previous 'spark.master' before set new one for each test.
+          .config(sparkConf.remove("spark.master").setMaster("local-cluster[2, 1, 1024]"))
           .getOrCreate()) { spark =>
         implicit val sqlContext = spark.sqlContext
         val path = Utils.createDirectory(tempDir, Random.nextString(10)).toString

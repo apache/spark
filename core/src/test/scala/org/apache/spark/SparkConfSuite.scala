@@ -131,9 +131,8 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("SparkContext property overriding") {
-    val conf = new SparkConf(false).setMaster("local").setAppName("My app")
+    val conf = new SparkConf(false).setAppName("My app")
     sc = new SparkContext("local[2]", "My other app", conf)
-    assert(sc.master === "local[2]")
     assert(sc.appName === "My other app")
   }
 
@@ -320,6 +319,26 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.set(NETWORK_AUTH_ENABLED, true)
     conf.validateSettings()
+  }
+
+  test("set 'spark.master' with different value") {
+    val conf = new SparkConf()
+    conf.setMaster("local[4]")
+    try {
+      conf.setMaster("yarn-client")
+      assert(false, "previous: local[4], current: yarn-client")
+    } catch {
+      case e: IllegalArgumentException =>
+      // expected
+    }
+
+    try {
+      conf.set("spark.master", "yarn-cluster")
+      assert(false, "previous: local[4], current: yarn-cluster")
+    } catch {
+      case e: IllegalArgumentException =>
+      // expected
+    }
   }
 
 }
