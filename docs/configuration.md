@@ -1623,6 +1623,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.dynamicAllocation.initialExecutors</code></td>
+  <td><code>minExecutors<code></td>
+  <td>
+    Initial number of executors to use if dynamic allocation is enabled.
+  </td>
+</tr>
+<tr>
   <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
   <td>1s</td>
   <td>
