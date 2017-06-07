@@ -576,14 +576,6 @@ class PlanParserSuite extends PlanTest {
     )
 
     comparePlans(
-      parsePlan("SELECT /*+ HINT1(a, array(1, 2, 3)) */ * from t"),
-      UnresolvedHint("HINT1", Seq($"a",
-        UnresolvedFunction("array", Literal(1) :: Literal(2) :: Literal(3) :: Nil, false)),
-        table("t").select(star())
-      )
-    )
-
-    comparePlans(
       parsePlan("SELECT /*+ HINT1(a, 5, 'a', b) */ * from t"),
       UnresolvedHint("HINT1", Seq($"a", Literal(5), Literal("a"), $"b"),
         table("t").select(star())
