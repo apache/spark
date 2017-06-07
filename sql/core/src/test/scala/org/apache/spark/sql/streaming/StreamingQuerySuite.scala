@@ -623,7 +623,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = triggerDF
       override def stop(): Unit = {}
     }
-    StreamingExecutionRelation(source)
+    StreamingSourceRelation(source)
   }
 
   /** Returns the query progress at the end of the first trigger of streaming DF */

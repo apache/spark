@@ -155,7 +155,7 @@ class StreamExecution(
       "logicalPlan must be initialized in StreamExecutionThread " +
         s"but the current thread was ${Thread.currentThread}")
     var nextSourceId = 0L
-    val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
+    val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingSourceRelation]()
     val _logicalPlan = analyzedPlan.transform {
       case streamingRelation@StreamingRelation(dataSource, _, output) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
@@ -165,10 +165,10 @@ class StreamExecution(
           nextSourceId += 1
           // We still need to use the previous `output` instead of `source.schema` as attributes in
           // "df.logicalPlan" has already used attributes of the previous `output`.
-          StreamingExecutionRelation(source, output)
+          StreamingSourceRelation(source, output)
         })
     }
-    sources = _logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
+    sources = _logicalPlan.collect { case s: StreamingSourceRelation => s.source }
     uniqueSources = sources.distinct
     _logicalPlan
   }
@@ -621,16 +621,16 @@ class StreamExecution(
     var replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val withNewSources = logicalPlan transform {
-      case StreamingExecutionRelation(source, output) =>
+      case StreamingSourceRelation(source, output) =>
         newData.get(source).map { data =>
           val newPlan = data.logicalPlan
           assert(output.size == newPlan.output.size,
             s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
             s"${Utils.truncatedString(newPlan.output, ",")}")
           replacements ++= output.zip(newPlan.output)
-          newPlan
+          StreamingRelationWrapper(newPlan)
         }.getOrElse {
-          LocalRelation(output)
+          StreamingRelationWrapper(LocalRelation(output))
         }
     }
 

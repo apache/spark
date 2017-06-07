@@ -319,8 +319,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case s: StreamingRelation =>
         StreamingRelationExec(s.sourceName, s.output) :: Nil
-      case s: StreamingExecutionRelation =>
+      case s: StreamingSourceRelation =>
         StreamingRelationExec(s.toString, s.output) :: Nil
+      case StreamingRelationWrapper(child) =>
+        StreamingRelationWrapperExec(planLater(child)) :: Nil
       case _ => Nil
     }
   }

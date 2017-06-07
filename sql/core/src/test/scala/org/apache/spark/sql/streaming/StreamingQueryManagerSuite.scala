@@ -304,7 +304,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       if (withError) {
         logDebug(s"Terminating query ${queryToStop.name} with error")
         queryToStop.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
-          case StreamingExecutionRelation(source, _) =>
+          case StreamingSourceRelation(source, _) =>
             source.asInstanceOf[MemoryStream[Int]].addData(0)
         }
       } else {

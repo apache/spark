@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
-import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.datasources.DataSource
 
 object StreamingRelation {
@@ -35,7 +35,7 @@ object StreamingRelation {
  * Used to link a streaming [[DataSource]] into a
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]]. This is only used for creating
  * a streaming [[org.apache.spark.sql.DataFrame]] from [[org.apache.spark.sql.DataFrameReader]].
- * It should be used to create [[Source]] and converted to [[StreamingExecutionRelation]] when
+ * It should be used to create [[Source]] and converted to [[StreamingSourceRelation]] when
  * passing to [[StreamExecution]] to run a query.
  */
 case class StreamingRelation(dataSource: DataSource, sourceName: String, output: Seq[Attribute])
@@ -48,7 +48,7 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
  * Used to link a streaming [[Source]] of data into a
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  */
-case class StreamingExecutionRelation(source: Source, output: Seq[Attribute]) extends LeafNode {
+case class StreamingSourceRelation(source: Source, output: Seq[Attribute]) extends LeafNode {
   override def isStreaming: Boolean = true
   override def toString: String = source.toString
 }
@@ -64,8 +64,20 @@ case class StreamingRelationExec(sourceName: String, output: Seq[Attribute]) ext
   }
 }
 
-object StreamingExecutionRelation {
-  def apply(source: Source): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, source.schema.toAttributes)
+case class StreamingRelationWrapper(child: LogicalPlan) extends UnaryNode {
+  override def isStreaming: Boolean = true
+  override def output: Seq[Attribute] = child.output
+}
+
+case class StreamingRelationWrapperExec(child: SparkPlan)
+  extends UnaryExecNode {
+  override protected def doExecute(): RDD[InternalRow] = child.execute()
+
+  override def output: Seq[Attribute] = child.output
+}
+
+object StreamingSourceRelation {
+  def apply(source: Source): StreamingSourceRelation = {
+    StreamingSourceRelation(source, source.schema.toAttributes)
   }
 }

@@ -104,7 +104,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
         "Cannot add data when there is no query for finding the active kafka source")
 
       val sources = query.get.logicalPlan.collect {
-        case StreamingExecutionRelation(source, _) if source.isInstanceOf[KafkaSource] =>
+        case StreamingSourceRelation(source, _) if source.isInstanceOf[KafkaSource] =>
           source.asInstanceOf[KafkaSource]
       }
       if (sources.isEmpty) {
