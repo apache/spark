@@ -1754,6 +1754,10 @@ class SQLTests(ReusedPySparkTestCase):
         row = self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna({"a": True}).first()
         self.assertEqual(row.a, True)
 
+        # fillna with dictionary for boolean types
+        row = self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna({"a": True}).first()
+        self.assertEqual(row.a, True)
+
     def test_bitwise_operations(self):
         from pyspark.sql import functions
         row = Row(a=170, b=75)
