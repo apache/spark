@@ -153,6 +153,7 @@ private[spark] object JsonProtocol {
     ("Submission Time" -> jobStart.time) ~
     ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~  // Added in Spark 1.2.0
     ("Stage IDs" -> jobStart.stageIds) ~
+    ("User" -> jobStart.user) ~ // Added in Spark 2.1.0
     ("Properties" -> properties)
   }
 
@@ -582,6 +583,7 @@ private[spark] object JsonProtocol {
     val submissionTime =
       Utils.jsonOption(json \ "Submission Time").map(_.extract[Long]).getOrElse(-1L)
     val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
+    val user = Utils.jsonOption(json \ "User").map(_.extract[String]).getOrElse("Unknown")
     val properties = propertiesFromJson(json \ "Properties")
     // The "Stage Infos" field was added in Spark 1.2.0
     val stageInfos = Utils.jsonOption(json \ "Stage Infos")
@@ -590,7 +592,9 @@ private[spark] object JsonProtocol {
           new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown")
         }
       }
-    SparkListenerJobStart(jobId, submissionTime, stageInfos, properties)
+    val jobStart = SparkListenerJobStart(jobId, submissionTime, stageInfos, properties)
+    jobStart.user = user
+    jobStart
   }
 
   def jobEndFromJson(json: JValue): SparkListenerJobEnd = {

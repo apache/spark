@@ -85,7 +85,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
             <h4>Retry state</h4>
             {retryTable}
           </div>
-        </div>;
+        </div>
 
     UIUtils.basicSparkPage(content, s"Details for Job $driverId")
   }

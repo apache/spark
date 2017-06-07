@@ -589,9 +589,17 @@ class DAGScheduler(
     assert(partitions.size > 0)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
-    eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions.toArray, callSite, waiter,
-      SerializationUtils.clone(properties)))
+    val user = Utils.getCurrentUserName
+    eventProcessLoop.post(
+      JobSubmitted(
+        jobId,
+        rdd,
+        func2,
+        partitions.toArray,
+        callSite,
+        waiter,
+        user,
+        SerializationUtils.clone(properties)))
     waiter
   }
 
@@ -655,8 +663,17 @@ class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.partitions.length).toArray
     val jobId = nextJobId.getAndIncrement()
-    eventProcessLoop.post(JobSubmitted(
-      jobId, rdd, func2, partitions, callSite, listener, SerializationUtils.clone(properties)))
+    val user = Utils.getCurrentUserName
+    eventProcessLoop.post(
+      JobSubmitted(
+        jobId,
+        rdd,
+        func2,
+        partitions,
+        callSite,
+        listener,
+        user,
+        SerializationUtils.clone(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -690,8 +707,15 @@ class DAGScheduler(
     // tracker that might result if we told the user the stage had finished, but then they queries
     // the map output tracker and some node failures had caused the output statistics to be lost.
     val waiter = new JobWaiter(this, jobId, 1, (i: Int, r: MapOutputStatistics) => callback(r))
-    eventProcessLoop.post(MapStageSubmitted(
-      jobId, dependency, callSite, waiter, SerializationUtils.clone(properties)))
+    val user = Utils.getCurrentUserName
+    eventProcessLoop.post(
+      MapStageSubmitted(
+        jobId,
+        dependency,
+        callSite,
+        waiter,
+        user,
+        SerializationUtils.clone(properties)))
     waiter
   }
 
@@ -842,6 +866,7 @@ class DAGScheduler(
       partitions: Array[Int],
       callSite: CallSite,
       listener: JobListener,
+      user: String,
       properties: Properties) {
     var finalStage: ResultStage = null
     try {
@@ -869,8 +894,9 @@ class DAGScheduler(
     finalStage.setActiveJob(job)
     val stageIds = jobIdToStageIds(jobId).toArray
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
-    listenerBus.post(
-      SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
+    val jobStart = SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties)
+    jobStart.user = user
+    listenerBus.post(jobStart)
     submitStage(finalStage)
   }
 
@@ -878,6 +904,7 @@ class DAGScheduler(
       dependency: ShuffleDependency[_, _, _],
       callSite: CallSite,
       listener: JobListener,
+      user: String,
       properties: Properties) {
     // Submitting this map stage might still require the creation of some parent stages, so make
     // sure that happens.
@@ -907,8 +934,9 @@ class DAGScheduler(
     finalStage.addActiveJob(job)
     val stageIds = jobIdToStageIds(jobId).toArray
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
-    listenerBus.post(
-      SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
+    val jobStart = SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties)
+    jobStart.user = user
+    listenerBus.post(jobStart)
     submitStage(finalStage)
 
     // If the whole stage has already finished, tell the listener and remove it
@@ -1679,11 +1707,25 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   }
 
   private def doOnReceive(event: DAGSchedulerEvent): Unit = event match {
-    case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties) =>
-      dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties)
+    case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, user, properties) =>
+      dagScheduler.handleJobSubmitted(
+        jobId,
+        rdd,
+        func,
+        partitions,
+        callSite,
+        listener,
+        user,
+        properties)
 
-    case MapStageSubmitted(jobId, dependency, callSite, listener, properties) =>
-      dagScheduler.handleMapStageSubmitted(jobId, dependency, callSite, listener, properties)
+    case MapStageSubmitted(jobId, dependency, callSite, listener, user, properties) =>
+      dagScheduler.handleMapStageSubmitted(
+        jobId,
+        dependency,
+        callSite,
+        listener,
+        user,
+        properties)
 
     case StageCancelled(stageId, reason) =>
       dagScheduler.handleStageCancellation(stageId, reason)

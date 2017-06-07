@@ -61,6 +61,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
       SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
     }
+    jobStart.user = "testUser"
     val jobEnd = SparkListenerJobEnd(20, jobCompletionTime, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
       "JVM Information" -> Seq(("GC speed", "9999 objects/s"), ("Java home", "Land of coffee")),
@@ -332,6 +333,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldStartEvent = JsonProtocol.jobStartToJson(jobStart)
       .removeField({ _._1 == "Submission Time"})
     val expectedJobStart = SparkListenerJobStart(11, -1, stageInfos, properties)
+
     assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldStartEvent))
 
     val jobEnd = SparkListenerJobEnd(11, jobCompletionTime, JobSucceeded)
@@ -538,6 +540,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(e1.jobId === e2.jobId)
         assert(e1.properties === e2.properties)
         assert(e1.stageIds === e2.stageIds)
+        assert(e1.user === e2.user)
       case (e1: SparkListenerJobEnd, e2: SparkListenerJobEnd) =>
         assert(e1.jobId === e2.jobId)
         assertEquals(e1.jobResult, e2.jobResult)
@@ -1649,6 +1652,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    3,
       |    4
       |  ],
+      |  "User": "testUser",
       |  "Properties": {
       |    "France": "Paris",
       |    "Germany": "Berlin",

@@ -397,14 +397,14 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         val firstRow = find(cssSelector("tbody tr")).get.underlying
         val firstRowColumns = firstRow.findElements(By.tagName("td"))
         firstRowColumns.get(0).getText should be ("1")
-        firstRowColumns.get(4).getText should be ("1/1 (2 skipped)")
-        firstRowColumns.get(5).getText should be ("8/8 (16 skipped)")
+        firstRowColumns.get(5).getText should be ("1/1 (2 skipped)")
+        firstRowColumns.get(6).getText should be ("8/8 (16 skipped)")
         // The second row is the first run of the job, where nothing was skipped:
         val secondRow = findAll(cssSelector("tbody tr")).toSeq(1).underlying
         val secondRowColumns = secondRow.findElements(By.tagName("td"))
         secondRowColumns.get(0).getText should be ("0")
-        secondRowColumns.get(4).getText should be ("3/3")
-        secondRowColumns.get(5).getText should be ("24/24")
+        secondRowColumns.get(5).getText should be ("3/3")
+        secondRowColumns.get(6).getText should be ("24/24")
       }
     }
   }

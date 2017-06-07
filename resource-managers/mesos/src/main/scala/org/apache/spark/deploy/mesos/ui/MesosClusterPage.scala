@@ -60,7 +60,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
           <h4>Supervise drivers waiting for retry:</h4>
           {retryTable}
         </div>
-      </div>;
+      </div>
     UIUtils.basicSparkPage(content, "Spark Drivers for Mesos cluster")
   }
 

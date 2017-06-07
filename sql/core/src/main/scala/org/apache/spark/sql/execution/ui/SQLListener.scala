@@ -36,6 +36,7 @@ import org.apache.spark.util.AccumulatorContext
 @DeveloperApi
 case class SparkListenerSQLExecutionStart(
     executionId: Long,
+    user: String,
     description: String,
     details: String,
     physicalPlanDescription: String,
@@ -267,7 +268,7 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-    case SparkListenerSQLExecutionStart(executionId, description, details,
+    case SparkListenerSQLExecutionStart(executionId, user, description, details,
       physicalPlanDescription, sparkPlanInfo, time) =>
       val physicalPlanGraph = SparkPlanGraph(sparkPlanInfo)
       val sqlPlanMetrics = physicalPlanGraph.allNodes.flatMap { node =>
@@ -275,6 +276,7 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
       }
       val executionUIData = new SQLExecutionUIData(
         executionId,
+        user,
         description,
         details,
         physicalPlanDescription,
@@ -423,6 +425,7 @@ class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
  */
 private[ui] class SQLExecutionUIData(
     val executionId: Long,
+    val user: String,
     val description: String,
     val details: String,
     val physicalPlanDescription: String,

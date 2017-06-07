@@ -41,6 +41,7 @@ private[scheduler] case class JobSubmitted(
     partitions: Array[Int],
     callSite: CallSite,
     listener: JobListener,
+    user: String,
     properties: Properties = null)
   extends DAGSchedulerEvent
 
@@ -50,6 +51,7 @@ private[scheduler] case class MapStageSubmitted(
   dependency: ShuffleDependency[_, _, _],
   callSite: CallSite,
   listener: JobListener,
+  user: String,
   properties: Properties = null)
   extends DAGSchedulerEvent
 

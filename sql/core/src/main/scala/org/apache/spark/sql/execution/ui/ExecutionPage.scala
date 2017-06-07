@@ -44,6 +44,9 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         <div>
           <ul class="unstyled">
             <li>
+              <strong>User: </strong>{executionUIData.user}
+            </li>
+            <li>
               <strong>Submitted Time: </strong>{UIUtils.formatDate(executionUIData.submissionTime)}
             </li>
             <li>

@@ -70,7 +70,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   private def generateSQLStatsTable(): Seq[Node] = {
     val numStatement = listener.getExecutionList.size
     val table = if (numStatement > 0) {
-      val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
+      val headerRow = Seq("JobID", "GroupID", "User", "Start Time", "Finish Time", "Duration",
         "Statement", "State", "Detail")
       val dataRows = listener.getExecutionList
 
@@ -82,11 +82,9 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         }
         val detail = if (info.state == ExecutionState.FAILED) info.detail else info.executePlan
         <tr>
-          <td>{info.userName}</td>
-          <td>
-            {jobLink}
-          </td>
+          <td>{jobLink}</td>
           <td>{info.groupId}</td>
+          <td>{info.userName}</td>
           <td>{formatDate(info.startTimestamp)}</td>
           <td>{if (info.finishTimestamp > 0) formatDate(info.finishTimestamp)}</td>
           <td>{formatDurationOption(Some(info.totalTime))}</td>
@@ -143,15 +141,15 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     val numBatches = sessionList.size
     val table = if (numBatches > 0) {
       val dataRows = sessionList
-      val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
+      val headerRow = Seq("IP", "Session ID", "User", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       def generateDataRow(session: SessionInfo): Seq[Node] = {
         val sessionLink = "%s/%s/session?id=%s"
           .format(UIUtils.prependBaseUri(parent.basePath), parent.prefix, session.sessionId)
         <tr>
-          <td> {session.userName} </td>
           <td> {session.ip} </td>
           <td> <a href={sessionLink}> {session.sessionId} </a> </td>
+          <td> {session.userName} </td>
           <td> {formatDate(session.startTimestamp)} </td>
           <td> {if (session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
           <td> {formatDurationOption(Some(session.totalTime))} </td>

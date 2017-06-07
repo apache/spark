@@ -315,10 +315,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         <div>
           <ul class="unstyled">
             <li>
-              <strong>User:</strong>
-              {parent.getSparkUser}
-            </li>
-            <li>
               <strong>Total Uptime:</strong>
               {
                 if (endTime < 0 && parent.sc.isDefined) {
@@ -467,6 +463,7 @@ private[ui] class JobDataSource(
     val ordering: Ordering[JobTableRowData] = sortColumn match {
       case "Job Id" | "Job Id (Job Group)" => Ordering.by(_.jobData.jobId)
       case "Description" => Ordering.by(x => (x.lastStageDescription, x.lastStageName))
+      case "User" => Ordering.by(_.jobData.user)
       case "Submitted" => Ordering.by(_.submissionTime)
       case "Duration" => Ordering.by(_.duration)
       case "Stages: Succeeded/Total" | "Tasks (for all stages): Succeeded/Total" =>
@@ -541,8 +538,8 @@ private[ui] class JobPagedTable(
     val jobHeadersAndCssClasses: Seq[(String, String, Boolean)] =
       Seq(
         (jobIdTitle, "", true),
-        ("Description", "", true), ("Submitted", "", true), ("Duration", "", true),
-        ("Stages: Succeeded/Total", "", false),
+        ("Description", "", true), ("User", "", true), ("Submitted", "", true),
+        ("Duration", "", true), ("Stages: Succeeded/Total", "", false),
         ("Tasks (for all stages): Succeeded/Total", "", false)
       )
 
@@ -620,6 +617,9 @@ private[ui] class JobPagedTable(
       <td>
         {jobTableRow.jobDescription} {killLink}
         <a href={jobTableRow.detailUrl} class="name-link">{jobTableRow.lastStageName}</a>
+      </td>
+      <td>
+        {jobTableRow.jobData.user}
       </td>
       <td>
         {jobTableRow.formattedSubmissionTime}

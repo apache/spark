@@ -24,6 +24,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd,
   SparkListenerSQLExecutionStart}
+import org.apache.spark.util.Utils
 
 object SQLExecution {
 
@@ -70,10 +71,16 @@ object SQLExecution {
         // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
         // streaming queries would give us call site like "run at <unknown>:0"
         val callSite = sparkSession.sparkContext.getCallSite()
-
-        sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
-          executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
-          SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
+        val user = Utils.getCurrentUserName()
+        sparkSession.sparkContext.listenerBus.post(
+          SparkListenerSQLExecutionStart(
+            executionId,
+            user,
+            callSite.shortForm,
+            callSite.longForm,
+            queryExecution.toString,
+            SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
+            System.currentTimeMillis()))
         try {
           body
         } finally {
