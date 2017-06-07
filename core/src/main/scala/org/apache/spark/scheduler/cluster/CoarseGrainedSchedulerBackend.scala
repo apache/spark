@@ -456,6 +456,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   def sufficientResourcesRegistered(): Boolean = true
 
+  def allResourcesRegistered(): Boolean = true
+
   override def isReady(): Boolean = {
     if (sufficientResourcesRegistered) {
       logInfo("SchedulerBackend is ready for scheduling beginning after " +

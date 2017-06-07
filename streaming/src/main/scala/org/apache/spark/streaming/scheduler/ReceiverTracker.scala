@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
@@ -422,16 +423,36 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /**
-   * Run the dummy Spark job to ensure that all slaves have registered. This avoids all the
-   * receivers to be scheduled on the same node.
+   * Wait for executors register ready. This avoids multiple receivers to be scheduled
+   * on the same node. Here, we check whether all resource has been registered. If not,
+   * and the number of receiver is larger than the number of registered executors, we
+   * will give once more chance to wait for remaining executors to register for
+   * "spark.scheduler.maxRegisteredResourcesWaitingTime" times.
    *
-   * TODO Should poll the executor number and wait for executors according to
-   * "spark.scheduler.minRegisteredResourcesRatio" and
-   * "spark.scheduler.maxRegisteredResourcesWaitingTime" rather than running a dummy job.
+   * This only occurs when set too small "spark.scheduler.minRegisteredResourcesRatio".
    */
-  private def runDummySparkJob(): Unit = {
+  private def checkResourceReady(): Unit = {
+    val pollTime = 100
+    val checkingStarted = System.currentTimeMillis()
+    val onceMoreWaitingTimeMs =
+      ssc.sparkContext.conf.getTimeAsMs("spark.scheduler.maxRegisteredResourcesWaitingTime", "30s")
+
+    def hasTimedOut: Boolean = {
+      val timedOut = (System.currentTimeMillis() - checkingStarted) > onceMoreWaitingTimeMs
+      if (timedOut) {
+        logWarning(s"Timed out while checking registered resource ready (timeout = " +
+          s"$onceMoreWaitingTimeMs)")
+      }
+      timedOut
+    }
+
     if (!ssc.sparkContext.isLocal) {
-      ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
+      assert(ssc.sparkContext.schedulerBackend.isInstanceOf[CoarseGrainedSchedulerBackend])
+      while (!hasTimedOut && numReceivers() > getExecutors.size
+        && !ssc.sparkContext.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+          .allResourcesRegistered()) {
+        Thread.sleep(pollTime)
+      }
     }
     assert(getExecutors.nonEmpty)
   }
@@ -447,7 +468,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       rcvr
     }
 
-    runDummySparkJob()
+    checkResourceReady()
 
     logInfo("Starting " + receivers.length + " receivers")
     endpoint.send(StartAllReceivers(receivers))
