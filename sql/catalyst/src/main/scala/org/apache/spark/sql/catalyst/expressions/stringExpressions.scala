@@ -1199,6 +1199,49 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 }
 
 /**
+ * Returns the rightmost n characters from the string.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str, len) - Returns the rightmost `len`(`len` can be string type) characters from the string `str`,if `len` is less or equal than 0 the result is an empty string.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 3);
+       SQL
+  """)
+// scalastyle:on line.size.limit
+case class Right(str: Expression, len: Expression, child: Expression) extends RuntimeReplaceable {
+  def this(str: Expression, len: Expression) = {
+    this(str, len, If(IsNull(str), Literal(null, StringType), If(LessThanOrEqual(len, Literal(0)),
+      Literal(UTF8String.EMPTY_UTF8, StringType), new Substring(str, UnaryMinus(len)))))
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(str, len)
+  override def sql: String = s"$prettyName(${str.sql}, ${len.sql})"
+}
+
+/**
+ * Returns the leftmost n characters from the string.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str, len) - Returns the leftmost `len`(`len` can be string type) characters from the string `str`,if `len` is less or equal than 0 the result is an empty string.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL', 3);
+       Spa
+  """)
+// scalastyle:on line.size.limit
+case class Left(str: Expression, len: Expression, child: Expression) extends RuntimeReplaceable {
+  def this(str: Expression, len: Expression) = {
+    this(str, len, Substring(str, Literal(1), len))
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(str, len)
+  override def sql: String = s"$prettyName(${str.sql}, ${len.sql})"
+}
+
+/**
  * A function that returns the char length of the given string expression or
  * number of bytes of the given binary expression.
  */
