@@ -1132,30 +1132,30 @@ private[spark] object Utils extends Logging {
   def bytesToString(size: Long): String = bytesToString(BigInt(size))
 
   def bytesToString(size: BigInt): String = {
-    val EB = 1L << 60
-    val PB = 1L << 50
-    val TB = 1L << 40
-    val GB = 1L << 30
-    val MB = 1L << 20
-    val KB = 1L << 10
+    val EiB = 1L << 60
+    val PiB = 1L << 50
+    val TiB = 1L << 40
+    val GiB = 1L << 30
+    val MiB = 1L << 20
+    val KiB = 1L << 10
 
-    if (size >= BigInt(1L << 11) * EB) {
+    if (size >= BigInt(1L << 11) * EiB) {
       // The number is too large, show it in scientific notation.
       BigDecimal(size, new MathContext(3, RoundingMode.HALF_UP)).toString() + " B"
     } else {
       val (value, unit) = {
-        if (size >= 2 * EB) {
-          (BigDecimal(size) / EB, "EiB")
-        } else if (size >= 2 * PB) {
-          (BigDecimal(size) / PB, "PiB")
-        } else if (size >= 2 * TB) {
-          (BigDecimal(size) / TB, "TiB")
-        } else if (size >= 2 * GB) {
-          (BigDecimal(size) / GB, "GiB")
-        } else if (size >= 2 * MB) {
-          (BigDecimal(size) / MB, "MiB")
-        } else if (size >= 2 * KB) {
-          (BigDecimal(size) / KB, "KiB")
+        if (size >= 2 * EiB) {
+          (BigDecimal(size) / EiB, "EiB")
+        } else if (size >= 2 * PiB) {
+          (BigDecimal(size) / PiB, "PiB")
+        } else if (size >= 2 * TiB) {
+          (BigDecimal(size) / TiB, "TiB")
+        } else if (size >= 2 * GiB) {
+          (BigDecimal(size) / GiB, "GiB")
+        } else if (size >= 2 * MiB) {
+          (BigDecimal(size) / MiB, "MiB")
+        } else if (size >= 2 * KiB) {
+          (BigDecimal(size) / KiB, "KiB")
         } else {
           (BigDecimal(size), "B")
         }
