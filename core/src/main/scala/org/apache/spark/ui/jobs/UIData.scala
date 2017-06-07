@@ -101,9 +101,9 @@ private[spark] object UIData {
     var schedulingPool: String = ""
     var description: Option[String] = None
 
-    var accumulables = new HashMap[Long, AccumulableInfo]
+    val accumulables = new HashMap[Long, AccumulableInfo]
     var taskData = new LinkedHashMap[Long, TaskUIData]
-    var executorSummary = new HashMap[String, ExecutorSummary]
+    val executorSummary = new HashMap[String, ExecutorSummary]
 
     def hasInput: Boolean = inputBytes > 0
     def hasOutput: Boolean = outputBytes > 0

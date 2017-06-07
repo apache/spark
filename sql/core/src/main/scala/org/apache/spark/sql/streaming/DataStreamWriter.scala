@@ -379,7 +379,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var trigger: Trigger = Trigger.ProcessingTime(0L)
 
-  private var extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private val extraOptions = new scala.collection.mutable.HashMap[String, String]
 
   private var foreachWriter: ForeachWriter[T] = null
 

@@ -76,8 +76,8 @@ object LocalKMeans {
     showWarning()
 
     val data = generateData
-    var points = new HashSet[Vector[Double]]
-    var kPoints = new HashMap[Int, Vector[Double]]
+    val points = new HashSet[Vector[Double]]
+    val kPoints = new HashMap[Int, Vector[Double]]
     var tempDist = 1.0
 
     while (points.size < K) {
