@@ -133,20 +133,38 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   override def fit(dataset: Dataset[_]): ImputerModel = {
     transformSchema(dataset.schema, logging = true)
     val spark = dataset.sparkSession
-    import spark.implicits._
-    val surrogates = $(inputCols).map { inputCol =>
-      val ic = col(inputCol)
-      val filtered = dataset.select(ic.cast(DoubleType))
-        .filter(ic.isNotNull && ic =!= $(missingValue) && !ic.isNaN)
-      if(filtered.take(1).length == 0) {
-        throw new SparkException(s"surrogate cannot be computed. " +
-          s"All the values in $inputCol are Null, Nan or missingValue(${$(missingValue)})")
-      }
-      val surrogate = $(strategy) match {
-        case Imputer.mean => filtered.select(avg(inputCol)).as[Double].first()
-        case Imputer.median => filtered.stat.approxQuantile(inputCol, Array(0.5), 0.001).head
-      }
-      surrogate
+
+    val surrogates = $(strategy) match {
+      case Imputer.mean =>
+        val numInputCols = $(inputCols).length
+        val (_, avgs) = dataset.select($(inputCols).map(col(_).cast("double")): _*).rdd
+          .treeAggregate((Array.ofDim[Long](numInputCols), Array.ofDim[Double](numInputCols)))(
+            seqOp = { case ((counts, avgs), row) =>
+              counts.indices.foreach { i =>
+                if (!row.isNullAt(i)) {
+                  val v = row.getDouble(i)
+                  if (!v.isNaN) {
+                    val diff = v - avgs(i)
+                    counts(i) += 1
+                    avgs(i) += diff / counts(i)
+                  }
+                }
+              }
+              (counts, avgs)
+            }, combOp = { case ((counts1, avgs1), (counts2, avgs2)) =>
+              counts1.indices.foreach { i =>
+                if (counts2(i) > 0) {
+                  val diff = avgs2(i) - avgs1(i)
+                  counts1(i) += counts2(i)
+                  avgs1(i) += diff * counts2(i) / counts1(i)
+                }
+              }
+              (counts1, avgs1)
+            })
+        avgs
+
+      case Imputer.median =>
+        dataset.stat.approxQuantile($(inputCols), Array(0.5), 0.001).map(_.head)
     }
 
     val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(surrogates)))
