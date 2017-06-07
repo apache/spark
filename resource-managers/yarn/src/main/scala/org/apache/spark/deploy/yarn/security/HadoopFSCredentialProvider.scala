@@ -22,6 +22,7 @@ import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.ipc.{RemoteException, StandbyException}
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
@@ -48,9 +49,16 @@ private[security] class HadoopFSCredentialProvider
     val tmpCreds = new Credentials()
     val tokenRenewer = getTokenRenewer(hadoopConf)
     hadoopFSsToAccess(hadoopConf, sparkConf).foreach { dst =>
-      val dstFs = dst.getFileSystem(hadoopConf)
-      logInfo("getting token for: " + dst)
-      dstFs.addDelegationTokens(tokenRenewer, tmpCreds)
+      try {
+        val dstFs = dst.getFileSystem(hadoopConf)
+        logInfo("getting token for: " + dst)
+        dstFs.addDelegationTokens(tokenRenewer, tmpCreds)
+      } catch {
+        case e: StandbyException =>
+          logWarning(s"Can't get token from ${dst} for it is in state standby", e)
+        case e: RemoteException =>
+          logWarning(s"Can't get token from ${dst}", e)
+      }
     }
 
     // Get the token renewal interval if it is not set. It will only be called once.
@@ -81,8 +89,15 @@ private[security] class HadoopFSCredentialProvider
     sparkConf.get(PRINCIPAL).flatMap { renewer =>
       val creds = new Credentials()
       hadoopFSsToAccess(hadoopConf, sparkConf).foreach { dst =>
-        val dstFs = dst.getFileSystem(hadoopConf)
-        dstFs.addDelegationTokens(renewer, creds)
+        try {
+          val dstFs = dst.getFileSystem(hadoopConf)
+          dstFs.addDelegationTokens(renewer, creds)
+        } catch {
+          case e: StandbyException =>
+            logWarning(s"Can't get token from ${dst} for it is in state standby", e)
+          case e: RemoteException =>
+            logWarning(s"Can't get token from ${dst}", e)
+        }
       }
 
       val renewIntervals = creds.getAllTokens.asScala.filter {
