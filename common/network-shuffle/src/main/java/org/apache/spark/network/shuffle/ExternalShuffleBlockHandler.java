@@ -44,7 +44,6 @@ import org.apache.spark.network.shuffle.protocol.*;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
 
-
 /**
  * RPC Handler for a server which can serve shuffle blocks from outside of an Executor process.
  *
@@ -91,26 +90,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       try {
         OpenBlocks msg = (OpenBlocks) msgObj;
         checkAuth(client, msg.appId);
-
-        Iterator<ManagedBuffer> iter = new Iterator<ManagedBuffer>() {
-          private int index = 0;
-
-          @Override
-          public boolean hasNext() {
-            return index < msg.blockIds.length;
-          }
-
-          @Override
-          public ManagedBuffer next() {
-            final ManagedBuffer block = blockManager.getBlockData(msg.appId, msg.execId,
-              msg.blockIds[index]);
-            index++;
-            metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
-            return block;
-          }
-        };
-
-        long streamId = streamManager.registerStream(client.getClientId(), iter);
+        long streamId = streamManager.registerStream(client.getClientId(),
+          new ManagedBufferIterator(msg.appId, msg.execId, msg.blockIds));
         if (logger.isTraceEnabled()) {
           logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
                        streamId,
@@ -206,6 +187,49 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     @Override
     public Map<String, Metric> getMetrics() {
       return allMetrics;
+    }
+  }
+
+  private class ManagedBufferIterator implements Iterator<ManagedBuffer> {
+
+    private int index = 0;
+    private String appId;
+    private String execId;
+    private String shuffleId;
+    // mapId and reduceId are stored as bytes to save memory.
+    private byte[][] mapIdAndReduceIds;
+
+    ManagedBufferIterator(String appId, String execId, String[] blockIds) {
+      this.appId = appId;
+      this.execId = execId;
+      String blockId = blockIds[0];
+      String[] blockIdParts = blockId.split("_");
+      if (blockIdParts.length < 4) {
+        throw new IllegalArgumentException("Unexpected block id format: " + blockId);
+      } else if (!blockIdParts[0].equals("shuffle")) {
+        throw new IllegalArgumentException("Expected shuffle block id, got: " + blockId);
+      }
+      this.shuffleId = blockIdParts[1];
+      mapIdAndReduceIds = new byte[blockIds.length][];
+      if (blockIds.length > 0) {
+        for (int i = 0; i< blockIds.length; i++) {
+          mapIdAndReduceIds[i] = (blockIdParts[2] + "_" + blockIdParts[3]).getBytes();
+        }
+      }
+    }
+
+    @Override
+    public boolean hasNext() {
+      return index < mapIdAndReduceIds.length;
+    }
+
+    @Override
+    public ManagedBuffer next() {
+      String blockId = "shuffle_" + shuffleId + "_" + new String(mapIdAndReduceIds[index]);
+      final ManagedBuffer block = blockManager.getBlockData(appId, execId, blockId);
+      index++;
+      metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
+      return block;
     }
   }
 
