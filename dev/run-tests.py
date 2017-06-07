@@ -365,6 +365,8 @@ def build_spark_assembly_sbt(hadoop_version):
     print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
+    # Make sure that Java and Scala API documentation can be generated
+    build_spark_unidoc_sbt(hadoop_version)
 
     # Note that we skip Unidoc build only if Hadoop 2.6 is explicitly set in this SBT build.
     # Due to a different dependency resolution in SBT & Unidoc by an unknown reason, the
