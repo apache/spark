@@ -44,6 +44,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private val ssc = jobScheduler.ssc
   private val conf = ssc.conf
   private val graph = ssc.graph
+  private[streaming] var stopTime = -1L
 
   val clock = {
     val clockClass = ssc.sc.conf.get(
@@ -134,7 +135,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       logInfo("Waited for all received blocks to be consumed for job generation")
 
       // Stop generating jobs
-      val stopTime = timer.stop(interruptTimer = false)
+      stopTime = timer.stop(interruptTimer = false)
       graph.stop()
       logInfo("Stopped generation timer")
 
@@ -145,6 +146,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       logInfo("Waiting for jobs to be processed and checkpoints to be written")
       while (!hasTimedOut && !haveAllBatchesBeenProcessed) {
         Thread.sleep(pollTime)
+      }
+      if (shouldCheckpoint
+        && !(lastProcessedBatch - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
+        ssc.graph.updateCheckpointData(lastProcessedBatch)
+        checkpointWriter.write(new Checkpoint(ssc, lastProcessedBatch), false)
       }
       logInfo("Waited for jobs to be processed and checkpoints to be written")
     } else {

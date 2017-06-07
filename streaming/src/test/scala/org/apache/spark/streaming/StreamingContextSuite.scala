@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.fs.Path
 import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts
@@ -33,6 +34,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
@@ -836,6 +838,29 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     // SparkContext. Note: the stop codes in `after` will just do nothing if `ssc.stop` in this test
     // is running.
     assert(latch.await(60, TimeUnit.SECONDS))
+  }
+
+  test("SPARK-19343 Do once optimistic checkpoint before stop") {
+    val testDirectory = Utils.createTempDir().getAbsolutePath()
+    val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
+    ssc = new StreamingContext(conf.clone.set("someKey", "someValue"), batchDuration)
+    ssc.checkpoint(checkpointDirectory)
+    val stream = ssc.textFileStream(testDirectory).checkpoint(batchDuration * 11)
+    stream.foreachRDD { rdd => rdd.count() }
+    ssc.start()
+    try {
+      Thread.sleep(batchDuration.milliseconds * 13)
+      ssc.stop(true, true)
+      val path = new Path(ssc.sparkContext.checkpointDir.get)
+      val fs = path.getFileSystem(SparkHadoopUtil.get.conf)
+      val statuses = fs.listStatus(path)
+      assert(statuses.count(_.getPath.toString.contains("rdd-")) == 2)
+    } catch {
+      case e: Exception =>
+        e.printStackTrace()
+        ssc.stop()
+        assert(false)
+    }
   }
 
   def addInputStream(s: StreamingContext): DStream[Int] = {
