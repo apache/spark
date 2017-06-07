@@ -1145,17 +1145,17 @@ private[spark] object Utils extends Logging {
     } else {
       val (value, unit) = {
         if (size >= 2 * EB) {
-          (BigDecimal(size) / EB, "EB")
+          (BigDecimal(size) / EB, "EiB")
         } else if (size >= 2 * PB) {
-          (BigDecimal(size) / PB, "PB")
+          (BigDecimal(size) / PB, "PiB")
         } else if (size >= 2 * TB) {
-          (BigDecimal(size) / TB, "TB")
+          (BigDecimal(size) / TB, "TiB")
         } else if (size >= 2 * GB) {
-          (BigDecimal(size) / GB, "GB")
+          (BigDecimal(size) / GB, "GiB")
         } else if (size >= 2 * MB) {
-          (BigDecimal(size) / MB, "MB")
+          (BigDecimal(size) / MB, "MiB")
         } else if (size >= 2 * KB) {
-          (BigDecimal(size) / KB, "KB")
+          (BigDecimal(size) / KB, "KiB")
         } else {
           (BigDecimal(size), "B")
         }
