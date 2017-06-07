@@ -1545,6 +1545,15 @@ class DatetimeConverter(object):
         t.setNanos(obj.microsecond * 1000)
         return t
 
+class DecimalConverter(object):
+    def can_convert(self, obj):
+        return isinstance(obj, decimal.Decimal)
+
+    def convert(self, obj, gateway_client):
+        Decimal = JavaClass("org.apache.spark.sql.types.Decimal", gateway_client)
+        return Decimal(obj.to_eng_string())
+
+
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())

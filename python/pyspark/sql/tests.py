@@ -2359,6 +2359,17 @@ class UDFInitializationTests(unittest.TestCase):
             "SparkSession shouldn't be initialized when UserDefinedFunction is created."
         )
 
+    def test_dataframe_group_with_decimal(self):
+        from decimal import Decimal
+        data = [('a', Decimal('1.1')), ('b', Decimal('2.3')), ('a', Decimal('3.4'))]
+        rdd = self.sc.parallelize(data)
+        df = self.sqlCtx.createDataFrame(rdd, ['key', 'value'])
+        df_local = df.map(lambda x: x.value).collect()
+        self.assertEquals(df_local, [Decimal('1.1'), Decimal('2.3'), Decimal('3.4')])
+        df_grouped = df.groupBy("key").sum("value").map(lambda x: x[1]).collect()
+        expected = [Decimal('4.5'), Decimal('2.3')]
+        self.assertEquals(df_grouped, expected)
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
