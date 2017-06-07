@@ -22,22 +22,28 @@
 #'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
 #' @export
+#' @include mllib_wrapper.R
 #' @note AFTSurvivalRegressionModel since 2.0.0
-setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
+setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"),
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents a generalized linear model
 #'
 #' @param jobj a Java object reference to the backing Scala GeneralizedLinearRegressionWrapper
 #' @export
+#' @include mllib_wrapper.R
 #' @note GeneralizedLinearRegressionModel since 2.0.0
-setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
+setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"),
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' S4 class that represents an IsotonicRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala IsotonicRegressionModel
 #' @export
+#' @include mllib_wrapper.R
 #' @note IsotonicRegressionModel since 2.1.0
-setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
+setClass("IsotonicRegressionModel", representation(jobj = "jobj"),
+         contains = c("JavaModel", "JavaMLWritable"))
 
 #' Generalized Linear Models
 #'
@@ -270,34 +276,6 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
   }
 
-#  Makes predictions from a generalized linear model produced by glm() or spark.glm(),
-#  similarly to R's predict().
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
-#'         "prediction".
-#' @rdname spark.glm
-#' @export
-#' @note predict(GeneralizedLinearRegressionModel) since 1.5.0
-setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
-
-#  Saves the generalized linear model to the input path.
-
-#' @param path the directory where the model is saved.
-#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @rdname spark.glm
-#' @export
-#' @note write.ml(GeneralizedLinearRegressionModel, character) since 2.0.0
-setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
-          })
-
 #' Isotonic Regression Model
 #'
 #' Fits an Isotonic Regression model against a SparkDataFrame, similarly to R's isoreg().
@@ -360,6 +338,7 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
 
 #  Get the summary of an IsotonicRegressionModel model
 
+#' @param object a fitted IsotonicRegressionModel.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list includes model's \code{boundaries} (boundaries in increasing order)
 #'         and \code{predictions} (predictions associated with the boundaries at the same index).
@@ -373,35 +352,6 @@ setMethod("summary", signature(object = "IsotonicRegressionModel"),
             boundaries <- callJMethod(jobj, "boundaries")
             predictions <- callJMethod(jobj, "predictions")
             list(boundaries = boundaries, predictions = predictions)
-          })
-
-#  Predicted values based on an isotonicRegression model
-
-#' @param object a fitted IsotonicRegressionModel.
-#' @param newData SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted values.
-#' @rdname spark.isoreg
-#' @aliases predict,IsotonicRegressionModel,SparkDataFrame-method
-#' @export
-#' @note predict(IsotonicRegressionModel) since 2.1.0
-setMethod("predict", signature(object = "IsotonicRegressionModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
-
-#  Save fitted IsotonicRegressionModel to the input path
-
-#' @param path The directory where the model is saved.
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#'
-#' @rdname spark.isoreg
-#' @aliases write.ml,IsotonicRegressionModel,character-method
-#' @export
-#' @note write.ml(IsotonicRegression, character) since 2.1.0
-setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
           })
 
 #' Accelerated Failure Time (AFT) Survival Regression Model
@@ -469,32 +419,4 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
             colnames(coefficients) <- c("Value")
             rownames(coefficients) <- unlist(features)
             list(coefficients = coefficients)
-          })
-
-#  Makes predictions from an AFT survival regression model or a model produced by
-#  spark.survreg, similarly to R package survival's predict.
-
-#' @param newData a SparkDataFrame for testing.
-#' @return \code{predict} returns a SparkDataFrame containing predicted values
-#'         on the original scale of the data (mean predicted value at scale = 1.0).
-#' @rdname spark.survreg
-#' @export
-#' @note predict(AFTSurvivalRegressionModel) since 2.0.0
-setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
-          function(object, newData) {
-            predict_internal(object, newData)
-          })
-
-#  Saves the AFT survival regression model to the input path.
-
-#' @param path the directory where the model is saved.
-#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
-#' @rdname spark.survreg
-#' @export
-#' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
-#' @seealso \link{write.ml}
-setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),
-          function(object, path, overwrite = FALSE) {
-            write_internal(object, path, overwrite)
           })

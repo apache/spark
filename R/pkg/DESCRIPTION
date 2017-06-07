@@ -42,6 +42,7 @@ Collate:
     'functions.R'
     'install.R'
     'jvm.R'
+    'mllib_wrapper.R'
     'mllib_classification.R'
     'mllib_clustering.R'
     'mllib_fpm.R'

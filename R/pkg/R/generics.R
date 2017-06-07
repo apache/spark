@@ -1544,9 +1544,7 @@ setGeneric("spark.freqItemsets", function(object) { standardGeneric("spark.freqI
 #' @export
 setGeneric("spark.associationRules", function(object) { standardGeneric("spark.associationRules") })
 
-#' @param object a fitted ML model object.
-#' @param path the directory where the model is saved.
-#' @param ... additional argument(s) passed to the method.
+#' @param ... additional arguments passed to the method.
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })
