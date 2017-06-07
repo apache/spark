@@ -257,7 +257,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     }
   }
 
-  test("time window in SQL with with two expressions") {
+  test("time window in SQL with two expressions") {
     withTempTable { table =>
       checkAnswer(
         spark.sql(
@@ -272,7 +272,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     }
   }
 
-  test("time window in SQL with with three expressions") {
+  test("time window in SQL with three expressions") {
     withTempTable { table =>
       checkAnswer(
         spark.sql(

@@ -29,7 +29,8 @@ import org.apache.spark.{SparkConf, SparkEnv, TaskState}
 import org.apache.spark.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.cluster.mesos.{MesosSchedulerUtils, MesosTaskLaunchData}
+import org.apache.spark.scheduler.TaskDescription
+import org.apache.spark.scheduler.cluster.mesos.MesosSchedulerUtils
 import org.apache.spark.util.Utils
 
 private[spark] class MesosExecutorBackend
@@ -73,9 +74,8 @@ private[spark] class MesosExecutorBackend
     val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray) ++
       Seq[(String, String)](("spark.app.id", frameworkInfo.getId.getValue))
     val conf = new SparkConf(loadDefaults = true).setAll(properties)
-    val port = conf.getInt("spark.executor.port", 0)
     val env = SparkEnv.createExecutorEnv(
-      conf, executorId, slaveInfo.getHostname, port, cpusPerTask, None, isLocal = false)
+      conf, executorId, slaveInfo.getHostname, cpusPerTask, None, isLocal = false)
 
     executor = new Executor(
       executorId,
@@ -84,14 +84,12 @@ private[spark] class MesosExecutorBackend
   }
 
   override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo) {
-    val taskId = taskInfo.getTaskId.getValue.toLong
-    val taskData = MesosTaskLaunchData.fromByteString(taskInfo.getData)
+    val taskDescription = TaskDescription.decode(taskInfo.getData.asReadOnlyByteBuffer())
     if (executor == null) {
       logError("Received launchTask but executor was null")
     } else {
       SparkHadoopUtil.get.runAsSparkUser { () =>
-        executor.launchTask(this, taskId = taskId, attemptNumber = taskData.attemptNumber,
-          taskInfo.getName, taskData.serializedTask)
+        executor.launchTask(this, taskDescription)
       }
     }
   }
@@ -105,7 +103,8 @@ private[spark] class MesosExecutorBackend
       logError("Received KillTask but executor was null")
     } else {
       // TODO: Determine the 'interruptOnCancel' property set for the given job.
-      executor.killTask(t.getValue.toLong, interruptThread = false)
+      executor.killTask(
+        t.getValue.toLong, interruptThread = false, reason = "killed by mesos")
     }
   }
 

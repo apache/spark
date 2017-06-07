@@ -184,7 +184,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.stageInfos.size should be {1}
     val stageInfo2 = listener.stageInfos.keys.find(_.stageId == 1).get
-    stageInfo2.rddInfos.size should be {3} // ParallelCollectionRDD, FilteredRDD, MappedRDD
+    stageInfo2.rddInfos.size should be {3}
     stageInfo2.rddInfos.forall(_.numPartitions == 4) should be {true}
     stageInfo2.rddInfos.exists(_.name == "Deux") should be {true}
     listener.stageInfos.clear()
@@ -229,7 +229,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     }
 
     val numSlices = 16
-    val d = sc.parallelize(0 to 1e3.toInt, numSlices).map(w)
+    val d = sc.parallelize(0 to 10000, numSlices).map(w)
     d.count()
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.stageInfos.size should be (1)

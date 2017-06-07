@@ -38,16 +38,4 @@ private[spark] object YarnCommandBuilderUtils {
     CommandBuilderUtils.findJarsDir(sparkHome, scalaVer, true)
   }
 
-  /**
-   * Adds the perm gen configuration to the list of java options if needed and not yet added.
-   *
-   * Note that this method adds the option based on the local JVM version; if the node where
-   * the container is running has a different Java version, there's a risk that the option will
-   * not be added (e.g. if the AM is running Java 8 but the container's node is set up to use
-   * Java 7).
-   */
-  def addPermGenSizeOpt(args: ListBuffer[String]): Unit = {
-    CommandBuilderUtils.addPermGenSizeOpt(args.asJava)
-  }
-
 }

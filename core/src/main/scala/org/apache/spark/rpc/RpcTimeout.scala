@@ -19,15 +19,14 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * An exception thrown if RpcTimeout modifies a [[TimeoutException]].
+ * An exception thrown if RpcTimeout modifies a `TimeoutException`.
  */
 private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
   extends TimeoutException(message) { initCause(cause) }

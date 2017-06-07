@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.tree
 
+import java.util.Locale
+
 import scala.util.Try
 
 import org.apache.spark.ml.PredictorParams
@@ -25,7 +27,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
-import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
+import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, ClassificationLoss => OldClassificationLoss, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
@@ -108,77 +110,77 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
   /** @group getParam */
   final def getMaxDepth: Int = $(maxDepth)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMaxBins(value: Int): this.type = set(maxBins, value)
 
   /** @group getParam */
   final def getMaxBins: Int = $(maxBins)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group getParam */
   final def getMinInstancesPerNode: Int = $(minInstancesPerNode)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
   /** @group getParam */
   final def getMinInfoGain: Double = $(minInfoGain)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group expertSetParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
 
   /** @group expertGetParam */
   final def getMaxMemoryInMB: Int = $(maxMemoryInMB)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group expertSetParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
 
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -218,19 +220,20 @@ private[ml] trait TreeClassifierParams extends Params {
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}",
-    (value: String) => TreeClassifierParams.supportedImpurities.contains(value.toLowerCase))
+    (value: String) =>
+      TreeClassifierParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(impurity -> "gini")
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = $(impurity).toLowerCase
+  final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -247,7 +250,8 @@ private[ml] trait TreeClassifierParams extends Params {
 
 private[ml] object TreeClassifierParams {
   // These options should be lowercase.
-  final val supportedImpurities: Array[String] = Array("entropy", "gini").map(_.toLowerCase)
+  final val supportedImpurities: Array[String] =
+    Array("entropy", "gini").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait DecisionTreeClassifierParams
@@ -267,19 +271,20 @@ private[ml] trait TreeRegressorParams extends Params {
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
-    (value: String) => TreeRegressorParams.supportedImpurities.contains(value.toLowerCase))
+    (value: String) =>
+      TreeRegressorParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(impurity -> "variance")
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = $(impurity).toLowerCase
+  final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -295,7 +300,8 @@ private[ml] trait TreeRegressorParams extends Params {
 
 private[ml] object TreeRegressorParams {
   // These options should be lowercase.
-  final val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
+  final val supportedImpurities: Array[String] =
+    Array("variance").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
@@ -333,10 +339,10 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   setDefault(subsamplingRate -> 1.0)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
 
   /** @group getParam */
@@ -377,10 +383,10 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   setDefault(numTrees -> 20)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setNumTrees(value: Int): this.type = set(numTrees, value)
 
   /** @group getParam */
@@ -417,27 +423,28 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
       s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
       s", (0.0-1.0], [1-n].",
     (value: String) =>
-      RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
+      RandomForestParams.supportedFeatureSubsetStrategies.contains(
+        value.toLowerCase(Locale.ROOT))
       || Try(value.toInt).filter(_ > 0).isSuccess
       || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
 
   setDefault(featureSubsetStrategy -> "auto")
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
 
   /** @group getParam */
-  final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase
+  final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
 }
 
 private[spark] object RandomForestParams {
   // These options should be lowercase.
   final val supportedFeatureSubsetStrategies: Array[String] =
-    Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
+    Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait RandomForestClassifierParams
@@ -465,10 +472,10 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   // validationTol -> 1e-5
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /**
@@ -485,10 +492,10 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   final def getStepSize: Double = $(stepSize)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
   setDefault(maxIter -> 20, stepSize -> 0.1)
@@ -509,7 +516,8 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
 private[ml] object GBTClassifierParams {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: logistic */
-  final val supportedLossTypes: Array[String] = Array("logistic").map(_.toLowerCase)
+  final val supportedLossTypes: Array[String] =
+    Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
@@ -523,15 +531,16 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
     s" ${GBTClassifierParams.supportedLossTypes.mkString(", ")}",
-    (value: String) => GBTClassifierParams.supportedLossTypes.contains(value.toLowerCase))
+    (value: String) =>
+      GBTClassifierParams.supportedLossTypes.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(lossType -> "logistic")
 
   /** @group getParam */
-  def getLossType: String = $(lossType).toLowerCase
+  def getLossType: String = $(lossType).toLowerCase(Locale.ROOT)
 
   /** (private[ml]) Convert new loss to old loss. */
-  override private[ml] def getOldLossType: OldLoss = {
+  override private[ml] def getOldLossType: OldClassificationLoss = {
     getLossType match {
       case "logistic" => OldLogLoss
       case _ =>
@@ -544,7 +553,8 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
 private[ml] object GBTRegressorParams {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: squared (L2), absolute (L1) */
-  final val supportedLossTypes: Array[String] = Array("squared", "absolute").map(_.toLowerCase)
+  final val supportedLossTypes: Array[String] =
+    Array("squared", "absolute").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
@@ -558,12 +568,13 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
     s" ${GBTRegressorParams.supportedLossTypes.mkString(", ")}",
-    (value: String) => GBTRegressorParams.supportedLossTypes.contains(value.toLowerCase))
+    (value: String) =>
+      GBTRegressorParams.supportedLossTypes.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(lossType -> "squared")
 
   /** @group getParam */
-  def getLossType: String = $(lossType).toLowerCase
+  def getLossType: String = $(lossType).toLowerCase(Locale.ROOT)
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {

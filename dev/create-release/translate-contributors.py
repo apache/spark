@@ -45,8 +45,8 @@ if not GITHUB_API_TOKEN:
 
 # Write new contributors list to <old_file_name>.final
 if not os.path.isfile(contributors_file_name):
-    print "Contributors file %s does not exist!" % contributors_file_name
-    print "Have you run ./generate-contributors.py yet?"
+    print("Contributors file %s does not exist!" % contributors_file_name)
+    print("Have you run ./generate-contributors.py yet?")
     sys.exit(1)
 contributors_file = open(contributors_file_name, "r")
 warnings = []
@@ -58,11 +58,11 @@ if len(sys.argv) > 1:
     if "--non-interactive" in options:
         INTERACTIVE_MODE = False
 if INTERACTIVE_MODE:
-    print "Running in interactive mode. To disable this, provide the --non-interactive flag."
+    print("Running in interactive mode. To disable this, provide the --non-interactive flag.")
 
 # Setup Github and JIRA clients
-jira_options = { "server": JIRA_API_BASE }
-jira_client = JIRA(options = jira_options, basic_auth = (JIRA_USERNAME, JIRA_PASSWORD))
+jira_options = {"server": JIRA_API_BASE}
+jira_client = JIRA(options=jira_options, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
 github_client = Github(GITHUB_API_TOKEN)
 
 # Load known author translations that are cached locally
@@ -70,7 +70,8 @@ known_translations = {}
 known_translations_file_name = "known_translations"
 known_translations_file = open(known_translations_file_name, "r")
 for line in known_translations_file:
-    if line.startswith("#"): continue
+    if line.startswith("#"):
+        continue
     [old_name, new_name] = line.strip("\n").split(" - ")
     known_translations[old_name] = new_name
 known_translations_file.close()
@@ -91,6 +92,8 @@ known_translations_file = open(known_translations_file_name, "a")
 #   (NOT_FOUND, "No assignee found for SPARK-1763")
 # ]
 NOT_FOUND = "Not found"
+
+
 def generate_candidates(author, issues):
     candidates = []
     # First check for full name of Github user
@@ -121,9 +124,11 @@ def generate_candidates(author, issues):
             user_name = jira_assignee.name
             display_name = jira_assignee.displayName
             if display_name:
-                candidates.append((display_name, "Full name of %s assignee %s" % (issue, user_name)))
+                candidates.append(
+                    (display_name, "Full name of %s assignee %s" % (issue, user_name)))
             else:
-                candidates.append((NOT_FOUND, "No full name found for %s assignee %" % (issue, user_name)))
+                candidates.append(
+                    (NOT_FOUND, "No full name found for %s assignee %s" % (issue, user_name)))
         else:
             candidates.append((NOT_FOUND, "No assignee found for %s" % issue))
     # Guard against special characters in candidate names
@@ -143,16 +148,18 @@ def generate_candidates(author, issues):
 # select from this list. Additionally, the user may also choose to enter a custom name.
 # In non-interactive mode, this script picks the first valid author name from the candidates
 # If no such name exists, the original name is used (without the JIRA numbers).
-print "\n========================== Translating contributor list =========================="
+print("\n========================== Translating contributor list ==========================")
 lines = contributors_file.readlines()
 contributions = []
 for i, line in enumerate(lines):
-    temp_author = line.strip(" * ").split(" -- ")[0]
-    print "Processing author %s (%d/%d)" % (temp_author, i + 1, len(lines))
+    # It is possible that a line in the contributor file only has the github name, e.g. yhuai.
+    # So, we need a strip() to remove the newline.
+    temp_author = line.strip(" * ").split(" -- ")[0].strip()
+    print("Processing author %s (%d/%d)" % (temp_author, i + 1, len(lines)))
     if not temp_author:
         error_msg = "    ERROR: Expected the following format \" * <author> -- <contributions>\"\n"
         error_msg += "    ERROR: Actual = %s" % line
-        print error_msg
+        print(error_msg)
         warnings.append(error_msg)
         contributions.append(line)
         continue
@@ -173,8 +180,8 @@ for i, line in enumerate(lines):
         #   [3] andrewor14 - Raw Github username
         #   [4] Custom
         candidate_names = []
-        bad_prompts = [] # Prompts that can't actually be selected; print these first.
-        good_prompts = [] # Prompts that contain valid choices
+        bad_prompts = []  # Prompts that can't actually be selected; print these first.
+        good_prompts = []  # Prompts that contain valid choices
         for candidate, source in candidates:
             if candidate == NOT_FOUND:
                 bad_prompts.append("    [X] %s" % source)
@@ -184,13 +191,16 @@ for i, line in enumerate(lines):
                 good_prompts.append("    [%d] %s - %s" % (index, candidate, source))
         raw_index = len(candidate_names)
         custom_index = len(candidate_names) + 1
-        for p in bad_prompts: print p
-        if bad_prompts: print "    ---"
-        for p in good_prompts: print p
+        for p in bad_prompts:
+            print(p)
+        if bad_prompts:
+            print("    ---")
+        for p in good_prompts:
+            print(p)
         # In interactive mode, additionally provide "custom" option and await user response
         if INTERACTIVE_MODE:
-            print "    [%d] %s - Raw Github username" % (raw_index, author)
-            print "    [%d] Custom" % custom_index
+            print("    [%d] %s - Raw Github username" % (raw_index, author))
+            print("    [%d] Custom" % custom_index)
             response = raw_input("    Your choice: ")
             last_index = custom_index
             while not response.isdigit() or int(response) > last_index:
@@ -202,8 +212,8 @@ for i, line in enumerate(lines):
                 new_author = candidate_names[response]
         # In non-interactive mode, just pick the first candidate
         else:
-            valid_candidate_names = [name for name, _ in candidates\
-                if is_valid_author(name) and name != NOT_FOUND]
+            valid_candidate_names = [name for name, _ in candidates
+                                     if is_valid_author(name) and name != NOT_FOUND]
             if valid_candidate_names:
                 new_author = valid_candidate_names[0]
         # Finally, capitalize the author and replace the original one with it
@@ -211,17 +221,20 @@ for i, line in enumerate(lines):
         if is_valid_author(new_author):
             new_author = capitalize_author(new_author)
         else:
-            warnings.append("Unable to find a valid name %s for author %s" % (author, temp_author))
-        print "    * Replacing %s with %s" % (author, new_author)
-        # If we are in interactive mode, prompt the user whether we want to remember this new mapping
-        if INTERACTIVE_MODE and\
-          author not in known_translations and\
-          yesOrNoPrompt("    Add mapping %s -> %s to known translations file?" % (author, new_author)):
+            warnings.append(
+                "Unable to find a valid name %s for author %s" % (author, temp_author))
+        print("    * Replacing %s with %s" % (author, new_author))
+        # If we are in interactive mode, prompt the user whether we want to remember this new
+        # mapping
+        if INTERACTIVE_MODE and \
+            author not in known_translations and \
+                yesOrNoPrompt(
+                    "    Add mapping %s -> %s to known translations file?" % (author, new_author)):
             known_translations_file.write("%s - %s\n" % (author, new_author))
             known_translations_file.flush()
         line = line.replace(temp_author, author)
     contributions.append(line)
-print "==================================================================================\n"
+print("==================================================================================\n")
 contributors_file.close()
 known_translations_file.close()
 
@@ -242,12 +255,13 @@ for line in contributions:
     new_contributors_file.write(line)
 new_contributors_file.close()
 
-print "Translated contributors list successfully written to %s!" % new_contributors_file_name
+print("Translated contributors list successfully written to %s!" % new_contributors_file_name)
 
 # Log any warnings encountered in the process
 if warnings:
-    print "\n========== Warnings encountered while translating the contributor list ==========="
-    for w in warnings: print w
-    print "Please manually correct these in the final contributors list at %s." % new_contributors_file_name
-    print "==================================================================================\n"
-
+    print("\n========== Warnings encountered while translating the contributor list ===========")
+    for w in warnings:
+        print(w)
+    print("Please manually correct these in the final contributors list at %s." %
+          new_contributors_file_name)
+    print("==================================================================================\n")

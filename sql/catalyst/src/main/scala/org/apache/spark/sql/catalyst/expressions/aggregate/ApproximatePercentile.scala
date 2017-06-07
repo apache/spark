@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 
 import com.google.common.primitives.{Doubles, Ints, Longs}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -120,16 +119,18 @@ case class ApproximatePercentile(
     new PercentileDigest(relativeError)
   }
 
-  override def update(buffer: PercentileDigest, inputRow: InternalRow): Unit = {
+  override def update(buffer: PercentileDigest, inputRow: InternalRow): PercentileDigest = {
     val value = child.eval(inputRow)
     // Ignore empty rows, for example: percentile_approx(null)
     if (value != null) {
       buffer.add(value.asInstanceOf[Double])
     }
+    buffer
   }
 
-  override def merge(buffer: PercentileDigest, other: PercentileDigest): Unit = {
+  override def merge(buffer: PercentileDigest, other: PercentileDigest): PercentileDigest = {
     buffer.merge(other)
+    buffer
   }
 
   override def eval(buffer: PercentileDigest): Any = {
@@ -244,7 +245,8 @@ object ApproximatePercentile {
         val result = new Array[Double](percentages.length)
         var i = 0
         while (i < percentages.length) {
-          result(i) = summaries.query(percentages(i))
+          // Since summaries.count != 0, the query here never return None.
+          result(i) = summaries.query(percentages(i)).get
           i += 1
         }
         result

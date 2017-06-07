@@ -88,12 +88,10 @@ public class ExternalShuffleBlockHandlerSuite {
     ByteBuffer openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" })
       .toByteBuffer();
     handler.receive(client, openBlocks, callback);
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b0");
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b1");
 
     ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
     verify(callback, times(1)).onSuccess(response.capture());
-    verify(callback, never()).onFailure((Throwable) any());
+    verify(callback, never()).onFailure(any());
 
     StreamHandle handle =
       (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
@@ -107,6 +105,8 @@ public class ExternalShuffleBlockHandlerSuite {
     assertEquals(block0Marker, buffers.next());
     assertEquals(block1Marker, buffers.next());
     assertFalse(buffers.hasNext());
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b0");
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b1");
 
     // Verify open block request latency metrics
     Timer openBlockRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)

@@ -91,23 +91,13 @@ private[spark] abstract class WebUI(
   /** Attach a handler to this UI. */
   def attachHandler(handler: ServletContextHandler) {
     handlers += handler
-    serverInfo.foreach { info =>
-      info.rootHandler.addHandler(handler)
-      if (!handler.isStarted) {
-        handler.start()
-      }
-    }
+    serverInfo.foreach(_.addHandler(handler))
   }
 
   /** Detach a handler from this UI. */
   def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
-    serverInfo.foreach { info =>
-      info.rootHandler.removeHandler(handler)
-      if (handler.isStarted) {
-        handler.stop()
-      }
-    }
+    serverInfo.foreach(_.removeHandler(handler))
   }
 
   /**
@@ -134,7 +124,7 @@ private[spark] abstract class WebUI(
 
   /** Bind to the HTTP server behind this web interface. */
   def bind(): Unit = {
-    assert(!serverInfo.isDefined, s"Attempted to bind $className more than once!")
+    assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       serverInfo = Some(startJettyServer(host, port, sslOptions, handlers, conf, name))

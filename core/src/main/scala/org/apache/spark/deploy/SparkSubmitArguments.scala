@@ -27,10 +27,13 @@ import java.util.jar.JarFile
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
+import scala.util.Try
 
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
+
 
 /**
  * Parses and encapsulates arguments from the spark-submit script.
@@ -84,9 +87,15 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     // scalastyle:off println
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
     Option(propertiesFile).foreach { filename =>
-      Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
+      val properties = Utils.getPropertiesFromFile(filename)
+      properties.foreach { case (k, v) =>
         defaultProperties(k) = v
-        if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
+      }
+      // Property files may contain sensitive information, so redact before printing
+      if (verbose) {
+        Utils.redact(properties).foreach { case (k, v) =>
+          SparkSubmit.printStream.println(s"Adding default property: $k=$v")
+        }
       }
     }
     // scalastyle:on println
@@ -178,12 +187,15 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
     packagesExclusions = Option(packagesExclusions)
       .orElse(sparkProperties.get("spark.jars.excludes")).orNull
+    repositories = Option(repositories)
+      .orElse(sparkProperties.get("spark.jars.repositories")).orNull
     deployMode = Option(deployMode)
       .orElse(sparkProperties.get("spark.submit.deployMode"))
       .orElse(env.get("DEPLOY_MODE"))
       .orNull
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
+    queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
 
@@ -245,6 +257,23 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     }
     if (mainClass == null && SparkSubmit.isUserJar(primaryResource)) {
       SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
+    }
+    if (driverMemory != null
+        && Try(JavaUtils.byteStringAsBytes(driverMemory)).getOrElse(-1L) <= 0) {
+      SparkSubmit.printErrorAndExit("Driver Memory must be a positive number")
+    }
+    if (executorMemory != null
+        && Try(JavaUtils.byteStringAsBytes(executorMemory)).getOrElse(-1L) <= 0) {
+      SparkSubmit.printErrorAndExit("Executor Memory cores must be a positive number")
+    }
+    if (executorCores != null && Try(executorCores.toInt).getOrElse(-1) <= 0) {
+      SparkSubmit.printErrorAndExit("Executor cores must be a positive number")
+    }
+    if (totalExecutorCores != null && Try(totalExecutorCores.toInt).getOrElse(-1) <= 0) {
+      SparkSubmit.printErrorAndExit("Total executor cores must be a positive number")
+    }
+    if (numExecutors != null && Try(numExecutors.toInt).getOrElse(-1) <= 0) {
+      SparkSubmit.printErrorAndExit("Number of executors must be a positive number")
     }
     if (pyFiles != null && !isPython) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
@@ -318,7 +347,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |
     |Spark properties used, including those specified through
     | --conf and those from the properties file $propertiesFile:
-    |${sparkProperties.mkString("  ", "\n  ", "\n")}
+    |${Utils.redact(sparkProperties).mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
 
@@ -506,7 +535,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
         |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
-        |                              directory of each executor.
+        |                              directory of each executor. File paths of these files
+        |                              in executors can be accessed via SparkFiles.get(fileName).
         |
         |  --conf PROP=VALUE           Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not

@@ -34,7 +34,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
 
 /**
- * Helper methods to load, save and pre-process data used in ML Lib.
+ * Helper methods to load, save and pre-process data used in MLLib.
  */
 @Since("0.8.0")
 object MLUtils extends Logging {
@@ -119,7 +119,7 @@ object MLUtils extends Logging {
     while (i < indicesLength) {
       val current = indices(i)
       require(current > previous, s"indices should be one-based and in ascending order;"
-        + " found current=$current, previous=$previous; line=\"$line\"")
+        + s""" found current=$current, previous=$previous; line="$line"""")
       previous = current
       i += 1
     }
@@ -149,7 +149,7 @@ object MLUtils extends Logging {
    * Save labeled data in LIBSVM format.
    * @param data an RDD of LabeledPoint to be saved
    * @param dir directory to save the data
-   * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
+   * @see `org.apache.spark.mllib.util.MLUtils.loadLibSVMFile`
    */
   @Since("1.0.0")
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {

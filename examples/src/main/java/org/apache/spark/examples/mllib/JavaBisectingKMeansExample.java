@@ -17,10 +17,9 @@
 
 package org.apache.spark.examples.mllib;
 
-import java.util.ArrayList;
-
 // $example on$
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+import java.util.List;
 // $example off$
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -41,7 +40,7 @@ public class JavaBisectingKMeansExample {
     JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
     // $example on$
-    ArrayList<Vector> localData = Lists.newArrayList(
+    List<Vector> localData = Arrays.asList(
       Vectors.dense(0.1, 0.1),   Vectors.dense(0.3, 0.3),
       Vectors.dense(10.1, 10.1), Vectors.dense(10.3, 10.3),
       Vectors.dense(20.1, 20.1), Vectors.dense(20.3, 20.3),

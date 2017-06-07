@@ -1,5 +1,5 @@
 -- Create the origin table
-CREATE TABLE test_change(a INT, b STRING, c INT);
+CREATE TABLE test_change(a INT, b STRING, c INT) using parquet;
 DESC test_change;
 
 -- Change column name (not supported yet)
@@ -47,7 +47,7 @@ CREATE GLOBAL TEMPORARY VIEW global_temp_view(a, b) AS SELECT 1, "one";
 ALTER TABLE global_temp.global_temp_view CHANGE a a INT COMMENT 'this is column a';
 
 -- Change column in partition spec (not supported yet)
-CREATE TABLE partition_table(a INT, b STRING) PARTITIONED BY (c INT, d STRING);
+CREATE TABLE partition_table(a INT, b STRING, c INT, d STRING) USING parquet PARTITIONED BY (c, d);
 ALTER TABLE partition_table PARTITION (c = 1) CHANGE COLUMN a new_a INT;
 
 -- DROP TEST TABLE

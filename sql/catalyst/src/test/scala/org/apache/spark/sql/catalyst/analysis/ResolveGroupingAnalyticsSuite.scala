@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.TimeZone
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -32,7 +34,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
   lazy val unresolved_c = UnresolvedAttribute("c")
   lazy val gid = 'spark_grouping_id.int.withNullability(false)
   lazy val hive_gid = 'grouping__id.int.withNullability(false)
-  lazy val grouping_a = Cast(ShiftRight(gid, 1) & 1, ByteType)
+  lazy val grouping_a = Cast(ShiftRight(gid, 1) & 1, ByteType, Option(TimeZone.getDefault().getID))
   lazy val nulInt = Literal(null, IntegerType)
   lazy val nulStr = Literal(null, StringType)
   lazy val r1 = LocalRelation(a, b, c)
@@ -213,7 +215,8 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     val originalPlan = Filter(Grouping(unresolved_a) === 0,
       GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b), r1, Seq(unresolved_a, unresolved_b)))
-    val expected = Project(Seq(a, b), Filter(Cast(grouping_a, IntegerType) === 0,
+    val expected = Project(Seq(a, b),
+      Filter(Cast(grouping_a, IntegerType, Option(TimeZone.getDefault().getID)) === 0,
       Aggregate(Seq(a, b, gid),
         Seq(a, b, gid),
         Expand(

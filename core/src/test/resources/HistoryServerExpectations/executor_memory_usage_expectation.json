@@ -1,0 +1,148 @@
+[ {
+  "id" : "2",
+  "hostPort" : "172.22.0.167:51487",
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "totalCores" : 4,
+  "maxTasks" : 4,
+  "activeTasks" : 0,
+  "failedTasks" : 4,
+  "completedTasks" : 0,
+  "totalTasks" : 4,
+  "totalDuration" : 2537,
+  "totalGCTime" : 88,
+  "totalInputBytes" : 0,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "isBlacklisted" : true,
+  "maxMemory" : 908381388,
+  "executorLogs" : {
+    "stdout" : "http://172.22.0.167:51469/logPage/?appId=app-20161116163331-0000&executorId=2&logType=stdout",
+    "stderr" : "http://172.22.0.167:51469/logPage/?appId=app-20161116163331-0000&executorId=2&logType=stderr"
+  },
+  "memoryMetrics": {
+    "usedOnHeapStorageMemory": 0,
+    "usedOffHeapStorageMemory": 0,
+    "totalOnHeapStorageMemory": 384093388,
+    "totalOffHeapStorageMemory": 524288000
+  }
+}, {
+  "id" : "driver",
+  "hostPort" : "172.22.0.167:51475",
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "totalCores" : 0,
+  "maxTasks" : 0,
+  "activeTasks" : 0,
+  "failedTasks" : 0,
+  "completedTasks" : 0,
+  "totalTasks" : 0,
+  "totalDuration" : 0,
+  "totalGCTime" : 0,
+  "totalInputBytes" : 0,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "isBlacklisted" : true,
+  "maxMemory" : 908381388,
+  "executorLogs" : { },
+  "memoryMetrics": {
+    "usedOnHeapStorageMemory": 0,
+    "usedOffHeapStorageMemory": 0,
+    "totalOnHeapStorageMemory": 384093388,
+    "totalOffHeapStorageMemory": 524288000
+  }
+}, {
+  "id" : "1",
+  "hostPort" : "172.22.0.167:51490",
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "totalCores" : 4,
+  "maxTasks" : 4,
+  "activeTasks" : 0,
+  "failedTasks" : 0,
+  "completedTasks" : 4,
+  "totalTasks" : 4,
+  "totalDuration" : 3152,
+  "totalGCTime" : 68,
+  "totalInputBytes" : 0,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "isBlacklisted" : true,
+  "maxMemory" : 908381388,
+  "executorLogs" : {
+    "stdout" : "http://172.22.0.167:51467/logPage/?appId=app-20161116163331-0000&executorId=1&logType=stdout",
+    "stderr" : "http://172.22.0.167:51467/logPage/?appId=app-20161116163331-0000&executorId=1&logType=stderr"
+  },
+  "memoryMetrics": {
+    "usedOnHeapStorageMemory": 0,
+    "usedOffHeapStorageMemory": 0,
+    "totalOnHeapStorageMemory": 384093388,
+    "totalOffHeapStorageMemory": 524288000
+  }
+}, {
+  "id" : "0",
+  "hostPort" : "172.22.0.167:51491",
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "totalCores" : 4,
+  "maxTasks" : 4,
+  "activeTasks" : 0,
+  "failedTasks" : 4,
+  "completedTasks" : 0,
+  "totalTasks" : 4,
+  "totalDuration" : 2551,
+  "totalGCTime" : 116,
+  "totalInputBytes" : 0,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "isBlacklisted" : true,
+  "maxMemory" : 908381388,
+  "executorLogs" : {
+    "stdout" : "http://172.22.0.167:51465/logPage/?appId=app-20161116163331-0000&executorId=0&logType=stdout",
+    "stderr" : "http://172.22.0.167:51465/logPage/?appId=app-20161116163331-0000&executorId=0&logType=stderr"
+  },
+  "memoryMetrics": {
+    "usedOnHeapStorageMemory": 0,
+    "usedOffHeapStorageMemory": 0,
+    "totalOnHeapStorageMemory": 384093388,
+    "totalOffHeapStorageMemory": 524288000
+  }
+}, {
+  "id" : "3",
+  "hostPort" : "172.22.0.167:51485",
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "totalCores" : 4,
+  "maxTasks" : 4,
+  "activeTasks" : 0,
+  "failedTasks" : 0,
+  "completedTasks" : 12,
+  "totalTasks" : 12,
+  "totalDuration" : 2453,
+  "totalGCTime" : 72,
+  "totalInputBytes" : 0,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "isBlacklisted" : true,
+  "maxMemory" : 908381388,
+  "executorLogs" : {
+    "stdout" : "http://172.22.0.167:51466/logPage/?appId=app-20161116163331-0000&executorId=3&logType=stdout",
+    "stderr" : "http://172.22.0.167:51466/logPage/?appId=app-20161116163331-0000&executorId=3&logType=stderr"
+  },
+  "memoryMetrics": {
+    "usedOnHeapStorageMemory": 0,
+    "usedOffHeapStorageMemory": 0,
+    "totalOnHeapStorageMemory": 384093388,
+    "totalOffHeapStorageMemory": 524288000
+  }
+} ]

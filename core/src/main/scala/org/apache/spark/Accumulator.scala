@@ -24,8 +24,7 @@ package org.apache.spark
  * They can be used to implement counters (as in MapReduce) or sums. Spark natively supports
  * accumulators of numeric value types, and programmers can add support for new types.
  *
- * An accumulator is created from an initial value `v` by calling
- * [[SparkContext#accumulator SparkContext.accumulator]].
+ * An accumulator is created from an initial value `v` by calling `SparkContext.accumulator`.
  * Tasks running on the cluster can then add to it using the `+=` operator.
  * However, they cannot read its value. Only the driver program can read the accumulator's value,
  * using its [[#value]] method.

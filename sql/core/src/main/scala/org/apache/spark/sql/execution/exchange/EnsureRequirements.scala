@@ -241,7 +241,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         } else {
           requiredOrdering.zip(child.outputOrdering).forall {
             case (requiredOrder, childOutputOrder) =>
-              requiredOrder.semanticEquals(childOutputOrder)
+              childOutputOrder.satisfies(requiredOrder)
           }
         }
 
