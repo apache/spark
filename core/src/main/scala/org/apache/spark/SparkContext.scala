@@ -2787,7 +2787,7 @@ object SparkContext extends Logging {
 /**
  * A collection of regexes for extracting information from the master string.
  */
-private object SparkMasterRegex {
+private[spark] object SparkMasterRegex {
   // Regular expression used for local[N] and local[*] master formats
   val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
   // Regular expression for local[N, maxRetries], used in tests with failing tasks

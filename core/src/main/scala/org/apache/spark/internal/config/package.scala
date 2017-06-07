@@ -87,6 +87,14 @@ package object config {
     .intConf
     .createOptional
 
+  private[spark] val EXECUTOR_CORES = ConfigBuilder("spark.executor.cores")
+    .intConf
+    .createWithDefault(1)
+
+  private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
+    .intConf
+    .createOptional
+
   private[spark] val PY_FILES = ConfigBuilder("spark.submit.pyFiles")
     .internal()
     .stringConf

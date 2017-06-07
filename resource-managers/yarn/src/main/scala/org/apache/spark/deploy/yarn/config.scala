@@ -217,10 +217,6 @@ package object config {
 
   /* Executor configuration. */
 
-  private[spark] val EXECUTOR_CORES = ConfigBuilder("spark.executor.cores")
-    .intConf
-    .createWithDefault(1)
-
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.yarn.executor.memoryOverhead")
     .bytesConf(ByteUnit.MiB)
     .createOptional

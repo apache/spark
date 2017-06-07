@@ -838,6 +838,26 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(latch.await(60, TimeUnit.SECONDS))
   }
 
+  for (master <- Array("local", "local[1]", "local[1, 2]", "local-cluster[1, 1, 1024]")) {
+    test(s"check resource enough for $master") {
+      val conf = new SparkConf().setMaster(master).setAppName(appName)
+      ssc = new StreamingContext(conf, Milliseconds(100))
+      val input1 = ssc.receiverStream(new TestReceiver)
+      val input2 = ssc.receiverStream(new TestReceiver)
+      val input = input1.union(input2)
+
+      try {
+        input.foreachRDD { rdd => rdd.count()}
+        ssc.start()
+        ssc.awaitTerminationOrTimeout(60000)
+        assert(false, "There are no enough resource to run Spark Streaming job.")
+      } catch {
+        case e: SparkException =>
+          // expected.
+      }
+    }
+  }
+
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => 1 to i)
     val inputStream = new TestInputStream(s, input, 1)
@@ -939,7 +959,7 @@ object SlowTestReceiver {
 /** Streaming application for testing DStream and RDD creation sites */
 package object testPackage extends Assertions {
   def test() {
-    val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
+    val conf = new SparkConf().setMaster("local[2]").setAppName("CreationSite test")
     val ssc = new StreamingContext(conf, Milliseconds(100))
     try {
       val inputStream = ssc.receiverStream(new TestReceiver)
