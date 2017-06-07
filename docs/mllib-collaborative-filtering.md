@@ -89,6 +89,15 @@ that is equivalent to the provided example in Scala is given below:
 Refer to the [`ALS` Java docs](api/java/org/apache/spark/mllib/recommendation/ALS.html) for more details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaRecommendationExample.java %}
+
+If the rating matrix is derived from other source of information (i.e., it is inferred from other
+signals), you can use the trainImplicit method to get better results.
+
+{% highlight java %}
+double alpha = 0.01;
+double lambda = 0.01;
+MatrixFactorizationModel model = ALS.trainImplicit(JavaRDD.toRDD(ratings), rank, numIterations, lambda, alpha);
+{% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
