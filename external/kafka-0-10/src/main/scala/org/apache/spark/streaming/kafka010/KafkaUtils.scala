@@ -59,6 +59,33 @@ object KafkaUtils extends Logging {
       offsetRanges: Array[OffsetRange],
       locationStrategy: LocationStrategy
     ): RDD[ConsumerRecord[K, V]] = {
+    createRDD(sc, kafkaParams, offsetRanges, locationStrategy, true)
+  }
+
+  /**
+   * :: Experimental ::
+   * Scala constructor for a batch-oriented interface for consuming from Kafka.
+   * Starting and ending offsets are specified in advance,
+   * so that you can control exactly-once semantics.
+   * @param kafkaParams Kafka
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * configuration parameters</a>. Requires "bootstrap.servers" to be set
+   * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+   * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
+   *   see [[LocationStrategies]] for more details.
+   * @param useConsumerCache whether to use a consumer from a per-jvm cache.
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   */
+  @Experimental
+  def createRDD[K, V](
+      sc: SparkContext,
+      kafkaParams: ju.Map[String, Object],
+      offsetRanges: Array[OffsetRange],
+      locationStrategy: LocationStrategy,
+      useConsumerCache: Boolean
+    ): RDD[ConsumerRecord[K, V]] = {
     val preferredHosts = locationStrategy match {
       case PreferBrokers =>
         throw new AssertionError(
@@ -71,7 +98,7 @@ object KafkaUtils extends Logging {
     fixKafkaParams(kp)
     val osr = offsetRanges.clone()
 
-    new KafkaRDD[K, V](sc, kp, osr, preferredHosts, true)
+    new KafkaRDD[K, V](sc, kp, osr, preferredHosts, useConsumerCache)
   }
 
   /**
@@ -97,7 +124,36 @@ object KafkaUtils extends Logging {
       locationStrategy: LocationStrategy
     ): JavaRDD[ConsumerRecord[K, V]] = {
 
-    new JavaRDD(createRDD[K, V](jsc.sc, kafkaParams, offsetRanges, locationStrategy))
+    createRDD(jsc, kafkaParams, offsetRanges, locationStrategy, true)
+  }
+
+  /**
+   * :: Experimental ::
+   * Java constructor for a batch-oriented interface for consuming from Kafka.
+   * Starting and ending offsets are specified in advance,
+   * so that you can control exactly-once semantics.
+   * @param kafkaParams Kafka
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * configuration parameters</a>. Requires "bootstrap.servers" to be set
+   * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+   * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
+   *   see [[LocationStrategies]] for more details.
+   * @param useConsumerCache whether to use a consumer from a per-jvm cache.
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   */
+  @Experimental
+  def createRDD[K, V](
+      jsc: JavaSparkContext,
+      kafkaParams: ju.Map[String, Object],
+      offsetRanges: Array[OffsetRange],
+      locationStrategy: LocationStrategy,
+      useConsumerCache: Boolean
+    ): JavaRDD[ConsumerRecord[K, V]] = {
+
+    new JavaRDD(
+      createRDD[K, V](jsc.sc, kafkaParams, offsetRanges, locationStrategy, useConsumerCache))
   }
 
   /**

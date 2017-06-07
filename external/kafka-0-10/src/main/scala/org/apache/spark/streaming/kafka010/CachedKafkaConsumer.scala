@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
+import java.util.ConcurrentModificationException
 
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord, KafkaConsumer }
 import org.apache.kafka.common.{ KafkaException, TopicPartition }
@@ -92,7 +93,14 @@ class CachedKafkaConsumer[K, V] private(
 
   private def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $topicPartition $offset")
-    consumer.seek(topicPartition, offset)
+    try {
+      consumer.seek(topicPartition, offset)
+    } catch {
+      case e: ConcurrentModificationException =>
+        logError("KafkaConsumer is not safe for multi-threaded access. To avoid this failure, " +
+          "you may set 'spark.streaming.kafka.consumer.cache.enabled' as false.")
+        throw e
+    }
   }
 
   private def poll(timeout: Long): Unit = {
