@@ -45,11 +45,11 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
       expectedStatsCboOn = filterStatsCboOn,
       expectedStatsCboOff = filterStatsCboOff)
 
-    val broadcastHint = ResolvedHint(filter, HintInfo(isBroadcastable = Option(true)))
+    val broadcastHint = ResolvedHint(filter, HintInfo(broadcast = true))
     checkStats(
       broadcastHint,
-      expectedStatsCboOn = filterStatsCboOn.copy(hints = HintInfo(isBroadcastable = Option(true))),
-      expectedStatsCboOff = filterStatsCboOff.copy(hints = HintInfo(isBroadcastable = Option(true)))
+      expectedStatsCboOn = filterStatsCboOn.copy(hints = HintInfo(broadcast = true)),
+      expectedStatsCboOff = filterStatsCboOff.copy(hints = HintInfo(broadcast = true))
     )
   }
 
