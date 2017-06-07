@@ -365,6 +365,7 @@ class SparkContext(config: SparkConf) extends Logging {
     require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
       s"Supplied level $logLevel did not match one of:" +
         s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
+    _conf.set("spark.logLevel", logLevel)
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
   }
 
@@ -391,6 +392,8 @@ class SparkContext(config: SparkConf) extends Logging {
     if (_conf.getBoolean("spark.logConf", false)) {
       logInfo("Spark configuration:\n" + _conf.toDebugString)
     }
+
+    setLogLevel(_conf.get("spark.logLevel", "INFO"))
 
     // Set Spark driver host and port system properties. This explicitly sets the configuration
     // instead of relying on the default value of the config constant.
