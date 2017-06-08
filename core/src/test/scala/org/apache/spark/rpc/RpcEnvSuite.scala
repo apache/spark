@@ -633,7 +633,12 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("port conflict") {
     val anotherEnv = createRpcEnv(new SparkConf(), "remote", env.address.port)
-    assert(anotherEnv.address.port != env.address.port)
+    try {
+      assert(anotherEnv.address.port != env.address.port)
+    } finally {
+      anotherEnv.shutdown()
+      anotherEnv.awaitTermination()
+    }
   }
 
   private def testSend(conf: SparkConf): Unit = {
