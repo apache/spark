@@ -194,21 +194,21 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.dist.archives</code></td>
   <td>(none)</td>
   <td>
-    Comma separated list of archives to be extracted into the working directory of each executor.
+    Comma separated list of archives to be extracted into the working directory of each executor. Globs are allowed.
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.dist.files</code></td>
   <td>(none)</td>
   <td>
-    Comma-separated list of files to be placed in the working directory of each executor.
+    Comma-separated list of files to be placed in the working directory of each executor. Globs are allowed.
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.dist.jars</code></td>
   <td>(none)</td>
   <td>
-    Comma-separated list of jars to be placed in the working directory of each executor.
+    Comma-separated list of jars to be placed in the working directory of each executor. Globs are allowed.
   </td>
 </tr>
 <tr>

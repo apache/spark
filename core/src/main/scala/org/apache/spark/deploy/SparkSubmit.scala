@@ -310,33 +310,19 @@ object SparkSubmit extends CommandLineUtils {
       RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
     }
 
+    val hadoopConf = new HadoopConfiguration()
+
+    // Resolve glob path for different resources.
+    args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
+    args.files = Option(args.files).map(resolveGlobPaths(_, hadoopConf)).orNull
+    args.pyFiles = Option(args.pyFiles).map(resolveGlobPaths(_, hadoopConf)).orNull
+    args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
+
     // In client mode, download remote files.
     if (deployMode == CLIENT) {
-      val hadoopConf = new HadoopConfiguration()
       args.primaryResource = Option(args.primaryResource).map(downloadFile(_, hadoopConf)).orNull
       args.jars = Option(args.jars).map(downloadFileList(_, hadoopConf)).orNull
       args.pyFiles = Option(args.pyFiles).map(downloadFileList(_, hadoopConf)).orNull
-      args.files = Option(args.files).map(downloadFileList(_, hadoopConf)).orNull
-    }
-
-    // Require all python files to be local, so we can add them to the PYTHONPATH
-    // In YARN cluster mode, python files are distributed as regular files, which can be non-local.
-    // In Mesos cluster mode, non-local python files are automatically downloaded by Mesos.
-    if (args.isPython && !isYarnCluster && !isMesosCluster) {
-      if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
-        printErrorAndExit(s"Only local python files are supported: ${args.primaryResource}")
-      }
-      val nonLocalPyFiles = Utils.nonLocalPaths(args.pyFiles).mkString(",")
-      if (nonLocalPyFiles.nonEmpty) {
-        printErrorAndExit(s"Only local additional python files are supported: $nonLocalPyFiles")
-      }
-    }
-
-    // Require all R files to be local
-    if (args.isR && !isYarnCluster && !isMesosCluster) {
-      if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
-        printErrorAndExit(s"Only local R files are supported: ${args.primaryResource}")
-      }
     }
 
     // The following modes are not supported or applicable
@@ -858,18 +844,32 @@ object SparkSubmit extends CommandLineUtils {
     require(path != null, "path cannot be null.")
     val uri = Utils.resolveURI(path)
     uri.getScheme match {
-      case "file" | "local" =>
-        path
-
+      case "file" | "local" => path
+      case "https" | "http" | "ftp" => path
       case _ =>
         val fs = FileSystem.get(uri, hadoopConf)
-        val tmpFile = new File(Files.createTempDirectory("tmp").toFile, uri.getPath)
+        val tmpFile = new File(Files.createTempDirectory("tmp").toFile, new Path(uri).getName)
         // scalastyle:off println
         printStream.println(s"Downloading ${uri.toString} to ${tmpFile.getAbsolutePath}.")
         // scalastyle:on println
         fs.copyToLocalFile(new Path(uri), new Path(tmpFile.getAbsolutePath))
         Utils.resolveURI(tmpFile.getAbsolutePath).toString
     }
+  }
+
+  private def resolveGlobPaths(paths: String, hadoopConf: HadoopConfiguration): String = {
+    require(paths != null, "paths cannot be null.")
+    paths.split(",").filter(_.trim.nonEmpty).flatMap { path =>
+      val uri = Utils.resolveURI(path)
+      uri.getScheme match {
+        case "local" | "http" | "https" | "ftp" => Array(path)
+        case _ =>
+          val fs = FileSystem.get(uri, hadoopConf)
+          Option(fs.globStatus(new Path(uri))).map { status =>
+            status.filter(_.isFile).map(_.getPath.toUri.toString)
+          }.getOrElse(Array(path))
+      }
+    }.mkString(",")
   }
 }
 
