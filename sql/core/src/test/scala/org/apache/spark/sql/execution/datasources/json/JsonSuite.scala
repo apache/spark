@@ -1036,24 +1036,24 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("Corrupt records: FAILFAST mode") {
-    val schema = StructType(
-        StructField("a", StringType, true) :: Nil)
     // `FAILFAST` mode should throw an exception for corrupt records.
     val exceptionOne = intercept[SparkException] {
       spark.read
         .option("mode", "FAILFAST")
         .json(corruptRecords)
-    }
-    assert(exceptionOne.getMessage.contains("JsonParseException"))
+    }.getMessage
+    assert(exceptionOne.contains(
+      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
 
     val exceptionTwo = intercept[SparkException] {
       spark.read
         .option("mode", "FAILFAST")
-        .schema(schema)
+        .schema("a string")
         .json(corruptRecords)
         .collect()
-    }
-    assert(exceptionTwo.getMessage.contains("JsonParseException"))
+    }.getMessage
+    assert(exceptionTwo.contains(
+      "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
   }
 
   test("Corrupt records: DROPMALFORMED mode") {
@@ -1944,7 +1944,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .option("mode", "FAILFAST")
           .json(path)
       }
-      assert(exceptionOne.getMessage.contains("Failed to infer a common schema"))
+      assert(exceptionOne.getMessage.contains("Malformed records are detected in schema " +
+        "inference. Parse Mode: FAILFAST."))
 
       val exceptionTwo = intercept[SparkException] {
         spark.read
@@ -1954,7 +1955,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .json(path)
           .collect()
       }
-      assert(exceptionTwo.getMessage.contains("Failed to parse a value"))
+      assert(exceptionTwo.getMessage.contains("Malformed records are detected in record " +
+        "parsing. Parse Mode: FAILFAST."))
     }
   }
 
