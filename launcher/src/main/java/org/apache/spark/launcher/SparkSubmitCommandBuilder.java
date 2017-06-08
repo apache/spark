@@ -241,17 +241,16 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
 
-    // We don't want the client to specify Xmx. These have to be set by their corresponding
-    // memory flag --driver-memory or configuration entry spark.driver.memory
-    String driverExtraJavaOptions = config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
-    if (!isEmpty(driverExtraJavaOptions) && driverExtraJavaOptions.contains("Xmx")) {
-      String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
-                   "java options (was %s). Use the corresponding --driver-memory or " +
-                   "spark.driver.memory configuration instead.", driverExtraJavaOptions);
-      throw new IllegalArgumentException(msg);
-    }
-
     if (isClientMode) {
+      // We don't want the client to specify Xmx. These have to be set by their corresponding
+      // memory flag --driver-memory or configuration entry spark.driver.memory
+      String driverExtraJavaOptions = config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
+      if (!isEmpty(driverExtraJavaOptions) && driverExtraJavaOptions.contains("Xmx")) {
+        String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
+                     "java options (was %s). Use the corresponding --driver-memory or " +
+                     "spark.driver.memory configuration instead.", driverExtraJavaOptions);
+        throw new IllegalArgumentException(msg);
+      }
       // Figuring out where the memory value come from is a little tricky due to precedence.
       // Precedence is observed in the following order:
       // - explicit configuration (setConf()), which also covers --driver-memory cli argument.
