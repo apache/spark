@@ -118,7 +118,7 @@ object SVDPlusPlus {
       val updateY = q.clone()
       blas.dscal(rank, err * usr._4 * conf.gamma2, updateY, 1)
       blas.daxpy(rank, -conf.gamma7 * conf.gamma2, itm._2, 1, updateY, 1)
-      ctx.sendToSrc((updateP, updateY, (err - conf.gamma6 * usr._3) * conf.gamma1))
+      ctx.sendToSrc((updateP, updateP, (err - conf.gamma6 * usr._3) * conf.gamma1))
       ctx.sendToDst((updateQ, updateY, (err - conf.gamma6 * itm._3) * conf.gamma1))
     }
 
