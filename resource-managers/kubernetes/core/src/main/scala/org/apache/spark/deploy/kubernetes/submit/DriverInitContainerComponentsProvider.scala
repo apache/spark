@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.kubernetes.submit
 
-import java.io.File
-
 import org.apache.spark.{SparkConf, SSLOptions}
 import org.apache.spark.deploy.kubernetes.{InitContainerResourceStagingServerSecretPluginImpl, OptionRequirements, SparkPodInitContainerBootstrap, SparkPodInitContainerBootstrapImpl}
 import org.apache.spark.deploy.kubernetes.config._
@@ -46,12 +44,12 @@ private[spark] trait DriverInitContainerComponentsProvider {
 }
 
 private[spark] class DriverInitContainerComponentsProviderImpl(
-    sparkConf: SparkConf,
-    kubernetesAppId: String,
-    namespace: String,
-    sparkJars: Seq[String],
-    sparkFiles: Seq[String],
-    resourceStagingServerExternalSslOptions: SSLOptions)
+      sparkConf: SparkConf,
+      kubernetesResourceNamePrefix: String,
+      namespace: String,
+      sparkJars: Seq[String],
+      sparkFiles: Seq[String],
+      resourceStagingServerExternalSslOptions: SSLOptions)
     extends DriverInitContainerComponentsProvider {
 
   private val maybeResourceStagingServerUri = sparkConf.get(RESOURCE_STAGING_SERVER_URI)
@@ -99,10 +97,10 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
   private val jarsDownloadPath = sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
   private val filesDownloadPath = sparkConf.get(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION)
   private val maybeSecretName = maybeResourceStagingServerUri.map { _ =>
-    s"$kubernetesAppId-init-secret"
+    s"$kubernetesResourceNamePrefix-init-secret"
   }
-  private val configMapName = s"$kubernetesAppId-init-config"
-  private val configMapKey = s"$kubernetesAppId-init-config-key"
+  private val configMapName = s"$kubernetesResourceNamePrefix-init-config"
+  private val configMapKey = s"$kubernetesResourceNamePrefix-init-config-key"
   private val initContainerImage = sparkConf.get(INIT_CONTAINER_DOCKER_IMAGE)
   private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)
   private val downloadTimeoutMinutes = sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT)
@@ -116,29 +114,29 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
       filesResourceId <- maybeSubmittedResourceIds.map(_.filesResourceId)
     } yield {
       new SubmittedDependencyInitContainerConfigPluginImpl(
-        // Configure the init-container with the internal URI over the external URI.
-        maybeResourceStagingServerInternalUri.getOrElse(stagingServerUri),
-        jarsResourceId,
-        filesResourceId,
-        INIT_CONTAINER_SUBMITTED_JARS_SECRET_KEY,
-        INIT_CONTAINER_SUBMITTED_FILES_SECRET_KEY,
-        INIT_CONTAINER_STAGING_SERVER_TRUSTSTORE_SECRET_KEY,
-        INIT_CONTAINER_STAGING_SERVER_CLIENT_CERT_SECRET_KEY,
-        resourceStagingServerInternalSslEnabled,
-        maybeResourceStagingServerInternalTrustStore,
-        maybeResourceStagingServerInternalClientCert,
-        maybeResourceStagingServerInternalTrustStorePassword,
-        maybeResourceStagingServerInternalTrustStoreType,
-        INIT_CONTAINER_SECRET_VOLUME_MOUNT_PATH)
+          // Configure the init-container with the internal URI over the external URI.
+          maybeResourceStagingServerInternalUri.getOrElse(stagingServerUri),
+          jarsResourceId,
+          filesResourceId,
+          INIT_CONTAINER_SUBMITTED_JARS_SECRET_KEY,
+          INIT_CONTAINER_SUBMITTED_FILES_SECRET_KEY,
+          INIT_CONTAINER_STAGING_SERVER_TRUSTSTORE_SECRET_KEY,
+          INIT_CONTAINER_STAGING_SERVER_CLIENT_CERT_SECRET_KEY,
+          resourceStagingServerInternalSslEnabled,
+          maybeResourceStagingServerInternalTrustStore,
+          maybeResourceStagingServerInternalClientCert,
+          maybeResourceStagingServerInternalTrustStorePassword,
+          maybeResourceStagingServerInternalTrustStoreType,
+          INIT_CONTAINER_SECRET_VOLUME_MOUNT_PATH)
     }
     new SparkInitContainerConfigMapBuilderImpl(
-      sparkJars,
-      sparkFiles,
-      jarsDownloadPath,
-      filesDownloadPath,
-      configMapName,
-      configMapKey,
-      submittedDependencyConfigPlugin)
+        sparkJars,
+        sparkFiles,
+        jarsDownloadPath,
+        filesDownloadPath,
+        configMapName,
+        configMapKey,
+        submittedDependencyConfigPlugin)
   }
 
   override def provideContainerLocalizedFilesResolver(): ContainerLocalizedFilesResolver = {
@@ -158,14 +156,13 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
       driverPodLabels: Map[String, String]): Option[SubmittedDependencyUploader] = {
     maybeResourceStagingServerUri.map { stagingServerUri =>
       new SubmittedDependencyUploaderImpl(
-        kubernetesAppId,
-        driverPodLabels,
-        namespace,
-        stagingServerUri,
-        sparkJars,
-        sparkFiles,
-        resourceStagingServerExternalSslOptions,
-        RetrofitClientFactoryImpl)
+          driverPodLabels,
+          namespace,
+          stagingServerUri,
+          sparkJars,
+          sparkFiles,
+          resourceStagingServerExternalSslOptions,
+          RetrofitClientFactoryImpl)
     }
   }
 
@@ -178,15 +175,15 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
       filesResourceSecret <- maybeSubmittedResourceSecrets.map(_.filesResourceSecret)
     } yield {
       new SubmittedDependencySecretBuilderImpl(
-        secretName,
-        jarsResourceSecret,
-        filesResourceSecret,
-        INIT_CONTAINER_SUBMITTED_JARS_SECRET_KEY,
-        INIT_CONTAINER_SUBMITTED_FILES_SECRET_KEY,
-        INIT_CONTAINER_STAGING_SERVER_TRUSTSTORE_SECRET_KEY,
-        INIT_CONTAINER_STAGING_SERVER_CLIENT_CERT_SECRET_KEY,
-        maybeResourceStagingServerInternalTrustStore,
-        maybeResourceStagingServerInternalClientCert)
+          secretName,
+          jarsResourceSecret,
+          filesResourceSecret,
+          INIT_CONTAINER_SUBMITTED_JARS_SECRET_KEY,
+          INIT_CONTAINER_SUBMITTED_FILES_SECRET_KEY,
+          INIT_CONTAINER_STAGING_SERVER_TRUSTSTORE_SECRET_KEY,
+          INIT_CONTAINER_STAGING_SERVER_CLIENT_CERT_SECRET_KEY,
+          maybeResourceStagingServerInternalTrustStore,
+          maybeResourceStagingServerInternalClientCert)
     }
   }
 
@@ -196,13 +193,13 @@ private[spark] class DriverInitContainerComponentsProviderImpl(
           secret, INIT_CONTAINER_SECRET_VOLUME_MOUNT_PATH)
     }
     new SparkPodInitContainerBootstrapImpl(
-      initContainerImage,
-      dockerImagePullPolicy,
-      jarsDownloadPath,
-      filesDownloadPath,
-      downloadTimeoutMinutes,
-      configMapName,
-      configMapKey,
-      resourceStagingServerSecretPlugin)
+        initContainerImage,
+        dockerImagePullPolicy,
+        jarsDownloadPath,
+        filesDownloadPath,
+        downloadTimeoutMinutes,
+        configMapName,
+        configMapKey,
+        resourceStagingServerSecretPlugin)
   }
 }

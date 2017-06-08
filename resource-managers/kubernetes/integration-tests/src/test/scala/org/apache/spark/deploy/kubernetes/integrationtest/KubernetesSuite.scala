@@ -195,6 +195,13 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
         Array(testExistenceFile.getName, TEST_EXISTENCE_FILE_CONTENTS))
   }
 
+  test("Use a very long application name.") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+
+    sparkConf.setJars(Seq(CONTAINER_LOCAL_HELPER_JAR_PATH)).setAppName("long" * 40)
+    runSparkPiAndVerifyCompletion(CONTAINER_LOCAL_MAIN_APP_RESOURCE)
+  }
+
   private def launchStagingServer(
       resourceStagingServerSslOptions: SSLOptions, keyAndCertPem: Option[KeyAndCertPem]): Unit = {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)

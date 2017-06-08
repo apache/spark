@@ -85,14 +85,13 @@ private[spark] class SubmittedDependencyUploaderSuite extends SparkFunSuite with
       resourcesDataCaptor.capture(), resourcesOwnerCaptor.capture()))
       .thenReturn(responseCall)
     dependencyUploaderUnderTest = new SubmittedDependencyUploaderImpl(
-      APP_ID,
-      LABELS,
-      NAMESPACE,
-      STAGING_SERVER_URI,
-      JARS,
-      FILES,
-      STAGING_SERVER_SSL_OPTIONS,
-      retrofitClientFactory)
+        LABELS,
+        NAMESPACE,
+        STAGING_SERVER_URI,
+        JARS,
+        FILES,
+        STAGING_SERVER_SSL_OPTIONS,
+        retrofitClientFactory)
   }
 
   test("Uploading jars should contact the staging server with the appropriate parameters") {

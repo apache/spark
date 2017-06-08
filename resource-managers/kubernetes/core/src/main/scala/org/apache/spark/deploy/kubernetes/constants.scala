@@ -19,10 +19,12 @@ package org.apache.spark.deploy.kubernetes
 package object constants {
   // Labels
   private[spark] val SPARK_DRIVER_LABEL = "spark-driver"
-  private[spark] val SPARK_APP_ID_LABEL = "spark-app-id"
-  private[spark] val SPARK_APP_NAME_LABEL = "spark-app-name"
+  private[spark] val SPARK_APP_ID_LABEL = "spark-app-selector"
   private[spark] val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
   private[spark] val SPARK_ROLE_LABEL = "spark-role"
+  private[spark] val SPARK_POD_DRIVER_ROLE = "driver"
+  private[spark] val SPARK_POD_EXECUTOR_ROLE = "executor"
+  private[spark] val SPARK_APP_NAME_ANNOTATION = "spark-app-name"
 
   // Credentials secrets
   private[spark] val DRIVER_CREDENTIALS_SECRETS_BASE_DIR =

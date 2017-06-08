@@ -65,7 +65,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
       "executor labels")
   require(
       !executorLabels.contains(SPARK_APP_ID_LABEL),
-      s"Custom executor labels cannot contain $SPARK_APP_ID_LABEL as it is reserved for Spark.")
+      s"Custom executor labels cannot contain $SPARK_APP_ID_LABEL as it is" +
+        s" reserved for Spark.")
   require(
       !executorLabels.contains(SPARK_EXECUTOR_ID_LABEL),
       s"Custom executor labels cannot contain $SPARK_EXECUTOR_ID_LABEL as it is reserved for" +
@@ -87,6 +88,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     .get(KUBERNETES_DRIVER_POD_NAME)
     .getOrElse(
       throw new SparkException("Must specify the driver pod name"))
+  private val executorPodNamePrefix = conf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
 
   private val executorMemoryMb = conf.get(org.apache.spark.internal.config.EXECUTOR_MEMORY)
   private val executorMemoryString = conf.get(
@@ -225,8 +227,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def start(): Unit = {
     super.start()
-    executorWatchResource.set(kubernetesClient.pods().withLabel(SPARK_APP_ID_LABEL, applicationId())
-      .watch(new ExecutorPodsWatcher()))
+    executorWatchResource.set(
+        kubernetesClient
+            .pods()
+            .withLabel(SPARK_APP_ID_LABEL, applicationId())
+            .watch(new ExecutorPodsWatcher()))
 
     allocator.scheduleWithFixedDelay(
       allocatorRunnable, 0, podAllocationInterval, TimeUnit.SECONDS)
@@ -280,7 +285,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private def allocateNewExecutorPod(): (String, Pod) = {
     val executorId = EXECUTOR_ID_COUNTER.incrementAndGet().toString
-    val name = s"${applicationId()}-exec-$executorId"
+    val name = s"$executorPodNamePrefix-exec-$executorId"
 
     // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
     // name as the hostname.  This preserves uniqueness since the end of name contains
@@ -289,7 +294,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val resolvedExecutorLabels = Map(
       SPARK_EXECUTOR_ID_LABEL -> executorId,
       SPARK_APP_ID_LABEL -> applicationId(),
-      SPARK_ROLE_LABEL -> "executor") ++
+      SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE) ++
       executorLabels
     val executorMemoryQuantity = new QuantityBuilder(false)
       .withAmount(s"${executorMemoryMb}M")

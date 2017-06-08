@@ -151,6 +151,13 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
+  private[spark] val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
+    ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
+      .doc("Prefix to use in front of the executor pod names.")
+      .internal()
+      .stringConf
+      .createWithDefault("spark")
+
   private[spark] val KUBERNETES_SHUFFLE_NAMESPACE =
     ConfigBuilder("spark.kubernetes.shuffle.namespace")
       .doc("Namespace of the shuffle service")

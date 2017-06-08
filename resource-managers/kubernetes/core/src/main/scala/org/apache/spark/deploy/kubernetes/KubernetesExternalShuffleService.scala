@@ -91,7 +91,7 @@ private[spark] class KubernetesShuffleBlockHandler (
     try {
       Some(kubernetesClient
         .pods()
-        .withLabels(Map(SPARK_ROLE_LABEL -> "driver").asJava)
+        .withLabels(Map(SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE).asJava)
         .watch(new Watcher[Pod] {
           override def eventReceived(action: Watcher.Action, p: Pod): Unit = {
             action match {

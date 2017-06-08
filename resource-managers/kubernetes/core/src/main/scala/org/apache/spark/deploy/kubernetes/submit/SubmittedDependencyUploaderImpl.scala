@@ -50,7 +50,6 @@ private[spark] trait SubmittedDependencyUploader {
  * Resource Staging Service.
  */
 private[spark] class SubmittedDependencyUploaderImpl(
-    kubernetesAppId: String,
     podLabels: Map[String, String],
     podNamespace: String,
     stagingServerUri: String,

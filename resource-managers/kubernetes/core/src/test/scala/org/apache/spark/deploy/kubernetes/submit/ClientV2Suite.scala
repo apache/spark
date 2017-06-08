@@ -45,14 +45,14 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   private val BOOTSTRAPPED_POD_ANNOTATION = "bootstrapped"
   private val TRUE = "true"
   private val APP_NAME = "spark-test"
-  private val APP_ID = "spark-app-id"
+  private val APP_RESOURCE_PREFIX = "spark-prefix"
+  private val APP_ID = "spark-id"
   private val CUSTOM_LABEL_KEY = "customLabel"
   private val CUSTOM_LABEL_VALUE = "customLabelValue"
   private val ALL_EXPECTED_LABELS = Map(
       CUSTOM_LABEL_KEY -> CUSTOM_LABEL_VALUE,
       SPARK_APP_ID_LABEL -> APP_ID,
-      SPARK_APP_NAME_LABEL -> APP_NAME,
-      SPARK_ROLE_LABEL -> "driver")
+      SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
   private val CUSTOM_ANNOTATION_KEY = "customAnnotation"
   private val CUSTOM_ANNOTATION_VALUE = "customAnnotationValue"
   private val INIT_CONTAINER_SECRET_NAME = "init-container-secret"
@@ -183,7 +183,7 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
           .build()
       }
     })
-    when(podOps.withName(APP_ID)).thenReturn(namedPodResource)
+    when(podOps.withName(s"$APP_RESOURCE_PREFIX-driver")).thenReturn(namedPodResource)
     when(namedPodResource.watch(loggingPodStatusWatcher)).thenReturn(watch)
     when(containerLocalizedFilesResolver.resolveSubmittedAndRemoteSparkJars())
         .thenReturn(RESOLVED_SPARK_REMOTE_AND_LOCAL_JARS)
@@ -291,6 +291,7 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
     expectationsForNoDependencyUploader()
     new Client(
       APP_NAME,
+      APP_RESOURCE_PREFIX,
       APP_ID,
       MAIN_CLASS,
       SPARK_CONF,
@@ -334,7 +335,7 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
         owners.head.getController &&
         owners.head.getKind == DRIVER_POD_KIND &&
         owners.head.getUid == DRIVER_POD_UID &&
-        owners.head.getName == APP_ID &&
+        owners.head.getName == s"$APP_RESOURCE_PREFIX-driver" &&
         owners.head.getApiVersion == DRIVER_POD_API_VERSION
     })
   }
@@ -354,14 +355,15 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
       .toMap ++
       Map(
         "spark.app.id" -> APP_ID,
-        KUBERNETES_DRIVER_POD_NAME.key -> APP_ID,
+        KUBERNETES_DRIVER_POD_NAME.key -> s"$APP_RESOURCE_PREFIX-driver",
+        KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> APP_RESOURCE_PREFIX,
         EXECUTOR_INIT_CONF_KEY -> TRUE,
         CUSTOM_JAVA_OPTION_KEY -> CUSTOM_JAVA_OPTION_VALUE,
         "spark.jars" -> RESOLVED_SPARK_JARS.mkString(","),
         "spark.files" -> RESOLVED_SPARK_FILES.mkString(","))
     runAndVerifyPodMatchesPredicate { p =>
       Option(p)
-        .filter(_.getMetadata.getName == APP_ID)
+        .filter(_.getMetadata.getName == s"$APP_RESOURCE_PREFIX-driver")
         .filter(podHasCorrectAnnotations)
         .filter(_.getMetadata.getLabels.asScala == ALL_EXPECTED_LABELS)
         .filter(containerHasCorrectBasicContainerConfiguration)
@@ -374,6 +376,7 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   private def runAndVerifyPodMatchesPredicate(pred: (Pod => Boolean)): Unit = {
     new Client(
       APP_NAME,
+      APP_RESOURCE_PREFIX,
       APP_ID,
       MAIN_CLASS,
       SPARK_CONF,
@@ -442,6 +445,7 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   private def podHasCorrectAnnotations(pod: Pod): Boolean = {
     val expectedAnnotations = Map(
       CUSTOM_ANNOTATION_KEY -> CUSTOM_ANNOTATION_VALUE,
+      SPARK_APP_NAME_ANNOTATION -> APP_NAME,
       BOOTSTRAPPED_POD_ANNOTATION -> TRUE)
     pod.getMetadata.getAnnotations.asScala == expectedAnnotations
   }

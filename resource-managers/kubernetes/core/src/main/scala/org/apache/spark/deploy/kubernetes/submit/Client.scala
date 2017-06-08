@@ -17,13 +17,13 @@
 package org.apache.spark.deploy.kubernetes.submit
 
 import java.io.File
-import java.util.Collections
+import java.util.{Collections, UUID}
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, OwnerReferenceBuilder, PodBuilder, QuantityBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.{ConfigurationUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
@@ -43,22 +43,21 @@ import org.apache.spark.util.Utils
  * where different steps of submission should be factored out into separate classes.
  */
 private[spark] class Client(
-      appName: String,
-      kubernetesAppId: String,
-      mainClass: String,
-      sparkConf: SparkConf,
-      appArgs: Array[String],
-      sparkJars: Seq[String],
-      sparkFiles: Seq[String],
-      waitForAppCompletion: Boolean,
-      kubernetesClient: KubernetesClient,
-      initContainerComponentsProvider: DriverInitContainerComponentsProvider,
-      kubernetesCredentialsMounterProvider: DriverPodKubernetesCredentialsMounterProvider,
-      loggingPodStatusWatcher: LoggingPodStatusWatcher)
-    extends Logging {
-
+    appName: String,
+    kubernetesResourceNamePrefix: String,
+    kubernetesAppId: String,
+    mainClass: String,
+    sparkConf: SparkConf,
+    appArgs: Array[String],
+    sparkJars: Seq[String],
+    sparkFiles: Seq[String],
+    waitForAppCompletion: Boolean,
+    kubernetesClient: KubernetesClient,
+    initContainerComponentsProvider: DriverInitContainerComponentsProvider,
+    kubernetesCredentialsMounterProvider: DriverPodKubernetesCredentialsMounterProvider,
+    loggingPodStatusWatcher: LoggingPodStatusWatcher) extends Logging {
   private val kubernetesDriverPodName = sparkConf.get(KUBERNETES_DRIVER_POD_NAME)
-    .getOrElse(kubernetesAppId)
+    .getOrElse(s"$kubernetesResourceNamePrefix-driver")
   private val driverDockerImage = sparkConf.get(DRIVER_DOCKER_IMAGE)
   private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)
 
@@ -86,15 +85,16 @@ private[spark] class Client(
     val parsedCustomLabels = ConfigurationUtils.parseKeyValuePairs(
         customLabels, KUBERNETES_DRIVER_LABELS.key, "labels")
     require(!parsedCustomLabels.contains(SPARK_APP_ID_LABEL), s"Label with key " +
-      s" $SPARK_APP_ID_LABEL is not allowed as it is reserved for Spark bookkeeping operations.")
-    require(!parsedCustomLabels.contains(SPARK_APP_NAME_LABEL), s"Label with key" +
-      s" $SPARK_APP_NAME_LABEL is not allowed as it is reserved for Spark bookkeeping operations.")
+      s" $SPARK_APP_ID_LABEL is not allowed as it is reserved for Spark bookkeeping" +
+      s" operations.")
+    val parsedCustomAnnotations = ConfigurationUtils.parseKeyValuePairs(
+      customAnnotations, KUBERNETES_DRIVER_ANNOTATIONS.key, "annotations")
+    require(!parsedCustomAnnotations.contains(SPARK_APP_NAME_ANNOTATION), s"Annotation with key" +
+      s" $SPARK_APP_NAME_ANNOTATION is not allowed as it is reserved for Spark bookkeeping" +
+      s" operations.")
     val allLabels = parsedCustomLabels ++ Map(
         SPARK_APP_ID_LABEL -> kubernetesAppId,
-        SPARK_APP_NAME_LABEL -> appName,
-        SPARK_ROLE_LABEL -> "driver")
-    val parsedCustomAnnotations = ConfigurationUtils.parseKeyValuePairs(
-        customAnnotations, KUBERNETES_DRIVER_ANNOTATIONS.key, "annotations")
+        SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
 
     val driverExtraClasspathEnv = driverExtraClasspath.map { classPath =>
       new EnvVarBuilder()
@@ -140,6 +140,7 @@ private[spark] class Client(
         .withName(kubernetesDriverPodName)
         .addToLabels(allLabels.asJava)
         .addToAnnotations(parsedCustomAnnotations.asJava)
+        .addToAnnotations(SPARK_APP_NAME_ANNOTATION, appName)
         .endMetadata()
       .withNewSpec()
         .withRestartPolicy("Never")
@@ -186,6 +187,7 @@ private[spark] class Client(
     }
     resolvedSparkConf.setIfMissing(KUBERNETES_DRIVER_POD_NAME, kubernetesDriverPodName)
     resolvedSparkConf.set("spark.app.id", kubernetesAppId)
+    resolvedSparkConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, kubernetesResourceNamePrefix)
     // We don't need this anymore since we just set the JVM options on the environment
     resolvedSparkConf.remove(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS)
     val resolvedLocalClasspath = containerLocalizedFilesResolver
@@ -234,11 +236,11 @@ private[spark] class Client(
           throw e
       }
       if (waitForAppCompletion) {
-        logInfo(s"Waiting for application $kubernetesAppId to finish...")
+        logInfo(s"Waiting for application $appName to finish...")
         loggingPodStatusWatcher.awaitCompletion()
-        logInfo(s"Application $kubernetesAppId finished.")
+        logInfo(s"Application $appName finished.")
       } else {
-        logInfo(s"Deployed Spark application $kubernetesAppId into Kubernetes.")
+        logInfo(s"Deployed Spark application $appName into Kubernetes.")
       }
     }
   }
@@ -279,15 +281,21 @@ private[spark] object Client {
     val sparkFiles = sparkConf.getOption("spark.files")
       .map(_.split(","))
       .getOrElse(Array.empty[String])
-    val appName = sparkConf.getOption("spark.app.name")
-      .getOrElse("spark")
-    val kubernetesAppId = s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
+    val appName = sparkConf.getOption("spark.app.name").getOrElse("spark")
+    // The resource name prefix is derived from the application name, making it easy to connect the
+    // names of the Kubernetes resources from e.g. Kubectl or the Kubernetes dashboard to the
+    // application the user submitted. However, we can't use the application name in the label, as
+    // label values are considerably restrictive, e.g. must be no longer than 63 characters in
+    // length. So we generate a separate identifier for the app ID itself, and bookkeeping that
+    // requires finding "all pods for this application" should use the kubernetesAppId.
+    val kubernetesResourceNamePrefix = s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
+    val kubernetesAppId = s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
     val namespace = sparkConf.get(KUBERNETES_NAMESPACE)
     val master = resolveK8sMaster(sparkConf.get("spark.master"))
     val sslOptionsProvider = new ResourceStagingServerSslOptionsProviderImpl(sparkConf)
     val initContainerComponentsProvider = new DriverInitContainerComponentsProviderImpl(
         sparkConf,
-        kubernetesAppId,
+        kubernetesResourceNamePrefix,
         namespace,
         sparkJars,
         sparkFiles,
@@ -300,14 +308,16 @@ private[spark] object Client {
         None,
         None)) { kubernetesClient =>
       val kubernetesCredentialsMounterProvider =
-          new DriverPodKubernetesCredentialsMounterProviderImpl(sparkConf, kubernetesAppId)
+          new DriverPodKubernetesCredentialsMounterProviderImpl(
+              sparkConf, kubernetesResourceNamePrefix)
       val waitForAppCompletion = sparkConf.get(WAIT_FOR_APP_COMPLETION)
       val loggingInterval = Option(sparkConf.get(REPORT_INTERVAL))
           .filter( _ => waitForAppCompletion)
       val loggingPodStatusWatcher = new LoggingPodStatusWatcherImpl(
-          kubernetesAppId, loggingInterval)
+          kubernetesResourceNamePrefix, loggingInterval)
       new Client(
           appName,
+          kubernetesResourceNamePrefix,
           kubernetesAppId,
           mainClass,
           sparkConf,
