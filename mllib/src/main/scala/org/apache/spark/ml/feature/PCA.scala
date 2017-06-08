@@ -153,11 +153,24 @@ class PCAModel private[ml] (
       OldMatrices.fromML(pc).asInstanceOf[OldDenseMatrix],
       OldVectors.fromML(explainedVariance).asInstanceOf[OldDenseVector])
 
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => pcaModel.transform(OldVectors.fromML(v)).asML
+    val transformer: Vector => Vector = v => transform(pcaModel.pc.asML, v)
 
     val pcaOp = udf(transformer)
     dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
+  }
+
+  private def transform(pc: DenseMatrix, vector: Vector): Vector = {
+    vector match {
+      case dv: DenseVector =>
+        pc.transpose.multiply(dv)
+      case SparseVector(size, indices, values) =>
+        val sm = Matrices.sparse(size, 1, Array(0, indices.length), indices, values).transpose
+        val projection = sm.multiply(pc)
+        Vectors.dense(projection.values)
+      case _ =>
+        throw new IllegalArgumentException("Unsupported vector format. Expected " +
+          s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
+    }
   }
 
   @Since("1.5.0")

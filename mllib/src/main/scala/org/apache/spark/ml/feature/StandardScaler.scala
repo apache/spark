@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -162,11 +162,69 @@ class StandardScalerModel private[ml] (
     transformSchema(dataset.schema, logging = true)
     val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
 
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => scaler.transform(OldVectors.fromML(v)).asML
+    val transformer: Vector => Vector = v =>
+      transform(scaler.mean, v)
 
     val scale = udf(transformer)
     dataset.withColumn($(outputCol), scale(col($(inputCol))))
+  }
+
+  private def transform(mean: Vector, vector: Vector): Vector = {
+    require(mean.size == vector.size)
+    if(getWithMean) {
+      // By default, Scala generates Java methods for member variables. So every time when
+      // the member variables are accessed, `invokespecial` will be called which is expensive.
+      // This can be avoid by having a local reference of `shift`.
+      val localShift = mean.toArray
+      // Must have a copy of the values since it will be modified in place
+      val values = vector match {
+        // specially handle DenseVector because its toArray does not clone already
+        case d: DenseVector => d.values.clone()
+        case v: Vector => v.toArray
+      }
+      val newSize = values.length
+      if (getWithStd) {
+        var i = 0
+        while (i < newSize) {
+          values(i) = if (std(i) != 0.0) (values(i) - localShift(i)) * (1.0 / std(i)) else 0.0
+          i += 1
+        }
+      } else {
+        var i = 0
+        while (i < newSize) {
+          values(i) -= localShift(i)
+          i += 1
+        }
+      }
+      Vectors.dense(values)
+    } else if (getWithStd) {
+      vector match {
+        case DenseVector(vs) =>
+          val values = vs.clone()
+          val size = values.length
+          var i = 0
+          while(i < size) {
+            values(i) *= (if (std(i) != 0.0) 1.0 / std(i) else 0.0)
+            i += 1
+          }
+          Vectors.dense(values)
+        case SparseVector(size, indices, vs) =>
+          // For sparse vector, the `index` array inside sparse vector object will not be changed,
+          // so we can re-use it to save memory.
+          val values = vs.clone()
+          val nnz = values.length
+          var i = 0
+          while (i < nnz) {
+            values(i) *= (if (std(indices(i)) != 0.0) 1.0 / std(indices(i)) else 0.0)
+            i += 1
+          }
+          Vectors.sparse(size, indices, values)
+        case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+      }
+    } else {
+      // Note that it's safe since we always assume that the data in RDD should be immutable.
+      vector
+    }
   }
 
   @Since("1.4.0")

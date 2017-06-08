@@ -17,12 +17,14 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable.ArrayBuilder
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -267,8 +269,7 @@ final class ChiSqSelectorModel private[ml] (
     val transformedSchema = transformSchema(dataset.schema, logging = true)
     val newField = transformedSchema.last
 
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => chiSqSelector.transform(OldVectors.fromML(v)).asML
+    val transformer: Vector => Vector = v => compress(v)
 
     val selector = udf(transformer)
     dataset.withColumn($(outputCol), selector(col($(featuresCol))), newField.metadata)
@@ -280,6 +281,42 @@ final class ChiSqSelectorModel private[ml] (
     val newField = prepOutputField(schema)
     val outputFields = schema.fields :+ newField
     StructType(outputFields)
+  }
+
+  private def compress(features: Vector): Vector = {
+    features match {
+      case SparseVector(_, indices, values) =>
+        val newSize = selectedFeatures.length
+        val newValues = new ArrayBuilder.ofDouble
+        val newIndices = new ArrayBuilder.ofInt
+        var i = 0
+        var j = 0
+        var indicesIdx = 0
+        var filterIndicesIdx = 0
+        while (i < indices.length && j < newSize) {
+          indicesIdx = indices(i)
+          filterIndicesIdx = selectedFeatures(j)
+          if (indicesIdx == filterIndicesIdx) {
+            newIndices += j
+            newValues += values(i)
+            j += 1
+            i += 1
+          } else {
+            if (indicesIdx > filterIndicesIdx) {
+              j += 1
+            } else {
+              i += 1
+            }
+          }
+        }
+        Vectors.sparse(newSize, newIndices.result(), newValues.result())
+      case DenseVector(values) =>
+        val values = features.toArray
+        Vectors.dense(selectedFeatures.map(i => values(i)))
+      case other =>
+        throw new UnsupportedOperationException(
+          s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+    }
   }
 
   /**
