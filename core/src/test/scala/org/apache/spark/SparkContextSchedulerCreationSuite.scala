@@ -129,4 +129,29 @@ class SparkContextSchedulerCreationSuite
       case _ => fail()
     }
   }
+
+  test("bad-spark-url") {
+    val e = intercept[SparkException] {
+      createTaskScheduler("spark:*")
+    }
+    assert(e.getMessage.contains("spark:*"))
+  }
+
+  test("spark-localhost") {
+    val conf = new SparkConf().set("spark.default.parallelism", "16")
+    val sched = createTaskScheduler("spark://localhost:1234", "spark", conf)
+      sched.backend match {
+      case s: StandaloneSchedulerBackend => assert(s.defaultParallelism() === 16)
+      case _ => fail()
+    }
+  }
+
+  test("spark-ipaddress") {
+    val conf = new SparkConf().set("spark.default.parallelism", "16")
+    val sched = createTaskScheduler("spark://127.0.0.1:1234", "spark", conf)
+    sched.backend match {
+      case s: StandaloneSchedulerBackend => assert(s.defaultParallelism() === 16)
+      case _ => fail()
+    }
+  }
 }
