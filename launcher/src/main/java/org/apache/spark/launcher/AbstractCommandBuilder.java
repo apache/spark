@@ -20,6 +20,7 @@ package org.apache.spark.launcher;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.InputStreamReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -272,20 +273,26 @@ abstract class AbstractCommandBuilder {
   }
 
   /**
-   * Loads the configuration file for the application, if it exists. This is either the
-   * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
-   * directory.
+   * Loads the configuration file for the application, if it exists.
+   * The KV pair in user-specified properties file will overwrite the one
+   * in spark-defaults.conf file under the Spark configuration directory.
    */
   private Properties loadPropertiesFile() throws IOException {
     Properties props = new Properties();
-    File propsFile;
+    File propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);
+    loadPropertiesFileInternal(props, propsFile);
+
     if (propertiesFile != null) {
       propsFile = new File(propertiesFile);
       checkArgument(propsFile.isFile(), "Invalid properties file '%s'.", propertiesFile);
-    } else {
-      propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);
     }
+    loadPropertiesFileInternal(props, propsFile);
 
+    return props;
+  }
+
+  private void loadPropertiesFileInternal(Properties props, File propsFile)
+      throws FileNotFoundException, IOException {
     if (propsFile.isFile()) {
       FileInputStream fd = null;
       try {
@@ -304,8 +311,6 @@ abstract class AbstractCommandBuilder {
         }
       }
     }
-
-    return props;
   }
 
   private String getConfDir() {
