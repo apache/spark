@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.hive.test
 
-import java.io.File
+import java.io.{File, FileOutputStream}
 import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.implicitConversions
 
+import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -245,7 +246,12 @@ private[hive] class TestHiveSparkSession(
   ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
   def getHiveFile(path: String): File = {
-    new File(Thread.currentThread().getContextClassLoader.getResource(path).getFile)
+    val tempFile = File.createTempFile(path, "tmp")
+    tempFile.deleteOnExit()
+    val in = Thread.currentThread().getContextClassLoader.getResourceAsStream(path)
+    val out = new FileOutputStream(tempFile)
+    IOUtils.copy(in, out)
+    tempFile
   }
 
   private def quoteHiveFile(path : String) = if (Utils.isWindows) {
