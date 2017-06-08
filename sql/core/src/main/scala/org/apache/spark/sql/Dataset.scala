@@ -2775,6 +2775,21 @@ class Dataset[T] private[sql](
   def createGlobalTempView(viewName: String): Unit = withPlan {
     createTempViewCommand(viewName, replace = false, global = true)
   }
+    
+  /**
+   * Creates or replaces a global temporary view using the given name. The lifetime of this
+   * temporary view is tied to this Spark application.
+   *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM _global_temp.view1`.
+   *
+   * @group basic
+   */
+  def createOrReplaceGlobalTempView(viewName: String): Unit = withPlan {
+    createTempViewCommand(viewName, replace = true, global = true)
+  }
 
   /**
    * Creates or replaces a global temporary view using the given name. The lifetime of this
