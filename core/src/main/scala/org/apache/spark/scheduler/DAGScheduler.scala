@@ -1166,7 +1166,7 @@ class DAGScheduler(
         task match {
           case rt: ResultTask[_, _] =>
             // Cast to ResultStage here because it's part of the ResultTask
-            // TODO Refactor this out to a function that accepts a ResultStage
+            // TODO: Refactor this out to a function that accepts a ResultStage
             val resultStage = stage.asInstanceOf[ResultStage]
             resultStage.activeJob match {
               case Some(job) =>
