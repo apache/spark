@@ -159,6 +159,20 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     assert(servletProps.size() === 2)
   }
 
+  test("MetricsConfig with properties with spaces") {
+    val sparkConf = new SparkConf(loadDefaults = false)
+    setMetricsProperty(sparkConf, "*.sink.console.class",
+      " org.apache.spark.metrics.sink.ConsoleSink ")
+    setMetricsProperty(sparkConf, "*.sink.console.period", "10   ")
+    val conf = new MetricsConfig(sparkConf)
+    conf.initialize()
+
+    val property = conf.getInstance("random")
+    assert(property.getProperty("sink.console.class") ===
+      "org.apache.spark.metrics.sink.ConsoleSink")
+    assert(property.getProperty("sink.console.period") === "10")
+  }
+
   private def setMetricsProperty(conf: SparkConf, name: String, value: String): Unit = {
     conf.set(s"spark.metrics.conf.$name", value)
   }
