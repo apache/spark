@@ -522,15 +522,15 @@ case class DescribeTableCommand(
         throw new AnalysisException(
           s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
       }
-      describeSchema(catalog.lookupRelation(table).schema, result, isExtended)
+      describeSchema(catalog.lookupRelation(table).schema, result, false)
     } else {
       val metadata = catalog.getTableMetadata(table)
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
-        describeSchema(sparkSession.table(metadata.identifier).schema, result, isExtended)
+        describeSchema(sparkSession.table(metadata.identifier).schema, result, false)
       } else {
-        describeSchema(metadata.schema, result, isExtended)
+        describeSchema(metadata.schema, result, false)
       }
 
       describePartitionInfo(metadata, result)
