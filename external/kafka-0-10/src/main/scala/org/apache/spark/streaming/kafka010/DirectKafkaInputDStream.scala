@@ -73,6 +73,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     }
     kc
   }
+  val useConsumerCache = _ssc.conf.getBoolean("spark.streaming.kafka.consumer.cache.enable", true)
 
   override def persist(newLevel: StorageLevel): DStream[ConsumerRecord[K, V]] = {
     logError("Kafka ConsumerRecord is not serializable. " +
@@ -213,8 +214,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
       val fo = currentOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
-    val rdd = new KafkaRDD[K, V](
-      context.sparkContext, executorKafkaParams, offsetRanges.toArray, getPreferredHosts, true)
+    val rdd = new KafkaRDD[K, V](context.sparkContext, executorKafkaParams, offsetRanges.toArray,
+      getPreferredHosts, useConsumerCache)
 
     // Report the record number and metadata of this batch interval to InputInfoTracker.
     val description = offsetRanges.filter { offsetRange =>
