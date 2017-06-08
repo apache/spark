@@ -33,6 +33,7 @@ import org.apache.thrift.TException
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
@@ -843,6 +844,20 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // columns. Here we Lowercase the column names before passing the partition spec to Hive
       // client, to satisfy Hive.
       orderedPartitionSpec.put(colName.toLowerCase, partition(colName))
+    }
+
+    // Access SQLConf to get 'Dynamic Partition Inserts' parameter specified dynamically
+    // after HiveClient is created
+    val sqlConf = SparkSession.getActiveSession.get.sessionState.conf
+    Seq(
+      "hive.exec.max.dynamic.partitions",
+      "hive.exec.max.dynamic.partitions.pernode",
+      "hive.exec.max.created.files",
+      "hive.error.on.empty.partition"
+    ).foreach { param =>
+      if (sqlConf.contains(param)) {
+        client.runSqlHive(s"set $param=${sqlConf.getConfString(param)}")
+      }
     }
 
     client.loadDynamicPartitions(
