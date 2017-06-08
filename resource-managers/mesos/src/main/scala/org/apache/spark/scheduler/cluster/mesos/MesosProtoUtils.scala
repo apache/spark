@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
+import scala.collection.JavaConverters._
+
 import org.apache.mesos.Protos
 
 import org.apache.spark.SparkException
@@ -26,69 +28,32 @@ object MesosProtoUtils extends Logging {
 
   /** Parses a label string of the format specified in spark.mesos.task.labels. */
   def mesosLabels(labelsStr: String): Protos.Labels.Builder = {
-    var key: Option[String] = None
-    var value: Option[String] = None
-    var currStr = ""
-    var i = 0
-    val labels = Protos.Labels.newBuilder()
 
-    // 0 -> parsing key
-    // 1 -> parsing value
-    var state = 0
-
-    def addLabel() = {
-      value = Some(currStr)
-      if (key.isEmpty) {
-        throw new SparkException(s"Error while parsing label string: ${labelsStr}.  " +
-          s"Empty label key.")
-      } else {
-        val label = Protos.Label.newBuilder().setKey(key.get).setValue(value.get)
-        labels.addLabels(label)
-
-        key = None
-        value = None
-        currStr = ""
-        state = 0
-      }
-    }
-
-    while(i < labelsStr.length) {
-      val c = labelsStr(i)
-
-      if (c == ',') {
-        addLabel()
-      } else if (c == ':') {
-        key = Some(currStr)
-        currStr = ""
-        state = 1
-      } else if (c == '\\') {
-        if (i == labelsStr.length - 1) {
-          if (state == 1) {
-            value = value.map(_ + '\\')
-          } else {
-            throw new SparkException(s"Error while parsing label string: ${labelsStr}.  " +
-              "Key has no value.")
-          }
-        } else {
-          val c2 = labelsStr(i + 1)
-          if (c2 == ',' || c2 == ':') {
-            currStr += c2
-            i += 1
-          } else {
-            currStr += c
-          }
-        }
-      } else {
-        currStr += c
+    // Return str split around unescaped occurrences of c.
+    def splitUnescaped(str: String, c: Char): Seq[String] = {
+      val indices = (0 to str.length - 1).filter {
+        i => str(i) == c && (i == 0 || str(i-1) != '\\')
       }
 
-      i += 1
+      (-1 +: indices :+ str.length).sliding(2).map {
+        case t => str.substring(t(0) + 1, t(1))
+      }.toSeq
     }
 
-    if (key.isDefined) {
-      addLabel()
-    }
+    val labels = splitUnescaped(labelsStr, ',').map { labelStr =>
+      val parts = splitUnescaped(labelStr, ':')
+      if (parts.length != 2) {
+        throw new SparkException(s"Malformed label: ${labelStr}")
+      }
 
-    labels
+      val cleanedParts = parts
+        .map(part => part.replaceAll("\\\\,", ","))
+        .map(part => part.replaceAll("\\\\:", ":"))
+
+      Protos.Label.newBuilder().setKey(cleanedParts(0)).setValue(cleanedParts(1)).build()
+    }.asJava
+
+    Protos.Labels.newBuilder().addAllLabels(labels)
   }
+
 }
