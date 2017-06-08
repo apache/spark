@@ -28,6 +28,7 @@ private[spark] class SparkDockerImageBuilder(private val dockerEnv: Map[String, 
 
   private val DOCKER_BUILD_PATH = Paths.get("target", "docker")
   // Dockerfile paths must be relative to the build path.
+  private val BASE_DOCKER_FILE = "dockerfiles/spark-base/Dockerfile"
   private val DRIVER_DOCKER_FILE = "dockerfiles/driver/Dockerfile"
   private val EXECUTOR_DOCKER_FILE = "dockerfiles/executor/Dockerfile"
   private val SHUFFLE_SERVICE_DOCKER_FILE = "dockerfiles/shuffle-service/Dockerfile"
@@ -60,6 +61,7 @@ private[spark] class SparkDockerImageBuilder(private val dockerEnv: Map[String, 
 
   def buildSparkDockerImages(): Unit = {
     Eventually.eventually(TIMEOUT, INTERVAL) { dockerClient.ping() }
+    buildImage("spark-base", BASE_DOCKER_FILE)
     buildImage("spark-driver", DRIVER_DOCKER_FILE)
     buildImage("spark-executor", EXECUTOR_DOCKER_FILE)
     buildImage("spark-shuffle", SHUFFLE_SERVICE_DOCKER_FILE)

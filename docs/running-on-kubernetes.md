@@ -49,7 +49,7 @@ If you wish to use pre-built docker images, you may use the images published in
 </table>
 
 You may also build these docker images from sources, or customize them as required. Spark distributions include the
-Docker files for the driver, executor, and init-container at `dockerfiles/driver/Dockerfile`,
+Docker files for the base-image, driver, executor, and init-container at `dockerfiles/spark-base/Dockerfile`, `dockerfiles/driver/Dockerfile`,
 `dockerfiles/executor/Dockerfile`, and `dockerfiles/init-container/Dockerfile` respectively. Use these Docker files to
 build the Docker images, and then tag them with the registry that the images should be sent to. Finally, push the images
 to the registry.
@@ -57,12 +57,16 @@ to the registry.
 For example, if the registry host is `registry-host` and the registry is listening on port 5000:
 
     cd $SPARK_HOME
+    docker build -t registry-host:5000/spark-base:latest -f dockerfiles/driver/spark-base .
     docker build -t registry-host:5000/spark-driver:latest -f dockerfiles/driver/Dockerfile .
     docker build -t registry-host:5000/spark-executor:latest -f dockerfiles/executor/Dockerfile .
     docker build -t registry-host:5000/spark-init:latest -f dockerfiles/init-container/Dockerfile .
+    docker push registry-host:5000/spark-base:latest
     docker push registry-host:5000/spark-driver:latest
     docker push registry-host:5000/spark-executor:latest
     docker push registry-host:5000/spark-init:latest
+    
+Note that `spark-base` is the base image for the other images.  It must be built first before the other images, and then afterwards the other images can be built in any order.
 
 ## Submitting Applications to Kubernetes
 

@@ -15,24 +15,10 @@
 # limitations under the License.
 #
 
-FROM openjdk:8-alpine
+FROM spark-base
 
 # If this docker file is being used in the context of building your images from a Spark distribution, the docker build
 # command should be invoked from the top level directory of the Spark distribution. E.g.:
 # docker build -t spark-executor:latest -f dockerfiles/executor/Dockerfile .
-
-RUN apk upgrade --update
-RUN apk add --update bash tini
-RUN mkdir -p /opt/spark
-RUN touch /opt/spark/RELEASE
-
-ADD jars /opt/spark/jars
-ADD bin /opt/spark/bin
-ADD sbin /opt/spark/sbin
-ADD conf /opt/spark/conf
-
-ENV SPARK_HOME /opt/spark
-
-WORKDIR /opt/spark
 
 ENTRYPOINT [ "/sbin/tini", "--", "bin/spark-class", "org.apache.spark.deploy.rest.kubernetes.ResourceStagingServer" ]
