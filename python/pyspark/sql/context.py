@@ -245,7 +245,8 @@ class SQLContext(object):
 
     @since(1.3)
     @ignore_unicode_prefix
-    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
+    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True,
+                        numSlices=None):
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
 
@@ -276,6 +277,9 @@ class SQLContext(object):
             We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
         :param samplingRatio: the sample ratio of rows used for inferring
         :param verifySchema: verify data types of every row against schema.
+        :param numSlices: specify as :class:`int` the number of slices (partitions) to distribute
+            ``data`` across. Applies to ``data`` of :class:`list` or :class:`pandas.DataFrame`.
+            Defaults to `self.sparkContext.defaultParallelism`.
         :return: :class:`DataFrame`
 
         .. versionchanged:: 2.0
@@ -334,7 +338,8 @@ class SQLContext(object):
             ...
         Py4JJavaError: ...
         """
-        return self.sparkSession.createDataFrame(data, schema, samplingRatio, verifySchema)
+        return self.sparkSession.createDataFrame(data, schema, samplingRatio, verifySchema,
+                                                 numSlices)
 
     @since(1.3)
     def registerDataFrameAsTable(self, df, tableName):
