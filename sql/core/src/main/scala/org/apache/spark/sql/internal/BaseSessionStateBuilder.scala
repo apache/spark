@@ -18,7 +18,7 @@ package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
-import org.apache.spark.sql.{ExperimentalMethods, SparkSession, Strategy, UDFRegistration}
+import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
@@ -57,11 +57,16 @@ abstract class BaseSessionStateBuilder(
   type NewBuilder = (SparkSession, Option[SessionState]) => BaseSessionStateBuilder
 
   /**
-   * Function that produces a new instance of the SessionStateBuilder. This is used by the
+   * Function that produces a new instance of the `BaseSessionStateBuilder`. This is used by the
    * [[SessionState]]'s clone functionality. Make sure to override this when implementing your own
    * [[SessionStateBuilder]].
    */
   protected def newBuilder: NewBuilder
+
+  /**
+   * Session extensions defined in the [[SparkSession]].
+   */
+  protected def extensions: SparkSessionExtensions = session.extensions
 
   /**
    * Extract entries from `SparkConf` and put them in the `SQLConf`
@@ -108,7 +113,9 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` field.
    */
-  protected lazy val sqlParser: ParserInterface = new SparkSqlParser(conf)
+  protected lazy val sqlParser: ParserInterface = {
+    extensions.buildParser(session, new SparkSqlParser(conf))
+  }
 
   /**
    * ResourceLoader that is used to load function resources and jars.
@@ -171,7 +178,9 @@ abstract class BaseSessionStateBuilder(
    *
    * Note that this may NOT depend on the `analyzer` function.
    */
-  protected def customResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+  protected def customResolutionRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildResolutionRules(session)
+  }
 
   /**
    * Custom post resolution rules to add to the Analyzer. Prefer overriding this instead of
@@ -179,7 +188,9 @@ abstract class BaseSessionStateBuilder(
    *
    * Note that this may NOT depend on the `analyzer` function.
    */
-  protected def customPostHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+  protected def customPostHocResolutionRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPostHocResolutionRules(session)
+  }
 
   /**
    * Custom check rules to add to the Analyzer. Prefer overriding this instead of creating
@@ -187,7 +198,9 @@ abstract class BaseSessionStateBuilder(
    *
    * Note that this may NOT depend on the `analyzer` function.
    */
-  protected def customCheckRules: Seq[LogicalPlan => Unit] = Nil
+  protected def customCheckRules: Seq[LogicalPlan => Unit] = {
+    extensions.buildCheckRules(session)
+  }
 
   /**
    * Logical query plan optimizer.
@@ -207,7 +220,9 @@ abstract class BaseSessionStateBuilder(
    *
    * Note that this may NOT depend on the `optimizer` function.
    */
-  protected def customOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
+  protected def customOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildOptimizerRules(session)
+  }
 
   /**
    * Planner that converts optimized logical plans to physical plans.
@@ -227,7 +242,9 @@ abstract class BaseSessionStateBuilder(
    *
    * Note that this may NOT depend on the `planner` function.
    */
-  protected def customPlanningStrategies: Seq[Strategy] = Nil
+  protected def customPlanningStrategies: Seq[Strategy] = {
+    extensions.buildPlannerStrategies(session)
+  }
 
   /**
    * Create a query execution object.

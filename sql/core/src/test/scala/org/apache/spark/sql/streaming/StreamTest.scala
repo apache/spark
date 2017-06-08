@@ -214,24 +214,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       AssertOnQuery(query => { func(query); true })
   }
 
-  class StreamManualClock(time: Long = 0L) extends ManualClock(time) with Serializable {
-    private var waitStartTime: Option[Long] = None
-
-    override def waitTillTime(targetTime: Long): Long = synchronized {
-      try {
-        waitStartTime = Some(getTimeMillis())
-        super.waitTillTime(targetTime)
-      } finally {
-        waitStartTime = None
-      }
-    }
-
-    def isStreamWaitingAt(time: Long): Boolean = synchronized {
-      waitStartTime == Some(time)
-    }
-  }
-
-
   /**
    * Executes the specified actions on the given streaming DataFrame and provides helpful
    * error messages in the case of failures or incorrect answers.
@@ -242,6 +224,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   def testStream(
       _stream: Dataset[_],
       outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = synchronized {
+    import org.apache.spark.sql.streaming.util.StreamManualClock
+
     // `synchronized` is added to prevent the user from calling multiple `testStream`s concurrently
     // because this method assumes there is only one active query in its `StreamingQueryListener`
     // and it may not work correctly when multiple `testStream`s run concurrently.
@@ -293,6 +277,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
     def threadState =
       if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
+    def threadStackTrace = if (currentStream != null && currentStream.microBatchThread.isAlive) {
+      s"Thread stack trace: ${currentStream.microBatchThread.getStackTrace.mkString("\n")}"
+    } else {
+      ""
+    }
 
     def testState =
       s"""
@@ -303,6 +292,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
          |Output Mode: $outputMode
          |Stream state: $currentOffsets
          |Thread state: $threadState
+         |$threadStackTrace
          |${if (streamThreadDeathCause != null) stackTraceToString(streamThreadDeathCause) else ""}
          |
          |== Sink ==

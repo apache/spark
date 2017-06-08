@@ -58,7 +58,7 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
           fileFormat = new ParquetFileFormat(),
           options = Map.empty)(sparkSession = spark)
 
-        val logicalRelation = LogicalRelation(relation, catalogTable = Some(tableMeta))
+        val logicalRelation = LogicalRelation(relation, tableMeta)
         val query = Project(Seq('i, 'p), Filter('p === 1, logicalRelation)).analyze
 
         val optimized = Optimize.execute(query)

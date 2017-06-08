@@ -30,10 +30,12 @@ strList <- list("Dexter Morgan: Blood. Sometimes it sets my teeth on edge, ",
                 "raising me. But they're both dead now. I didn't kill them. Honest.")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("take() gives back the original elements in correct count and order", {
+  skip_on_cran()
+
   numVectorRDD <- parallelize(sc, numVector, 10)
   # case: number of elements to take is less than the size of the first partition
   expect_equal(takeRDD(numVectorRDD, 1), as.list(head(numVector, n = 1)))

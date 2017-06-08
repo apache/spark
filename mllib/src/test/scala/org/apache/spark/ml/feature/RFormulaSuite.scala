@@ -37,7 +37,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val formula = new RFormula().setFormula("id ~ v1 + v2")
     val original = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
     val model = formula.fit(original)
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(formula, model)
     val result = model.transform(original)
     val resultSchema = model.transformSchema(original.schema)
     val expected = Seq(
@@ -125,6 +125,90 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
         (3, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 3.0),
         (4, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0)
       ).toDF("id", "a", "b", "features", "label")
+    assert(result.schema.toString == resultSchema.toString)
+    assert(result.collect() === expected.collect())
+  }
+
+  test("encodes string terms with string indexer order type") {
+    val formula = new RFormula().setFormula("id ~ a + b")
+    val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "aaz", 5))
+      .toDF("id", "a", "b")
+
+    val expected = Seq(
+      Seq(
+        (1, "foo", 4, Vectors.dense(0.0, 0.0, 4.0), 1.0),
+        (2, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 2.0),
+        (3, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 3.0),
+        (4, "aaz", 5, Vectors.dense(0.0, 1.0, 5.0), 4.0)
+      ).toDF("id", "a", "b", "features", "label"),
+      Seq(
+        (1, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
+        (2, "bar", 4, Vectors.dense(0.0, 0.0, 4.0), 2.0),
+        (3, "bar", 5, Vectors.dense(0.0, 0.0, 5.0), 3.0),
+        (4, "aaz", 5, Vectors.dense(1.0, 0.0, 5.0), 4.0)
+      ).toDF("id", "a", "b", "features", "label"),
+      Seq(
+        (1, "foo", 4, Vectors.dense(1.0, 0.0, 4.0), 1.0),
+        (2, "bar", 4, Vectors.dense(0.0, 1.0, 4.0), 2.0),
+        (3, "bar", 5, Vectors.dense(0.0, 1.0, 5.0), 3.0),
+        (4, "aaz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0)
+      ).toDF("id", "a", "b", "features", "label"),
+      Seq(
+        (1, "foo", 4, Vectors.dense(0.0, 0.0, 4.0), 1.0),
+        (2, "bar", 4, Vectors.dense(0.0, 1.0, 4.0), 2.0),
+        (3, "bar", 5, Vectors.dense(0.0, 1.0, 5.0), 3.0),
+        (4, "aaz", 5, Vectors.dense(1.0, 0.0, 5.0), 4.0)
+      ).toDF("id", "a", "b", "features", "label")
+    )
+
+    var idx = 0
+    for (orderType <- StringIndexer.supportedStringOrderType) {
+      val model = formula.setStringIndexerOrderType(orderType).fit(original)
+      val result = model.transform(original)
+      val resultSchema = model.transformSchema(original.schema)
+      assert(result.schema.toString == resultSchema.toString)
+      assert(result.collect() === expected(idx).collect())
+      idx += 1
+    }
+  }
+
+  test("test consistency with R when encoding string terms") {
+    /*
+     R code:
+
+     df <- data.frame(id = c(1, 2, 3, 4),
+                  a = c("foo", "bar", "bar", "aaz"),
+                  b = c(4, 4, 5, 5))
+     model.matrix(id ~ a + b, df)[, -1]
+
+     abar afoo b
+      0    1   4
+      1    0   4
+      1    0   5
+      0    0   5
+    */
+    val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "aaz", 5))
+      .toDF("id", "a", "b")
+    val formula = new RFormula().setFormula("id ~ a + b")
+      .setStringIndexerOrderType(StringIndexer.alphabetDesc)
+
+    /*
+     Note that the category dropped after encoding is the same between R and Spark
+     (i.e., "aaz" is treated as the reference level).
+     However, the column order is still different:
+     R renders the columns in ascending alphabetical order ("bar", "foo"), while
+     RFormula renders the columns in descending alphabetical order ("foo", "bar").
+    */
+    val expected = Seq(
+      (1, "foo", 4, Vectors.dense(1.0, 0.0, 4.0), 1.0),
+      (2, "bar", 4, Vectors.dense(0.0, 1.0, 4.0), 2.0),
+      (3, "bar", 5, Vectors.dense(0.0, 1.0, 5.0), 3.0),
+      (4, "aaz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0)
+    ).toDF("id", "a", "b", "features", "label")
+
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
     assert(result.schema.toString == resultSchema.toString)
     assert(result.collect() === expected.collect())
   }

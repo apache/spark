@@ -12,6 +12,8 @@ For Scala/Java applications using SBT/Maven project definitions, link your strea
 	artifactId = spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}}
 	version = {{site.SPARK_VERSION_SHORT}}
 
+**Do not** manually add dependencies on `org.apache.kafka` artifacts (e.g. `kafka-clients`).  The `spark-streaming-kafka-0-10` artifact has the appropriate transitive dependencies already, and different versions may be incompatible in hard to diagnose ways.
+
 ### Creating a Direct Stream
  Note that the namespace for the import includes the version, org.apache.spark.streaming.kafka010
 

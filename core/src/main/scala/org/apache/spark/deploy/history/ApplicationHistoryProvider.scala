@@ -30,7 +30,8 @@ private[spark] case class ApplicationAttemptInfo(
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
-    completed: Boolean = false)
+    completed: Boolean = false,
+    appSparkVersion: String)
 
 private[spark] case class ApplicationHistoryInfo(
     id: String,
@@ -86,7 +87,7 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return Count of application event logs that are currently under process
    */
   def getEventLogsUnderProcess(): Int = {
-    return 0;
+    0
   }
 
   /**
@@ -95,7 +96,7 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return 0 if this is undefined or unsupported, otherwise the last updated time in millis
    */
   def getLastUpdatedTime(): Long = {
-    return 0;
+    0
   }
 
   /**

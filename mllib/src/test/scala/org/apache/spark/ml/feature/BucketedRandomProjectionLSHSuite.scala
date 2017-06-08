@@ -94,7 +94,8 @@ class BucketedRandomProjectionLSHSuite
     unitVectors.foreach { v: Vector =>
       assert(Vectors.norm(v, 2.0) ~== 1.0 absTol 1e-14)
     }
-    MLTestingUtils.checkCopy(brpModel)
+
+    MLTestingUtils.checkCopyAndUids(brp, brpModel)
   }
 
   test("BucketedRandomProjectionLSH: test of LSH property") {

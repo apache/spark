@@ -347,7 +347,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
       timeoutConf: GroupStateTimeout): Dataset[U] = {
-    mapGroupsWithState[S, U](
+    mapGroupsWithState[S, U](timeoutConf)(
       (key: K, it: Iterator[V], s: GroupState[S]) => func.call(key, it.asJava, s)
     )(stateEncoder, outputEncoder)
   }

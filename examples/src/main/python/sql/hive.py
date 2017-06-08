@@ -68,7 +68,7 @@ if __name__ == "__main__":
     # The results of SQL queries are themselves DataFrames and support all normal functions.
     sqlDF = spark.sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
 
-    # The items in DaraFrames are of type Row, which allows you to access each column by ordinal.
+    # The items in DataFrames are of type Row, which allows you to access each column by ordinal.
     stringsDS = sqlDF.rdd.map(lambda row: "Key: %d, Value: %s" % (row.key, row.value))
     for record in stringsDS.collect():
         print(record)

@@ -17,7 +17,7 @@
 
 # catalog.R: SparkSession catalog functions
 
-#' Create an external table
+#' (Deprecated) Create an external table
 #'
 #' Creates an external table based on the dataset in a data source,
 #' Returns a SparkDataFrame associated with the external table.
@@ -29,10 +29,11 @@
 #' @param tableName a name of the table.
 #' @param path the path of files to load.
 #' @param source the name of external data source.
-#' @param schema the schema of the data for certain data source.
+#' @param schema the schema of the data required for some data sources.
 #' @param ... additional argument(s) passed to the method.
 #' @return A SparkDataFrame.
-#' @rdname createExternalTable
+#' @rdname createExternalTable-deprecated
+#' @seealso \link{createTable}
 #' @export
 #' @examples
 #'\dontrun{
@@ -43,29 +44,70 @@
 #' @method createExternalTable default
 #' @note createExternalTable since 1.4.0
 createExternalTable.default <- function(tableName, path = NULL, source = NULL, schema = NULL, ...) {
-  sparkSession <- getSparkSession()
-  options <- varargsToStrEnv(...)
-  if (!is.null(path)) {
-    options[["path"]] <- path
-  }
-  catalog <- callJMethod(sparkSession, "catalog")
-  if (is.null(schema)) {
-    sdf <- callJMethod(catalog, "createExternalTable", tableName, source, options)
-  } else {
-    sdf <- callJMethod(catalog, "createExternalTable", tableName, source, schema$jobj, options)
-  }
-  dataFrame(sdf)
+  .Deprecated("createTable", old = "createExternalTable")
+  createTable(tableName, path, source, schema, ...)
 }
 
 createExternalTable <- function(x, ...) {
   dispatchFunc("createExternalTable(tableName, path = NULL, source = NULL, ...)", x, ...)
 }
 
+#' Creates a table based on the dataset in a data source
+#'
+#' Creates a table based on the dataset in a data source. Returns a SparkDataFrame associated with
+#' the table.
+#'
+#' The data source is specified by the \code{source} and a set of options(...).
+#' If \code{source} is not specified, the default data source configured by
+#' "spark.sql.sources.default" will be used. When a \code{path} is specified, an external table is
+#' created from the data at the given path. Otherwise a managed table is created.
+#'
+#' @param tableName the qualified or unqualified name that designates a table. If no database
+#'                  identifier is provided, it refers to a table in the current database.
+#' @param path (optional) the path of files to load.
+#' @param source (optional) the name of the data source.
+#' @param schema (optional) the schema of the data required for some data sources.
+#' @param ... additional named parameters as options for the data source.
+#' @return A SparkDataFrame.
+#' @rdname createTable
+#' @seealso \link{createExternalTable}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- createTable("myjson", path="path/to/json", source="json", schema)
+#'
+#' createTable("people", source = "json", schema = schema)
+#' insertInto(df, "people")
+#' }
+#' @name createTable
+#' @note createTable since 2.2.0
+createTable <- function(tableName, path = NULL, source = NULL, schema = NULL, ...) {
+  sparkSession <- getSparkSession()
+  options <- varargsToStrEnv(...)
+  if (!is.null(path)) {
+    options[["path"]] <- path
+  }
+  if (is.null(source)) {
+    source <- getDefaultSqlSource()
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  if (is.null(schema)) {
+    sdf <- callJMethod(catalog, "createTable", tableName, source, options)
+  } else if (class(schema) == "structType") {
+    sdf <- callJMethod(catalog, "createTable", tableName, source, schema$jobj, options)
+  } else {
+    stop("schema must be a structType.")
+  }
+  dataFrame(sdf)
+}
+
 #' Cache Table
 #'
 #' Caches the specified table in-memory.
 #'
-#' @param tableName The name of the table being cached
+#' @param tableName the qualified or unqualified name that designates a table. If no database
+#'                  identifier is provided, it refers to a table in the current database.
 #' @return SparkDataFrame
 #' @rdname cacheTable
 #' @export
@@ -94,7 +136,8 @@ cacheTable <- function(x, ...) {
 #'
 #' Removes the specified table from the in-memory cache.
 #'
-#' @param tableName The name of the table being uncached
+#' @param tableName the qualified or unqualified name that designates a table. If no database
+#'                  identifier is provided, it refers to a table in the current database.
 #' @return SparkDataFrame
 #' @rdname uncacheTable
 #' @export
@@ -162,6 +205,7 @@ clearCache <- function() {
 #' @method dropTempTable default
 #' @note dropTempTable since 1.4.0
 dropTempTable.default <- function(tableName) {
+  .Deprecated("dropTempView", old = "dropTempTable")
   if (class(tableName) != "character") {
     stop("tableName must be a string.")
   }
@@ -169,7 +213,6 @@ dropTempTable.default <- function(tableName) {
 }
 
 dropTempTable <- function(x, ...) {
-  .Deprecated("dropTempView")
   dispatchFunc("dropTempView(viewName)", x, ...)
 }
 
@@ -178,7 +221,7 @@ dropTempTable <- function(x, ...) {
 #' Drops the temporary view with the given view name in the catalog.
 #' If the view has been cached before, then it will also be uncached.
 #'
-#' @param viewName the name of the view to be dropped.
+#' @param viewName the name of the temporary view to be dropped.
 #' @return TRUE if the view is dropped successfully, FALSE otherwise.
 #' @rdname dropTempView
 #' @name dropTempView
@@ -317,10 +360,10 @@ listDatabases <- function() {
   dataFrame(callJMethod(callJMethod(catalog, "listDatabases"), "toDF"))
 }
 
-#' Returns a list of tables in the specified database
+#' Returns a list of tables or views in the specified database
 #'
-#' Returns a list of tables in the specified database.
-#' This includes all temporary tables.
+#' Returns a list of tables or views in the specified database.
+#' This includes all temporary views.
 #'
 #' @param databaseName (optional) name of the database
 #' @return a SparkDataFrame of the list of tables.
@@ -349,11 +392,13 @@ listTables <- function(databaseName = NULL) {
   dataFrame(callJMethod(jdst, "toDF"))
 }
 
-#' Returns a list of columns for the given table in the specified database
+#' Returns a list of columns for the given table/view in the specified database
 #'
-#' Returns a list of columns for the given table in the specified database.
+#' Returns a list of columns for the given table/view in the specified database.
 #'
-#' @param tableName a name of the table.
+#' @param tableName the qualified or unqualified name that designates a table/view. If no database
+#'                  identifier is provided, it refers to a table/view in the current database.
+#'                  If \code{databaseName} parameter is specified, this must be an unqualified name.
 #' @param databaseName (optional) name of the database
 #' @return a SparkDataFrame of the list of column descriptions.
 #' @rdname listColumns
@@ -409,12 +454,13 @@ listFunctions <- function(databaseName = NULL) {
   dataFrame(callJMethod(jdst, "toDF"))
 }
 
-#' Recover all the partitions in the directory of a table and update the catalog
+#' Recovers all the partitions in the directory of a table and update the catalog
 #'
-#' Recover all the partitions in the directory of a table and update the catalog. The name should
-#' reference a partitioned table, and not a temporary view.
+#' Recovers all the partitions in the directory of a table and update the catalog. The name should
+#' reference a partitioned table, and not a view.
 #'
-#' @param tableName a name of the table.
+#' @param tableName the qualified or unqualified name that designates a table. If no database
+#'                  identifier is provided, it refers to a table in the current database.
 #' @rdname recoverPartitions
 #' @name recoverPartitions
 #' @export
@@ -430,17 +476,18 @@ recoverPartitions <- function(tableName) {
   invisible(handledCallJMethod(catalog, "recoverPartitions", tableName))
 }
 
-#' Invalidate and refresh all the cached metadata of the given table
+#' Invalidates and refreshes all the cached data and metadata of the given table
 #'
-#' Invalidate and refresh all the cached metadata of the given table. For performance reasons,
-#' Spark SQL or the external data source library it uses might cache certain metadata about a
-#' table, such as the location of blocks. When those change outside of Spark SQL, users should
+#' Invalidates and refreshes all the cached data and metadata of the given table. For performance
+#' reasons, Spark SQL or the external data source library it uses might cache certain metadata about
+#' a table, such as the location of blocks. When those change outside of Spark SQL, users should
 #' call this function to invalidate the cache.
 #'
 #' If this table is cached as an InMemoryRelation, drop the original cached version and make the
 #' new version cached lazily.
 #'
-#' @param tableName a name of the table.
+#' @param tableName the qualified or unqualified name that designates a table. If no database
+#'                  identifier is provided, it refers to a table in the current database.
 #' @rdname refreshTable
 #' @name refreshTable
 #' @export
@@ -456,11 +503,11 @@ refreshTable <- function(tableName) {
   invisible(handledCallJMethod(catalog, "refreshTable", tableName))
 }
 
-#' Invalidate and refresh all the cached data and metadata for SparkDataFrame containing path
+#' Invalidates and refreshes all the cached data and metadata for SparkDataFrame containing path
 #'
-#' Invalidate and refresh all the cached data (and the associated metadata) for any SparkDataFrame
-#' that contains the given data source path. Path matching is by prefix, i.e. "/" would invalidate
-#' everything that is cached.
+#' Invalidates and refreshes all the cached data (and the associated metadata) for any
+#' SparkDataFrame that contains the given data source path. Path matching is by prefix, i.e. "/"
+#' would invalidate everything that is cached.
 #'
 #' @param path the path of the data source.
 #' @rdname refreshByPath

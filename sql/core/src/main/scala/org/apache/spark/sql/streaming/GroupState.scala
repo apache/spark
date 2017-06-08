@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  * `Dataset.groupByKey()`) while maintaining user-defined per-group state between invocations.
  * For a static batch Dataset, the function will be invoked once per group. For a streaming
  * Dataset, the function will be invoked for each group repeatedly in every trigger.
- * That is, in every batch of the `streaming.StreamingQuery`,
+ * That is, in every batch of the `StreamingQuery`,
  * the function will be invoked once for each group that has data in the trigger. Furthermore,
  * if timeout is set, then the function will invoked on timed out groups (more detail below).
  *
@@ -42,12 +42,23 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  *  - The key of the group.
  *  - An iterator containing all the values for this group.
  *  - A user-defined state object set by previous invocations of the given function.
+ *
  * In case of a batch Dataset, there is only one invocation and state object will be empty as
  * there is no prior state. Essentially, for batch Datasets, `[map/flatMap]GroupsWithState`
  * is equivalent to `[map/flatMap]Groups` and any updates to the state and/or timeouts have
  * no effect.
  *
- * Important points to note about the function.
+ * The major difference between `mapGroupsWithState` and `flatMapGroupsWithState` is that the
+ * former allows the function to return one and only one record, whereas the latter
+ * allows the function to return any number of records (including no records). Furthermore, the
+ * `flatMapGroupsWithState` is associated with an operation output mode, which can be either
+ * `Append` or `Update`. Semantically, this defines whether the output records of one trigger
+ * is effectively replacing the previously output records (from previous triggers) or is appending
+ * to the list of previously output records. Essentially, this defines how the Result Table (refer
+ * to the semantics in the programming guide) is updated, and allows us to reason about the
+ * semantics of later operations.
+ *
+ * Important points to note about the function (both mapGroupsWithState and flatMapGroupsWithState).
  *  - In a trigger, the function will be called only the groups present in the batch. So do not
  *    assume that the function will be called in every trigger for every group that has state.
  *  - There is no guaranteed ordering of values in the iterator in the function, neither with
@@ -201,7 +212,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
   @throws[IllegalArgumentException]("when updating with null")
   def update(newState: S): Unit
 
-  /** Remove this state. Note that this resets any timeout configuration as well. */
+  /** Remove this state. */
   def remove(): Unit
 
   /**

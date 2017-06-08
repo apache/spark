@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib clustering algorithms")
 
 # Tests for MLlib clustering algorithms in SparkR
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 absoluteSparkPath <- function(x) {
   sparkHome <- sparkR.conf("spark.home")
@@ -28,6 +28,8 @@ absoluteSparkPath <- function(x) {
 }
 
 test_that("spark.bisectingKmeans", {
+  skip_on_cran()
+
   newIris <- iris
   newIris$Species <- NULL
   training <- suppressWarnings(createDataFrame(newIris))
@@ -53,18 +55,20 @@ test_that("spark.bisectingKmeans", {
                c(0, 1, 2, 3))
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "spark-bisectingkmeans", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  summary2 <- summary(model2)
-  expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
-  expect_equal(summary.model$coefficients, summary2$coefficients)
-  expect_true(!summary.model$is.loaded)
-  expect_true(summary2$is.loaded)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-bisectingkmeans", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    summary2 <- summary(model2)
+    expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
+    expect_equal(summary.model$coefficients, summary2$coefficients)
+    expect_true(!summary.model$is.loaded)
+    expect_true(summary2$is.loaded)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 })
 
 test_that("spark.gaussianMixture", {
@@ -125,18 +129,20 @@ test_that("spark.gaussianMixture", {
   expect_equal(p$prediction, c(0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1))
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "spark-gaussianMixture", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
-  expect_equal(stats$lambda, stats2$lambda)
-  expect_equal(unlist(stats$mu), unlist(stats2$mu))
-  expect_equal(unlist(stats$sigma), unlist(stats2$sigma))
-  expect_equal(unlist(stats$loglik), unlist(stats2$loglik))
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-gaussianMixture", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$lambda, stats2$lambda)
+    expect_equal(unlist(stats$mu), unlist(stats2$mu))
+    expect_equal(unlist(stats$sigma), unlist(stats2$sigma))
+    expect_equal(unlist(stats$loglik), unlist(stats2$loglik))
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 })
 
 test_that("spark.kmeans", {
@@ -171,18 +177,20 @@ test_that("spark.kmeans", {
   expect_true(class(summary.model$coefficients[1, ]) == "numeric")
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "spark-kmeans", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  summary2 <- summary(model2)
-  expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
-  expect_equal(summary.model$coefficients, summary2$coefficients)
-  expect_true(!summary.model$is.loaded)
-  expect_true(summary2$is.loaded)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-kmeans", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    summary2 <- summary(model2)
+    expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
+    expect_equal(summary.model$coefficients, summary2$coefficients)
+    expect_true(!summary.model$is.loaded)
+    expect_true(summary2$is.loaded)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   # Test Kmeans on dataset that is sensitive to seed value
   col1 <- c(1, 2, 3, 4, 0, 1, 2, 3, 4, 0)
@@ -236,25 +244,29 @@ test_that("spark.lda with libsvm", {
   expect_true(logPrior <= 0 & !is.na(logPrior))
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "spark-lda", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-lda", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
 
-  expect_true(stats2$isDistributed)
-  expect_equal(logLikelihood, stats2$logLikelihood)
-  expect_equal(logPerplexity, stats2$logPerplexity)
-  expect_equal(vocabSize, stats2$vocabSize)
-  expect_equal(vocabulary, stats2$vocabulary)
-  expect_equal(trainingLogLikelihood, stats2$trainingLogLikelihood)
-  expect_equal(logPrior, stats2$logPrior)
+    expect_true(stats2$isDistributed)
+    expect_equal(logLikelihood, stats2$logLikelihood)
+    expect_equal(logPerplexity, stats2$logPerplexity)
+    expect_equal(vocabSize, stats2$vocabSize)
+    expect_equal(vocabulary, stats2$vocabulary)
+    expect_equal(trainingLogLikelihood, stats2$trainingLogLikelihood)
+    expect_equal(logPrior, stats2$logPrior)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 })
 
 test_that("spark.lda with text input", {
+  skip_on_cran()
+
   text <- read.text(absoluteSparkPath("data/mllib/sample_lda_data.txt"))
   model <- spark.lda(text, optimizer = "online", features = "value")
 
@@ -297,6 +309,8 @@ test_that("spark.lda with text input", {
 })
 
 test_that("spark.posterior and spark.perplexity", {
+  skip_on_cran()
+
   text <- read.text(absoluteSparkPath("data/mllib/sample_lda_data.txt"))
   model <- spark.lda(text, features = "value", k = 3)
 

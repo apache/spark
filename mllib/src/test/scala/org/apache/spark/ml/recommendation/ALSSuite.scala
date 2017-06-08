@@ -37,6 +37,7 @@ import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.recommendation.ALS.Rating
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.recommendation.MatrixFactorizationModelSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
@@ -78,7 +79,7 @@ class ALSSuite
     val k = 2
     val ne0 = new NormalEquation(k)
       .add(Array(1.0f, 2.0f), 3.0)
-      .add(Array(4.0f, 5.0f), 6.0, 2.0) // weighted
+      .add(Array(4.0f, 5.0f), 12.0, 2.0) // weighted
     assert(ne0.k === k)
     assert(ne0.triK === k * (k + 1) / 2)
     // NumPy code that computes the expected values:
@@ -348,6 +349,37 @@ class ALSSuite
   }
 
   /**
+  * Train ALS using the given training set and parameters
+  * @param training training dataset
+  * @param rank rank of the matrix factorization
+  * @param maxIter max number of iterations
+  * @param regParam regularization constant
+  * @param implicitPrefs whether to use implicit preference
+  * @param numUserBlocks number of user blocks
+  * @param numItemBlocks number of item blocks
+  * @return a trained ALSModel
+  */
+  def trainALS(
+    training: RDD[Rating[Int]],
+    rank: Int,
+    maxIter: Int,
+    regParam: Double,
+    implicitPrefs: Boolean = false,
+    numUserBlocks: Int = 2,
+    numItemBlocks: Int = 3): ALSModel = {
+    val spark = this.spark
+    import spark.implicits._
+    val als = new ALS()
+      .setRank(rank)
+      .setRegParam(regParam)
+      .setImplicitPrefs(implicitPrefs)
+      .setNumUserBlocks(numUserBlocks)
+      .setNumItemBlocks(numItemBlocks)
+      .setSeed(0)
+    als.fit(training.toDF())
+  }
+
+  /**
    * Test ALS using the given training/test splits and parameters.
    * @param training training dataset
    * @param test test dataset
@@ -409,8 +441,7 @@ class ALSSuite
     logInfo(s"Test RMSE is $rmse.")
     assert(rmse < targetRMSE)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(als, model)
   }
 
   test("exact rank-1 matrix") {
@@ -456,6 +487,20 @@ class ALSSuite
       targetRMSE = 0.3)
   }
 
+  test("implicit feedback regression") {
+    val trainingWithNeg = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, -3)))
+    val trainingWithZero = sc.parallelize(Array(Rating(0, 0, 1), Rating(1, 1, 1), Rating(0, 1, 0)))
+    val modelWithNeg =
+      trainALS(trainingWithNeg, rank = 1, maxIter = 5, regParam = 0.01, implicitPrefs = true)
+    val modelWithZero =
+      trainALS(trainingWithZero, rank = 1, maxIter = 5, regParam = 0.01, implicitPrefs = true)
+    val userFactorsNeg = modelWithNeg.userFactors
+    val itemFactorsNeg = modelWithNeg.itemFactors
+    val userFactorsZero = modelWithZero.userFactors
+    val itemFactorsZero = modelWithZero.itemFactors
+    assert(userFactorsNeg.intersect(userFactorsZero).count() == 0)
+    assert(itemFactorsNeg.intersect(itemFactorsZero).count() == 0)
+  }
   test("using generic ID types") {
     val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
 
@@ -672,58 +717,45 @@ class ALSSuite
       .setItemCol("item")
   }
 
-  test("recommendForAllUsers with k < num_items") {
-    val topItems = getALSModel.recommendForAllUsers(2)
-    assert(topItems.count() == 3)
-    assert(topItems.columns.contains("user"))
-
-    val expected = Map(
-      0 -> Array((3, 54f), (4, 44f)),
-      1 -> Array((3, 39f), (5, 33f)),
-      2 -> Array((3, 51f), (5, 45f))
-    )
-    checkRecommendations(topItems, expected, "item")
-  }
-
-  test("recommendForAllUsers with k = num_items") {
-    val topItems = getALSModel.recommendForAllUsers(4)
-    assert(topItems.count() == 3)
-    assert(topItems.columns.contains("user"))
-
+  test("recommendForAllUsers with k <, = and > num_items") {
+    val model = getALSModel
+    val numUsers = model.userFactors.count
+    val numItems = model.itemFactors.count
     val expected = Map(
       0 -> Array((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
       1 -> Array((3, 39f), (5, 33f), (4, 26f), (6, 16f)),
       2 -> Array((3, 51f), (5, 45f), (4, 30f), (6, 18f))
     )
-    checkRecommendations(topItems, expected, "item")
+
+    Seq(2, 4, 6).foreach { k =>
+      val n = math.min(k, numItems).toInt
+      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val topItems = model.recommendForAllUsers(k)
+      assert(topItems.count() == numUsers)
+      assert(topItems.columns.contains("user"))
+      checkRecommendations(topItems, expectedUpToN, "item")
+    }
   }
 
-  test("recommendForAllItems with k < num_users") {
-    val topUsers = getALSModel.recommendForAllItems(2)
-    assert(topUsers.count() == 4)
-    assert(topUsers.columns.contains("item"))
-
-    val expected = Map(
-      3 -> Array((0, 54f), (2, 51f)),
-      4 -> Array((0, 44f), (2, 30f)),
-      5 -> Array((2, 45f), (0, 42f)),
-      6 -> Array((0, 28f), (2, 18f))
-    )
-    checkRecommendations(topUsers, expected, "user")
-  }
-
-  test("recommendForAllItems with k = num_users") {
-    val topUsers = getALSModel.recommendForAllItems(3)
-    assert(topUsers.count() == 4)
-    assert(topUsers.columns.contains("item"))
-
+  test("recommendForAllItems with k <, = and > num_users") {
+    val model = getALSModel
+    val numUsers = model.userFactors.count
+    val numItems = model.itemFactors.count
     val expected = Map(
       3 -> Array((0, 54f), (2, 51f), (1, 39f)),
       4 -> Array((0, 44f), (2, 30f), (1, 26f)),
       5 -> Array((2, 45f), (0, 42f), (1, 33f)),
       6 -> Array((0, 28f), (2, 18f), (1, 16f))
     )
-    checkRecommendations(topUsers, expected, "user")
+
+    Seq(2, 3, 4).foreach { k =>
+      val n = math.min(k, numUsers).toInt
+      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val topUsers = getALSModel.recommendForAllItems(k)
+      assert(topUsers.count() == numItems)
+      assert(topUsers.columns.contains("item"))
+      checkRecommendations(topUsers, expectedUpToN, "user")
+    }
   }
 
   private def checkRecommendations(
