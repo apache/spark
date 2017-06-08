@@ -24,6 +24,7 @@ import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
@@ -38,6 +39,11 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    * local blocks or put local blocks.
    */
   def init(blockDataManager: BlockDataManager): Unit
+
+  /**
+   * Collect current executor memory metrics of transferService.
+   */
+  private[spark] def updateMemMetrics(executorMetrics: ExecutorMetrics): Unit
 
   /**
    * Tear down the transfer service.

@@ -53,6 +53,7 @@ public class TransportServer implements Closeable {
 
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
+  private PooledByteBufAllocator allocator;
   private int port = -1;
 
   /**
@@ -78,6 +79,8 @@ public class TransportServer implements Closeable {
     }
   }
 
+  public PooledByteBufAllocator getAllocator() { return allocator; }
+
   public int getPort() {
     if (port == -1) {
       throw new IllegalStateException("Server not initialized");
@@ -92,7 +95,7 @@ public class TransportServer implements Closeable {
       NettyUtils.createEventLoop(ioMode, conf.serverThreads(), conf.getModuleName() + "-server");
     EventLoopGroup workerGroup = bossGroup;
 
-    PooledByteBufAllocator allocator = NettyUtils.createPooledByteBufAllocator(
+    allocator = NettyUtils.createPooledByteBufAllocator(
       conf.preferDirectBufs(), true /* allowCache */, conf.serverThreads());
 
     bootstrap = new ServerBootstrap()

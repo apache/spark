@@ -139,7 +139,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
 
     assert(listener.getExecutionMetrics(0).isEmpty)
 
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", null, Seq(
       // (task id, stage id, stage attempt, accum updates)
       (0L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo)),
       (1L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo))
@@ -152,7 +152,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
     listener.onOtherEvent(SparkListenerDriverAccumUpdates(0, Seq((999L, 2L))))
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", null, Seq(
       // (task id, stage id, stage attempt, accum updates)
       (0L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo)),
       (1L, 0, 0,
@@ -164,7 +164,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
     // Retrying a stage should reset the metrics
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 1)))
 
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", null, Seq(
       // (task id, stage id, stage attempt, accum updates)
       (0L, 0, 1, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo)),
       (1L, 0, 1, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo))
@@ -204,7 +204,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
     // Summit a new stage
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(1, 0)))
 
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", null, Seq(
       // (task id, stage id, stage attempt, accum updates)
       (0L, 1, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo)),
       (1L, 1, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo))

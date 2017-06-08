@@ -35,7 +35,7 @@ import org.scalatest.concurrent.Timeouts._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
-import org.apache.spark.executor.DataReadMethod
+import org.apache.spark.executor.{DataReadMethod, ExecutorMetrics}
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
@@ -1295,6 +1295,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         shuffleFiles: Array[File]): Unit = {
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
     }
+
+    override def updateMemMetrics(executorMetrics: ExecutorMetrics): Unit = {}
 
     override def close(): Unit = {}
 

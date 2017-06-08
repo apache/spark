@@ -117,6 +117,12 @@ private[spark] class Executor(
     env.blockManager.initialize(conf.getAppId)
   }
 
+  private val executorMetrics: ExecutorMetrics = new ExecutorMetrics
+  executorMetrics.setHostname(Utils.localHostName)
+  if (env.rpcEnv.address != null) {
+    executorMetrics.setPort(Some(env.rpcEnv.address.port))
+  }
+
   // Whether to load classes in user jars before those in Spark jars
   private val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)
 
@@ -721,7 +727,21 @@ private[spark] class Executor(
       }
     }
 
-    val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
+    env.blockTransferService.updateMemMetrics(this.executorMetrics)
+    val executorMetrics = if (isLocal) {
+      // When running locally, there is a chance that the executorMetrics could change
+      // out from under us. So, copy them here. In non-local mode this object would be
+      // serialized and de-serialized on its way to the driver. Perform that operation here
+      // to obtain the same result as non-local mode.
+      // TODO - Add a test that fails in local mode if we don't copy executorMetrics here.
+      Utils.deserialize[ExecutorMetrics](Utils.serialize(this.executorMetrics))
+    } else {
+      this.executorMetrics
+    }
+
+    val message = Heartbeat(
+      executorId, executorMetrics, accumUpdates.toArray, env.blockManager.blockManagerId)
+
     try {
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
           message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))

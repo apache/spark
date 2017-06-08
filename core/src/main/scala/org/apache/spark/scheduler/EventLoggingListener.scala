@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
@@ -33,6 +33,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.{ExecutorMetrics, TransportMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -86,6 +87,10 @@ private[spark] class EventLoggingListener(
 
   // Visible for tests only.
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
+
+  private val executorIdToLatestMetrics = new HashMap[String, SparkListenerExecutorMetricsUpdate]
+  private val executorIdToModifiedMaxMetrics =
+    new HashMap[String, SparkListenerExecutorMetricsUpdate]
 
   /**
    * Creates the log file in the configured log directory.
@@ -145,8 +150,23 @@ private[spark] class EventLoggingListener(
     }
   }
 
+  // When a stage is submitted and completed, update the executor memory metrics for that
+  // stage, and then log the metrics. Anytime we receive more executor metrics, update the
+  // running set of {{executorIdToLatestMetrics}} and {{executorIdToModifiedMaxMetrics}}.
+  // Since stage submit and complete times might be interleaved, maintain the latest and
+  // max metrics for each time segment. For each stage start and stage completion, replace
+  // each item in {{executorIdToModifiedMaxMetrics}} with that in {{executorIdToLatestMetrics}}.
+  private def updateAndLogExecutorMemoryMetrics() : Unit = {
+    executorIdToModifiedMaxMetrics.foreach { case(_, metrics) => logEvent(metrics) }
+    executorIdToModifiedMaxMetrics.clear()
+    executorIdToLatestMetrics.foreach { case(_, metrics) => logEvent(metrics) }
+  }
+
   // Events that do not trigger a flush
-  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = logEvent(event)
+  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
+    updateAndLogExecutorMemoryMetrics()
+    logEvent(event)
+  }
 
   override def onTaskStart(event: SparkListenerTaskStart): Unit = logEvent(event)
 
@@ -160,6 +180,7 @@ private[spark] class EventLoggingListener(
 
   // Events that trigger a flush
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+    updateAndLogExecutorMemoryMetrics()
     logEvent(event, flushLogger = true)
   }
 
@@ -186,11 +207,14 @@ private[spark] class EventLoggingListener(
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     logEvent(event, flushLogger = true)
   }
+
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     logEvent(event, flushLogger = true)
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
+    executorIdToLatestMetrics.remove(event.executorId)
+    executorIdToModifiedMaxMetrics.remove(event.executorId)
     logEvent(event, flushLogger = true)
   }
 
@@ -213,8 +237,15 @@ private[spark] class EventLoggingListener(
   // No-op because logging every update would be overkill
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {}
 
-  // No-op because logging every update would be overkill
-  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
+  // Track executor metrics for logging on stage start and end
+  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
+    // We only track the executor metrics in each stage, so we drop the task metrics as they are
+    // quite verbose
+    val eventWithoutTaskMetrics = SparkListenerExecutorMetricsUpdate(
+      event.execId, Seq.empty, event.executorMetrics)
+    executorIdToLatestMetrics(eventWithoutTaskMetrics.execId) = eventWithoutTaskMetrics
+    updateModifiedMetrics(eventWithoutTaskMetrics)
+  }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (event.logEvent) {
@@ -265,6 +296,55 @@ private[spark] class EventLoggingListener(
     SparkListenerEnvironmentUpdate(redactedProps)
   }
 
+  /**
+   * Process an executor metrics update and update our stored cache of events.
+   * Does this event match the ID of an executor we are already tracking?
+   * If no, start tracking metrics for this executor, starting at this event.
+   * If yes, compare time stamps, and perhaps update using this event.
+   * Only do this if executorMetrics is present in the toBeModifiedEvent.
+   * If it is not - meaning we are processing historical data created
+   * without executorMetrics - simply cache the latestEvent
+   * @param latestEvent the latest event received, used to update our map of stored metrics.
+   */
+  private def updateModifiedMetrics(latestEvent: SparkListenerExecutorMetricsUpdate): Unit = {
+    val executorId = latestEvent.execId
+    val toBeModifiedEvent = executorIdToModifiedMaxMetrics.get(executorId)
+    toBeModifiedEvent match {
+      case None =>
+        executorIdToModifiedMaxMetrics(executorId) = latestEvent
+      case Some(toBeModifiedEvent) =>
+        if (toBeModifiedEvent.executorMetrics.isEmpty ||
+          latestEvent.executorMetrics.isEmpty) {
+          executorIdToModifiedMaxMetrics(executorId) == latestEvent
+        }
+        else {
+          val prevTransportMetrics = toBeModifiedEvent.executorMetrics.get.transportMetrics
+          val latestTransportMetrics = latestEvent.executorMetrics.get.transportMetrics
+          var timeStamp: Long = prevTransportMetrics.timeStamp
+
+          val onHeapSize = if
+          (latestTransportMetrics.onHeapSize > prevTransportMetrics.onHeapSize) {
+            timeStamp = latestTransportMetrics.timeStamp
+            latestTransportMetrics.onHeapSize
+          } else {
+            prevTransportMetrics.onHeapSize
+          }
+          val offHeapSize =
+            if (latestTransportMetrics.offHeapSize > prevTransportMetrics.offHeapSize) {
+              timeStamp = latestTransportMetrics.timeStamp
+              latestTransportMetrics.offHeapSize
+            } else {
+              prevTransportMetrics.offHeapSize
+            }
+          val updatedExecMetrics = ExecutorMetrics(toBeModifiedEvent.executorMetrics.get.hostname,
+            toBeModifiedEvent.executorMetrics.get.port,
+            TransportMetrics(timeStamp, onHeapSize, offHeapSize))
+          val modifiedEvent = SparkListenerExecutorMetricsUpdate(
+            toBeModifiedEvent.execId, toBeModifiedEvent.accumUpdates, Some(updatedExecMetrics))
+          executorIdToModifiedMaxMetrics(executorId) = modifiedEvent
+        }
+    }
+  }
 }
 
 private[spark] object EventLoggingListener extends Logging {

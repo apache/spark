@@ -28,6 +28,7 @@ import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
@@ -450,6 +451,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
    */
   override def executorHeartbeatReceived(
       execId: String,
+      executorMetrics: ExecutorMetrics,
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId): Boolean = {
     // (taskId, stageId, stageAttemptId, accumUpdates)
@@ -461,7 +463,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
         }
       }
     }
-    dagScheduler.executorHeartbeatReceived(execId, accumUpdatesWithTaskIds, blockManagerId)
+    dagScheduler.executorHeartbeatReceived(
+      execId, executorMetrics, accumUpdatesWithTaskIds, blockManagerId)
   }
 
   def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {

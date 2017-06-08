@@ -235,9 +235,15 @@ private[spark] object JsonProtocol {
 
   def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
     val execId = metricsUpdate.execId
+    val executorMetrics = metricsUpdate.executorMetrics
     val accumUpdates = metricsUpdate.accumUpdates
+    val metricsJson: JValue = executorMetrics match {
+      case Some(metrics) => executorMetricsToJson(metrics)
+      case None => "none"
+    }
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.metricsUpdate) ~
     ("Executor ID" -> execId) ~
+    ("Executor Metrics Updated" -> metricsJson) ~
     ("Metrics Updated" -> accumUpdates.map { case (taskId, stageId, stageAttemptId, updates) =>
       ("Task ID" -> taskId) ~
       ("Stage ID" -> stageId) ~
@@ -331,6 +337,19 @@ private[spark] object JsonProtocol {
       // For all external accumulators, just use strings
       JString(value.toString)
     }
+  }
+
+  def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
+    val transportMetrics = transportMetricsToJson(executorMetrics.transportMetrics)
+    ("Executor Hostname" -> executorMetrics.hostname) ~
+    ("Executor Port" -> executorMetrics.port.map(new JInt(_)).getOrElse(JNothing)) ~
+    ("TransportMetrics" -> transportMetrics)
+  }
+
+  def transportMetricsToJson(transportMetrics: TransportMetrics): JValue = {
+    ("TimeStamp" -> transportMetrics.timeStamp) ~
+    ("OnHeapSize" -> transportMetrics.onHeapSize) ~
+    ("OffHeapSize" -> transportMetrics.offHeapSize)
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
@@ -664,6 +683,7 @@ private[spark] object JsonProtocol {
 
   def executorMetricsUpdateFromJson(json: JValue): SparkListenerExecutorMetricsUpdate = {
     val execInfo = (json \ "Executor ID").extract[String]
+    val executorMetrics = executorMetricsFromJson(json \ "Executor Metrics Updated")
     val accumUpdates = (json \ "Metrics Updated").extract[List[JValue]].map { json =>
       val taskId = (json \ "Task ID").extract[Long]
       val stageId = (json \ "Stage ID").extract[Int]
@@ -672,7 +692,7 @@ private[spark] object JsonProtocol {
         (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
       (taskId, stageId, stageAttemptId, updates)
     }
-    SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates)
+    SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates, Some(executorMetrics))
   }
 
   /** --------------------------------------------------------------------- *
@@ -775,6 +795,25 @@ private[spark] object JsonProtocol {
     } else {
       value.extract[String]
     }
+  }
+
+  def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
+    val metrics = new ExecutorMetrics
+    if (json == JNothing) {
+      return metrics
+    }
+    metrics.setHostname((json \ "Executor Hostname").extract[String])
+    metrics.setPort(Utils.jsonOption(json \ "Executor Port").map(_.extract[Int]))
+    metrics.setTransportMetrics(transportMetricsFromJson(json \ "TransportMetrics"))
+    metrics
+  }
+
+  def transportMetricsFromJson(json: JValue): TransportMetrics = {
+    val metrics = new TransportMetrics(
+      (json \ "TimeStamp").extract[Long],
+      (json \ "OnHeapSize").extract[Long],
+      (json \ "OffHeapSize").extract[Long])
+    metrics
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {
