@@ -140,7 +140,7 @@ case class InsertIntoHiveTable(
       hadoopConf: Configuration,
       stagingDir: String): Path = {
     getStagingDir(
-      new Path(extURI.getScheme, extURI.getAuthority, extURI.getPath),
+      new Path(extURI.getScheme, extURI.getAuthority, extURI.getPath).getParent,
       hadoopConf,
       stagingDir)
   }
