@@ -23,41 +23,50 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.codahale.metrics.Timer
-
 import org.apache.spark.internal.Logging
+
+private [spark] trait MultipleListenerBus[L <: AnyRef, E]{
+
+  def addListener(listener: L): Unit
+
+  def removeListener(listener: L): Unit
+
+  private[spark] def addIsolatedListener(listener: L,
+    eventFilter: Option[E => Boolean]): Unit
+
+  private[spark] def findListenersByClass[T <: L : ClassTag]: Seq[T]
+
+  private[spark] def listeners: Seq[L]
+}
+
 
 /**
  * An event bus which posts events to its listeners.
  */
-private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
-
-  private[this] val listenersPlusTimers = new CopyOnWriteArrayList[(L, Option[Timer])]
+private[spark] trait ListenerBus[L <: AnyRef, E] extends MultipleListenerBus[L, E] with Logging {
 
   // Marked `private[spark]` for access in tests.
-  private[spark] def listeners = listenersPlusTimers.asScala.map(_._1).asJava
-
-  /**
-   * Returns a CodaHale metrics Timer for measuring the listener's event processing time.
-   * This method is intended to be overridden by subclasses.
-   */
-  protected def getTimer(listener: L): Option[Timer] = None
+  private[spark] val internalListeners = new CopyOnWriteArrayList[L]
 
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
    */
-  final def addListener(listener: L): Unit = {
-    listenersPlusTimers.add((listener, getTimer(listener)))
+  final override def addListener(listener: L): Unit = {
+    internalListeners.add(listener)
   }
+
+   /**
+    * For the synchronous implementation, this method is equivalent to the simple addListener
+    */
+  final override def addIsolatedListener(listener: L, eventFilter: Option[(E) => Boolean]): Unit =
+    internalListeners.add(listener)
 
   /**
    * Remove a listener and it won't receive any events. This method is thread-safe and can be called
    * in any thread.
    */
-  final def removeListener(listener: L): Unit = {
-    listenersPlusTimers.asScala.find(_._1 eq listener).foreach { listenerAndTimer =>
-      listenersPlusTimers.remove(listenerAndTimer)
-    }
+  final override def removeListener(listener: L): Unit = {
+    internalListeners.remove(listener)
   }
 
   /**
@@ -68,25 +77,14 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
     // JavaConverters can create a JIterableWrapper if we use asScala.
     // However, this method will be called frequently. To avoid the wrapper cost, here we use
     // Java Iterator directly.
-    val iter = listenersPlusTimers.iterator
+    val iter = internalListeners.iterator
     while (iter.hasNext) {
-      val listenerAndMaybeTimer = iter.next()
-      val listener = listenerAndMaybeTimer._1
-      val maybeTimer = listenerAndMaybeTimer._2
-      val maybeTimerContext = if (maybeTimer.isDefined) {
-        maybeTimer.get.time()
-      } else {
-        null
-      }
+      val listener = iter.next()
       try {
         doPostEvent(listener, event)
       } catch {
         case NonFatal(e) =>
           logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
-      } finally {
-        if (maybeTimerContext != null) {
-          maybeTimerContext.stop()
-        }
       }
     }
   }
@@ -97,9 +95,10 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    */
   protected def doPostEvent(listener: L, event: E): Unit
 
-  private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
+  private[spark] override def findListenersByClass[T <: L : ClassTag]: Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass
-    listeners.asScala.filter(_.getClass == c).map(_.asInstanceOf[T]).toSeq
+    listeners.filter(_.getClass == c).map(_.asInstanceOf[T])
   }
 
+  override private[spark] def listeners = internalListeners.asScala
 }
