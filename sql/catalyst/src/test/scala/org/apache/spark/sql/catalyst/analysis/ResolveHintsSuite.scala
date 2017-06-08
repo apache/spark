@@ -36,17 +36,17 @@ class ResolveHintsSuite extends AnalysisTest {
   test("case-sensitive or insensitive parameters") {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      ResolvedHint(testRelation, HintInfo(isBroadcastable = Option(true))),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table"), table("TaBlE")),
-      ResolvedHint(testRelation, HintInfo(isBroadcastable = Option(true))),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      ResolvedHint(testRelation, HintInfo(isBroadcastable = Option(true))),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = true)
 
     checkAnalysis(
@@ -58,28 +58,28 @@ class ResolveHintsSuite extends AnalysisTest {
   test("multiple broadcast hint aliases") {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table", "table2"), table("table").join(table("table2"))),
-      Join(ResolvedHint(testRelation, HintInfo(isBroadcastable = Option(true))),
-        ResolvedHint(testRelation2, HintInfo(isBroadcastable = Option(true))), Inner, None),
+      Join(ResolvedHint(testRelation, HintInfo(broadcast = true)),
+        ResolvedHint(testRelation2, HintInfo(broadcast = true)), Inner, None),
       caseSensitive = false)
   }
 
   test("do not traverse past existing broadcast hints") {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table"),
-        ResolvedHint(table("table").where('a > 1), HintInfo(isBroadcastable = Option(true)))),
-      ResolvedHint(testRelation.where('a > 1), HintInfo(isBroadcastable = Option(true))).analyze,
+        ResolvedHint(table("table").where('a > 1), HintInfo(broadcast = true))),
+      ResolvedHint(testRelation.where('a > 1), HintInfo(broadcast = true)).analyze,
       caseSensitive = false)
   }
 
   test("should work for subqueries") {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").as("tableAlias")),
-      ResolvedHint(testRelation, HintInfo(isBroadcastable = Option(true))),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
-      ResolvedHint(testRelation, HintInfo(isBroadcastable = Option(true))),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     // Negative case: if the alias doesn't match, don't match the original table name.
@@ -104,7 +104,7 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
         """.stripMargin
       ),
-      ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(isBroadcastable = Option(true)))
+      ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(broadcast = true))
         .select('a).analyze,
       caseSensitive = false)
   }
