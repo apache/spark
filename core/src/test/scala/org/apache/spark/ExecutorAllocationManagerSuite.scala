@@ -854,6 +854,17 @@ class ExecutorAllocationManagerSuite
     assert(maxNumExecutorsNeeded(manager) === 1)
   }
 
+  test("SPARK-20079: Re registration of AM hangs spark cluster in yarn-client mode") {
+    sc = createSparkContext()
+    val manager = sc.executorAllocationManager.get
+    assert(initializing(manager))
+    val stageInfo = createStageInfo(0, 2)
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfo))
+    assert(!initializing(manager))
+    manager.reset()
+    assert(!initializing(manager))
+  }
+
   test("reset the state of allocation manager") {
     sc = createSparkContext()
     val manager = sc.executorAllocationManager.get
@@ -988,6 +999,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
    | Helper methods for accessing private methods and fields |
    * ------------------------------------------------------- */
 
+  private val _initializing = PrivateMethod[Boolean]('initializing)
   private val _numExecutorsToAdd = PrivateMethod[Int]('numExecutorsToAdd)
   private val _numExecutorsTarget = PrivateMethod[Int]('numExecutorsTarget)
   private val _maxNumExecutorsNeeded = PrivateMethod[Int]('maxNumExecutorsNeeded)
@@ -1010,6 +1022,10 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _onExecutorBusy = PrivateMethod[Unit]('onExecutorBusy)
   private val _localityAwareTasks = PrivateMethod[Int]('localityAwareTasks)
   private val _hostToLocalTaskCount = PrivateMethod[Map[String, Int]]('hostToLocalTaskCount)
+
+  private def initializing(manager: ExecutorAllocationManager): Boolean = {
+    manager invokePrivate _initializing()
+  }
 
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsToAdd()
