@@ -17,9 +17,8 @@
 
 package org.apache.spark.util
 
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -31,13 +30,20 @@ import org.apache.spark.internal.Logging
 private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
   // Marked `private[spark]` for access in tests.
-  private[spark] val listeners = new CopyOnWriteArrayList[L]
+  private[spark] def listeners = internalHolder.get()
+  private val internalHolder = new AtomicReference[Array[L]](Array.empty.asInstanceOf[Array[L]])
 
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
    */
   final def addListener(listener: L): Unit = {
-    listeners.add(listener)
+
+    var oldVal, candidate: Array[L] = null
+    do {
+      oldVal = listeners
+      candidate = oldVal.:+(listener)(oldVal.elemTag)
+      // This creates a new array so we can compare reference
+    } while (!internalHolder.compareAndSet(oldVal, candidate))
   }
 
   /**
@@ -45,7 +51,11 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * in any thread.
    */
   final def removeListener(listener: L): Unit = {
-    listeners.remove(listener)
+    var oldVal, candidate: Array[L] = null
+    do {
+      oldVal = listeners
+      candidate = oldVal.filter(l => !l.equals(listener))
+    } while (!internalHolder.compareAndSet(oldVal, candidate))
   }
 
   /**
@@ -53,18 +63,16 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * `postToAll` in the same thread for all events.
    */
   def postToAll(event: E): Unit = {
-    // JavaConverters can create a JIterableWrapper if we use asScala.
-    // However, this method will be called frequently. To avoid the wrapper cost, here we use
-    // Java Iterator directly.
-    val iter = listeners.iterator
-    while (iter.hasNext) {
-      val listener = iter.next()
+    val currentVal = listeners
+    var i = 0
+    while(i < currentVal.length) {
       try {
-        doPostEvent(listener, event)
+        doPostEvent(currentVal(i), event)
       } catch {
         case NonFatal(e) =>
-          logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
+          logError(s"Listener ${Utils.getFormattedClassName(currentVal(i))} threw an exception", e)
       }
+      i = i + 1
     }
   }
 
@@ -76,7 +84,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
   private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass
-    listeners.asScala.filter(_.getClass == c).map(_.asInstanceOf[T]).toSeq
+    listeners.filter(_.getClass == c).map(_.asInstanceOf[T])
   }
 
 }

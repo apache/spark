@@ -158,6 +158,11 @@ package object config {
       .checkValue(_ > 0, "The capacity of listener bus event queue must not be negative")
       .createWithDefault(10000)
 
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_DROP =
+    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.drop")
+      .booleanConf
+      .createWithDefault(true)
+
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
     .stringConf

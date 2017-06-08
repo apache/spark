@@ -36,357 +36,378 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
   val jobCompletionTime = 1421191296660L
 
-  test("don't call sc.stop in listener") {
-    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
-    val listener = new SparkContextStoppingListener(sc)
-    val bus = new LiveListenerBus(sc)
-    bus.addListener(listener)
+  val queuingStrategy = List("true", "false")
 
-    // Starting listener bus should flush all buffered events
-    bus.start()
-    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+  queuingStrategy.foreach(qS => {
 
-    bus.stop()
-    assert(listener.sparkExSeen)
-  }
-
-  test("basic creation and shutdown of LiveListenerBus") {
-    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
-    val counter = new BasicJobCounter
-    val bus = new LiveListenerBus(sc)
-    bus.addListener(counter)
-
-    // Listener bus hasn't started yet, so posting events should not increment counter
-    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
-    assert(counter.count === 0)
-
-    // Starting listener bus should flush all buffered events
-    bus.start()
-    bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    assert(counter.count === 5)
-
-    // After listener bus has stopped, posting events should not increment counter
-    bus.stop()
-    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
-    assert(counter.count === 5)
-
-    // Listener bus must not be started twice
-    intercept[IllegalStateException] {
-      val bus = new LiveListenerBus(sc)
-      bus.start()
-      bus.start()
+    def getConf: SparkConf = {
+      val conf = new SparkConf()
+      conf.set("spark.scheduler.listenerbus.eventqueue.drop", qS)
+      conf
     }
 
-    // ... or stopped before starting
-    intercept[IllegalStateException] {
+    def name(testName: String): String = {
+      if (qS == "true") {
+        s"dropping event bus: $testName"
+      } else {
+        s"Waiting event bus: $testName"
+      }
+    }
+
+    test(name("don't call sc.stop in listener")) {
+      sc = new SparkContext("local", "SparkListenerSuite", getConf)
+      val listener = new SparkContextStoppingListener(sc)
       val bus = new LiveListenerBus(sc)
+      bus.addListener(listener)
+
+      // Starting listener bus should flush all buffered events
+      bus.start()
+      bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+      bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+
       bus.stop()
+      assert(listener.sparkExSeen)
     }
-  }
 
-  test("bus.stop() waits for the event queue to completely drain") {
-    @volatile var drained = false
+    test(name("basic creation and shutdown of LiveListenerBus")) {
+      sc = new SparkContext("local", "SparkListenerSuite", getConf)
+      val counter = new BasicJobCounter
+      val bus = new LiveListenerBus(sc)
+      bus.addListener(counter)
 
-    // When Listener has started
-    val listenerStarted = new Semaphore(0)
+      // Listener bus hasn't started yet, so posting events should not increment counter
+      (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
+      assert(counter.count === 0)
 
-    // Tells the listener to stop blocking
-    val listenerWait = new Semaphore(0)
+      // Starting listener bus should flush all buffered events
+      bus.start()
+      bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      assert(counter.count === 5)
 
-    // When stopper has started
-    val stopperStarted = new Semaphore(0)
+      // After listener bus has stopped, posting events should not increment counter
+      bus.stop()
+      (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
+      assert(counter.count === 5)
 
-    // When stopper has returned
-    val stopperReturned = new Semaphore(0)
-
-    class BlockingListener extends SparkListener {
-      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-        listenerStarted.release()
-        listenerWait.acquire()
-        drained = true
+      // Listener bus must not be started twice
+      intercept[IllegalStateException] {
+        val bus = new LiveListenerBus(sc)
+        bus.start()
+        bus.start()
       }
-    }
-    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
-    val bus = new LiveListenerBus(sc)
-    val blockingListener = new BlockingListener
 
-    bus.addListener(blockingListener)
-    bus.start()
-    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-
-    listenerStarted.acquire()
-    // Listener should be blocked after start
-    assert(!drained)
-
-    new Thread("ListenerBusStopper") {
-      override def run() {
-        stopperStarted.release()
-        // stop() will block until notify() is called below
+      // ... or stopped before starting
+      intercept[IllegalStateException] {
+        val bus = new LiveListenerBus(sc)
         bus.stop()
-        stopperReturned.release()
       }
-    }.start()
-
-    stopperStarted.acquire()
-    // Listener should remain blocked after stopper started
-    assert(!drained)
-
-    // unblock Listener to let queue drain
-    listenerWait.release()
-    stopperReturned.acquire()
-    assert(drained)
-  }
-
-  test("basic creation of StageInfo") {
-    sc = new SparkContext("local", "SparkListenerSuite")
-    val listener = new SaveStageAndTaskInfo
-    sc.addSparkListener(listener)
-    val rdd1 = sc.parallelize(1 to 100, 4)
-    val rdd2 = rdd1.map(_.toString)
-    rdd2.setName("Target RDD")
-    rdd2.count()
-
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-
-    listener.stageInfos.size should be {1}
-    val (stageInfo, taskInfoMetrics) = listener.stageInfos.head
-    stageInfo.rddInfos.size should be {2}
-    stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
-    stageInfo.rddInfos.exists(_.name == "Target RDD") should be {true}
-    stageInfo.numTasks should be {4}
-    stageInfo.submissionTime should be ('defined)
-    stageInfo.completionTime should be ('defined)
-    taskInfoMetrics.length should be {4}
-  }
-
-  test("basic creation of StageInfo with shuffle") {
-    sc = new SparkContext("local", "SparkListenerSuite")
-    val listener = new SaveStageAndTaskInfo
-    sc.addSparkListener(listener)
-    val rdd1 = sc.parallelize(1 to 100, 4)
-    val rdd2 = rdd1.filter(_ % 2 == 0).map(i => (i, i))
-    val rdd3 = rdd2.reduceByKey(_ + _)
-    rdd1.setName("Un")
-    rdd2.setName("Deux")
-    rdd3.setName("Trois")
-
-    rdd1.count()
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    listener.stageInfos.size should be {1}
-    val stageInfo1 = listener.stageInfos.keys.find(_.stageId == 0).get
-    stageInfo1.rddInfos.size should be {1} // ParallelCollectionRDD
-    stageInfo1.rddInfos.forall(_.numPartitions == 4) should be {true}
-    stageInfo1.rddInfos.exists(_.name == "Un") should be {true}
-    listener.stageInfos.clear()
-
-    rdd2.count()
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    listener.stageInfos.size should be {1}
-    val stageInfo2 = listener.stageInfos.keys.find(_.stageId == 1).get
-    stageInfo2.rddInfos.size should be {3}
-    stageInfo2.rddInfos.forall(_.numPartitions == 4) should be {true}
-    stageInfo2.rddInfos.exists(_.name == "Deux") should be {true}
-    listener.stageInfos.clear()
-
-    rdd3.count()
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    listener.stageInfos.size should be {2} // Shuffle map stage + result stage
-    val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 3).get
-    stageInfo3.rddInfos.size should be {1} // ShuffledRDD
-    stageInfo3.rddInfos.forall(_.numPartitions == 4) should be {true}
-    stageInfo3.rddInfos.exists(_.name == "Trois") should be {true}
-  }
-
-  test("StageInfo with fewer tasks than partitions") {
-    sc = new SparkContext("local", "SparkListenerSuite")
-    val listener = new SaveStageAndTaskInfo
-    sc.addSparkListener(listener)
-    val rdd1 = sc.parallelize(1 to 100, 4)
-    val rdd2 = rdd1.map(_.toString)
-    sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1))
-
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-
-    listener.stageInfos.size should be {1}
-    val (stageInfo, _) = listener.stageInfos.head
-    stageInfo.numTasks should be {2}
-    stageInfo.rddInfos.size should be {2}
-    stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
-  }
-
-  test("local metrics") {
-    sc = new SparkContext("local", "SparkListenerSuite")
-    val listener = new SaveStageAndTaskInfo
-    sc.addSparkListener(listener)
-    sc.addSparkListener(new StatsReportListener)
-    // just to make sure some of the tasks take a noticeable amount of time
-    val w = { i: Int =>
-      if (i == 0) {
-        Thread.sleep(100)
-      }
-      i
     }
 
-    val numSlices = 16
-    val d = sc.parallelize(0 to 10000, numSlices).map(w)
-    d.count()
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    listener.stageInfos.size should be (1)
+    test(name("bus.stop() waits for the event queue to completely drain")) {
+      @volatile var drained = false
 
-    val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
-    val d3 = d.map { i => w(i) -> (0 to (i % 5)) }.setName("shuffle input 2")
-    val d4 = d2.cogroup(d3, numSlices).map { case (k, (v1, v2)) =>
-      w(k) -> (v1.size, v2.size)
+      // When Listener has started
+      val listenerStarted = new Semaphore(0)
+
+      // Tells the listener to stop blocking
+      val listenerWait = new Semaphore(0)
+
+      // When stopper has started
+      val stopperStarted = new Semaphore(0)
+
+      // When stopper has returned
+      val stopperReturned = new Semaphore(0)
+
+      class BlockingListener extends SparkListener {
+        override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+          listenerStarted.release()
+          listenerWait.acquire()
+          drained = true
+        }
+      }
+      sc = new SparkContext("local", "SparkListenerSuite", getConf)
+      val bus = new LiveListenerBus(sc)
+      val blockingListener = new BlockingListener
+
+      bus.addListener(blockingListener)
+      bus.start()
+      bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+
+      listenerStarted.acquire()
+      // Listener should be blocked after start
+      assert(!drained)
+
+      new Thread("ListenerBusStopper") {
+        override def run() {
+          stopperStarted.release()
+          // stop() will block until notify() is called below
+          bus.stop()
+          stopperReturned.release()
+        }
+      }.start()
+
+      stopperStarted.acquire()
+      // Listener should remain blocked after stopper started
+      assert(!drained)
+
+      // unblock Listener to let queue drain
+      listenerWait.release()
+      stopperReturned.acquire()
+      assert(drained)
     }
-    d4.setName("A Cogroup")
-    d4.collectAsMap()
 
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    listener.stageInfos.size should be (4)
-    listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
-      /**
-       * Small test, so some tasks might take less than 1 millisecond, but average should be greater
-       * than 0 ms.
-       */
-      checkNonZeroAvg(
-        taskInfoMetrics.map(_._2.executorRunTime),
-        stageInfo + " executorRunTime")
-      checkNonZeroAvg(
-        taskInfoMetrics.map(_._2.executorDeserializeTime),
-        stageInfo + " executorDeserializeTime")
+    test(name("basic creation of StageInfo")) {
+      sc = new SparkContext("local", "SparkListenerSuite", getConf)
+      val listener = new SaveStageAndTaskInfo
+      sc.addSparkListener(listener)
+      val rdd1 = sc.parallelize(1 to 100, 4)
+      val rdd2 = rdd1.map(_.toString)
+      rdd2.setName("Target RDD")
+      rdd2.count()
 
-      /* Test is disabled (SEE SPARK-2208)
-      if (stageInfo.rddInfos.exists(_.name == d4.name)) {
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+
+      listener.stageInfos.size should be {1}
+      val (stageInfo, taskInfoMetrics) = listener.stageInfos.head
+      stageInfo.rddInfos.size should be {2}
+      stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
+      stageInfo.rddInfos.exists(_.name == "Target RDD") should be {true}
+      stageInfo.numTasks should be {4}
+      stageInfo.submissionTime should be ('defined)
+      stageInfo.completionTime should be ('defined)
+      taskInfoMetrics.length should be {4}
+    }
+
+    test(name("basic creation of StageInfo with shuffle")) {
+      sc = new SparkContext("local", "SparkListenerSuite", getConf)
+      val listener = new SaveStageAndTaskInfo
+      sc.addSparkListener(listener)
+      val rdd1 = sc.parallelize(1 to 100, 4)
+      val rdd2 = rdd1.filter(_ % 2 == 0).map(i => (i, i))
+      val rdd3 = rdd2.reduceByKey(_ + _)
+      rdd1.setName("Un")
+      rdd2.setName("Deux")
+      rdd3.setName("Trois")
+
+      rdd1.count()
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      listener.stageInfos.size should be {1}
+      val stageInfo1 = listener.stageInfos.keys.find(_.stageId == 0).get
+      stageInfo1.rddInfos.size should be {1} // ParallelCollectionRDD
+      stageInfo1.rddInfos.forall(_.numPartitions == 4) should be {true}
+      stageInfo1.rddInfos.exists(_.name == "Un") should be {true}
+      listener.stageInfos.clear()
+
+      rdd2.count()
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      listener.stageInfos.size should be {1}
+      val stageInfo2 = listener.stageInfos.keys.find(_.stageId == 1).get
+      stageInfo2.rddInfos.size should be {3}
+      stageInfo2.rddInfos.forall(_.numPartitions == 4) should be {true}
+      stageInfo2.rddInfos.exists(_.name == "Deux") should be {true}
+      listener.stageInfos.clear()
+
+      rdd3.count()
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      listener.stageInfos.size should be {2} // Shuffle map stage + result stage
+      val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 3).get
+      stageInfo3.rddInfos.size should be {1} // ShuffledRDD
+      stageInfo3.rddInfos.forall(_.numPartitions == 4) should be {true}
+      stageInfo3.rddInfos.exists(_.name == "Trois") should be {true}
+    }
+
+    test(name("StageInfo with fewer tasks than partitions")) {
+      sc = new SparkContext("local", "SparkListenerSuite", getConf)
+      val listener = new SaveStageAndTaskInfo
+      sc.addSparkListener(listener)
+      val rdd1 = sc.parallelize(1 to 100, 4)
+      val rdd2 = rdd1.map(_.toString)
+      sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1))
+
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+
+      listener.stageInfos.size should be {1}
+      val (stageInfo, _) = listener.stageInfos.head
+      stageInfo.numTasks should be {2}
+      stageInfo.rddInfos.size should be {2}
+      stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
+    }
+
+    test(name("local metrics")) {
+      sc = new SparkContext("local", "SparkListenerSuite", getConf)
+      val listener = new SaveStageAndTaskInfo
+      sc.addSparkListener(listener)
+      sc.addSparkListener(new StatsReportListener)
+      // just to make sure some of the tasks take a noticeable amount of time
+      val w = { i: Int =>
+        if (i == 0) {
+          Thread.sleep(100)
+        }
+        i
+      }
+
+      val numSlices = 16
+      val d = sc.parallelize(0 to 10000, numSlices).map(w)
+      d.count()
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      listener.stageInfos.size should be (1)
+
+      val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
+      val d3 = d.map { i => w(i) -> (0 to (i % 5)) }.setName("shuffle input 2")
+      val d4 = d2.cogroup(d3, numSlices).map { case (k, (v1, v2)) =>
+        w(k) -> (v1.size, v2.size)
+      }
+      d4.setName("A Cogroup")
+      d4.collectAsMap()
+
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      listener.stageInfos.size should be (4)
+      listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
+        /**
+          * Small test, so some tasks might take less than 1 millisecond,
+          * but average should be greater than 0 ms.
+          */
         checkNonZeroAvg(
-          taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
-          stageInfo + " fetchWaitTime")
-      }
-      */
+          taskInfoMetrics.map(_._2.executorRunTime),
+          stageInfo + " executorRunTime")
+        checkNonZeroAvg(
+          taskInfoMetrics.map(_._2.executorDeserializeTime),
+          stageInfo + " executorDeserializeTime")
 
-      taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
-        taskMetrics.resultSize should be > (0L)
-        if (stageInfo.rddInfos.exists(info => info.name == d2.name || info.name == d3.name)) {
-          assert(taskMetrics.shuffleWriteMetrics.bytesWritten > 0L)
-        }
+        /* Test is disabled (SEE SPARK-2208)
         if (stageInfo.rddInfos.exists(_.name == d4.name)) {
-          assert(taskMetrics.shuffleReadMetrics.totalBlocksFetched == 2 * numSlices)
-          assert(taskMetrics.shuffleReadMetrics.localBlocksFetched == 2 * numSlices)
-          assert(taskMetrics.shuffleReadMetrics.remoteBlocksFetched == 0)
-          assert(taskMetrics.shuffleReadMetrics.remoteBytesRead == 0L)
+          checkNonZeroAvg(
+            taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
+            stageInfo + " fetchWaitTime")
+        }
+        */
+
+        taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
+          taskMetrics.resultSize should be > (0L)
+          if (stageInfo.rddInfos.exists(info => info.name == d2.name || info.name == d3.name)) {
+            assert(taskMetrics.shuffleWriteMetrics.bytesWritten > 0L)
+          }
+          if (stageInfo.rddInfos.exists(_.name == d4.name)) {
+            assert(taskMetrics.shuffleReadMetrics.totalBlocksFetched == 2 * numSlices)
+            assert(taskMetrics.shuffleReadMetrics.localBlocksFetched == 2 * numSlices)
+            assert(taskMetrics.shuffleReadMetrics.remoteBlocksFetched == 0)
+            assert(taskMetrics.shuffleReadMetrics.remoteBytesRead == 0L)
+          }
         }
       }
     }
-  }
 
-  test("onTaskGettingResult() called when result fetched remotely") {
-    val conf = new SparkConf().set("spark.rpc.message.maxSize", "1")
-    sc = new SparkContext("local", "SparkListenerSuite", conf)
-    val listener = new SaveTaskEvents
-    sc.addSparkListener(listener)
+    test(name("onTaskGettingResult() called when result fetched remotely")) {
+      val conf = getConf.set("spark.rpc.message.maxSize", "1")
+      sc = new SparkContext("local", "SparkListenerSuite", conf)
+      val listener = new SaveTaskEvents
+      sc.addSparkListener(listener)
 
-    // Make a task whose result is larger than the RPC message size
-    val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
-    assert(maxRpcMessageSize === 1024 * 1024)
-    val result = sc.parallelize(Seq(1), 1)
-      .map { x => 1.to(maxRpcMessageSize).toArray }
-      .reduce { case (x, y) => x }
-    assert(result === 1.to(maxRpcMessageSize).toArray)
+      // Make a task whose result is larger than the RPC message size
+      val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
+      assert(maxRpcMessageSize === 1024 * 1024)
+      val result = sc.parallelize(Seq(1), 1)
+        .map { x => 1.to(maxRpcMessageSize).toArray }
+        .reduce { case (x, y) => x }
+      assert(result === 1.to(maxRpcMessageSize).toArray)
 
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    val TASK_INDEX = 0
-    assert(listener.startedTasks.contains(TASK_INDEX))
-    assert(listener.startedGettingResultTasks.contains(TASK_INDEX))
-    assert(listener.endedTasks.contains(TASK_INDEX))
-  }
-
-  test("onTaskGettingResult() not called when result sent directly") {
-    sc = new SparkContext("local", "SparkListenerSuite")
-    val listener = new SaveTaskEvents
-    sc.addSparkListener(listener)
-
-    // Make a task whose result is larger than the RPC message size
-    val result = sc.parallelize(Seq(1), 1).map(2 * _).reduce { case (x, y) => x }
-    assert(result === 2)
-
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-    val TASK_INDEX = 0
-    assert(listener.startedTasks.contains(TASK_INDEX))
-    assert(listener.startedGettingResultTasks.isEmpty)
-    assert(listener.endedTasks.contains(TASK_INDEX))
-  }
-
-  test("onTaskEnd() should be called for all started tasks, even after job has been killed") {
-    sc = new SparkContext("local", "SparkListenerSuite")
-    val WAIT_TIMEOUT_MILLIS = 10000
-    val listener = new SaveTaskEvents
-    sc.addSparkListener(listener)
-
-    val numTasks = 10
-    val f = sc.parallelize(1 to 10000, numTasks).map { i => Thread.sleep(10); i }.countAsync()
-    // Wait until one task has started (because we want to make sure that any tasks that are started
-    // have corresponding end events sent to the listener).
-    var finishTime = System.currentTimeMillis + WAIT_TIMEOUT_MILLIS
-    listener.synchronized {
-      var remainingWait = finishTime - System.currentTimeMillis
-      while (listener.startedTasks.isEmpty && remainingWait > 0) {
-        listener.wait(remainingWait)
-        remainingWait = finishTime - System.currentTimeMillis
-      }
-      assert(!listener.startedTasks.isEmpty)
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      val TASK_INDEX = 0
+      assert(listener.startedTasks.contains(TASK_INDEX))
+      assert(listener.startedGettingResultTasks.contains(TASK_INDEX))
+      assert(listener.endedTasks.contains(TASK_INDEX))
     }
 
-    f.cancel()
+    test(name("onTaskGettingResult() not called when result sent directly")) {
+      sc = new SparkContext("local", "SparkListenerSuite", getConf)
+      val listener = new SaveTaskEvents
+      sc.addSparkListener(listener)
 
-    // Ensure that onTaskEnd is called for all started tasks.
-    finishTime = System.currentTimeMillis + WAIT_TIMEOUT_MILLIS
-    listener.synchronized {
-      var remainingWait = finishTime - System.currentTimeMillis
-      while (listener.endedTasks.size < listener.startedTasks.size && remainingWait > 0) {
-        listener.wait(finishTime - System.currentTimeMillis)
-        remainingWait = finishTime - System.currentTimeMillis
-      }
-      assert(listener.endedTasks.size === listener.startedTasks.size)
+      // Make a task whose result is larger than the RPC message size
+      val result = sc.parallelize(Seq(1), 1).map(2 * _).reduce { case (x, y) => x }
+      assert(result === 2)
+
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      val TASK_INDEX = 0
+      assert(listener.startedTasks.contains(TASK_INDEX))
+      assert(listener.startedGettingResultTasks.isEmpty)
+      assert(listener.endedTasks.contains(TASK_INDEX))
     }
-  }
 
-  test("SparkListener moves on if a listener throws an exception") {
-    val badListener = new BadListener
-    val jobCounter1 = new BasicJobCounter
-    val jobCounter2 = new BasicJobCounter
-    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
-    val bus = new LiveListenerBus(sc)
+    test(name("onTaskEnd() should be called for all started tasks, even after job has been killed"))
+    {
+      sc = new SparkContext("local", "SparkListenerSuite", getConf)
+      val WAIT_TIMEOUT_MILLIS = 10000
+      val listener = new SaveTaskEvents
+      sc.addSparkListener(listener)
 
-    // Propagate events to bad listener first
-    bus.addListener(badListener)
-    bus.addListener(jobCounter1)
-    bus.addListener(jobCounter2)
-    bus.start()
+      val numTasks = 10
+      val f = sc.parallelize(1 to 10000, numTasks).map { i => Thread.sleep(10); i }.countAsync()
+      // Wait until one task has started (because we want to make sure that any tasks that are
+      // started have corresponding end events sent to the listener).
+      var finishTime = System.currentTimeMillis + WAIT_TIMEOUT_MILLIS
+      listener.synchronized {
+        var remainingWait = finishTime - System.currentTimeMillis
+        while (listener.startedTasks.isEmpty && remainingWait > 0) {
+          listener.wait(remainingWait)
+          remainingWait = finishTime - System.currentTimeMillis
+        }
+        assert(listener.startedTasks.nonEmpty)
+      }
 
-    // Post events to all listeners, and wait until the queue is drained
-    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
-    bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      f.cancel()
 
-    // The exception should be caught, and the event should be propagated to other listeners
-    assert(bus.listenerThreadIsAlive)
-    assert(jobCounter1.count === 5)
-    assert(jobCounter2.count === 5)
-  }
+      // Ensure that onTaskEnd is called for all started tasks.
+      finishTime = System.currentTimeMillis + WAIT_TIMEOUT_MILLIS
+      listener.synchronized {
+        var remainingWait = finishTime - System.currentTimeMillis
+        while (listener.endedTasks.size < listener.startedTasks.size && remainingWait > 0) {
+          listener.wait(finishTime - System.currentTimeMillis)
+          remainingWait = finishTime - System.currentTimeMillis
+        }
+        assert(listener.endedTasks.size === listener.startedTasks.size)
+      }
+    }
 
-  test("registering listeners via spark.extraListeners") {
-    val listeners = Seq(
-      classOf[ListenerThatAcceptsSparkConf],
-      classOf[FirehoseListenerThatAcceptsSparkConf],
-      classOf[BasicJobCounter])
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-      .set("spark.extraListeners", listeners.map(_.getName).mkString(","))
-    sc = new SparkContext(conf)
-    sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
-    sc.listenerBus.listeners.asScala
-      .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
-    sc.listenerBus.listeners.asScala
+    test(name("SparkListener moves on if a listener throws an exception")) {
+      val badListener = new BadListener
+      val jobCounter1 = new BasicJobCounter
+      val jobCounter2 = new BasicJobCounter
+      sc = new SparkContext("local", "SparkListenerSuite", getConf)
+      val bus = new LiveListenerBus(sc)
+
+      // Propagate events to bad listener first
+      bus.addListener(badListener)
+      bus.addListener(jobCounter1)
+      bus.addListener(jobCounter2)
+      bus.start()
+
+      // Post events to all listeners, and wait until the queue is drained
+      (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
+      bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+
+      // The exception should be caught, and the event should be propagated to other listeners
+      assert(bus.listenerThreadIsAlive)
+      assert(jobCounter1.count === 5)
+      assert(jobCounter2.count === 5)
+    }
+
+    test(name("registering listeners via spark.extraListeners")) {
+      val listeners = Seq(
+        classOf[ListenerThatAcceptsSparkConf],
+        classOf[FirehoseListenerThatAcceptsSparkConf],
+        classOf[BasicJobCounter])
+      val conf = getConf.setMaster("local").setAppName("test")
+        .set("spark.extraListeners", listeners.map(_.getName).mkString(","))
+      sc = new SparkContext(conf)
+      sc.listenerBus.listeners.count(_.isInstanceOf[BasicJobCounter]) should be (1)
+      sc.listenerBus.listeners.count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
+      sc.listenerBus.listeners
         .count(_.isInstanceOf[FirehoseListenerThatAcceptsSparkConf]) should be (1)
-  }
+    }
+
+  })
+
 
   /**
    * Assert that the given list of numbers has an average that is greater than zero.

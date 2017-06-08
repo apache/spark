@@ -17,12 +17,14 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.locks.ReentrantLock
 
 import scala.util.DynamicVariable
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -38,55 +40,45 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
 
   import LiveListenerBus._
 
-  // Cap the capacity of the event queue so we get an explicit error (rather than
-  // an OOM exception) if it's perpetually being added to more quickly than it's being drained.
-  private lazy val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](
-    sparkContext.conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
+  private lazy val BUFFER_SIZE = sparkContext.conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY)
+  private lazy val circularBuffer = new Array[SparkListenerEvent](BUFFER_SIZE)
+
+  private lazy val queueStrategy = getQueueStrategy
+
+
+  private def getQueueStrategy: QueuingStrategy = {
+    val queueDrop = sparkContext.conf.get(LISTENER_BUS_EVENT_QUEUE_DROP)
+    if (queueDrop) {
+      new DropQueuingStrategy(BUFFER_SIZE)
+    } else {
+      new WaitQueuingStrategy(BUFFER_SIZE)
+    }
+  }
+
+  private val numberOfEvents = new AtomicInteger(0)
+
+  @volatile private var writeIndex = 0
+  @volatile private var readIndex = 0
 
   // Indicate if `start()` is called
   private val started = new AtomicBoolean(false)
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
 
-  /** A counter for dropped events. It will be reset every time we log it. */
-  private val droppedEventsCounter = new AtomicLong(0L)
-
-  /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private var lastReportTimestamp = 0L
-
-  // Indicate if we are processing some event
-  // Guarded by `self`
-  private var processingEvent = false
-
-  private val logDroppedEvent = new AtomicBoolean(false)
-
-  // A counter that represents the number of events produced and consumed in the queue
-  private val eventLock = new Semaphore(0)
+  // only post is done from multiple threads so need a lock
+  private val postLock = new ReentrantLock()
 
   private val listenerThread = new Thread(name) {
     setDaemon(true)
     override def run(): Unit = Utils.tryOrStopSparkContext(sparkContext) {
       LiveListenerBus.withinListenerThread.withValue(true) {
-        while (true) {
-          eventLock.acquire()
-          self.synchronized {
-            processingEvent = true
-          }
-          try {
-            val event = eventQueue.poll
-            if (event == null) {
-              // Get out of the while loop and shutdown the daemon thread
-              if (!stopped.get) {
-                throw new IllegalStateException("Polling `null` from eventQueue means" +
-                  " the listener bus has been stopped. So `stopped` must be true")
-              }
-              return
-            }
-            postToAll(event)
-          } finally {
-            self.synchronized {
-              processingEvent = false
-            }
+        while (!stopped.get() || numberOfEvents.get() > 0) {
+          if (numberOfEvents.get() > 0) {
+            postToAll(circularBuffer(readIndex))
+            numberOfEvents.decrementAndGet()
+            readIndex = (readIndex + 1) % BUFFER_SIZE
+          } else {
+            Thread.sleep(20) // give more chance for producer thread to be scheduled
           }
         }
       }
@@ -115,30 +107,14 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
       logError(s"$name has already stopped! Dropping event $event")
       return
     }
-    val eventAdded = eventQueue.offer(event)
-    if (eventAdded) {
-      eventLock.release()
-    } else {
-      onDropEvent(event)
-      droppedEventsCounter.incrementAndGet()
+    postLock.lock()
+    val queueOrNot = queueStrategy.queue(numberOfEvents)
+    if(queueOrNot) {
+      circularBuffer(writeIndex) = event
+      numberOfEvents.incrementAndGet()
+      writeIndex = (writeIndex + 1) % BUFFER_SIZE
     }
-
-    val droppedEvents = droppedEventsCounter.get
-    if (droppedEvents > 0) {
-      // Don't log too frequently
-      if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
-        // There may be multiple threads trying to decrease droppedEventsCounter.
-        // Use "compareAndSet" to make sure only one thread can win.
-        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail and
-        // then that thread will update it.
-        if (droppedEventsCounter.compareAndSet(droppedEvents, 0)) {
-          val prevLastReportTimestamp = lastReportTimestamp
-          lastReportTimestamp = System.currentTimeMillis()
-          logWarning(s"Dropped $droppedEvents SparkListenerEvents since " +
-            new java.util.Date(prevLastReportTimestamp))
-        }
-      }
-    }
+    postLock.unlock()
   }
 
   /**
@@ -170,10 +146,15 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
   /**
    * Return whether the event queue is empty.
    *
-   * The use of synchronized here guarantees that all events that once belonged to this queue
+   * The use of the post lock here guarantees that all events that once belonged to this queue
    * have already been processed by all attached listeners, if this returns true.
    */
-  private def queueIsEmpty: Boolean = synchronized { eventQueue.isEmpty && !processingEvent }
+  private def queueIsEmpty: Boolean = {
+    postLock.lock()
+    val isEmpty = numberOfEvents.get() == 0
+    postLock.unlock()
+    isEmpty
+  }
 
   /**
    * Stop the listener bus. It will wait until the queued events have been processed, but drop the
@@ -183,30 +164,10 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
     if (!started.get()) {
       throw new IllegalStateException(s"Attempted to stop $name that has not yet started!")
     }
-    if (stopped.compareAndSet(false, true)) {
-      // Call eventLock.release() so that listenerThread will poll `null` from `eventQueue` and know
-      // `stop` is called.
-      eventLock.release()
-      listenerThread.join()
-    } else {
-      // Keep quiet
-    }
+    stopped.set(true)
+    listenerThread.join()
   }
 
-  /**
-   * If the event queue exceeds its capacity, the new events will be dropped. The subclasses will be
-   * notified with the dropped events.
-   *
-   * Note: `onDropEvent` can be called in any thread.
-   */
-  def onDropEvent(event: SparkListenerEvent): Unit = {
-    if (logDroppedEvent.compareAndSet(false, true)) {
-      // Only log the following message once to avoid duplicated annoying logs.
-      logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
-        "This likely means one of the SparkListeners is too slow and cannot keep up with " +
-        "the rate at which tasks are being started by the scheduler.")
-    }
-  }
 }
 
 private[spark] object LiveListenerBus {
@@ -215,5 +176,86 @@ private[spark] object LiveListenerBus {
 
   /** The thread name of Spark listener bus */
   val name = "SparkListenerBus"
+
+  private trait FirstAndRecurrentLogging extends Logging {
+
+    @volatile private var numberOfTime = 0
+    /** When `numberOfTime` was logged last time in milliseconds. */
+    @volatile private var lastReportTimestamp = 0L
+    @volatile private var logFirstTime = false
+
+
+    def inc(): Unit = {
+      numberOfTime = numberOfTime + 1
+    }
+
+    def waringIfNotToClose(message: Int => String): Unit = {
+      if (numberOfTime > 0 &&
+        (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000)) {
+        val prevLastReportTimestamp = lastReportTimestamp
+        lastReportTimestamp = System.currentTimeMillis()
+        logWarning(s"${message(numberOfTime)} SparkListenerEvents since " +
+          new java.util.Date(prevLastReportTimestamp))
+        numberOfTime = 0
+      }
+    }
+
+    def errorIfFirstTime(firstTimeAction: String): Unit = {
+      if (!logFirstTime) {
+        // Only log the following message once to avoid duplicated annoying logs.
+        logError(s"$firstTimeAction SparkListenerEvent because no remaining room in event" +
+          " queue. " +
+          "This likely means one of the SparkListeners is too slow and cannot keep up with " +
+          "the rate at which tasks are being started by the scheduler.")
+        logFirstTime = true
+        lastReportTimestamp = System.currentTimeMillis()
+      }
+    }
+
+  }
+
+  private trait QueuingStrategy {
+    /**
+      * this method indicate if an element should be queued or discarded
+      * @param numberOfEvents atomic integer: the queue size
+      * @return true if an element should be queued, false if it should be dropped
+      */
+    def queue(numberOfEvents: AtomicInteger): Boolean
+
+  }
+
+  private class DropQueuingStrategy(val bufferSize: Int)
+    extends QueuingStrategy with FirstAndRecurrentLogging {
+
+    override def queue(numberOfEvents: AtomicInteger): Boolean = {
+      if (numberOfEvents.get() == bufferSize) {
+        errorIfFirstTime("Dropping")
+        inc()
+        waringIfNotToClose(count => s"Dropped $count")
+        false
+      } else {
+        true
+      }
+    }
+
+  }
+
+  private class WaitQueuingStrategy(val bufferSize: Int)
+    extends QueuingStrategy with FirstAndRecurrentLogging {
+
+    override def queue(numberOfEvents: AtomicInteger): Boolean = {
+      if (numberOfEvents.get() == bufferSize) {
+        errorIfFirstTime("Waiting for posting")
+        waringIfNotToClose(count => s"Waiting $count period posting")
+        while (numberOfEvents.get() == bufferSize) {
+          inc()
+          Thread.sleep(20) // give more chance for consumer thread to be scheduled
+        }
+      }
+      true
+    }
+
+  }
+
 }
 
