@@ -183,7 +183,11 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
   /** No-arg constructor for serialization. */
   protected def this() = this(null, null)
 
-  override def fieldIndex(name: String): Int = schema.fieldIndex(name)
+  override def fieldIndex(name: String): Int = if (name == null || name.length() == 0) {
+    throw new IllegalArgumentException(s"""Field "$name" should not null or empty.""")
+  } else {
+    schema.fieldIndex(name)
+  }
 }
 
 /**
