@@ -361,7 +361,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def setLogLevel(logLevel: String) {
     // let's allow lowercase or mixed case too
-    val upperCased = logLevel.toUpperCase(Locale.ENGLISH)
+    val upperCased = logLevel.toUpperCase(Locale.ROOT)
     require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
       s"Supplied level $logLevel did not match one of:" +
         s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
@@ -961,12 +961,11 @@ class SparkContext(config: SparkConf) extends Logging {
       classOf[LongWritable],
       classOf[BytesWritable],
       conf = conf)
-    val data = br.map { case (k, v) =>
-      val bytes = v.getBytes
+    br.map { case (k, v) =>
+      val bytes = v.copyBytes()
       assert(bytes.length == recordLength, "Byte array does not have correct length")
       bytes
     }
-    data
   }
 
   /**
@@ -1351,7 +1350,7 @@ class SparkContext(config: SparkConf) extends Logging {
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name))
+    val acc = new Accumulator(initialValue, param, Option(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1380,7 +1379,7 @@ class SparkContext(config: SparkConf) extends Logging {
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T])
     : Accumulable[R, T] = {
-    val acc = new Accumulable(initialValue, param, Some(name))
+    val acc = new Accumulable(initialValue, param, Option(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1415,7 +1414,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note Accumulators must be registered before use, or it will throw exception.
    */
   def register(acc: AccumulatorV2[_, _], name: String): Unit = {
-    acc.register(this, name = Some(name))
+    acc.register(this, name = Option(name))
   }
 
   /**
@@ -1735,6 +1734,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Return information about blocks stored in all of the slaves
    */
   @DeveloperApi
+  @deprecated("This method may change or be removed in a future release.", "2.2.0")
   def getExecutorStorageStatus: Array[StorageStatus] = {
     assertNotStopped()
     env.blockManager.master.getStorageStatus
@@ -1801,32 +1801,39 @@ class SparkContext(config: SparkConf) extends Logging {
    * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
   def addJar(path: String) {
+    def addJarFile(file: File): String = {
+      try {
+        if (!file.exists()) {
+          throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
+        }
+        if (file.isDirectory) {
+          throw new IllegalArgumentException(
+            s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
+        }
+        env.rpcEnv.fileServer.addJar(file)
+      } catch {
+        case NonFatal(e) =>
+          logError(s"Failed to add $path to Spark environment", e)
+          null
+      }
+    }
+
     if (path == null) {
       logWarning("null specified as parameter to addJar")
     } else {
-      var key = ""
-      if (path.contains("\\")) {
+      val key = if (path.contains("\\")) {
         // For local paths with backslashes on Windows, URI throws an exception
-        key = env.rpcEnv.fileServer.addJar(new File(path))
+        addJarFile(new File(path))
       } else {
         val uri = new URI(path)
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
-        key = uri.getScheme match {
+        uri.getScheme match {
           // A JAR file which exists only on the driver node
-          case null | "file" =>
-            try {
-              env.rpcEnv.fileServer.addJar(new File(uri.getPath))
-            } catch {
-              case exc: FileNotFoundException =>
-                logError(s"Jar not found at $path")
-                null
-            }
+          case null | "file" => addJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
-          case "local" =>
-            "file:" + uri.getPath
-          case _ =>
-            path
+          case "local" => "file:" + uri.getPath
+          case _ => path
         }
       }
       if (key != null) {
@@ -1931,6 +1938,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       SparkEnv.set(null)
     }
+    // Clear this `InheritableThreadLocal`, or it will still be inherited in child threads even this
+    // `SparkContext` is stopped.
+    localProperties.remove()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
@@ -2240,6 +2250,24 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def cancelStage(stageId: Int): Unit = {
     dagScheduler.cancelStage(stageId, None)
+  }
+
+  /**
+   * Kill and reschedule the given task attempt. Task ids can be obtained from the Spark UI
+   * or through SparkListener.onTaskStart.
+   *
+   * @param taskId the task ID to kill. This id uniquely identifies the task attempt.
+   * @param interruptThread whether to interrupt the thread running the task.
+   * @param reason the reason for killing the task, which should be a short string. If a task
+   *   is killed multiple times with different reasons, only one reason will be reported.
+   *
+   * @return Whether the task was successfully killed.
+   */
+  def killTaskAttempt(
+      taskId: Long,
+      interruptThread: Boolean = true,
+      reason: String = "killed via SparkContext.killTaskAttempt"): Boolean = {
+    dagScheduler.killTaskAttempt(taskId, interruptThread, reason)
   }
 
   /**

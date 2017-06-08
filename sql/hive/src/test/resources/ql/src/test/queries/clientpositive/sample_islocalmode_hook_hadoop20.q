@@ -1,15 +1,15 @@
 USE default;
 
 set hive.input.format=org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
-set mapred.max.split.size=300;
-set mapred.min.split.size=300;
-set mapred.min.split.size.per.node=300;
-set mapred.min.split.size.per.rack=300;
+set mapreduce.input.fileinputformat.split.maxsize=300;
+set mapreduce.input.fileinputformat.split.minsize=300;
+set mapreduce.input.fileinputformat.split.minsize.per.node=300;
+set mapreduce.input.fileinputformat.split.minsize.per.rack=300;
 set hive.exec.mode.local.auto=true;
 set hive.merge.smallfiles.avgsize=1;
 
 -- INCLUDE_HADOOP_MAJOR_VERSIONS(0.20, 0.20S)
--- This test sets mapred.max.split.size=300 and hive.merge.smallfiles.avgsize=1
+-- This test sets mapreduce.input.fileinputformat.split.maxsize=300 and hive.merge.smallfiles.avgsize=1
 -- in an attempt to force the generation of multiple splits and multiple output files.
 -- However, Hadoop 0.20 is incapable of generating splits smaller than the block size
 -- when using CombineFileInputFormat, so only one split is generated. This has a
@@ -25,7 +25,7 @@ create table sih_src as select key, value from sih_i_part order by key, value;
 create table sih_src2 as select key, value from sih_src order by key, value;
 
 set hive.exec.post.hooks = org.apache.hadoop.hive.ql.hooks.VerifyIsLocalModeHook ;
-set mapred.job.tracker=localhost:58;
+set mapreduce.jobtracker.address=localhost:58;
 set hive.exec.mode.local.auto.input.files.max=1;
 
 -- Sample split, running locally limited by num tasks

@@ -518,71 +518,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    // Check for legacy configs
-    sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
-      val warning =
-        s"""
-          |SPARK_JAVA_OPTS was detected (set to '$value').
-          |This is deprecated in Spark 1.0+.
-          |
-          |Please instead use:
-          | - ./spark-submit with conf/spark-defaults.conf to set defaults for an application
-          | - ./spark-submit with --driver-java-options to set -X options for a driver
-          | - spark.executor.extraJavaOptions to set -X options for executors
-          | - SPARK_DAEMON_JAVA_OPTS to set java options for standalone daemons (master or worker)
-        """.stripMargin
-      logWarning(warning)
-
-      for (key <- Seq(executorOptsKey, driverOptsKey)) {
-        if (getOption(key).isDefined) {
-          throw new SparkException(s"Found both $key and SPARK_JAVA_OPTS. Use only the former.")
-        } else {
-          logWarning(s"Setting '$key' to '$value' as a work-around.")
-          set(key, value)
-        }
-      }
-    }
-
-    sys.env.get("SPARK_CLASSPATH").foreach { value =>
-      val warning =
-        s"""
-          |SPARK_CLASSPATH was detected (set to '$value').
-          |This is deprecated in Spark 1.0+.
-          |
-          |Please instead use:
-          | - ./spark-submit with --driver-class-path to augment the driver classpath
-          | - spark.executor.extraClassPath to augment the executor classpath
-        """.stripMargin
-      logWarning(warning)
-
-      for (key <- Seq(executorClasspathKey, driverClassPathKey)) {
-        if (getOption(key).isDefined) {
-          throw new SparkException(s"Found both $key and SPARK_CLASSPATH. Use only the former.")
-        } else {
-          logWarning(s"Setting '$key' to '$value' as a work-around.")
-          set(key, value)
-        }
-      }
-    }
-
-    if (!contains(sparkExecutorInstances)) {
-      sys.env.get("SPARK_WORKER_INSTANCES").foreach { value =>
-        val warning =
-          s"""
-             |SPARK_WORKER_INSTANCES was detected (set to '$value').
-             |This is deprecated in Spark 1.0+.
-             |
-             |Please instead use:
-             | - ./spark-submit with --num-executors to specify the number of executors
-             | - Or set SPARK_EXECUTOR_INSTANCES
-             | - spark.executor.instances to configure the number of instances in the spark config.
-        """.stripMargin
-        logWarning(warning)
-
-        set("spark.executor.instances", value)
-      }
-    }
-
     if (contains("spark.master") && get("spark.master").startsWith("yarn-")) {
       val warning = s"spark.master ${get("spark.master")} is deprecated in Spark 2.0+, please " +
         "instead use \"yarn\" with specified deploy mode."
@@ -644,7 +579,9 @@ private[spark] object SparkConf extends Logging {
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
       DeprecatedConfig("spark.rpc", "2.0", "Not used any more."),
       DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
-        "Please use the new blacklisting options, spark.blacklist.*")
+        "Please use the new blacklisting options, spark.blacklist.*"),
+      DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used any more"),
+      DeprecatedConfig("spark.executor.port", "2.0.0", "Not used any more")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -655,6 +592,8 @@ private[spark] object SparkConf extends Logging {
    *
    * The alternates are used in the order defined in this map. If deprecated configs are
    * present in the user's configuration, a warning is logged.
+   *
+   * TODO: consolidate it with `ConfigBuilder.withAlternative`.
    */
   private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
     "spark.executor.userClassPathFirst" -> Seq(

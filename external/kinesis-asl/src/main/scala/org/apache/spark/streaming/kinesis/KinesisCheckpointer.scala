@@ -21,7 +21,7 @@ import java.util.concurrent._
 import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
-import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Duration

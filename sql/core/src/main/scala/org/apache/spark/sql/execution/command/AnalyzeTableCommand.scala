@@ -22,11 +22,9 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogTable}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.internal.SessionState
 
 
@@ -41,53 +39,39 @@ case class AnalyzeTableCommand(
     val sessionState = sparkSession.sessionState
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val relation =
-      EliminateSubqueryAliases(sparkSession.table(tableIdentWithDB).queryExecution.analyzed)
-
-    relation match {
-      case relation: CatalogRelation =>
-        updateTableStats(relation.catalogTable,
-          AnalyzeTableCommand.calculateTotalSize(sessionState, relation.catalogTable))
-
-      // data source tables have been converted into LogicalRelations
-      case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
-        updateTableStats(logicalRel.catalogTable.get,
-          AnalyzeTableCommand.calculateTotalSize(sessionState, logicalRel.catalogTable.get))
-
-      case otherRelation =>
-        throw new AnalysisException("ANALYZE TABLE is not supported for " +
-          s"${otherRelation.nodeName}.")
+    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    if (tableMeta.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
+    val newTotalSize = AnalyzeTableCommand.calculateTotalSize(sessionState, tableMeta)
 
-    def updateTableStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
-      val oldTotalSize = catalogTable.stats.map(_.sizeInBytes.toLong).getOrElse(0L)
-      val oldRowCount = catalogTable.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
-      var newStats: Option[CatalogStatistics] = None
-      if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-        newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
-      }
-      // We only set rowCount when noscan is false, because otherwise:
-      // 1. when total size is not changed, we don't need to alter the table;
-      // 2. when total size is changed, `oldRowCount` becomes invalid.
-      // This is to make sure that we only record the right statistics.
-      if (!noscan) {
-        val newRowCount = Dataset.ofRows(sparkSession, relation).count()
-        if (newRowCount >= 0 && newRowCount != oldRowCount) {
-          newStats = if (newStats.isDefined) {
-            newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
-          } else {
-            Some(CatalogStatistics(
-              sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
-          }
+    val oldTotalSize = tableMeta.stats.map(_.sizeInBytes.toLong).getOrElse(0L)
+    val oldRowCount = tableMeta.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
+    var newStats: Option[CatalogStatistics] = None
+    if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+      newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
+    }
+    // We only set rowCount when noscan is false, because otherwise:
+    // 1. when total size is not changed, we don't need to alter the table;
+    // 2. when total size is changed, `oldRowCount` becomes invalid.
+    // This is to make sure that we only record the right statistics.
+    if (!noscan) {
+      val newRowCount = sparkSession.table(tableIdentWithDB).countInternal()
+      if (newRowCount >= 0 && newRowCount != oldRowCount) {
+        newStats = if (newStats.isDefined) {
+          newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
+        } else {
+          Some(CatalogStatistics(
+            sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
         }
       }
-      // Update the metastore if the above statistics of the table are different from those
-      // recorded in the metastore.
-      if (newStats.isDefined) {
-        sessionState.catalog.alterTable(catalogTable.copy(stats = newStats))
-        // Refresh the cached data source table in the catalog.
-        sessionState.catalog.refreshTable(tableIdentWithDB)
-      }
+    }
+    // Update the metastore if the above statistics of the table are different from those
+    // recorded in the metastore.
+    if (newStats.isDefined) {
+      sessionState.catalog.alterTable(tableMeta.copy(stats = newStats))
+      // Refresh the cached data source table in the catalog.
+      sessionState.catalog.refreshTable(tableIdentWithDB)
     }
 
     Seq.empty[Row]

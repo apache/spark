@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.internal.SQLConf
 
 
 class AggregateEstimationSuite extends StatsEstimationTestBase {
@@ -101,13 +102,13 @@ class AggregateEstimationSuite extends StatsEstimationTestBase {
 
     val noGroupAgg = Aggregate(groupingExpressions = Nil,
       aggregateExpressions = Seq(Alias(Count(Literal(1)), "cnt")()), child)
-    assert(noGroupAgg.stats(conf.copy(cboEnabled = false)) ==
+    assert(noGroupAgg.stats(conf.copy(SQLConf.CBO_ENABLED -> false)) ==
       // overhead + count result size
       Statistics(sizeInBytes = 8 + 8, rowCount = Some(1)))
 
     val hasGroupAgg = Aggregate(groupingExpressions = attributes,
       aggregateExpressions = attributes :+ Alias(Count(Literal(1)), "cnt")(), child)
-    assert(hasGroupAgg.stats(conf.copy(cboEnabled = false)) ==
+    assert(hasGroupAgg.stats(conf.copy(SQLConf.CBO_ENABLED -> false)) ==
       // From UnaryNode.computeStats, childSize * outputRowSize / childRowSize
       Statistics(sizeInBytes = 48 * (8 + 4 + 8) / (8 + 4)))
   }

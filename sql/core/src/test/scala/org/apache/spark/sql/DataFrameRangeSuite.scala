@@ -89,6 +89,22 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     val n = 9L * 1000 * 1000 * 1000 * 1000 * 1000 * 1000
     val res13 = spark.range(-n, n, n / 9).select("id")
     assert(res13.count == 18)
+
+    // range with non aggregation operation
+    val res14 = spark.range(0, 100, 2).toDF.filter("50 <= id")
+    val len14 = res14.collect.length
+    assert(len14 == 25)
+
+    val res15 = spark.range(100, -100, -2).toDF.filter("id <= 0")
+    val len15 = res15.collect.length
+    assert(len15 == 50)
+
+    val res16 = spark.range(-1500, 1500, 3).toDF.filter("0 <= id")
+    val len16 = res16.collect.length
+    assert(len16 == 500)
+
+    val res17 = spark.range(10, 0, -1, 1).toDF.sortWithinPartitions("id")
+    assert(res17.collect === (1 to 10).map(i => Row(i)).toArray)
   }
 
   test("Range with randomized parameters") {
@@ -167,6 +183,12 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
       eventually(timeout(20.seconds)) {
         assert(sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
       }
+    }
+  }
+
+  test("SPARK-20430 Initialize Range parameters in a driver side") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      checkAnswer(sql("SELECT * FROM range(3)"), Row(0) :: Row(1) :: Row(2) :: Nil)
     }
   }
 }

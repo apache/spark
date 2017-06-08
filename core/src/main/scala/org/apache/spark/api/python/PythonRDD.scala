@@ -215,7 +215,7 @@ private[spark] class PythonRunner(
 
           case e: Exception if context.isInterrupted =>
             logDebug("Exception thrown after task interruption", e)
-            throw new TaskKilledException
+            throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
           case e: Exception if env.isStopped =>
             logDebug("Exception thrown after context is stopped", e)
@@ -879,7 +879,7 @@ private[spark] class PythonAccumulatorV2(
     private val serverPort: Int)
   extends CollectionAccumulator[Array[Byte]] {
 
-  Utils.checkHost(serverHost, "Expected hostname")
+  Utils.checkHost(serverHost)
 
   val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
 

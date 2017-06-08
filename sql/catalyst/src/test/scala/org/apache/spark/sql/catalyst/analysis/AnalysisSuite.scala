@@ -21,11 +21,11 @@ import java.util.TimeZone
 
 import org.scalatest.ShouldMatchers
 
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
+import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -61,23 +61,23 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation))
 
     assertAnalysisError(
       Project(Seq(UnresolvedAttribute("tBl.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Seq("cannot resolve"))
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("tBl.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
   }
@@ -192,12 +192,13 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   }
 
   test("pull out nondeterministic expressions from RepartitionByExpression") {
-    val plan = RepartitionByExpression(Seq(Rand(33)), testRelation)
+    val plan = RepartitionByExpression(Seq(Rand(33)), testRelation, numPartitions = 10)
     val projected = Alias(Rand(33), "_nondeterministic")()
     val expected =
       Project(testRelation.output,
         RepartitionByExpression(Seq(projected.toAttribute),
-          Project(testRelation.output :+ projected, testRelation)))
+          Project(testRelation.output :+ projected, testRelation),
+          numPartitions = 10))
     checkAnalysis(plan, expected)
   }
 
@@ -372,8 +373,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
-          Project(Seq($"y.key"), SubqueryAlias("y", input, None)),
+          Project(Seq($"x.key"), SubqueryAlias("x", input)),
+          Project(Seq($"y.key"), SubqueryAlias("y", input)),
           Cross, None))
 
     assertAnalysisSuccess(query)
@@ -433,10 +434,40 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   test("resolve as with an already existed alias") {
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("tbl2.a")),
-        SubqueryAlias("tbl", testRelation, None).as("tbl2")),
+        SubqueryAlias("tbl", testRelation).as("tbl2")),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
-    checkAnalysis(SubqueryAlias("tbl", testRelation, None).as("tbl2"), testRelation)
+    checkAnalysis(SubqueryAlias("tbl", testRelation).as("tbl2"), testRelation)
+  }
+
+  test("SPARK-20311 range(N) as alias") {
+    def rangeWithAliases(args: Seq[Int], outputNames: Seq[String]): LogicalPlan = {
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", args.map(Literal(_)), outputNames))
+        .select(star())
+    }
+    assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
+    assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
+    assertAnalysisSuccess(rangeWithAliases(2 :: 6 :: 2 :: Nil, "c" :: Nil))
+    assertAnalysisError(
+      rangeWithAliases(3 :: Nil, "a" :: "b" :: Nil),
+      Seq("Number of given aliases does not match number of output columns. "
+        + "Function name: range; number of aliases: 2; number of output columns: 1."))
+  }
+
+  test("SPARK-20841 Support table column aliases in FROM clause") {
+    def tableColumnsWithAliases(outputNames: Seq[String]): LogicalPlan = {
+      SubqueryAlias("t", UnresolvedRelation(TableIdentifier("TaBlE3"), outputNames))
+        .select(star())
+    }
+    assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
+    assertAnalysisError(
+      tableColumnsWithAliases("col1" :: Nil),
+      Seq("Number of column aliases does not match number of columns. Table name: TaBlE3; " +
+        "number of column aliases: 1; number of columns: 4."))
+    assertAnalysisError(
+      tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
+      Seq("Number of column aliases does not match number of columns. Table name: TaBlE3; " +
+        "number of column aliases: 5; number of columns: 4."))
   }
 }

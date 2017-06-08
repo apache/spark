@@ -149,7 +149,8 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' This method implements a variation of the Greenwald-Khanna algorithm (with some speed
 #' optimizations). The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670
 #' Space-efficient Online Computation of Quantile Summaries]] by Greenwald and Khanna.
-#' Note that rows containing any NA values will be removed before calculation.
+#' Note that NA values will be ignored in numerical columns before calculation. For
+#'   columns only containing NA values, an empty list is returned.
 #'
 #' @param x A SparkDataFrame.
 #' @param cols A single column name, or a list of names for multiple columns.

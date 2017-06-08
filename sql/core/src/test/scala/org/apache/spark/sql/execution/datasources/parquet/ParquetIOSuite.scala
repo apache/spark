@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -107,11 +109,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         |  required binary g(ENUM);
         |  required binary h(DECIMAL(32,0));
         |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
+        |  required int64 j(TIMESTAMP_MILLIS);
         |}
       """.stripMargin)
 
     val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0),
-      DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0))
+      DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0),
+      TimestampType)
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
@@ -298,7 +302,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     def checkCompressionCodec(codec: CompressionCodecName): Unit = {
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
-          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION).toUpperCase) {
+          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION).toUpperCase(Locale.ROOT)) {
             compressionCodecFor(path, codec.name())
           }
         }
@@ -603,6 +607,18 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           // Decimal column in this file is encoded using plain dictionary
           readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
           spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
+      }
+    }
+  }
+
+  test("read dictionary and plain encoded timestamp_millis written as INT64") {
+    ("true" :: "false" :: Nil).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        checkAnswer(
+          // timestamp column in this file is encoded using combination of plain
+          // and dictionary encodings.
+          readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
+          (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
       }
     }
   }

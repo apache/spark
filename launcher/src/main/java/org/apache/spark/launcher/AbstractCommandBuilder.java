@@ -135,7 +135,6 @@ abstract class AbstractCommandBuilder {
     String sparkHome = getSparkHome();
 
     Set<String> cp = new LinkedHashSet<>();
-    addToClassPath(cp, getenv("SPARK_CLASSPATH"));
     addToClassPath(cp, appClassPath);
 
     addToClassPath(cp, getConfDir());

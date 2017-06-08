@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib tree-based algorithms")
 
 # Tests for MLlib tree-based algorithms in SparkR
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 absoluteSparkPath <- function(x) {
   sparkHome <- sparkR.conf("spark.home")
@@ -28,6 +28,8 @@ absoluteSparkPath <- function(x) {
 }
 
 test_that("spark.gbt", {
+  skip_on_cran()
+
   # regression
   data <- suppressWarnings(createDataFrame(longley))
   model <- spark.gbt(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16, seed = 123)
@@ -39,24 +41,28 @@ test_that("spark.gbt", {
                tolerance = 1e-4)
   stats <- summary(model)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
   expect_equal(stats$formula, "Employed ~ .")
   expect_equal(stats$numFeatures, 6)
   expect_equal(length(stats$treeWeights), 20)
 
-  modelPath <- tempfile(pattern = "spark-gbtRegression", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
-  expect_equal(stats$formula, stats2$formula)
-  expect_equal(stats$numFeatures, stats2$numFeatures)
-  expect_equal(stats$features, stats2$features)
-  expect_equal(stats$featureImportances, stats2$featureImportances)
-  expect_equal(stats$numTrees, stats2$numTrees)
-  expect_equal(stats$treeWeights, stats2$treeWeights)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-gbtRegression", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$formula, stats2$formula)
+    expect_equal(stats$numFeatures, stats2$numFeatures)
+    expect_equal(stats$features, stats2$features)
+    expect_equal(stats$featureImportances, stats2$featureImportances)
+    expect_equal(stats$maxDepth, stats2$maxDepth)
+    expect_equal(stats$numTrees, stats2$numTrees)
+    expect_equal(stats$treeWeights, stats2$treeWeights)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   # classification
   # label must be binary - GBTClassifier currently only supports binary classification.
@@ -66,6 +72,7 @@ test_that("spark.gbt", {
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
   expect_error(capture.output(stats), NA)
   expect_true(length(capture.output(stats)) > 6)
   predictions <- collect(predict(model, data))$prediction
@@ -73,17 +80,19 @@ test_that("spark.gbt", {
   expect_equal(length(grep("setosa", predictions)), 50)
   expect_equal(length(grep("versicolor", predictions)), 50)
 
-  modelPath <- tempfile(pattern = "spark-gbtClassification", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
-  expect_equal(stats$depth, stats2$depth)
-  expect_equal(stats$numNodes, stats2$numNodes)
-  expect_equal(stats$numClasses, stats2$numClasses)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-gbtClassification", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$depth, stats2$depth)
+    expect_equal(stats$numNodes, stats2$numNodes)
+    expect_equal(stats$numClasses, stats2$numClasses)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   iris2$NumericSpecies <- ifelse(iris2$Species == "setosa", 0, 1)
   df <- suppressWarnings(createDataFrame(iris2))
@@ -93,12 +102,15 @@ test_that("spark.gbt", {
   expect_equal(iris2$NumericSpecies, as.double(collect(predict(m, df))$prediction))
   expect_equal(s$numFeatures, 5)
   expect_equal(s$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
 
   # spark.gbt classification can work on libsvm data
-  data <- read.df(absoluteSparkPath("data/mllib/sample_binary_classification_data.txt"),
-                source = "libsvm")
-  model <- spark.gbt(data, label ~ features, "classification")
-  expect_equal(summary(model)$numFeatures, 692)
+  if (not_cran_or_windows_with_hadoop()) {
+    data <- read.df(absoluteSparkPath("data/mllib/sample_binary_classification_data.txt"),
+                  source = "libsvm")
+    model <- spark.gbt(data, label ~ features, "classification")
+    expect_equal(summary(model)$numFeatures, 692)
+  }
 })
 
 test_that("spark.randomForest", {
@@ -116,6 +128,7 @@ test_that("spark.randomForest", {
 
   stats <- summary(model)
   expect_equal(stats$numTrees, 1)
+  expect_equal(stats$maxDepth, 5)
   expect_error(capture.output(stats), NA)
   expect_true(length(capture.output(stats)) > 6)
 
@@ -129,21 +142,25 @@ test_that("spark.randomForest", {
                tolerance = 1e-4)
   stats <- summary(model)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
 
-  modelPath <- tempfile(pattern = "spark-randomForestRegression", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
-  expect_equal(stats$formula, stats2$formula)
-  expect_equal(stats$numFeatures, stats2$numFeatures)
-  expect_equal(stats$features, stats2$features)
-  expect_equal(stats$featureImportances, stats2$featureImportances)
-  expect_equal(stats$numTrees, stats2$numTrees)
-  expect_equal(stats$treeWeights, stats2$treeWeights)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-randomForestRegression", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$formula, stats2$formula)
+    expect_equal(stats$numFeatures, stats2$numFeatures)
+    expect_equal(stats$features, stats2$features)
+    expect_equal(stats$featureImportances, stats2$featureImportances)
+    expect_equal(stats$numTrees, stats2$numTrees)
+    expect_equal(stats$maxDepth, stats2$maxDepth)
+    expect_equal(stats$treeWeights, stats2$treeWeights)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   # classification
   data <- suppressWarnings(createDataFrame(iris))
@@ -153,6 +170,7 @@ test_that("spark.randomForest", {
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
   expect_error(capture.output(stats), NA)
   expect_true(length(capture.output(stats)) > 6)
   # Test string prediction values
@@ -160,17 +178,19 @@ test_that("spark.randomForest", {
   expect_equal(length(grep("setosa", predictions)), 50)
   expect_equal(length(grep("versicolor", predictions)), 50)
 
-  modelPath <- tempfile(pattern = "spark-randomForestClassification", fileext = ".tmp")
-  write.ml(model, modelPath)
-  expect_error(write.ml(model, modelPath))
-  write.ml(model, modelPath, overwrite = TRUE)
-  model2 <- read.ml(modelPath)
-  stats2 <- summary(model2)
-  expect_equal(stats$depth, stats2$depth)
-  expect_equal(stats$numNodes, stats2$numNodes)
-  expect_equal(stats$numClasses, stats2$numClasses)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-randomForestClassification", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$depth, stats2$depth)
+    expect_equal(stats$numNodes, stats2$numNodes)
+    expect_equal(stats$numClasses, stats2$numClasses)
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   # Test numeric response variable
   labelToIndex <- function(species) {
@@ -187,16 +207,114 @@ test_that("spark.randomForest", {
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
+
   # Test numeric prediction values
   predictions <- collect(predict(model, data))$prediction
   expect_equal(length(grep("1.0", predictions)), 50)
   expect_equal(length(grep("2.0", predictions)), 50)
 
   # spark.randomForest classification can work on libsvm data
-  data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
-                source = "libsvm")
-  model <- spark.randomForest(data, label ~ features, "classification")
-  expect_equal(summary(model)$numFeatures, 4)
+  if (not_cran_or_windows_with_hadoop()) {
+    data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
+                  source = "libsvm")
+    model <- spark.randomForest(data, label ~ features, "classification")
+    expect_equal(summary(model)$numFeatures, 4)
+  }
+})
+
+test_that("spark.decisionTree", {
+  skip_on_cran()
+
+  # regression
+  data <- suppressWarnings(createDataFrame(longley))
+  model <- spark.decisionTree(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16)
+
+  predictions <- collect(predict(model, data))
+  expect_equal(predictions$prediction, c(60.323, 61.122, 60.171, 61.187,
+                                         63.221, 63.639, 64.989, 63.761,
+                                         66.019, 67.857, 68.169, 66.513,
+                                         68.655, 69.564, 69.331, 70.551),
+               tolerance = 1e-4)
+
+  stats <- summary(model)
+  expect_equal(stats$maxDepth, 5)
+  expect_error(capture.output(stats), NA)
+  expect_true(length(capture.output(stats)) > 6)
+
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-decisionTreeRegression", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$formula, stats2$formula)
+    expect_equal(stats$numFeatures, stats2$numFeatures)
+    expect_equal(stats$features, stats2$features)
+    expect_equal(stats$featureImportances, stats2$featureImportances)
+    expect_equal(stats$maxDepth, stats2$maxDepth)
+
+    unlink(modelPath)
+  }
+
+  # classification
+  data <- suppressWarnings(createDataFrame(iris))
+  model <- spark.decisionTree(data, Species ~ Petal_Length + Petal_Width, "classification",
+                              maxDepth = 5, maxBins = 16)
+
+  stats <- summary(model)
+  expect_equal(stats$numFeatures, 2)
+  expect_equal(stats$maxDepth, 5)
+  expect_error(capture.output(stats), NA)
+  expect_true(length(capture.output(stats)) > 6)
+  # Test string prediction values
+  predictions <- collect(predict(model, data))$prediction
+  expect_equal(length(grep("setosa", predictions)), 50)
+  expect_equal(length(grep("versicolor", predictions)), 50)
+
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-decisionTreeClassification", fileext = ".tmp")
+    write.ml(model, modelPath)
+    expect_error(write.ml(model, modelPath))
+    write.ml(model, modelPath, overwrite = TRUE)
+    model2 <- read.ml(modelPath)
+    stats2 <- summary(model2)
+    expect_equal(stats$depth, stats2$depth)
+    expect_equal(stats$numNodes, stats2$numNodes)
+    expect_equal(stats$numClasses, stats2$numClasses)
+
+    unlink(modelPath)
+  }
+
+  # Test numeric response variable
+  labelToIndex <- function(species) {
+    switch(as.character(species),
+      setosa = 0.0,
+      versicolor = 1.0,
+      virginica = 2.0
+    )
+  }
+  iris$NumericSpecies <- lapply(iris$Species, labelToIndex)
+  data <- suppressWarnings(createDataFrame(iris[-5]))
+  model <- spark.decisionTree(data, NumericSpecies ~ Petal_Length + Petal_Width, "classification",
+                              maxDepth = 5, maxBins = 16)
+  stats <- summary(model)
+  expect_equal(stats$numFeatures, 2)
+  expect_equal(stats$maxDepth, 5)
+
+  # Test numeric prediction values
+  predictions <- collect(predict(model, data))$prediction
+  expect_equal(length(grep("1.0", predictions)), 50)
+  expect_equal(length(grep("2.0", predictions)), 50)
+
+  # spark.decisionTree classification can work on libsvm data
+  if (not_cran_or_windows_with_hadoop()) {
+    data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
+                  source = "libsvm")
+    model <- spark.decisionTree(data, label ~ features, "classification")
+    expect_equal(summary(model)$numFeatures, 4)
+  }
 })
 
 sparkR.session.stop()

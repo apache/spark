@@ -33,7 +33,8 @@ import org.apache.spark.mllib.tree.model.DecisionTreeModel;
 
 public class JavaDecisionTreeSuite extends SharedSparkSession {
 
-  private static int validatePrediction(List<LabeledPoint> validationData, DecisionTreeModel model) {
+  private static int validatePrediction(
+      List<LabeledPoint> validationData, DecisionTreeModel model) {
     int numCorrect = 0;
     for (LabeledPoint point : validationData) {
       Double prediction = model.predict(point.features());

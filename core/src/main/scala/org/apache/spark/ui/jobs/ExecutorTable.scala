@@ -133,9 +133,9 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
             </td>
             <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
             <td sorttable_customkey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
-            <td>{v.failedTasks + v.succeededTasks + v.killedTasks}</td>
+            <td>{v.failedTasks + v.succeededTasks + v.reasonToNumKilled.values.sum}</td>
             <td>{v.failedTasks}</td>
-            <td>{v.killedTasks}</td>
+            <td>{v.reasonToNumKilled.values.sum}</td>
             <td>{v.succeededTasks}</td>
             {if (stageData.hasInput) {
               <td sorttable_customkey={v.inputBytes.toString}>

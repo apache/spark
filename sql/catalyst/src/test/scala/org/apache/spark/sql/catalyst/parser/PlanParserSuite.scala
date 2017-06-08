@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedGenerator, UnresolvedInlineTable, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -79,7 +79,7 @@ class PlanParserSuite extends PlanTest {
     def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
       val ctes = namedPlans.map {
         case (name, cte) =>
-          name -> SubqueryAlias(name, cte, None)
+          name -> SubqueryAlias(name, cte)
       }
       With(plan, ctes)
     }
@@ -152,10 +152,7 @@ class PlanParserSuite extends PlanTest {
     val orderSortDistrClusterClauses = Seq(
       ("", basePlan),
       (" order by a, b desc", basePlan.orderBy('a.asc, 'b.desc)),
-      (" sort by a, b desc", basePlan.sortBy('a.asc, 'b.desc)),
-      (" distribute by a, b", basePlan.distribute('a, 'b)()),
-      (" distribute by a sort by b", basePlan.distribute('a)().sortBy('b.asc)),
-      (" cluster by a, b", basePlan.distribute('a, 'b)().sortBy('a.asc, 'b.asc))
+      (" sort by a, b desc", basePlan.sortBy('a.asc, 'b.desc))
     )
 
     orderSortDistrClusterClauses.foreach {
@@ -179,14 +176,14 @@ class PlanParserSuite extends PlanTest {
     def insert(
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
-        ifNotExists: Boolean = false): LogicalPlan =
-      InsertIntoTable(table("s"), partition, plan, overwrite, ifNotExists)
+        ifPartitionNotExists: Boolean = false): LogicalPlan =
+      InsertIntoTable(table("s"), partition, plan, overwrite, ifPartitionNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
       insert(Map.empty, overwrite = true))
     assertEqual(s"insert overwrite table s partition (e = 1) if not exists $sql",
-      insert(Map("e" -> Option("1")), overwrite = true, ifNotExists = true))
+      insert(Map("e" -> Option("1")), overwrite = true, ifPartitionNotExists = true))
     assertEqual(s"insert into s $sql",
       insert(Map.empty))
     assertEqual(s"insert into table s partition (c = 'd', e = 1) $sql",
@@ -196,9 +193,9 @@ class PlanParserSuite extends PlanTest {
     val plan2 = table("t").where('x > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
       InsertIntoTable(
-        table("s"), Map.empty, plan.limit(1), false, ifNotExists = false).union(
+        table("s"), Map.empty, plan.limit(1), false, ifPartitionNotExists = false).union(
         InsertIntoTable(
-          table("u"), Map.empty, plan2, false, ifNotExists = false)))
+          table("u"), Map.empty, plan2, false, ifPartitionNotExists = false)))
   }
 
   test ("insert with if not exists") {
@@ -447,6 +444,19 @@ class PlanParserSuite extends PlanTest {
         |      (select id from t0)) as u_1
       """.stripMargin,
       plan.union(plan).union(plan).as("u_1").select('id))
+
+  }
+
+  test("aliased subquery") {
+    val errMsg = "The unaliased subqueries in the FROM clause are not supported"
+
+    assertEqual("select a from (select id as a from t0) tt",
+      table("t0").select('id.as("a")).as("tt").select('a))
+    intercept("select a from (select id as a from t0)", errMsg)
+
+    assertEqual("from (select id as a from t0) tt select a",
+      table("t0").select('id.as("a")).as("tt").select('a))
+    intercept("from (select id as a from t0) select a", errMsg)
   }
 
   test("scalar sub-query") {
@@ -471,7 +481,25 @@ class PlanParserSuite extends PlanTest {
   test("table valued function") {
     assertEqual(
       "select * from range(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
+      UnresolvedTableValuedFunction("range", Literal(2) :: Nil, Seq.empty).select(star()))
+  }
+
+  test("SPARK-20311 range(N) as alias") {
+    assertEqual(
+      "SELECT * FROM range(10) AS t",
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(10) :: Nil, Seq.empty))
+        .select(star()))
+    assertEqual(
+      "SELECT * FROM range(7) AS t(a)",
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(7) :: Nil, "a" :: Nil))
+        .select(star()))
+  }
+
+  test("SPARK-20841 Support table column aliases in FROM clause") {
+    assertEqual(
+      "SELECT * FROM testData AS t(col1, col2)",
+      SubqueryAlias("t", UnresolvedRelation(TableIdentifier("testData"), Seq("col1", "col2")))
+        .select(star()))
   }
 
   test("inline table") {
@@ -499,46 +527,109 @@ class PlanParserSuite extends PlanTest {
     val m = intercept[ParseException] {
       parsePlan("SELECT /*+ HINT() */ * FROM t")
     }.getMessage
-    assert(m.contains("no viable alternative at input"))
-
-    // Hive compatibility: No database.
-    val m2 = intercept[ParseException] {
-      parsePlan("SELECT /*+ MAPJOIN(default.t) */ * from default.t")
-    }.getMessage
-    assert(m2.contains("mismatched input '.' expecting {')', ','}"))
+    assert(m.contains("mismatched input"))
 
     // Disallow space as the delimiter.
     val m3 = intercept[ParseException] {
       parsePlan("SELECT /*+ INDEX(a b c) */ * from default.t")
     }.getMessage
-    assert(m3.contains("mismatched input 'b' expecting {')', ','}"))
+    assert(m3.contains("mismatched input 'b' expecting"))
 
     comparePlans(
       parsePlan("SELECT /*+ HINT */ * FROM t"),
-      Hint("HINT", Seq.empty, table("t").select(star())))
+      UnresolvedHint("HINT", Seq.empty, table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ BROADCASTJOIN(u) */ * FROM t"),
-      Hint("BROADCASTJOIN", Seq("u"), table("t").select(star())))
+      UnresolvedHint("BROADCASTJOIN", Seq($"u"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(u) */ * FROM t"),
-      Hint("MAPJOIN", Seq("u"), table("t").select(star())))
+      UnresolvedHint("MAPJOIN", Seq($"u"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ STREAMTABLE(a,b,c) */ * FROM t"),
-      Hint("STREAMTABLE", Seq("a", "b", "c"), table("t").select(star())))
+      UnresolvedHint("STREAMTABLE", Seq($"a", $"b", $"c"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ INDEX(t, emp_job_ix) */ * FROM t"),
-      Hint("INDEX", Seq("t", "emp_job_ix"), table("t").select(star())))
+      UnresolvedHint("INDEX", Seq($"t", $"emp_job_ix"), table("t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(`default.t`) */ * from `default.t`"),
-      Hint("MAPJOIN", Seq("default.t"), table("default.t").select(star())))
+      UnresolvedHint("MAPJOIN", Seq(UnresolvedAttribute.quoted("default.t")),
+        table("default.t").select(star())))
 
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
-      Hint("MAPJOIN", Seq("t"), table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
+      UnresolvedHint("MAPJOIN", Seq($"t"),
+        table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
+  }
+
+  test("SPARK-20854: select hint syntax with expressions") {
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, array(1, 2, 3)) */ * from t"),
+      UnresolvedHint("HINT1", Seq($"a",
+        UnresolvedFunction("array", Literal(1) :: Literal(2) :: Literal(3) :: Nil, false)),
+        table("t").select(star())
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, 5, 'a', b) */ * from t"),
+      UnresolvedHint("HINT1", Seq($"a", Literal(5), Literal("a"), $"b"),
+        table("t").select(star())
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1('a', (b, c), (1, 2)) */ * from t"),
+      UnresolvedHint("HINT1",
+        Seq(Literal("a"),
+          CreateStruct($"b" :: $"c" :: Nil),
+          CreateStruct(Literal(1) :: Literal(2) :: Nil)),
+        table("t").select(star())
+      )
+    )
+  }
+
+  test("SPARK-20854: multiple hints") {
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, 1) hint2(b, 2) */ * from t"),
+      UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+        UnresolvedHint("hint2", Seq($"b", Literal(2)),
+          table("t").select(star())
+        )
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, 1),hint2(b, 2) */ * from t"),
+      UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+        UnresolvedHint("hint2", Seq($"b", Literal(2)),
+          table("t").select(star())
+        )
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, 1) */ /*+ hint2(b, 2) */ * from t"),
+      UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+        UnresolvedHint("hint2", Seq($"b", Literal(2)),
+          table("t").select(star())
+        )
+      )
+    )
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT1(a, 1), hint2(b, 2) */ /*+ hint3(c, 3) */ * from t"),
+      UnresolvedHint("HINT1", Seq($"a", Literal(1)),
+        UnresolvedHint("hint2", Seq($"b", Literal(2)),
+          UnresolvedHint("hint3", Seq($"c", Literal(3)),
+            table("t").select(star())
+          )
+        )
+      )
+    )
   }
 }

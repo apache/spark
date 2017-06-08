@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -34,11 +33,11 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
       Batch("Constant Folding", FixedPoint(50),
-        NullPropagation(SimpleCatalystConf(caseSensitiveAnalysis = true)),
+        NullPropagation(conf),
         ConstantFolding,
         BooleanSimplification,
         SimplifyBinaryComparison,
-        PruneFilters) :: Nil
+        PruneFilters(conf)) :: Nil
   }
 
   val nullableRelation = LocalRelation('a.int.withNullability(true))

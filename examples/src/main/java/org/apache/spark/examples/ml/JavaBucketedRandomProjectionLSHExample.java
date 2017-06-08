@@ -42,7 +42,7 @@ import static org.apache.spark.sql.functions.col;
 /**
  * An example demonstrating BucketedRandomProjectionLSH.
  * Run with:
- *   bin/run-example org.apache.spark.examples.ml.JavaBucketedRandomProjectionLSHExample
+ *   bin/run-example ml.JavaBucketedRandomProjectionLSHExample
  */
 public class JavaBucketedRandomProjectionLSHExample {
   public static void main(String[] args) {

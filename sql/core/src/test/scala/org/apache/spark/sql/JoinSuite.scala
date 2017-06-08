@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable.ListBuffer
 import scala.language.existentials
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -24,7 +25,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-
+import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 
 class JoinSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -603,5 +604,138 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
 
     cartesianQueries.foreach(checkCartesianDetection)
+  }
+
+  test("test SortMergeJoin (without spill)") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
+      "spark.sql.sortMergeJoinExec.buffer.spill.threshold" -> Int.MaxValue.toString) {
+
+      assertNotSpilled(sparkContext, "inner join") {
+        checkAnswer(
+          sql("SELECT * FROM testData JOIN testData2 ON key = a where key = 2"),
+          Row(2, "2", 2, 1) :: Row(2, "2", 2, 2) :: Nil
+        )
+      }
+
+      val expected = new ListBuffer[Row]()
+      expected.append(
+        Row(1, "1", 1, 1), Row(1, "1", 1, 2),
+        Row(2, "2", 2, 1), Row(2, "2", 2, 2),
+        Row(3, "3", 3, 1), Row(3, "3", 3, 2)
+      )
+      for (i <- 4 to 100) {
+        expected.append(Row(i, i.toString, null, null))
+      }
+
+      assertNotSpilled(sparkContext, "left outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData big
+              |LEFT OUTER JOIN
+              |  testData2 small
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected
+        )
+      }
+
+      assertNotSpilled(sparkContext, "right outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData2 small
+              |RIGHT OUTER JOIN
+              |  testData big
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected
+        )
+      }
+    }
+  }
+
+  test("test SortMergeJoin (with spill)") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
+      "spark.sql.sortMergeJoinExec.buffer.spill.threshold" -> "0") {
+
+      assertSpilled(sparkContext, "inner join") {
+        checkAnswer(
+          sql("SELECT * FROM testData JOIN testData2 ON key = a where key = 2"),
+          Row(2, "2", 2, 1) :: Row(2, "2", 2, 2) :: Nil
+        )
+      }
+
+      val expected = new ListBuffer[Row]()
+      expected.append(
+        Row(1, "1", 1, 1), Row(1, "1", 1, 2),
+        Row(2, "2", 2, 1), Row(2, "2", 2, 2),
+        Row(3, "3", 3, 1), Row(3, "3", 3, 2)
+      )
+      for (i <- 4 to 100) {
+        expected.append(Row(i, i.toString, null, null))
+      }
+
+      assertSpilled(sparkContext, "left outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData big
+              |LEFT OUTER JOIN
+              |  testData2 small
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected
+        )
+      }
+
+      assertSpilled(sparkContext, "right outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData2 small
+              |RIGHT OUTER JOIN
+              |  testData big
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected
+        )
+      }
+
+      // FULL OUTER JOIN still does not use [[ExternalAppendOnlyUnsafeRowArray]]
+      // so should not cause any spill
+      assertNotSpilled(sparkContext, "full outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData2 small
+              |FULL OUTER JOIN
+              |  testData big
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected
+        )
+      }
+    }
   }
 }
