@@ -155,7 +155,7 @@
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.11.8</scala.version>
+    <scala.version>2.11.11</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.6.5</fasterxml.jackson.version>
@@ -2618,7 +2618,7 @@
         <property><name>!scala-2.10</name></property>
       </activation>
       <properties>
-        <scala.version>2.11.8</scala.version>
+        <scala.version>2.11.11</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
         <jline.version>2.12.1</jline.version>
         <jline.groupid>jline</jline.groupid>

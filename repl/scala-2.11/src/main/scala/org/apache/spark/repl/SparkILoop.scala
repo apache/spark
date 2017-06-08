@@ -90,13 +90,15 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   override def commands: List[LoopCommand] = standardCommands
 
   /**
-   * We override `loadFiles` because we need to initialize Spark *before* the REPL
+   * We override `createInterpreter` because we need to initialize Spark *before* the REPL
    * sees any files, so that the Spark context is visible in those files. This is a bit of a
-   * hack, but there isn't another hook available to us at this point.
+   * hack, but there isn't another hook available to us at this point -- at least,
+   * not one that works across versions of Scala 2.11.
+   * TODO: use `loopPostInit()`, probably, in Scala 2.12+ or when 2.11.8 support is dropped.
    */
-  override def loadFiles(settings: Settings): Unit = {
+  override def createInterpreter(): Unit = {
+    super.createInterpreter()
     initializeSpark()
-    super.loadFiles(settings)
   }
 
   override def resetCommand(line: String): Unit = {
