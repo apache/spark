@@ -225,6 +225,38 @@ public class JavaDatasetSuite implements Serializable {
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped.collectAsList()));
 
+    Dataset<String> mapped2 = grouped.mapGroupsWithState(
+      new MapGroupsWithStateFunction<Integer, String, Long, String>() {
+        @Override
+        public String call(Integer key, Iterator<String> values, KeyedState<Long> s) throws Exception {
+          StringBuilder sb = new StringBuilder(key.toString());
+          while (values.hasNext()) {
+            sb.append(values.next());
+          }
+          return sb.toString();
+        }
+        },
+        Encoders.LONG(),
+        Encoders.STRING());
+
+    Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped2.collectAsList()));
+
+    Dataset<String> flatMapped2 = grouped.flatMapGroupsWithState(
+      new FlatMapGroupsWithStateFunction<Integer, String, Long, String>() {
+        @Override
+        public Iterator<String> call(Integer key, Iterator<String> values, KeyedState<Long> s) {
+          StringBuilder sb = new StringBuilder(key.toString());
+          while (values.hasNext()) {
+            sb.append(values.next());
+          }
+          return Collections.singletonList(sb.toString()).iterator();
+        }
+      },
+      Encoders.LONG(),
+      Encoders.STRING());
+
+    Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
+
     Dataset<Tuple2<Integer, String>> reduced = grouped.reduceGroups(new ReduceFunction<String>() {
       @Override
       public String call(String v1, String v2) throws Exception {

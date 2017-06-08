@@ -46,8 +46,13 @@ object UnsupportedOperationChecker {
         "Queries without streaming sources cannot be executed with writeStream.start()")(plan)
     }
 
+    /** Collect all the streaming aggregates in a sub plan */
+    def collectStreamingAggregates(subplan: LogicalPlan): Seq[Aggregate] = {
+      subplan.collect { case a: Aggregate if a.isStreaming => a }
+    }
+
     // Disallow multiple streaming aggregations
-    val aggregates = plan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+    val aggregates = collectStreamingAggregates(plan)
 
     if (aggregates.size > 1) {
       throwError(
@@ -112,6 +117,10 @@ object UnsupportedOperationChecker {
 
         case _: InsertIntoTable =>
           throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
+
+        case m: MapGroupsWithState if collectStreamingAggregates(m).nonEmpty =>
+          throwError("(map/flatMap)GroupsWithState is not supported after aggregation on a " +
+            "streaming DataFrame/Dataset")
 
         case Join(left, right, joinType, _) =>
 
