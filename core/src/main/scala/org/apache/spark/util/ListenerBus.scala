@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
  */
 private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
-  private[this] val listenersPlusTimers = new CopyOnWriteArrayList[(L, Timer)]
+  private[this] val listenersPlusTimers = new CopyOnWriteArrayList[(L, Option[Timer])]
 
   // Marked `private[spark]` for access in tests.
   private[spark] def listeners = listenersPlusTimers.asScala.map(_._1).asJava
@@ -47,7 +47,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
    */
   final def addListener(listener: L): Unit = {
-    listenersPlusTimers.add((listener, getTimer(listener).orNull))
+    listenersPlusTimers.add((listener, getTimer(listener)))
   }
 
   /**
@@ -73,8 +73,8 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
       val listenerAndMaybeTimer = iter.next()
       val listener = listenerAndMaybeTimer._1
       val maybeTimer = listenerAndMaybeTimer._2
-      val maybeTimerContext = if (maybeTimer != null) {
-        maybeTimer.time()
+      val maybeTimerContext = if (maybeTimer.isDefined) {
+        maybeTimer.get.time()
       } else {
         null
       }
