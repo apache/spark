@@ -151,7 +151,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
    * log the events.
    */
   private class EventMonster(conf: SparkConf)
-    extends EventLoggingListener("test", None, new URI("testdir"), conf) {
+    extends EventLoggingListener("test", None, "test dir", conf) {
 
     override def start() { }
 

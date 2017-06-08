@@ -62,8 +62,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       inProgress: Boolean,
       codec: Option[String] = None): File = {
     val ip = if (inProgress) EventLoggingListener.IN_PROGRESS else ""
-    val logUri = EventLoggingListener.getLogPath(testDir.toURI, appId, appAttemptId)
-    val logPath = new URI(logUri).getPath + ip
+    val logPath = EventLoggingListener.getLogPath(testDir.getAbsolutePath, appId, appAttemptId) + ip
     new File(logPath)
   }
 

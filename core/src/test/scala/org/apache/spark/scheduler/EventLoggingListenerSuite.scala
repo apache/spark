@@ -50,7 +50,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   private var testDirPath: Path = _
 
   before {
-    testDir = Utils.createTempDir()
+    testDir = Utils.createTempDir(namePrefix = s"event log")
     testDir.deleteOnExit()
     testDirPath = new Path(testDir.getAbsolutePath())
   }
@@ -62,7 +62,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   test("Verify log file exist") {
     // Verify logging directory exists
     val conf = getLoggingConf(testDirPath)
-    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    val eventLogger = new EventLoggingListener("test", None, testDirPath.toString, conf)
     eventLogger.start()
 
     val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
@@ -100,7 +100,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val secretPassword = "secret_password"
     val conf = getLoggingConf(testDirPath, None)
       .set(key, secretPassword)
-    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    val eventLogger = new EventLoggingListener("test", None, testDirPath.toString, conf)
     val envDetails = SparkEnv.environmentDetails(conf, "FIFO", Seq.empty, Seq.empty)
     val event = SparkListenerEnvironmentUpdate(envDetails)
     val redactedProps = eventLogger.redactEvent(event).environmentDetails("Spark Properties").toMap
@@ -108,8 +108,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   test("Log overwriting") {
-    val logUri = EventLoggingListener.getLogPath(testDir.toURI, "test", None)
-    val logPath = new URI(logUri).getPath
+    val logPath = EventLoggingListener.getLogPath(testDir.toString, "test", None)
     // Create file before writing the event log
     new FileOutputStream(new File(logPath)).close()
     // Expected IOException, since we haven't enabled log overwrite.
@@ -119,7 +118,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   test("Event log name") {
-    val baseDirUri = Utils.resolveURI("/base-dir")
+    val baseDirUri = "/base-dir"
     // without compression
     assert(s"${baseDirUri.toString}/app1" === EventLoggingListener.getLogPath(
       baseDirUri, "app1", None))
@@ -154,7 +153,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val conf = getLoggingConf(testDirPath, compressionCodec)
     extraConf.foreach { case (k, v) => conf.set(k, v) }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
-    val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
+    val eventLogger = new EventLoggingListener(logName, None, testDirPath.toString, conf)
     val listenerBus = new LiveListenerBus(sc)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
@@ -190,15 +189,12 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
    * This runs a simple Spark job and asserts that the expected events are logged when expected.
    */
   private def testApplicationEventLogging(compressionCodec: Option[String] = None) {
-    // Set defaultFS to something that would cause an exception, to make sure we don't run
-    // into SPARK-6688.
     val conf = getLoggingConf(testDirPath, compressionCodec)
-      .set("spark.hadoop.fs.defaultFS", "unsupported://example.com")
     sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
     val eventLogPath = eventLogger.logPath
-    val expectedLogDir = testDir.toURI()
+    val expectedLogDir = testDir.getAbsolutePath
     assert(eventLogPath === EventLoggingListener.getLogPath(
       expectedLogDir, sc.applicationId, None, compressionCodec.map(CompressionCodec.getShortName)))
 
@@ -290,7 +286,7 @@ object EventLoggingListenerSuite {
     val conf = new SparkConf
     conf.set("spark.eventLog.enabled", "true")
     conf.set("spark.eventLog.testing", "true")
-    conf.set("spark.eventLog.dir", logDir.toUri.toString)
+    conf.set("spark.eventLog.dir", logDir.toString)
     compressionCodec.foreach { codec =>
       conf.set("spark.eventLog.compress", "true")
       conf.set("spark.io.compression.codec", codec)

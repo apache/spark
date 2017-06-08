@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import java.io._
-import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
@@ -50,14 +49,14 @@ import org.apache.spark.util.{JsonProtocol, Utils}
 private[spark] class EventLoggingListener(
     appId: String,
     appAttemptId : Option[String],
-    logBaseDir: URI,
+    logBaseDir: String,
     sparkConf: SparkConf,
     hadoopConf: Configuration)
   extends SparkListener with Logging {
 
   import EventLoggingListener._
 
-  def this(appId: String, appAttemptId : Option[String], logBaseDir: URI, sparkConf: SparkConf) =
+  def this(appId: String, appAttemptId : Option[String], logBaseDir: String, sparkConf: SparkConf) =
     this(appId, appAttemptId, logBaseDir, sparkConf,
       SparkHadoopUtil.get.newConfiguration(sparkConf))
 
@@ -65,7 +64,7 @@ private[spark] class EventLoggingListener(
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-  private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
+  private val fileSystem = new Path(logBaseDir).getFileSystem(hadoopConf)
   private val compressionCodec =
     if (shouldCompress) {
       Some(CompressionCodec.createCodec(sparkConf))
@@ -96,8 +95,8 @@ private[spark] class EventLoggingListener(
     }
 
     val workingPath = logPath + IN_PROGRESS
-    val uri = new URI(workingPath)
     val path = new Path(workingPath)
+    val uri = path.toUri
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
@@ -316,11 +315,11 @@ private[spark] object EventLoggingListener extends Logging {
    * @return A path which consists of file-system-safe characters.
    */
   def getLogPath(
-      logBaseDir: URI,
+      logBaseDir: String,
       appId: String,
       appAttemptId: Option[String],
       compressionCodecName: Option[String] = None): String = {
-    val base = logBaseDir.toString.stripSuffix("/") + "/" + sanitize(appId)
+    val base = logBaseDir.stripSuffix("/") + "/" + sanitize(appId)
     val codec = compressionCodecName.map("." + _).getOrElse("")
     if (appAttemptId.isDefined) {
       base + "_" + sanitize(appAttemptId.get) + codec
