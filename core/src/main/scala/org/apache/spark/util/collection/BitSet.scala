@@ -187,8 +187,8 @@ class BitSet(numBits: Int) extends Serializable {
 
 
   /** Return the number of bits set to true in this BitSet. */
-  def cardinality(): Int = {
-    var sum = 0
+  def cardinality(): Long = {
+    var sum = 0L
     var i = 0
     while (i < numWords) {
       sum += java.lang.Long.bitCount(words(i))

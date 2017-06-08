@@ -68,7 +68,7 @@ private[graphx] abstract class VertexPartitionBase[@specialized(Long, Int, Doubl
 
   val capacity: Int = index.capacity
 
-  def size: Int = mask.cardinality()
+  def size: Long = mask.cardinality()
 
   /** Return the vertex attribute for the given vertex ID. */
   def apply(vid: VertexId): VD = values(index.getPos(vid))
