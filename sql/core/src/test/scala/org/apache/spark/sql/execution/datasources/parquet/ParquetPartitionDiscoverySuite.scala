@@ -1022,4 +1022,15 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       }
     }
   }
+
+  test("SPARK-19005 Keep column ordering when a schema is explicitly specified") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = Seq((1L, 2.0)).toDF("a", "b")
+      df.write.parquet(s"$path/a=1")
+      val schema = new StructType().add("a", LongType).add("b", DoubleType)
+      assert(spark.read.schema(schema).parquet(path).schema ===
+        StructType(StructField("a", LongType) :: StructField("b", DoubleType) :: Nil))
+    }
+  }
 }
