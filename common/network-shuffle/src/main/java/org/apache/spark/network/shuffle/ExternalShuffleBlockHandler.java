@@ -196,24 +196,29 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private String appId;
     private String execId;
     private String shuffleId;
-    // mapId and reduceId are stored as bytes to save memory.
-    private byte[][] mapIdAndReduceIds;
+    // An array containing mapId and reduceId pairs.
+    private int[][] mapIdAndReduceIds;
 
     ManagedBufferIterator(String appId, String execId, String[] blockIds) {
       this.appId = appId;
       this.execId = execId;
-      String blockId = blockIds[0];
-      String[] blockIdParts = blockId.split("_");
-      if (blockIdParts.length < 4) {
-        throw new IllegalArgumentException("Unexpected block id format: " + blockId);
-      } else if (!blockIdParts[0].equals("shuffle")) {
-        throw new IllegalArgumentException("Expected shuffle block id, got: " + blockId);
+      String[] blockId0Parts = blockIds[0].split("_");
+      if (blockId0Parts.length < 4) {
+        throw new IllegalArgumentException("Unexpected block id format: " + blockIds[0]);
+      } else if (!blockId0Parts[0].equals("shuffle")) {
+        throw new IllegalArgumentException("Expected shuffle block id, got: " + blockIds[0]);
       }
-      this.shuffleId = blockIdParts[1];
-      mapIdAndReduceIds = new byte[blockIds.length][];
+      this.shuffleId = blockId0Parts[1];
+      mapIdAndReduceIds = new int[blockIds.length][2];
       if (blockIds.length > 0) {
         for (int i = 0; i< blockIds.length; i++) {
-          mapIdAndReduceIds[i] = (blockIdParts[2] + "_" + blockIdParts[3]).getBytes();
+          String[] blockIdParts = blockIds[i].split("_");
+          if (!blockIdParts[1].equals(shuffleId)) {
+            throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
+              ", got:" + blockIds[i]);
+          }
+          mapIdAndReduceIds[i][0] = Integer.parseInt(blockIdParts[2]);
+          mapIdAndReduceIds[i][1] = Integer.parseInt(blockIdParts[3]);
         }
       }
     }
@@ -225,7 +230,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
 
     @Override
     public ManagedBuffer next() {
-      String blockId = "shuffle_" + shuffleId + "_" + new String(mapIdAndReduceIds[index]);
+      String blockId = "shuffle_" + shuffleId + "_" + mapIdAndReduceIds[index][0] + "_" + mapIdAndReduceIds[index][1];
       final ManagedBuffer block = blockManager.getBlockData(appId, execId, blockId);
       index++;
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
