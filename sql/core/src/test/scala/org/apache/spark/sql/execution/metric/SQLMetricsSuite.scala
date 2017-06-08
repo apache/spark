@@ -290,10 +290,13 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("save metrics") {
     withTempPath { file =>
+      // person creates a temporary view. get the DF before listing previous execution IDs
+      val data = person.select('name)
+      sparkContext.listenerBus.waitUntilEmpty(10000)
       val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
-      person.select('name).write.format("json").save(file.getAbsolutePath)
+      data.write.format("json").save(file.getAbsolutePath)
       sparkContext.listenerBus.waitUntilEmpty(10000)
       val executionIds =
         spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)

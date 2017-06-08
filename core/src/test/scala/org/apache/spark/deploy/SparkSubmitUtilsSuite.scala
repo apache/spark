@@ -187,12 +187,9 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("neglects Spark and Spark's dependencies") {
-    val components = Seq("catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
-      "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
-
-    val coordinates =
-      components.map(comp => s"org.apache.spark:spark-${comp}2.10:1.2.0").mkString(",") +
-      ",org.apache.spark:spark-core_fake:1.2.0"
+    val coordinates = SparkSubmitUtils.IVY_DEFAULT_EXCLUDES
+      .map(comp => s"org.apache.spark:spark-${comp}2.11:2.1.1")
+      .mkString(",") + ",org.apache.spark:spark-core_fake:1.2.0"
 
     val path = SparkSubmitUtils.resolveMavenCoordinates(
       coordinates,

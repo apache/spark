@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.util.Locale
+import java.util.concurrent.Callable
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -125,12 +126,34 @@ class SessionCatalog(
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
   }
 
-  /**
-   * A cache of qualified table names to table relation plans.
-   */
-  val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
+  private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
     val cacheSize = conf.tableRelationCacheSize
     CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
+  }
+
+  /** This method provides a way to get a cached plan. */
+  def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
+    tableRelationCache.get(t, c)
+  }
+
+  /** This method provides a way to get a cached plan if the key exists. */
+  def getCachedTable(key: QualifiedTableName): LogicalPlan = {
+    tableRelationCache.getIfPresent(key)
+  }
+
+  /** This method provides a way to cache a plan. */
+  def cacheTable(t: QualifiedTableName, l: LogicalPlan): Unit = {
+    tableRelationCache.put(t, l)
+  }
+
+  /** This method provides a way to invalidate a cached plan. */
+  def invalidateCachedTable(key: QualifiedTableName): Unit = {
+    tableRelationCache.invalidate(key)
+  }
+
+  /** This method provides a way to invalidate all the cached plans. */
+  def invalidateAllCachedTables(): Unit = {
+    tableRelationCache.invalidateAll()
   }
 
   /**
@@ -1105,8 +1128,9 @@ class SessionCatalog(
       !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
   }
 
-  protected def failFunctionLookup(name: String): Nothing = {
-    throw new NoSuchFunctionException(db = currentDb, func = name)
+  protected def failFunctionLookup(name: FunctionIdentifier): Nothing = {
+    throw new NoSuchFunctionException(
+      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName)
   }
 
   /**
@@ -1128,7 +1152,7 @@ class SessionCatalog(
             qualifiedName.database.orNull,
             qualifiedName.identifier)
         } else {
-          failFunctionLookup(name.funcName)
+          failFunctionLookup(name)
         }
       }
   }
@@ -1158,8 +1182,8 @@ class SessionCatalog(
     }
 
     // If the name itself is not qualified, add the current database to it.
-    val database = name.database.orElse(Some(currentDb)).map(formatDatabaseName)
-    val qualifiedName = name.copy(database = database)
+    val database = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val qualifiedName = name.copy(database = Some(database))
 
     if (functionRegistry.functionExists(qualifiedName.unquotedString)) {
       // This function has been already loaded into the function registry.
@@ -1172,10 +1196,10 @@ class SessionCatalog(
     // in the metastore). We need to first put the function in the FunctionRegistry.
     // TODO: why not just check whether the function exists first?
     val catalogFunction = try {
-      externalCatalog.getFunction(currentDb, name.funcName)
+      externalCatalog.getFunction(database, name.funcName)
     } catch {
-      case e: AnalysisException => failFunctionLookup(name.funcName)
-      case e: NoSuchPermanentFunctionException => failFunctionLookup(name.funcName)
+      case _: AnalysisException => failFunctionLookup(name)
+      case _: NoSuchPermanentFunctionException => failFunctionLookup(name)
     }
     loadFunctionResources(catalogFunction.resources)
     // Please note that qualifiedName is provided by the user. However,

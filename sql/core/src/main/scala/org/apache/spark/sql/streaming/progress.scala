@@ -29,13 +29,11 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 
 /**
- * :: Experimental ::
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
  */
-@Experimental
 @InterfaceStability.Evolving
 class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
@@ -54,7 +52,6 @@ class StateOperatorProgress private[sql](
 }
 
 /**
- * :: Experimental ::
  * Information about progress made in the execution of a [[StreamingQuery]] during
  * a trigger. Each event relates to processing done for a single trigger of the streaming
  * query. Events are emitted even when no new data is available to be processed.
@@ -80,7 +77,6 @@ class StateOperatorProgress private[sql](
  * @param sources detailed statistics on data being read from each of the streaming sources.
  * @since 2.1.0
  */
-@Experimental
 @InterfaceStability.Evolving
 class StreamingQueryProgress private[sql](
   val id: UUID,
@@ -139,7 +135,6 @@ class StreamingQueryProgress private[sql](
 }
 
 /**
- * :: Experimental ::
  * Information about progress made for a source in the execution of a [[StreamingQuery]]
  * during a trigger. See [[StreamingQueryProgress]] for more information.
  *
@@ -152,7 +147,6 @@ class StreamingQueryProgress private[sql](
  *                               Spark.
  * @since 2.1.0
  */
-@Experimental
 @InterfaceStability.Evolving
 class SourceProgress protected[sql](
   val description: String,
@@ -191,14 +185,12 @@ class SourceProgress protected[sql](
 }
 
 /**
- * :: Experimental ::
  * Information about progress made for a sink in the execution of a [[StreamingQuery]]
  * during a trigger. See [[StreamingQueryProgress]] for more information.
  *
  * @param description Description of the source corresponding to this status.
  * @since 2.1.0
  */
-@Experimental
 @InterfaceStability.Evolving
 class SinkProgress protected[sql](
     val description: String) extends Serializable {
