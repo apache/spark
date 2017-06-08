@@ -60,7 +60,8 @@ private[spark] abstract class Task[T](
       SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
-    val appAttemptId: Option[String] = None) extends Serializable {
+    val appAttemptId: Option[String] = None,
+    val tokens: Option[Array[Byte]] = None) extends Serializable {
 
   @transient lazy val metrics: TaskMetrics =
     SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
@@ -105,7 +106,7 @@ private[spark] abstract class Task[T](
       Option(attemptNumber)).setCurrentContext()
 
     try {
-      runTask(context)
+      KerberosFunction.executeSecure(tokens, runTask, context)
     } catch {
       case e: Throwable =>
         // Catch all errors; run task failure callbacks, and rethrow the exception.

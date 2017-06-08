@@ -415,11 +415,10 @@ class SparkSession private(
     Dataset.ofRows(self, LogicalRelation(baseRelation))
   }
 
-  /* ------------------------------- *
-   |  Methods for creating DataSets  |
-   * ------------------------------- */
-
-  /**
+   /* ------------------------------- *
+    |  Methods for creating DataSets  |
+    * ------------------------------- */
+/**
    * :: Experimental ::
    * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
    * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)

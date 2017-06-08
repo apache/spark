@@ -48,6 +48,7 @@ import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.scheduler.{KerberosUser, KerberosUtil}
 import org.apache.spark.util._
 
 /**
@@ -153,9 +154,13 @@ object SparkSubmit extends CommandLineUtils {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
 
     def doRunMain(): Unit = {
+      if (args.principal != null && args.keytab!= null) {
+        KerberosUser.securize(args.principal, args.keytab)
+      }
       if (args.proxyUser != null) {
         val proxyUser = UserGroupInformation.createProxyUser(args.proxyUser,
           UserGroupInformation.getCurrentUser())
+        KerberosUtil.proxyUser = Option(proxyUser)
         try {
           proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
