@@ -68,12 +68,6 @@ trait FunctionRegistry {
   /* List all of the registered function names. */
   def listFunction(): Seq[FunctionIdentifier]
 
-  /**
-   * List all of the registered functions in the specified database.
-   * This includes all temporary functions.
-   */
-  def listFunction(db: String): Seq[FunctionIdentifier]
-
   /* Get the class of the registered function by specified name. */
   def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo]
 
@@ -125,12 +119,6 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.iterator.map(_._1).toList
   }
 
-  override def listFunction(db: String): Seq[FunctionIdentifier] = synchronized {
-    functionBuilders.iterator.map(_._1).filter { name =>
-      name.database.isEmpty || name.database == Some(db)
-    }.toList
-  }
-
   override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = synchronized {
     functionBuilders.get(normalizeFuncName(name)).map(_._1)
   }
@@ -172,10 +160,6 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   }
 
   override def listFunction(): Seq[FunctionIdentifier] = {
-    throw new UnsupportedOperationException
-  }
-
-  override def listFunction(db: String): Seq[FunctionIdentifier] = {
     throw new UnsupportedOperationException
   }
 
