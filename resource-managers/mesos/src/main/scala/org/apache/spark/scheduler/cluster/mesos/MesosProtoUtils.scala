@@ -31,6 +31,10 @@ object MesosProtoUtils extends Logging {
 
     // Return str split around unescaped occurrences of c.
     def splitUnescaped(str: String, c: Char): Seq[String] = {
+      if (str == "") {
+        return Seq()
+      }
+
       val indices = (0 to str.length - 1).filter {
         i => str(i) == c && (i == 0 || str(i-1) != '\\')
       }
