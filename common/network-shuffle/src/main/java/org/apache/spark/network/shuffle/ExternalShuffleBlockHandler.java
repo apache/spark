@@ -210,16 +210,14 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       }
       this.shuffleId = blockId0Parts[1];
       mapIdAndReduceIds = new int[blockIds.length][2];
-      if (blockIds.length > 0) {
-        for (int i = 0; i< blockIds.length; i++) {
-          String[] blockIdParts = blockIds[i].split("_");
-          if (!blockIdParts[1].equals(shuffleId)) {
-            throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
-              ", got:" + blockIds[i]);
-          }
-          mapIdAndReduceIds[i][0] = Integer.parseInt(blockIdParts[2]);
-          mapIdAndReduceIds[i][1] = Integer.parseInt(blockIdParts[3]);
+      for (int i = 0; i< blockIds.length; i++) {
+        String[] blockIdParts = blockIds[i].split("_");
+        if (!blockIdParts[1].equals(shuffleId)) {
+          throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
+            ", got:" + blockIds[i]);
         }
+        mapIdAndReduceIds[i][0] = Integer.parseInt(blockIdParts[2]);
+        mapIdAndReduceIds[i][1] = Integer.parseInt(blockIdParts[3]);
       }
     }
 
@@ -230,7 +228,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
 
     @Override
     public ManagedBuffer next() {
-      String blockId = "shuffle_" + shuffleId + "_" + mapIdAndReduceIds[index][0] + "_" + mapIdAndReduceIds[index][1];
+      String blockId = "shuffle_" + shuffleId + "_" + mapIdAndReduceIds[index][0] + "_" +
+        mapIdAndReduceIds[index][1];
       final ManagedBuffer block = blockManager.getBlockData(appId, execId, blockId);
       index++;
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
