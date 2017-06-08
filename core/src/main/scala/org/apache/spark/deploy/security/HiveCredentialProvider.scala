@@ -48,8 +48,8 @@ private[security] class HiveCredentialProvider extends HadoopDelegationTokenProv
         logDebug("Fail to create Hive Configuration", e)
         hadoopConf
       case e: NoClassDefFoundError =>
-        logError(classNotFoundErrorStr)
-        throw e
+        logWarning(classNotFoundErrorStr)
+        hadoopConf
     }
   }
 
@@ -96,8 +96,8 @@ private[security] class HiveCredentialProvider extends HadoopDelegationTokenProv
       None
     } catch {
       case e: NoClassDefFoundError =>
-        logError(classNotFoundErrorStr)
-        throw e
+        logWarning(classNotFoundErrorStr)
+        None
     }
   }
 
