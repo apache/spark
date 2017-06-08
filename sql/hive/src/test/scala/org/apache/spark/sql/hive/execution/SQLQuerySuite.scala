@@ -138,6 +138,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-19840: Disallow creating permanent functions with invalid class names") {
+    val e = intercept[ClassNotFoundException] {
+      sql("CREATE FUNCTION function_with_invalid_classname AS 'org.invalid'")
+    }
+    assert(e.getMessage().contains("org.invalid"))
+  }
+
   test("SPARK-6835: udtf in lateral view") {
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.createOrReplaceTempView("table1")

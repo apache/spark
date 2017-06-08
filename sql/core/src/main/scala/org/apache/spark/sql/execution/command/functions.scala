@@ -64,7 +64,10 @@ case class CreateFunctionCommand(
     } else {
       // For a permanent, we will store the metadata into underlying external catalog.
       // This function will be loaded into the FunctionRegistry when a query uses it.
-      // We do not load it into FunctionRegistry right now.
+      // We do not load it into FunctionRegistry right now. However, we need to validate.
+      catalog.loadFunctionResources(resources)
+      catalog.makeFunctionBuilder(functionName, className)
+
       // TODO: should we also parse "IF NOT EXISTS"?
       catalog.createFunction(func, ignoreIfExists = false)
     }

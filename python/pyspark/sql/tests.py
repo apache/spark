@@ -2115,19 +2115,6 @@ class SQLTests(ReusedPySparkTestCase):
             className="org.apache.spark.sql.catalyst.expressions.Add",
             isTemporary=True))
         self.assertEquals(functions, functionsDefault)
-        spark.catalog.registerFunction("temp_func", lambda x: str(x))
-        spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
-        spark.sql("CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'")
-        newFunctions = dict((f.name, f) for f in spark.catalog.listFunctions())
-        newFunctionsSomeDb = dict((f.name, f) for f in spark.catalog.listFunctions("some_db"))
-        self.assertTrue(set(functions).issubset(set(newFunctions)))
-        self.assertTrue(set(functions).issubset(set(newFunctionsSomeDb)))
-        self.assertTrue("temp_func" in newFunctions)
-        self.assertTrue("func1" in newFunctions)
-        self.assertTrue("func2" not in newFunctions)
-        self.assertTrue("temp_func" in newFunctionsSomeDb)
-        self.assertTrue("func1" not in newFunctionsSomeDb)
-        self.assertTrue("func2" in newFunctionsSomeDb)
         self.assertRaisesRegexp(
             AnalysisException,
             "does_not_exist",
@@ -2579,6 +2566,27 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             self.assertTrue(range_frame_match())
 
         importlib.reload(window)
+
+    def test_list_functions(self):
+        from pyspark.sql.catalog import Function
+        spark = self.spark
+        catalog = spark.sparkSession.catalog
+        catalog._reset()
+        spark.sql("CREATE DATABASE some_db")
+        functions = dict((f.name, f) for f in catalog.listFunctions())
+        catalog.registerFunction("temp_func", lambda x: str(x))
+        spark.sql("CREATE FUNCTION func1 AS 'java.lang.Integer'")
+        spark.sql("CREATE FUNCTION some_db.func2 AS 'java.lang.Integer'")
+        newFunctions = dict((f.name, f) for f in catalog.listFunctions())
+        newFunctionsSomeDb = dict((f.name, f) for f in catalog.listFunctions("some_db"))
+        self.assertTrue(set(functions).issubset(set(newFunctions)))
+        self.assertTrue(set(functions).issubset(set(newFunctionsSomeDb)))
+        self.assertTrue("temp_func" in newFunctions)
+        self.assertTrue("func1" in newFunctions)
+        self.assertTrue("func2" not in newFunctions)
+        self.assertTrue("temp_func" in newFunctionsSomeDb)
+        self.assertTrue("func1" not in newFunctionsSomeDb)
+        self.assertTrue("func2" in newFunctionsSomeDb)
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
