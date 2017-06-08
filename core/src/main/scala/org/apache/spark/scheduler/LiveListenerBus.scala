@@ -52,7 +52,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
   private val eventQueue =
     new LinkedBlockingQueue[SparkListenerEvent](conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
 
-  private[spark] val metrics = new LiveListenerBusMetrics(eventQueue)
+  private[spark] val metrics = new LiveListenerBusMetrics(conf, eventQueue)
 
   // Indicate if `start()` is called
   private val started = new AtomicBoolean(false)
@@ -243,8 +243,11 @@ private[spark] object LiveListenerBus {
   val name = "SparkListenerBus"
 }
 
-private[spark]
-class LiveListenerBusMetrics(queue: LinkedBlockingQueue[_]) extends Source with Logging {
+private[spark] class LiveListenerBusMetrics(
+    conf: SparkConf,
+    queue: LinkedBlockingQueue[_])
+  extends Source with Logging {
+
   override val sourceName: String = "LiveListenerBus"
   override val metricRegistry: MetricRegistry = new MetricRegistry
 
@@ -285,7 +288,7 @@ class LiveListenerBusMetrics(queue: LinkedBlockingQueue[_]) extends Source with 
   def getTimerForListenerClass(cls: Class[_ <: SparkListenerInterface]): Option[Timer] = {
     synchronized {
       val className = cls.getName
-      val maxTimed = 128
+      val maxTimed = conf.get(LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED)
       perListenerClassTimers.get(className).orElse {
         if (perListenerClassTimers.size == maxTimed) {
           logError(s"Not measuring processing time for listener class $className because a " +
