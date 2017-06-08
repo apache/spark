@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import org.apache.hadoop.net.{NetworkTopology, NodeBase}
 import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.log4j.{Level, Logger}
 
@@ -34,6 +35,11 @@ private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(s
   // By default, rack is unknown
   override def getRackForHost(hostPort: String): Option[String] = {
     val host = Utils.parseHostPort(hostPort)._1
-    Option(RackResolver.resolve(sc.hadoopConfiguration, host).getNetworkLocation)
+    val rackNode = RackResolver.resolve(sc.hadoopConfiguration, host)
+    if (rackNode.getNetworkLocation.equals(NodeBase.normalize(NetworkTopology.DEFAULT_RACK))) {
+      None
+    } else {
+      Option(rackNode.getNetworkLocation)
+    }
   }
 }
