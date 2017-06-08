@@ -36,6 +36,39 @@ import org.apache.spark.util.ThreadUtils
  */
 class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
+  test("filter redundant mutable state default init code") {
+    val statesWithRedundantInitCode = Seq(
+      ("boolean", "foo", "foo = false;"),      // most commonly seen case
+      ("boolean", "foo", "this.foo =false ;"), // case with "this." and weird spaces
+      ("byte", "foo", "foo = 0;"),
+      ("short", "foo", "foo = 0;"),
+      ("char", "foo", "foo = '\\0';"),
+      ("int", "foo", "foo = 0;"),
+      ("long", "foo", "foo = 0;"),
+      ("long", "foo", "foo = 0L;"),
+      ("float", "foo", "foo = 0;"),
+      ("float", "foo", "foo = 0.0F;"),
+      ("float", "foo", "foo = .0F;"),
+      ("double", "foo", "foo = 0;"),
+      ("double", "foo", "foo = 0.0;"),
+      ("double", "foo", "foo = .0;"),
+      ("MyObject", "foo", "foo = null;")
+    )
+    assert(statesWithRedundantInitCode.forall { case (javaType, variableName, initCode) =>
+      CodegenContext.isRedundantInitCode(javaType, variableName, initCode)
+    })
+
+    val statesWithNonRedundantInitCode = Seq(
+      ("boolean", "foo", "foo = true;"),
+      ("int", "foo", "bar = 0;"),
+      ("float", "foo", "foo = 010;"),
+      ("double", "foo", "foo = 010;")
+    )
+    assert(statesWithNonRedundantInitCode.forall { case (javaType, variableName, initCode) =>
+      !CodegenContext.isRedundantInitCode(javaType, variableName, initCode)
+    })
+  }
+
   test("multithreaded eval") {
     import scala.concurrent._
     import ExecutionContext.Implicits.global

@@ -25,10 +25,10 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.util.control.NonFatal
+import scala.util.matching.Regex
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, JaninoRuntimeException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
@@ -76,6 +76,32 @@ case class SubExprEliminationState(isNull: String, value: String)
  *               the state to use.
  */
 case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprEliminationState])
+
+object CodegenContext {
+  private val primitiveTypeDefaultValuePatterns = Map(
+    "boolean" -> "false",
+    "byte" -> "0",
+    "short" -> "0",
+    "char" -> "'\\\\0'",
+    "int" -> "0",
+    "long" -> "0L?",
+    "float" -> "0(?:\\.0[fF])?|\\.0[fF]",
+    "double" -> "0(?:\\.0)?|\\.0"
+  )
+
+  // In a Java class, instances fields are guaranteed to be initialized to their default
+  // values ("zero value") before the constructor is invoked. As such, explicit initialization
+  // of fields to their "zero values" in the constructor or in an init method is totally
+  // redundant and should be discouraged, albeit they're usually harmless.
+  // In Catalyst codegen, such redundant code is problematic because they could add to the size
+  // of the generated init method, making it more likely to hit the 64KB method bytecode size
+  // limit.
+  def isRedundantInitCode(javaType: String, variableName: String, initCode: String): Boolean = {
+    val defaultValuePattern = primitiveTypeDefaultValuePatterns.getOrElse(javaType, "null")
+    val regex = s"^\\s*(?:this.)?$variableName\\s*=\\s*(?:$defaultValuePattern)\\s*;\\s*$$".r
+    regex.findFirstMatchIn(initCode).isDefined
+  }
+}
 
 /**
  * A context for codegen, tracking a list of objects that could be passed into generated Java
@@ -152,7 +178,13 @@ class CodegenContext {
     mutable.ArrayBuffer.empty[(String, String, String)]
 
   def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
-    mutableStates += ((javaType, variableName, initCode))
+    val normalizedInitCode =
+      if (CodegenContext.isRedundantInitCode(javaType, variableName, initCode)) {
+        ""
+      } else {
+        initCode
+      }
+    mutableStates += ((javaType, variableName, normalizedInitCode))
   }
 
   /**
