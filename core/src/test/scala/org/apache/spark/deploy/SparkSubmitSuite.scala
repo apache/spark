@@ -460,8 +460,8 @@ class SparkSubmitSuite
   // SPARK-7287
   test("includes jars passed in through --packages") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
-    val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = new MavenCoordinate("my.great.dep", "mylib", "0.1")
     IvyTestUtils.withRepository(main, Some(dep.toString), None) { repo =>
       val args = Seq(
         "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
@@ -503,7 +503,7 @@ class SparkSubmitSuite
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     // Check if the SparkR package is installed
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
-    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val rScriptDir =
       Seq(sparkHome, "R", "pkg", "inst", "tests", "packageInAJarTest.R").mkString(File.separator)

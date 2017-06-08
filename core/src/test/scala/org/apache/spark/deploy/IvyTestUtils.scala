@@ -34,13 +34,13 @@ import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 private[deploy] object IvyTestUtils {
 
   /**
-   * Create the path for the jar and pom from the maven coordinate. Extension should be `jar`
-   * or `pom`.
+   * Create the path for the jar and pom from the maven coordinate. `extOverride` should
+   * be `jar` or `pom`.
    */
   private[deploy] def pathFromCoordinate(
       artifact: MavenCoordinate,
       prefix: File,
-      ext: String,
+      extOverride: Option[String],
       useIvyLayout: Boolean): File = {
     val groupDirs = artifact.groupId.replace(".", File.separator)
     val artifactDirs = artifact.artifactId
@@ -48,6 +48,7 @@ private[deploy] object IvyTestUtils {
       if (!useIvyLayout) {
         Seq(groupDirs, artifactDirs, artifact.version).mkString(File.separator)
       } else {
+        val ext = extOverride.getOrElse(artifact.packaging.getOrElse("jar"))
         Seq(artifact.groupId, artifactDirs, artifact.version, ext + "s").mkString(File.separator)
       }
     new File(prefix, artifactPath)
@@ -57,9 +58,11 @@ private[deploy] object IvyTestUtils {
   private[deploy] def artifactName(
       artifact: MavenCoordinate,
       useIvyLayout: Boolean,
-      ext: String = ".jar"): String = {
+      extOverride: Option[String]): String = {
+    val classifier = artifact.classifier.map("-" + _).getOrElse("")
+    val ext = extOverride.getOrElse("." + artifact.packaging.getOrElse("jar"))
     if (!useIvyLayout) {
-      s"${artifact.artifactId}-${artifact.version}$ext"
+      s"${artifact.artifactId}-${artifact.version}$classifier$ext"
     } else {
       s"${artifact.artifactId}$ext"
     }
@@ -152,11 +155,11 @@ private[deploy] object IvyTestUtils {
       dependencies: Option[Seq[MavenCoordinate]],
       useIvyLayout: Boolean): File = {
     if (useIvyLayout) {
-      val ivyXmlPath = pathFromCoordinate(artifact, tempPath, "ivy", true)
+      val ivyXmlPath = pathFromCoordinate(artifact, tempPath, Some("ivy"), useIvyLayout)
       Files.createParentDirs(new File(ivyXmlPath, "dummy"))
       createIvyDescriptor(ivyXmlPath, artifact, dependencies)
     } else {
-      val pomPath = pathFromCoordinate(artifact, tempPath, "pom", useIvyLayout)
+      val pomPath = pathFromCoordinate(artifact, tempPath, Some("pom"), useIvyLayout)
       Files.createParentDirs(new File(pomPath, "dummy"))
       createPom(pomPath, artifact, dependencies)
     }
@@ -167,6 +170,12 @@ private[deploy] object IvyTestUtils {
     var result = "\n" + "  " * tabCount + s"<groupId>${artifact.groupId}</groupId>"
     result += "\n" + "  " * tabCount + s"<artifactId>${artifact.artifactId}</artifactId>"
     result += "\n" + "  " * tabCount + s"<version>${artifact.version}</version>"
+    if (artifact.classifier.isDefined) {
+      result += "\n" + "  " * tabCount + s"<classifier>${artifact.classifier.get}</classifier>"
+    }
+    if (artifact.packaging.isDefined) {
+      result += "\n" + "  " * tabCount + s"<type>${artifact.packaging.get}</type>"
+    }
     result
   }
 
@@ -191,7 +200,7 @@ private[deploy] object IvyTestUtils {
       "\n  <dependencies>\n" + inside + "\n  </dependencies>"
     }.getOrElse("")
     content += "\n</project>"
-    writeFile(dir, artifactName(artifact, false, ".pom"), content.trim)
+    writeFile(dir, artifactName(artifact, false, Some(".pom")), content.trim)
   }
 
   /** Helper method to write artifact information in the ivy.xml. */
@@ -206,6 +215,8 @@ private[deploy] object IvyTestUtils {
       dir: File,
       artifact: MavenCoordinate,
       dependencies: Option[Seq[MavenCoordinate]]): File = {
+    val typeExt = artifact.packaging.getOrElse("jar")
+    val classifier = artifact.classifier.map(c => s"classifier=$c").getOrElse("")
     var content = s"""
         |<?xml version="1.0" encoding="UTF-8"?>
         |<ivy-module version="2.0" xmlns:m="http://ant.apache.org/ivy/maven">
@@ -221,7 +232,8 @@ private[deploy] object IvyTestUtils {
         |    <conf name="pom" visibility="public" description=""/>
         |  </configurations>
         |  <publications>
-        |     <artifact name="${artifactName(artifact, true, "")}" type="jar" ext="jar"
+        |     <artifact name="${artifactName(artifact, true, Some(""))}"
+        |               type="$typeExt" ext="$typeExt" $classifier
         |               conf="master"/>
         |  </publications>
       """.stripMargin.trim
@@ -241,7 +253,7 @@ private[deploy] object IvyTestUtils {
       useIvyLayout: Boolean,
       withR: Boolean,
       withManifest: Option[Manifest] = None): File = {
-    val jarFile = new File(dir, artifactName(artifact, useIvyLayout))
+    val jarFile = new File(dir, artifactName(artifact, useIvyLayout, None))
     val jarFileStream = new FileOutputStream(jarFile)
     val manifest: Manifest = withManifest.getOrElse {
       if (withR) {
@@ -301,7 +313,7 @@ private[deploy] object IvyTestUtils {
     val root = new File(tempPath, tempPath.hashCode().toString)
     Files.createParentDirs(new File(root, "dummy"))
     try {
-      val jarPath = pathFromCoordinate(artifact, tempPath, "jar", useIvyLayout)
+      val jarPath = pathFromCoordinate(artifact, tempPath, None, useIvyLayout)
       Files.createParentDirs(new File(jarPath, "dummy"))
       val className = "MyLib"
 

@@ -58,7 +58,8 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("incorrect maven coordinate throws error") {
-    val coordinates = Seq("a:b: ", " :a:b", "a: :b", "a:b:", ":a:b", "a::b", "::", "a:b", "a")
+    val coordinates = Seq("a:b: ", " :a:b", "a: :b", "a:b:", ":a:b", "a::b", "::", "a:b", "a",
+      "a:b:c:d:e:f")
     for (coordinate <- coordinates) {
       intercept[IllegalArgumentException] {
         SparkSubmitUtils.extractMavenCoordinates(coordinate)
@@ -91,6 +92,15 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("extractMavenCoordinates parses correctly") {
+    for (s <- Seq("g:a:v,g:a:p:v,g:a:p:c:v", "g/a/v,g/a/p/v,g/a/p/c/v")) {
+      val Seq(gav, gapv, gapcv) = SparkSubmitUtils.extractMavenCoordinates(s)
+      assert(new MavenCoordinate("g", "a", "v") === gav)
+      assert(new MavenCoordinate("g", "a", Some("p"), None, "v") === gapv)
+      assert(new MavenCoordinate("g", "a", Some("p"), Some("c"), "v") === gapcv)
+    }
+  }
+
   test("add dependencies works correctly") {
     val md = SparkSubmitUtils.getModuleDescriptor
     val artifacts = SparkSubmitUtils.extractMavenCoordinates("com.databricks:spark-csv_2.10:0.1," +
@@ -115,7 +125,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rule2.getOrganisation === "c")
     assert(rule2.getName === "d")
     intercept[IllegalArgumentException] {
-      SparkSubmitUtils.createExclusion("e:f:g:h", new IvySettings, "default")
+      SparkSubmitUtils.createExclusion("e:f:g:h:i:j", new IvySettings, "default")
     }
   }
 
@@ -128,7 +138,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       assert(index >= 0)
       jPaths = jPaths.substring(index + tempIvyPath.length)
     }
-    val main = MavenCoordinate("my.awesome.lib", "mylib", "0.1")
+    val main = new MavenCoordinate("my.awesome.lib", "mylib", "0.1")
     IvyTestUtils.withRepository(main, None, None) { repo =>
       // end to end
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
@@ -196,7 +206,8 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       SparkSubmitUtils.buildIvySettings(None, None),
       isTest = true)
     assert(path === "", "should return empty path")
-    val main = MavenCoordinate("org.apache.spark", "spark-streaming-kafka-assembly_2.10", "1.2.0")
+    val main = new MavenCoordinate(
+      "org.apache.spark", "spark-streaming-kafka-assembly_2.10", "1.2.0")
     IvyTestUtils.withRepository(main, None, None) { repo =>
       val files = SparkSubmitUtils.resolveMavenCoordinates(
         coordinates + "," + main.toString,

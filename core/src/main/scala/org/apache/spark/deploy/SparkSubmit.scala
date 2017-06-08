@@ -23,6 +23,7 @@ import java.net.URL
 import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
+import java.util.Collections
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -889,33 +890,56 @@ private[spark] object SparkSubmitUtils {
     "tags_", "unsafe_")
 
   /**
-   * Represents a Maven Coordinate
+   * Represents a Maven Coordinate. Refer to https://maven.apache.org/pom.html#Maven_Coordinates
+   * for more information. Standard ordering for a full coordinate is
+   * `groupId:artifactId:packaging:classifier:version` although packaging and classifier
+   * are optional.
+   *
    * @param groupId the groupId of the coordinate
    * @param artifactId the artifactId of the coordinate
+   * @param packaging Maven packaging type (e.g. jar), if any
+   * @param classifier Maven classifier, if any
    * @param version the version of the coordinate
    */
-  private[deploy] case class MavenCoordinate(groupId: String, artifactId: String, version: String) {
-    override def toString: String = s"$groupId:$artifactId:$version"
+  private[deploy] case class MavenCoordinate(
+      groupId: String,
+      artifactId: String,
+      packaging: Option[String],
+      classifier: Option[String],
+      version: String) {
+
+    def this(groupId: String, artifactId: String, version: String) =
+      this(groupId, artifactId, None, None, version)
+
+    override def toString: String = {
+      (Seq(groupId, artifactId) ++ packaging ++ classifier ++ Seq(version)).mkString(":")
+    }
   }
 
 /**
  * Extracts maven coordinates from a comma-delimited string. Coordinates should be provided
- * in the format `groupId:artifactId:version` or `groupId/artifactId:version`.
- * @param coordinates Comma-delimited string of maven coordinates
+ * in the format `groupId:artifactId:version`, `groupId:artifactId:packaging:version`, or
+ * `groupId:artifactId:packaging:classifier:version`. '/' can be used as a separator instead
+ * of ':'.
+ *
+ * @param coordinates Comma-delimited string of Maven coordinates
  * @return Sequence of Maven coordinates
  */
   def extractMavenCoordinates(coordinates: String): Seq[MavenCoordinate] = {
-    coordinates.split(",").map { p =>
-      val splits = p.replace("/", ":").split(":")
-      require(splits.length == 3, s"Provided Maven Coordinates must be in the form " +
-        s"'groupId:artifactId:version'. The coordinate provided is: $p")
-      require(splits(0) != null && splits(0).trim.nonEmpty, s"The groupId cannot be null or " +
-        s"be whitespace. The groupId provided is: ${splits(0)}")
-      require(splits(1) != null && splits(1).trim.nonEmpty, s"The artifactId cannot be null or " +
-        s"be whitespace. The artifactId provided is: ${splits(1)}")
-      require(splits(2) != null && splits(2).trim.nonEmpty, s"The version cannot be null or " +
-        s"be whitespace. The version provided is: ${splits(2)}")
-      new MavenCoordinate(splits(0), splits(1), splits(2))
+    coordinates.split(",").map { coordinate =>
+      val splits = coordinate.split("[:/]")
+      require(splits.forall(split => split != null && split.trim.nonEmpty),
+        s"All elements of coordinate must be non-null and not whitespace; got $coordinate")
+      splits match {
+        case Array(groupId, artifactId, version) =>
+          new MavenCoordinate(groupId, artifactId, version)
+        case Array(groupId, artifactId, packaging, version) =>
+          new MavenCoordinate(groupId, artifactId, Some(packaging), None, version)
+        case Array(groupId, artifactId, packaging, classifier, version) =>
+          new MavenCoordinate(groupId, artifactId, Some(packaging), Some(classifier), version)
+        case _ => throw new IllegalArgumentException("Coordinates must be of form " +
+          s"groupId:artifactId[:packaging[:classifier]]:version; got $coordinate")
+      }
     }
   }
 
@@ -983,12 +1007,14 @@ private[spark] object SparkSubmitUtils {
    * @return a comma-delimited list of paths for the dependencies
    */
   def resolveDependencyPaths(
-      artifacts: Array[AnyRef],
+      artifacts: Array[Artifact],
       cacheDirectory: File): String = {
     artifacts.map { artifactInfo =>
-      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
+      val artifact = artifactInfo.getModuleRevisionId
+      val classifier =
+        Option(artifactInfo.getExtraAttribute("classifier")).map("-" + _).getOrElse("")
       cacheDirectory.getAbsolutePath + File.separator +
-        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}.jar"
+        s"${artifact.getOrganisation}_${artifact.getName}${classifier}-${artifact.getRevision}.jar"
     }.mkString(",")
   }
 
@@ -1005,6 +1031,12 @@ private[spark] object SparkSubmitUtils {
       printStream.println(s"${dd.getDependencyId} added as a dependency")
       // scalastyle:on println
       md.addDependency(dd)
+      if (mvn.classifier.isDefined) {
+        val typeExt = mvn.packaging.getOrElse("jar")
+        dd.addDependencyArtifact(ivyConfName, new DefaultDependencyArtifactDescriptor(
+          dd, mvn.artifactId, typeExt, typeExt, null,
+          Collections.singletonMap("classifier", mvn.classifier.get)))
+      }
     }
   }
 
@@ -1182,9 +1214,10 @@ private[spark] object SparkSubmitUtils {
         // retrieve all resolved dependencies
         ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
           packagesDirectory.getAbsolutePath + File.separator +
-            "[organization]_[artifact]-[revision].[ext]",
+            "[organization]_[artifact](-[classifier])-[revision].[ext]",
           retrieveOptions.setConfs(Array(ivyConfName)))
-        resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
+        resolveDependencyPaths(
+          rr.getArtifacts.toArray.map(_.asInstanceOf[Artifact]), packagesDirectory)
       } finally {
         System.setOut(sysOut)
       }
