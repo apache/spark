@@ -192,6 +192,22 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(ser.serialize(union.partitions.head).limit() < 2000)
   }
 
+  test("fold") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10)
+    def op: (Int, Int) => Int = (c: Int, x: Int) => c + x
+    val sum = rdd.fold(0)(op)
+    assert(sum === -1000)
+  }
+
+  test("fold with op modifying first arg") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10).map(x => Array(x))
+    def op: (Array[Int], Array[Int]) => Array[Int] = { (c: Array[Int], x: Array[Int]) =>
+      c(0) += x(0)
+      c
+    }
+    val sum = rdd.fold(Array(0))(op)
+  }
+
   test("aggregate") {
     val pairs = sc.makeRDD(Array(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
     type StringMap = HashMap[String, Int]
@@ -218,7 +234,19 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     def combOp: (Long, Long) => Long = (c1: Long, c2: Long) => c1 + c2
     for (depth <- 1 until 10) {
       val sum = rdd.treeAggregate(0L)(seqOp, combOp, depth)
-      assert(sum === -1000L)
+      assert(sum === -1000)
+    }
+  }
+
+  test("treeAggregate with ops modifying first args") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10).map(x => Array(x))
+    def op: (Array[Int], Array[Int]) => Array[Int] = { (c: Array[Int], x: Array[Int]) =>
+      c(0) += x(0)
+      c
+    }
+    for (depth <- 1 until 10) {
+      val sum = rdd.treeAggregate(Array(0))(op, op, depth)
+      assert(sum(0) === -1000)
     }
   }
 
