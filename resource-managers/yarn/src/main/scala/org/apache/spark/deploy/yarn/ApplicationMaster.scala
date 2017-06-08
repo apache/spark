@@ -250,7 +250,7 @@ private[spark] class ApplicationMaster(
         val credentialManager = new YARNConfigurableCredentialManager(
           sparkConf,
           yarnConf,
-          YarnSparkHadoopUtil.get.yarnHadoopFSsToAccess(sparkConf, yarnConf))
+          YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, yarnConf))
 
         val credentialRenewer = new AMCredentialRenewer(sparkConf, yarnConf, credentialManager)
         credentialRenewer.scheduleLoginFromKeytab()

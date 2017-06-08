@@ -81,9 +81,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers {
     val creds = new Credentials()
 
     // Tokens cannot be obtained from HDFS, Hive, HBase in unit tests.
-    credentialManager.obtainCredentials(
-      hadoopConf,
-      creds)
+    credentialManager.obtainCredentials(hadoopConf, creds)
     val tokens = creds.getAllTokens
     tokens.size() should be (0)
   }
@@ -96,9 +94,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers {
 
     val hiveCredentialProvider = new HiveCredentialProvider()
     val credentials = new Credentials()
-    hiveCredentialProvider.obtainCredentials(
-      hadoopConf,
-      credentials)
+    hiveCredentialProvider.obtainCredentials(hadoopConf, credentials)
 
     credentials.getAllTokens.size() should be (0)
   }
@@ -109,9 +105,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers {
 
     val hbaseTokenProvider = new HBaseCredentialProvider()
     val creds = new Credentials()
-    hbaseTokenProvider.obtainCredentials(
-      hadoopConf,
-      creds)
+    hbaseTokenProvider.obtainCredentials(hadoopConf, creds)
 
     creds.getAllTokens.size should be (0)
   }

@@ -174,7 +174,7 @@ private[yarn] class AMCredentialRenewer(
     keytabLoggedInUGI.doAs(new PrivilegedExceptionAction[Void] {
       // Get a copy of the credentials
       override def run(): Void = {
-        nearestNextRenewalTime = credentialManager.obtainYARNCredentials(
+        nearestNextRenewalTime = credentialManager.obtainCredentials(
           freshHadoopConf,
           tempCreds)
         null

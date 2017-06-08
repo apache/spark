@@ -95,7 +95,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     val credentialManager = new YARNConfigurableCredentialManager(
       sparkConf,
       hadoopConf,
-      YarnSparkHadoopUtil.get.yarnHadoopFSsToAccess(sparkConf, hadoopConf))
+      YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, hadoopConf))
     credentialUpdater = new CredentialUpdater(sparkConf, hadoopConf, credentialManager)
     credentialUpdater.start()
   }
@@ -113,9 +113,9 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /** The filesystems for which YARN should fetch delegation tokens. */
-  private[spark] def yarnHadoopFSsToAccess(
-    sparkConf: SparkConf,
-    hadoopConf: Configuration): Set[FileSystem] = {
+  private[spark] def hadoopFSsToAccess(
+      sparkConf: SparkConf,
+      hadoopConf: Configuration): Set[FileSystem] = {
     val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
       .map(new Path(_).getFileSystem(hadoopConf))
       .toSet

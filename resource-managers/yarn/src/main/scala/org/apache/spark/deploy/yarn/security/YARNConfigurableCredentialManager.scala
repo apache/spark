@@ -30,7 +30,6 @@ import org.apache.spark.deploy.security.ConfigurableCredentialManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-
 /**
  * This class loads credential providers registered under the YARN-specific
  * [[ServiceCredentialProvider]] interface, as well as the builtin credential providers defined
@@ -47,9 +46,9 @@ private[yarn] class YARNConfigurableCredentialManager(
   // public for testing
   val credentialProviders = getCredentialProviders
 
-  def obtainYARNCredentials(
-    hadoopConf: Configuration,
-    creds: Credentials): Long = {
+  def obtainCredentials(
+      hadoopConf: Configuration,
+      creds: Credentials): Long = {
 
     val superInterval = configurableCredentialManager.obtainCredentials(
       hadoopConf,
@@ -66,8 +65,7 @@ private[yarn] class YARNConfigurableCredentialManager(
     }.foldLeft(superInterval)(math.min)
   }
 
-  private def getCredentialProviders:
-    Map[String, ServiceCredentialProvider] = {
+  private def getCredentialProviders: Map[String, ServiceCredentialProvider] = {
     val providers = loadCredentialProviders
 
     providers.
@@ -76,8 +74,7 @@ private[yarn] class YARNConfigurableCredentialManager(
       .toMap
   }
 
-  private def loadCredentialProviders:
-    List[ServiceCredentialProvider] = {
+  private def loadCredentialProviders: List[ServiceCredentialProvider] = {
     ServiceLoader.load(
       classOf[ServiceCredentialProvider],
       Utils.getContextOrSparkClassLoader)

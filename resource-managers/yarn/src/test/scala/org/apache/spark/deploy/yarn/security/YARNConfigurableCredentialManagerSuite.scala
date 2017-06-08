@@ -24,8 +24,7 @@ import org.scalatest.Matchers
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 
-class YARNConfigurableCredentialManagerSuite
-    extends SparkFunSuite with Matchers {
+class YARNConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers {
   private var credentialManager: YARNConfigurableCredentialManager = null
   private var sparkConf: SparkConf = null
   private var hadoopConf: Configuration = null
@@ -39,11 +38,17 @@ class YARNConfigurableCredentialManagerSuite
     hadoopConf = new Configuration()
   }
 
+  override def afterAll(): Unit = {
+    super.afterAll()
+
+    System.clearProperty("SPARK_YARN_MODE")
+  }
+
   test("Correctly loads credential providers") {
     credentialManager = new YARNConfigurableCredentialManager(
       sparkConf,
       hadoopConf,
-      YarnSparkHadoopUtil.get.yarnHadoopFSsToAccess(sparkConf, hadoopConf))
+      YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, hadoopConf))
 
     credentialManager.credentialProviders.get("yarn-test") should not be (None)
   }
@@ -55,7 +60,7 @@ class YARNTestCredentialProvider extends ServiceCredentialProvider {
   override def credentialsRequired(conf: Configuration): Boolean = true
 
   override def obtainCredentials(
-    hadoopConf: Configuration,
-    sparkConf: SparkConf,
-    creds: Credentials): Option[Long] = None
+      hadoopConf: Configuration,
+      sparkConf: SparkConf,
+      creds: Credentials): Option[Long] = None
 }

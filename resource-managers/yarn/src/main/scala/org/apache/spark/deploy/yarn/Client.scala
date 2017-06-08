@@ -124,7 +124,7 @@ private[spark] class Client(
   private val credentialManager = new YARNConfigurableCredentialManager(
     sparkConf,
     hadoopConf,
-    YarnSparkHadoopUtil.get.yarnHadoopFSsToAccess(sparkConf, hadoopConf))
+    YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, hadoopConf))
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
@@ -371,7 +371,7 @@ private[spark] class Client(
     val fs = destDir.getFileSystem(hadoopConf)
 
     // Merge credentials obtained from registered providers
-    val nearestTimeOfNextRenewal = credentialManager.obtainYARNCredentials(
+    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(
       hadoopConf,
       credentials)
 
