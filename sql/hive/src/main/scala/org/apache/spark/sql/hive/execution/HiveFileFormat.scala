@@ -142,7 +142,8 @@ class HiveOutputWriter(
 
   override def write(row: InternalRow): Unit = {
     var i = 0
-    while (i < fieldOIs.length) {
+    val fieldOIsLength = fieldOIs.length
+    while (i < fieldOIsLength) {
       outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, dataTypes(i)))
       i += 1
     }
