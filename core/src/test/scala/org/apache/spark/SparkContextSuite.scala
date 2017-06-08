@@ -309,6 +309,44 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().head.contains(tmpJar.getName))
   }
 
+  test("add a local jar and remove this jar") {
+    val tmpDir = Utils.createTempDir()
+    val tmpJar = File.createTempFile("test-1.1.0", ".jar", tmpDir)
+
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.addJar(tmpJar.getAbsolutePath)
+    sc.listJars().size should be (1)
+    sc.removeJar(sc.listJars().head)
+    sc.listJars().size should be (0)
+
+    assert (sc.parallelize(Array(1, 2, 3)).count === 3)
+  }
+
+  test("add a HDFS jar and remove this jar") {
+    val hdfsFile = "hdfs://nn:8020/jar/test-1.2.0.jar"
+
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.addJar(hdfsFile)
+    sc.listJars().size should be (1)
+    sc.removeJar(hdfsFile)
+    sc.listJars().size should be (0)
+
+    assert (sc.parallelize(Array(1, 2, 3)).count === 3)
+  }
+
+  test("remove a non exist jar") {
+    val tmpDir = Utils.createTempDir()
+    val tmpJar = File.createTempFile("test-1.1.0", ".jar", tmpDir)
+
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.addJar(tmpJar.getAbsolutePath)
+    sc.listJars().size should be (1)
+    sc.removeJar(sc.listJars().head + "1")
+    sc.listJars().size should be (1)
+
+    assert (sc.parallelize(Array(1, 2, 3)).count === 3)
+  }
+
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
