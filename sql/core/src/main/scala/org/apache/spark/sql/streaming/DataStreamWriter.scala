@@ -143,6 +143,20 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
+   * Saves the content of the stream in Parquet format at the specified path.
+   * This is equivalent to:
+   * {{{
+   *   format("parquet").partitionBy(col1, col2, col3).option("path", path).start()
+   * }}}
+   *
+   * @since 2.2.0
+   */
+  def parquet(path: String, partitioningColumns: String*): StreamingQuery = {
+    this.partitioningColumns = Option(partitioningColumns)
+    format("parquet").option("path", path).start()
+  }
+
+  /**
    * Adds an output option for the underlying data source.
    *
    * You can set the following option(s):
