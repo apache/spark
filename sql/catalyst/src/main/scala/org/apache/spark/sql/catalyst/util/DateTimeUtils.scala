@@ -32,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Helper functions for converting between internal and external date and time representations.
  * Dates are exposed externally as java.sql.Date and are represented internally as the number of
  * dates since the Unix epoch (1970-01-01). Timestamps are exposed externally as java.sql.Timestamp
- * and are stored internally as longs, which are capable of storing timestamps with 100 nanosecond
+ * and are stored internally as longs, which are capable of storing timestamps with microsecond
  * precision.
  */
 object DateTimeUtils {
@@ -397,6 +397,11 @@ object DateTimeUtils {
     while (digitsMilli < 6) {
       segments(6) *= 10
       digitsMilli += 1
+    }
+
+    while (digitsMilli > 6) {
+      segments(6) /= 10
+      digitsMilli -= 1
     }
 
     if (!justTime && isInvalidDate(segments(0), segments(1), segments(2))) {
