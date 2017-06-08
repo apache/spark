@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib frequent pattern mining")
 
 # Tests for MLlib frequent pattern mining algorithms in SparkR
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 test_that("spark.fpGrowth", {
   data <- selectExpr(createDataFrame(data.frame(items = c(
@@ -62,15 +62,17 @@ test_that("spark.fpGrowth", {
 
   expect_equivalent(expected_predictions, collect(predict(model, new_data)))
 
-  modelPath <- tempfile(pattern = "spark-fpm", fileext = ".tmp")
-  write.ml(model, modelPath, overwrite = TRUE)
-  loaded_model <- read.ml(modelPath)
+  if (not_cran_or_windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-fpm", fileext = ".tmp")
+    write.ml(model, modelPath, overwrite = TRUE)
+    loaded_model <- read.ml(modelPath)
 
-  expect_equivalent(
-    itemsets,
-    collect(spark.freqItemsets(loaded_model)))
+    expect_equivalent(
+      itemsets,
+      collect(spark.freqItemsets(loaded_model)))
 
-  unlink(modelPath)
+    unlink(modelPath)
+  }
 
   model_without_numpartitions <- spark.fpGrowth(data, minSupport = 0.3, minConfidence = 0.8)
   expect_equal(

@@ -158,7 +158,7 @@ public class ExternalShuffleIntegrationSuite {
             }
           }
         }
-      });
+      }, null);
 
     if (!requestsRemaining.tryAcquire(blockIds.length, 5, TimeUnit.SECONDS)) {
       fail("Timeout getting response from the server");
@@ -216,9 +216,8 @@ public class ExternalShuffleIntegrationSuite {
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-0",
       new String[] { "shuffle_0_0_0" /* right */, "shuffle_1_0_0" /* wrong */ });
-    // Both still fail, as we start by checking for all block.
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_1_0_0"), execFetch.failedBlocks);
+    assertEquals(Sets.newHashSet("shuffle_0_0_0"), execFetch.successBlocks);
+    assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch.failedBlocks);
   }
 
   @Test

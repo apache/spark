@@ -894,10 +894,10 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[regression] object Probit extends Link("probit") {
 
-    override def link(mu: Double): Double = dist.Gaussian(0.0, 1.0).icdf(mu)
+    override def link(mu: Double): Double = dist.Gaussian(0.0, 1.0).inverseCdf(mu)
 
     override def deriv(mu: Double): Double = {
-      1.0 / dist.Gaussian(0.0, 1.0).pdf(dist.Gaussian(0.0, 1.0).icdf(mu))
+      1.0 / dist.Gaussian(0.0, 1.0).pdf(dist.Gaussian(0.0, 1.0).inverseCdf(mu))
     }
 
     override def unlink(eta: Double): Double = dist.Gaussian(0.0, 1.0).cdf(eta)

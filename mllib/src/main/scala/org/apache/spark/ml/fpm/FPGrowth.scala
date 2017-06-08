@@ -55,7 +55,7 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
 
   /**
    * Minimal support level of the frequent pattern. [0.0, 1.0]. Any pattern that appears
-   * more than (minSupport * size-of-the-dataset) times will be output
+   * more than (minSupport * size-of-the-dataset) times will be output in the frequent itemsets.
    * Default: 0.3
    * @group param
    */
@@ -83,8 +83,8 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   def getNumPartitions: Int = $(numPartitions)
 
   /**
-   * Minimal confidence for generating Association Rule.
-   * Note that minConfidence has no effect during fitting.
+   * Minimal confidence for generating Association Rule. minConfidence will not affect the mining
+   * for frequent itemsets, but will affect the association rules generation.
    * Default: 0.8
    * @group param
    */
@@ -119,7 +119,7 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
  * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
  * independent group of mining tasks. The FP-Growth algorithm is described in
  * <a href="http://dx.doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
- * candidate generation</a>. Note null values in the feature column are ignored during fit().
+ * candidate generation</a>. Note null values in the itemsCol column are ignored during fit().
  *
  * @see <a href="http://en.wikipedia.org/wiki/Association_rule_learning">
  * Association rule learning (Wikipedia)</a>
@@ -168,7 +168,6 @@ class FPGrowth @Since("2.2.0") (
     }
     val parentModel = mllibFP.run(items)
     val rows = parentModel.freqItemsets.map(f => Row(f.items, f.freq))
-
     val schema = StructType(Seq(
       StructField("items", dataset.schema($(itemsCol)).dataType, nullable = false),
       StructField("freq", LongType, nullable = false)))
@@ -197,14 +196,14 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
  * :: Experimental ::
  * Model fitted by FPGrowth.
  *
- * @param freqItemsets frequent items in the format of DataFrame("items"[Seq], "freq"[Long])
+ * @param freqItemsets frequent itemsets in the format of DataFrame("items"[Array], "freq"[Long])
  */
 @Since("2.2.0")
 @Experimental
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
-    @transient val freqItemsets: DataFrame,
-    val numTrainingRecords: Long)
+    @Since("2.2.0") @transient val freqItemsets: DataFrame,
+    @Since("2.3.0") val numTrainingRecords: Long)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
   /** @group setParam */
@@ -228,7 +227,7 @@ class FPGrowthModel private[ml] (
   @transient private var _cachedRules: DataFrame = _
 
   /**
-   * Get association rules fitted by AssociationRules using the minConfidence. Returns a dataframe
+   * Get association rules fitted by AssociationRules with the minConfidence. Returns a dataframe
    * with four fields, "antecedent", "consequent", "confidence" and "support", where "antecedent"
    * and "consequent" are Array[T], "confidence" and "support" are Double.
    */
@@ -246,10 +245,13 @@ class FPGrowthModel private[ml] (
 
   /**
    * The transform method first generates the association rules according to the frequent itemsets.
-   * Then for each association rule, it will examine the input items against antecedents and
-   * summarize the consequents as prediction. The prediction column has the same data type as the
-   * input column(Array[T]) and will not contain existing items in the input column. The null
-   * values in the feature columns are treated as empty sets.
+   * Then for each transaction in itemsCol, the transform method will compare its items against the
+   * antecedents of each association rule. If the record contains all the antecedents of a
+   * specific association rule, the rule will be considered as applicable and its consequents
+   * will be added to the prediction result. The transform method will summarize the consequents
+   * from all the applicable rules as prediction. The prediction column has the same data type as
+   * the input column(Array[T]) and will not contain existing items in the input column. The null
+   * values in the itemsCol columns are treated as empty sets.
    * WARNING: internally it collects association rules to the driver and uses broadcast for
    * efficiency. This may bring pressure to driver memory for large set of association rules.
    */
@@ -270,12 +272,8 @@ class FPGrowthModel private[ml] (
     val predictUDF = udf((items: Seq[_]) => {
       if (items != null) {
         val itemset = items.toSet
-        brRules.value.flatMap(rule =>
-          if (items != null && rule._1.forall(item => itemset.contains(item))) {
-            rule._2.filter(item => !itemset.contains(item))
-          } else {
-            Seq.empty
-          }).distinct
+        brRules.value.filter(_._1.forall(itemset.contains))
+          .flatMap(_._2.filter(!itemset.contains(_))).distinct
       } else {
         Seq.empty
       }}, dt)
@@ -340,8 +338,8 @@ private[fpm] object AssociationRules {
 
   /**
    * Computes the association rules with confidence above minConfidence.
-   * @param dataset DataFrame("items", "freq") containing frequent itemset obtained from
-   *                algorithms like [[FPGrowth]].
+   * @param dataset DataFrame("items"[Array], "freq"[Long]) containing frequent itemsets obtained
+   *                from algorithms like [[FPGrowth]].
    * @param itemsCol column name for frequent itemsets
    * @param freqCol column name for frequent itemsets count
    * @param numTrainingRecords count of training Dataset

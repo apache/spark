@@ -94,7 +94,7 @@ object PartitioningUtils {
       typeInference: Boolean,
       basePaths: Set[Path],
       timeZoneId: String): PartitionSpec = {
-    parsePartitions(paths, typeInference, basePaths, TimeZone.getTimeZone(timeZoneId))
+    parsePartitions(paths, typeInference, basePaths, DateTimeUtils.getTimeZone(timeZoneId))
   }
 
   private[datasources] def parsePartitions(
@@ -243,7 +243,7 @@ object PartitioningUtils {
     if (equalSignIndex == -1) {
       None
     } else {
-      val columnName = columnSpec.take(equalSignIndex)
+      val columnName = unescapePathName(columnSpec.take(equalSignIndex))
       assert(columnName.nonEmpty, s"Empty partition column name in '$columnSpec'")
 
       val rawColumnValue = columnSpec.drop(equalSignIndex + 1)

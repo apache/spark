@@ -320,12 +320,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         find(cssSelector(".stage-progress-cell")).get.text should be ("2/2 (1 failed)")
-        // Ideally, the following test would pass, but currently we overcount completed tasks
-        // if task recomputations occur:
-        // find(cssSelector(".progress-cell .progress")).get.text should be ("2/2 (1 failed)")
-        // Instead, we guarantee that the total number of tasks is always correct, while the number
-        // of completed tasks may be higher:
-        find(cssSelector(".progress-cell .progress")).get.text should be ("3/2 (1 failed)")
+        find(cssSelector(".progress-cell .progress")).get.text should be ("2/2 (1 failed)")
       }
       val jobJson = getJson(sc.ui.get, "jobs")
       (jobJson \ "numTasks").extract[Int]should be (2)

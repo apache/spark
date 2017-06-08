@@ -137,7 +137,7 @@ class WindowSpec private[sql](
    * and `Window.currentRow` to specify special boundary values, rather than using integral
    * values directly.
    *
-   * A range based boundary is based on the actual value of the ORDER BY
+   * A range-based boundary is based on the actual value of the ORDER BY
    * expression(s). An offset is used to alter the value of the ORDER BY expression, for
    * instance if the current order by expression has a value of 10 and the lower bound offset
    * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a

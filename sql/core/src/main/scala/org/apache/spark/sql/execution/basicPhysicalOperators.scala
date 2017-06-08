@@ -331,16 +331,16 @@ case class SampleExec(
 case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   extends LeafExecNode with CodegenSupport {
 
-  def start: Long = range.start
-  def step: Long = range.step
-  def numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
-  def numElements: BigInt = range.numElements
+  val start: Long = range.start
+  val end: Long = range.end
+  val step: Long = range.step
+  val numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
+  val numElements: BigInt = range.numElements
 
   override val output: Seq[Attribute] = range.output
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numGeneratedRows" -> SQLMetrics.createMetric(sparkContext, "number of generated rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override lazy val canonicalized: SparkPlan = {
     RangeExec(range.canonicalized.asInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Range])
@@ -353,7 +353,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
   protected override def doProduce(ctx: CodegenContext): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val numGenerated = metricTerm(ctx, "numGeneratedRows")
 
     val initTerm = ctx.freshName("initRange")
     ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
@@ -463,9 +462,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     $number = $batchEnd;
       |   }
       |
-      |   if ($taskContext.isInterrupted()) {
-      |     throw new TaskKilledException();
-      |   }
+      |   $taskContext.killTaskIfInterrupted();
       |
       |   long $nextBatchTodo;
       |   if ($numElementsTodo > ${batchSize}L) {
@@ -540,7 +537,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       }
   }
 
-  override def simpleString: String = range.simpleString
+  override def simpleString: String = s"Range ($start, $end, step=$step, splits=$numSlices)"
 }
 
 /**
@@ -597,6 +594,9 @@ case class OutputFakerExec(output: Seq[Attribute], child: SparkPlan) extends Spa
  * Physical plan for a subquery.
  */
 case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
+
+  // Ignore this wrapper for canonicalizing.
+  override lazy val canonicalized: SparkPlan = child.canonicalized
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),

@@ -545,6 +545,7 @@ private[spark] class Client(
           distribute(jarsArchive.toURI.getPath,
             resType = LocalResourceType.ARCHIVE,
             destName = Some(LOCALIZED_LIB_DIR))
+          jarsArchive.delete()
       }
     }
 
@@ -577,7 +578,7 @@ private[spark] class Client(
     ).foreach { case (flist, resType, addToClasspath) =>
       flist.foreach { file =>
         val (_, localizedPath) = distribute(file, resType = resType)
-        // If addToClassPath, we ignore adding jar multiple times to distitrbuted cache.
+        // If addToClassPath, we ignore adding jar multiple times to distributed cache.
         if (addToClasspath) {
           if (localizedPath != null) {
             cachedSecondaryJarLinks += localizedPath
@@ -1274,7 +1275,8 @@ private object Client extends Logging {
     if (sparkConf.get(SPARK_ARCHIVE).isEmpty) {
       sparkConf.get(SPARK_JARS).foreach { jars =>
         jars.filter(isLocalUri).foreach { jar =>
-          addClasspathEntry(getClusterPath(sparkConf, jar), env)
+          val uri = new URI(jar)
+          addClasspathEntry(getClusterPath(sparkConf, uri.getPath()), env)
         }
       }
     }

@@ -185,6 +185,12 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
       }
     }
   }
+
+  test("SPARK-20430 Initialize Range parameters in a driver side") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      checkAnswer(sql("SELECT * FROM range(3)"), Row(0) :: Row(1) :: Row(2) :: Nil)
+    }
+  }
 }
 
 object DataFrameRangeSuite {

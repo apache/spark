@@ -219,6 +219,12 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Tan, DoubleType)
   }
 
+  test("cot") {
+    def f: (Double) => Double = (x: Double) => 1 / math.tan(x)
+    testUnary(Cot, f)
+    checkConsistencyBetweenInterpretedAndCodegen(Cot, DoubleType)
+  }
+
   test("atan") {
     testUnary(Atan, math.atan)
     checkConsistencyBetweenInterpretedAndCodegen(Atan, DoubleType)
@@ -252,6 +258,16 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 3))
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 0))
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(5, 0))
+
+    val doublePi: Double = 3.1415
+    val floatPi: Float = 3.1415f
+    val longLit: Long = 12345678901234567L
+    checkEvaluation(Ceil(doublePi), 4L, EmptyRow)
+    checkEvaluation(Ceil(floatPi.toDouble), 4L, EmptyRow)
+    checkEvaluation(Ceil(longLit), longLit, EmptyRow)
+    checkEvaluation(Ceil(-doublePi), -3L, EmptyRow)
+    checkEvaluation(Ceil(-floatPi.toDouble), -3L, EmptyRow)
+    checkEvaluation(Ceil(-longLit), -longLit, EmptyRow)
   }
 
   test("floor") {
@@ -262,6 +278,16 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 3))
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 0))
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(5, 0))
+
+    val doublePi: Double = 3.1415
+    val floatPi: Float = 3.1415f
+    val longLit: Long = 12345678901234567L
+    checkEvaluation(Floor(doublePi), 3L, EmptyRow)
+    checkEvaluation(Floor(floatPi.toDouble), 3L, EmptyRow)
+    checkEvaluation(Floor(longLit), longLit, EmptyRow)
+    checkEvaluation(Floor(-doublePi), -4L, EmptyRow)
+    checkEvaluation(Floor(-floatPi.toDouble), -4L, EmptyRow)
+    checkEvaluation(Floor(-longLit), -longLit, EmptyRow)
   }
 
   test("factorial") {
@@ -546,15 +572,14 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val bdResults: Seq[BigDecimal] = Seq(BigDecimal(3.0), BigDecimal(3.1), BigDecimal(3.14),
       BigDecimal(3.142), BigDecimal(3.1416), BigDecimal(3.14159),
       BigDecimal(3.141593), BigDecimal(3.1415927))
-    // round_scale > current_scale would result in precision increase
-    // and not allowed by o.a.s.s.types.Decimal.changePrecision, therefore null
+
     (0 to 7).foreach { i =>
       checkEvaluation(Round(bdPi, i), bdResults(i), EmptyRow)
       checkEvaluation(BRound(bdPi, i), bdResults(i), EmptyRow)
     }
     (8 to 10).foreach { scale =>
-      checkEvaluation(Round(bdPi, scale), null, EmptyRow)
-      checkEvaluation(BRound(bdPi, scale), null, EmptyRow)
+      checkEvaluation(Round(bdPi, scale), bdPi, EmptyRow)
+      checkEvaluation(BRound(bdPi, scale), bdPi, EmptyRow)
     }
 
     DataTypeTestUtils.numericTypes.foreach { dataType =>

@@ -277,6 +277,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
     def threadState =
       if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
+    def threadStackTrace = if (currentStream != null && currentStream.microBatchThread.isAlive) {
+      s"Thread stack trace: ${currentStream.microBatchThread.getStackTrace.mkString("\n")}"
+    } else {
+      ""
+    }
 
     def testState =
       s"""
@@ -287,6 +292,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
          |Output Mode: $outputMode
          |Stream state: $currentOffsets
          |Thread state: $threadState
+         |$threadStackTrace
          |${if (streamThreadDeathCause != null) stackTraceToString(streamThreadDeathCause) else ""}
          |
          |== Sink ==

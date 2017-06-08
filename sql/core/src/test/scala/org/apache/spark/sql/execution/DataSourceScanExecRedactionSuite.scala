@@ -18,22 +18,17 @@ package org.apache.spark.sql.execution
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.Utils
 
 /**
  * Suite that tests the redaction of DataSourceScanExec
  */
 class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
 
-  import Utils._
-
-  override def beforeAll(): Unit = {
-    sparkConf.set("spark.redaction.string.regex",
-      "file:/[\\w_]+")
-    super.beforeAll()
-  }
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.redaction.string.regex", "file:/[\\w_]+")
 
   test("treeString is redacted") {
     withTempDir { dir =>
@@ -43,7 +38,7 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
 
       val rootPath = df.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
         .asInstanceOf[FileSourceScanExec].relation.location.rootPaths.head
-      assert(rootPath.toString.contains(basePath.toString))
+      assert(rootPath.toString.contains(dir.toURI.getPath.stripSuffix("/")))
 
       assert(!df.queryExecution.sparkPlan.treeString(verbose = true).contains(rootPath.getName))
       assert(!df.queryExecution.executedPlan.treeString(verbose = true).contains(rootPath.getName))

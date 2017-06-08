@@ -88,8 +88,10 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-   * Given a type `T` this function constructs and ObjectType that holds a class of type
-   * Array[T].  Special handling is performed for primitive types to map them back to their raw
+   * Given a type `T` this function constructs `ObjectType` that holds a class of type
+   * `Array[T]`.
+   *
+   * Special handling is performed for primitive types to map them back to their raw
    * JVM form instead of the Scala Array that handles auto boxing.
    */
   private def arrayClassFor(tpe: `Type`): ObjectType = ScalaReflectionLock.synchronized {
@@ -836,8 +838,16 @@ trait ScalaReflection {
   def getConstructorParameters(tpe: Type): Seq[(String, Type)] = {
     val formalTypeArgs = tpe.typeSymbol.asClass.typeParams
     val TypeRef(_, _, actualTypeArgs) = tpe
-    constructParams(tpe).map { p =>
-      p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+    val params = constructParams(tpe)
+    // if there are type variables to fill in, do the substitution (SomeClass[T] -> SomeClass[Int])
+    if (actualTypeArgs.nonEmpty) {
+      params.map { p =>
+        p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+      }
+    } else {
+      params.map { p =>
+        p.name.toString -> p.typeSignature
+      }
     }
   }
 

@@ -70,6 +70,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.commit()
 
+    conn.prepareStatement("CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)")
+        .executeUpdate()
+    conn.prepareStatement("INSERT INTO ts_with_timezone VALUES (1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))")
+        .executeUpdate()
+    conn.commit()
+
     sql(
       s"""
         |CREATE TEMPORARY VIEW datetime
@@ -184,5 +190,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     checkRow(sql("SELECT * FROM datetime where id = 1").head())
     sql("INSERT INTO TABLE datetime1 SELECT * FROM datetime where id = 1")
     checkRow(sql("SELECT * FROM datetime1 where id = 1").head())
+  }
+
+  test("SPARK-20557: column type TIMESTAMP with TIME ZONE should be recognized") {
+    val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+    val rows = dfRead.collect()
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(1).equals("class java.sql.Timestamp"))
   }
 }

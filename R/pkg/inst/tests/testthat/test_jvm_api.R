@@ -17,7 +17,7 @@
 
 context("JVM API")
 
-sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 test_that("Create and call methods on object", {
   jarr <- sparkR.newJObject("java.util.ArrayList")

@@ -32,6 +32,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.hive._
@@ -203,9 +204,9 @@ case class HiveTableScanExec(
   override lazy val canonicalized: HiveTableScanExec = {
     val input: AttributeSeq = relation.output
     HiveTableScanExec(
-      requestedAttributes.map(normalizeExprId(_, input)),
+      requestedAttributes.map(QueryPlan.normalizeExprId(_, input)),
       relation.canonicalized.asInstanceOf[CatalogRelation],
-      partitionPruningPred.map(normalizeExprId(_, input)))(sparkSession)
+      QueryPlan.normalizePredicates(partitionPruningPred, input))(sparkSession)
   }
 
   override def otherCopyArgs: Seq[AnyRef] = Seq(sparkSession)

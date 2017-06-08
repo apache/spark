@@ -40,13 +40,13 @@ private[r] class LogisticRegressionWrapper private (
   private val lrModel: LogisticRegressionModel =
     pipeline.stages(1).asInstanceOf[LogisticRegressionModel]
 
-  val rFeatures: Array[String] = if (lrModel.getFitIntercept) {
+  lazy val rFeatures: Array[String] = if (lrModel.getFitIntercept) {
     Array("(Intercept)") ++ features
   } else {
     features
   }
 
-  val rCoefficients: Array[Double] = {
+  lazy val rCoefficients: Array[Double] = {
     val numRows = lrModel.coefficientMatrix.numRows
     val numCols = lrModel.coefficientMatrix.numCols
     val numColsWithIntercept = if (lrModel.getFitIntercept) numCols + 1 else numCols

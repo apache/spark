@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{BaseSessionStateBuilder, CatalogImpl, SessionState, SessionStateBuilder, SharedState}
+import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
@@ -77,11 +77,12 @@ import org.apache.spark.util.Utils
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState],
-    @transient private val parentSessionState: Option[SessionState])
+    @transient private val parentSessionState: Option[SessionState],
+    @transient private[sql] val extensions: SparkSessionExtensions)
   extends Serializable with Closeable with Logging { self =>
 
   private[sql] def this(sc: SparkContext) {
-    this(sc, None, None)
+    this(sc, None, None, new SparkSessionExtensions)
   }
 
   sparkContext.assertNotStopped()
@@ -219,7 +220,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def newSession(): SparkSession = {
-    new SparkSession(sparkContext, Some(sharedState), parentSessionState = None)
+    new SparkSession(sparkContext, Some(sharedState), parentSessionState = None, extensions)
   }
 
   /**
@@ -235,7 +236,7 @@ class SparkSession private(
    * implementation is Hive, this will initialize the metastore, which may take some time.
    */
   private[sql] def cloneSession(): SparkSession = {
-    val result = new SparkSession(sparkContext, Some(sharedState), Some(sessionState))
+    val result = new SparkSession(sparkContext, Some(sharedState), Some(sessionState), extensions)
     result.sessionState // force copy of SessionState
     result
   }
@@ -635,7 +636,6 @@ class SparkSession private(
   def read: DataFrameReader = new DataFrameReader(self)
 
   /**
-   * :: Experimental ::
    * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
    * {{{
    *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
@@ -644,7 +644,6 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  @Experimental
   @InterfaceStability.Evolving
   def readStream: DataStreamReader = new DataStreamReader(self)
 
@@ -754,6 +753,8 @@ object SparkSession {
 
     private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
+    private[this] val extensions = new SparkSessionExtensions
+
     private[this] var userSuppliedContext: Option[SparkContext] = None
 
     private[spark] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
@@ -848,6 +849,17 @@ object SparkSession {
     }
 
     /**
+     * Inject extensions into the [[SparkSession]]. This allows a user to add Analyzer rules,
+     * Optimizer rules, Planning Strategies or a customized parser.
+     *
+     * @since 2.2.0
+     */
+    def withExtensions(f: SparkSessionExtensions => Unit): Builder = {
+      f(extensions)
+      this
+    }
+
+    /**
      * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
      * one based on the options set in this builder.
      *
@@ -903,7 +915,26 @@ object SparkSession {
           }
           sc
         }
-        session = new SparkSession(sparkContext)
+
+        // Initialize extensions if the user has defined a configurator class.
+        val extensionConfOption = sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
+        if (extensionConfOption.isDefined) {
+          val extensionConfClassName = extensionConfOption.get
+          try {
+            val extensionConfClass = Utils.classForName(extensionConfClassName)
+            val extensionConf = extensionConfClass.newInstance()
+              .asInstanceOf[SparkSessionExtensions => Unit]
+            extensionConf(extensions)
+          } catch {
+            // Ignore the error if we cannot find the class or when the class has the wrong type.
+            case e @ (_: ClassCastException |
+                      _: ClassNotFoundException |
+                      _: NoClassDefFoundError) =>
+              logWarning(s"Cannot use $extensionConfClassName to configure session extensions.", e)
+          }
+        }
+
+        session = new SparkSession(sparkContext, None, None, extensions)
         options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
         defaultSession.set(session)
 
