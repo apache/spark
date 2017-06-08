@@ -76,15 +76,12 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   }
 
   test("FPGrowth associationRules") {
-    val freqItemsets = spark.createDataFrame(Seq(
-      (Array("2"), 4L),
-      (Array("1"), 2L),
-      (Array("1", "2"), 2L)
-    )).toDF("items", "freq")
-    val model = new FPGrowthModel("fpgrowth", freqItemsets, 4L).setMinConfidence(0.1)
+    val model = new FPGrowth().setMinSupport(0.1).setMinConfidence(0.1).fit(dataset)
     val expectedRules = spark.createDataFrame(Seq(
-      (Array("2"), Array("1"), 0.5, 0.5),
-      (Array("1"), Array("2"), 1.0, 0.5)
+      (Array("2"), Array("1"), 1.0, 0.75),
+      (Array("3"), Array("1"), 1.0, 0.25),
+      (Array("1"), Array("3"), 0.25, 0.25),
+      (Array("1"), Array("2"), 0.75, 0.75)
     )).toDF("antecedent", "consequent", "confidence", "support")
     assert(expectedRules.collect().toSet.equals(model.associationRules.collect().toSet))
   }
