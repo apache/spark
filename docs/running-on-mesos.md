@@ -473,7 +473,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.driver.labels</code></td>
   <td><code>(none)</code></td>
   <td>
-    Mesos labels to add to the driver.  See spark.mesos.task.labels
+    Mesos labels to add to the driver.  See <code>spark.mesos.task.labels</code>
     for formatting information.
   </td>
 </tr>
