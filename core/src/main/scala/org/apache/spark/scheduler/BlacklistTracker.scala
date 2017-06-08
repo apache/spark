@@ -336,9 +336,9 @@ private[scheduler] object BlacklistTracker extends Logging {
    */
   def isBlacklistEnabled(conf: SparkConf): Boolean = {
     conf.get(config.BLACKLIST_ENABLED) match {
-      case Some(enabled) =>
+      case enabled =>
         enabled
-      case None =>
+      case _ =>
         // if they've got a non-zero setting for the legacy conf, always enable the blacklist,
         // otherwise, use the default.
         val legacyKey = config.BLACKLIST_LEGACY_TIMEOUT_CONF.key
