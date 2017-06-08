@@ -151,6 +151,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         }
       }
     }
+    // External users are not allowed to set/switch the table type. In Hive metastore, the table
+    // type can be switched by changing the value of a case-sensitive table property `EXTERNAL`.
+    if (table.properties.contains("EXTERNAL")) {
+      throw new AnalysisException("Cannot set or change the preserved property key: 'EXTERNAL'")
+    }
   }
 
   // --------------------------------------------------------------------------
