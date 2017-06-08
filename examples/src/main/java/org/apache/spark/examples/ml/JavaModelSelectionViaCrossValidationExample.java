@@ -48,8 +48,8 @@ public class JavaModelSelectionViaCrossValidationExample {
       .getOrCreate();
 
     // $example on$
-    // Prepare training documents, which are labeled.
-    Dataset<Row> training = spark.createDataFrame(Arrays.asList(
+    // Prepare data documents, which are labeled.
+    Dataset<Row> data = spark.createDataFrame(Arrays.asList(
       new JavaLabeledDocument(0L, "a b c d e spark", 1.0),
       new JavaLabeledDocument(1L, "b d", 0.0),
       new JavaLabeledDocument(2L,"spark f g h", 1.0),
@@ -97,18 +97,14 @@ public class JavaModelSelectionViaCrossValidationExample {
       .setEstimatorParamMaps(paramGrid).setNumFolds(2);  // Use 3+ in practice
 
     // Run cross-validation, and choose the best set of parameters.
-    CrossValidatorModel cvModel = cv.fit(training);
-
-    // Prepare test documents, which are unlabeled.
-    Dataset<Row> test = spark.createDataFrame(Arrays.asList(
-      new JavaDocument(4L, "spark i j k"),
-      new JavaDocument(5L, "l m n"),
-      new JavaDocument(6L, "mapreduce spark"),
-      new JavaDocument(7L, "apache hadoop")
-    ), JavaDocument.class);
+    CrossValidatorModel cvModel = cv.fit(data);
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
-    Dataset<Row> predictions = cvModel.transform(test);
+    cvModel.avgMetrics();
+    Model<?> bestModel = cvModel.bestModel();
+
+    Dataset<Row> predictions = bestModel.transform(data);
+    
     for (Row r : predictions.select("id", "text", "probability", "prediction").collectAsList()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
         + ", prediction=" + r.get(3));
