@@ -345,6 +345,11 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
             f.mkString("[", ", ", "]") )
           batchTimeToSelectedFiles.synchronized { batchTimeToSelectedFiles += ((t, f)) }
           recentlySelectedFiles ++= f
+          val metadata = Map(
+            "files" -> f.toList,
+            StreamInputInfo.METADATA_KEY_DESCRIPTION -> f.mkString("\n"))
+          val inputInfo = StreamInputInfo(id, 0, metadata)
+          recoveredReports += t -> inputInfo
           generatedRDDs += ((t, filesToRDD(f)))
       }
     }

@@ -21,14 +21,12 @@ import java.{ util => ju }
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.kafka.clients.consumer._
-import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
+import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{StreamingContext, Time}
@@ -309,16 +307,31 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
     override def restore(): Unit = {
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
-         logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
-         generatedRDDs += t -> new KafkaRDD[K, V](
-           context.sparkContext,
-           executorKafkaParams,
-           b.map(OffsetRange(_)),
-           getPreferredHosts,
-           // during restore, it's possible same partition will be consumed from multiple
-           // threads, so dont use cache
-           false
-         )
+        logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
+        val offsetRanges = b.map(OffsetRange(_))
+        val rdd = new KafkaRDD[K, V](
+          context.sparkContext,
+          executorKafkaParams,
+          offsetRanges,
+          getPreferredHosts,
+          // during restore, it's possible same partition will be consumed from multiple
+          // threads, so do not use cache
+          false
+        )
+        // Re-report the record number and metadata of this batch interval to InputInfoTracker.
+        // Then, we can get StreamInputInfo after recover from checkpoint.
+        val description = offsetRanges.filter { offsetRange =>
+          offsetRange.fromOffset != offsetRange.untilOffset
+        }.map { offsetRange =>
+          s"topic: ${offsetRange.topic}\tpartition: ${offsetRange.partition}\t" +
+            s"offsets: ${offsetRange.fromOffset} to ${offsetRange.untilOffset}"
+        }.mkString("\n")
+        val metadata = Map(
+          "offsets" -> offsetRanges.toList,
+          StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
+        val inputInfo = StreamInputInfo(id, rdd.count(), metadata)
+        recoveredReports += t -> inputInfo
+        generatedRDDs += t -> rdd
       }
     }
   }

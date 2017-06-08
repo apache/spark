@@ -226,12 +226,22 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       .distinct.sorted(Time.ordering)
     logInfo("Batches to reschedule (" + timesToReschedule.length + " batches): " +
       timesToReschedule.mkString(", "))
+    graph.getInputStreams().foreach(is => {
+      is.recoveredReports.foreach(ts => jobScheduler.inputInfoTracker.reportInfo(ts._1, ts._2))
+    })
     timesToReschedule.foreach { time =>
       // Allocate the related blocks when recovering from failure, because some blocks that were
       // added but not allocated, are dangling in the queue after recovering, we have to allocate
       // those blocks to the next batch, which is the batch they were supposed to go.
       jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
-      jobScheduler.submitJobSet(JobSet(time, graph.generateJobs(time)))
+      // SPARK-18116: submit job set with stream input information. These stream input information
+      // comes from two stage:
+      // 1. recover from checkpoint: like KafkaRDD contains the offset information.
+      // 2. get from inputInfoTracker: during downTimes and in `DStream.getOrCompute(time)`, the
+      // information can be reported.
+      val jobs = graph.generateJobs(time)
+      val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
+      jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
     }
 
     // Restart the timer

@@ -210,9 +210,24 @@ class DirectKafkaInputDStream[
       val leaders = KafkaCluster.checkErrors(kc.findLeaders(topics))
 
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
-         logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
-         generatedRDDs += t -> new KafkaRDD[K, V, U, T, R](
-           context.sparkContext, kafkaParams, b.map(OffsetRange(_)), leaders, messageHandler)
+        logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
+        val offsetRanges = b.map(OffsetRange(_))
+        val rdd = new KafkaRDD[K, V, U, T, R](
+          context.sparkContext, kafkaParams, offsetRanges, leaders, messageHandler)
+        // Re-report the record number and metadata of this batch interval to InputInfoTracker.
+        // Then, we can get StreamInputInfo after recover from checkpoint.
+        val description = offsetRanges.filter { offsetRange =>
+          offsetRange.fromOffset != offsetRange.untilOffset
+        }.map { offsetRange =>
+          s"topic: ${offsetRange.topic}\tpartition: ${offsetRange.partition}\t" +
+            s"offsets: ${offsetRange.fromOffset} to ${offsetRange.untilOffset}"
+        }.mkString("\n")
+        val metadata = Map(
+          "offsets" -> offsetRanges.toList,
+          StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
+        val inputInfo = StreamInputInfo(id, rdd.count(), metadata)
+        recoveredReports += t -> inputInfo
+        generatedRDDs += t -> rdd
       }
     }
   }
