@@ -324,8 +324,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       DescribeTableCommand(
         visitTableIdentifier(ctx.tableIdentifier),
         partitionSpec,
-        ctx.EXTENDED != null,
-        ctx.FORMATTED != null)
+        ctx.EXTENDED != null || ctx.FORMATTED != null)
     }
   }
 
