@@ -54,7 +54,6 @@ DESCRIBE t
 -- !query 5 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 5 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -70,7 +69,6 @@ DESC default.t
 -- !query 6 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 6 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -86,7 +84,6 @@ DESC TABLE t
 -- !query 7 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 7 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -102,7 +99,6 @@ DESC FORMATTED t
 -- !query 8 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 8 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -132,7 +128,6 @@ DESC EXTENDED t
 -- !query 9 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 9 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -162,7 +157,6 @@ DESC t PARTITION (c='Us', d=1)
 -- !query 10 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 10 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -178,7 +172,6 @@ DESC EXTENDED t PARTITION (c='Us', d=1)
 -- !query 11 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 11 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -206,7 +199,6 @@ DESC FORMATTED t PARTITION (c='Us', d=1)
 -- !query 12 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 12 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -268,7 +260,6 @@ DESC temp_v
 -- !query 16 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 16 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -280,7 +271,6 @@ DESC TABLE temp_v
 -- !query 17 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 17 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -292,7 +282,6 @@ DESC FORMATTED temp_v
 -- !query 18 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 18 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -304,7 +293,6 @@ DESC EXTENDED temp_v
 -- !query 19 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 19 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -316,7 +304,6 @@ DESC temp_Data_Source_View
 -- !query 20 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 20 output
-# col_name          	data_type           	comment             
 intType             	int                 	test comment test1  
 stringType          	string              	                    
 dateType            	date                	                    
@@ -349,7 +336,6 @@ DESC v
 -- !query 22 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 22 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -361,7 +347,6 @@ DESC TABLE v
 -- !query 23 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 23 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -373,7 +358,6 @@ DESC FORMATTED v
 -- !query 24 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 24 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -396,7 +380,6 @@ DESC EXTENDED v
 -- !query 25 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 25 output
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    

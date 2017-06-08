@@ -806,7 +806,7 @@ class HiveDDLSuite
 
       checkAnswer(
         sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
-        Row("# col_name", "data_type", "comment") :: Row("a", "int", "test") :: Nil
+        Row("a", "int", "test") :: Nil
       )
     }
   }
