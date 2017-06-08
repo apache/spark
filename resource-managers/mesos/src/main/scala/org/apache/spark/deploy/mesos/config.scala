@@ -56,4 +56,8 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val USER_CREDENTIALS = ConfigBuilder("spark.mesos.kerberos.userCredentials")
+    .doc("Base64 encoding of UGI credentials.")
+    .stringConf
+    .createOptional
 }

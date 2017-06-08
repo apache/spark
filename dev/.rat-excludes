@@ -102,7 +102,7 @@ spark-deps-.*
 org.apache.spark.scheduler.ExternalClusterManager
 .*\.sql
 .Rbuildignore
-org.apache.spark.deploy.yarn.security.ServiceCredentialProvider
+org.apache.spark.deploy.security.ServiceCredentialProvider
 spark-warehouse
 structured-streaming/*
 kafka-source-initial-offset-version-2.1.0.bin

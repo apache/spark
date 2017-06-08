@@ -38,7 +38,7 @@ private[spark] class StandaloneSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     masters: Array[String])
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv, None)
   with StandaloneAppClientListener
   with Logging {
 

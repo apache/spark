@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import java.lang.reflect.UndeclaredThrowableException
 import java.security.PrivilegedExceptionAction

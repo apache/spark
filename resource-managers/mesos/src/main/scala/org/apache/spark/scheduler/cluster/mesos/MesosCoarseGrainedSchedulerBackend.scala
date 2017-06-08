@@ -20,15 +20,20 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.File
 import java.util.{Collections, List => JList}
 import java.util.concurrent.locks.ReentrantLock
+import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.mesos.Protos.{Credentials => _, TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.mesos.config
+import org.apache.spark.deploy.security.ConfigurableCredentialManager
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcEndpointAddress
@@ -51,7 +56,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     sc: SparkContext,
     master: String,
     securityManager: SecurityManager)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
+  extends CoarseGrainedSchedulerBackend(
+    scheduler,
+    sc.env.rpcEnv,
+    Option(new ConfigurableCredentialManager(
+      sc.conf,
+      SparkHadoopUtil.get.newConfiguration(sc.conf))))
   with org.apache.mesos.Scheduler
   with MesosSchedulerUtils {
 
@@ -167,6 +177,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   override def start() {
     super.start()
+
     val driver = createSchedulerDriver(
       master,
       MesosCoarseGrainedSchedulerBackend.this,
@@ -250,6 +261,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
     command.build()
   }
+
 
   protected def driverURL: String = {
     if (conf.contains("spark.testing")) {

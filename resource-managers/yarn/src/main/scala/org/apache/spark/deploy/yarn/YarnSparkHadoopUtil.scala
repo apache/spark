@@ -35,7 +35,8 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.security.{ConfigurableCredentialManager, CredentialUpdater}
+import org.apache.spark.deploy.yarn.security.CredentialUpdater
+import org.apache.spark.deploy.yarn.security.YARNConfigurableCredentialManager
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
@@ -87,8 +88,9 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   private[spark] override def startCredentialUpdater(sparkConf: SparkConf): Unit = {
-    credentialUpdater =
-      new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf)).credentialUpdater()
+    val hadoopConf = newConfiguration(sparkConf)
+    val credentialManager = new YARNConfigurableCredentialManager(sparkConf, hadoopConf)
+    credentialUpdater = new CredentialUpdater(sparkConf, hadoopConf, credentialManager)
     credentialUpdater.start()
   }
 

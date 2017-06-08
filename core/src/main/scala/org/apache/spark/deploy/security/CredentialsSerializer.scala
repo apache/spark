@@ -15,8 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
-@deprecated("Use org.apache.spark.deploy.security.ServiceCredentialProvider", "2.3.0")
-trait ServiceCredentialProvider
-  extends org.apache.spark.deploy.security.ServiceCredentialProvider
+import java.io.{ByteArrayOutputStream, DataOutputStream}
+
+import org.apache.hadoop.security.Credentials
+
+class CredentialsSerializer {
+  def serializeTokens(creds: Credentials): Array[Byte] = {
+    val byteStream = new ByteArrayOutputStream
+    val dataStream = new DataOutputStream(byteStream)
+    creds.writeTokenStorageToStream(dataStream)
+    byteStream.toByteArray
+  }
+
+  def deserializeTokens(tokenBytes: Array[Byte]): Credentials = {
+    val tokensBuf = new java.io.ByteArrayInputStream(tokenBytes)
+
+    val creds = new Credentials()
+    creds.readTokenStorageStream(new java.io.DataInputStream(tokensBuf))
+    creds
+  }
+}

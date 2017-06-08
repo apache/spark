@@ -442,7 +442,7 @@ trait MesosSchedulerUtils extends Logging {
 
   /**
    * The values of the non-zero ports to be used by the executor process.
- *
+   *
    * @param conf the spark config to use
    * @return the ono-zero values of the ports
    */

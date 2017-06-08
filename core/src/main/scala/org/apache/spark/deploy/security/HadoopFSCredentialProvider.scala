@@ -15,23 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.mapred.Master
-import org.apache.hadoop.security.Credentials
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
-import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
 
-private[security] class HadoopFSCredentialProvider
+private[deploy] class HadoopFSCredentialProvider
     extends ServiceCredentialProvider with Logging {
   // Token renewal interval, this value will be set in the first call,
   // if None means no token renewer specified or no token can be renewed,
@@ -73,48 +69,15 @@ private[security] class HadoopFSCredentialProvider
     nextRenewalDate
   }
 
-  private def getTokenRenewalInterval(
-      hadoopConf: Configuration, sparkConf: SparkConf): Option[Long] = {
-    // We cannot use the tokens generated with renewer yarn. Trying to renew
-    // those will fail with an access control issue. So create new tokens with the logged in
-    // user as renewer.
-    sparkConf.get(PRINCIPAL).flatMap { renewer =>
-      val creds = new Credentials()
-      hadoopFSsToAccess(hadoopConf, sparkConf).foreach { dst =>
-        val dstFs = dst.getFileSystem(hadoopConf)
-        dstFs.addDelegationTokens(renewer, creds)
-      }
+  protected def getTokenRenewalInterval(
+    hadoopConf: Configuration,
+    sparkConf: SparkConf): Option[Long] = None
 
-      val renewIntervals = creds.getAllTokens.asScala.filter {
-        _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
-      }.flatMap { token =>
-        Try {
-          val newExpiration = token.renew(hadoopConf)
-          val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
-          val interval = newExpiration - identifier.getIssueDate
-          logInfo(s"Renewal interval is $interval for token ${token.getKind.toString}")
-          interval
-        }.toOption
-      }
-      if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
-    }
+  protected def getTokenRenewer(hadoopConf: Configuration): String = {
+    UserGroupInformation.getCurrentUser.getShortUserName
   }
 
-  private def getTokenRenewer(conf: Configuration): String = {
-    val delegTokenRenewer = Master.getMasterPrincipal(conf)
-    logDebug("delegation token renewer is: " + delegTokenRenewer)
-    if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
-      val errorMessage = "Can't get Master Kerberos principal for use as renewer"
-      logError(errorMessage)
-      throw new SparkException(errorMessage)
-    }
-
-    delegTokenRenewer
-  }
-
-  private def hadoopFSsToAccess(hadoopConf: Configuration, sparkConf: SparkConf): Set[Path] = {
-    sparkConf.get(FILESYSTEMS_TO_ACCESS).map(new Path(_)).toSet +
-      sparkConf.get(STAGING_DIR).map(new Path(_))
-        .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory)
+  protected def hadoopFSsToAccess(hadoopConf: Configuration, sparkConf: SparkConf): Set[Path] = {
+    Set(FileSystem.get(hadoopConf).getHomeDirectory)
   }
 }
