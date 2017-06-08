@@ -261,10 +261,11 @@ case class DataSource(
   }
 
   /** Returns a sink that can be used to continually write data. */
-  def createSink(outputMode: OutputMode): Sink = {
+  def createSink(schema: StructType, outputMode: OutputMode): Sink = {
     providingClass.newInstance() match {
       case s: StreamSinkProvider =>
-        s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
+        s.createSink(schema, sparkSession.sqlContext,
+          caseInsensitiveOptions, partitionColumns, outputMode)
 
       case fileFormat: FileFormat =>
         val path = caseInsensitiveOptions.getOrElse("path", {
