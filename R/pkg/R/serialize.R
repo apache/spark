@@ -83,6 +83,7 @@ writeObject <- function(con, object, writeType = TRUE) {
          Date = writeDate(con, object),
          POSIXlt = writeTime(con, object),
          POSIXct = writeTime(con, object),
+         bigint = writeDouble(con, object),
          stop(paste("Unsupported type for serialization", type)))
 }
 
@@ -157,6 +158,7 @@ writeType <- function(con, class) {
                  Date = "D",
                  POSIXlt = "t",
                  POSIXct = "t",
+                 bigint = "B",
                  stop(paste("Unsupported type for serialization", class)))
   writeBin(charToRaw(type), con)
 }

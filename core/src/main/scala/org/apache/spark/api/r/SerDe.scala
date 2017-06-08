@@ -84,6 +84,7 @@ private[spark] object SerDe {
       case 'l' => readList(dis, jvmObjectTracker)
       case 'D' => readDate(dis)
       case 't' => readTime(dis)
+      case 'B' => new java.lang.Double(readDouble(dis))
       case 'j' => jvmObjectTracker(JVMObjectId(readString(dis)))
       case _ =>
         if (sqlReadObject == null) {
@@ -198,6 +199,7 @@ private[spark] object SerDe {
       case 'b' => readBooleanArr(dis)
       case 'j' => readStringArr(dis).map(x => jvmObjectTracker(JVMObjectId(x)))
       case 'r' => readBytesArr(dis)
+      case 'B' => readDoubleArr(dis)
       case 'a' =>
         val len = readInt(dis)
         (0 until len).map(_ => readArray(dis, jvmObjectTracker)).toArray
@@ -278,6 +280,7 @@ private[spark] object SerDe {
       case "list" => dos.writeByte('l')
       case "map" => dos.writeByte('e')
       case "jobj" => dos.writeByte('j')
+      case "bigint" => dos.writeByte('B')
       case _ => throw new IllegalArgumentException(s"Invalid type $typeStr")
     }
   }

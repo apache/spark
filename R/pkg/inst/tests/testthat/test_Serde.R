@@ -30,6 +30,10 @@ test_that("SerDe of primitive types", {
   expect_equal(x, 1)
   expect_equal(class(x), "numeric")
 
+  x <- callJStatic("SparkRHandler", "echo", 1380742793415240)
+  expect_equal(x, 1380742793415240)
+  expect_equal(class(x), "numeric")
+
   x <- callJStatic("SparkRHandler", "echo", TRUE)
   expect_true(x)
   expect_equal(class(x), "logical")
@@ -46,6 +50,11 @@ test_that("SerDe of list of primitive types", {
   y <- callJStatic("SparkRHandler", "echo", x)
   expect_equal(x, y)
   expect_equal(class(y[[1]]), "integer")
+
+  x <- list(1380742793415240, 13807427934152401, 13807427934152402)
+  y <- callJStatic("SparkRHandler", "echo", x)
+  expect_equal(x, y)
+  expect_equal(class(y[[1]]), "numeric")
 
   x <- list(1, 2, 3)
   y <- callJStatic("SparkRHandler", "echo", x)
@@ -72,7 +81,8 @@ test_that("SerDe of list of lists", {
   skip_on_cran()
 
   x <- list(list(1L, 2L, 3L), list(1, 2, 3),
-            list(TRUE, FALSE), list("a", "b", "c"))
+            list(TRUE, FALSE), list("a", "b", "c"),
+            list(1380742793415240, 1380742793415240))
   y <- callJStatic("SparkRHandler", "echo", x)
   expect_equal(x, y)
 
