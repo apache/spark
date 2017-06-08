@@ -15,31 +15,15 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
+python:
+  ml: []
+  mllib: []
+  sql: []
+  streaming: []
+  als.py: []
+  pi.py: 3
+  wordcount.py: 300
 
-import sys
-from operator import add
-
-from pyspark.sql import SparkSession
-
-
-if __name__ == "__main__":
-    """
-    Usage: wordcount <file>
-    """
-    filename = "../resources/people.txt" if len(sys.argv) != 2 else sys.args[1]
-
-    spark = SparkSession\
-        .builder\
-        .appName("PythonWordCount")\
-        .getOrCreate()
-
-    lines = spark.read.text(filename).rdd.map(lambda r: r[0])
-    counts = lines.flatMap(lambda x: x.split(' ')) \
-                  .map(lambda x: (x, 1)) \
-                  .reduceByKey(add)
-    output = counts.collect()
-    for (word, count) in output:
-        print("%s: %i" % (word, count))
-
-    spark.stop()
+scala:
+java:
+r:
