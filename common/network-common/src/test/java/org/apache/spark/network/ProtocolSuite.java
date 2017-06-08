@@ -81,7 +81,7 @@ public class ProtocolSuite {
 
   @Test
   public void requests() {
-    testClientToServer(new ChunkFetchRequest(new StreamChunkId(1, 2)));
+    testClientToServer(new ChunkFetchRequest(new StreamChunkId(1, "2")));
     testClientToServer(new RpcRequest(12345, new TestManagedBuffer(0)));
     testClientToServer(new RpcRequest(12345, new TestManagedBuffer(10)));
     testClientToServer(new StreamRequest("abcde"));
@@ -90,10 +90,10 @@ public class ProtocolSuite {
 
   @Test
   public void responses() {
-    testServerToClient(new ChunkFetchSuccess(new StreamChunkId(1, 2), new TestManagedBuffer(10)));
-    testServerToClient(new ChunkFetchSuccess(new StreamChunkId(1, 2), new TestManagedBuffer(0)));
-    testServerToClient(new ChunkFetchFailure(new StreamChunkId(1, 2), "this is an error"));
-    testServerToClient(new ChunkFetchFailure(new StreamChunkId(1, 2), ""));
+    testServerToClient(new ChunkFetchSuccess(new StreamChunkId(1, "2"), new TestManagedBuffer(10)));
+    testServerToClient(new ChunkFetchSuccess(new StreamChunkId(1, "2"), new TestManagedBuffer(0)));
+    testServerToClient(new ChunkFetchFailure(new StreamChunkId(1, "2"), "this is an error"));
+    testServerToClient(new ChunkFetchFailure(new StreamChunkId(1, "2"), ""));
     testServerToClient(new RpcResponse(12345, new TestManagedBuffer(0)));
     testServerToClient(new RpcResponse(12345, new TestManagedBuffer(100)));
     testServerToClient(new RpcFailure(0, "this is an error"));

@@ -42,16 +42,16 @@ public abstract class StreamManager {
    * The returned ManagedBuffer will be release()'d after being written to the network.
    *
    * @param streamId id of a stream that has been previously registered with the StreamManager.
-   * @param chunkIndex 0-indexed chunk of the stream that's requested
+   * @param chunkId chunk of the stream that's requested
    */
-  public abstract ManagedBuffer getChunk(long streamId, int chunkIndex);
+  public abstract ManagedBuffer getChunk(long streamId, String chunkId);
 
   /**
    * Called in response to a stream() request. The returned data is streamed to the client
    * through a single TCP connection.
    *
    * Note the <code>streamId</code> argument is not related to the similarly named argument in the
-   * {@link #getChunk(long, int)} method.
+   * {@link #getChunk(long, String)} method.
    *
    * @param streamId id of a stream that has been previously registered with the StreamManager.
    * @return A managed buffer for the stream, or null if the stream was not found.

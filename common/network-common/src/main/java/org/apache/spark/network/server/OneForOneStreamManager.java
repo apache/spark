@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.server;
 
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,13 +39,14 @@ import org.apache.spark.network.client.TransportClient;
 public class OneForOneStreamManager extends StreamManager {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneStreamManager.class);
 
+  private final ChunkGetter chunkGetter;
   private final AtomicLong nextStreamId;
-  private final ConcurrentHashMap<Long, StreamState> streams;
+  private final ConcurrentHashMap<Long, StreamState> streamStates;
 
   /** State of a single stream. */
   private static class StreamState {
     final String appId;
-    final Iterator<ManagedBuffer> buffers;
+    final String executorId;
 
     // The channel associated to the stream
     Channel associatedChannel = null;
@@ -55,78 +55,70 @@ public class OneForOneStreamManager extends StreamManager {
     // that the caller only requests each chunk one at a time, in order.
     int curChunk = 0;
 
-    StreamState(String appId, Iterator<ManagedBuffer> buffers) {
+    StreamState(String appId, String executorId) {
       this.appId = appId;
-      this.buffers = Preconditions.checkNotNull(buffers);
+      this.executorId = executorId;
     }
   }
 
+  public interface ChunkGetter {
+    ManagedBuffer getChunk(String appId, String executorId, String chunkId);
+  }
+
   public OneForOneStreamManager() {
+    this(null);
+  }
+
+  public OneForOneStreamManager(ChunkGetter chunkGetter) {
     // For debugging purposes, start with a random stream id to help identifying different streams.
     // This does not need to be globally unique, only unique to this class.
     nextStreamId = new AtomicLong((long) new Random().nextInt(Integer.MAX_VALUE) * 1000);
-    streams = new ConcurrentHashMap<>();
+    streamStates = new ConcurrentHashMap<>();
+    this.chunkGetter = chunkGetter;
   }
 
   @Override
   public void registerChannel(Channel channel, long streamId) {
-    if (streams.containsKey(streamId)) {
-      streams.get(streamId).associatedChannel = channel;
+    if (streamStates.containsKey(streamId)) {
+      streamStates.get(streamId).associatedChannel = channel;
     }
   }
 
   @Override
-  public ManagedBuffer getChunk(long streamId, int chunkIndex) {
-    StreamState state = streams.get(streamId);
-    if (chunkIndex != state.curChunk) {
-      throw new IllegalStateException(String.format(
-        "Received out-of-order chunk index %s (expected %s)", chunkIndex, state.curChunk));
-    } else if (!state.buffers.hasNext()) {
-      throw new IllegalStateException(String.format(
-        "Requested chunk index beyond end %s", chunkIndex));
-    }
-    state.curChunk += 1;
-    ManagedBuffer nextChunk = state.buffers.next();
+  public ManagedBuffer getChunk(long streamId, String chunkId) {
+    StreamState state = streamStates.get(streamId);
+    String appId = state.appId;
+    String executorId = state.executorId;
 
-    if (!state.buffers.hasNext()) {
-      logger.trace("Removing stream id {}", streamId);
-      streams.remove(streamId);
-    }
-
-    return nextChunk;
+    return chunkGetter.getChunk(appId, executorId, chunkId);
   }
 
   @Override
   public ManagedBuffer openStream(String streamChunkId) {
-    Tuple2<Long, Integer> streamIdAndChunkId = parseStreamChunkId(streamChunkId);
-    return getChunk(streamIdAndChunkId._1, streamIdAndChunkId._2);
+    Tuple2<Long, String> streamIdAndchunkId = parseStreamChunkId(streamChunkId);
+    return getChunk(streamIdAndchunkId._1, streamIdAndchunkId._2);
   }
 
-  public static String genStreamChunkId(long streamId, int chunkId) {
-    return String.format("%d_%d", streamId, chunkId);
+  public static String genStreamChunkId(long streamId, String chunkId) {
+    return String.format("%d-%d", streamId, chunkId);
   }
 
-  public static Tuple2<Long, Integer> parseStreamChunkId(String streamChunkId) {
-    String[] array = streamChunkId.split("_");
+  public static Tuple2<Long, String> parseStreamChunkId(String streamchunkId) {
+    String[] array = streamchunkId.split("-");
     assert array.length == 2:
       "Stream id and chunk index should be specified when open stream for fetching block.";
     long streamId = Long.valueOf(array[0]);
-    int chunkIndex = Integer.valueOf(array[1]);
-    return new Tuple2<>(streamId, chunkIndex);
+    String chunkId = array[1];
+    return new Tuple2<>(streamId, chunkId);
   }
 
   @Override
   public void connectionTerminated(Channel channel) {
     // Close all streams which have been associated with the channel.
-    for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {
+    for (Map.Entry<Long, StreamState> entry: streamStates.entrySet()) {
       StreamState state = entry.getValue();
       if (state.associatedChannel == channel) {
-        streams.remove(entry.getKey());
-
-        // Release all remaining buffers.
-        while (state.buffers.hasNext()) {
-          state.buffers.next().release();
-        }
+        streamStates.remove(entry.getKey());
       }
     }
   }
@@ -134,7 +126,7 @@ public class OneForOneStreamManager extends StreamManager {
   @Override
   public void checkAuthorization(TransportClient client, long streamId) {
     if (client.getClientId() != null) {
-      StreamState state = streams.get(streamId);
+      StreamState state = streamStates.get(streamId);
       Preconditions.checkArgument(state != null, "Unknown stream ID.");
       if (!client.getClientId().equals(state.appId)) {
         throw new SecurityException(String.format(
@@ -147,17 +139,12 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   /**
-   * Registers a stream of ManagedBuffers which are served as individual chunks one at a time to
-   * callers. Each ManagedBuffer will be release()'d after it is transferred on the wire. If a
-   * client connection is closed before the iterator is fully drained, then the remaining buffers
-   * will all be release()'d.
-   *
-   * If an app ID is provided, only callers who've authenticated with the given app ID will be
-   * allowed to fetch from this stream.
+   * Register metadata(appId and executorId) in a stream. Thus client doesn't need to send the
+   * metadata again when fetch chunks.
    */
-  public long registerStream(String appId, Iterator<ManagedBuffer> buffers) {
+  public long registerStream(String appId, String executorId) {
     long myStreamId = nextStreamId.getAndIncrement();
-    streams.put(myStreamId, new StreamState(appId, buffers));
+    streamStates.put(myStreamId, new StreamState(appId, executorId));
     return myStreamId;
   }
 

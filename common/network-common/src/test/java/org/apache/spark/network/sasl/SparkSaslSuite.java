@@ -259,7 +259,7 @@ public class SparkSaslSuite {
     try {
       TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(testConf));
       StreamManager sm = mock(StreamManager.class);
-      when(sm.getChunk(anyLong(), anyInt())).thenAnswer(invocation ->
+      when(sm.getChunk(anyLong(), anyString())).thenAnswer(invocation ->
           new FileSegmentManagedBuffer(conf, file, 0, file.length()));
 
       RpcHandler rpcHandler = mock(RpcHandler.class);
@@ -279,13 +279,13 @@ public class SparkSaslSuite {
         response.get().retain();
         lock.countDown();
         return null;
-      }).when(callback).onSuccess(anyInt(), any(ManagedBuffer.class));
+      }).when(callback).onSuccess(anyString(), any(ManagedBuffer.class));
 
-      ctx.client.fetchChunk(0, 0, callback);
+      ctx.client.fetchChunk(0, "0", callback);
       lock.await(10, TimeUnit.SECONDS);
 
-      verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));
-      verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
+      verify(callback, times(1)).onSuccess(anyString(), any(ManagedBuffer.class));
+      verify(callback, never()).onFailure(anyString(), any(Throwable.class));
 
       byte[] received = ByteStreams.toByteArray(response.get().createInputStream());
       assertTrue(Arrays.equals(data, received));

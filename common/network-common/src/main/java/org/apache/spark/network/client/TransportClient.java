@@ -44,7 +44,7 @@ import org.apache.spark.network.protocol.StreamRequest;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
- * Client for fetching consecutive chunks of a pre-negotiated stream. This API is intended to allow
+ * Client for fetching chunks of a pre-negotiated stream. This API is intended to allow
  * efficient transfer of a large amount of data, broken up into chunks with size ranging from
  * hundreds of KB to a few MB.
  *
@@ -55,8 +55,8 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  *
  * For example, a typical workflow might be:
  * client.sendRPC(new OpenFile("/foo")) --&gt; returns StreamId = 100
- * client.fetchChunk(streamId = 100, chunkIndex = 0, callback)
- * client.fetchChunk(streamId = 100, chunkIndex = 1, callback)
+ * client.fetchChunk(streamId = 100, chunkId = "0", callback)
+ * client.fetchChunk(streamId = 100, chunkId = "1", callback)
  * ...
  * client.sendRPC(new CloseStream(100))
  *
@@ -117,8 +117,8 @@ public class TransportClient implements Closeable {
   /**
    * Requests a single chunk from the remote side, from the pre-negotiated streamId.
    *
-   * Chunk indices go from 0 onwards. It is valid to request the same chunk multiple times, though
-   * some streams may not support this.
+   * The chunk is specified by chunkId. It is valid to request the same chunk multiple times,
+   * though some streams may not support this.
    *
    * Multiple fetchChunk requests may be outstanding simultaneously, and the chunks are guaranteed
    * to be returned in the same order that they were requested, assuming only a single
@@ -126,19 +126,19 @@ public class TransportClient implements Closeable {
    *
    * @param streamId Identifier that refers to a stream in the remote StreamManager. This should
    *                 be agreed upon by client and server beforehand.
-   * @param chunkIndex 0-based index of the chunk to fetch
+   * @param chunkId Id of the chunk to be fetched.
    * @param callback Callback invoked upon successful receipt of chunk, or upon any failure.
    */
   public void fetchChunk(
       long streamId,
-      int chunkIndex,
+      String chunkId,
       ChunkReceivedCallback callback) {
     long startTime = System.currentTimeMillis();
     if (logger.isDebugEnabled()) {
-      logger.debug("Sending fetch chunk request {} to {}", chunkIndex, getRemoteAddress(channel));
+      logger.debug("Sending fetch chunk request {} to {}", chunkId, getRemoteAddress(channel));
     }
 
-    StreamChunkId streamChunkId = new StreamChunkId(streamId, chunkIndex);
+    StreamChunkId streamChunkId = new StreamChunkId(streamId, chunkId);
     handler.addFetchRequest(streamChunkId, callback);
 
     channel.writeAndFlush(new ChunkFetchRequest(streamChunkId)).addListener(future -> {
@@ -155,7 +155,7 @@ public class TransportClient implements Closeable {
         handler.removeFetchRequest(streamChunkId);
         channel.close();
         try {
-          callback.onFailure(chunkIndex, new IOException(errorMsg, future.cause()));
+          callback.onFailure(chunkId, new IOException(errorMsg, future.cause()));
         } catch (Exception e) {
           logger.error("Uncaught exception in RPC response callback handler!", e);
         }

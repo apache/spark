@@ -45,7 +45,11 @@ class NettyBlockRpcServer(
     blockManager: BlockDataManager)
   extends RpcHandler with Logging {
 
-  private val streamManager = new OneForOneStreamManager()
+  private val streamManager = new OneForOneStreamManager(new OneForOneStreamManager.ChunkGetter {
+    override def getChunk(appId: String, executorId: String, chunkId: String): ManagedBuffer = {
+      blockManager.getBlockData(BlockId(chunkId))
+    }
+  })
 
   override def receive(
       client: TransportClient,
@@ -56,12 +60,9 @@ class NettyBlockRpcServer(
 
     message match {
       case openBlocks: OpenBlocks =>
-        val blocksNum = openBlocks.blockIds.length
-        val blocks = for (i <- (0 until blocksNum).view)
-          yield blockManager.getBlockData(BlockId.apply(openBlocks.blockIds(i)))
-        val streamId = streamManager.registerStream(appId, blocks.iterator.asJava)
-        logTrace(s"Registered streamId $streamId with $blocksNum buffers")
-        responseContext.onSuccess(new StreamHandle(streamId, blocksNum).toByteBuffer)
+        val streamId = streamManager.registerStream(appId, openBlocks.execId)
+        logTrace(s"Registered streamId $streamId")
+        responseContext.onSuccess(new StreamHandle(streamId).toByteBuffer)
 
       case uploadBlock: UploadBlock =>
         // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.

@@ -25,40 +25,40 @@ import io.netty.buffer.ByteBuf;
 */
 public final class StreamChunkId implements Encodable {
   public final long streamId;
-  public final int chunkIndex;
+  public final String chunkId;
 
-  public StreamChunkId(long streamId, int chunkIndex) {
+  public StreamChunkId(long streamId, String chunkId) {
     this.streamId = streamId;
-    this.chunkIndex = chunkIndex;
+    this.chunkId = chunkId;
   }
 
   @Override
   public int encodedLength() {
-    return 8 + 4;
+    return 8 + Encoders.Strings.encodedLength(chunkId);
   }
 
   public void encode(ByteBuf buffer) {
     buffer.writeLong(streamId);
-    buffer.writeInt(chunkIndex);
+    Encoders.Strings.encode(buffer, chunkId);
   }
 
   public static StreamChunkId decode(ByteBuf buffer) {
-    assert buffer.readableBytes() >= 8 + 4;
+    assert buffer.readableBytes() >= 8;
     long streamId = buffer.readLong();
-    int chunkIndex = buffer.readInt();
-    return new StreamChunkId(streamId, chunkIndex);
+    String chunkId = Encoders.Strings.decode(buffer);
+    return new StreamChunkId(streamId, chunkId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamId, chunkIndex);
+    return Objects.hashCode(streamId, chunkId);
   }
 
   @Override
   public boolean equals(Object other) {
     if (other instanceof StreamChunkId) {
       StreamChunkId o = (StreamChunkId) other;
-      return streamId == o.streamId && chunkIndex == o.chunkIndex;
+      return streamId == o.streamId && Objects.equal(chunkId, o.chunkId);
     }
     return false;
   }
@@ -67,7 +67,7 @@ public final class StreamChunkId implements Encodable {
   public String toString() {
     return Objects.toStringHelper(this)
       .add("streamId", streamId)
-      .add("chunkIndex", chunkIndex)
+      .add("chunkId", chunkId)
       .toString();
   }
 }

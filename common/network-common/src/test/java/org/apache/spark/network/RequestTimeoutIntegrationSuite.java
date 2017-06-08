@@ -65,7 +65,7 @@ public class RequestTimeoutIntegrationSuite {
 
     defaultManager = new StreamManager() {
       @Override
-      public ManagedBuffer getChunk(long streamId, int chunkIndex) {
+      public ManagedBuffer getChunk(long streamId, String chunkId) {
         throw new UnsupportedOperationException();
       }
     };
@@ -184,7 +184,7 @@ public class RequestTimeoutIntegrationSuite {
     final byte[] response = new byte[16];
     final StreamManager manager = new StreamManager() {
       @Override
-      public ManagedBuffer getChunk(long streamId, int chunkIndex) {
+      public ManagedBuffer getChunk(long streamId, String chunkId) {
         Uninterruptibles.sleepUninterruptibly(FOREVER, TimeUnit.MILLISECONDS);
         return new NioManagedBuffer(ByteBuffer.wrap(response));
       }
@@ -211,12 +211,12 @@ public class RequestTimeoutIntegrationSuite {
 
     // Send one request, which will eventually fail.
     TestCallback callback0 = new TestCallback();
-    client.fetchChunk(0, 0, callback0);
+    client.fetchChunk(0, "0", callback0);
     Uninterruptibles.sleepUninterruptibly(1200, TimeUnit.MILLISECONDS);
 
     // Send a second request before the first has failed.
     TestCallback callback1 = new TestCallback();
-    client.fetchChunk(0, 1, callback1);
+    client.fetchChunk(0, "1", callback1);
     Uninterruptibles.sleepUninterruptibly(1200, TimeUnit.MILLISECONDS);
 
     // not complete yet, but should complete soon
@@ -254,7 +254,7 @@ public class RequestTimeoutIntegrationSuite {
     }
 
     @Override
-    public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
+    public void onSuccess(String chunkId, ManagedBuffer buffer) {
       try {
         successLength = buffer.nioByteBuffer().remaining();
       } catch (IOException e) {
@@ -265,7 +265,7 @@ public class RequestTimeoutIntegrationSuite {
     }
 
     @Override
-    public void onFailure(int chunkIndex, Throwable e) {
+    public void onFailure(String chunkId, Throwable e) {
       failure = e;
       latch.countDown();
     }

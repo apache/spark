@@ -71,7 +71,7 @@ public class OneForOneBlockFetcher {
       TransportConf transportConf,
       File[] shuffleFiles) {
     this.client = client;
-    this.openMessage = new OpenBlocks(appId, execId, blockIds);
+    this.openMessage = new OpenBlocks(appId, execId);
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
@@ -86,14 +86,18 @@ public class OneForOneBlockFetcher {
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */
   private class ChunkCallback implements ChunkReceivedCallback {
     @Override
-    public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
+    public void onSuccess(String chunkId, ManagedBuffer buffer) {
       // On receipt of a chunk, pass it upwards as a block.
-      listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
+      listener.onBlockFetchSuccess(chunkId, buffer);
     }
 
     @Override
-    public void onFailure(int chunkIndex, Throwable e) {
+    public void onFailure(String chunkId, Throwable e) {
       // On receipt of a failure, fail every block from chunkIndex onwards.
+      int chunkIndex = 0;
+      while (chunkIndex < blockIds.length && !blockIds[chunkIndex].equals(chunkId)) {
+        chunkIndex++;
+      }
       String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
       failRemainingBlocks(remainingBlockIds, e);
     }
@@ -118,12 +122,13 @@ public class OneForOneBlockFetcher {
 
           // Immediately request all chunks -- we expect that the total size of the request is
           // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
-          for (int i = 0; i < streamHandle.numChunks; i++) {
+          for (int i = 0; i < blockIds.length; i++) {
             if (shuffleFiles != null) {
-              client.stream(OneForOneStreamManager.genStreamChunkId(streamHandle.streamId, i),
+              client.stream(
+                OneForOneStreamManager.genStreamChunkId(streamHandle.streamId, blockIds[i]),
                 new DownloadCallback(shuffleFiles[i], i));
             } else {
-              client.fetchChunk(streamHandle.streamId, i, chunkCallback);
+              client.fetchChunk(streamHandle.streamId, blockIds[i], chunkCallback);
             }
           }
         } catch (Exception e) {
