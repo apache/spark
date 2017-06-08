@@ -152,6 +152,11 @@ private[spark] class TaskSetManager(
   // of inserting into the heap when the heap won't be used.
   val successfulTaskDurations = new MedianHeap()
 
+  // Use a MedianHeap to record durations of successful tasks so we know when to launch
+  // speculative tasks. This is only used when speculation is enabled, to avoid the overhead
+  // of inserting into the heap when the heap won't be used.
+  val successfulTaskDurations = new MedianHeap()
+
   // How frequently to reprint duplicate exceptions in full, in milliseconds
   val EXCEPTION_PRINT_INTERVAL =
     conf.getLong("spark.logging.exceptionPrintInterval", 10000)
