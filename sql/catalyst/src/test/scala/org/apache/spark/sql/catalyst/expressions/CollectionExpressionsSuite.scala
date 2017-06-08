@@ -105,4 +105,117 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
+
+  test("Array intersects") {
+    val a0 = Literal.create(1, IntegerType)
+    val a1 = Literal.create(2, IntegerType)
+    val a2 = Literal.create(3, IntegerType)
+    val a3 = Literal.create(4, IntegerType)
+
+    val b0 = Literal.create(1L, LongType)
+    val b2 = Literal.create(3L, LongType)
+
+    val c0 = Literal.create(1.0, DoubleType)
+    val d0 = Literal.create("1", StringType)
+
+    val nullLiteral = Literal.create(null)
+
+    checkEvaluation(ArrayIntersect(Seq(nullLiteral)), null)
+
+    checkEvaluation(ArrayIntersect(Seq(CreateArray(Seq()))), Seq())
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(a0, a1)), CreateArray(Seq(a2)), CreateArray(Seq(a3)))), Seq())
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(a0, a1)), CreateArray(Seq(a0)))), Seq(1))
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(a0, a1)), CreateArray(Seq(a0)), CreateArray(Seq(a0)))), Seq(1))
+
+    checkEvaluation(ArrayIntersect(Seq(ArrayIntersect(Seq(CreateArray(
+      Seq(a0, a1)), CreateArray(Seq(a2)))), CreateArray(Seq(a0)))), Seq())
+
+    checkEvaluation(ArrayIntersect(Seq(CreateArray(Seq(a0, a1)),
+      CreateArray(Seq(Cast(b0, IntegerType), Cast(b2, IntegerType))))), Seq(1))
+
+    checkEvaluation(ArrayIntersect(
+      Seq(CreateArray(Seq(a0, a0, a1, a3)), CreateArray(Seq(a0, a2, a3, a3)),
+        CreateArray(Seq(a0, a1, a3)))), Seq(1, 1, 4))
+
+    checkEvaluation(ArrayIntersect(Seq(nullLiteral, CreateArray(Seq(a0, a2, a3, a3)),
+      CreateArray(Seq(a0, a1, a3)))), null)
+
+    checkEvaluation(ArrayIntersect(Seq(CreateArray(Seq(a0, a1)), CreateArray(Seq(a0)))), Seq(1))
+
+    checkEvaluation(If(LessThan(Rand(0L), c0), a0, a0), 1)
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a0, a1, a3)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a2, a3, a3)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a2, a3)))), Seq(1, 1, 4))
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a1)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0))))), Seq(1))
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a1)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), d0, d0))))), Seq())
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(a0, a1)), CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0))))), Seq(1))
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(a0, a1)), CreateArray(Seq(If(LessThan(Rand(0L), c0), d0, d0))))), Seq())
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a1)), CreateArray(Seq(a0)))), Seq(1))
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(a0, a1, a2)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a1, a2)),
+      CreateArray(Seq(a0, a1, a2)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a2)))),
+      Seq(1, 3))
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(d0, Cast(a1, StringType), Cast(a2, StringType))),
+      CreateArray(Seq(a1, a2)))),
+      Seq())
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(a0, a1, a2)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a1, a2)),
+      CreateArray(Seq(a0, a1, a2)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), d0, d0), Cast(a2, StringType))))),
+      Seq())
+
+    checkEvaluation(ArrayIntersect(Seq(
+      nullLiteral,
+      CreateArray(Seq(a0, a1, a2)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a2)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), d0, d0))))),
+      null)
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), nullLiteral, nullLiteral))),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), a0, a0), a2)),
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), d0, d0))))),
+      Seq())
+
+    checkEvaluation(ArrayIntersect(Seq(CreateArray(Seq(a0, a1)), nullLiteral)), null)
+
+    checkEvaluation(ArrayIntersect(Seq(nullLiteral, CreateArray(Seq(a0, a1)))), null)
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), nullLiteral, nullLiteral))),
+      nullLiteral, nullLiteral, CreateArray(Seq(a0)))), null)
+
+    checkEvaluation(ArrayIntersect(Seq(
+      CreateArray(Seq(If(LessThan(Rand(0L), c0), nullLiteral, nullLiteral))),
+      CreateArray(Seq(a0, a1)),
+      CreateArray(Seq(a0)))),
+      Seq())
+  }
 }

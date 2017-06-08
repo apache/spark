@@ -163,6 +163,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
           Alias(expression, s"Optimized($expression)2")() :: Nil),
       expression)
 
+    plan.initialize(0)
     val unsafeRow = plan(inputRow)
     val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
 

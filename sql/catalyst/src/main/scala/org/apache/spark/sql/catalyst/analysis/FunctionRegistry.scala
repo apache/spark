@@ -368,6 +368,7 @@ object FunctionRegistry {
     // collection functions
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
+    expression[ArrayIntersect]("array_intersect"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[MapKeys]("map_keys"),

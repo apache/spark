@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util._
 import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -286,4 +287,127 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "array_contains"
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(array, array, ...) - Returns intersection of multiple arrays.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), array(3, 4), array(0, 1, 3));
+       array(1)
+  """)
+case class ArrayIntersect(children: Seq[Expression]) extends Expression {
+
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val types = children.map(_.dataType)
+    types.foreach { t =>
+      if (!t.isInstanceOf[NullType] && !t.isInstanceOf[ArrayType]) {
+        return TypeCheckResult.TypeCheckFailure(
+          s"input to $prettyName should be an array type, but it's " +
+            types.map(_.simpleString).mkString("[", ", ", "]"))
+      }
+    }
+
+    TypeCheckResult.TypeCheckSuccess
+  }
+
+  override def dataType: DataType = {
+    children.headOption.map(_.dataType).getOrElse(NullType)
+  }
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  override def eval(input: InternalRow): Any = {
+    if (nullable) {
+      null
+    } else {
+      val arrays = children.map(_.eval(input).asInstanceOf[ArrayData].array)
+      var results = arrays.head
+      arrays.tail.foreach {
+        array => results = results.filter(elem => array.contains(elem))
+      }
+      new GenericArrayData(results)
+    }
+  }
+
+  private def doGenJavaArray(
+        ctx: CodegenContext,
+        arrayCodeType: (ExprCode, DataType)): (String, String) = {
+    val objArrayName = ctx.freshName("array")
+    val tmpIndex = ctx.freshName("index")
+
+    val (ev, arrayDataType) = arrayCodeType
+    val elemDataType = arrayDataType.asInstanceOf[ArrayType].elementType
+    val boxedJavaDataType = ctx.boxedType(elemDataType)
+    val getValueCode = ctx.getValue(ev.value, elemDataType, tmpIndex)
+
+    (objArrayName,
+      s"""
+       ${ev.code}
+       ${boxedJavaDataType}[] ${objArrayName} = new ${boxedJavaDataType}[${ev.value}.numElements()];
+       for (int ${tmpIndex}=0; ${tmpIndex}<${ev.value}.numElements(); ${tmpIndex}++) {
+         ${objArrayName}[${tmpIndex}] = ${getValueCode};
+       }
+     """.stripMargin
+    )
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val arraysCode = children.map(e => (
+      e.genCode(ctx),
+      e.dataType))
+
+    val arrayDataName = ctx.freshName("arrayData")
+    val resultsArrayListName = ctx.freshName("resultArrayList")
+
+    val genericArrayClass = classOf[GenericArrayData].getName
+    val arrayListClass = classOf[ArrayList[Any]].getName
+    val listClass = classOf[List[Any]].getName
+    val arraysClass = classOf[Arrays].getName
+
+    if (nullable) {
+      ev.copy(code = s"""
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        """)
+    } else {
+      val (resultsName, genResultsCode) = doGenJavaArray(ctx, arraysCode.head)
+      val setupResultsCode =
+        s"""
+           ${arrayListClass} ${resultsArrayListName} = new ${arrayListClass}();
+           ${genResultsCode}
+           ${resultsArrayListName}.addAll(${arraysClass}.asList(${resultsName}));
+         """.stripMargin
+
+      val intersectArraysCode = arraysCode.tail.map {
+        arrayCode => {
+          val tmpListName = ctx.freshName("array")
+          val (arrayTmpName, genArrayTmpCode) = doGenJavaArray(ctx, arrayCode)
+          s"""
+             ${genArrayTmpCode}
+             ${listClass} ${tmpListName} = ${arraysClass}.asList(${arrayTmpName});
+             ${resultsArrayListName}.retainAll(${tmpListName});
+           """.stripMargin
+        }
+      }
+
+      val resultsAsArrayDataCode =
+        s"""
+           final ArrayData ${arrayDataName} = new ${genericArrayClass}(${resultsArrayListName});
+         """.stripMargin
+
+      ev.copy(
+        code = setupResultsCode
+          + ctx.splitExpressions(
+            intersectArraysCode, "apply",
+              ("InternalRow", ctx.INPUT_ROW) :: (arrayListClass, resultsArrayListName) :: Nil)
+          + resultsAsArrayDataCode,
+        value = arrayDataName,
+        isNull = "false")
+    }
+  }
+
+  override def prettyName: String = "array_intersect"
 }
