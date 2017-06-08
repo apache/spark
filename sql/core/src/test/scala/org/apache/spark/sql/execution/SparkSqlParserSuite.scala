@@ -224,13 +224,13 @@ class SparkSqlParserSuite extends PlanTest {
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     assertEqual("describe table t",
       DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = false))
+        TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = false))
     assertEqual("describe table extended t",
       DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = true))
+        TableIdentifier("t"), Map.empty, isExtended = true, isFormatted = false))
     assertEqual("describe table formatted t",
       DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = true))
+        TableIdentifier("t"), Map.empty, isExtended = true, isFormatted = true))
 
     intercept("explain describe tables x", "Unsupported SQL statement")
   }

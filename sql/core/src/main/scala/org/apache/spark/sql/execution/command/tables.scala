@@ -500,7 +500,8 @@ case class TruncateTableCommand(
 case class DescribeTableCommand(
     table: TableIdentifier,
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean)
+    isExtended: Boolean,
+    isFormatted: Boolean)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] = Seq(
@@ -522,15 +523,15 @@ case class DescribeTableCommand(
         throw new AnalysisException(
           s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
       }
-      describeSchema(catalog.lookupRelation(table).schema, result, isExtended)
+      describeSchema(catalog.lookupRelation(table).schema, result, isFormatted)
     } else {
       val metadata = catalog.getTableMetadata(table)
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
-        describeSchema(sparkSession.table(metadata.identifier).schema, result, isExtended)
+        describeSchema(sparkSession.table(metadata.identifier).schema, result, isFormatted)
       } else {
-        describeSchema(metadata.schema, result, isExtended)
+        describeSchema(metadata.schema, result, isFormatted)
       }
 
       describePartitionInfo(metadata, result)
@@ -539,7 +540,7 @@ case class DescribeTableCommand(
         // Outputs the partition-specific info for the DDL command:
         // "DESCRIBE [EXTENDED|FORMATTED] table_name PARTITION (partitionVal*)"
         describeDetailedPartitionInfo(sparkSession, catalog, metadata, result)
-      } else if (isExtended) {
+      } else if (isExtended || isFormatted) {
         describeFormattedTableInfo(metadata, result)
       }
     }
@@ -578,7 +579,9 @@ case class DescribeTableCommand(
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
     val partition = catalog.getPartition(table, partitionSpec)
-    if (isExtended) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
+    if (isExtended || isFormatted) {
+      describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
+    }
   }
 
   private def describeFormattedDetailedPartitionInfo(
