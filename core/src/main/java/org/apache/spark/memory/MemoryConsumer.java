@@ -84,6 +84,9 @@ public abstract class MemoryConsumer {
 
   /**
    * Allocates a LongArray of `size`.
+   *
+   * @throws OutOfMemoryError
+   * @throws TooLargePageException
    */
   public LongArray allocateArray(long size) {
     long required = size * 8L;
