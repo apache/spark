@@ -18,12 +18,19 @@
 package org.apache.spark.sql.execution.metric
 
 import java.text.NumberFormat
+import java.util.Locale
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.util.{AccumulatorV2, Utils}
+import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
 
+/**
+ * A metric used in a SQL query plan. This is implemented as an [[AccumulatorV2]]. Updates on
+ * the executor side are automatically propagated and shown in the SQL UI through metrics. Updates
+ * on the driver side must be explicitly posted using [[SQLMetrics.postDriverMetricUpdates()]].
+ */
 class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
   // This is a workaround for SPARK-11013.
   // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
@@ -55,19 +62,17 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   override def value: Long = _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
-  private[spark] override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(id, name, update, value, true, true, Some(SQLMetrics.ACCUM_IDENTIFIER))
+  override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
+    new AccumulableInfo(
+      id, name, update, value, true, true, Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
   }
 }
 
 
-private[sql] object SQLMetrics {
-  // Identifier for distinguishing SQL metrics from other accumulators
-  private[sql] val ACCUM_IDENTIFIER = "sql"
-
-  private[sql] val SUM_METRIC = "sum"
-  private[sql] val SIZE_METRIC = "size"
-  private[sql] val TIMING_METRIC = "timing"
+object SQLMetrics {
+  private val SUM_METRIC = "sum"
+  private val SIZE_METRIC = "size"
+  private val TIMING_METRIC = "timing"
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
     val acc = new SQLMetric(SUM_METRIC)
@@ -103,7 +108,8 @@ private[sql] object SQLMetrics {
    */
   def stringValue(metricsType: String, values: Seq[Long]): String = {
     if (metricsType == SUM_METRIC) {
-      NumberFormat.getInstance().format(values.sum)
+      val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
+      numberFormat.format(values.sum)
     } else {
       val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
         Utils.bytesToString
@@ -115,7 +121,7 @@ private[sql] object SQLMetrics {
 
       val validValues = values.filter(_ >= 0)
       val Seq(sum, min, med, max) = {
-        val metric = if (validValues.length == 0) {
+        val metric = if (validValues.isEmpty) {
           Seq.fill(4)(0L)
         } else {
           val sorted = validValues.sorted
@@ -124,6 +130,20 @@ private[sql] object SQLMetrics {
         metric.map(strFormat)
       }
       s"\n$sum ($min, $med, $max)"
+    }
+  }
+
+  /**
+   * Updates metrics based on the driver side value. This is useful for certain metrics that
+   * are only updated on the driver, e.g. subquery execution time, or number of files.
+   */
+  def postDriverMetricUpdates(
+      sc: SparkContext, executionId: String, metrics: Seq[SQLMetric]): Unit = {
+    // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
+    // directly without setting an execution id. We should be tolerant to it.
+    if (executionId != null) {
+      sc.listenerBus.post(
+        SparkListenerDriverAccumUpdates(executionId.toLong, metrics.map(m => m.id -> m.value)))
     }
   }
 }

@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+
 
 /**
  * A graph used for storing information of an executionPlan of DataFrame.
@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * Each graph is defined with a set of nodes and a set of edges. Each node represents a node in the
  * SparkPlan tree, and each edge represents a parent-child relationship between two nodes.
  */
-private[ui] case class SparkPlanGraph(
+case class SparkPlanGraph(
     nodes: Seq[SparkPlanGraphNode], edges: Seq[SparkPlanGraphEdge]) {
 
   def makeDotFile(metrics: Map[Long, String]): String = {
@@ -55,7 +55,7 @@ private[ui] case class SparkPlanGraph(
   }
 }
 
-private[sql] object SparkPlanGraph {
+object SparkPlanGraph {
 
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.
@@ -99,7 +99,11 @@ private[sql] object SparkPlanGraph {
       case "Subquery" if subgraph != null =>
         // Subquery should not be included in WholeStageCodegen
         buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
-      case "ReusedExchange" =>
+      case "Subquery" if exchanges.contains(planInfo) =>
+        // Point to the re-used subquery
+        val node = exchanges(planInfo)
+        edges += SparkPlanGraphEdge(node.id, parent.id)
+      case "ReusedExchange" if exchanges.contains(planInfo.children.head) =>
         // Point to the re-used exchange
         val node = exchanges(planInfo.children.head)
         edges += SparkPlanGraphEdge(node.id, parent.id)
@@ -115,7 +119,7 @@ private[sql] object SparkPlanGraph {
         } else {
           subgraph.nodes += node
         }
-        if (name.contains("Exchange")) {
+        if (name.contains("Exchange") || name == "Subquery") {
           exchanges += planInfo -> node
         }
 

@@ -38,7 +38,8 @@ class ApplicationAttemptInfo private[spark](
     val lastUpdated: Date,
     val duration: Long,
     val sparkUser: String,
-    val completed: Boolean = false) {
+    val completed: Boolean = false,
+    val appSparkVersion: String) {
     def getStartTimeEpoch: Long = startTime.getTime
     def getEndTimeEpoch: Long = endTime.getTime
     def getLastUpdatedEpoch: Long = lastUpdated.getTime
@@ -73,8 +74,16 @@ class ExecutorSummary private[spark](
     val totalInputBytes: Long,
     val totalShuffleRead: Long,
     val totalShuffleWrite: Long,
+    val isBlacklisted: Boolean,
     val maxMemory: Long,
-    val executorLogs: Map[String, String])
+    val executorLogs: Map[String, String],
+    val memoryMetrics: Option[MemoryMetrics])
+
+class MemoryMetrics private[spark](
+    val usedOnHeapStorageMemory: Long,
+    val usedOffHeapStorageMemory: Long,
+    val totalOnHeapStorageMemory: Long,
+    val totalOffHeapStorageMemory: Long)
 
 class JobData private[spark](
     val jobId: Int,
@@ -110,7 +119,11 @@ class RDDDataDistribution private[spark](
     val address: String,
     val memoryUsed: Long,
     val memoryRemaining: Long,
-    val diskUsed: Long)
+    val diskUsed: Long,
+    val onHeapMemoryUsed: Option[Long],
+    val offHeapMemoryUsed: Option[Long],
+    val onHeapMemoryRemaining: Option[Long],
+    val offHeapMemoryRemaining: Option[Long])
 
 class RDDPartitionInfo private[spark](
     val blockName: String,
@@ -128,6 +141,7 @@ class StageData private[spark](
     val numFailedTasks: Int,
 
     val executorRunTime: Long,
+    val executorCpuTime: Long,
     val submissionTime: Option[Date],
     val firstTaskLaunchedTime: Option[Date],
     val completionTime: Option[Date],
@@ -156,8 +170,10 @@ class TaskData private[spark](
     val index: Int,
     val attempt: Int,
     val launchTime: Date,
+    val duration: Option[Long] = None,
     val executorId: String,
     val host: String,
+    val status: String,
     val taskLocality: String,
     val speculative: Boolean,
     val accumulatorUpdates: Seq[AccumulableInfo],
@@ -166,7 +182,9 @@ class TaskData private[spark](
 
 class TaskMetrics private[spark](
     val executorDeserializeTime: Long,
+    val executorDeserializeCpuTime: Long,
     val executorRunTime: Long,
+    val executorCpuTime: Long,
     val resultSize: Long,
     val jvmGcTime: Long,
     val resultSerializationTime: Long,
@@ -202,7 +220,9 @@ class TaskMetricDistributions private[spark](
     val quantiles: IndexedSeq[Double],
 
     val executorDeserializeTime: IndexedSeq[Double],
+    val executorDeserializeCpuTime: IndexedSeq[Double],
     val executorRunTime: IndexedSeq[Double],
+    val executorCpuTime: IndexedSeq[Double],
     val resultSize: IndexedSeq[Double],
     val jvmGcTime: IndexedSeq[Double],
     val resultSerializationTime: IndexedSeq[Double],
@@ -244,3 +264,14 @@ class AccumulableInfo private[spark](
 
 class VersionInfo private[spark](
   val spark: String)
+
+class ApplicationEnvironmentInfo private[spark] (
+    val runtime: RuntimeInfo,
+    val sparkProperties: Seq[(String, String)],
+    val systemProperties: Seq[(String, String)],
+    val classpathEntries: Seq[(String, String)])
+
+class RuntimeInfo private[spark](
+    val javaVersion: String,
+    val javaHome: String,
+    val scalaVersion: String)

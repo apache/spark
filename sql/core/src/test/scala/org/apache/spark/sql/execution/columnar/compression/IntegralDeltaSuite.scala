@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types.IntegralType
@@ -47,8 +47,8 @@ class IntegralDeltaSuite extends SparkFunSuite {
         }
       }
 
-      input.map { value =>
-        val row = new GenericMutableRow(1)
+      input.foreach { value =>
+        val row = new GenericInternalRow(1)
         columnType.setField(row, 0, value)
         builder.appendFrom(row, 0)
       }
@@ -95,7 +95,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
       buffer.rewind().position(headerSize + 4)
 
       val decoder = scheme.decoder(buffer, columnType)
-      val mutableRow = new GenericMutableRow(1)
+      val mutableRow = new GenericInternalRow(1)
 
       if (input.nonEmpty) {
         input.foreach{

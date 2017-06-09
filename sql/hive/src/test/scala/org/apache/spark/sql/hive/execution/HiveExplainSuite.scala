@@ -26,14 +26,52 @@ import org.apache.spark.sql.test.SQLTestUtils
  * A set of tests that validates support for Hive Explain command.
  */
 class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import testImplicits._
+
+  test("show cost in explain command") {
+    // For readability, we only show optimized plan and physical plan in explain cost command
+    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "),
+      "Optimized Logical Plan", "Physical Plan")
+    checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "),
+      "Parsed Logical Plan", "Analyzed Logical Plan")
+
+    // Only has sizeInBytes before ANALYZE command
+    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes")
+    checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "), "rowCount")
+
+    // Has both sizeInBytes and rowCount after ANALYZE command
+    sql("ANALYZE TABLE src COMPUTE STATISTICS")
+    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes", "rowCount")
+
+    // No cost information
+    checkKeywordsNotExist(sql("EXPLAIN  SELECT * FROM src "), "sizeInBytes", "rowCount")
+  }
 
   test("explain extended command") {
     checkKeywordsExist(sql(" explain   select * from src where key=123 "),
-                   "== Physical Plan ==")
+                   "== Physical Plan ==",
+                   "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+
     checkKeywordsNotExist(sql(" explain   select * from src where key=123 "),
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
-                   "== Optimized Logical Plan ==")
+                   "== Optimized Logical Plan ==",
+                   "Owner",
+                   "Database",
+                   "Created",
+                   "Last Access",
+                   "Type",
+                   "Provider",
+                   "Properties",
+                   "Statistics",
+                   "Location",
+                   "Serde Library",
+                   "InputFormat",
+                   "OutputFormat",
+                   "Partition Provider",
+                   "Schema"
+    )
+
     checkKeywordsExist(sql(" explain   extended select * from src where key=123 "),
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
@@ -53,7 +91,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
-      "CreateTableAsSelect",
+      "CreateHiveTableAsSelect",
       "InsertIntoHiveTable",
       "Limit",
       "src")
@@ -71,16 +109,16 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
-      "CreateTableAsSelect",
+      "CreateHiveTableAsSelect",
       "InsertIntoHiveTable",
       "Limit",
       "src")
   }
 
-  test("SPARK-6212: The EXPLAIN output of CTAS only shows the analyzed plan") {
-    withTempTable("jt") {
-      val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-      hiveContext.read.json(rdd).registerTempTable("jt")
+  test("SPARK-17409: The EXPLAIN output of CTAS only shows the analyzed plan") {
+    withTempView("jt") {
+      val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str$i"}""").toDS()
+      spark.read.json(ds).createOrReplaceTempView("jt")
       val outputs = sql(
         s"""
            |EXPLAIN EXTENDED
@@ -92,14 +130,14 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val shouldContain =
         "== Parsed Logical Plan ==" :: "== Analyzed Logical Plan ==" :: "Subquery" ::
         "== Optimized Logical Plan ==" :: "== Physical Plan ==" ::
-        "CreateTableAsSelect" :: "InsertIntoHiveTable" :: "jt" :: Nil
+        "CreateHiveTableAsSelect" :: "InsertIntoHiveTable" :: "jt" :: Nil
       for (key <- shouldContain) {
         assert(outputs.contains(key), s"$key doesn't exist in result")
       }
 
       val physicalIndex = outputs.indexOf("== Physical Plan ==")
-      assert(!outputs.substring(physicalIndex).contains("Subquery"),
-        "Physical Plan should not contain Subquery since it's eliminated by optimizer")
+      assert(outputs.substring(physicalIndex).contains("Subquery"),
+        "Physical Plan should contain SubqueryAlias since the query should not be optimized")
     }
   }
 

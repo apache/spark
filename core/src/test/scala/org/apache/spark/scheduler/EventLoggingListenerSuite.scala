@@ -25,12 +25,14 @@ import scala.io.Source
 
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
+import org.mockito.Mockito
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.io._
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
@@ -95,6 +97,18 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     }
   }
 
+  test("Event logging with password redaction") {
+    val key = "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD"
+    val secretPassword = "secret_password"
+    val conf = getLoggingConf(testDirPath, None)
+      .set(key, secretPassword)
+    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    val envDetails = SparkEnv.environmentDetails(conf, "FIFO", Seq.empty, Seq.empty)
+    val event = SparkListenerEnvironmentUpdate(envDetails)
+    val redactedProps = eventLogger.redactEvent(event).environmentDetails("Spark Properties").toMap
+    assert(redactedProps(key) == "*********(redacted)")
+  }
+
   test("Log overwriting") {
     val logUri = EventLoggingListener.getLogPath(testDir.toURI, "test", None)
     val logPath = new URI(logUri).getPath
@@ -107,19 +121,20 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   test("Event log name") {
+    val baseDirUri = Utils.resolveURI("/base-dir")
     // without compression
-    assert(s"file:/base-dir/app1" === EventLoggingListener.getLogPath(
-      Utils.resolveURI("/base-dir"), "app1", None))
+    assert(s"${baseDirUri.toString}/app1" === EventLoggingListener.getLogPath(
+      baseDirUri, "app1", None))
     // with compression
-    assert(s"file:/base-dir/app1.lzf" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"), "app1", None, Some("lzf")))
+    assert(s"${baseDirUri.toString}/app1.lzf" ===
+      EventLoggingListener.getLogPath(baseDirUri, "app1", None, Some("lzf")))
     // illegal characters in app ID
-    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
+    assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1" ===
+      EventLoggingListener.getLogPath(baseDirUri,
         "a fine:mind$dollar{bills}.1", None))
     // illegal characters in app ID with compression
-    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1.lz4" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
+    assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1.lz4" ===
+      EventLoggingListener.getLogPath(baseDirUri,
         "a fine:mind$dollar{bills}.1", None, Some("lz4")))
   }
 
@@ -142,17 +157,18 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     extraConf.foreach { case (k, v) => conf.set(k, v) }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
     val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
-    val listenerBus = new LiveListenerBus
+    val listenerBus = new LiveListenerBus(conf)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
 
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite
     eventLogger.start()
-    listenerBus.start(sc)
+    listenerBus.start(Mockito.mock(classOf[SparkContext]), Mockito.mock(classOf[MetricsSystem]))
     listenerBus.addListener(eventLogger)
     listenerBus.postToAll(applicationStart)
     listenerBus.postToAll(applicationEnd)
+    listenerBus.stop()
     eventLogger.stop()
 
     // Verify file contains exactly the two events logged
@@ -181,7 +197,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     // into SPARK-6688.
     val conf = getLoggingConf(testDirPath, compressionCodec)
       .set("spark.hadoop.fs.defaultFS", "unsupported://example.com")
-    val sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
+    sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
     val eventLogPath = eventLogger.logPath
@@ -202,8 +218,6 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
     // Make sure expected events exist in the log file.
     val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
-    val logStart = SparkListenerLogStart(SPARK_VERSION)
-    val lines = readLines(logData)
     val eventSet = mutable.Set(
       SparkListenerApplicationStart,
       SparkListenerBlockManagerAdded,
@@ -216,19 +230,25 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       SparkListenerTaskStart,
       SparkListenerTaskEnd,
       SparkListenerApplicationEnd).map(Utils.getFormattedClassName)
-    lines.foreach { line =>
-      eventSet.foreach { event =>
-        if (line.contains(event)) {
-          val parsedEvent = JsonProtocol.sparkEventFromJson(parse(line))
-          val eventType = Utils.getFormattedClassName(parsedEvent)
-          if (eventType == event) {
-            eventSet.remove(event)
+    Utils.tryWithSafeFinally {
+      val logStart = SparkListenerLogStart(SPARK_VERSION)
+      val lines = readLines(logData)
+      lines.foreach { line =>
+        eventSet.foreach { event =>
+          if (line.contains(event)) {
+            val parsedEvent = JsonProtocol.sparkEventFromJson(parse(line))
+            val eventType = Utils.getFormattedClassName(parsedEvent)
+            if (eventType == event) {
+              eventSet.remove(event)
+            }
           }
         }
       }
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
+    } {
+      logData.close()
     }
-    assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
-    assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
   }
 
   private def readLines(in: InputStream): Seq[String] = {
@@ -273,7 +293,7 @@ object EventLoggingListenerSuite {
     val conf = new SparkConf
     conf.set("spark.eventLog.enabled", "true")
     conf.set("spark.eventLog.testing", "true")
-    conf.set("spark.eventLog.dir", logDir.toString)
+    conf.set("spark.eventLog.dir", logDir.toUri.toString)
     compressionCodec.foreach { codec =>
       conf.set("spark.eventLog.compress", "true")
       conf.set("spark.io.compression.codec", codec)

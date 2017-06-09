@@ -25,8 +25,8 @@ class TableIdentifierParserSuite extends SparkFunSuite {
   // Add "$elem$", "$value$" & "$key$"
   val hiveNonReservedKeyword = Array("add", "admin", "after", "analyze", "archive", "asc", "before",
     "bucket", "buckets", "cascade", "change", "cluster", "clustered", "clusterstatus", "collection",
-    "columns", "comment", "compact", "compactions", "compute", "concatenate", "continue", "data",
-    "day", "databases", "datetime", "dbproperties", "deferred", "defined", "delimited",
+    "columns", "comment", "compact", "compactions", "compute", "concatenate", "continue", "cost",
+    "data", "day", "databases", "datetime", "dbproperties", "deferred", "defined", "delimited",
     "dependency", "desc", "directories", "directory", "disable", "distribute",
     "enable", "escaped", "exclusive", "explain", "export", "fields", "file", "fileformat", "first",
     "format", "formatted", "functions", "hold_ddltime", "hour", "idxproperties", "ignore", "index",
@@ -49,12 +49,13 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "insert", "int", "into", "is", "lateral", "like", "local", "none", "null",
     "of", "order", "out", "outer", "partition", "percent", "procedure", "range", "reads", "revoke",
     "rollup", "row", "rows", "set", "smallint", "table", "timestamp", "to", "trigger",
-    "true", "truncate", "update", "user", "using", "values", "with", "regexp", "rlike",
+    "true", "truncate", "update", "user", "values", "with", "regexp", "rlike",
     "bigint", "binary", "boolean", "current_date", "current_timestamp", "date", "double", "float",
     "int", "smallint", "timestamp", "at")
 
-  val hiveNonReservedRegression = Seq("left", "right", "left", "right", "full", "inner", "semi",
-    "union", "except", "intersect", "schema", "database")
+  val hiveStrictNonReservedKeyword = Seq("anti", "full", "inner", "left", "semi", "right",
+    "natural", "union", "intersect", "except", "database", "on", "join", "cross", "select", "from",
+    "where", "having", "from", "to", "table", "with", "not")
 
   test("table identifier") {
     // Regular names.
@@ -67,11 +68,18 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     }
   }
 
-  test("table identifier - keywords") {
+  test("quoted identifiers") {
+    assert(TableIdentifier("z", Some("x.y")) === parseTableIdentifier("`x.y`.z"))
+    assert(TableIdentifier("y.z", Some("x")) === parseTableIdentifier("x.`y.z`"))
+    assert(TableIdentifier("z", Some("`x.y`")) === parseTableIdentifier("```x.y```.z"))
+    assert(TableIdentifier("`y.z`", Some("x")) === parseTableIdentifier("x.```y.z```"))
+    assert(TableIdentifier("x.y.z", None) === parseTableIdentifier("`x.y.z`"))
+  }
+
+  test("table identifier - strict keywords") {
     // SQL Keywords.
-    val keywords = Seq("select", "from", "where") ++ hiveNonReservedRegression
-    keywords.foreach { keyword =>
-      intercept[ParseException](parseTableIdentifier(keyword))
+    hiveStrictNonReservedKeyword.foreach { keyword =>
+      assert(TableIdentifier(keyword) === parseTableIdentifier(keyword))
       assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
       assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
     }
@@ -82,5 +90,28 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     hiveNonReservedKeyword.foreach { nonReserved =>
       assert(TableIdentifier(nonReserved) === parseTableIdentifier(nonReserved))
     }
+  }
+
+  test("SPARK-17364 table identifier - contains number") {
+    assert(parseTableIdentifier("123_") == TableIdentifier("123_"))
+    assert(parseTableIdentifier("1a.123_") == TableIdentifier("123_", Some("1a")))
+    // ".123" should not be treated as token of type DECIMAL_VALUE
+    assert(parseTableIdentifier("a.123A") == TableIdentifier("123A", Some("a")))
+    // ".123E3" should not be treated as token of type SCIENTIFIC_DECIMAL_VALUE
+    assert(parseTableIdentifier("a.123E3_LIST") == TableIdentifier("123E3_LIST", Some("a")))
+    // ".123D" should not be treated as token of type DOUBLE_LITERAL
+    assert(parseTableIdentifier("a.123D_LIST") == TableIdentifier("123D_LIST", Some("a")))
+    // ".123BD" should not be treated as token of type BIGDECIMAL_LITERAL
+    assert(parseTableIdentifier("a.123BD_LIST") == TableIdentifier("123BD_LIST", Some("a")))
+  }
+
+  test("SPARK-17832 table identifier - contains backtick") {
+    val complexName = TableIdentifier("`weird`table`name", Some("`d`b`1"))
+    assert(complexName === parseTableIdentifier("```d``b``1`.```weird``table``name`"))
+    assert(complexName === parseTableIdentifier(complexName.quotedString))
+    intercept[ParseException](parseTableIdentifier(complexName.unquotedString))
+    // Table identifier contains countious backticks should be treated correctly.
+    val complexName2 = TableIdentifier("x``y", Some("d``b"))
+    assert(complexName2 === parseTableIdentifier(complexName2.quotedString))
   }
 }

@@ -110,9 +110,12 @@ isRDD <- function(name, env) {
 #' @return the hash code as an integer
 #' @export
 #' @examples
+#'\dontrun{
 #' hashCode(1L) # 1
 #' hashCode(1.0) # 1072693248
 #' hashCode("1") # 49
+#'}
+#' @note hashCode since 1.4.0
 hashCode <- function(key) {
   if (class(key) == "integer") {
     as.integer(key[[1]])
@@ -123,20 +126,16 @@ hashCode <- function(key) {
     as.integer(bitwXor(intBits[2], intBits[1]))
   } else if (class(key) == "character") {
     # TODO: SPARK-7839 means we might not have the native library available
-    if (is.loaded("stringHashCode")) {
-      .Call("stringHashCode", key)
+    n <- nchar(key)
+    if (n == 0) {
+      0L
     } else {
-      n <- nchar(key)
-      if (n == 0) {
-        0L
-      } else {
-        asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
-        hashC <- 0
-        for (k in 1:length(asciiVals)) {
-          hashC <- mult31AndAdd(hashC, asciiVals[k])
-        }
-        as.integer(hashC)
+      asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
+      hashC <- 0
+      for (k in 1:length(asciiVals)) {
+        hashC <- mult31AndAdd(hashC, asciiVals[k])
       }
+      as.integer(hashC)
     }
   } else {
     warning(paste("Could not hash object, returning 0", sep = ""))
@@ -315,6 +314,15 @@ convertEnvsToList <- function(keys, vals) {
          })
 }
 
+# Utility function to merge 2 environments with the second overriding values in the first
+# env1 is changed in place
+overrideEnvs <- function(env1, env2) {
+  lapply(ls(env2),
+         function(name) {
+           env1[[name]] <- env2[[name]]
+         })
+}
+
 # Utility function to capture the varargs into environment object
 varargsToEnv <- function(...) {
   # Based on http://stackoverflow.com/a/3057419/4577954
@@ -322,6 +330,48 @@ varargsToEnv <- function(...) {
   env <- new.env()
   for (name in names(pairs)) {
     env[[name]] <- pairs[[name]]
+  }
+  env
+}
+
+# Utility function to capture the varargs into environment object but all values are converted
+# into string.
+varargsToStrEnv <- function(...) {
+  pairs <- list(...)
+  nameList <- names(pairs)
+  env <- new.env()
+  ignoredNames <- list()
+
+  if (is.null(nameList)) {
+    # When all arguments are not named, names(..) returns NULL.
+    ignoredNames <- pairs
+  } else {
+    for (i in seq_along(pairs)) {
+      name <- nameList[i]
+      value <- pairs[i]
+      if (identical(name, "")) {
+        # When some of arguments are not named, name is "".
+        ignoredNames <- append(ignoredNames, value)
+      } else {
+        value <- pairs[[name]]
+        if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
+          stop(paste0("Unsupported type for ", name, " : ", class(value),
+               ". Supported types are logical, numeric, character and NULL."), call. = FALSE)
+        }
+        if (is.logical(value)) {
+          env[[name]] <- tolower(as.character(value))
+        } else if (is.null(value)) {
+          env[[name]] <- value
+        } else {
+          env[[name]] <- as.character(value)
+        }
+      }
+    }
+  }
+
+  if (length(ignoredNames) != 0) {
+    warning(paste0("Unnamed arguments ignored: ", paste(ignoredNames, collapse = ", "), "."),
+            call. = FALSE)
   }
   env
 }
@@ -353,6 +403,47 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                          "MEMORY_ONLY_SER" = callJStatic(storageLevelClass, "MEMORY_ONLY_SER"),
                          "MEMORY_ONLY_SER_2" = callJStatic(storageLevelClass, "MEMORY_ONLY_SER_2"),
                          "OFF_HEAP" = callJStatic(storageLevelClass, "OFF_HEAP"))
+}
+
+storageLevelToString <- function(levelObj) {
+  useDisk <- callJMethod(levelObj, "useDisk")
+  useMemory <- callJMethod(levelObj, "useMemory")
+  useOffHeap <- callJMethod(levelObj, "useOffHeap")
+  deserialized <- callJMethod(levelObj, "deserialized")
+  replication <- callJMethod(levelObj, "replication")
+  shortName <- if (!useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "NONE"
+  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "DISK_ONLY"
+  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "DISK_ONLY_2"
+  } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 1) {
+    "MEMORY_ONLY"
+  } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 2) {
+    "MEMORY_ONLY_2"
+  } else if (!useDisk && useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "MEMORY_ONLY_SER"
+  } else if (!useDisk && useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "MEMORY_ONLY_SER_2"
+  } else if (useDisk && useMemory && !useOffHeap && deserialized && replication == 1) {
+    "MEMORY_AND_DISK"
+  } else if (useDisk && useMemory && !useOffHeap && deserialized && replication == 2) {
+    "MEMORY_AND_DISK_2"
+  } else if (useDisk && useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "MEMORY_AND_DISK_SER"
+  } else if (useDisk && useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "MEMORY_AND_DISK_SER_2"
+  } else if (useDisk && useMemory && useOffHeap && !deserialized && replication == 1) {
+    "OFF_HEAP"
+  } else {
+    NULL
+  }
+  fullInfo <- callJMethod(levelObj, "toString")
+  if (is.null(shortName)) {
+    fullInfo
+  } else {
+    paste(shortName, "-", fullInfo)
+  }
 }
 
 # Utility function for functions where an argument needs to be integer but we want to allow
@@ -489,7 +580,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
 #   checkedFunc An environment of function objects examined during cleanClosure. It can be
 #               considered as a "name"-to-"list of functions" mapping.
 # return value
-#   a new version of func that has an correct environment (closure).
+#   a new version of func that has a correct environment (closure).
 cleanClosure <- function(func, checkedFuncs = new.env()) {
   if (is.function(func)) {
     newEnv <- new.env(parent = .GlobalEnv)
@@ -663,4 +754,172 @@ varargsToJProperties <- function(...) {
     })
   }
   props
+}
+
+launchScript <- function(script, combinedArgs, wait = FALSE) {
+  if (.Platform$OS.type == "windows") {
+    scriptWithArgs <- paste(script, combinedArgs, sep = " ")
+    # on Windows, intern = F seems to mean output to the console. (documentation on this is missing)
+    shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait) # nolint
+  } else {
+    # http://stat.ethz.ch/R-manual/R-devel/library/base/html/system2.html
+    # stdout = F means discard output
+    # stdout = "" means to its console (default)
+    # Note that the console of this child process might not be the same as the running R process.
+    system2(script, combinedArgs, stdout = "", wait = wait)
+  }
+}
+
+getSparkContext <- function() {
+  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    stop("SparkR has not been initialized. Please call sparkR.session()")
+  }
+  sc <- get(".sparkRjsc", envir = .sparkREnv)
+  sc
+}
+
+isMasterLocal <- function(master) {
+  grepl("^local(\\[([0-9]+|\\*)\\])?$", master, perl = TRUE)
+}
+
+isClientMode <- function(master) {
+  grepl("([a-z]+)-client$", master, perl = TRUE)
+}
+
+isSparkRShell <- function() {
+  grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)
+}
+
+# Works identically with `callJStatic(...)` but throws a pretty formatted exception.
+handledCallJStatic <- function(cls, method, ...) {
+  result <- tryCatch(callJStatic(cls, method, ...),
+                     error = function(e) {
+                       captureJVMException(e, method)
+                     })
+  result
+}
+
+# Works identically with `callJMethod(...)` but throws a pretty formatted exception.
+handledCallJMethod <- function(obj, method, ...) {
+  result <- tryCatch(callJMethod(obj, method, ...),
+                     error = function(e) {
+                       captureJVMException(e, method)
+                     })
+  result
+}
+
+captureJVMException <- function(e, method) {
+  rawmsg <- as.character(e)
+  if (any(grep("^Error in .*?: ", rawmsg))) {
+    # If the exception message starts with "Error in ...", this is possibly
+    # "Error in invokeJava(...)". Here, it replaces the characters to
+    # `paste("Error in", method, ":")` in order to identify which function
+    # was called in JVM side.
+    stacktrace <- strsplit(rawmsg, "Error in .*?: ")[[1]]
+    rmsg <- paste("Error in", method, ":")
+    stacktrace <- paste(rmsg[1], stacktrace[2])
+  } else {
+    # Otherwise, do not convert the error message just in case.
+    stacktrace <- rawmsg
+  }
+
+  # StreamingQueryException could wrap an IllegalArgumentException, so look for that first
+  if (any(grep("org.apache.spark.sql.streaming.StreamingQueryException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.streaming.StreamingQueryException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(paste0(rmsg, "streaming query error - ", first), call. = FALSE)
+  } else if (any(grep("java.lang.IllegalArgumentException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "java.lang.IllegalArgumentException: ", fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(paste0(rmsg, "illegal argument - ", first), call. = FALSE)
+  } else if (any(grep("org.apache.spark.sql.AnalysisException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.AnalysisException: ", fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(paste0(rmsg, "analysis error - ", first), call. = FALSE)
+  } else
+    if (any(grep("org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(paste0(rmsg, "no such database - ", first), call. = FALSE)
+  } else
+    if (any(grep("org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(paste0(rmsg, "no such table - ", first), call. = FALSE)
+  } else if (any(grep("org.apache.spark.sql.catalyst.parser.ParseException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.parser.ParseException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(paste0(rmsg, "parse error - ", first), call. = FALSE)
+  } else {
+    stop(stacktrace, call. = FALSE)
+  }
+}
+
+# rbind a list of rows with raw (binary) columns
+#
+# @param inputData a list of rows, with each row a list
+# @return data.frame with raw columns as lists
+rbindRaws <- function(inputData) {
+  row1 <- inputData[[1]]
+  rawcolumns <- ("raw" == sapply(row1, class))
+
+  listmatrix <- do.call(rbind, inputData)
+  # A dataframe with all list columns
+  out <- as.data.frame(listmatrix)
+  out[!rawcolumns] <- lapply(out[!rawcolumns], unlist)
+  out
+}
+
+# Get basename without extension from URL
+basenameSansExtFromUrl <- function(url) {
+  # split by '/'
+  splits <- unlist(strsplit(url, "^.+/"))
+  last <- tail(splits, 1)
+  # this is from file_path_sans_ext
+  # first, remove any compression extension
+  filename <- sub("[.](gz|bz2|xz)$", "", last)
+  # then, strip extension by the last '.'
+  sub("([^.]+)\\.[[:alnum:]]+$", "\\1", filename)
+}
+
+isAtomicLengthOne <- function(x) {
+  is.atomic(x) && length(x) == 1
+}
+
+is_cran <- function() {
+  !identical(Sys.getenv("NOT_CRAN"), "true")
+}
+
+is_windows <- function() {
+  .Platform$OS.type == "windows"
+}
+
+hadoop_home_set <- function() {
+  !identical(Sys.getenv("HADOOP_HOME"), "")
+}
+
+not_cran_or_windows_with_hadoop <- function() {
+  !is_cran() && (!is_windows() || hadoop_home_set())
 }

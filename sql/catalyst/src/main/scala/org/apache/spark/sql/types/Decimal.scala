@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{MathContext, RoundingMode}
+import java.lang.{Long => JLong}
+import java.math.{BigInteger, MathContext, RoundingMode}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.sql.AnalysisException
 
 /**
  * A mutable implementation of BigDecimal that can hold a Long if values are small enough.
@@ -29,6 +31,7 @@ import org.apache.spark.annotation.DeveloperApi
  * - If decimalVal is set, it represents the whole decimal value
  * - Otherwise, the decimal value is longVal / (10 ** _scale)
  */
+@InterfaceStability.Unstable
 final class Decimal extends Ordered[Decimal] with Serializable {
   import org.apache.spark.sql.types.Decimal._
 
@@ -129,6 +132,25 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
+   * If the value is not in the range of long, convert it to BigDecimal and
+   * the precision and scale are based on the converted value.
+   *
+   * This code avoids BigDecimal object allocation as possible to improve runtime efficiency
+   */
+  def set(bigintval: BigInteger): Decimal = {
+    try {
+      this.decimalVal = null
+      this.longVal = bigintval.longValueExact()
+      this._precision = DecimalType.MAX_PRECISION
+      this._scale = 0
+      this
+    } catch {
+      case _: ArithmeticException =>
+        set(BigDecimal(bigintval))
+    }
+  }
+
+  /**
    * Set this Decimal to the given Decimal value.
    */
   def set(decimal: Decimal): Decimal = {
@@ -155,9 +177,13 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
+  def toScalaBigInt: BigInt = BigInt(toLong)
+
+  def toJavaBigInteger: java.math.BigInteger = java.math.BigInteger.valueOf(toLong)
+
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {
-      decimalVal.underlying().unscaledValue().longValue()
+      decimalVal.underlying().unscaledValue().longValueExact()
     } else {
       longVal
     }
@@ -165,7 +191,6 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   override def toString: String = toBigDecimal.toString()
 
-  @DeveloperApi
   def toDebugString: String = {
     if (decimalVal.ne(null)) {
       s"Decimal(expanded,$decimalVal,$precision,$scale})"
@@ -207,6 +232,19 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
+   * Create new `Decimal` with given precision and scale.
+   *
+   * @return `Some(decimal)` if successful or `None` if overflow would occur
+   */
+  private[sql] def toPrecision(
+      precision: Int,
+      scale: Int,
+      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP): Option[Decimal] = {
+    val copy = clone()
+    if (copy.changePrecision(precision, scale, roundMode)) Some(copy) else None
+  }
+
+  /**
    * Update precision and scale while keeping our value the same, and return true if successful.
    *
    * @return true if successful, false if overflow would occur
@@ -222,10 +260,30 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (scale < _scale) {
         // Easier case: we just need to divide our scale down
         val diff = _scale - scale
-        val droppedDigits = longVal % POW_10(diff)
-        longVal /= POW_10(diff)
-        if (math.abs(droppedDigits) * 2 >= POW_10(diff)) {
-          longVal += (if (longVal < 0) -1L else 1L)
+        val pow10diff = POW_10(diff)
+        // % and / always round to 0
+        val droppedDigits = longVal % pow10diff
+        longVal /= pow10diff
+        roundMode match {
+          case ROUND_FLOOR =>
+            if (droppedDigits < 0) {
+              longVal += -1L
+            }
+          case ROUND_CEILING =>
+            if (droppedDigits > 0) {
+              longVal += 1L
+            }
+          case ROUND_HALF_UP =>
+            if (math.abs(droppedDigits) * 2 >= pow10diff) {
+              longVal += (if (droppedDigits < 0) -1L else 1L)
+            }
+          case ROUND_HALF_EVEN =>
+            val doubled = math.abs(droppedDigits) * 2
+            if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
+              longVal += (if (droppedDigits < 0) -1L else 1L)
+            }
+          case _ =>
+            sys.error(s"Not supported rounding mode: $roundMode")
         }
       } else if (scale > _scale) {
         // We might be able to multiply longVal by a power of 10 and not overflow, but if not,
@@ -302,7 +360,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  // HiveTypeCoercion will take care of the precision, scale of result
+  // TypeCoercion will take care of the precision, scale of result
   def * (that: Decimal): Decimal =
     Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
 
@@ -326,27 +384,26 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def abs: Decimal = if (this.compare(Decimal.ZERO) < 0) this.unary_- else this
 
   def floor: Decimal = if (scale == 0) this else {
-    val value = this.clone()
-    value.changePrecision(
-      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_FLOOR)
-    value
+    val newPrecision = DecimalType.bounded(precision - scale + 1, 0).precision
+    toPrecision(newPrecision, 0, ROUND_FLOOR).getOrElse(
+      throw new AnalysisException(s"Overflow when setting precision to $newPrecision"))
   }
 
   def ceil: Decimal = if (scale == 0) this else {
-    val value = this.clone()
-    value.changePrecision(
-      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_CEILING)
-    value
+    val newPrecision = DecimalType.bounded(precision - scale + 1, 0).precision
+    toPrecision(newPrecision, 0, ROUND_CEILING).getOrElse(
+      throw new AnalysisException(s"Overflow when setting precision to $newPrecision"))
   }
 }
 
+@InterfaceStability.Unstable
 object Decimal {
   val ROUND_HALF_UP = BigDecimal.RoundingMode.HALF_UP
   val ROUND_HALF_EVEN = BigDecimal.RoundingMode.HALF_EVEN
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
 
-  /** Maximum number of decimal digits a Int can represent */
+  /** Maximum number of decimal digits an Int can represent */
   val MAX_INT_DIGITS = 9
 
   /** Maximum number of decimal digits a Long can represent */
@@ -361,6 +418,9 @@ object Decimal {
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
 
+  private val LONG_MAX_BIG_INT = BigInteger.valueOf(JLong.MAX_VALUE)
+  private val LONG_MIN_BIG_INT = BigInteger.valueOf(JLong.MIN_VALUE)
+
   def apply(value: Double): Decimal = new Decimal().set(value)
 
   def apply(value: Long): Decimal = new Decimal().set(value)
@@ -370,6 +430,10 @@ object Decimal {
   def apply(value: BigDecimal): Decimal = new Decimal().set(value)
 
   def apply(value: java.math.BigDecimal): Decimal = new Decimal().set(value)
+
+  def apply(value: java.math.BigInteger): Decimal = new Decimal().set(value)
+
+  def apply(value: scala.math.BigInt): Decimal = new Decimal().set(value.bigInteger)
 
   def apply(value: BigDecimal, precision: Int, scale: Int): Decimal =
     new Decimal().set(value, precision, scale)
@@ -387,6 +451,8 @@ object Decimal {
     value match {
       case j: java.math.BigDecimal => apply(j)
       case d: BigDecimal => apply(d)
+      case k: scala.math.BigInt => apply(k)
+      case l: java.math.BigInteger => apply(l)
       case d: Decimal => d
     }
   }

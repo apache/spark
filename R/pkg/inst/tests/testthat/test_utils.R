@@ -18,12 +18,14 @@
 context("functions in utils.R")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("convertJListToRList() gives back (deserializes) the original JLists
           of strings and integers", {
+  skip_on_cran()
   # It's hard to manually create a Java List using rJava, since it does not
-  # support generics well. Instead, we rely on collect() returning a
+  # support generics well. Instead, we rely on collectRDD() returning a
   # JList.
   nums <- as.list(1:10)
   rdd <- parallelize(sc, nums, 1L)
@@ -39,6 +41,7 @@ test_that("convertJListToRList() gives back (deserializes) the original JLists
 })
 
 test_that("serializeToBytes on RDD", {
+  skip_on_cran()
   # File content
   mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
@@ -47,7 +50,7 @@ test_that("serializeToBytes on RDD", {
   text.rdd <- textFile(sc, fileName)
   expect_equal(getSerializedMode(text.rdd), "string")
   ser.rdd <- serializeToBytes(text.rdd)
-  expect_equal(collect(ser.rdd), as.list(mockFile))
+  expect_equal(collectRDD(ser.rdd), as.list(mockFile))
   expect_equal(getSerializedMode(ser.rdd), "byte")
 
   unlink(fileName)
@@ -127,13 +130,13 @@ test_that("cleanClosure on R functions", {
   env <- environment(newF)
   expect_equal(ls(env), "t")
   expect_equal(get("t", envir = env, inherits = FALSE), t)
-  actual <- collect(lapply(rdd, f))
+  actual <- collectRDD(lapply(rdd, f))
   expected <- as.list(c(rep(FALSE, 4), rep(TRUE, 6)))
   expect_equal(actual, expected)
 
   # Test for broadcast variables.
   a <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
-  aBroadcast <- broadcast(sc, a)
+  aBroadcast <- broadcastRDD(sc, a)
   normMultiply <- function(x) { norm(aBroadcast$value) * x }
   newnormMultiply <- SparkR:::cleanClosure(normMultiply)
   env <- environment(newnormMultiply)
@@ -165,6 +168,81 @@ test_that("convertToJSaveMode", {
     'mode should be one of "append", "overwrite", "error", "ignore"') #nolint
 })
 
+test_that("captureJVMException", {
+  skip_on_cran()
+
+  method <- "createStructField"
+  expect_error(tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", method,
+                                    "col", "unknown", TRUE),
+                        error = function(e) {
+                          captureJVMException(e, method)
+                        }),
+               "parse error - .*DataType unknown.*not supported.")
+})
+
 test_that("hashCode", {
+  skip_on_cran()
+
   expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
 })
+
+test_that("overrideEnvs", {
+  config <- new.env()
+  config[["spark.master"]] <- "foo"
+  config[["config_only"]] <- "ok"
+  param <- new.env()
+  param[["spark.master"]] <- "local"
+  param[["param_only"]] <- "blah"
+  overrideEnvs(config, param)
+  expect_equal(config[["spark.master"]], "local")
+  expect_equal(config[["param_only"]], "blah")
+  expect_equal(config[["config_only"]], "ok")
+})
+
+test_that("rbindRaws", {
+
+  # Mixed Column types
+  r <- serialize(1:5, connection = NULL)
+  r1 <- serialize(1, connection = NULL)
+  r2 <- serialize(letters, connection = NULL)
+  r3 <- serialize(1:10, connection = NULL)
+  inputData <- list(list(1L, r1, "a", r), list(2L, r2, "b", r),
+                    list(3L, r3, "c", r))
+  expected <- data.frame(V1 = 1:3)
+  expected$V2 <- list(r1, r2, r3)
+  expected$V3 <- c("a", "b", "c")
+  expected$V4 <- list(r, r, r)
+  result <- rbindRaws(inputData)
+  expect_equal(expected, result)
+
+  # Single binary column
+  input <- list(list(r1), list(r2), list(r3))
+  expected <- subset(expected, select = "V2")
+  result <- setNames(rbindRaws(input), "V2")
+  expect_equal(expected, result)
+
+})
+
+test_that("varargsToStrEnv", {
+  strenv <- varargsToStrEnv(a = 1, b = 1.1, c = TRUE, d = "abcd")
+  env <- varargsToEnv(a = "1", b = "1.1", c = "true", d = "abcd")
+  expect_equal(strenv, env)
+  expect_error(varargsToStrEnv(a = list(1, "a")),
+               paste0("Unsupported type for a : list. Supported types are logical, ",
+                      "numeric, character and NULL."))
+  expect_warning(varargsToStrEnv(a = 1, 2, 3, 4), "Unnamed arguments ignored: 2, 3, 4.")
+  expect_warning(varargsToStrEnv(1, 2, 3, 4), "Unnamed arguments ignored: 1, 2, 3, 4.")
+})
+
+test_that("basenameSansExtFromUrl", {
+  x <- paste0("http://people.apache.org/~pwendell/spark-nightly/spark-branch-2.1-bin/spark-2.1.1-",
+              "SNAPSHOT-2016_12_09_11_08-eb2d9bf-bin/spark-2.1.1-SNAPSHOT-bin-hadoop2.7.tgz")
+  expect_equal(basenameSansExtFromUrl(x), "spark-2.1.1-SNAPSHOT-bin-hadoop2.7")
+  z <- "http://people.apache.org/~pwendell/spark-releases/spark-2.1.0--hive.tar.gz"
+  expect_equal(basenameSansExtFromUrl(z), "spark-2.1.0--hive")
+})
+
+sparkR.session.stop()
+
+message("--- End test (utils) ", as.POSIXct(Sys.time(), tz = "GMT"))
+message("elapsed ", (proc.time() - timer_ptm)[3])

@@ -24,16 +24,21 @@ import org.apache.spark.ml.recommendation.ALS
 // $example off$
 import org.apache.spark.sql.SparkSession
 
+/**
+ * An example demonstrating ALS.
+ * Run with
+ * {{{
+ * bin/run-example ml.ALSExample
+ * }}}
+ */
 object ALSExample {
 
   // $example on$
   case class Rating(userId: Int, movieId: Int, rating: Float, timestamp: Long)
-  object Rating {
-    def parseRating(str: String): Rating = {
-      val fields = str.split("::")
-      assert(fields.size == 4)
-      Rating(fields(0).toInt, fields(1).toInt, fields(2).toFloat, fields(3).toLong)
-    }
+  def parseRating(str: String): Rating = {
+    val fields = str.split("::")
+    assert(fields.size == 4)
+    Rating(fields(0).toInt, fields(1).toInt, fields(2).toFloat, fields(3).toLong)
   }
   // $example off$
 
@@ -45,8 +50,8 @@ object ALSExample {
     import spark.implicits._
 
     // $example on$
-    val ratings = spark.read.text("data/mllib/als/sample_movielens_ratings.txt")
-      .map(Rating.parseRating)
+    val ratings = spark.read.textFile("data/mllib/als/sample_movielens_ratings.txt")
+      .map(parseRating)
       .toDF()
     val Array(training, test) = ratings.randomSplit(Array(0.8, 0.2))
 
@@ -60,6 +65,8 @@ object ALSExample {
     val model = als.fit(training)
 
     // Evaluate the model by computing the RMSE on the test data
+    // Note we set cold start strategy to 'drop' to ensure we don't get NaN evaluation metrics
+    model.setColdStartStrategy("drop")
     val predictions = model.transform(test)
 
     val evaluator = new RegressionEvaluator()
@@ -68,7 +75,14 @@ object ALSExample {
       .setPredictionCol("prediction")
     val rmse = evaluator.evaluate(predictions)
     println(s"Root-mean-square error = $rmse")
+
+    // Generate top 10 movie recommendations for each user
+    val userRecs = model.recommendForAllUsers(10)
+    // Generate top 10 user recommendations for each movie
+    val movieRecs = model.recommendForAllItems(10)
     // $example off$
+    userRecs.show()
+    movieRecs.show()
 
     spark.stop()
   }

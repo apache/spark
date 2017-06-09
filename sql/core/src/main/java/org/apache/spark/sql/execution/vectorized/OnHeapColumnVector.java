@@ -158,7 +158,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return byteData[rowId];
     } else {
-      return (byte) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -188,7 +188,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return shortData[rowId];
     } else {
-      return (short) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -230,8 +230,19 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return intData[rowId];
     } else {
-      return dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  /**
+   * Returns the dictionary Id for rowId.
+   * This should only be called when the ColumnVector is dictionaryIds.
+   * We have this separate method for dictionaryIds as per SPARK-16928.
+   */
+  public int getDictId(int rowId) {
+    assert(dictionary == null)
+            : "A ColumnVector dictionary should not have a dictionary for itself.";
+    return intData[rowId];
   }
 
   //
@@ -271,7 +282,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return longData[rowId];
     } else {
-      return dictionary.decodeToLong(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToLong(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -310,7 +321,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return floatData[rowId];
     } else {
-      return dictionary.decodeToFloat(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -351,7 +362,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return doubleData[rowId];
     } else {
-      return dictionary.decodeToDouble(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToDouble(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -392,64 +403,60 @@ public final class OnHeapColumnVector extends ColumnVector {
     return result;
   }
 
-  @Override
-  public void reserve(int requiredCapacity) {
-    if (requiredCapacity > capacity) reserveInternal(requiredCapacity * 2);
-  }
-
   // Spilt this function out since it is the slow path.
-  private void reserveInternal(int newCapacity) {
+  @Override
+  protected void reserveInternal(int newCapacity) {
     if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
       if (this.arrayLengths != null) {
-        System.arraycopy(this.arrayLengths, 0, newLengths, 0, elementsAppended);
-        System.arraycopy(this.arrayOffsets, 0, newOffsets, 0, elementsAppended);
+        System.arraycopy(this.arrayLengths, 0, newLengths, 0, capacity);
+        System.arraycopy(this.arrayOffsets, 0, newOffsets, 0, capacity);
       }
       arrayLengths = newLengths;
       arrayOffsets = newOffsets;
     } else if (type instanceof BooleanType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];
-        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, elementsAppended);
+        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, capacity);
         byteData = newData;
       }
     } else if (type instanceof ByteType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];
-        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, elementsAppended);
+        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, capacity);
         byteData = newData;
       }
     } else if (type instanceof ShortType) {
       if (shortData == null || shortData.length < newCapacity) {
         short[] newData = new short[newCapacity];
-        if (shortData != null) System.arraycopy(shortData, 0, newData, 0, elementsAppended);
+        if (shortData != null) System.arraycopy(shortData, 0, newData, 0, capacity);
         shortData = newData;
       }
     } else if (type instanceof IntegerType || type instanceof DateType ||
       DecimalType.is32BitDecimalType(type)) {
       if (intData == null || intData.length < newCapacity) {
         int[] newData = new int[newCapacity];
-        if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
+        if (intData != null) System.arraycopy(intData, 0, newData, 0, capacity);
         intData = newData;
       }
     } else if (type instanceof LongType || type instanceof TimestampType ||
         DecimalType.is64BitDecimalType(type)) {
       if (longData == null || longData.length < newCapacity) {
         long[] newData = new long[newCapacity];
-        if (longData != null) System.arraycopy(longData, 0, newData, 0, elementsAppended);
+        if (longData != null) System.arraycopy(longData, 0, newData, 0, capacity);
         longData = newData;
       }
     } else if (type instanceof FloatType) {
       if (floatData == null || floatData.length < newCapacity) {
         float[] newData = new float[newCapacity];
-        if (floatData != null) System.arraycopy(floatData, 0, newData, 0, elementsAppended);
+        if (floatData != null) System.arraycopy(floatData, 0, newData, 0, capacity);
         floatData = newData;
       }
     } else if (type instanceof DoubleType) {
       if (doubleData == null || doubleData.length < newCapacity) {
         double[] newData = new double[newCapacity];
-        if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, elementsAppended);
+        if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, capacity);
         doubleData = newData;
       }
     } else if (resultStruct != null) {
@@ -459,7 +466,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
 
     byte[] newNulls = new byte[newCapacity];
-    if (nulls != null) System.arraycopy(nulls, 0, newNulls, 0, elementsAppended);
+    if (nulls != null) System.arraycopy(nulls, 0, newNulls, 0, capacity);
     nulls = newNulls;
 
     capacity = newCapacity;

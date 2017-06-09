@@ -20,16 +20,17 @@ package org.apache.spark.sql.hive.execution
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.StringType
 
 class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   private val noSerdeIOSchema = HiveScriptIOSchema(
     inputRowFormat = Seq.empty,
@@ -49,10 +50,12 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   )
 
   test("cat without SerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new ScriptTransformation(
+      (child: SparkPlan) => new ScriptTransformationExec(
         input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
@@ -63,10 +66,12 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   }
 
   test("cat with LazySimpleSerDe") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     checkAnswer(
       rowsDf,
-      (child: SparkPlan) => new ScriptTransformation(
+      (child: SparkPlan) => new ScriptTransformationExec(
         input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
@@ -77,11 +82,13 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   }
 
   test("script transformation should not swallow errors from upstream operators (no serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
-        (child: SparkPlan) => new ScriptTransformation(
+        (child: SparkPlan) => new ScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
@@ -94,11 +101,13 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   }
 
   test("script transformation should not swallow errors from upstream operators (with serde)") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
     val e = intercept[TestFailedException] {
       checkAnswer(
         rowsDf,
-        (child: SparkPlan) => new ScriptTransformation(
+        (child: SparkPlan) => new ScriptTransformationExec(
           input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
@@ -108,6 +117,24 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         rowsDf.collect())
     }
     assert(e.getMessage().contains("intentional exception"))
+  }
+
+  test("SPARK-14400 script transformation should fail for bad script command") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+
+    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+
+    val e = intercept[SparkException] {
+      val plan =
+        new ScriptTransformationExec(
+          input = Seq(rowsDf.col("a").expr),
+          script = "some_non_existent_command",
+          output = Seq(AttributeReference("a", StringType)()),
+          child = rowsDf.queryExecution.sparkPlan,
+          ioschema = serdeIOSchema)
+      SparkPlanTest.executePlan(plan, hiveContext)
+    }
+    assert(e.getMessage.contains("Subprocess exited with status"))
   }
 }
 
@@ -119,5 +146,8 @@ private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExe
       throw new IllegalArgumentException("intentional exception")
     }
   }
+
   override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }

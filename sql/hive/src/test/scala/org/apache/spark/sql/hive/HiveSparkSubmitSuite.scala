@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
+import java.io.{BufferedWriter, File, FileWriter}
 import java.sql.Timestamp
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 import scala.tools.nsc.Properties
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
@@ -31,13 +32,14 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, JarResource}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
@@ -152,7 +154,8 @@ class HiveSparkSubmitSuite
       case v if v.startsWith("2.10") || v.startsWith("2.11") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
-    val testJar = s"sql/hive/src/test/resources/regression-test-SPARK-8489/test-$version.jar"
+    val jarDir = getTestResourcePath("regression-test-SPARK-8489")
+    val testJar = s"$jarDir/test-$version.jar"
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
@@ -205,7 +208,7 @@ class HiveSparkSubmitSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
-      "--name", "SetWarehouseLocationTest",
+      "--name", "SetSparkWarehouseLocationTest",
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
@@ -214,12 +217,135 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("set hive.metastore.warehouse.dir") {
+    // In this test, we set hive.metastore.warehouse.dir in hive-site.xml but
+    // not set spark.sql.warehouse.dir. So, the warehouse dir should be
+    // the value of hive.metastore.warehouse.dir. Also, the value of
+    // spark.sql.warehouse.dir should be set to the value of hive.metastore.warehouse.dir.
+
+    val hiveWarehouseLocation = Utils.createTempDir()
+    hiveWarehouseLocation.delete()
+    val hiveSiteXmlContent =
+      s"""
+         |<configuration>
+         |  <property>
+         |    <name>hive.metastore.warehouse.dir</name>
+         |    <value>$hiveWarehouseLocation</value>
+         |  </property>
+         |</configuration>
+     """.stripMargin
+
+    // Write a hive-site.xml containing a setting of hive.metastore.warehouse.dir.
+    val hiveSiteDir = Utils.createTempDir()
+    val file = new File(hiveSiteDir.getCanonicalPath, "hive-site.xml")
+    val bw = new BufferedWriter(new FileWriter(file))
+    bw.write(hiveSiteXmlContent)
+    bw.close()
+
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
+      "--name", "SetHiveWarehouseLocationTest",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--conf", s"spark.sql.test.expectedWarehouseDir=$hiveWarehouseLocation",
+      "--conf", s"spark.driver.extraClassPath=${hiveSiteDir.getCanonicalPath}",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
+  test("SPARK-16901: set javax.jdo.option.ConnectionURL") {
+    // In this test, we set javax.jdo.option.ConnectionURL and set metastore version to
+    // 0.13. This test will make sure that javax.jdo.option.ConnectionURL will not be
+    // overridden by hive's default settings when we create a HiveConf object inside
+    // HiveClientImpl. Please see SPARK-16901 for more details.
+
+    val metastoreLocation = Utils.createTempDir()
+    metastoreLocation.delete()
+    val metastoreURL =
+      s"jdbc:derby:memory:;databaseName=${metastoreLocation.getAbsolutePath};create=true"
+    val hiveSiteXmlContent =
+      s"""
+         |<configuration>
+         |  <property>
+         |    <name>javax.jdo.option.ConnectionURL</name>
+         |    <value>$metastoreURL</value>
+         |  </property>
+         |</configuration>
+     """.stripMargin
+
+    // Write a hive-site.xml containing a setting of hive.metastore.warehouse.dir.
+    val hiveSiteDir = Utils.createTempDir()
+    val file = new File(hiveSiteDir.getCanonicalPath, "hive-site.xml")
+    val bw = new BufferedWriter(new FileWriter(file))
+    bw.write(hiveSiteXmlContent)
+    bw.close()
+
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SetMetastoreURLTest.getClass.getName.stripSuffix("$"),
+      "--name", "SetMetastoreURLTest",
+      "--master", "local[1]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--conf", s"spark.sql.test.expectedMetastoreURL=$metastoreURL",
+      "--conf", s"spark.driver.extraClassPath=${hiveSiteDir.getCanonicalPath}",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
+  test("SPARK-18360: default table path of tables in default database should depend on the " +
+    "location of default database") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SPARK_18360.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-18360",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
+  test("SPARK-18989: DESC TABLE should not fail with format class not found") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+
+    val argsForCreateTable = Seq(
+      "--class", SPARK_18989_CREATE_TABLE.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-18947",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--jars", TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath,
+      unusedJar.toString)
+    runSparkSubmit(argsForCreateTable)
+
+    val argsForShowTables = Seq(
+      "--class", SPARK_18989_DESC_TABLE.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-18947",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      unusedJar.toString)
+    runSparkSubmit(argsForShowTables)
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val history = ArrayBuffer.empty[String]
-    val commands = Seq("./bin/spark-submit") ++ args
+    val sparkSubmit = if (Utils.isWindows) {
+      // On Windows, `ProcessBuilder.directory` does not change the current working directory.
+      new File("..\\..\\bin\\spark-submit.cmd").getAbsolutePath
+    } else {
+      "./bin/spark-submit"
+    }
+    val commands = Seq(sparkSubmit) ++ args
     val commandLine = commands.mkString("'", "' '", "'")
 
     val builder = new ProcessBuilder(commands: _*).directory(new File(sparkHome))
@@ -274,25 +400,80 @@ class HiveSparkSubmitSuite
   }
 }
 
+object SetMetastoreURLTest extends Logging {
+  def main(args: Array[String]): Unit = {
+    Utils.configTestLog4j("INFO")
+
+    val sparkConf = new SparkConf(loadDefaults = true)
+    val builder = SparkSession.builder()
+      .config(sparkConf)
+      .config("spark.ui.enabled", "false")
+      .config("spark.sql.hive.metastore.version", "0.13.1")
+      // The issue described in SPARK-16901 only appear when
+      // spark.sql.hive.metastore.jars is not set to builtin.
+      .config("spark.sql.hive.metastore.jars", "maven")
+      .enableHiveSupport()
+
+    val spark = builder.getOrCreate()
+    val expectedMetastoreURL =
+      spark.conf.get("spark.sql.test.expectedMetastoreURL")
+    logInfo(s"spark.sql.test.expectedMetastoreURL is $expectedMetastoreURL")
+
+    if (expectedMetastoreURL == null) {
+      throw new Exception(
+        s"spark.sql.test.expectedMetastoreURL should be set.")
+    }
+
+    // HiveExternalCatalog is used when Hive support is enabled.
+    val actualMetastoreURL =
+      spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+        .getConf("javax.jdo.option.ConnectionURL", "this_is_a_wrong_URL")
+    logInfo(s"javax.jdo.option.ConnectionURL is $actualMetastoreURL")
+
+    if (actualMetastoreURL != expectedMetastoreURL) {
+      throw new Exception(
+        s"Expected value of javax.jdo.option.ConnectionURL is $expectedMetastoreURL. But, " +
+          s"the actual value is $actualMetastoreURL")
+    }
+  }
+}
+
 object SetWarehouseLocationTest extends Logging {
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
-    val warehouseLocation = Utils.createTempDir()
-    warehouseLocation.delete()
-    val hiveWarehouseLocation = Utils.createTempDir()
-    hiveWarehouseLocation.delete()
 
-    val conf = new SparkConf()
-    conf.set("spark.ui.enabled", "false")
-    // We will use the value of spark.sql.warehouse.dir override the
-    // value of hive.metastore.warehouse.dir.
-    conf.set("spark.sql.warehouse.dir", warehouseLocation.toString)
-    conf.set("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)
+    val sparkConf = new SparkConf(loadDefaults = true).set("spark.ui.enabled", "false")
+    val providedExpectedWarehouseLocation =
+      sparkConf.getOption("spark.sql.test.expectedWarehouseDir")
 
-    val sparkSession = SparkSession.builder
-      .config(conf)
-      .enableHiveSupport()
-      .getOrCreate()
+    val (sparkSession, expectedWarehouseLocation) = providedExpectedWarehouseLocation match {
+      case Some(warehouseDir) =>
+        // If spark.sql.test.expectedWarehouseDir is set, the warehouse dir is set
+        // through spark-summit. So, neither spark.sql.warehouse.dir nor
+        // hive.metastore.warehouse.dir is set at here.
+        (new TestHiveContext(new SparkContext(sparkConf)).sparkSession, warehouseDir)
+      case None =>
+        val warehouseLocation = Utils.createTempDir()
+        warehouseLocation.delete()
+        val hiveWarehouseLocation = Utils.createTempDir()
+        hiveWarehouseLocation.delete()
+        // If spark.sql.test.expectedWarehouseDir is not set, we will set
+        // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
+        // We are expecting that the value of spark.sql.warehouse.dir will override the
+        // value of hive.metastore.warehouse.dir.
+        val session = new TestHiveContext(new SparkContext(sparkConf
+          .set("spark.sql.warehouse.dir", warehouseLocation.toString)
+          .set("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)))
+          .sparkSession
+        (session, warehouseLocation.toString)
+
+    }
+
+    if (sparkSession.conf.get("spark.sql.warehouse.dir") != expectedWarehouseLocation) {
+      throw new Exception(
+        "spark.sql.warehouse.dir is not set to the expected warehouse location " +
+        s"$expectedWarehouseLocation.")
+    }
 
     val catalog = sparkSession.sessionState.catalog
 
@@ -304,8 +485,8 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
-        "file:" + warehouseLocation.toString + "/testlocation"
-      val actualLocation = tableMetadata.storage.locationUri.get
+        CatalogUtils.stringToURI(s"file:${expectedWarehouseLocation.toString}/testlocation")
+      val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
           s"Expected table location is $expectedLocation. But, it is actually $actualLocation")
@@ -319,9 +500,9 @@ object SetWarehouseLocationTest extends Logging {
       sparkSession.sql("create table testLocation (a int)")
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
-      val expectedLocation =
-        "file:" + warehouseLocation.toString + "/testlocationdb.db/testlocation"
-      val actualLocation = tableMetadata.storage.locationUri.get
+      val expectedLocation = CatalogUtils.stringToURI(
+        s"file:${expectedWarehouseLocation.toString}/testlocationdb.db/testlocation")
+      val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
           s"Expected table location is $expectedLocation. But, it is actually $actualLocation")
@@ -355,7 +536,7 @@ object TemporaryHiveUDFTest extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -393,7 +574,7 @@ object PermanentHiveUDFTest1 extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -429,7 +610,7 @@ object PermanentHiveUDFTest2 extends Logging {
     hiveContext.sessionState.catalog.createFunction(function, ignoreIfExists = false)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -451,7 +632,9 @@ object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]) {
     Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
+    val hiveWarehouseLocation = Utils.createTempDir()
     conf.set("spark.ui.enabled", "false")
+    conf.set("spark.sql.warehouse.dir", hiveWarehouseLocation.toString)
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
@@ -491,7 +674,7 @@ object SparkSubmitClassLoaderTest extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Load a Hive SerDe from the jar.
     logInfo("Creating a Hive table with a SerDe provided in a jar.")
     hiveContext.sql(
@@ -560,11 +743,13 @@ object SPARK_9757 extends QueryTest {
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
+    val hiveWarehouseLocation = Utils.createTempDir()
     val sparkContext = new SparkContext(
       new SparkConf()
         .set("spark.sql.hive.metastore.version", "0.13.1")
         .set("spark.sql.hive.metastore.jars", "maven")
-        .set("spark.ui.enabled", "false"))
+        .set("spark.ui.enabled", "false")
+        .set("spark.sql.warehouse.dir", hiveWarehouseLocation.toString))
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
@@ -654,6 +839,71 @@ object SPARK_14244 extends QueryTest {
       checkAnswer(df, Seq(Row(0.5D), Row(1.0D)))
     } finally {
       sparkContext.stop()
+    }
+  }
+}
+
+object SPARK_18360 {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder()
+      .config("spark.ui.enabled", "false")
+      .enableHiveSupport().getOrCreate()
+
+    val defaultDbLocation = spark.catalog.getDatabase("default").locationUri
+    assert(new Path(defaultDbLocation) == new Path(spark.sharedState.warehousePath))
+
+    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+
+    try {
+      val tableMeta = CatalogTable(
+        identifier = TableIdentifier("test_tbl", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("i", "int"),
+        provider = Some(DDLUtils.HIVE_PROVIDER))
+
+      val newWarehousePath = Utils.createTempDir().getAbsolutePath
+      hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$newWarehousePath")
+      hiveClient.createTable(tableMeta, ignoreIfExists = false)
+      val rawTable = hiveClient.getTable("default", "test_tbl")
+      // Hive will use the value of `hive.metastore.warehouse.dir` to generate default table
+      // location for tables in default database.
+      assert(rawTable.storage.locationUri.map(
+        CatalogUtils.URIToString(_)).get.contains(newWarehousePath))
+      hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = false, purge = false)
+
+      spark.sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
+      val readBack = spark.sharedState.externalCatalog.getTable("default", "test_tbl")
+      // Spark SQL will use the location of default database to generate default table
+      // location for tables in default database.
+      assert(readBack.storage.locationUri.map(CatalogUtils.URIToString(_))
+        .get.contains(defaultDbLocation))
+    } finally {
+      hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = true, purge = false)
+      hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$defaultDbLocation")
+    }
+  }
+}
+
+object SPARK_18989_CREATE_TABLE {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    spark.sql(
+      """
+        |CREATE TABLE IF NOT EXISTS base64_tbl(val string) STORED AS
+        |INPUTFORMAT 'org.apache.hadoop.hive.contrib.fileformat.base64.Base64TextInputFormat'
+        |OUTPUTFORMAT 'org.apache.hadoop.hive.contrib.fileformat.base64.Base64TextOutputFormat'
+      """.stripMargin)
+  }
+}
+
+object SPARK_18989_DESC_TABLE {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    try {
+      spark.sql("DESC base64_tbl")
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS base64_tbl")
     }
   }
 }

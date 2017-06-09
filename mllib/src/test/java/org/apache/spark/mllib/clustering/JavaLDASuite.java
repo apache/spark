@@ -17,40 +17,29 @@
 
 package org.apache.spark.mllib.clustering;
 
-import java.io.Serializable;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import scala.Tuple2;
 import scala.Tuple3;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.SparkSession;
 
-public class JavaLDASuite implements Serializable {
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaLDASuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-
-    ArrayList<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<>();
+public class JavaLDASuite extends SharedSparkSession {
+  @Override
+  public void setUp() throws IOException {
+    super.setUp();
+    List<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<>();
     for (int i = 0; i < LDASuite.tinyCorpus().length; i++) {
       tinyCorpus.add(new Tuple2<>((Long) LDASuite.tinyCorpus()[i]._1(),
         LDASuite.tinyCorpus()[i]._2()));
@@ -59,18 +48,12 @@ public class JavaLDASuite implements Serializable {
     corpus = JavaPairRDD.fromJavaRDD(tmpCorpus);
   }
 
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
-
   @Test
   public void localLDAModel() {
     Matrix topics = LDASuite.tinyTopics();
     double[] topicConcentration = new double[topics.numRows()];
     Arrays.fill(topicConcentration, 1.0D / topics.numRows());
-    LocalLDAModel model = new LocalLDAModel(topics, Vectors.dense(topicConcentration), 1D, 100D);
+    LocalLDAModel model = new LocalLDAModel(topics, Vectors.dense(topicConcentration), 1.0, 100.0);
 
     // Check: basic parameters
     assertEquals(model.k(), tinyK);
@@ -104,17 +87,17 @@ public class JavaLDASuite implements Serializable {
 
     // Check: basic parameters
     LocalLDAModel localModel = model.toLocal();
-    assertEquals(model.k(), k);
-    assertEquals(localModel.k(), k);
-    assertEquals(model.vocabSize(), tinyVocabSize);
-    assertEquals(localModel.vocabSize(), tinyVocabSize);
-    assertEquals(model.topicsMatrix(), localModel.topicsMatrix());
+    assertEquals(k, model.k());
+    assertEquals(k, localModel.k());
+    assertEquals(tinyVocabSize, model.vocabSize());
+    assertEquals(tinyVocabSize, localModel.vocabSize());
+    assertEquals(localModel.topicsMatrix(), model.topicsMatrix());
 
     // Check: topic summaries
     Tuple2<int[], double[]>[] roundedTopicSummary = model.describeTopics();
-    assertEquals(roundedTopicSummary.length, k);
+    assertEquals(k, roundedTopicSummary.length);
     Tuple2<int[], double[]>[] roundedLocalTopicSummary = localModel.describeTopics();
-    assertEquals(roundedLocalTopicSummary.length, k);
+    assertEquals(k, roundedLocalTopicSummary.length);
 
     // Check: log probabilities
     assertTrue(model.logLikelihood() < 0.0);
@@ -124,12 +107,8 @@ public class JavaLDASuite implements Serializable {
     JavaPairRDD<Long, Vector> topicDistributions = model.javaTopicDistributions();
     // SPARK-5562. since the topicDistribution returns the distribution of the non empty docs
     // over topics. Compare it against nonEmptyCorpus instead of corpus
-    JavaPairRDD<Long, Vector> nonEmptyCorpus = corpus.filter(
-      new Function<Tuple2<Long, Vector>, Boolean>() {
-        public Boolean call(Tuple2<Long, Vector> tuple2) {
-          return Vectors.norm(tuple2._2(), 1.0) != 0.0;
-        }
-      });
+    JavaPairRDD<Long, Vector> nonEmptyCorpus =
+        corpus.filter(tuple2 -> Vectors.norm(tuple2._2(), 1.0) != 0.0);
     assertEquals(topicDistributions.count(), nonEmptyCorpus.count());
 
     // Check: javaTopTopicsPerDocuments
@@ -172,14 +151,14 @@ public class JavaLDASuite implements Serializable {
     LDAModel model = lda.run(corpus);
 
     // Check: basic parameters
-    assertEquals(model.k(), k);
-    assertEquals(model.vocabSize(), tinyVocabSize);
+    assertEquals(k, model.k());
+    assertEquals(tinyVocabSize, model.vocabSize());
 
     // Check: topic summaries
     Tuple2<int[], double[]>[] roundedTopicSummary = model.describeTopics();
-    assertEquals(roundedTopicSummary.length, k);
+    assertEquals(k, roundedTopicSummary.length);
     Tuple2<int[], double[]>[] roundedLocalTopicSummary = model.describeTopics();
-    assertEquals(roundedLocalTopicSummary.length, k);
+    assertEquals(k, roundedLocalTopicSummary.length);
   }
 
   @Test
@@ -194,7 +173,7 @@ public class JavaLDASuite implements Serializable {
     double logPerplexity = toyModel.logPerplexity(pairedDocs);
 
     // check: logLikelihood.
-    ArrayList<Tuple2<Long, Vector>> docsSingleWord = new ArrayList<>();
+    List<Tuple2<Long, Vector>> docsSingleWord = new ArrayList<>();
     docsSingleWord.add(new Tuple2<>(0L, Vectors.dense(1.0, 0.0, 0.0)));
     JavaPairRDD<Long, Vector> single = JavaPairRDD.fromJavaRDD(jsc.parallelize(docsSingleWord));
     double logLikelihood = toyModel.logLikelihood(single);
@@ -207,6 +186,6 @@ public class JavaLDASuite implements Serializable {
     LDASuite.tinyTopicDescription();
   private JavaPairRDD<Long, Vector> corpus;
   private LocalLDAModel toyModel = LDASuite.toyModel();
-  private ArrayList<Tuple2<Long, Vector>> toyData = LDASuite.javaToyData();
+  private List<Tuple2<Long, Vector>> toyData = LDASuite.javaToyData();
 
 }

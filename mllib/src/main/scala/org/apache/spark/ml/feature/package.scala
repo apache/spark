@@ -25,13 +25,13 @@ import org.apache.spark.sql.DataFrame
  *
  * The `ml.feature` package provides common feature transformers that help convert raw data or
  * features into more suitable forms for model fitting.
- * Most feature transformers are implemented as [[Transformer]]s, which transform one [[DataFrame]]
+ * Most feature transformers are implemented as [[Transformer]]s, which transform one `DataFrame`
  * into another, e.g., [[HashingTF]].
  * Some feature transformers are implemented as [[Estimator]]s, because the transformation requires
  * some aggregated information of the dataset, e.g., document frequencies in [[IDF]].
- * For those feature transformers, calling [[Estimator!.fit]] is required to obtain the model first,
+ * For those feature transformers, calling `Estimator.fit` is required to obtain the model first,
  * e.g., [[IDFModel]], in order to apply transformation.
- * The transformation is usually done by appending new columns to the input [[DataFrame]], so all
+ * The transformation is usually done by appending new columns to the input `DataFrame`, so all
  * input columns are carried over.
  *
  * We try to make each transformer minimal, so it becomes flexible to assemble feature
@@ -44,7 +44,7 @@ import org.apache.spark.sql.DataFrame
  *   import org.apache.spark.ml.Pipeline
  *
  *   // a DataFrame with three columns: id (integer), text (string), and rating (double).
- *   val df = sqlContext.createDataFrame(Seq(
+ *   val df = spark.createDataFrame(Seq(
  *     (0, "Hi I heard about Spark", 3.0),
  *     (1, "I wish Java could use case classes", 4.0),
  *     (2, "Logistic regression models are neat", 4.0)
@@ -84,6 +84,7 @@ import org.apache.spark.sql.DataFrame
  * input dataset, while MLlib's feature transformers operate lazily on individual columns,
  * which is more efficient and flexible to handle large and complex datasets.
  *
- * @see [[http://scikit-learn.org/stable/modules/preprocessing.html scikit-learn.preprocessing]]
+ * @see <a href="http://scikit-learn.org/stable/modules/preprocessing.html">
+ * scikit-learn.preprocessing</a>
  */
 package object feature

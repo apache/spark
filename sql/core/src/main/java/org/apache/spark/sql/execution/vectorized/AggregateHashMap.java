@@ -30,7 +30,7 @@ import static org.apache.spark.sql.types.DataTypes.LongType;
  * This is an illustrative implementation of an append-only single-key/single value aggregate hash
  * map that can act as a 'cache' for extremely fast key-value lookups while evaluating aggregates
  * (and fall back to the `BytesToBytesMap` if a given key isn't found). This can be potentially
- * 'codegened' in TungstenAggregate to speed up aggregates w/ key.
+ * 'codegened' in HashAggregate to speed up aggregates w/ key.
  *
  * It is backed by a power-of-2-sized array for index lookups and a columnar batch that stores the
  * key-value pairs. The index lookups in the array rely on linear probing (with a small number of

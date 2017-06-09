@@ -20,7 +20,7 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.feature.DCT
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -45,7 +45,7 @@ object DCTExample {
       .setInverse(false)
 
     val dctDf = dct.transform(df)
-    dctDf.select("featuresDCT").show(3)
+    dctDf.select("featuresDCT").show(false)
     // $example off$
 
     spark.stop()

@@ -18,14 +18,14 @@
 package org.apache.spark.ml.linalg
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
  * User-defined type for [[Vector]] in [[mllib-local]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.Dataset]].
  */
-private[ml] class VectorUDT extends UserDefinedType[Vector] {
+private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {
     // type: 0 = sparse, 1 = dense
@@ -42,14 +42,14 @@ private[ml] class VectorUDT extends UserDefinedType[Vector] {
   override def serialize(obj: Vector): InternalRow = {
     obj match {
       case SparseVector(size, indices, values) =>
-        val row = new GenericMutableRow(4)
+        val row = new GenericInternalRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
         row.update(2, UnsafeArrayData.fromPrimitiveArray(indices))
         row.update(3, UnsafeArrayData.fromPrimitiveArray(values))
         row
       case DenseVector(values) =>
-        val row = new GenericMutableRow(4)
+        val row = new GenericInternalRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)

@@ -63,13 +63,20 @@ class PartitionBatchPruningSuite
       val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
       TestData(key, string)
     }, 5).toDF()
-    pruningData.registerTempTable("pruningData")
+    pruningData.createOrReplaceTempView("pruningData")
     spark.catalog.cacheTable("pruningData")
+
+    val pruningStringData = sparkContext.makeRDD((100 to 200).map { key =>
+      StringData(key.toString)
+    }, 5).toDF()
+    pruningStringData.createOrReplaceTempView("pruningStringData")
+    spark.catalog.cacheTable("pruningStringData")
   }
 
   override protected def afterEach(): Unit = {
     try {
       spark.catalog.uncacheTable("pruningData")
+      spark.catalog.uncacheTable("pruningStringData")
     } finally {
       super.afterEach()
     }
@@ -78,6 +85,8 @@ class PartitionBatchPruningSuite
   // Comparisons
   checkBatchPruning("SELECT key FROM pruningData WHERE key = 1", 1, 1)(Seq(1))
   checkBatchPruning("SELECT key FROM pruningData WHERE 1 = key", 1, 1)(Seq(1))
+  checkBatchPruning("SELECT key FROM pruningData WHERE key <=> 1", 1, 1)(Seq(1))
+  checkBatchPruning("SELECT key FROM pruningData WHERE 1 <=> key", 1, 1)(Seq(1))
   checkBatchPruning("SELECT key FROM pruningData WHERE key < 12", 1, 2)(1 to 11)
   checkBatchPruning("SELECT key FROM pruningData WHERE key <= 11", 1, 2)(1 to 11)
   checkBatchPruning("SELECT key FROM pruningData WHERE key > 88", 1, 2)(89 to 100)
@@ -110,13 +119,42 @@ class PartitionBatchPruningSuite
     88 to 100
   }
 
-  // With unsupported predicate
+  // Support `IN` predicate
+  checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1)", 1, 1)(Seq(1))
+  checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1, 2)", 1, 1)(Seq(1, 2))
+  checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1, 11)", 1, 2)(Seq(1, 11))
+  checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1, 21, 41, 61, 81)", 5, 5)(
+    Seq(1, 21, 41, 61, 81))
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s = '100'", 1, 1)(Seq(100))
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s < '102'", 1, 1)(
+    Seq(100, 101))
+  checkBatchPruning(
+    "SELECT CAST(s AS INT) FROM pruningStringData WHERE s IN ('99', '150', '201')", 1, 1)(
+      Seq(150))
+
+  // With unsupported `InSet` predicate
   {
     val seq = (1 to 30).mkString(", ")
+    checkBatchPruning(s"SELECT key FROM pruningData WHERE key IN ($seq)", 5, 10)(1 to 30)
     checkBatchPruning(s"SELECT key FROM pruningData WHERE NOT (key IN ($seq))", 5, 10)(31 to 100)
     checkBatchPruning(s"SELECT key FROM pruningData WHERE NOT (key IN ($seq)) AND key > 88", 1, 2) {
       89 to 100
     }
+  }
+
+  // With disable IN_MEMORY_PARTITION_PRUNING option
+  test("disable IN_MEMORY_PARTITION_PRUNING") {
+    spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, false)
+
+    val df = sql("SELECT key FROM pruningData WHERE key = 1")
+    val result = df.collect().map(_(0)).toArray
+    assert(result.length === 1)
+
+    val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
+        case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
+      }.head
+    assert(readPartitions === 5)
+    assert(readBatches === 10)
   }
 
   def checkBatchPruning(

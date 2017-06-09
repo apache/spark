@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the basic expression abstract classes in Catalyst.
@@ -70,9 +72,9 @@ abstract class Expression extends TreeNode[Expression] {
    * children.
    *
    * Note that this means that an expression should be considered as non-deterministic if:
-   * - if it relies on some mutable internal state, or
-   * - if it relies on some implicit input that is not part of the children expression list.
-   * - if it has non-deterministic child or children.
+   * - it relies on some mutable internal state, or
+   * - it relies on some implicit input that is not part of the children expression list.
+   * - it has non-deterministic child or children.
    *
    * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
    * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
@@ -97,15 +99,14 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated which means that the code to evaluate it has already been added
       // as a function before. In that case, we just re-use it.
-      val code = s"/* ${toCommentSafeString(this.toString)} */"
-      ExprCode(code, subExprState.isNull, subExprState.value)
+      ExprCode(ctx.registerComment(this.toString), subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val ve = doGenCode(ctx, ExprCode("", isNull, value))
       if (ve.code.nonEmpty) {
         // Add `this` in the comment.
-        ve.copy(s"/* ${toCommentSafeString(this.toString)} */\n" + ve.code.trim)
+        ve.copy(code = s"${ctx.registerComment(this.toString)}\n" + ve.code.trim)
       } else {
         ve
       }
@@ -185,16 +186,21 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns a user-facing string representation of this expression's name.
    * This should usually match the name of the function in SQL.
    */
-  def prettyName: String = nodeName.toLowerCase
+  def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
 
-  private def flatArguments = productIterator.flatMap {
+  protected def flatArguments: Iterator[Any] = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
   }
 
+  // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
+  // overridden by concrete classes.
+  final override def verboseString: String = simpleString
+
   override def simpleString: String = toString
 
-  override def toString: String = prettyName + flatArguments.mkString("(", ", ", ")")
+  override def toString: String = prettyName + Utils.truncatedString(
+    flatArguments.toSeq, "(", ", ", ")")
 
   /**
    * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],
@@ -222,6 +228,23 @@ trait Unevaluable extends Expression {
 
 
 /**
+ * An expression that gets replaced at runtime (currently by the optimizer) into a different
+ * expression for evaluation. This is mainly used to provide compatibility with other databases.
+ * For example, we use this to support "nvl" by replacing it with "coalesce".
+ *
+ * A RuntimeReplaceable should have the original parameters along with a "child" expression in the
+ * case class constructor, and define a normal constructor that accepts only the original
+ * parameters. For an example, see [[Nvl]]. To make sure the explain plan and expression SQL
+ * works correctly, the implementation should also override flatArguments method and sql method.
+ */
+trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
+  override def nullable: Boolean = child.nullable
+  override def foldable: Boolean = child.foldable
+  override def dataType: DataType = child.dataType
+}
+
+
+/**
  * Expressions that don't have SQL representation should extend this trait.  Examples are
  * `ScalaUDF`, `ScalaUDAF`, and object expressions like `MapObjects` and `Invoke`.
  */
@@ -241,17 +264,28 @@ trait Nondeterministic extends Expression {
   final override def deterministic: Boolean = false
   final override def foldable: Boolean = false
 
+  @transient
   private[this] var initialized = false
 
-  final def setInitialValues(): Unit = {
-    initInternal()
+  /**
+   * Initializes internal states given the current partition index and mark this as initialized.
+   * Subclasses should override [[initializeInternal()]].
+   */
+  final def initialize(partitionIndex: Int): Unit = {
+    initializeInternal(partitionIndex)
     initialized = true
   }
 
-  protected def initInternal(): Unit
+  protected def initializeInternal(partitionIndex: Int): Unit
 
+  /**
+   * @inheritdoc
+   * Throws an exception if [[initialize()]] is not called yet.
+   * Subclasses should override [[evalInternal()]].
+   */
   final override def eval(input: InternalRow = null): Any = {
-    require(initialized, "nondeterministic expression should be initialized before evaluate")
+    require(initialized,
+      s"Nondeterministic expression ${this.getClass.getName} should be initialized before eval.")
     evalInternal(input)
   }
 
@@ -264,7 +298,7 @@ trait Nondeterministic extends Expression {
  */
 abstract class LeafExpression extends Expression {
 
-  def children: Seq[Expression] = Nil
+  override final def children: Seq[Expression] = Nil
 }
 
 
@@ -276,7 +310,7 @@ abstract class UnaryExpression extends Expression {
 
   def child: Expression
 
-  override def children: Seq[Expression] = child :: Nil
+  override final def children: Seq[Expression] = child :: Nil
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -346,6 +380,7 @@ abstract class UnaryExpression extends Expression {
       """)
     } else {
       ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${childGen.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         $resultCode""", isNull = "false")
@@ -362,7 +397,7 @@ abstract class BinaryExpression extends Expression {
   def left: Expression
   def right: Expression
 
-  override def children: Seq[Expression] = Seq(left, right)
+  override final def children: Seq[Expression] = Seq(left, right)
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -444,6 +479,7 @@ abstract class BinaryExpression extends Expression {
       """)
     } else {
       ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${rightGen.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -457,7 +493,7 @@ abstract class BinaryExpression extends Expression {
  * A [[BinaryExpression]] that is an operator, with two properties:
  *
  * 1. The string representation is "x symbol y", rather than "funcName(x, y)".
- * 2. Two inputs are expected to the be same type. If the two inputs have different types,
+ * 2. Two inputs are expected to be of the same type. If the two inputs have different types,
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
@@ -478,7 +514,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.
-    if (left.dataType != right.dataType) {
+    if (!left.dataType.sameType(right.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
         s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
     } else if (!inputType.acceptsType(left.dataType)) {
@@ -493,7 +529,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 }
 
 
-private[sql] object BinaryOperator {
+object BinaryOperator {
   def unapply(e: BinaryOperator): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
@@ -586,6 +622,7 @@ abstract class TernaryExpression extends Expression {
         $nullSafeEval""")
     } else {
       ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${midGen.code}
         ${rightGen.code}

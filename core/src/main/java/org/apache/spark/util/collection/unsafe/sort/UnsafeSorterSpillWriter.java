@@ -136,7 +136,8 @@ public final class UnsafeSorterSpillWriter {
   }
 
   public void close() throws IOException {
-    writer.commitAndClose();
+    writer.commitAndGet();
+    writer.close();
     writer = null;
     writeBuffer = null;
   }

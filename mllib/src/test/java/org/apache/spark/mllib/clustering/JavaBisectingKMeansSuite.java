@@ -17,43 +17,21 @@
 
 package org.apache.spark.mllib.clustering;
 
-import java.io.Serializable;
+import java.util.Arrays;
 
-import com.google.common.collect.Lists;
-
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.SparkSession;
 
-public class JavaBisectingKMeansSuite implements Serializable {
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaBisectingKMeansSuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaBisectingKMeansSuite extends SharedSparkSession {
 
   @Test
   public void twoDimensionalData() {
-    JavaRDD<Vector> points = jsc.parallelize(Lists.newArrayList(
+    JavaRDD<Vector> points = jsc.parallelize(Arrays.asList(
       Vectors.dense(4, -1),
       Vectors.dense(4, 1),
       Vectors.sparse(2, new int[]{0}, new double[]{1.0})

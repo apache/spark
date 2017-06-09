@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.net.URI
 import java.sql.Timestamp
 import java.util.{Locale, TimeZone}
 
@@ -26,15 +27,17 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkException, SparkFiles}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.{SparkFiles, TestUtils}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 
 case class TestData(a: Int, b: String)
 
@@ -42,11 +45,15 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests
  * included in the hive distribution.
  */
-class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
+class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAndAfter {
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
 
   import org.apache.spark.sql.hive.test.TestHive.implicits._
+
+  private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
+
+  def spark: SparkSession = sparkSession
 
   override def beforeAll() {
     super.beforeAll()
@@ -55,6 +62,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
+    // Ensures that cross joins are enabled so that we can test them
+    TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
   }
 
   override def afterAll() {
@@ -63,6 +72,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       TimeZone.setDefault(originalTimeZone)
       Locale.setDefault(originalLocale)
       sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
+      TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
     } finally {
       super.afterAll()
     }
@@ -70,7 +80,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   private def assertUnsupportedFeature(body: => Unit): Unit = {
     val e = intercept[ParseException] { body }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
   }
 
   // Testing the Broadcast based join for cartesian join (cross join)
@@ -210,15 +220,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(new Timestamp(1000) == r1.getTimestamp(0))
   }
 
-  createQueryTest("constant array",
-  """
-    |SELECT sort_array(
-    |  sort_array(
-    |    array("hadoop distributed file system",
-    |          "enterprise databases", "hadoop map-reduce")))
-    |FROM src LIMIT 1;
-  """.stripMargin)
-
   createQueryTest("null case",
     "SELECT case when(true) then 1 else null end FROM src LIMIT 1")
 
@@ -321,10 +322,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("trivial join ON clause",
     "SELECT * FROM src a JOIN src b ON a.key = b.key")
 
-  createQueryTest("small.cartesian",
-    "SELECT a.key, b.key FROM (SELECT key FROM src WHERE key < 1) a JOIN " +
-      "(SELECT key FROM src WHERE key = 2) b")
-
   createQueryTest("length.udf",
     "SELECT length(\"test\") FROM src LIMIT 1")
 
@@ -391,14 +388,18 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
+  // Some tests suing script transformation are skipped as it requires `/bin/bash` which
+  // can be missing or differently located.
   createQueryTest("transform",
-    "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
+    "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src",
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("schema-less transform",
     """
       |SELECT TRANSFORM (key, value) USING 'cat' FROM src;
       |SELECT TRANSFORM (*) USING 'cat' FROM src;
-    """.stripMargin)
+    """.stripMargin,
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   val delimiter = "'\t'"
 
@@ -406,19 +407,22 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     s"""
       |SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
       |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("\n", " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with custom field delimiter2",
     s"""
       |SELECT TRANSFORM (key, value) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
       |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("\n", " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with custom field delimiter3",
     s"""
       |SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
       |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
-    """.stripMargin.replaceAll("\n", " "))
+    """.stripMargin.replaceAll("\n", " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with SerDe",
     """
@@ -426,9 +430,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src;
-    """.stripMargin.replaceAll(System.lineSeparator(), " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   test("transform with SerDe2") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
 
     sql("CREATE TABLE small_src(key INT, value STRING)")
     sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
@@ -457,7 +463,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |('serialization.last.column.takes.rest'='true') USING 'cat' AS (tKey, tValue)
       |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll(System.lineSeparator(), " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with SerDe4",
     """
@@ -466,7 +473,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |('serialization.last.column.takes.rest'='true') USING 'cat' ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
       |('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll(System.lineSeparator(), " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
@@ -685,12 +693,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("case sensitivity when query Hive table",
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
-  test("case sensitivity: registered table") {
+  test("case sensitivity: created temporary view") {
     val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
         TestData(2, "str2") :: Nil)
-    testData.toDF().registerTempTable("REGisteredTABle")
+    testData.toDF().createOrReplaceTempView("REGisteredTABle")
 
     assertResult(Array(Row(2, "str2"))) {
       sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
@@ -715,7 +723,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
       .zipWithIndex.map {case ((value, attr), key) => HavingRow(key, value, attr)}
-    TestHive.sparkContext.parallelize(fixture).toDF().registerTempTable("having_test")
+    TestHive.sparkContext.parallelize(fixture).toDF().createOrReplaceTempView("having_test")
     val results =
       sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
@@ -781,62 +789,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(Try(q0.count()).isSuccess)
   }
 
-  test("DESCRIBE commands") {
-    sql(s"CREATE TABLE test_describe_commands1 (key INT, value STRING) PARTITIONED BY (dt STRING)")
-
-    sql(
-      """FROM src INSERT OVERWRITE TABLE test_describe_commands1 PARTITION (dt='2008-06-08')
-        |SELECT key, value
-      """.stripMargin)
-
-    // Describe a table
-    assertResult(
-      Array(
-        Row("key", "int", null),
-        Row("value", "string", null),
-        Row("dt", "string", null),
-        Row("# Partition Information", "", ""),
-        Row("# col_name", "data_type", "comment"),
-        Row("dt", "string", null))
-    ) {
-      sql("DESCRIBE test_describe_commands1")
-        .select('col_name, 'data_type, 'comment)
-        .collect()
-    }
-
-    // Describe a table with a fully qualified table name
-    assertResult(
-      Array(
-        Row("key", "int", null),
-        Row("value", "string", null),
-        Row("dt", "string", null),
-        Row("# Partition Information", "", ""),
-        Row("# col_name", "data_type", "comment"),
-        Row("dt", "string", null))
-    ) {
-      sql("DESCRIBE default.test_describe_commands1")
-        .select('col_name, 'data_type, 'comment)
-        .collect()
-    }
-
-    // Describe a registered temporary table.
-    val testData =
-      TestHive.sparkContext.parallelize(
-        TestData(1, "str1") ::
-        TestData(1, "str2") :: Nil)
-    testData.toDF().registerTempTable("test_describe_commands2")
-
-    assertResult(
-      Array(
-        Row("a", "int", ""),
-        Row("b", "string", ""))
-    ) {
-      sql("DESCRIBE test_describe_commands2")
-        .select('col_name, 'data_type, 'comment)
-        .collect()
-    }
-  }
-
   test("SPARK-2263: Insert Map<K, V> values") {
     sql("CREATE TABLE m(value MAP<INT, STRING>)")
     sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
@@ -861,8 +813,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("ADD JAR command 2") {
     // this is a test case from mapjoin_addjar.q
-    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").getCanonicalPath
-    val testData = TestHive.getHiveFile("data/files/sample.json").getCanonicalPath
+    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").toURI
+    val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     sql(s"ADD JAR $testJar")
     sql(
       """CREATE TABLE t1(a string, b string)
@@ -870,11 +822,18 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
     sql("select * from src join t1 on src.key = t1.a")
     sql("DROP TABLE t1")
+    assert(sql("list jars").
+      filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
+    assert(sql("list jar").
+      filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
+    val testJar2 = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
+    sql(s"ADD JAR $testJar2")
+    assert(sql(s"list jar $testJar").count() == 1)
   }
 
   test("CREATE TEMPORARY FUNCTION") {
-    val funcJar = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
-    val jarURL = s"file://$funcJar"
+    val funcJar = TestHive.getHiveFile("TestUDTF.jar")
+    val jarURL = funcJar.toURI.toURL
     sql(s"ADD JAR $jarURL")
     sql(
       """CREATE TEMPORARY FUNCTION udtf_count2 AS
@@ -885,7 +844,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("ADD FILE command") {
-    val testFile = TestHive.getHiveFile("data/files/v1.txt").getCanonicalFile
+    val testFile = TestHive.getHiveFile("data/files/v1.txt").toURI
     sql(s"ADD FILE $testFile")
 
     val checkAddFileRDD = sparkContext.parallelize(1 to 2, 1).mapPartitions { _ =>
@@ -893,6 +852,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
 
     assert(checkAddFileRDD.first())
+    assert(sql("list files").
+      filter(_.getString(0).contains("data/files/v1.txt")).count() > 0)
+    assert(sql("list file").
+      filter(_.getString(0).contains("data/files/v1.txt")).count() > 0)
+    assert(sql(s"list file $testFile").count() == 1)
   }
 
   createQueryTest("dynamic_partition",
@@ -946,7 +910,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         .mkString("/")
 
       // Loads partition data to a temporary table to verify contents
-      val path = s"${sparkSession.warehousePath}/dynamic_part_table/$partFolder/part-00000"
+      val warehousePathFile = new URI(sparkSession.getWarehousePath()).getPath
+      val path = s"$warehousePathFile/dynamic_part_table/$partFolder/part-00000"
 
       sql("DROP TABLE IF EXISTS dp_verify")
       sql("CREATE TABLE dp_verify(intcol INT)")
@@ -988,7 +953,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
     // Should throw when a static partition appears after a dynamic partition
-    intercept[SparkException] {
+    intercept[AnalysisException] {
       sql(
         """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
           |SELECT key, value, key % 5 FROM src
@@ -996,9 +961,9 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
-  test("SPARK-3414 regression: should store analyzed logical plan when registering a temp table") {
-    sparkContext.makeRDD(Seq.empty[LogEntry]).toDF().registerTempTable("rawLogs")
-    sparkContext.makeRDD(Seq.empty[LogFile]).toDF().registerTempTable("logFiles")
+  test("SPARK-3414 regression: should store analyzed logical plan when creating a temporary view") {
+    sparkContext.makeRDD(Seq.empty[LogEntry]).toDF().createOrReplaceTempView("rawLogs")
+    sparkContext.makeRDD(Seq.empty[LogFile]).toDF().createOrReplaceTempView("logFiles")
 
     sql(
       """
@@ -1009,29 +974,29 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         FROM logFiles
       ) files
       ON rawLogs.filename = files.name
-      """).registerTempTable("boom")
+      """).createOrReplaceTempView("boom")
 
     // This should be successfully analyzed
     sql("SELECT * FROM boom").queryExecution.analyzed
   }
 
-  test("SPARK-3810: PreInsertionCasts static partitioning support") {
+  test("SPARK-3810: PreprocessTableInsertion static partitioning support") {
     val analyzedPlan = {
       loadTestTable("srcpart")
       sql("DROP TABLE IF EXISTS withparts")
       sql("CREATE TABLE withparts LIKE srcpart")
       sql("INSERT INTO TABLE withparts PARTITION(ds='1', hr='2') SELECT key, value FROM src")
         .queryExecution.analyzed
-    }
+      }
 
     assertResult(1, "Duplicated project detected\n" + analyzedPlan) {
       analyzedPlan.collect {
-        case _: Project => ()
-      }.size
+        case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
+      }.sum
     }
   }
 
-  test("SPARK-3810: PreInsertionCasts dynamic partitioning support") {
+  test("SPARK-3810: PreprocessTableInsertion dynamic partitioning support") {
     val analyzedPlan = {
       loadTestTable("srcpart")
       sql("DROP TABLE IF EXISTS withparts")
@@ -1039,14 +1004,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
       sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
-      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value FROM src")
+      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value, '1', '2' FROM src")
         .queryExecution.analyzed
     }
 
-    assertResult(1, "Duplicated project detected\n" + analyzedPlan) {
+    assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
       analyzedPlan.collect {
-        case _: Project => ()
-      }.size
+        case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
+      }.sum
     }
   }
 
@@ -1193,6 +1158,27 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("CREATE TEMPORARY MACRO SIGMOID (x DOUBLE) 1.0 / (1.0 + EXP(-x))")
     }
     assertUnsupportedFeature { sql("DROP TEMPORARY MACRO SIGMOID") }
+  }
+
+  test("dynamic partitioning is allowed when hive.exec.dynamic.partition.mode is nonstrict") {
+    val modeConfKey = "hive.exec.dynamic.partition.mode"
+    withTable("with_parts") {
+      sql("CREATE TABLE with_parts(key INT) PARTITIONED BY (p INT)")
+
+      withSQLConf(modeConfKey -> "nonstrict") {
+        sql("INSERT OVERWRITE TABLE with_parts partition(p) select 1, 2")
+        assert(spark.table("with_parts").filter($"p" === 2).collect().head == Row(1, 2))
+      }
+
+      val originalValue = spark.sparkContext.hadoopConfiguration.get(modeConfKey, "nonstrict")
+      try {
+        spark.sparkContext.hadoopConfiguration.set(modeConfKey, "nonstrict")
+        sql("INSERT OVERWRITE TABLE with_parts partition(p) select 3, 4")
+        assert(spark.table("with_parts").filter($"p" === 4).collect().head == Row(3, 4))
+      } finally {
+        spark.sparkContext.hadoopConfiguration.set(modeConfKey, originalValue)
+      }
+    }
   }
 }
 

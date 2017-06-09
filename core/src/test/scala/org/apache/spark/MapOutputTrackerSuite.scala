@@ -19,10 +19,11 @@ package org.apache.spark
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.Matchers.{any, isA}
+import org.mockito.Matchers.any
 import org.mockito.Mockito._
 
 import org.apache.spark.broadcast.BroadcastManager
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
@@ -245,15 +246,14 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "10240") // 10 KB << 1MB framesize
 
     // needs TorrentBroadcast so need a SparkContext
-    val sc = new SparkContext("local", "MapOutputTrackerSuite", newConf)
-    try {
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
       val masterTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
       val rpcEnv = sc.env.rpcEnv
       val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
       rpcEnv.stop(masterTracker.trackerEndpoint)
       rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
 
-      // Frame size should be ~1.1MB, and MapOutputTrackerMasterActor should throw exception.
+      // Frame size should be ~1.1MB, and MapOutputTrackerMasterEndpoint should throw exception.
       // Note that the size is hand-selected here because map output statuses are compressed before
       // being sent.
       masterTracker.registerShuffle(20, 100)
@@ -271,9 +271,6 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       assert(1 == masterTracker.getNumCachedSerializedBroadcast)
       masterTracker.unregisterShuffle(20)
       assert(0 == masterTracker.getNumCachedSerializedBroadcast)
-
-    } finally {
-      LocalSparkContext.stop(sc)
     }
   }
 

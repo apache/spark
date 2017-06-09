@@ -95,14 +95,13 @@ object BinaryClassification {
         """.stripMargin)
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    } getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val conf = new SparkConf().setAppName(s"BinaryClassification with $params")
     val sc = new SparkContext(conf)
 

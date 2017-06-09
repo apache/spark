@@ -22,11 +22,12 @@ import org.antlr.v4.runtime.misc.ParseCancellationException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Base SQL parsing infrastructure.
@@ -34,8 +35,7 @@ import org.apache.spark.sql.types.DataType
 abstract class AbstractSqlParser extends ParserInterface with Logging {
 
   /** Creates/Resolves DataType for a given SQL string. */
-  def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
-    // TODO add this to the parser interface.
+  override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
   }
 
@@ -49,6 +49,21 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
   }
 
+  /** Creates FunctionIdentifier for a given SQL string. */
+  override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
+    parse(sqlText) { parser =>
+      astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
+    }
+  }
+
+  /**
+   * Creates StructType for a given SQL string, which is a comma separated list of field
+   * definitions which will preserve the correct Hive metadata.
+   */
+  override def parseTableSchema(sqlText: String): StructType = parse(sqlText) { parser =>
+    StructType(astBuilder.visitColTypeList(parser.colTypeList()))
+  }
+
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
     astBuilder.visitSingleStatement(parser.singleStatement()) match {
@@ -59,11 +74,11 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     }
   }
 
-  /** Get the builder (visitor) which converts a ParseTree into a AST. */
+  /** Get the builder (visitor) which converts a ParseTree into an AST. */
   protected def astBuilder: AstBuilder
 
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    logInfo(s"Parsing command: $command")
+    logDebug(s"Parsing command: $command")
 
     val lexer = new SqlBaseLexer(new ANTLRNoCaseStringStream(command))
     lexer.removeErrorListeners()
@@ -107,8 +122,13 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
+class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser {
+  val astBuilder = new AstBuilder(conf)
+}
+
+/** For test-only. */
 object CatalystSqlParser extends AbstractSqlParser {
-  val astBuilder = new AstBuilder
+  val astBuilder = new AstBuilder(new SQLConf())
 }
 
 /**

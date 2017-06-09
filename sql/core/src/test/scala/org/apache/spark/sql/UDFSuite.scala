@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
@@ -53,20 +54,20 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-8003 spark_partition_id") {
     val df = Seq((1, "Tearing down the walls that divide us")).toDF("id", "saying")
-    df.registerTempTable("tmp_table")
+    df.createOrReplaceTempView("tmp_table")
     checkAnswer(sql("select spark_partition_id() from tmp_table").toDF(), Row(0))
-    spark.catalog.dropTempTable("tmp_table")
+    spark.catalog.dropTempView("tmp_table")
   }
 
   test("SPARK-8005 input_file_name") {
     withTempPath { dir =>
       val data = sparkContext.parallelize(0 to 10, 2).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
-      spark.read.parquet(dir.getCanonicalPath).registerTempTable("test_table")
+      spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("test_table")
       val answer = sql("select input_file_name() from test_table").head().getString(0)
-      assert(answer.contains(dir.getCanonicalPath))
+      assert(answer.contains(dir.toURI.getPath))
       assert(sql("select input_file_name() from test_table").distinct().collect().length >= 2)
-      spark.catalog.dropTempTable("test_table")
+      spark.catalog.dropTempView("test_table")
     }
   }
 
@@ -92,6 +93,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(sql("SELECT strLenScala('test')").head().getInt(0) === 4)
   }
 
+  test("UDF defined using UserDefinedFunction") {
+    import functions.udf
+    val foo = udf((x: Int) => x + 1)
+    spark.udf.register("foo", foo)
+    assert(sql("select foo(5)").head().getInt(0) == 6)
+  }
+
   test("ZeroArgument UDF") {
     spark.udf.register("random0", () => { Math.random()})
     assert(sql("SELECT random0()").head().getDouble(0) >= 0.0)
@@ -107,7 +115,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
     val df = sparkContext.parallelize(
       (1 to 100).map(i => TestData(i, i.toString))).toDF()
-    df.registerTempTable("integerData")
+    df.createOrReplaceTempView("integerData")
 
     val result =
       sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
@@ -119,7 +127,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq(("red", 1), ("red", 2), ("blue", 10),
       ("green", 100), ("green", 200)).toDF("g", "v")
-    df.registerTempTable("groupData")
+    df.createOrReplaceTempView("groupData")
 
     val result =
       sql(
@@ -138,7 +146,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq(("red", 1), ("red", 2), ("blue", 10),
       ("green", 100), ("green", 200)).toDF("g", "v")
-    df.registerTempTable("groupData")
+    df.createOrReplaceTempView("groupData")
 
     val result =
       sql(
@@ -158,7 +166,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
     val df = Seq(("red", 1), ("red", 2), ("blue", 10),
       ("green", 100), ("green", 200)).toDF("g", "v")
-    df.registerTempTable("groupData")
+    df.createOrReplaceTempView("groupData")
 
     val result =
       sql(
@@ -247,5 +255,20 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT tmp.t.* FROM (SELECT testDataFunc(a, b) AS t from testData2) tmp").toDF(),
       testData2)
+  }
+
+  test("SPARK-19338 Provide identical names for UDFs in the EXPLAIN output") {
+    def explainStr(df: DataFrame): String = {
+      val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+      val sparkPlan = spark.sessionState.executePlan(explain).executedPlan
+      sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
+    }
+    val udf1Name = "myUdf1"
+    val udf2Name = "myUdf2"
+    val udf1 = spark.udf.register(udf1Name, (n: Int) => n + 1)
+    val udf2 = spark.udf.register(udf2Name, (n: Int) => n * 1)
+    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+    assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
+      .contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
   }
 }

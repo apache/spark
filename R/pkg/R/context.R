@@ -87,6 +87,20 @@ objectFile <- function(sc, path, minPartitions = NULL) {
 #' in the list are split into \code{numSlices} slices and distributed to nodes
 #' in the cluster.
 #'
+#' If size of serialized slices is larger than spark.r.maxAllocationLimit or (200MB), the function
+#' will write it to disk and send the file name to JVM. Also to make sure each slice is not
+#' larger than that limit, number of slices may be increased.
+#'
+#' In 2.2.0 we are changing how the numSlices are used/computed to handle
+#' 1 < (length(coll) / numSlices) << length(coll) better, and to get the exact number of slices.
+#' This change affects both createDataFrame and spark.lapply.
+#' In the specific one case that it is used to convert R native object into SparkDataFrame, it has
+#' always been kept at the default of 1. In the case the object is large, we are explicitly setting
+#' the parallism to numSlices (which is still 1).
+#'
+#' Specifically, we are changing to split positions to match the calculation in positions() of
+#' ParallelCollectionRDD in Spark.
+#'
 #' @param sc SparkContext to use
 #' @param coll collection to parallelize
 #' @param numSlices number of partitions to create in the RDD
@@ -103,6 +117,8 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives
   # TODO: support matrix, data frame, etc
+
+  # Note, for data.frame, createDataFrame turns it into a list before it calls here.
   # nolint start
   # suppress lintr warning: Place a space before left parenthesis, except in a function call.
   if ((!is.list(coll) && !is.vector(coll)) || is.data.frame(coll)) {
@@ -120,20 +136,74 @@ parallelize <- function(sc, coll, numSlices = 1) {
     coll <- as.list(coll)
   }
 
-  if (numSlices > length(coll))
-    numSlices <- length(coll)
+  sizeLimit <- getMaxAllocationLimit(sc)
+  objectSize <- object.size(coll)
 
-  sliceLen <- ceiling(length(coll) / numSlices)
-  slices <- split(coll, rep(1: (numSlices + 1), each = sliceLen)[1:length(coll)])
+  # For large objects we make sure the size of each slice is also smaller than sizeLimit
+  numSerializedSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
+  if (numSerializedSlices > length(coll))
+    numSerializedSlices <- length(coll)
+
+  # Generate the slice ids to put each row
+  # For instance, for numSerializedSlices of 22, length of 50
+  #  [1]  0  0  2  2  4  4  6  6  6  9  9 11 11 13 13 15 15 15 18 18 20 20 22 22 22
+  # [26] 25 25 27 27 29 29 31 31 31 34 34 36 36 38 38 40 40 40 43 43 45 45 47 47 47
+  # Notice the slice group with 3 slices (ie. 6, 15, 22) are roughly evenly spaced.
+  # We are trying to reimplement the calculation in the positions method in ParallelCollectionRDD
+  splits <- if (numSerializedSlices > 0) {
+    unlist(lapply(0: (numSerializedSlices - 1), function(x) {
+      # nolint start
+      start <- trunc((x * length(coll)) / numSerializedSlices)
+      end <- trunc(((x + 1) * length(coll)) / numSerializedSlices)
+      # nolint end
+      rep(start, end - start)
+    }))
+  } else {
+    1
+  }
+
+  slices <- split(coll, splits)
 
   # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
   # 2-tuples of raws
   serializedSlices <- lapply(slices, serialize, connection = NULL)
 
-  jrdd <- callJStatic("org.apache.spark.api.r.RRDD",
-                      "createRDDFromArray", sc, serializedSlices)
+  # The PRC backend cannot handle arguments larger than 2GB (INT_MAX)
+  # If serialized data is safely less than that threshold we send it over the PRC channel.
+  # Otherwise, we write it to a file and send the file name
+  if (objectSize < sizeLimit) {
+    jrdd <- callJStatic("org.apache.spark.api.r.RRDD", "createRDDFromArray", sc, serializedSlices)
+  } else {
+    fileName <- writeToTempFile(serializedSlices)
+    jrdd <- tryCatch(callJStatic(
+        "org.apache.spark.api.r.RRDD", "createRDDFromFile", sc, fileName, as.integer(numSlices)),
+      finally = {
+        file.remove(fileName)
+    })
+  }
 
   RDD(jrdd, "byte")
+}
+
+getMaxAllocationLimit <- function(sc) {
+  conf <- callJMethod(sc, "getConf")
+  as.numeric(
+    callJMethod(conf,
+      "get",
+      "spark.r.maxAllocationLimit",
+      toString(.Machine$integer.max / 10) # Default to a safe value: 200MB
+  ))
+}
+
+writeToTempFile <- function(serializedSlices) {
+  fileName <- tempfile()
+  conn <- file(fileName, "wb")
+  for (slice in serializedSlices) {
+    writeBin(as.integer(length(slice)), conn, endian = "big")
+    writeBin(slice, conn, endian = "big")
+  }
+  close(conn)
+  fileName
 }
 
 #' Include this specified package on all workers
@@ -173,9 +243,8 @@ includePackage <- function(sc, pkg) {
   .sparkREnv$.packages <- packages
 }
 
-#' @title Broadcast a variable to all workers
+#' Broadcast a variable to all workers
 #'
-#' @description
 #' Broadcast a read-only variable to the cluster, returning a \code{Broadcast}
 #' object for reading it in distributed functions.
 #'
@@ -189,7 +258,7 @@ includePackage <- function(sc, pkg) {
 #'
 #' # Large Matrix object that we want to broadcast
 #' randomMat <- matrix(nrow=100, ncol=10, data=rnorm(1000))
-#' randomMatBr <- broadcast(sc, randomMat)
+#' randomMatBr <- broadcastRDD(sc, randomMat)
 #'
 #' # Use the broadcast variable inside the function
 #' useBroadcast <- function(x) {
@@ -197,7 +266,7 @@ includePackage <- function(sc, pkg) {
 #' }
 #' sumRDD <- lapply(rdd, useBroadcast)
 #'}
-broadcast <- function(sc, object) {
+broadcastRDD <- function(sc, object) {
   objName <- as.character(substitute(object))
   serializedObj <- serialize(object, connection = NULL)
 
@@ -207,7 +276,7 @@ broadcast <- function(sc, object) {
   Broadcast(id, object, jBroadcast, objName)
 }
 
-#' @title Set the checkpoint directory
+#' Set the checkpoint directory
 #'
 #' Set the directory under which RDDs are going to be checkpointed. The
 #' directory must be a HDFS path if running on a cluster.
@@ -222,49 +291,118 @@ broadcast <- function(sc, object) {
 #' rdd <- parallelize(sc, 1:2, 2L)
 #' checkpoint(rdd)
 #'}
-setCheckpointDir <- function(sc, dirName) {
+setCheckpointDirSC <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
 
-#' @title Run a function over a list of elements, distributing the computations with Spark.
+#' Add a file or directory to be downloaded with this Spark job on every node.
 #'
-#' @description
-#' Applies a function in a manner that is similar to doParallel or lapply to elements of a list.
+#' The path passed can be either a local file, a file in HDFS (or other Hadoop-supported
+#' filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
+#' use spark.getSparkFiles(fileName) to find its download location.
+#'
+#' A directory can be given if the recursive option is set to true.
+#' Currently directories are only supported for Hadoop-supported filesystems.
+#' Refer Hadoop-supported filesystems at \url{https://wiki.apache.org/hadoop/HCFS}.
+#'
+#' @rdname spark.addFile
+#' @param path The path of the file to be added
+#' @param recursive Whether to add files recursively from the path. Default is FALSE.
+#' @export
+#' @examples
+#'\dontrun{
+#' spark.addFile("~/myfile")
+#'}
+#' @note spark.addFile since 2.1.0
+spark.addFile <- function(path, recursive = FALSE) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "addFile", suppressWarnings(normalizePath(path)), recursive))
+}
+
+#' Get the root directory that contains files added through spark.addFile.
+#'
+#' @rdname spark.getSparkFilesRootDirectory
+#' @return the root directory that contains files added through spark.addFile
+#' @export
+#' @examples
+#'\dontrun{
+#' spark.getSparkFilesRootDirectory()
+#'}
+#' @note spark.getSparkFilesRootDirectory since 2.1.0
+spark.getSparkFilesRootDirectory <- function() {
+  if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
+    # Running on driver.
+    callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")
+  } else {
+    # Running on worker.
+    Sys.getenv("SPARKR_SPARKFILES_ROOT_DIR")
+  }
+}
+
+#' Get the absolute path of a file added through spark.addFile.
+#'
+#' @rdname spark.getSparkFiles
+#' @param fileName The name of the file added through spark.addFile
+#' @return the absolute path of a file added through spark.addFile.
+#' @export
+#' @examples
+#'\dontrun{
+#' spark.getSparkFiles("myfile")
+#'}
+#' @note spark.getSparkFiles since 2.1.0
+spark.getSparkFiles <- function(fileName) {
+  if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
+    # Running on driver.
+    callJStatic("org.apache.spark.SparkFiles", "get", as.character(fileName))
+  } else {
+    # Running on worker.
+    file.path(spark.getSparkFilesRootDirectory(), as.character(fileName))
+  }
+}
+
+#' Run a function over a list of elements, distributing the computations with Spark
+#'
+#' Run a function over a list of elements, distributing the computations with Spark. Applies a
+#' function in a manner that is similar to doParallel or lapply to elements of a list.
 #' The computations are distributed using Spark. It is conceptually the same as the following code:
 #'   lapply(list, func)
 #'
 #' Known limitations:
-#'  - variable scoping and capture: compared to R's rich support for variable resolutions, the
-# distributed nature of SparkR limits how variables are resolved at runtime. All the variables
-# that are available through lexical scoping are embedded in the closure of the function and
-# available as read-only variables within the function. The environment variables should be
-# stored into temporary variables outside the function, and not directly accessed within the
-# function.
+#' \itemize{
+#'    \item variable scoping and capture: compared to R's rich support for variable resolutions,
+#'    the distributed nature of SparkR limits how variables are resolved at runtime. All the
+#'    variables that are available through lexical scoping are embedded in the closure of the
+#'    function and available as read-only variables within the function. The environment variables
+#'    should be stored into temporary variables outside the function, and not directly accessed
+#'    within the function.
 #'
-#'  - loading external packages: In order to use a package, you need to load it inside the
-#'    closure. For example, if you rely on the MASS module, here is how you would use it:
-#'\dontrun{
-#' train <- function(hyperparam) {
-#'   library(MASS)
-#'   lm.ridge(“y ~ x+z”, data, lambda=hyperparam)
-#'   model
+#'   \item loading external packages: In order to use a package, you need to load it inside the
+#'   closure. For example, if you rely on the MASS module, here is how you would use it:
+#'   \preformatted{
+#'     train <- function(hyperparam) {
+#'       library(MASS)
+#'       lm.ridge("y ~ x+z", data, lambda=hyperparam)
+#'       model
+#'     }
+#'   }
 #' }
-#'}
 #'
 #' @rdname spark.lapply
-#' @param sc Spark Context to use
 #' @param list the list of elements
 #' @param func a function that takes one argument.
 #' @return a list of results (the exact type being determined by the function)
 #' @export
 #' @examples
 #'\dontrun{
+#' sparkR.session()
 #' doubled <- spark.lapply(1:10, function(x){2 * x})
 #'}
-spark.lapply <- function(sc, list, func) {
+#' @note spark.lapply since 2.0.0
+spark.lapply <- function(list, func) {
+  sc <- getSparkContext()
   rdd <- parallelize(sc, list, length(list))
   results <- map(rdd, func)
-  local <- collect(results)
+  local <- collectRDD(results)
   local
 }
 
@@ -273,14 +411,33 @@ spark.lapply <- function(sc, list, func) {
 #' Set new log level: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
 #'
 #' @rdname setLogLevel
-#' @param sc Spark Context to use
 #' @param level New log level
 #' @export
 #' @examples
 #'\dontrun{
-#' setLogLevel(sc, "ERROR")
+#' setLogLevel("ERROR")
 #'}
+#' @note setLogLevel since 2.0.0
+setLogLevel <- function(level) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setLogLevel", level))
+}
 
-setLogLevel <- function(sc, level) {
-  callJMethod(sc, "setLogLevel", level)
+#' Set checkpoint directory
+#'
+#' Set the directory under which SparkDataFrame are going to be checkpointed. The directory must be
+#' a HDFS path if running on a cluster.
+#'
+#' @rdname setCheckpointDir
+#' @param directory Directory path to checkpoint to
+#' @seealso \link{checkpoint}
+#' @export
+#' @examples
+#'\dontrun{
+#' setCheckpointDir("/checkpoint")
+#'}
+#' @note setCheckpointDir since 2.2.0
+setCheckpointDir <- function(directory) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(directory))))
 }

@@ -48,11 +48,27 @@ import com.google.common.base.Preconditions;
  * use this functionality in both a Guava 11 environment and a Guava &gt;14 environment.
  */
 public final class LimitedInputStream extends FilterInputStream {
+  private final boolean closeWrappedStream;
   private long left;
   private long mark = -1;
 
   public LimitedInputStream(InputStream in, long limit) {
+    this(in, limit, true);
+  }
+
+  /**
+   * Create a LimitedInputStream that will read {@code limit} bytes from {@code in}.
+   * <p>
+   * If {@code closeWrappedStream} is true, this will close {@code in} when it is closed.
+   * Otherwise, the stream is left open for reading its remaining content.
+   *
+   * @param in a {@link InputStream} to read from
+   * @param limit the number of bytes to read
+   * @param closeWrappedStream whether to close {@code in} when {@link #close} is called
+     */
+  public LimitedInputStream(InputStream in, long limit, boolean closeWrappedStream) {
     super(in);
+    this.closeWrappedStream = closeWrappedStream;
     Preconditions.checkNotNull(in);
     Preconditions.checkArgument(limit >= 0, "limit must be non-negative");
     left = limit;
@@ -101,5 +117,12 @@ public final class LimitedInputStream extends FilterInputStream {
     long skipped = in.skip(n);
     left -= skipped;
     return skipped;
+  }
+
+  @Override
+  public void close() throws IOException {
+    if (closeWrappedStream) {
+      super.close();
+    }
   }
 }

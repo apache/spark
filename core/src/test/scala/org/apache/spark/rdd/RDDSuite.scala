@@ -30,7 +30,7 @@ import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDDSuiteUtils._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class RDDSuite extends SparkFunSuite with SharedSparkContext {
   var tempDir: File = _
@@ -276,6 +276,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   test("repartitioned RDDs") {
     val data = sc.parallelize(1 to 1000, 10)
 
+    intercept[IllegalArgumentException] {
+      data.repartition(0)
+    }
+
     // Coalesce partitions
     val repartitioned1 = data.repartition(2)
     assert(repartitioned1.partitions.size == 2)
@@ -328,6 +332,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
 
   test("coalesced RDDs") {
     val data = sc.parallelize(1 to 10, 10)
+
+    intercept[IllegalArgumentException] {
+      data.coalesce(0)
+    }
 
     val coalesced1 = data.coalesce(2)
     assert(coalesced1.collect().toList === (1 to 10).toList)
@@ -678,27 +686,26 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }
     {
       val sample = data.takeSample(withReplacement = true, num = 20)
-      assert(sample.size === 20)        // Got exactly 100 elements
-      assert(sample.toSet.size <= 20, "sampling with replacement returned all distinct elements")
+      assert(sample.size === 20)        // Got exactly 20 elements
       assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
       val sample = data.takeSample(withReplacement = true, num = n)
-      assert(sample.size === n)        // Got exactly 100 elements
-      // Chance of getting all distinct elements is astronomically low, so test we got < 100
+      assert(sample.size === n)        // Got exactly n elements
+      // Chance of getting all distinct elements is astronomically low, so test we got < n
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
       assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement = true, n, seed)
-      assert(sample.size === n)        // Got exactly 100 elements
-      // Chance of getting all distinct elements is astronomically low, so test we got < 100
+      assert(sample.size === n)        // Got exactly n elements
+      // Chance of getting all distinct elements is astronomically low, so test we got < n
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement = true, 2 * n, seed)
-      assert(sample.size === 2 * n)        // Got exactly 200 elements
-      // Chance of getting all distinct elements is still quite low, so test we got < 100
+      assert(sample.size === 2 * n)        // Got exactly 2 * n elements
+      // Chance of getting all distinct elements is still quite low, so test we got < n
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
     }
   }
@@ -1073,6 +1080,22 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       assert(splitSizeSum <= maxSplitSize)
     })
     assert(totalPartitionCount == 10)
+  }
+
+  test("SPARK-18406: race between end-of-task and completion iterator read lock release") {
+    val rdd = sc.parallelize(1 to 1000, 10)
+    rdd.cache()
+
+    rdd.mapPartitions { iter =>
+      ThreadUtils.runInNewThread("TestThread") {
+        // Iterate to the end of the input iterator, to cause the CompletionIterator completion to
+        // fire outside of the task's main thread.
+        while (iter.hasNext) {
+          iter.next()
+        }
+        iter
+      }
+    }.collect()
   }
 
   // NOTE

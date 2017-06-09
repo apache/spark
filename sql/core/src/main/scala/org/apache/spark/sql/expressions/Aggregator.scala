@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.expressions
 
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{Dataset, Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 
 /**
- * A base class for user-defined aggregations, which can be used in [[Dataset]] operations to take
+ * :: Experimental ::
+ * A base class for user-defined aggregations, which can be used in `Dataset` operations to take
  * all of the elements of a group and reduce them to a single value.
  *
  * For example, the following aggregator extracts an `int` from a specific class and adds them up:
@@ -48,6 +50,8 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
  * @tparam OUT The type of the final output result.
  * @since 1.6.0
  */
+@Experimental
+@InterfaceStability.Evolving
 abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
 
   /**
@@ -76,19 +80,19 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def finish(reduction: BUF): OUT
 
   /**
-   * Specifies the [[Encoder]] for the intermediate value type.
+   * Specifies the `Encoder` for the intermediate value type.
    * @since 2.0.0
    */
   def bufferEncoder: Encoder[BUF]
 
   /**
-   * Specifies the [[Encoder]] for the final ouput value type.
+   * Specifies the `Encoder` for the final ouput value type.
    * @since 2.0.0
    */
   def outputEncoder: Encoder[OUT]
 
   /**
-   * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[Dataset]].
+   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset`.
    * operations.
    * @since 1.6.0
    */

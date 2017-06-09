@@ -92,10 +92,17 @@ class Module(object):
     def __hash__(self):
         return hash(self.name)
 
+tags = Module(
+    name="tags",
+    dependencies=[],
+    source_file_regexes=[
+        "common/tags/",
+    ]
+)
 
 catalyst = Module(
     name="catalyst",
-    dependencies=[],
+    dependencies=[tags],
     source_file_regexes=[
         "sql/catalyst/",
     ],
@@ -116,6 +123,7 @@ sql = Module(
     ],
 )
 
+
 hive = Module(
     name="hive",
     dependencies=[sql],
@@ -135,6 +143,18 @@ hive = Module(
 )
 
 
+repl = Module(
+    name="repl",
+    dependencies=[hive],
+    source_file_regexes=[
+        "repl/",
+    ],
+    sbt_test_goals=[
+        "repl/test",
+    ],
+)
+
+
 hive_thriftserver = Module(
     name="hive-thriftserver",
     dependencies=[hive],
@@ -151,21 +171,21 @@ hive_thriftserver = Module(
 )
 
 
-hivecontext_compatibility = Module(
-    name="hivecontext-compatibility",
-    dependencies=[hive],
+sql_kafka = Module(
+    name="sql-kafka-0-10",
+    dependencies=[sql],
     source_file_regexes=[
-        "sql/hivecontext-compatibility/",
+        "external/kafka-0-10-sql",
     ],
     sbt_test_goals=[
-        "hivecontext-compatibility/test"
+        "sql-kafka-0-10/test",
     ]
 )
 
 
 sketch = Module(
     name="sketch",
-    dependencies=[],
+    dependencies=[tags],
     source_file_regexes=[
         "common/sketch/",
     ],
@@ -177,7 +197,7 @@ sketch = Module(
 
 graphx = Module(
     name="graphx",
-    dependencies=[],
+    dependencies=[tags],
     source_file_regexes=[
         "graphx/",
     ],
@@ -189,7 +209,7 @@ graphx = Module(
 
 streaming = Module(
     name="streaming",
-    dependencies=[],
+    dependencies=[tags],
     source_file_regexes=[
         "streaming",
     ],
@@ -205,7 +225,7 @@ streaming = Module(
 # fail other PRs.
 streaming_kinesis_asl = Module(
     name="streaming-kinesis-asl",
-    dependencies=[],
+    dependencies=[tags],
     source_file_regexes=[
         "external/kinesis-asl/",
         "external/kinesis-asl-assembly/",
@@ -234,6 +254,18 @@ streaming_kafka = Module(
     ]
 )
 
+streaming_kafka_0_10 = Module(
+    name="streaming-kafka-0-10",
+    dependencies=[streaming],
+    source_file_regexes=[
+        # The ending "/" is necessary otherwise it will include "sql-kafka" codes
+        "external/kafka-0-10/",
+        "external/kafka-0-10-assembly",
+    ],
+    sbt_test_goals=[
+        "streaming-kafka-0-10/test",
+    ]
+)
 
 streaming_flume_sink = Module(
     name="streaming-flume-sink",
@@ -270,7 +302,7 @@ streaming_flume_assembly = Module(
 
 mllib_local = Module(
     name="mllib-local",
-    dependencies=[],
+    dependencies=[tags],
     source_file_regexes=[
         "mllib-local",
     ],
@@ -321,6 +353,7 @@ pyspark_core = Module(
         "pyspark.profiler",
         "pyspark.shuffle",
         "pyspark.tests",
+        "pyspark.util",
     ]
 )
 
@@ -342,6 +375,7 @@ pyspark_sql = Module(
         "pyspark.sql.group",
         "pyspark.sql.functions",
         "pyspark.sql.readwriter",
+        "pyspark.sql.streaming",
         "pyspark.sql.window",
         "pyspark.sql.tests",
     ]
@@ -403,14 +437,17 @@ pyspark_ml = Module(
         "python/pyspark/ml/"
     ],
     python_test_goals=[
-        "pyspark.ml.feature",
         "pyspark.ml.classification",
         "pyspark.ml.clustering",
+        "pyspark.ml.evaluation",
+        "pyspark.ml.feature",
+        "pyspark.ml.fpm",
+        "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",
         "pyspark.ml.regression",
+        "pyspark.ml.stat",
         "pyspark.ml.tuning",
         "pyspark.ml.tests",
-        "pyspark.ml.evaluation",
     ],
     blacklisted_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -449,9 +486,10 @@ yarn = Module(
     name="yarn",
     dependencies=[],
     source_file_regexes=[
-        "yarn/",
+        "resource-managers/yarn/",
         "common/network-yarn/",
     ],
+    build_profile_flags=["-Pyarn"],
     sbt_test_goals=[
         "yarn/test",
         "network-yarn/test",
@@ -459,6 +497,14 @@ yarn = Module(
     test_tags=[
         "org.apache.spark.tags.ExtendedYarnTest"
     ]
+)
+
+mesos = Module(
+    name="mesos",
+    dependencies=[],
+    source_file_regexes=["resource-managers/mesos/"],
+    build_profile_flags=["-Pmesos"],
+    sbt_test_goals=["mesos/test"]
 )
 
 # The root module is a dummy module which is used to run all of the tests.

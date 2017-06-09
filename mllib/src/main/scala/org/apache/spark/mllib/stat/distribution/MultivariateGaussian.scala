@@ -28,7 +28,8 @@ import org.apache.spark.mllib.util.MLUtils
  * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution. In
  * the event that the covariance matrix is singular, the density will be computed in a
  * reduced dimensional subspace under which the distribution is supported.
- * (see [[http://en.wikipedia.org/wiki/Multivariate_normal_distribution#Degenerate_case]])
+ * (see <a href="http://en.wikipedia.org/wiki/Multivariate_normal_distribution#Degenerate_case">
+ * Degenerate case in Multivariate normal distribution (Wikipedia)</a>)
  *
  * @param mu The mean vector of the distribution
  * @param sigma The covariance matrix of the distribution
@@ -42,7 +43,7 @@ class MultivariateGaussian @Since("1.3.0") (
   require(sigma.numCols == sigma.numRows, "Covariance matrix must be square")
   require(mu.size == sigma.numCols, "Mean vector length must match covariance matrix size")
 
-  private val breezeMu = mu.toBreeze.toDenseVector
+  private val breezeMu = mu.asBreeze.toDenseVector
 
   /**
    * private[mllib] constructor
@@ -64,17 +65,17 @@ class MultivariateGaussian @Since("1.3.0") (
   /**
    * Returns density of this multivariate Gaussian at given point, x
    */
-   @Since("1.3.0")
+  @Since("1.3.0")
   def pdf(x: Vector): Double = {
-    pdf(x.toBreeze)
+    pdf(x.asBreeze)
   }
 
   /**
    * Returns the log-density of this multivariate Gaussian at given point, x
    */
-   @Since("1.3.0")
+  @Since("1.3.0")
   def logpdf(x: Vector): Double = {
-    logpdf(x.toBreeze)
+    logpdf(x.asBreeze)
   }
 
   /** Returns density of this multivariate Gaussian at given point, x */
@@ -118,7 +119,7 @@ class MultivariateGaussian @Since("1.3.0") (
    * relation to the maximum singular value (same tolerance used by, e.g., Octave).
    */
   private def calculateCovarianceConstants: (DBM[Double], Double) = {
-    val eigSym.EigSym(d, u) = eigSym(sigma.toBreeze.toDenseMatrix) // sigma = u * diag(d) * u.t
+    val eigSym.EigSym(d, u) = eigSym(sigma.asBreeze.toDenseMatrix) // sigma = u * diag(d) * u.t
 
     // For numerical stability, values are considered to be non-zero only if they exceed tol.
     // This prevents any inverted value from exceeding (eps * n * max(d))^-1

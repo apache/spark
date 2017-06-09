@@ -19,7 +19,7 @@ from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 
 __all__ = ['ALS', 'ALSModel']
@@ -65,16 +65,16 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     indicated user preferences rather than explicit ratings given to
     items.
 
-    >>> df = sqlContext.createDataFrame(
+    >>> df = spark.createDataFrame(
     ...     [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
     ...     ["user", "item", "rating"])
-    >>> als = ALS(rank=10, maxIter=5)
+    >>> als = ALS(rank=10, maxIter=5, seed=0)
     >>> model = als.fit(df)
     >>> model.rank
     10
     >>> model.userFactors.orderBy("id").collect()
     [Row(id=0, features=[...]), Row(id=1, ...), Row(id=2, ...)]
-    >>> test = sqlContext.createDataFrame([(0, 2), (1, 0), (2, 0)], ["user", "item"])
+    >>> test = spark.createDataFrame([(0, 2), (1, 0), (2, 0)], ["user", "item"])
     >>> predictions = sorted(model.transform(test).collect(), key=lambda r: r[0])
     >>> predictions[0]
     Row(user=0, item=2, prediction=-0.13807615637779236)
@@ -82,6 +82,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     Row(user=1, item=0, prediction=2.6258413791656494)
     >>> predictions[2]
     Row(user=2, item=0, prediction=-1.5018409490585327)
+    >>> user_recs = model.recommendForAllUsers(3)
+    >>> user_recs.where(user_recs.user == 0)\
+        .select("recommendations.item", "recommendations.rating").collect()
+    [Row(item=[0, 1, 2], rating=[3.910..., 1.992..., -0.138...])]
+    >>> item_recs = model.recommendForAllItems(3)
+    >>> item_recs.where(item_recs.item == 2)\
+        .select("recommendations.user", "recommendations.rating").collect()
+    [Row(user=[2, 1, 0], rating=[4.901..., 3.981..., -0.138...])]
     >>> als_path = temp_path + "/als"
     >>> als.save(als_path)
     >>> als2 = ALS.load(als_path)
@@ -110,22 +118,26 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
                           typeConverter=TypeConverters.toBoolean)
     alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference",
                   typeConverter=TypeConverters.toFloat)
-    userCol = Param(Params._dummy(), "userCol", "column name for user ids",
-                    typeConverter=TypeConverters.toString)
-    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids",
-                    typeConverter=TypeConverters.toString)
+    userCol = Param(Params._dummy(), "userCol", "column name for user ids. Ids must be within " +
+                    "the integer value range.", typeConverter=TypeConverters.toString)
+    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids. Ids must be within " +
+                    "the integer value range.", typeConverter=TypeConverters.toString)
     ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings",
                       typeConverter=TypeConverters.toString)
     nonnegative = Param(Params._dummy(), "nonnegative",
                         "whether to use nonnegative constraint for least squares",
                         typeConverter=TypeConverters.toBoolean)
     intermediateStorageLevel = Param(Params._dummy(), "intermediateStorageLevel",
-                                     "StorageLevel for intermediate datasets. Cannot be 'NONE'. " +
-                                     "Default: 'MEMORY_AND_DISK'.",
+                                     "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
                                      typeConverter=TypeConverters.toString)
     finalStorageLevel = Param(Params._dummy(), "finalStorageLevel",
-                              "StorageLevel for ALS model factors. " +
-                              "Default: 'MEMORY_AND_DISK'.",
+                              "StorageLevel for ALS model factors.",
+                              typeConverter=TypeConverters.toString)
+    coldStartStrategy = Param(Params._dummy(), "coldStartStrategy", "strategy for dealing with " +
+                              "unknown or new users/items at prediction time. This may be useful " +
+                              "in cross-validation or production scenarios, for handling " +
+                              "user/item ids the model has not seen in the training data. " +
+                              "Supported values: 'nan', 'drop'.",
                               typeConverter=TypeConverters.toString)
 
     @keyword_only
@@ -133,22 +145,22 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                  ratingCol="rating", nonnegative=False, checkpointInterval=10,
                  intermediateStorageLevel="MEMORY_AND_DISK",
-                 finalStorageLevel="MEMORY_AND_DISK"):
+                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan"):
         """
         __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=None, \
                  ratingCol="rating", nonnegative=false, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
-                 finalStorageLevel="MEMORY_AND_DISK")
+                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
         """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
         self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
+                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
                          ratingCol="rating", nonnegative=False, checkpointInterval=10,
                          intermediateStorageLevel="MEMORY_AND_DISK",
-                         finalStorageLevel="MEMORY_AND_DISK")
-        kwargs = self.__init__._input_kwargs
+                         finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -157,16 +169,16 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
                   implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                   ratingCol="rating", nonnegative=False, checkpointInterval=10,
                   intermediateStorageLevel="MEMORY_AND_DISK",
-                  finalStorageLevel="MEMORY_AND_DISK"):
+                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan"):
         """
         setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None, \
                  ratingCol="rating", nonnegative=False, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
-                 finalStorageLevel="MEMORY_AND_DISK")
+                 finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
         Sets params for ALS.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -334,6 +346,20 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         return self.getOrDefault(self.finalStorageLevel)
 
+    @since("2.2.0")
+    def setColdStartStrategy(self, value):
+        """
+        Sets the value of :py:attr:`coldStartStrategy`.
+        """
+        return self._set(coldStartStrategy=value)
+
+    @since("2.2.0")
+    def getColdStartStrategy(self):
+        """
+        Gets the value of coldStartStrategy or its default value.
+        """
+        return self.getOrDefault(self.coldStartStrategy)
+
 
 class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
@@ -366,25 +392,49 @@ class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("itemFactors")
 
+    @since("2.2.0")
+    def recommendForAllUsers(self, numItems):
+        """
+        Returns top `numItems` items recommended for each user, for all users.
+
+        :param numItems: max number of recommendations for each user
+        :return: a DataFrame of (userCol, recommendations), where recommendations are
+                 stored as an array of (itemCol, rating) Rows.
+        """
+        return self._call_java("recommendForAllUsers", numItems)
+
+    @since("2.2.0")
+    def recommendForAllItems(self, numUsers):
+        """
+        Returns top `numUsers` users recommended for each item, for all items.
+
+        :param numUsers: max number of recommendations for each item
+        :return: a DataFrame of (itemCol, recommendations), where recommendations are
+                 stored as an array of (userCol, rating) Rows.
+        """
+        return self._call_java("recommendForAllItems", numUsers)
+
 
 if __name__ == "__main__":
     import doctest
     import pyspark.ml.recommendation
-    from pyspark.context import SparkContext
-    from pyspark.sql import SQLContext
+    from pyspark.sql import SparkSession
     globs = pyspark.ml.recommendation.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.recommendation tests")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("ml.recommendation tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = sqlContext
+    globs['spark'] = spark
     import tempfile
     temp_path = tempfile.mkdtemp()
     globs['temp_path'] = temp_path
     try:
         (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-        sc.stop()
+        spark.stop()
     finally:
         from shutil import rmtree
         try:

@@ -25,7 +25,7 @@ import scala.language.existentials
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
@@ -54,14 +54,12 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
 }
 
 /**
- * :: Experimental ::
  * Validation for hyper-parameter tuning.
  * Randomly splits the input dataset into train and validation sets,
  * and uses evaluation metric on the validation set to select the best model.
  * Similar to [[CrossValidator]], but only splits the set once.
  */
 @Since("1.5.0")
-@Experimental
 class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[TrainValidationSplitModel]
   with TrainValidationSplitParams with MLWritable with Logging {
@@ -99,6 +97,10 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
 
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(trainRatio, seed)
+    logTuningParams(instr)
+
     val Array(trainingDataset, validationDataset) =
       dataset.randomSplit(Array($(trainRatio), 1 - $(trainRatio)), $(seed))
     trainingDataset.cache()
@@ -125,6 +127,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best train validation split metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
+    instr.logSuccess(bestModel)
     copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
   }
 
@@ -188,7 +191,6 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
 }
 
 /**
- * :: Experimental ::
  * Model from train validation split.
  *
  * @param uid Id.
@@ -196,7 +198,6 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
  * @param validationMetrics Evaluated validation metrics.
  */
 @Since("1.5.0")
-@Experimental
 class TrainValidationSplitModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("1.5.0") val bestModel: Model[_],
@@ -225,7 +226,7 @@ class TrainValidationSplitModel private[ml] (
       uid,
       bestModel.copy(extra).asInstanceOf[Model[_]],
       validationMetrics.clone())
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 
   @Since("2.0.0")

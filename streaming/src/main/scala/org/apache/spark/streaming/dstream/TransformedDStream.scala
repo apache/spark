@@ -29,7 +29,7 @@ class TransformedDStream[U: ClassTag] (
     transformFunc: (Seq[RDD[_]], Time) => RDD[U]
   ) extends DStream[U](parents.head.ssc) {
 
-  require(parents.length > 0, "List of DStreams to transform is empty")
+  require(parents.nonEmpty, "List of DStreams to transform is empty")
   require(parents.map(_.ssc).distinct.size == 1, "Some of the DStreams have different contexts")
   require(parents.map(_.slideDuration).distinct.size == 1,
     "Some of the DStreams have different slide durations")

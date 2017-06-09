@@ -20,11 +20,10 @@ package org.apache.spark
 import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
-import java.util.{Arrays, Properties, ServiceLoader, UUID}
-import java.util.concurrent.ConcurrentMap
+import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
-import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.generic.Growable
@@ -34,32 +33,27 @@ import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
 
 import com.google.common.collect.MapMaker
-import org.apache.commons.lang.SerializationUtils
+import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
-  FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat,
-  TextInputFormat}
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
+import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.mesos.MesosNativeLibrary
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat,
-  WholeTextFileInputFormat}
+import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
-  SparkDeploySchedulerBackend}
-import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import org.apache.spark.scheduler.local.LocalBackend
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
+import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
@@ -76,7 +70,7 @@ import org.apache.spark.util._
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
  */
-class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
+class SparkContext(config: SparkConf) extends Logging {
 
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -94,7 +88,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
 
-  private def assertNotStopped(): Unit = {
+  private[spark] def assertNotStopped(): Unit = {
     if (stopped.get()) {
       val activeContext = SparkContext.activeContext.get()
       val activeCreationSite =
@@ -189,6 +183,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
 
+  warnDeprecatedVersions()
+
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
    | not accessible by the outside world. They're mutable since we want to initialize all  |
@@ -199,6 +195,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _conf: SparkConf = _
   private var _eventLogDir: Option[URI] = None
   private var _eventLogCodec: Option[String] = None
+  private var _listenerBus: LiveListenerBus = _
   private var _env: SparkEnv = _
   private var _jobProgressListener: JobProgressListener = _
   private var _statusTracker: SparkStatusTracker = _
@@ -251,7 +248,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def isStopped: Boolean = stopped.get()
 
   // An asynchronous listener bus for Spark events
-  private[spark] val listenerBus = new LiveListenerBus
+  private[spark] def listenerBus: LiveListenerBus = _listenerBus
 
   // This function allows components created by SparkEnv to be mocked in unit tests:
   private[spark] def createSparkEnv(
@@ -264,8 +261,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def env: SparkEnv = _env
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
-  private[spark] val addedFiles = HashMap[String, Long]()
-  private[spark] val addedJars = HashMap[String, Long]()
+  private[spark] val addedFiles = new ConcurrentHashMap[String, Long]().asScala
+  private[spark] val addedJars = new ConcurrentHashMap[String, Long]().asScala
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = {
@@ -285,7 +282,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse.
    *
-   * '''Note:''' As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
+   * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
    * plan to set some global configurations for all Hadoop RDDs.
    */
   def hadoopConfiguration: Configuration = _hadoopConfiguration
@@ -335,7 +332,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     override protected def childValue(parent: Properties): Properties = {
       // Note: make a clone such that changes in the parent properties aren't reflected in
       // the those of the children threads, which has confusing semantics (SPARK-10563).
-      SerializationUtils.clone(parent).asInstanceOf[Properties]
+      SerializationUtils.clone(parent)
     }
     override protected def initialValue(): Properties = new Properties()
   }
@@ -352,17 +349,24 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     value
   }
 
+  private def warnDeprecatedVersions(): Unit = {
+    val javaVersion = System.getProperty("java.version").split("[+.\\-]+", 3)
+    if (scala.util.Properties.releaseVersion.exists(_.startsWith("2.10"))) {
+      logWarning("Support for Scala 2.10 is deprecated as of Spark 2.1.0")
+    }
+  }
+
   /** Control our logLevel. This overrides any user-defined log settings.
    * @param logLevel The desired log level as a string.
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    */
   def setLogLevel(logLevel: String) {
-    val validLevels = Seq("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
-    if (!validLevels.contains(logLevel)) {
-      throw new IllegalArgumentException(
-        s"Supplied level $logLevel did not match one of: ${validLevels.mkString(",")}")
-    }
-    Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
+    // let's allow lowercase or mixed case too
+    val upperCased = logLevel.toUpperCase(Locale.ROOT)
+    require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
+      s"Supplied level $logLevel did not match one of:" +
+        s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
+    Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
   }
 
   try {
@@ -376,6 +380,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       throw new SparkException("An application name must be set in your configuration")
     }
 
+    // log out spark.app.name in the Spark driver logs
+    logInfo(s"Submitted application: $appName")
+
     // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
     if (master == "yarn" && deployMode == "cluster" && !_conf.contains("spark.yarn.app.id")) {
       throw new SparkException("Detected yarn cluster mode, but isn't running on a cluster. " +
@@ -386,13 +393,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       logInfo("Spark configuration:\n" + _conf.toDebugString)
     }
 
-    // Set Spark driver host and port system properties
-    _conf.setIfMissing("spark.driver.host", Utils.localHostName())
+    // Set Spark driver host and port system properties. This explicitly sets the configuration
+    // instead of relying on the default value of the config constant.
+    _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
     _conf.setIfMissing("spark.driver.port", "0")
 
     _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
 
-    _jars = _conf.getOption("spark.jars").map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
+    _jars = Utils.getUserJars(_conf)
     _files = _conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.nonEmpty))
       .toSeq.flatten
 
@@ -415,6 +423,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
 
     if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
+
+    _listenerBus = new LiveListenerBus(_conf)
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
@@ -504,6 +514,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    if (_conf.getBoolean("spark.ui.reverseProxy", false)) {
+      System.setProperty("spark.ui.proxyBase", "/proxy/" + _applicationId)
+    }
     _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
 
@@ -529,7 +542,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
     _executorAllocationManager =
       if (dynamicAllocationEnabled) {
-        Some(new ExecutorAllocationManager(this, listenerBus, _conf))
+        schedulerBackend match {
+          case b: ExecutorAllocationClient =>
+            Some(new ExecutorAllocationManager(
+              schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf))
+          case _ =>
+            None
+        }
       } else {
         None
       }
@@ -558,6 +577,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
+    logDebug("Adding shutdown hook") // force eager creation of logger
     _shutdownHookRef = ShutdownHookManager.addShutdownHook(
       ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
       logInfo("Invoking stop() from shutdown hook")
@@ -588,7 +608,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         Some(Utils.getThreadDump())
       } else {
         val endpointRef = env.blockManager.master.getExecutorEndpointRef(executorId).get
-        Some(endpointRef.askWithRetry[Array[ThreadStackTrace]](TriggerThreadDump))
+        Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
@@ -624,7 +644,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Get a local property set in this thread, or null if it is missing. See
-   * [[org.apache.spark.SparkContext.setLocalProperty]].
+   * `org.apache.spark.SparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String =
     Option(localProperties.get).map(_.getProperty(key)).orNull
@@ -642,7 +662,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Application programmers can use this method to group all those jobs together and give a
    * group description. Once set, the Spark web UI will associate such jobs with this group.
    *
-   * The application can also use [[org.apache.spark.SparkContext.cancelJobGroup]] to cancel all
+   * The application can also use `org.apache.spark.SparkContext.cancelJobGroup` to cancel all
    * running jobs in this group. For example,
    * {{{
    * // In the main thread:
@@ -653,10 +673,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * sc.cancelJobGroup("some_job_to_cancel")
    * }}}
    *
-   * If interruptOnCancel is set to true for the job group, then job cancellation will result
-   * in Thread.interrupt() being called on the job's executor threads. This is useful to help ensure
-   * that the tasks are actually stopped in a timely manner, but is off by default due to HDFS-1208,
-   * where HDFS may respond to Thread.interrupt() by marking nodes as dead.
+   * @param interruptOnCancel If true, then job cancellation will result in `Thread.interrupt()`
+   * being called on the job's executor threads. This is useful to help ensure that the tasks
+   * are actually stopped in a timely manner, but is off by default due to HDFS-1208, where HDFS
+   * may respond to Thread.interrupt() by marking nodes as dead.
    */
   def setJobGroup(groupId: String, description: String, interruptOnCancel: Boolean = false) {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, description)
@@ -679,7 +699,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Execute a block of code in a scope such that all new RDDs created in this body will
    * be part of the same scope. For more detail, see {{org.apache.spark.rdd.RDDOperationScope}}.
    *
-   * Note: Return statements are NOT allowed in the given body.
+   * @note Return statements are NOT allowed in the given body.
    */
   private[spark] def withScope[U](body: => U): U = RDDOperationScope.withScope[U](this)(body)
 
@@ -692,6 +712,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * modified collection. Pass a copy of the argument to avoid this.
    * @note avoid using `parallelize(Seq())` to create an empty `RDD`. Consider `emptyRDD` for an
    * RDD with no partitions, or `parallelize(Seq[T]())` for an RDD of `T` with empty partitions.
+   * @param seq Scala collection to distribute
+   * @param numSlices number of partitions to divide the collection into
+   * @return RDD representing distributed collection
    */
   def parallelize[T: ClassTag](
       seq: Seq[T],
@@ -709,8 +732,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param start the start value.
    * @param end the end value.
    * @param step the incremental step
-   * @param numSlices the partition number of the new RDD.
-   * @return
+   * @param numSlices number of partitions to divide the collection into
+   * @return RDD representing distributed range
    */
   def range(
       start: Long,
@@ -775,6 +798,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /** Distribute a local Scala collection to form an RDD.
    *
    * This method is identical to `parallelize`.
+   * @param seq Scala collection to distribute
+   * @param numSlices number of partitions to divide the collection into
+   * @return RDD representing distributed collection
    */
   def makeRDD[T: ClassTag](
       seq: Seq[T],
@@ -786,16 +812,21 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Distribute a local Scala collection to form an RDD, with one or more
    * location preferences (hostnames of Spark nodes) for each object.
    * Create a new partition for each collection item.
+   * @param seq list of tuples of data and location preferences (hostnames of Spark nodes)
+   * @return RDD representing data partitioned according to location preferences
    */
   def makeRDD[T: ClassTag](seq: Seq[(T, Seq[String])]): RDD[T] = withScope {
     assertNotStopped()
     val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
-    new ParallelCollectionRDD[T](this, seq.map(_._1), seq.size, indexToPrefs)
+    new ParallelCollectionRDD[T](this, seq.map(_._1), math.max(seq.size, 1), indexToPrefs)
   }
 
   /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   * @param path path to the text file on a supported file system
+   * @param minPartitions suggested minimum number of partitions for the resulting RDD
+   * @return RDD of lines of the text file
    */
   def textFile(
       path: String,
@@ -831,10 +862,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
    * @note On some filesystems, `.../path/&#42;` can be a more efficient way to read all files
    *       in a directory rather than `.../path/` or `.../path`
+   * @note Partitioning is determined by data locality. This may result in too few partitions
+   *       by default.
    *
    * @param path Directory to the input data files, the path can be comma separated paths as the
    *             list of inputs.
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   * @return RDD representing tuples of file path and the corresponding file content
    */
   def wholeTextFiles(
       path: String,
@@ -880,10 +914,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note Small files are preferred; very large files may cause bad performance.
    * @note On some filesystems, `.../path/&#42;` can be a more efficient way to read all files
    *       in a directory rather than `.../path/` or `.../path`
+   * @note Partitioning is determined by data locality. This may result in too few partitions
+   *       by default.
    *
    * @param path Directory to the input data files, the path can be comma separated paths as the
    *             list of inputs.
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
+   * @return RDD representing tuples of file path and corresponding file content
    */
   def binaryFiles(
       path: String,
@@ -906,7 +943,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
-   * '''Note:''' We ensure that the byte array for each record in the resulting RDD
+   * @note We ensure that the byte array for each record in the resulting RDD
    * has the provided record length.
    *
    * @param path Directory to the input data files, the path can be comma separated paths as the
@@ -927,12 +964,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       classOf[LongWritable],
       classOf[BytesWritable],
       conf = conf)
-    val data = br.map { case (k, v) =>
-      val bytes = v.getBytes
+    br.map { case (k, v) =>
+      val bytes = v.copyBytes()
       assert(bytes.length == recordLength, "Byte array does not have correct length")
       bytes
     }
-    data
   }
 
   /**
@@ -944,12 +980,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
    *             sure you won't modify the conf. A safe approach is always creating a new conf for
    *             a new RDD.
-   * @param inputFormatClass Class of the InputFormat
-   * @param keyClass Class of the keys
-   * @param valueClass Class of the values
+   * @param inputFormatClass storage format of the data to be read
+   * @param keyClass `Class` of the key associated with the `inputFormatClass` parameter
+   * @param valueClass `Class` of the value associated with the `inputFormatClass` parameter
    * @param minPartitions Minimum number of Hadoop Splits to generate.
+   * @return RDD of tuples of key and corresponding value
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -962,6 +999,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       valueClass: Class[V],
       minPartitions: Int = defaultMinPartitions): RDD[(K, V)] = withScope {
     assertNotStopped()
+
+    // This is a hack to enforce loading hdfs-site.xml.
+    // See SPARK-11227 for details.
+    FileSystem.getLocal(conf)
+
     // Add necessary security credentials to the JobConf before broadcasting it.
     SparkHadoopUtil.get.addCredentials(conf)
     new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minPartitions)
@@ -969,11 +1011,18 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
+   * @param path directory to the input data files, the path can be comma separated paths
+   * as a list of inputs
+   * @param inputFormatClass storage format of the data to be read
+   * @param keyClass `Class` of the key associated with the `inputFormatClass` parameter
+   * @param valueClass `Class` of the value associated with the `inputFormatClass` parameter
+   * @param minPartitions suggested minimum number of partitions for the resulting RDD
+   * @return RDD of tuples of key and corresponding value
    */
   def hadoopFile[K, V](
       path: String,
@@ -982,6 +1031,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       valueClass: Class[V],
       minPartitions: Int = defaultMinPartitions): RDD[(K, V)] = withScope {
     assertNotStopped()
+
+    // This is a hack to enforce loading hdfs-site.xml.
+    // See SPARK-11227 for details.
+    FileSystem.getLocal(hadoopConfiguration)
+
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableConfiguration(hadoopConfiguration))
     val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
@@ -1003,11 +1057,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path, minPartitions)
    * }}}
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
+   * @param path directory to the input data files, the path can be comma separated paths
+   * as a list of inputs
+   * @param minPartitions suggested minimum number of partitions for the resulting RDD
+   * @return RDD of tuples of key and corresponding value
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]]
       (path: String, minPartitions: Int)
@@ -1027,18 +1085,37 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path)
    * }}}
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
+   * @param path directory to the input data files, the path can be comma separated paths as
+   * a list of inputs
+   * @return RDD of tuples of key and corresponding value
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = withScope {
     hadoopFile[K, V, F](path, defaultMinPartitions)
   }
 
-  /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
+  /**
+   * Smarter version of `newApiHadoopFile` that uses class tags to figure out the classes of keys,
+   * values and the `org.apache.hadoop.mapreduce.InputFormat` (new MapReduce API) so that user
+   * don't need to pass them directly. Instead, callers can just write, for example:
+   * ```
+   * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path)
+   * ```
+   *
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
+   * @param path directory to the input data files, the path can be comma separated paths
+   * as a list of inputs
+   * @return RDD of tuples of key and corresponding value
+   */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
       (path: String)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = withScope {
@@ -1053,11 +1130,18 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
+   * @param path directory to the input data files, the path can be comma separated paths
+   * as a list of inputs
+   * @param fClass storage format of the data to be read
+   * @param kClass `Class` of the key associated with the `fClass` parameter
+   * @param vClass `Class` of the value associated with the `fClass` parameter
+   * @param conf Hadoop configuration
+   * @return RDD of tuples of key and corresponding value
    */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
       path: String,
@@ -1066,6 +1150,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       vClass: Class[V],
       conf: Configuration = hadoopConfiguration): RDD[(K, V)] = withScope {
     assertNotStopped()
+
+    // This is a hack to enforce loading hdfs-site.xml.
+    // See SPARK-11227 for details.
+    FileSystem.getLocal(hadoopConfiguration)
+
     // The call to NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
     val job = NewHadoopJob.getInstance(conf)
@@ -1084,11 +1173,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
    *             sure you won't modify the conf. A safe approach is always creating a new conf for
    *             a new RDD.
-   * @param fClass Class of the InputFormat
-   * @param kClass Class of the keys
-   * @param vClass Class of the values
+   * @param fClass storage format of the data to be read
+   * @param kClass `Class` of the key associated with the `fClass` parameter
+   * @param vClass `Class` of the value associated with the `fClass` parameter
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -1100,6 +1189,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       kClass: Class[K],
       vClass: Class[V]): RDD[(K, V)] = withScope {
     assertNotStopped()
+
+    // This is a hack to enforce loading hdfs-site.xml.
+    // See SPARK-11227 for details.
+    FileSystem.getLocal(conf)
+
     // Add necessary security credentials to the JobConf. Required to access secure HDFS.
     val jconf = new JobConf(conf)
     SparkHadoopUtil.get.addCredentials(jconf)
@@ -1109,11 +1203,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Get an RDD for a Hadoop SequenceFile with given key and value types.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
+   * @param path directory to the input data files, the path can be comma separated paths
+   * as a list of inputs
+   * @param keyClass `Class` of the key associated with `SequenceFileInputFormat`
+   * @param valueClass `Class` of the value associated with `SequenceFileInputFormat`
+   * @param minPartitions suggested minimum number of partitions for the resulting RDD
+   * @return RDD of tuples of key and corresponding value
    */
   def sequenceFile[K, V](path: String,
       keyClass: Class[K],
@@ -1128,11 +1228,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Get an RDD for a Hadoop SequenceFile with given key and value types.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
+   * @param path directory to the input data files, the path can be comma separated paths
+   * as a list of inputs
+   * @param keyClass `Class` of the key associated with `SequenceFileInputFormat`
+   * @param valueClass `Class` of the value associated with `SequenceFileInputFormat`
+   * @return RDD of tuples of key and corresponding value
    */
   def sequenceFile[K, V](
       path: String,
@@ -1158,11 +1263,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * for the appropriate type. In addition, we pass the converter a ClassTag of its type to
    * allow it to figure out the Writable class to use in the subclass case.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
+   * @param path directory to the input data files, the path can be comma separated paths
+   * as a list of inputs
+   * @param minPartitions suggested minimum number of partitions for the resulting RDD
+   * @return RDD of tuples of key and corresponding value
    */
    def sequenceFile[K, V]
        (path: String, minPartitions: Int = defaultMinPartitions)
@@ -1187,6 +1296,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * be pretty slow if you use the default serializer (Java serialization),
    * though the nice thing about it is that there's very little effort required to save arbitrary
    * objects.
+   *
+   * @param path directory to the input data files, the path can be comma separated paths
+   * as a list of inputs
+   * @param minPartitions suggested minimum number of partitions for the resulting RDD
+   * @return RDD representing deserialized data from the file(s)
    */
   def objectFile[T: ClassTag](
       path: String,
@@ -1239,14 +1353,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name))
+    val acc = new Accumulator(initialValue, param, Option(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
 
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values
-   * with `+=`. Only the driver can access the accumuable's `value`.
+   * with `+=`. Only the driver can access the accumulable's `value`.
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
@@ -1260,15 +1374,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
-   * Spark UI. Tasks can add values to the accumuable using the `+=` operator. Only the driver can
-   * access the accumuable's `value`.
+   * Spark UI. Tasks can add values to the accumulable using the `+=` operator. Only the driver can
+   * access the accumulable's `value`.
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T])
     : Accumulable[R, T] = {
-    val acc = new Accumulable(initialValue, param, Some(name))
+    val acc = new Accumulable(initialValue, param, Option(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1289,23 +1403,25 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Register the given accumulator.  Note that accumulators must be registered before use, or it
-   * will throw exception.
+   * Register the given accumulator.
+   *
+   * @note Accumulators must be registered before use, or it will throw exception.
    */
   def register(acc: AccumulatorV2[_, _]): Unit = {
     acc.register(this)
   }
 
   /**
-   * Register the given accumulator with given name.  Note that accumulators must be registered
-   * before use, or it will throw exception.
+   * Register the given accumulator with given name.
+   *
+   * @note Accumulators must be registered before use, or it will throw exception.
    */
   def register(acc: AccumulatorV2[_, _], name: String): Unit = {
-    acc.register(this, name = Some(name))
+    acc.register(this, name = Option(name))
   }
 
   /**
-   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def longAccumulator: LongAccumulator = {
     val acc = new LongAccumulator
@@ -1314,7 +1430,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def longAccumulator(name: String): LongAccumulator = {
     val acc = new LongAccumulator
@@ -1323,7 +1439,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def doubleAccumulator: DoubleAccumulator = {
     val acc = new DoubleAccumulator
@@ -1332,7 +1448,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def doubleAccumulator(name: String): DoubleAccumulator = {
     val acc = new DoubleAccumulator
@@ -1341,21 +1457,21 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a list accumulator, which starts with empty list and accumulates inputs
-   * by adding them into the inner list.
+   * Create and register a `CollectionAccumulator`, which starts with empty list and accumulates
+   * inputs by adding them into the list.
    */
-  def listAccumulator[T]: ListAccumulator[T] = {
-    val acc = new ListAccumulator[T]
+  def collectionAccumulator[T]: CollectionAccumulator[T] = {
+    val acc = new CollectionAccumulator[T]
     register(acc)
     acc
   }
 
   /**
-   * Create and register a list accumulator, which starts with empty list and accumulates inputs
-   * by adding them into the inner list.
+   * Create and register a `CollectionAccumulator`, which starts with empty list and accumulates
+   * inputs by adding them into the list.
    */
-  def listAccumulator[T](name: String): ListAccumulator[T] = {
-    val acc = new ListAccumulator[T]
+  def collectionAccumulator[T](name: String): CollectionAccumulator[T] = {
+    val acc = new CollectionAccumulator[T]
     register(acc, name)
     acc
   }
@@ -1364,6 +1480,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Broadcast a read-only variable to the cluster, returning a
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
+   *
+   * @param value value to broadcast to the Spark nodes
+   * @return `Broadcast` object, a read-only variable cached on each machine
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     assertNotStopped()
@@ -1378,8 +1497,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
-   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
-   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+   *
+   * @param path can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
    * use `SparkFiles.get(fileName)` to find its download location.
    */
   def addFile(path: String): Unit = {
@@ -1387,16 +1507,21 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Returns a list of file paths that are added to resources.
+   */
+  def listFiles(): Seq[String] = addedFiles.keySet.toSeq
+
+  /**
    * Add a file to be downloaded with this Spark job on every node.
-   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
-   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
-   * use `SparkFiles.get(fileName)` to find its download location.
    *
-   * A directory can be given if the recursive option is set to true. Currently directories are only
-   * supported for Hadoop-supported filesystems.
+   * @param path can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
+   * use `SparkFiles.get(fileName)` to find its download location.
+   * @param recursive if true, a directory can be given in `path`. Currently directories are
+   * only supported for Hadoop-supported filesystems.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
-    val uri = new URI(path)
+    val uri = new Path(path).toUri
     val schemeCorrectedPath = uri.getScheme match {
       case null | "local" => new File(path).getCanonicalFile.toURI.toString
       case _ => path
@@ -1406,9 +1531,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val scheme = new URI(schemeCorrectedPath).getScheme
     if (!Array("http", "https", "ftp").contains(scheme)) {
       val fs = hadoopPath.getFileSystem(hadoopConfiguration)
-      if (!fs.exists(hadoopPath)) {
-        throw new FileNotFoundException(s"Added file $hadoopPath does not exist.")
-      }
       val isDir = fs.getFileStatus(hadoopPath).isDirectory
       if (!isLocal && scheme == "file" && isDir) {
         throw new SparkException(s"addFile does not support local directories when not running " +
@@ -1418,6 +1540,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         throw new SparkException(s"Added file $hadoopPath is a directory and recursive is not " +
           "turned on.")
       }
+    } else {
+      // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
+      Utils.validateURL(uri)
     }
 
     val key = if (!isLocal && scheme == "file") {
@@ -1426,14 +1551,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       schemeCorrectedPath
     }
     val timestamp = System.currentTimeMillis
-    addedFiles(key) = timestamp
-
-    // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
-    Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
-      hadoopConfiguration, timestamp, useCache = false)
-
-    logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
-    postEnvironmentUpdate()
+    if (addedFiles.putIfAbsent(key, timestamp).isEmpty) {
+      logInfo(s"Added file $path at $key with timestamp $timestamp")
+      // Fetch the file locally so that closures which are run on the driver can still use the
+      // SparkFiles API to access files.
+      Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
+        env.securityManager, hadoopConfiguration, timestamp, useCache = false)
+      postEnvironmentUpdate()
+    }
   }
 
   /**
@@ -1445,7 +1570,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     listenerBus.addListener(listener)
   }
 
-  private[spark] override def getExecutorIds(): Seq[String] = {
+  /**
+   * :: DeveloperApi ::
+   * Deregister the listener from Spark's listener bus.
+   */
+  @DeveloperApi
+  def removeSparkListener(listener: SparkListenerInterface): Unit = {
+    listenerBus.removeListener(listener)
+  }
+
+  private[spark] def getExecutorIds(): Seq[String] = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.getExecutorIds()
@@ -1469,7 +1603,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *                             This includes running, pending, and completed tasks.
    * @return whether the request is acknowledged by the cluster manager.
    */
-  private[spark] override def requestTotalExecutors(
+  @DeveloperApi
+  def requestTotalExecutors(
       numExecutors: Int,
       localityAwareTasks: Int,
       hostToLocalTaskCount: scala.collection.immutable.Map[String, Int]
@@ -1489,7 +1624,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @return whether the request is received.
    */
   @DeveloperApi
-  override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
+  def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.requestExecutors(numAdditionalExecutors)
@@ -1503,7 +1638,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executors.
    *
-   * Note: This is an indication to the cluster manager that the application wishes to adjust
+   * @note This is an indication to the cluster manager that the application wishes to adjust
    * its resource usage downwards. If the application wishes to replace the executors it kills
    * through this method with new ones, it should follow up explicitly with a call to
    * {{SparkContext#requestExecutors}}.
@@ -1511,10 +1646,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @return whether the request is received.
    */
   @DeveloperApi
-  override def killExecutors(executorIds: Seq[String]): Boolean = {
+  def killExecutors(executorIds: Seq[String]): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(executorIds, replace = false, force = true)
+        b.killExecutors(executorIds, replace = false, force = true).nonEmpty
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
@@ -1525,7 +1660,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executor.
    *
-   * Note: This is an indication to the cluster manager that the application wishes to adjust
+   * @note This is an indication to the cluster manager that the application wishes to adjust
    * its resource usage downwards. If the application wishes to replace the executor it kills
    * through this method with a new one, it should follow up explicitly with a call to
    * {{SparkContext#requestExecutors}}.
@@ -1533,7 +1668,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @return whether the request is received.
    */
   @DeveloperApi
-  override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
+  def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
 
   /**
    * Request that the cluster manager kill the specified executor without adjusting the
@@ -1543,7 +1678,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * this request. This assumes the cluster manager will automatically and eventually
    * fulfill all missing application resource requests.
    *
-   * Note: The replace is by no means guaranteed; another application on the same cluster
+   * @note The replace is by no means guaranteed; another application on the same cluster
    * can steal the window of opportunity and acquire this application's resources in the
    * mean time.
    *
@@ -1552,7 +1687,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(Seq(executorId), replace = true, force = true)
+        b.killExecutors(Seq(executorId), replace = true, force = true).nonEmpty
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
@@ -1592,7 +1727,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Returns an immutable map of RDDs that have marked themselves as persistent via cache() call.
-   * Note that this does not necessarily mean the caching or computation was successful.
+   *
+   * @note This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
 
@@ -1601,6 +1737,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Return information about blocks stored in all of the slaves
    */
   @DeveloperApi
+  @deprecated("This method may change or be removed in a future release.", "2.2.0")
   def getExecutorStorageStatus: Array[StorageStatus] = {
     assertNotStopped()
     env.blockManager.master.getStorageStatus
@@ -1662,70 +1799,86 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
-   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
-   * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   * Adds a JAR dependency for all tasks to be executed on this `SparkContext` in the future.
+   * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
+   * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
   def addJar(path: String) {
+    def addJarFile(file: File): String = {
+      try {
+        if (!file.exists()) {
+          throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
+        }
+        if (file.isDirectory) {
+          throw new IllegalArgumentException(
+            s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
+        }
+        env.rpcEnv.fileServer.addJar(file)
+      } catch {
+        case NonFatal(e) =>
+          logError(s"Failed to add $path to Spark environment", e)
+          null
+      }
+    }
+
     if (path == null) {
       logWarning("null specified as parameter to addJar")
     } else {
-      var key = ""
-      if (path.contains("\\")) {
+      val key = if (path.contains("\\")) {
         // For local paths with backslashes on Windows, URI throws an exception
-        key = env.rpcEnv.fileServer.addJar(new File(path))
+        addJarFile(new File(path))
       } else {
         val uri = new URI(path)
-        key = uri.getScheme match {
+        // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
+        Utils.validateURL(uri)
+        uri.getScheme match {
           // A JAR file which exists only on the driver node
-          case null | "file" =>
-            if (master == "yarn" && deployMode == "cluster") {
-              // In order for this to work in yarn cluster mode the user must specify the
-              // --addJars option to the client to upload the file into the distributed cache
-              // of the AM to make it show up in the current working directory.
-              val fileName = new Path(uri.getPath).getName()
-              try {
-                env.rpcEnv.fileServer.addJar(new File(fileName))
-              } catch {
-                case e: Exception =>
-                  // For now just log an error but allow to go through so spark examples work.
-                  // The spark examples don't really need the jar distributed since its also
-                  // the app jar.
-                  logError("Error adding jar (" + e + "), was the --addJars option used?")
-                  null
-              }
-            } else {
-              try {
-                env.rpcEnv.fileServer.addJar(new File(uri.getPath))
-              } catch {
-                case exc: FileNotFoundException =>
-                  logError(s"Jar not found at $path")
-                  null
-                case e: Exception =>
-                  // For now just log an error but allow to go through so spark examples work.
-                  // The spark examples don't really need the jar distributed since its also
-                  // the app jar.
-                  logError("Error adding jar (" + e + "), was the --addJars option used?")
-                  null
-              }
-            }
+          case null | "file" => addJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
-          case "local" =>
-            "file:" + uri.getPath
-          case _ =>
-            path
+          case "local" => "file:" + uri.getPath
+          case _ => path
         }
       }
       if (key != null) {
-        addedJars(key) = System.currentTimeMillis
-        logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
+        val timestamp = System.currentTimeMillis
+        if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
+          logInfo(s"Added JAR $path at $key with timestamp $timestamp")
+          postEnvironmentUpdate()
+        }
       }
     }
-    postEnvironmentUpdate()
   }
 
-  // Shut down the SparkContext.
-  def stop() {
+  /**
+   * Returns a list of jar files that are added to resources.
+   */
+  def listJars(): Seq[String] = addedJars.keySet.toSeq
+
+  /**
+   * When stopping SparkContext inside Spark components, it's easy to cause dead-lock since Spark
+   * may wait for some internal threads to finish. It's better to use this method to stop
+   * SparkContext instead.
+   */
+  private[spark] def stopInNewThread(): Unit = {
+    new Thread("stop-spark-context") {
+      setDaemon(true)
+
+      override def run(): Unit = {
+        try {
+          SparkContext.this.stop()
+        } catch {
+          case e: Throwable =>
+            logError(e.getMessage, e)
+            throw e
+        }
+      }
+    }.start()
+  }
+
+  /**
+   * Shut down the SparkContext.
+   */
+  def stop(): Unit = {
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(
         s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
@@ -1788,6 +1941,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
       SparkEnv.set(null)
     }
+    // Clear this `InheritableThreadLocal`, or it will still be inherited in child threads even this
+    // `SparkContext` is stopped.
+    localProperties.remove()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
@@ -1845,6 +2001,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Run a function on a given set of partitions in an RDD and pass the results to the given
    * handler function. This is the main entry point for all actions in Spark.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param func a function to run on each partition of the RDD
+   * @param partitions set of partitions to run on; some jobs may not want to compute on all
+   * partitions of the target RDD, e.g. for operations like `first()`
+   * @param resultHandler callback to pass each result to
    */
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
@@ -1867,6 +2029,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Run a function on a given set of partitions in an RDD and return the results as an array.
+   * The function that is run against each partition additionally takes `TaskContext` argument.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param func a function to run on each partition of the RDD
+   * @param partitions set of partitions to run on; some jobs may not want to compute on all
+   * partitions of the target RDD, e.g. for operations like `first()`
+   * @return in-memory collection with a result of the job (each collection element will contain
+   * a result from one partition)
    */
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
@@ -1878,8 +2048,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Run a job on a given set of partitions of an RDD, but take a function of type
-   * `Iterator[T] => U` instead of `(TaskContext, Iterator[T]) => U`.
+   * Run a function on a given set of partitions in an RDD and return the results as an array.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param func a function to run on each partition of the RDD
+   * @param partitions set of partitions to run on; some jobs may not want to compute on all
+   * partitions of the target RDD, e.g. for operations like `first()`
+   * @return in-memory collection with a result of the job (each collection element will contain
+   * a result from one partition)
    */
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
@@ -1890,7 +2066,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Run a job on all partitions in an RDD and return the results in an array.
+   * Run a job on all partitions in an RDD and return the results in an array. The function
+   * that is run against each partition additionally takes `TaskContext` argument.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param func a function to run on each partition of the RDD
+   * @return in-memory collection with a result of the job (each collection element will contain
+   * a result from one partition)
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: (TaskContext, Iterator[T]) => U): Array[U] = {
     runJob(rdd, func, 0 until rdd.partitions.length)
@@ -1898,13 +2080,23 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Run a job on all partitions in an RDD and return the results in an array.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param func a function to run on each partition of the RDD
+   * @return in-memory collection with a result of the job (each collection element will contain
+   * a result from one partition)
    */
   def runJob[T, U: ClassTag](rdd: RDD[T], func: Iterator[T] => U): Array[U] = {
     runJob(rdd, func, 0 until rdd.partitions.length)
   }
 
   /**
-   * Run a job on all partitions in an RDD and pass the results to a handler function.
+   * Run a job on all partitions in an RDD and pass the results to a handler function. The function
+   * that is run against each partition additionally takes `TaskContext` argument.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param processPartition a function to run on each partition of the RDD
+   * @param resultHandler callback to pass each result to
    */
   def runJob[T, U: ClassTag](
     rdd: RDD[T],
@@ -1916,6 +2108,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Run a job on all partitions in an RDD and pass the results to a handler function.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param processPartition a function to run on each partition of the RDD
+   * @param resultHandler callback to pass each result to
    */
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
@@ -1929,6 +2125,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * :: DeveloperApi ::
    * Run a job that can return approximate results.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param func a function to run on each partition of the RDD
+   * @param evaluator `ApproximateEvaluator` to receive the partial results
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @return partial result (how partial depends on whether the job was finished before or
+   * after timeout)
    */
   @DeveloperApi
   def runApproximateJob[T, U, R](
@@ -1950,6 +2153,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Submit a job for execution and return a FutureJob holding the result.
+   *
+   * @param rdd target RDD to run tasks on
+   * @param processPartition a function to run on each partition of the RDD
+   * @param partitions set of partitions to run on; some jobs may not want to compute on all
+   * partitions of the target RDD, e.g. for operations like `first()`
+   * @param resultHandler callback to pass each result to
+   * @param resultFunc function to be executed when the result is ready
    */
   def submitJob[T, U, R](
       rdd: RDD[T],
@@ -1989,7 +2199,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Cancel active jobs for the specified group. See [[org.apache.spark.SparkContext.setJobGroup]]
+   * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
    * for more information.
    */
   def cancelJobGroup(groupId: String) {
@@ -2003,14 +2213,64 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     dagScheduler.cancelAllJobs()
   }
 
-  /** Cancel a given job if it's scheduled or running */
-  private[spark] def cancelJob(jobId: Int) {
-    dagScheduler.cancelJob(jobId)
+  /**
+   * Cancel a given job if it's scheduled or running.
+   *
+   * @param jobId the job ID to cancel
+   * @param reason optional reason for cancellation
+   * @note Throws `InterruptedException` if the cancel message cannot be sent
+   */
+  def cancelJob(jobId: Int, reason: String): Unit = {
+    dagScheduler.cancelJob(jobId, Option(reason))
   }
 
-  /** Cancel a given stage and all jobs associated with it */
-  private[spark] def cancelStage(stageId: Int) {
-    dagScheduler.cancelStage(stageId)
+  /**
+   * Cancel a given job if it's scheduled or running.
+   *
+   * @param jobId the job ID to cancel
+   * @note Throws `InterruptedException` if the cancel message cannot be sent
+   */
+  def cancelJob(jobId: Int): Unit = {
+    dagScheduler.cancelJob(jobId, None)
+  }
+
+  /**
+   * Cancel a given stage and all jobs associated with it.
+   *
+   * @param stageId the stage ID to cancel
+   * @param reason reason for cancellation
+   * @note Throws `InterruptedException` if the cancel message cannot be sent
+   */
+  def cancelStage(stageId: Int, reason: String): Unit = {
+    dagScheduler.cancelStage(stageId, Option(reason))
+  }
+
+  /**
+   * Cancel a given stage and all jobs associated with it.
+   *
+   * @param stageId the stage ID to cancel
+   * @note Throws `InterruptedException` if the cancel message cannot be sent
+   */
+  def cancelStage(stageId: Int): Unit = {
+    dagScheduler.cancelStage(stageId, None)
+  }
+
+  /**
+   * Kill and reschedule the given task attempt. Task ids can be obtained from the Spark UI
+   * or through SparkListener.onTaskStart.
+   *
+   * @param taskId the task ID to kill. This id uniquely identifies the task attempt.
+   * @param interruptThread whether to interrupt the thread running the task.
+   * @param reason the reason for killing the task, which should be a short string. If a task
+   *   is killed multiple times with different reasons, only one reason will be reported.
+   *
+   * @return Whether the task was successfully killed.
+   */
+  def killTaskAttempt(
+      taskId: Long,
+      interruptThread: Boolean = true,
+      reason: String = "killed via SparkContext.killTaskAttempt"): Boolean = {
+    dagScheduler.killTaskAttempt(taskId, interruptThread, reason)
   }
 
   /**
@@ -2024,6 +2284,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param checkSerializable whether or not to immediately check <tt>f</tt> for serializability
    * @throws SparkException if <tt>checkSerializable</tt> is set but <tt>f</tt> is not
    *   serializable
+   * @return the cleaned closure
    */
   private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
     ClosureCleaner.clean(f, checkSerializable)
@@ -2031,8 +2292,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Set the directory under which RDDs are going to be checkpointed. The directory must
-   * be a HDFS path if running on a cluster.
+   * Set the directory under which RDDs are going to be checkpointed.
+   * @param directory path to the directory where checkpoint files will be stored
+   * (must be HDFS path if running in cluster)
    */
   def setCheckpointDir(directory: String) {
 
@@ -2129,7 +2391,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         }
     }
 
-    listenerBus.start(this)
+    listenerBus.start(this, _env.metricsSystem)
     _listenerBusStarted = true
   }
 
@@ -2170,6 +2432,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
  * various Spark features.
  */
 object SparkContext extends Logging {
+  private val VALID_LOG_LEVELS =
+    Set("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
 
   /**
    * Lock that guards access to global variables that track SparkContext construction.
@@ -2235,8 +2499,10 @@ object SparkContext extends Logging {
    * singleton object. Because we can only have one active SparkContext per JVM,
    * this is useful when applications may wish to share a SparkContext.
    *
-   * Note: This function cannot be used to create multiple SparkContext instances
+   * @note This function cannot be used to create multiple SparkContext instances
    * even if multiple contexts are allowed.
+   * @param config `SparkConfig` that will be used for initialisation of the `SparkContext`
+   * @return current `SparkContext` (or a new one if it wasn't created before the function call)
    */
   def getOrCreate(config: SparkConf): SparkContext = {
     // Synchronize to ensure that multiple create requests don't trigger an exception
@@ -2244,6 +2510,10 @@ object SparkContext extends Logging {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       if (activeContext.get() == null) {
         setActiveContext(new SparkContext(config), allowMultipleContexts = false)
+      } else {
+        if (config.getAll.nonEmpty) {
+          logWarning("Using an existing SparkContext; some configuration may not take effect.")
+        }
       }
       activeContext.get()
     }
@@ -2256,11 +2526,24 @@ object SparkContext extends Logging {
    *
    * This method allows not passing a SparkConf (useful if just retrieving).
    *
-   * Note: This function cannot be used to create multiple SparkContext instances
+   * @note This function cannot be used to create multiple SparkContext instances
    * even if multiple contexts are allowed.
+   * @return current `SparkContext` (or a new one if wasn't created before the function call)
    */
   def getOrCreate(): SparkContext = {
-    getOrCreate(new SparkConf())
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      if (activeContext.get() == null) {
+        setActiveContext(new SparkContext(), allowMultipleContexts = false)
+      }
+      activeContext.get()
+    }
+  }
+
+  /** Return the current active [[SparkContext]] if any. */
+  private[spark] def getActive: Option[SparkContext] = {
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      Option(activeContext.get())
+    }
   }
 
   /**
@@ -2333,6 +2616,9 @@ object SparkContext extends Logging {
   /**
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
    * their JARs to SparkContext.
+   *
+   * @param cls class that should be inside of the jar
+   * @return jar that contains the Class, `None` if not found
    */
   def jarOfClass(cls: Class[_]): Option[String] = {
     val uri = cls.getResource("/" + cls.getName.replace('.', '/') + ".class")
@@ -2354,6 +2640,9 @@ object SparkContext extends Logging {
    * Find the JAR that contains the class of a particular object, to make it easy for users
    * to pass their JARs to SparkContext. In most cases you can call jarOfObject(this) in
    * your driver program.
+   *
+   * @param obj reference to an instance which class should be inside of the jar
+   * @return jar that contains the class of the instance, `None` if not found
    */
   def jarOfObject(obj: AnyRef): Option[String] = jarOfClass(obj.getClass)
 
@@ -2403,7 +2692,6 @@ object SparkContext extends Logging {
    * Create a task scheduler based on a given master URL.
    * Return a 2-tuple of the scheduler backend and the task scheduler.
    */
-  @tailrec
   private def createTaskScheduler(
       sc: SparkContext,
       master: String,
@@ -2416,7 +2704,7 @@ object SparkContext extends Logging {
     master match {
       case "local" =>
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalBackend(sc.getConf, scheduler, 1)
+        val backend = new LocalSchedulerBackend(sc.getConf, scheduler, 1)
         scheduler.initialize(backend)
         (backend, scheduler)
 
@@ -2428,7 +2716,7 @@ object SparkContext extends Logging {
           throw new SparkException(s"Asked to run locally with $threadCount threads")
         }
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalBackend(sc.getConf, scheduler, threadCount)
+        val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
 
@@ -2438,14 +2726,14 @@ object SparkContext extends Logging {
         // local[N, M] means exactly N threads with M failures
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
         val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
-        val backend = new LocalBackend(sc.getConf, scheduler, threadCount)
+        val backend = new LocalSchedulerBackend(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
 
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
+        val backend = new StandaloneSchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         (backend, scheduler)
 
@@ -2462,29 +2750,12 @@ object SparkContext extends Logging {
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt, sc.conf)
         val masterUrls = localCluster.start()
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
+        val backend = new StandaloneSchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
-        backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
+        backend.shutdownCallback = (backend: StandaloneSchedulerBackend) => {
           localCluster.stop()
         }
         (backend, scheduler)
-
-      case MESOS_REGEX(mesosUrl) =>
-        MesosNativeLibrary.load()
-        val scheduler = new TaskSchedulerImpl(sc)
-        val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", defaultValue = true)
-        val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, sc, mesosUrl, sc.env.securityManager)
-        } else {
-          new MesosSchedulerBackend(scheduler, sc, mesosUrl)
-        }
-        scheduler.initialize(backend)
-        (backend, scheduler)
-
-      case zkUrl if zkUrl.startsWith("zk://") =>
-        logWarning("Master URL for a multi-master Mesos cluster managed by ZooKeeper should be " +
-          "in the form mesos://zk://host:port. Current Master URL will stop working in Spark 2.0.")
-        createTaskScheduler(sc, "mesos://" + zkUrl, deployMode)
 
       case masterUrl =>
         val cm = getClusterManager(masterUrl) match {
@@ -2507,10 +2778,10 @@ object SparkContext extends Logging {
   private def getClusterManager(url: String): Option[ExternalClusterManager] = {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoaders =
-    ServiceLoader.load(classOf[ExternalClusterManager], loader).asScala.filter(_.canCreate(url))
+      ServiceLoader.load(classOf[ExternalClusterManager], loader).asScala.filter(_.canCreate(url))
     if (serviceLoaders.size > 1) {
-      throw new SparkException(s"Multiple Cluster Managers ($serviceLoaders) registered " +
-          s"for the url $url:")
+      throw new SparkException(
+        s"Multiple external cluster managers registered for the url $url: $serviceLoaders")
     }
     serviceLoaders.headOption
   }
@@ -2528,16 +2799,15 @@ private object SparkMasterRegex {
   val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
   // Regular expression for connecting to Spark deploy clusters
   val SPARK_REGEX = """spark://(.*)""".r
-  // Regular expression for connection to Mesos cluster by mesos:// or mesos://zk:// url
-  val MESOS_REGEX = """mesos://(.*)""".r
 }
 
 /**
- * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
- * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
- * The getter for the writable class takes a ClassTag[T] in case this is a generic object
- * that doesn't know the type of T when it is created. This sounds strange but is necessary to
- * support converting subclasses of Writable to themselves (writableWritableConverter).
+ * A class encapsulating how to convert some type `T` from `Writable`. It stores both the `Writable`
+ * class corresponding to `T` (e.g. `IntWritable` for `Int`) and a function for doing the
+ * conversion.
+ * The getter for the writable class takes a `ClassTag[T]` in case this is a generic object
+ * that doesn't know the type of `T` when it is created. This sounds strange but is necessary to
+ * support converting subclasses of `Writable` to themselves (`writableWritableConverter()`).
  */
 private[spark] class WritableConverter[T](
     val writableClass: ClassTag[T] => Class[_ <: Writable],
@@ -2588,9 +2858,10 @@ object WritableConverter {
 }
 
 /**
- * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
- * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
- * The Writable class will be used in `SequenceFileRDDFunctions`.
+ * A class encapsulating how to convert some type `T` to `Writable`. It stores both the `Writable`
+ * class corresponding to `T` (e.g. `IntWritable` for `Int`) and a function for doing the
+ * conversion.
+ * The `Writable` class will be used in `SequenceFileRDDFunctions`.
  */
 private[spark] class WritableFactory[T](
     val writableClass: ClassTag[T] => Class[_ <: Writable],

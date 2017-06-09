@@ -39,7 +39,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalLocale = Locale.getDefault
   private val originalColumnBatchSize = TestHive.conf.columnBatchSize
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
-  private val originalConvertMetastoreOrc = TestHive.sessionState.convertMetastoreOrc
+  private val originalConvertMetastoreOrc = TestHive.conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+  private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
+  private val originalSessionLocalTimeZone = TestHive.conf.sessionLocalTimeZone
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
@@ -56,11 +58,14 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, 5)
     // Enable in-memory partition pruning for testing purposes
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
-    // Use Hive hash expression instead of the native one
-    TestHive.sessionState.functionRegistry.unregisterFunction("hash")
     // Ensures that the plans generation use metastore relation and not OrcRelation
     // Was done because SqlBuilder does not work with plans having logical relation
     TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, false)
+    // Ensures that cross joins are enabled so that we can test them
+    TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
+    // Fix session local timezone to America/Los_Angeles for those timezone sensitive tests
+    // (timestamp_*)
+    TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, "America/Los_Angeles")
     RuleExecutor.resetTime()
   }
 
@@ -72,7 +77,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
       TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
-      TestHive.sessionState.functionRegistry.restore()
+      TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
+      TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, originalSessionLocalTimeZone)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
@@ -177,7 +183,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "skewjoin",
     "database",
 
-    // These tests fail and and exit the JVM.
+    // These tests fail and exit the JVM.
     "auto_join18_multi_distinct",
     "join18_multi_distinct",
     "input44",
@@ -511,7 +517,92 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "plan_json",
 
     // This test uses CREATE EXTERNAL TABLE without specifying LOCATION
-    "alter2"
+    "alter2",
+
+    // [SPARK-16248][SQL] Whitelist the list of Hive fallback functions
+    "udf_field",
+    "udf_reflect2",
+    "udf_xpath",
+    "udf_xpath_boolean",
+    "udf_xpath_double",
+    "udf_xpath_float",
+    "udf_xpath_int",
+    "udf_xpath_long",
+    "udf_xpath_short",
+    "udf_xpath_string",
+
+    // These tests DROP TABLE that don't exist (but do not specify IF EXISTS)
+    "alter_rename_partition1",
+    "date_1",
+    "date_4",
+    "date_join1",
+    "date_serde",
+    "insert_compressed",
+    "lateral_view_cp",
+    "leftsemijoin",
+    "mapjoin_subquery2",
+    "nomore_ambiguous_table_col",
+    "partition_date",
+    "partition_varchar1",
+    "ppd_repeated_alias",
+    "push_or",
+    "reducesink_dedup",
+    "subquery_in",
+    "subquery_notin_having",
+    "timestamp_3",
+    "timestamp_lazy",
+    "udaf_covar_pop",
+    "union31",
+    "union_date",
+    "varchar_2",
+    "varchar_join1",
+
+    // This test assumes we parse scientific decimals as doubles (we parse them as decimals)
+    "literal_double",
+
+    // These tests are duplicates of joinXYZ
+    "auto_join0",
+    "auto_join1",
+    "auto_join10",
+    "auto_join11",
+    "auto_join12",
+    "auto_join13",
+    "auto_join14",
+    "auto_join14_hadoop20",
+    "auto_join15",
+    "auto_join17",
+    "auto_join18",
+    "auto_join2",
+    "auto_join20",
+    "auto_join21",
+    "auto_join23",
+    "auto_join24",
+    "auto_join3",
+    "auto_join4",
+    "auto_join5",
+    "auto_join6",
+    "auto_join7",
+    "auto_join8",
+    "auto_join9",
+
+    // These tests are based on the Hive's hash function, which is different from Spark
+    "auto_join19",
+    "auto_join22",
+    "auto_join25",
+    "auto_join26",
+    "auto_join27",
+    "auto_join28",
+    "auto_join30",
+    "auto_join31",
+    "auto_join_nulls",
+    "auto_join_reordering_values",
+    "correlationoptimizer1",
+    "correlationoptimizer2",
+    "correlationoptimizer3",
+    "correlationoptimizer4",
+    "multiMapJoin1",
+    "orc_dictionary_threshold",
+    "udf_hash"
   )
 
   /**
@@ -525,46 +616,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "add_partition_with_whitelist",
     "alias_casted_column",
     "alter_partition_with_whitelist",
-    "alter_rename_partition",
     "ambiguous_col",
     "annotate_stats_join",
     "annotate_stats_limit",
     "annotate_stats_part",
     "annotate_stats_table",
     "annotate_stats_union",
-    "auto_join0",
-    "auto_join1",
-    "auto_join10",
-    "auto_join11",
-    "auto_join12",
-    "auto_join13",
-    "auto_join14",
-    "auto_join14_hadoop20",
-    "auto_join15",
-    "auto_join17",
-    "auto_join18",
-    "auto_join19",
-    "auto_join2",
-    "auto_join20",
-    "auto_join21",
-    "auto_join22",
-    "auto_join23",
-    "auto_join24",
-    "auto_join25",
-    "auto_join26",
-    "auto_join27",
-    "auto_join28",
-    "auto_join3",
-    "auto_join30",
-    "auto_join31",
-    "auto_join4",
-    "auto_join5",
-    "auto_join6",
-    "auto_join7",
-    "auto_join8",
-    "auto_join9",
-    "auto_join_nulls",
-    "auto_join_reordering_values",
     "binary_constant",
     "binarysortable_1",
     "cast1",
@@ -577,15 +634,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "compute_stats_long",
     "compute_stats_string",
     "convert_enum_to_string",
-    "correlationoptimizer1",
     "correlationoptimizer10",
     "correlationoptimizer11",
     "correlationoptimizer13",
     "correlationoptimizer14",
     "correlationoptimizer15",
-    "correlationoptimizer2",
-    "correlationoptimizer3",
-    "correlationoptimizer4",
     "correlationoptimizer6",
     "correlationoptimizer7",
     "correlationoptimizer8",
@@ -602,12 +655,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "database_drop",
     "database_location",
     "database_properties",
-    "date_1",
     "date_2",
-    "date_4",
     "date_comparison",
-    "date_join1",
-    "date_serde",
     "decimal_1",
     "decimal_4",
     "decimal_join",
@@ -733,7 +782,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "insert1",
     "insert1_overwrite_partitions",
     "insert2_overwrite_partitions",
-    "insert_compressed",
     "join1",
     "join10",
     "join11",
@@ -789,14 +837,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "join_reorder4",
     "join_star",
     "lateral_view",
-    "lateral_view_cp",
     "lateral_view_noalias",
     "lateral_view_ppd",
-    "leftsemijoin",
     "leftsemijoin_mr",
     "limit_pushdown_negative",
     "lineage1",
-    "literal_double",
     "literal_ints",
     "literal_string",
     "load_dyn_part1",
@@ -820,7 +865,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "mapjoin_filter_on_outerjoin",
     "mapjoin_mapjoin",
     "mapjoin_subquery",
-    "mapjoin_subquery2",
     "mapjoin_test_outer",
     "mapreduce1",
     "mapreduce2",
@@ -834,7 +878,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "merge2",
     "merge4",
     "mergejoins",
-    "multiMapJoin1",
     "multiMapJoin2",
     "multi_insert_gby",
     "multi_insert_gby3",
@@ -842,7 +885,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "multi_join_union",
     "multigroupby_singlemr",
     "noalias_subq1",
-    "nomore_ambiguous_table_col",
     "nonblock_op_deduplicate",
     "notable_alias1",
     "notable_alias2",
@@ -857,7 +899,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "nullinput2",
     "nullscript",
     "optional_outer",
-    "orc_dictionary_threshold",
     "order",
     "order2",
     "outer_join_ppr",
@@ -866,10 +907,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "part_inherit_tbl_props",
     "part_inherit_tbl_props_with_star",
     "partcols1",
-    "partition_date",
     "partition_serde_format",
     "partition_type_check",
-    "partition_varchar1",
     "partition_wise_fileformat9",
     "ppd1",
     "ppd2",
@@ -889,7 +928,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "ppd_outer_join4",
     "ppd_outer_join5",
     "ppd_random",
-    "ppd_repeated_alias",
     "ppd_udf_col",
     "ppd_union",
     "ppr_allchildsarenull",
@@ -897,7 +935,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "ppr_pushdown2",
     "ppr_pushdown3",
     "progress_1",
-    "push_or",
     "query_with_semi",
     "quote1",
     "quote2",
@@ -909,7 +946,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "reduce_deduplicate_exclude_gby",
     "reduce_deduplicate_exclude_join",
     "reduce_deduplicate_extended",
-    "reducesink_dedup",
     "router_join_ppr",
     "select_as_omitted",
     "select_unquote_and",
@@ -932,20 +968,15 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "subquery_exists_having",
     "subquery_notexists",
     "subquery_notexists_having",
-    "subquery_in",
     "subquery_in_having",
-    "subquery_notin_having",
     "tablename_with_select",
-    "timestamp_3",
     "timestamp_comparison",
-    "timestamp_lazy",
     "timestamp_null",
     "transform_ppr1",
     "transform_ppr2",
     "type_cast_1",
     "type_widening",
     "udaf_collect_set",
-    "udaf_covar_pop",
     "udaf_histogram_numeric",
     "udf2",
     "udf5",
@@ -957,8 +988,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_PI",
     "udf_acos",
     "udf_add",
-    "udf_array",
-    "udf_array_contains",
+    // "udf_array",  -- done in array.sql
+    // "udf_array_contains",  -- done in array.sql
     "udf_ascii",
     "udf_asin",
     "udf_atan",
@@ -994,14 +1025,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_elt",
     "udf_equal",
     "udf_exp",
-    "udf_field",
     "udf_find_in_set",
     "udf_float",
     "udf_floor",
     "udf_from_unixtime",
     "udf_greaterthan",
     "udf_greaterthanorequal",
-    "udf_hash",
     "udf_hex",
     "udf_if",
     "udf_index",
@@ -1039,7 +1068,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_power",
     "udf_radians",
     "udf_rand",
-    "udf_reflect2",
     "udf_regexp",
     "udf_regexp_extract",
     "udf_regexp_replace",
@@ -1080,14 +1108,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_variance",
     "udf_weekofyear",
     "udf_when",
-    "udf_xpath",
-    "udf_xpath_boolean",
-    "udf_xpath_double",
-    "udf_xpath_float",
-    "udf_xpath_int",
-    "udf_xpath_long",
-    "udf_xpath_short",
-    "udf_xpath_string",
     "union10",
     "union11",
     "union13",
@@ -1109,7 +1129,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union29",
     "union3",
     "union30",
-    "union31",
     "union33",
     "union34",
     "union4",
@@ -1118,13 +1137,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union7",
     "union8",
     "union9",
-    "union_date",
     "union_lateralview",
     "union_ppr",
     "union_remove_6",
     "union_script",
-    "varchar_2",
-    "varchar_join1",
     "varchar_union1",
     "view",
     "view_cast",

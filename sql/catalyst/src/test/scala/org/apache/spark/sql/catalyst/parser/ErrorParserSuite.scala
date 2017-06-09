@@ -39,8 +39,6 @@ class ErrorParserSuite extends SparkFunSuite {
   }
 
   test("no viable input") {
-    intercept("select from tbl", 1, 7, "no viable alternative at input", "-------^^^")
-    intercept("select\nfrom tbl", 2, 0, "no viable alternative at input", "^^^")
     intercept("select ((r + 1) ", 1, 16, "no viable alternative at input", "----------------^^^")
   }
 

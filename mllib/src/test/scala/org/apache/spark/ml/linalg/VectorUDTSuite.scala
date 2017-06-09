@@ -17,18 +17,10 @@
 
 package org.apache.spark.ml.linalg
 
-import scala.beans.BeanInfo
-
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.sql.catalyst.JavaTypeInference
 import org.apache.spark.sql.types._
-
-@BeanInfo
-case class LabeledPoint(label: Double, features: Vector) {
-  override def toString: String = {
-    s"($label,$features)"
-  }
-}
 
 class VectorUDTSuite extends SparkFunSuite {
 

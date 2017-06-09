@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.Closeable
+
 import org.apache.hadoop.mapreduce.RecordReader
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -27,7 +29,8 @@ import org.apache.spark.sql.catalyst.InternalRow
  * Note that this returns [[Object]]s instead of [[InternalRow]] because we rely on erasure to pass
  * column batches by pretending they are rows.
  */
-class RecordReaderIterator[T](rowReader: RecordReader[_, T]) extends Iterator[T] {
+class RecordReaderIterator[T](
+    private[this] var rowReader: RecordReader[_, T]) extends Iterator[T] with Closeable {
   private[this] var havePair = false
   private[this] var finished = false
 
@@ -38,7 +41,7 @@ class RecordReaderIterator[T](rowReader: RecordReader[_, T]) extends Iterator[T]
         // Close and release the reader here; close() will also be called when the task
         // completes, but for tasks that read from many files, it helps to release the
         // resources early.
-        rowReader.close()
+        close()
       }
       havePair = !finished
     }
@@ -51,5 +54,15 @@ class RecordReaderIterator[T](rowReader: RecordReader[_, T]) extends Iterator[T]
     }
     havePair = false
     rowReader.getCurrentValue
+  }
+
+  override def close(): Unit = {
+    if (rowReader != null) {
+      try {
+        rowReader.close()
+      } finally {
+        rowReader = null
+      }
+    }
   }
 }

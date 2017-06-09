@@ -20,7 +20,6 @@ package org.apache.spark.mllib.tree.loss
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.util.MLUtils
 
-
 /**
  * :: DeveloperApi ::
  * Class for log loss calculation (for classification).
@@ -32,7 +31,7 @@ import org.apache.spark.mllib.util.MLUtils
  */
 @Since("1.2.0")
 @DeveloperApi
-object LogLoss extends Loss {
+object LogLoss extends ClassificationLoss {
 
   /**
    * Method to calculate the loss gradients for the gradient boosting calculation for binary
@@ -51,5 +50,12 @@ object LogLoss extends Loss {
     val margin = 2.0 * label * prediction
     // The following is equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
     2.0 * MLUtils.log1pExp(-margin)
+  }
+
+  /**
+   * Returns the estimated probability of a label of 1.0.
+   */
+  override private[spark] def computeProbability(margin: Double): Double = {
+    1.0 / (1.0 + math.exp(-2.0 * margin))
   }
 }

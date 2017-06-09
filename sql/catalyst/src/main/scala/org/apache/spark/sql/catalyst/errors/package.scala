@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.SparkException
 
 /**
  * Functions for attaching and retrieving trees that are associated with errors.
@@ -47,7 +50,10 @@ package object errors {
    */
   def attachTree[TreeType <: TreeNode[_], A](tree: TreeType, msg: String = "")(f: => A): A = {
     try f catch {
-      case e: Exception => throw new TreeNodeException(tree, msg, e)
+      // SPARK-16748: We do not want SparkExceptions from job failures in the planning phase
+      // to create TreeNodeException. Hence, wrap exception only if it is not SparkException.
+      case NonFatal(e) if !e.isInstanceOf[SparkException] =>
+        throw new TreeNodeException(tree, msg, e)
     }
   }
 }

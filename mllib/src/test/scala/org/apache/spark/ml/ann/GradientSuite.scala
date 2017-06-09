@@ -20,7 +20,7 @@ package org.apache.spark.ml.ann
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {

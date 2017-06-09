@@ -18,42 +18,51 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-
 case class CacheTableCommand(
-  tableName: String,
-  plan: Option[LogicalPlan],
-  isLazy: Boolean)
-  extends RunnableCommand {
+    tableIdent: TableIdentifier,
+    plan: Option[LogicalPlan],
+    isLazy: Boolean) extends RunnableCommand {
+  require(plan.isEmpty || tableIdent.database.isEmpty,
+    "Database name is not allowed in CACHE TABLE AS SELECT")
+
+  override def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>
-      sparkSession.registerTable(Dataset.ofRows(sparkSession, logicalPlan), tableName)
+      Dataset.ofRows(sparkSession, logicalPlan)
+        .createTempViewCommand(tableIdent.quotedString, replace = false, global = false)
+        .run(sparkSession)
     }
-    sparkSession.catalog.cacheTable(tableName)
+    sparkSession.catalog.cacheTable(tableIdent.quotedString)
 
     if (!isLazy) {
       // Performs eager caching
-      sparkSession.table(tableName).count()
+      sparkSession.table(tableIdent).countInternal()
     }
 
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }
 
 
-case class UncacheTableCommand(tableName: String) extends RunnableCommand {
+case class UncacheTableCommand(
+    tableIdent: TableIdentifier,
+    ifExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.table(tableName).unpersist(blocking = false)
+    val tableId = tableIdent.quotedString
+    try {
+      sparkSession.catalog.uncacheTable(tableId)
+    } catch {
+      case _: NoSuchTableException if ifExists => // don't throw
+    }
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }
 
 /**
@@ -65,6 +74,4 @@ case object ClearCacheCommand extends RunnableCommand {
     sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }

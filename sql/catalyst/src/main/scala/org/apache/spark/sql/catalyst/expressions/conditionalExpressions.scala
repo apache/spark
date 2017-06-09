@@ -20,12 +20,16 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1,expr2,expr3) - If expr1 is TRUE then IF() returns expr2; otherwise it returns expr3.")
+  usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1 < 2, 'a', 'b');
+       a
+  """)
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
   extends Expression {
@@ -37,7 +41,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     if (predicate.dataType != BooleanType) {
       TypeCheckResult.TypeCheckFailure(
         s"type of predicate expression in If should be boolean, not ${predicate.dataType}")
-    } else if (trueValue.dataType.asNullable != falseValue.dataType.asNullable) {
+    } else if (!trueValue.dataType.sameType(falseValue.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
         s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")
     } else {
@@ -60,19 +64,75 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     val trueEval = trueValue.genCode(ctx)
     val falseEval = falseValue.genCode(ctx)
 
-    ev.copy(code = s"""
-      ${condEval.code}
-      boolean ${ev.isNull} = false;
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${condEval.isNull} && ${condEval.value}) {
-        ${trueEval.code}
-        ${ev.isNull} = ${trueEval.isNull};
-        ${ev.value} = ${trueEval.value};
-      } else {
-        ${falseEval.code}
-        ${ev.isNull} = ${falseEval.isNull};
-        ${ev.value} = ${falseEval.value};
-      }""")
+    // place generated code of condition, true value and false value in separate methods if
+    // their code combined is large
+    val combinedLength = condEval.code.length + trueEval.code.length + falseEval.code.length
+    val generatedCode = if (combinedLength > 1024 &&
+      // Split these expressions only if they are created from a row object
+      (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+
+      val (condFuncName, condGlobalIsNull, condGlobalValue) =
+        createAndAddFunction(ctx, condEval, predicate.dataType, "evalIfCondExpr")
+      val (trueFuncName, trueGlobalIsNull, trueGlobalValue) =
+        createAndAddFunction(ctx, trueEval, trueValue.dataType, "evalIfTrueExpr")
+      val (falseFuncName, falseGlobalIsNull, falseGlobalValue) =
+        createAndAddFunction(ctx, falseEval, falseValue.dataType, "evalIfFalseExpr")
+      s"""
+        $condFuncName(${ctx.INPUT_ROW});
+        boolean ${ev.isNull} = false;
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        if (!$condGlobalIsNull && $condGlobalValue) {
+          $trueFuncName(${ctx.INPUT_ROW});
+          ${ev.isNull} = $trueGlobalIsNull;
+          ${ev.value} = $trueGlobalValue;
+        } else {
+          $falseFuncName(${ctx.INPUT_ROW});
+          ${ev.isNull} = $falseGlobalIsNull;
+          ${ev.value} = $falseGlobalValue;
+        }
+      """
+    }
+    else {
+      s"""
+        ${condEval.code}
+        boolean ${ev.isNull} = false;
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        if (!${condEval.isNull} && ${condEval.value}) {
+          ${trueEval.code}
+          ${ev.isNull} = ${trueEval.isNull};
+          ${ev.value} = ${trueEval.value};
+        } else {
+          ${falseEval.code}
+          ${ev.isNull} = ${falseEval.isNull};
+          ${ev.value} = ${falseEval.value};
+        }
+      """
+    }
+
+    ev.copy(code = generatedCode)
+  }
+
+  private def createAndAddFunction(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      dataType: DataType,
+      baseFuncName: String): (String, String, String) = {
+    val globalIsNull = ctx.freshName("isNull")
+    ctx.addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
+    val globalValue = ctx.freshName("value")
+    ctx.addMutableState(ctx.javaType(dataType), globalValue,
+      s"$globalValue = ${ctx.defaultValue(dataType)};")
+    val funcName = ctx.freshName(baseFuncName)
+    val funcBody =
+      s"""
+         |private void $funcName(InternalRow ${ctx.INPUT_ROW}) {
+         |  ${ev.code.trim}
+         |  $globalIsNull = ${ev.isNull};
+         |  $globalValue = ${ev.value};
+         |}
+         """.stripMargin
+    ctx.addNewFunction(funcName, funcBody)
+    (funcName, globalIsNull, globalValue)
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
@@ -126,7 +186,8 @@ abstract class CaseWhenBase(
 
   override def eval(input: InternalRow): Any = {
     var i = 0
-    while (i < branches.size) {
+    val size = branches.size
+    while (i < size) {
       if (java.lang.Boolean.TRUE.equals(branches(i)._1.eval(input))) {
         return branches(i)._2.eval(input)
       }
@@ -162,7 +223,7 @@ abstract class CaseWhenBase(
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END - When a = true, returns b; when c = true, return d; else return e.")
+  usage = "CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END - When `expr1` = true, returns `expr2`; when `expr3` = true, return `expr4`; else return `expr5`.")
 // scalastyle:on line.size.limit
 case class CaseWhen(
     val branches: Seq[(Expression, Expression)],
@@ -272,131 +333,10 @@ object CaseWhen {
 object CaseKeyWhen {
   def apply(key: Expression, branches: Seq[Expression]): CaseWhen = {
     val cases = branches.grouped(2).flatMap {
-      case cond :: value :: Nil => Some((EqualTo(key, cond), value))
-      case value :: Nil => None
+      case Seq(cond, value) => Some((EqualTo(key, cond), value))
+      case Seq(value) => None
     }.toArray.toSeq  // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }
 }
-
-/**
- * A function that returns the least value of all parameters, skipping null values.
- * It takes at least 2 parameters, and returns null iff all parameters are null.
- */
-@ExpressionDescription(
-  usage = "_FUNC_(n1, ...) - Returns the least value of all parameters, skipping null values.")
-case class Least(children: Seq[Expression]) extends Expression {
-
-  override def nullable: Boolean = children.forall(_.nullable)
-  override def foldable: Boolean = children.forall(_.foldable)
-
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(s"LEAST requires at least 2 arguments")
-    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"The expressions should all have the same type," +
-          s" got LEAST (${children.map(_.dataType)}).")
-    } else {
-      TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
-    }
-  }
-
-  override def dataType: DataType = children.head.dataType
-
-  override def eval(input: InternalRow): Any = {
-    children.foldLeft[Any](null)((r, c) => {
-      val evalc = c.eval(input)
-      if (evalc != null) {
-        if (r == null || ordering.lt(evalc, r)) evalc else r
-      } else {
-        r
-      }
-    })
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evalChildren = children.map(_.genCode(ctx))
-    val first = evalChildren(0)
-    val rest = evalChildren.drop(1)
-    def updateEval(eval: ExprCode): String = {
-      s"""
-        ${eval.code}
-        if (!${eval.isNull} && (${ev.isNull} ||
-          ${ctx.genGreater(dataType, ev.value, eval.value)})) {
-          ${ev.isNull} = false;
-          ${ev.value} = ${eval.value};
-        }
-      """
-    }
-    ev.copy(code = s"""
-      ${first.code}
-      boolean ${ev.isNull} = ${first.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.map(updateEval).mkString("\n")}""")
-  }
-}
-
-/**
- * A function that returns the greatest value of all parameters, skipping null values.
- * It takes at least 2 parameters, and returns null iff all parameters are null.
- */
-@ExpressionDescription(
-  usage = "_FUNC_(n1, ...) - Returns the greatest value of all parameters, skipping null values.")
-case class Greatest(children: Seq[Expression]) extends Expression {
-
-  override def nullable: Boolean = children.forall(_.nullable)
-  override def foldable: Boolean = children.forall(_.foldable)
-
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(s"GREATEST requires at least 2 arguments")
-    } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"The expressions should all have the same type," +
-          s" got GREATEST (${children.map(_.dataType)}).")
-    } else {
-      TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
-    }
-  }
-
-  override def dataType: DataType = children.head.dataType
-
-  override def eval(input: InternalRow): Any = {
-    children.foldLeft[Any](null)((r, c) => {
-      val evalc = c.eval(input)
-      if (evalc != null) {
-        if (r == null || ordering.gt(evalc, r)) evalc else r
-      } else {
-        r
-      }
-    })
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evalChildren = children.map(_.genCode(ctx))
-    val first = evalChildren(0)
-    val rest = evalChildren.drop(1)
-    def updateEval(eval: ExprCode): String = {
-      s"""
-        ${eval.code}
-        if (!${eval.isNull} && (${ev.isNull} ||
-          ${ctx.genGreater(dataType, eval.value, ev.value)})) {
-          ${ev.isNull} = false;
-          ${ev.value} = ${eval.value};
-        }
-      """
-    }
-    ev.copy(code = s"""
-      ${first.code}
-      boolean ${ev.isNull} = ${first.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.map(updateEval).mkString("\n")}""")
-  }
-}
-

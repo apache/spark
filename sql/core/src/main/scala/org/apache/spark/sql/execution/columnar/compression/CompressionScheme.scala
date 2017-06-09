@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.columnar.compression
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.execution.columnar.{ColumnType, NativeColumnType}
 import org.apache.spark.sql.types.AtomicType
 
@@ -39,7 +38,7 @@ private[columnar] trait Encoder[T <: AtomicType] {
 }
 
 private[columnar] trait Decoder[T <: AtomicType] {
-  def next(row: MutableRow, ordinal: Int): Unit
+  def next(row: InternalRow, ordinal: Int): Unit
 
   def hasNext: Boolean
 }

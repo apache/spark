@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -25,6 +27,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
@@ -67,10 +70,14 @@ private[r] object GeneralizedLinearRegressionWrapper
       data: DataFrame,
       family: String,
       link: String,
-      epsilon: Double,
-      maxit: Int): GeneralizedLinearRegressionWrapper = {
-    val rFormula = new RFormula()
-      .setFormula(formula)
+      tol: Double,
+      maxIter: Int,
+      weightCol: String,
+      regParam: Double,
+      variancePower: Double,
+      linkPower: Double): GeneralizedLinearRegressionWrapper = {
+    val rFormula = new RFormula().setFormula(formula)
+    checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema
     val schema = rFormulaModel.transform(data).schema
@@ -80,10 +87,19 @@ private[r] object GeneralizedLinearRegressionWrapper
     // assemble and fit the pipeline
     val glr = new GeneralizedLinearRegression()
       .setFamily(family)
-      .setLink(link)
       .setFitIntercept(rFormula.hasIntercept)
-      .setTol(epsilon)
-      .setMaxIter(maxit)
+      .setTol(tol)
+      .setMaxIter(maxIter)
+      .setRegParam(regParam)
+      .setFeaturesCol(rFormula.getFeaturesCol)
+    // set variancePower and linkPower if family is tweedie; otherwise, set link function
+    if (family.toLowerCase(Locale.ROOT) == "tweedie") {
+      glr.setVariancePower(variancePower).setLinkPower(linkPower)
+    } else {
+      glr.setLink(link)
+    }
+    if (weightCol != null) glr.setWeightCol(weightCol)
+
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, glr))
       .fit(data)
@@ -98,30 +114,38 @@ private[r] object GeneralizedLinearRegressionWrapper
       features
     }
 
-    val rCoefficientStandardErrors = if (glm.getFitIntercept) {
-      Array(summary.coefficientStandardErrors.last) ++
-        summary.coefficientStandardErrors.dropRight(1)
-    } else {
-      summary.coefficientStandardErrors
-    }
+    val rCoefficients: Array[Double] = if (summary.isNormalSolver) {
+      val rCoefficientStandardErrors = if (glm.getFitIntercept) {
+        Array(summary.coefficientStandardErrors.last) ++
+          summary.coefficientStandardErrors.dropRight(1)
+      } else {
+        summary.coefficientStandardErrors
+      }
 
-    val rTValues = if (glm.getFitIntercept) {
-      Array(summary.tValues.last) ++ summary.tValues.dropRight(1)
-    } else {
-      summary.tValues
-    }
+      val rTValues = if (glm.getFitIntercept) {
+        Array(summary.tValues.last) ++ summary.tValues.dropRight(1)
+      } else {
+        summary.tValues
+      }
 
-    val rPValues = if (glm.getFitIntercept) {
-      Array(summary.pValues.last) ++ summary.pValues.dropRight(1)
-    } else {
-      summary.pValues
-    }
+      val rPValues = if (glm.getFitIntercept) {
+        Array(summary.pValues.last) ++ summary.pValues.dropRight(1)
+      } else {
+        summary.pValues
+      }
 
-    val rCoefficients: Array[Double] = if (glm.getFitIntercept) {
-      Array(glm.intercept) ++ glm.coefficients.toArray ++
-        rCoefficientStandardErrors ++ rTValues ++ rPValues
+      if (glm.getFitIntercept) {
+        Array(glm.intercept) ++ glm.coefficients.toArray ++
+          rCoefficientStandardErrors ++ rTValues ++ rPValues
+      } else {
+        glm.coefficients.toArray ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
+      }
     } else {
-      glm.coefficients.toArray ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
+      if (glm.getFitIntercept) {
+        Array(glm.intercept) ++ glm.coefficients.toArray
+      } else {
+        glm.coefficients.toArray
+      }
     }
 
     val rDispersion: Double = summary.dispersion
@@ -129,7 +153,12 @@ private[r] object GeneralizedLinearRegressionWrapper
     val rDeviance: Double = summary.deviance
     val rResidualDegreeOfFreedomNull: Long = summary.residualDegreeOfFreedomNull
     val rResidualDegreeOfFreedom: Long = summary.residualDegreeOfFreedom
-    val rAic: Double = summary.aic
+    val rAic: Double = if (family.toLowerCase(Locale.ROOT) == "tweedie" &&
+      !Array(0.0, 1.0, 2.0).exists(x => math.abs(x - variancePower) < 1e-8)) {
+      0.0
+    } else {
+      summary.aic
+    }
     val rNumIterations: Int = summary.numIterations
 
     new GeneralizedLinearRegressionWrapper(pipeline, rFeatures, rCoefficients, rDispersion,

@@ -17,41 +17,20 @@
 
 package org.apache.spark.mllib.recommendation;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
 import scala.Tuple2;
 import scala.Tuple3;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SparkSession;
 
-public class JavaALSSuite implements Serializable {
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaALS")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaALSSuite extends SharedSparkSession {
 
   private void validatePrediction(
     MatrixFactorizationModel model,

@@ -22,11 +22,9 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
-import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.unsafe.sort.RadixSort;
 
 /**
  * Performs (external) sorting.
@@ -47,12 +45,16 @@ case class SortExec(
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
 
+  // sort performed is local within a given partition so will retain
+  // child operator's partitioning
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   private val enableRadixSort = sqlContext.conf.enableRadixSort
 
-  override private[sql] lazy val metrics = Map(
+  override lazy val metrics = Map(
     "sortTime" -> SQLMetrics.createTimingMetric(sparkContext, "sort time"),
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
@@ -68,10 +70,16 @@ case class SortExec(
       SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
 
     // The generator for prefix
-    val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
+    val prefixExpr = SortPrefix(boundSortExpression)
+    val prefixProjection = UnsafeProjection.create(Seq(prefixExpr))
     val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
-      override def computePrefix(row: InternalRow): Long = {
-        prefixProjection.apply(row).getLong(0)
+      private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+      override def computePrefix(row: InternalRow):
+          UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+        val prefix = prefixProjection.apply(row)
+        result.isNull = prefix.isNullAt(0)
+        result.value = if (result.isNull) prefixExpr.nullValue else prefix.getLong(0)
+        result
       }
     }
 
@@ -168,6 +176,8 @@ case class SortExec(
        | }
      """.stripMargin.trim
   }
+
+  protected override val shouldStopRequired = false
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     s"""

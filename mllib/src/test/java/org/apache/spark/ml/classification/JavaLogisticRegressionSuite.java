@@ -17,50 +17,34 @@
 
 package org.apache.spark.ml.classification;
 
-import java.io.Serializable;
+import java.io.IOException;
 import java.util.List;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.regression.LabeledPoint;
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
+import org.apache.spark.ml.feature.LabeledPoint;
+import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
-public class JavaLogisticRegressionSuite implements Serializable {
+public class JavaLogisticRegressionSuite extends SharedSparkSession {
 
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
   private transient Dataset<Row> dataset;
 
   private transient JavaRDD<LabeledPoint> datasetRDD;
   private double eps = 1e-5;
 
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaLogisticRegressionSuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-
+  @Override
+  public void setUp() throws IOException {
+    super.setUp();
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
     dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
-    dataset.registerTempTable("dataset");
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
+    dataset.createOrReplaceTempView("dataset");
   }
 
   @Test
@@ -68,7 +52,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegression lr = new LogisticRegression();
     Assert.assertEquals(lr.getLabelCol(), "label");
     LogisticRegressionModel model = lr.fit(dataset);
-    model.transform(dataset).registerTempTable("prediction");
+    model.transform(dataset).createOrReplaceTempView("prediction");
     Dataset<Row> predictions = spark.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
     // Check defaults
@@ -97,14 +81,14 @@ public class JavaLogisticRegressionSuite implements Serializable {
 
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0);
-    model.transform(dataset).registerTempTable("predAllZero");
+    model.transform(dataset).createOrReplaceTempView("predAllZero");
     Dataset<Row> predAllZero = spark.sql("SELECT prediction, myProbability FROM predAllZero");
     for (Row r : predAllZero.collectAsList()) {
       Assert.assertEquals(0.0, r.getDouble(0), eps);
     }
     // Call transform with params, and check that the params worked.
     model.transform(dataset, model.threshold().w(0.0), model.probabilityCol().w("myProb"))
-      .registerTempTable("predNotAllZero");
+      .createOrReplaceTempView("predNotAllZero");
     Dataset<Row> predNotAllZero = spark.sql("SELECT prediction, myProb FROM predNotAllZero");
     boolean foundNonZero = false;
     for (Row r : predNotAllZero.collectAsList()) {
@@ -130,7 +114,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegressionModel model = lr.fit(dataset);
     Assert.assertEquals(2, model.numClasses());
 
-    model.transform(dataset).registerTempTable("transformed");
+    model.transform(dataset).createOrReplaceTempView("transformed");
     Dataset<Row> trans1 = spark.sql("SELECT rawPrediction, probability FROM transformed");
     for (Row row : trans1.collectAsList()) {
       Vector raw = (Vector) row.get(0);

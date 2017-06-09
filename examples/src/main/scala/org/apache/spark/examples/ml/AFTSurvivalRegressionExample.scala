@@ -19,8 +19,8 @@
 package org.apache.spark.examples.ml
 
 // $example on$
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.regression.AFTSurvivalRegression
-import org.apache.spark.mllib.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -55,8 +55,9 @@ object AFTSurvivalRegressionExample {
     val model = aft.fit(training)
 
     // Print the coefficients, intercept and scale parameter for AFT survival regression
-    println(s"Coefficients: ${model.coefficients} Intercept: " +
-      s"${model.intercept} Scale: ${model.scale}")
+    println(s"Coefficients: ${model.coefficients}")
+    println(s"Intercept: ${model.intercept}")
+    println(s"Scale: ${model.scale}")
     model.transform(training).show(false)
     // $example off$
 

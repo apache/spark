@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.NoSuchElementException
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -62,6 +60,30 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    case Some((SQLConf.Replaced.MAPREDUCE_JOB_REDUCES, Some(value))) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        logWarning(
+          s"Property ${SQLConf.Replaced.MAPREDUCE_JOB_REDUCES} is Hadoop's property, " +
+            s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+        if (value.toInt < 1) {
+          val msg =
+            s"Setting negative ${SQLConf.Replaced.MAPREDUCE_JOB_REDUCES} for automatically " +
+              "determining the number of reducers is not supported."
+          throw new IllegalArgumentException(msg)
+        } else {
+          sparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, value)
+          Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
+        }
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((key @ SetCommand.VariableName(name), Some(value))) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        sparkSession.conf.set(name, value)
+        Seq(Row(key, value))
+      }
+      (keyValueOutput, runFunc)
+
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
@@ -74,7 +96,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries all key-value pairs that are set in the SQLConf of the sparkSession.
     case None =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.conf.getAll.map { case (k, v) => Row(k, v) }.toSeq
+        sparkSession.conf.getAll.toSeq.sorted.map { case (k, v) => Row(k, v) }
       }
       (keyValueOutput, runFunc)
 
@@ -82,13 +104,14 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // SQLConf of the sparkSession.
     case Some(("-v", None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.sessionState.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
-          Row(key, defaultValue, doc)
+        sparkSession.sessionState.conf.getAllDefinedConfs.sorted.map {
+          case (key, defaultValue, doc) =>
+            Row(key, Option(defaultValue).getOrElse("<undefined>"), doc)
         }
       }
       val schema = StructType(
         StructField("key", StringType, nullable = false) ::
-          StructField("default", StringType, nullable = false) ::
+          StructField("value", StringType, nullable = false) ::
           StructField("meaning", StringType, nullable = false) :: Nil)
       (schema.toAttributes, runFunc)
 
@@ -117,4 +140,22 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 
   override def run(sparkSession: SparkSession): Seq[Row] = runFunc(sparkSession)
 
+}
+
+object SetCommand {
+  val VariableName = """hivevar:([^=]+)""".r
+}
+
+/**
+ * This command is for resetting SQLConf to the default values. Command that runs
+ * {{{
+ *   reset;
+ * }}}
+ */
+case object ResetCommand extends RunnableCommand with Logging {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.conf.clear()
+    Seq.empty[Row]
+  }
 }

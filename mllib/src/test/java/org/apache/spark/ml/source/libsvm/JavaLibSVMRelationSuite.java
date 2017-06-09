@@ -23,35 +23,28 @@ import java.nio.charset.StandardCharsets;
 
 import com.google.common.io.Files;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.mllib.linalg.DenseVector;
-import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.SharedSparkSession;
+import org.apache.spark.ml.linalg.DenseVector;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
 import org.apache.spark.util.Utils;
 
 
 /**
  * Test LibSVMRelation in Java.
  */
-public class JavaLibSVMRelationSuite {
-  private transient SparkSession spark;
+public class JavaLibSVMRelationSuite extends SharedSparkSession {
 
   private File tempDir;
   private String path;
 
-  @Before
+  @Override
   public void setUp() throws IOException {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaLibSVMRelationSuite")
-      .getOrCreate();
-
+    super.setUp();
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
     File file = new File(tempDir, "part-00000");
     String s = "1 1:1.0 3:2.0 5:3.0\n0\n0 2:4.0 4:5.0 6:6.0";
@@ -59,10 +52,9 @@ public class JavaLibSVMRelationSuite {
     path = tempDir.toURI().toString();
   }
 
-  @After
+  @Override
   public void tearDown() {
-    spark.stop();
-    spark = null;
+    super.tearDown();
     Utils.deleteRecursively(tempDir);
   }
 

@@ -18,10 +18,12 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -38,7 +40,7 @@ class DecisionTreeRegressorSuite
   override def beforeAll() {
     super.beforeAll()
     categoricalDataPointsRDD =
-      sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints())
+      sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints().map(_.asML))
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -67,11 +69,12 @@ class DecisionTreeRegressorSuite
   test("copied model must have the same parent") {
     val categoricalFeatures = Map(0 -> 2, 1 -> 2)
     val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
-    val model = new DecisionTreeRegressor()
+    val dtr = new DecisionTreeRegressor()
       .setImpurity("variance")
       .setMaxDepth(2)
-      .setMaxBins(8).fit(df)
-    MLTestingUtils.checkCopy(model)
+      .setMaxBins(8)
+    val model = dtr.fit(df)
+    MLTestingUtils.checkCopyAndUids(dtr, model)
   }
 
   test("predictVariance") {
@@ -94,6 +97,25 @@ class DecisionTreeRegressorSuite
       val expectedVariance = model.rootNode.predictImpl(features).impurityStats.calculate()
       assert(variance === expectedVariance,
         s"Expected variance $expectedVariance but got $variance.")
+    }
+
+    val varianceData: RDD[LabeledPoint] = TreeTests.varianceData(sc)
+    val varianceDF = TreeTests.setMetadata(varianceData, Map.empty[Int, Int], 0)
+    dt.setMaxDepth(1)
+      .setMaxBins(6)
+      .setSeed(0)
+    val transformVarDF = dt.fit(varianceDF).transform(varianceDF)
+    val calculatedVariances = transformVarDF.select(dt.getVarianceCol).collect().map {
+      case Row(variance: Double) => variance
+    }
+
+    // Since max depth is set to 1, the best split point is that which splits the data
+    // into (0.0, 1.0, 2.0) and (10.0, 12.0, 14.0). The predicted variance for each
+    // data point in the left node is 0.667 and for each data point in the right node
+    // is 2.667
+    val expectedVariances = Array(0.667, 0.667, 0.667, 2.667, 2.667, 2.667)
+    calculatedVariances.zip(expectedVariances).foreach { case (actual, expected) =>
+      assert(actual ~== expected absTol 1e-3)
     }
   }
 
@@ -120,7 +142,7 @@ class DecisionTreeRegressorSuite
   test("should support all NumericType labels and not support other types") {
     val dt = new DecisionTreeRegressor().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[DecisionTreeRegressionModel, DecisionTreeRegressor](
-      dt, isClassification = false, spark) { (expected, actual) =>
+      dt, spark, isClassification = false) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
   }
@@ -144,16 +166,17 @@ class DecisionTreeRegressorSuite
     val categoricalData: DataFrame =
       TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 0)
     testEstimatorAndModelReadWrite(dt, categoricalData,
-      TreeTests.allParamSettings, checkModelData)
+      TreeTests.allParamSettings, TreeTests.allParamSettings, checkModelData)
 
     // Continuous splits with tree depth 2
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(dt, continuousData,
-      TreeTests.allParamSettings, checkModelData)
+      TreeTests.allParamSettings, TreeTests.allParamSettings, checkModelData)
 
     // Continuous splits with tree depth 0
     testEstimatorAndModelReadWrite(dt, continuousData,
+      TreeTests.allParamSettings ++ Map("maxDepth" -> 0),
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
   }
 }
@@ -170,7 +193,7 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
       categoricalFeatures: Map[Int, Int]): Unit = {
     val numFeatures = data.first().features.size
     val oldStrategy = dt.getOldStrategy(categoricalFeatures)
-    val oldTree = OldDecisionTree.train(data, oldStrategy)
+    val oldTree = OldDecisionTree.train(data.map(OldLabeledPoint.fromML), oldStrategy)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newTree = dt.fit(newData)
     // Use parent from newTree since this is not checked anyways.

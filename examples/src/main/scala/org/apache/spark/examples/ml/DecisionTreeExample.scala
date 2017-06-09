@@ -18,8 +18,9 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import java.util.Locale
+
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
@@ -27,10 +28,10 @@ import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage, Transformer}
 import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, DecisionTreeClassifier}
 import org.apache.spark.ml.feature.{StringIndexer, VectorIndexer}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.{MulticlassMetrics, RegressionMetrics}
-import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -124,10 +125,9 @@ object DecisionTreeExample {
       }
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
@@ -197,14 +197,14 @@ object DecisionTreeExample {
     (training, test)
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val spark = SparkSession
       .builder
       .appName(s"DecisionTreeExample with $params")
       .getOrCreate()
 
     params.checkpointDir.foreach(spark.sparkContext.setCheckpointDir)
-    val algo = params.algo.toLowerCase
+    val algo = params.algo.toLowerCase(Locale.ROOT)
 
     println(s"DecisionTreeExample with parameters:\n$params")
 
@@ -321,7 +321,7 @@ object DecisionTreeExample {
       case None => throw new RuntimeException(
         "Unknown failure when indexing labels for classification.")
     }
-    val accuracy = new MulticlassMetrics(predictions.zip(labels)).precision
+    val accuracy = new MulticlassMetrics(predictions.zip(labels)).accuracy
     println(s"  Accuracy ($numClasses classes): $accuracy")
   }
 

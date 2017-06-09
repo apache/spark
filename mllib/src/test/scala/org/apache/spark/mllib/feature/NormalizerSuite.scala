@@ -51,10 +51,10 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert((data1, data1RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
 
-    assert(brzNorm(data1(0).toBreeze, 1) ~== 1.0 absTol 1E-5)
-    assert(brzNorm(data1(2).toBreeze, 1) ~== 1.0 absTol 1E-5)
-    assert(brzNorm(data1(3).toBreeze, 1) ~== 1.0 absTol 1E-5)
-    assert(brzNorm(data1(4).toBreeze, 1) ~== 1.0 absTol 1E-5)
+    assert(brzNorm(data1(0).asBreeze, 1) ~== 1.0 absTol 1E-5)
+    assert(brzNorm(data1(2).asBreeze, 1) ~== 1.0 absTol 1E-5)
+    assert(brzNorm(data1(3).asBreeze, 1) ~== 1.0 absTol 1E-5)
+    assert(brzNorm(data1(4).asBreeze, 1) ~== 1.0 absTol 1E-5)
 
     assert(data1(0) ~== Vectors.sparse(3, Seq((0, -0.465116279), (1, 0.53488372))) absTol 1E-5)
     assert(data1(1) ~== Vectors.dense(0.0, 0.0, 0.0) absTol 1E-5)
@@ -78,10 +78,10 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert((data2, data2RDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
 
-    assert(brzNorm(data2(0).toBreeze, 2) ~== 1.0 absTol 1E-5)
-    assert(brzNorm(data2(2).toBreeze, 2) ~== 1.0 absTol 1E-5)
-    assert(brzNorm(data2(3).toBreeze, 2) ~== 1.0 absTol 1E-5)
-    assert(brzNorm(data2(4).toBreeze, 2) ~== 1.0 absTol 1E-5)
+    assert(brzNorm(data2(0).asBreeze, 2) ~== 1.0 absTol 1E-5)
+    assert(brzNorm(data2(2).asBreeze, 2) ~== 1.0 absTol 1E-5)
+    assert(brzNorm(data2(3).asBreeze, 2) ~== 1.0 absTol 1E-5)
+    assert(brzNorm(data2(4).asBreeze, 2) ~== 1.0 absTol 1E-5)
 
     assert(data2(0) ~== Vectors.sparse(3, Seq((0, -0.65617871), (1, 0.75460552))) absTol 1E-5)
     assert(data2(1) ~== Vectors.dense(0.0, 0.0, 0.0) absTol 1E-5)

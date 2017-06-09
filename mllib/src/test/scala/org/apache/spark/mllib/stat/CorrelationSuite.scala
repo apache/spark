@@ -104,8 +104,8 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Log
       (Double.NaN, Double.NaN, 1.00000000, Double.NaN),
       (0.40047142, 0.91359586, Double.NaN, 1.0000000))
     // scalastyle:on
-    assert(matrixApproxEqual(defaultMat.toBreeze, expected))
-    assert(matrixApproxEqual(pearsonMat.toBreeze, expected))
+    assert(matrixApproxEqual(defaultMat.asBreeze, expected))
+    assert(matrixApproxEqual(pearsonMat.asBreeze, expected))
   }
 
   test("corr(X) spearman") {
@@ -118,7 +118,7 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Log
       (Double.NaN, Double.NaN, 1.00000000, Double.NaN),
       (0.4000000,  0.9486833,  Double.NaN, 1.0000000))
     // scalastyle:on
-    assert(matrixApproxEqual(spearmanMat.toBreeze, expected))
+    assert(matrixApproxEqual(spearmanMat.asBreeze, expected))
   }
 
   test("method identification") {

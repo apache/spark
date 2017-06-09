@@ -19,12 +19,13 @@ package org.apache.spark.ui.jobs
 
 import java.util.concurrent.TimeoutException
 
-import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
+import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
@@ -40,6 +41,7 @@ import org.apache.spark.ui.jobs.UIData._
  * updating the internal data structures concurrently.
  */
 @DeveloperApi
+@deprecated("This class will be removed in a future release.", "2.2.0")
 class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   // Define a handful of type aliases so that data structures' types can serve as documentation.
@@ -93,6 +95,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   val retainedStages = conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
   val retainedJobs = conf.getInt("spark.ui.retainedJobs", SparkUI.DEFAULT_RETAINED_JOBS)
+  val retainedTasks = conf.get(UI_RETAINED_TASKS)
 
   // We can test for memory leaks by ensuring that collections that track non-active jobs and
   // stages do not grow without bound and that collections for active jobs/stages eventually become
@@ -140,7 +143,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   /** If stages is too large, remove and garbage collect old stages */
   private def trimStagesIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
     if (stages.size > retainedStages) {
-      val toRemove = math.max(retainedStages / 10, 1)
+      val toRemove = calculateNumberToRemove(stages.size, retainedStages)
       stages.take(toRemove).foreach { s =>
         stageIdToData.remove((s.stageId, s.attemptId))
         stageIdToInfo.remove(s.stageId)
@@ -152,7 +155,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   /** If jobs is too large, remove and garbage collect old jobs */
   private def trimJobsIfNecessary(jobs: ListBuffer[JobUIData]) = synchronized {
     if (jobs.size > retainedJobs) {
-      val toRemove = math.max(retainedJobs / 10, 1)
+      val toRemove = calculateNumberToRemove(jobs.size, retainedJobs)
       jobs.take(toRemove).foreach { job =>
         // Remove the job's UI data, if it exists
         jobIdToData.remove(job.jobId).foreach { removedJob =>
@@ -224,7 +227,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         trimJobsIfNecessary(completedJobs)
         jobData.status = JobExecutionStatus.SUCCEEDED
         numCompletedJobs += 1
-      case JobFailed(exception) =>
+      case JobFailed(_) =>
         failedJobs += jobData
         trimJobsIfNecessary(failedJobs)
         jobData.status = JobExecutionStatus.FAILED
@@ -282,7 +285,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     ) {
       jobData.numActiveStages -= 1
       if (stage.failureReason.isEmpty) {
-        if (!stage.submissionTime.isEmpty) {
+        if (stage.submissionTime.isDefined) {
           jobData.completedStageIndices.add(stage.stageId)
         }
       } else {
@@ -326,13 +329,12 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val taskInfo = taskStart.taskInfo
     if (taskInfo != null) {
-      val metrics = TaskMetrics.empty
       val stageData = stageIdToData.getOrElseUpdate((taskStart.stageId, taskStart.stageAttemptId), {
         logWarning("Task start for unknown stage " + taskStart.stageId)
         new StageUIData
       })
       stageData.numActiveTasks += 1
-      stageData.taskData.put(taskInfo.taskId, new TaskUIData(taskInfo, Some(metrics)))
+      stageData.taskData.put(taskInfo.taskId, TaskUIData(taskInfo))
     }
     for (
       activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskStart.stageId);
@@ -369,6 +371,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskEnd.reason match {
         case Success =>
           execSummary.succeededTasks += 1
+        case kill: TaskKilled =>
+          execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
+            kill.reason, execSummary.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
         case _ =>
           execSummary.failedTasks += 1
       }
@@ -381,6 +386,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             stageData.completedIndices.add(info.index)
             stageData.numCompleteTasks += 1
             None
+          case kill: TaskKilled =>
+            stageData.reasonToNumKilled = stageData.reasonToNumKilled.updated(
+              kill.reason, stageData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
+            Some(kill.toErrorString)
           case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
             stageData.numFailedTasks += 1
             Some(e.toErrorString)
@@ -395,10 +404,16 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         updateAggregateMetrics(stageData, info.executorId, m, oldMetrics)
       }
 
-      val taskData = stageData.taskData.getOrElseUpdate(info.taskId, new TaskUIData(info))
-      taskData.taskInfo = info
-      taskData.metrics = taskMetrics
+      val taskData = stageData.taskData.getOrElseUpdate(info.taskId, TaskUIData(info))
+      taskData.updateTaskInfo(info)
+      taskData.updateTaskMetrics(taskMetrics)
       taskData.errorMessage = errorMessage
+
+      // If Tasks is too large, remove and garbage collect old tasks
+      if (stageData.taskData.size > retainedTasks) {
+        stageData.taskData = stageData.taskData.drop(
+          calculateNumberToRemove(stageData.taskData.size, retainedTasks))
+      }
 
       for (
         activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskEnd.stageId);
@@ -408,12 +423,23 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         jobData.numActiveTasks -= 1
         taskEnd.reason match {
           case Success =>
+            jobData.completedIndices.add((taskEnd.stageId, info.index))
             jobData.numCompletedTasks += 1
+          case kill: TaskKilled =>
+            jobData.reasonToNumKilled = jobData.reasonToNumKilled.updated(
+              kill.reason, jobData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
           case _ =>
             jobData.numFailedTasks += 1
         }
       }
     }
+  }
+
+  /**
+   * Remove at least (maxRetained / 10) items to reduce friction.
+   */
+  private def calculateNumberToRemove(dataSize: Int, retainedSize: Int): Int = {
+    math.max(retainedSize / 10, dataSize - retainedSize)
   }
 
   /**
@@ -425,7 +451,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       stageData: StageUIData,
       execId: String,
       taskMetrics: TaskMetrics,
-      oldMetrics: Option[TaskMetrics]) {
+      oldMetrics: Option[TaskMetricsUIData]) {
     val execSummary = stageData.executorSummary.getOrElseUpdate(execId, new ExecutorSummary)
 
     val shuffleWriteDelta =
@@ -489,6 +515,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     val timeDelta =
       taskMetrics.executorRunTime - oldMetrics.map(_.executorRunTime).getOrElse(0L)
     stageData.executorRunTime += timeDelta
+
+    val cpuTimeDelta =
+      taskMetrics.executorCpuTime - oldMetrics.map(_.executorCpuTime).getOrElse(0L)
+    stageData.executorCpuTime += cpuTimeDelta
   }
 
   override def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) {
@@ -503,7 +533,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         if (!t.taskInfo.finished) {
           updateAggregateMetrics(stageData, executorMetricsUpdate.execId, metrics, t.metrics)
           // Overwrite task metrics
-          t.metrics = Some(metrics)
+          t.updateTaskMetrics(Some(metrics))
         }
       }
     }

@@ -18,14 +18,18 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.sql.Timestamp
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
+import org.apache.spark.{DebugFilesystem, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
-import org.apache.spark.sql.execution.BatchedDataSourceScanExec
-import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT}
+import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
+import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -46,25 +50,49 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    spark.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     // Query appends, don't test with both read modes.
     withParquetTable(data, "t", false) {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tmp"), ignoreIfNotExists = true)
+      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    spark.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withParquetTable(data, "t") {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(spark.table("t"), data.map(Row.fromTuple))
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tmp"), ignoreIfNotExists = true)
+      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
+  }
+
+  test("SPARK-15678: not use cache on overwrite") {
+    withTempDir { dir =>
+      val path = dir.toString
+      spark.range(1000).write.mode("overwrite").parquet(path)
+      val df = spark.read.parquet(path).cache()
+      assert(df.count() == 1000)
+      spark.range(10).write.mode("overwrite").parquet(path)
+      assert(df.count() == 10)
+      assert(spark.read.parquet(path).count() == 10)
+    }
+  }
+
+  test("SPARK-15678: not use cache on append") {
+    withTempDir { dir =>
+      val path = dir.toString
+      spark.range(1000).write.mode("append").parquet(path)
+      val df = spark.read.parquet(path).cache()
+      assert(df.count() == 1000)
+      spark.range(10).write.mode("append").parquet(path)
+      assert(df.count() == 1010)
+      assert(spark.read.parquet(path).count() == 1010)
+    }
   }
 
   test("self-join") {
@@ -135,6 +163,78 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
+  test("SPARK-10634 timestamp written and read as INT64 - TIMESTAMP_MILLIS") {
+    val data = (1 to 10).map(i => Row(i, new java.sql.Timestamp(i)))
+    val schema = StructType(List(StructField("d", IntegerType, false),
+      StructField("time", TimestampType, false)).toArray)
+    withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.parquet(file.getCanonicalPath)
+        ("true" :: "false" :: Nil).foreach { vectorized =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            val df2 = spark.read.parquet(file.getCanonicalPath)
+            checkAnswer(df2, df.collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-10634 timestamp written and read as INT64 - truncation") {
+    withTable("ts") {
+      sql("create table ts (c1 int, c2 timestamp) using parquet")
+      sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
+      sql("insert into ts values (2, null)")
+      sql("insert into ts values (3, '1965-01-01 10:11:12.123456')")
+      checkAnswer(
+        sql("select * from ts"),
+        Seq(
+          Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123456")),
+          Row(2, null),
+          Row(3, Timestamp.valueOf("1965-01-01 10:11:12.123456"))))
+    }
+
+    // The microsecond portion is truncated when written as TIMESTAMP_MILLIS.
+    withTable("ts") {
+      withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
+        sql("create table ts (c1 int, c2 timestamp) using parquet")
+        sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
+        sql("insert into ts values (2, null)")
+        sql("insert into ts values (3, '1965-01-01 10:11:12.125456')")
+        sql("insert into ts values (4, '1965-01-01 10:11:12.125')")
+        sql("insert into ts values (5, '1965-01-01 10:11:12.1')")
+        sql("insert into ts values (6, '1965-01-01 10:11:12.123456789')")
+        sql("insert into ts values (7, '0001-01-01 00:00:00.000000')")
+        checkAnswer(
+          sql("select * from ts"),
+          Seq(
+            Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
+            Row(2, null),
+            Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+            Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+            Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
+            Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
+            Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+
+        // Read timestamps that were encoded as TIMESTAMP_MILLIS annotated as INT64
+        // with PARQUET_INT64_AS_TIMESTAMP_MILLIS set to false.
+        withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "false") {
+          checkAnswer(
+            sql("select * from ts"),
+            Seq(
+              Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
+              Row(2, null),
+              Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+              Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+              Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
+              Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
+              Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+        }
+      }
+    }
+  }
+
   test("Enabling/disabling merging partfiles when merging parquet schema") {
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
@@ -148,13 +248,22 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
 
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true") {
+    withSQLConf(
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
+      ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true"
+    ) {
       testSchemaMerging(2)
     }
 
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false") {
+    withSQLConf(
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false"
+    ) {
       testSchemaMerging(3)
     }
   }
@@ -175,6 +284,68 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
     withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false") {
       testSchemaMerging(2)
+    }
+  }
+
+  test("Enabling/disabling ignoreCorruptFiles") {
+    def testIgnoreCorruptFiles(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.parquet(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(
+          df,
+          Seq(Row(0), Row(1)))
+      }
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+      testIgnoreCorruptFiles()
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+      val exception = intercept[SparkException] {
+        testIgnoreCorruptFiles()
+      }
+      assert(exception.getMessage().contains("is not a Parquet file"))
+    }
+  }
+
+  /**
+   * this is part of test 'Enabling/disabling ignoreCorruptFiles' but run in a loop
+   * to increase the chance of failure
+    */
+  ignore("SPARK-20407 ParquetQuerySuite 'Enabling/disabling ignoreCorruptFiles' flaky test") {
+    def testIgnoreCorruptFiles(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.parquet(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(
+          df,
+          Seq(Row(0), Row(1)))
+      }
+    }
+
+    for (i <- 1 to 100) {
+      DebugFilesystem.clearOpenStreams()
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val exception = intercept[SparkException] {
+          testIgnoreCorruptFiles()
+        }
+        assert(exception.getMessage().contains("is not a Parquet file"))
+      }
+      DebugFilesystem.assertNoOpenStreams()
     }
   }
 
@@ -540,7 +711,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   test("expand UDT in StructType") {
     val schema = new StructType().add("n", new NestedStructUDT, nullable = true)
     val expected = new StructType().add("n", new NestedStructUDT().sqlType, nullable = true)
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("expand UDT in ArrayType") {
@@ -558,7 +729,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         containsNull = false),
       nullable = true)
 
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("expand UDT in MapType") {
@@ -578,45 +749,102 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         valueContainsNull = false),
       nullable = true)
 
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
-  }
-
-  test("read/write wide table") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      val df = spark.range(1000).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
-      df.write.mode(SaveMode.Overwrite).parquet(path)
-      checkAnswer(spark.read.parquet(path), df)
-    }
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("returning batch for wide table") {
-    withSQLConf("spark.sql.codegen.maxFields" -> "100") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(100).select(Seq.tabulate(110) {i => ('id + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
         val df2 = spark.read.parquet(path)
-        assert(df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isEmpty,
-          "Should not return batch")
+        val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+        assert(!fileScan2.asInstanceOf[FileSourceScanExec].supportsBatch)
         checkAnswer(df2, df)
 
         // return batch
-        val columns = Seq.tabulate(90) {i => s"c$i"}
+        val columns = Seq.tabulate(9) {i => s"c$i"}
         val df3 = df2.selectExpr(columns : _*)
-        assert(
-          df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isDefined,
-          "Should return batch")
+        val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+        assert(fileScan3.asInstanceOf[FileSourceScanExec].supportsBatch)
         checkAnswer(df3, df.selectExpr(columns : _*))
+      }
+    }
+  }
+
+  test("SPARK-15719: disable writing summary files by default") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(3).write.parquet(path)
+
+      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
+      val files = fs.listFiles(new Path(path), true)
+
+      while (files.hasNext) {
+        val file = files.next
+        assert(!file.getPath.getName.contains("_metadata"))
+      }
+    }
+  }
+
+  test("SPARK-15804: write out the metadata to parquet file") {
+    val df = Seq((1, "abc"), (2, "hello")).toDF("a", "b")
+    val md = new MetadataBuilder().putString("key", "value").build()
+    val dfWithmeta = df.select('a, 'b.as("b", md))
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      dfWithmeta.write.parquet(path)
+
+      readParquetFile(path) { df =>
+        assert(df.schema.last.metadata.getString("key") == "value")
+      }
+    }
+  }
+
+  test("SPARK-16344: array of struct with a single field named 'element'") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq(Tuple1(Array(SingleElement(42)))).toDF("f").write.parquet(path)
+
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Row(Array(Row(42)))
+      )
+    }
+  }
+
+  test("SPARK-16632: read Parquet int32 as ByteType and ShortType") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+
+        // When being written to Parquet, `TINYINT` and `SMALLINT` should be converted into
+        // `int32 (INT_8)` and `int32 (INT_16)` respectively. However, Hive doesn't add the `INT_8`
+        // and `INT_16` annotation properly (HIVE-14294). Thus, when reading files written by Hive
+        // using Spark with the vectorized Parquet reader enabled, we may hit error due to type
+        // mismatch.
+        //
+        // Here we are simulating Hive's behavior by writing a single `INT` field and then read it
+        // back as `TINYINT` and `SMALLINT` in Spark to verify this issue.
+        Seq(1).toDF("f").write.parquet(path)
+
+        val withByteField = new StructType().add("f", ByteType)
+        checkAnswer(spark.read.schema(withByteField).parquet(path), Row(1: Byte))
+
+        val withShortField = new StructType().add("f", ShortType)
+        checkAnswer(spark.read.schema(withShortField).parquet(path), Row(1: Short))
       }
     }
   }
 }
 
 object TestingUDT {
+  case class SingleElement(element: Long)
+
   @SQLUserDefinedType(udt = classOf[NestedStructUDT])
   case class NestedStruct(a: Integer, b: Long, c: Double)
 
@@ -628,7 +856,7 @@ object TestingUDT {
         .add("c", DoubleType, nullable = false)
 
     override def serialize(n: NestedStruct): Any = {
-      val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
       row.setInt(0, n.a)
       row.setLong(1, n.b)
       row.setDouble(2, n.c)

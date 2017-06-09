@@ -25,22 +25,30 @@ import org.apache.spark.sql.catalyst.expressions._
  */
 abstract class Predicate {
   def eval(r: InternalRow): Boolean
+
+  /**
+   * Initializes internal states given the current partition index.
+   * This is used by nondeterministic expressions to set initial states.
+   * The default implementation does nothing.
+   */
+  def initialize(partitionIndex: Int): Unit = {}
 }
 
 /**
  * Generates bytecode that evaluates a boolean [[Expression]] on a given input [[InternalRow]].
  */
-object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Boolean] {
+object GeneratePredicate extends CodeGenerator[Expression, Predicate] {
 
   protected def canonicalize(in: Expression): Expression = ExpressionCanonicalizer.execute(in)
 
   protected def bind(in: Expression, inputSchema: Seq[Attribute]): Expression =
     BindReferences.bindReference(in, inputSchema)
 
-  protected def create(predicate: Expression): ((InternalRow) => Boolean) = {
+  protected def create(predicate: Expression): Predicate = {
     val ctx = newCodeGenContext()
     val eval = predicate.genCode(ctx)
-    val code = s"""
+
+    val codeBody = s"""
       public SpecificPredicate generate(Object[] references) {
         return new SpecificPredicate(references);
       }
@@ -48,12 +56,17 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
       class SpecificPredicate extends ${classOf[Predicate].getName} {
         private final Object[] references;
         ${ctx.declareMutableStates()}
-        ${ctx.declareAddedFunctions()}
 
         public SpecificPredicate(Object[] references) {
           this.references = references;
           ${ctx.initMutableStates()}
         }
+
+        public void initialize(int partitionIndex) {
+          ${ctx.initPartition()}
+        }
+
+        ${ctx.declareAddedFunctions()}
 
         public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
           ${eval.code}
@@ -61,9 +74,10 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
         }
       }"""
 
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
 
-    val p = CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
-    (r: InternalRow) => p.eval(r)
+    CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
   }
 }

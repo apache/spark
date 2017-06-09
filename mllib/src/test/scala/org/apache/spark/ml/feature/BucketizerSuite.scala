@@ -20,14 +20,18 @@ package org.apache.spark.ml.feature
 import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
 
   test("params") {
     ParamsSuite.checkParams(new Bucketizer)
@@ -38,8 +42,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val splits = Array(-0.5, 0.0, 0.5)
     val validData = Array(-0.5, -0.3, 0.0, 0.2)
     val expectedBuckets = Array(0.0, 0.0, 1.0, 1.0)
-    val dataFrame: DataFrame =
-      spark.createDataFrame(validData.zip(expectedBuckets)).toDF("feature", "expected")
+    val dataFrame: DataFrame = validData.zip(expectedBuckets).toSeq.toDF("feature", "expected")
 
     val bucketizer: Bucketizer = new Bucketizer()
       .setInputCol("feature")
@@ -55,13 +58,13 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     // Check for exceptions when using a set of invalid feature values.
     val invalidData1: Array[Double] = Array(-0.9) ++ validData
     val invalidData2 = Array(0.51) ++ validData
-    val badDF1 = spark.createDataFrame(invalidData1.zipWithIndex).toDF("feature", "idx")
+    val badDF1 = invalidData1.zipWithIndex.toSeq.toDF("feature", "idx")
     withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
       intercept[SparkException] {
         bucketizer.transform(badDF1).collect()
       }
     }
-    val badDF2 = spark.createDataFrame(invalidData2.zipWithIndex).toDF("feature", "idx")
+    val badDF2 = invalidData2.zipWithIndex.toSeq.toDF("feature", "idx")
     withClue("Invalid feature value 0.51 was not caught as an invalid feature!") {
       intercept[SparkException] {
         bucketizer.transform(badDF2).collect()
@@ -73,8 +76,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity)
     val validData = Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9)
     val expectedBuckets = Array(0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0)
-    val dataFrame: DataFrame =
-      spark.createDataFrame(validData.zip(expectedBuckets)).toDF("feature", "expected")
+    val dataFrame: DataFrame = validData.zip(expectedBuckets).toSeq.toDF("feature", "expected")
 
     val bucketizer: Bucketizer = new Bucketizer()
       .setInputCol("feature")
@@ -85,6 +87,47 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       case Row(x: Double, y: Double) =>
         assert(x === y,
           s"The feature value is not correct after bucketing.  Expected $y but found $x")
+    }
+  }
+
+  test("Bucket continuous features, with NaN data but non-NaN splits") {
+    val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity)
+    val validData = Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9, Double.NaN, Double.NaN, Double.NaN)
+    val expectedBuckets = Array(0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 4.0)
+    val dataFrame: DataFrame = validData.zip(expectedBuckets).toSeq.toDF("feature", "expected")
+
+    val bucketizer: Bucketizer = new Bucketizer()
+      .setInputCol("feature")
+      .setOutputCol("result")
+      .setSplits(splits)
+
+    bucketizer.setHandleInvalid("keep")
+    bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
+      case Row(x: Double, y: Double) =>
+        assert(x === y,
+          s"The feature value is not correct after bucketing.  Expected $y but found $x")
+    }
+
+    bucketizer.setHandleInvalid("skip")
+    val skipResults: Array[Double] = bucketizer.transform(dataFrame)
+      .select("result").as[Double].collect()
+    assert(skipResults.length === 7)
+    assert(skipResults.forall(_ !== 4.0))
+
+    bucketizer.setHandleInvalid("error")
+    withClue("Bucketizer should throw error when setHandleInvalid=error and given NaN values") {
+      intercept[SparkException] {
+        bucketizer.transform(dataFrame).collect()
+      }
+    }
+  }
+
+  test("Bucket continuous features, with NaN splits") {
+    val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity, Double.NaN)
+    withClue("Invalid NaN split was not caught during Bucketizer initialization") {
+      intercept[IllegalArgumentException] {
+        new Bucketizer().setSplits(splits)
+      }
     }
   }
 
@@ -108,7 +151,8 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val data = Array.fill(100)(Random.nextDouble())
     val splits: Array[Double] = Double.NegativeInfinity +:
       Array.fill(10)(Random.nextDouble()).sorted :+ Double.PositiveInfinity
-    val bsResult = Vectors.dense(data.map(x => Bucketizer.binarySearchForBuckets(splits, x)))
+    val bsResult = Vectors.dense(data.map(x =>
+      Bucketizer.binarySearchForBuckets(splits, x, false)))
     val lsResult = Vectors.dense(data.map(x => BucketizerSuite.linearSearchForBuckets(splits, x)))
     assert(bsResult ~== lsResult absTol 1e-5)
   }
@@ -119,6 +163,29 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCol("myOutputCol")
       .setSplits(Array(0.1, 0.8, 0.9))
     testDefaultReadWrite(t)
+  }
+
+  test("Bucket numeric features") {
+    val splits = Array(-3.0, 0.0, 3.0)
+    val data = Array(-2.0, -1.0, 0.0, 1.0, 2.0)
+    val expectedBuckets = Array(0.0, 0.0, 1.0, 1.0, 1.0)
+    val dataFrame: DataFrame = data.zip(expectedBuckets).toSeq.toDF("feature", "expected")
+
+    val bucketizer: Bucketizer = new Bucketizer()
+      .setInputCol("feature")
+      .setOutputCol("result")
+      .setSplits(splits)
+
+    val types = Seq(ShortType, IntegerType, LongType, FloatType, DoubleType,
+      ByteType, DecimalType(10, 0))
+    for (mType <- types) {
+      val df = dataFrame.withColumn("feature", col("feature").cast(mType))
+      bucketizer.transform(df).select("result", "expected").collect().foreach {
+        case Row(x: Double, y: Double) =>
+          assert(x === y, "The result is not correct after bucketing in type " +
+            mType.toString + ". " + s"Expected $y but found $x.")
+      }
+    }
   }
 }
 
@@ -139,7 +206,7 @@ private object BucketizerSuite extends SparkFunSuite {
   /** Check all values in splits, plus values between all splits. */
   def checkBinarySearch(splits: Array[Double]): Unit = {
     def testFeature(feature: Double, expectedBucket: Double): Unit = {
-      assert(Bucketizer.binarySearchForBuckets(splits, feature) === expectedBucket,
+      assert(Bucketizer.binarySearchForBuckets(splits, feature, false) === expectedBucket,
         s"Expected feature value $feature to be in bucket $expectedBucket with splits:" +
           s" ${splits.mkString(", ")}")
     }

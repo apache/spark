@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.expressions.scalalang
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate._
 
 /**
  * :: Experimental ::
- * Type-safe functions available for [[Dataset]] operations in Scala.
+ * Type-safe functions available for `Dataset` operations in Scala.
  *
  * Java users should use [[org.apache.spark.sql.expressions.javalang.typed]].
  *
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 // scalastyle:off
 object typed {
   // scalastyle:on
@@ -38,7 +39,7 @@ object typed {
   // The reason we have separate files for Java and Scala is because in the Scala version, we can
   // use tighter types (primitive types) for return types, whereas in the Java version we can only
   // use boxed primitive types.
-  // For example, avg in the Scala veresion returns Scala primitive Double, whose bytecode
+  // For example, avg in the Scala version returns Scala primitive Double, whose bytecode
   // signature is just a java.lang.Object; avg in the Java version returns java.lang.Double.
 
   // TODO: This is pretty hacky. Maybe we should have an object for implicit encoders.

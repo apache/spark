@@ -20,22 +20,24 @@ package org.apache.spark.ml.tuning
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
 
 class TrainValidationSplitSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
+
   test("train validation with logistic regression") {
-    val dataset = spark.createDataFrame(
-      sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
+    val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
 
     val lr = new LogisticRegression
     val lrParamMaps = new ParamGridBuilder()
@@ -43,24 +45,25 @@ class TrainValidationSplitSuite
       .addGrid(lr.maxIter, Array(0, 10))
       .build()
     val eval = new BinaryClassificationEvaluator
-    val cv = new TrainValidationSplit()
+    val tvs = new TrainValidationSplit()
       .setEstimator(lr)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
       .setSeed(42L)
-    val cvModel = cv.fit(dataset)
-    val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
-    assert(cv.getTrainRatio === 0.5)
+    val tvsModel = tvs.fit(dataset)
+    val parent = tvsModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(tvs.getTrainRatio === 0.5)
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
-    assert(cvModel.validationMetrics.length === lrParamMaps.length)
+    assert(tvsModel.validationMetrics.length === lrParamMaps.length)
   }
 
   test("train validation with linear regression") {
-    val dataset = spark.createDataFrame(
-        sc.parallelize(LinearDataGenerator.generateLinearInput(
-            6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
+    val dataset = sc.parallelize(
+      LinearDataGenerator.generateLinearInput(
+        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2)
+      .map(_.asML).toDF()
 
     val trainer = new LinearRegression().setSolver("l-bfgs")
     val lrParamMaps = new ParamGridBuilder()
@@ -68,24 +71,27 @@ class TrainValidationSplitSuite
       .addGrid(trainer.maxIter, Array(0, 10))
       .build()
     val eval = new RegressionEvaluator()
-    val cv = new TrainValidationSplit()
+    val tvs = new TrainValidationSplit()
       .setEstimator(trainer)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
       .setSeed(42L)
-    val cvModel = cv.fit(dataset)
-    val parent = cvModel.bestModel.parent.asInstanceOf[LinearRegression]
+    val tvsModel = tvs.fit(dataset)
+
+    MLTestingUtils.checkCopyAndUids(tvs, tvsModel)
+
+    val parent = tvsModel.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
-    assert(cvModel.validationMetrics.length === lrParamMaps.length)
+    assert(tvsModel.validationMetrics.length === lrParamMaps.length)
 
       eval.setMetricName("r2")
-    val cvModel2 = cv.fit(dataset)
-    val parent2 = cvModel2.bestModel.parent.asInstanceOf[LinearRegression]
+    val tvsModel2 = tvs.fit(dataset)
+    val parent2 = tvsModel2.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent2.getRegParam === 0.001)
     assert(parent2.getMaxIter === 10)
-    assert(cvModel2.validationMetrics.length === lrParamMaps.length)
+    assert(tvsModel2.validationMetrics.length === lrParamMaps.length)
   }
 
   test("transformSchema should check estimatorParamMaps") {
@@ -97,17 +103,17 @@ class TrainValidationSplitSuite
       .addGrid(est.inputCol, Array("input1", "input2"))
       .build()
 
-    val cv = new TrainValidationSplit()
+    val tvs = new TrainValidationSplit()
       .setEstimator(est)
       .setEstimatorParamMaps(paramMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
-    cv.transformSchema(new StructType()) // This should pass.
+    tvs.transformSchema(new StructType()) // This should pass.
 
     val invalidParamMaps = paramMaps :+ ParamMap(est.inputCol -> "")
-    cv.setEstimatorParamMaps(invalidParamMaps)
+    tvs.setEstimatorParamMaps(invalidParamMaps)
     intercept[IllegalArgumentException] {
-      cv.transformSchema(new StructType())
+      tvs.transformSchema(new StructType())
     }
   }
 

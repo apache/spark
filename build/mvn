@@ -22,7 +22,7 @@ _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Preserve the calling directory
 _CALLING_DIR="$(pwd)"
 # Options used during compilation
-_COMPILE_JVM_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+_COMPILE_JVM_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m"
 
 # Installs any application tarball given a URL, the expected tarball name,
 # and, optionally, a checkable binary path to determine if the binary has
@@ -91,13 +91,13 @@ install_mvn() {
 
 # Install zinc under the build/ folder
 install_zinc() {
-  local zinc_path="zinc-0.3.9/bin/zinc"
+  local zinc_path="zinc-0.3.11/bin/zinc"
   [ ! -f "${_DIR}/${zinc_path}" ] && ZINC_INSTALL_FLAG=1
   local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.typesafe.com}
 
   install_app \
-    "${TYPESAFE_MIRROR}/zinc/0.3.9" \
-    "zinc-0.3.9.tgz" \
+    "${TYPESAFE_MIRROR}/zinc/0.3.11" \
+    "zinc-0.3.11.tgz" \
     "${zinc_path}"
   ZINC_BIN="${_DIR}/${zinc_path}"
 }

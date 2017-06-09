@@ -36,7 +36,8 @@ import org.apache.spark.util.random.XORShiftRandom
 class SortBenchmark extends BenchmarkBase {
 
   private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
-    new Sorter(UnsafeSortDataFormat.INSTANCE).sort(
+    val sortBuffer = new LongArray(MemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))
+    new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
       buf, lo, hi, new Comparator[RecordPointerAndKeyPrefix] {
         override def compare(
           r1: RecordPointerAndKeyPrefix,
@@ -109,7 +110,7 @@ class SortBenchmark extends BenchmarkBase {
     benchmark.addTimerCase("radix sort key prefix array") { timer =>
       val (_, buf2) = generateKeyPrefixTestData(size, rand.nextLong)
       timer.startTiming()
-      RadixSort.sortKeyPrefixArray(buf2, size, 0, 7, false, false)
+      RadixSort.sortKeyPrefixArray(buf2, 0, size, 0, 7, false, false)
       timer.stopTiming()
     }
     benchmark.run()

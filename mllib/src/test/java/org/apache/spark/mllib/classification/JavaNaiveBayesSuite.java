@@ -17,42 +17,20 @@
 
 package org.apache.spark.mllib.classification;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.SparkSession;
 
 
-public class JavaNaiveBayesSuite implements Serializable {
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaNaiveBayesSuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaNaiveBayesSuite extends SharedSparkSession {
 
   private static final List<LabeledPoint> POINTS = Arrays.asList(
     new LabeledPoint(0, Vectors.dense(1.0, 0.0, 0.0)),
@@ -63,7 +41,7 @@ public class JavaNaiveBayesSuite implements Serializable {
     new LabeledPoint(2, Vectors.dense(0.0, 0.0, 2.0))
   );
 
-  private int validatePrediction(List<LabeledPoint> points, NaiveBayesModel model) {
+  private static int validatePrediction(List<LabeledPoint> points, NaiveBayesModel model) {
     int correct = 0;
     for (LabeledPoint p : points) {
       if (model.predict(p.features()) == p.label()) {
@@ -101,12 +79,7 @@ public class JavaNaiveBayesSuite implements Serializable {
   public void testPredictJavaRDD() {
     JavaRDD<LabeledPoint> examples = jsc.parallelize(POINTS, 2).cache();
     NaiveBayesModel model = NaiveBayes.train(examples.rdd());
-    JavaRDD<Vector> vectors = examples.map(new Function<LabeledPoint, Vector>() {
-      @Override
-      public Vector call(LabeledPoint v) throws Exception {
-        return v.features();
-      }
-    });
+    JavaRDD<Vector> vectors = examples.map(LabeledPoint::features);
     JavaRDD<Double> predictions = model.predict(vectors);
     // Should be able to get the first prediction.
     predictions.first();

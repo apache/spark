@@ -141,6 +141,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   private def addShutdownHook(): AnyRef = {
+    logDebug("Adding shutdown hook") // force eager creation of logger
     ShutdownHookManager.addShutdownHook(ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
       logInfo("Shutdown hook called")
       DiskBlockManager.this.doStop()

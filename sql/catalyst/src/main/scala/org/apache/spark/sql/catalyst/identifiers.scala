@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-
 /**
  * An identifier that optionally specifies a database.
  *
@@ -29,8 +28,16 @@ sealed trait IdentifierWithDatabase {
 
   def database: Option[String]
 
+  /*
+   * Escapes back-ticks within the identifier name with double-back-ticks.
+   */
+  private def quoteIdentifier(name: String): String = name.replace("`", "``")
+
   def quotedString: String = {
-    if (database.isDefined) s"`${database.get}`.`$identifier`" else s"`$identifier`"
+    val replacedId = quoteIdentifier(identifier)
+    val replacedDb = database.map(quoteIdentifier(_))
+
+    if (replacedDb.isDefined) s"`${replacedDb.get}`.`$replacedId`" else s"`$replacedId`"
   }
 
   def unquotedString: String = {
@@ -53,7 +60,11 @@ case class TableIdentifier(table: String, database: Option[String])
   override val identifier: String = table
 
   def this(table: String) = this(table, None)
+}
 
+/** A fully qualified identifier for a table (i.e., database.tableName) */
+case class QualifiedTableName(database: String, name: String) {
+  override def toString: String = s"$database.$name"
 }
 
 object TableIdentifier {

@@ -31,7 +31,8 @@ import org.apache.spark.rdd.RDD
  * distribution of the sample data and the theoretical distribution we can provide a test for the
  * the null hypothesis that the sample data comes from that theoretical distribution.
  * For more information on KS Test:
- * @see [[https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test]]
+ * @see <a href="https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test">
+ * Kolmogorov-Smirnov test (Wikipedia)</a>
  *
  * Implementation note: We seek to implement the KS test with a minimal number of distributed
  * passes. We sort the RDD, and then perform the following operations on a per-partition basis:
@@ -45,7 +46,7 @@ import org.apache.spark.rdd.RDD
  * many elements are in each partition. Once these three values have been returned for every
  * partition, we can collect and operate locally. Locally, we can now adjust each distance by the
  * appropriate constant (the cumulative sum of number of elements in the prior partitions divided by
- * thedata set size). Finally, we take the maximum absolute value, and this is the statistic.
+ * the data set size). Finally, we take the maximum absolute value, and this is the statistic.
  */
 private[stat] object KolmogorovSmirnovTest extends Logging {
 
@@ -124,7 +125,8 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
     val pResults = partDiffs.foldLeft(initAcc) { case ((pMin, pMax, pCt), (dl, dp)) =>
       (math.min(pMin, dl), math.max(pMax, dp), pCt + 1)
     }
-    val results = if (pResults == initAcc) Array[(Double, Double, Double)]() else Array(pResults)
+    val results =
+      if (pResults == initAcc) Array.empty[(Double, Double, Double)] else Array(pResults)
     results.iterator
   }
 

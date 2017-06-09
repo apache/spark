@@ -18,14 +18,17 @@
 package org.apache.spark.util
 
 import java.io._
-import java.lang.management.ManagementFactory
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.math.{MathContext, RoundingMode}
 import java.net._
 import java.nio.ByteBuffer
-import java.nio.channels.Channels
+import java.nio.channels.{Channels, FileChannel}
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, Paths}
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.zip.GZIPInputStream
 import javax.net.ssl.HttpsURLConnection
 
 import scala.annotation.tailrec
@@ -36,7 +39,10 @@ import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
+import scala.util.matching.Regex
 
+import _root_.io.netty.channel.unix.Errors.NativeIoException
+import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.lang3.SystemUtils
@@ -51,6 +57,7 @@ import org.slf4j.Logger
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
@@ -78,6 +85,52 @@ private[spark] object Utils extends Logging {
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
+  /**
+   * The performance overhead of creating and logging strings for wide schemas can be large. To
+   * limit the impact, we bound the number of fields to include by default. This can be overridden
+   * by setting the 'spark.debug.maxToStringFields' conf in SparkEnv.
+   */
+  val DEFAULT_MAX_TO_STRING_FIELDS = 25
+
+  private def maxNumToStringFields = {
+    if (SparkEnv.get != null) {
+      SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
+    } else {
+      DEFAULT_MAX_TO_STRING_FIELDS
+    }
+  }
+
+  /** Whether we have warned about plan string truncation yet. */
+  private val truncationWarningPrinted = new AtomicBoolean(false)
+
+  /**
+   * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
+   * maxNumToStringFields will be dropped and replaced by a "... N more fields" placeholder.
+   *
+   * @return the trimmed and formatted string.
+   */
+  def truncatedString[T](
+      seq: Seq[T],
+      start: String,
+      sep: String,
+      end: String,
+      maxNumFields: Int = maxNumToStringFields): String = {
+    if (seq.length > maxNumFields) {
+      if (truncationWarningPrinted.compareAndSet(false, true)) {
+        logWarning(
+          "Truncated the string representation of a plan since it was too large. This " +
+          "behavior can be adjusted by setting 'spark.debug.maxToStringFields' in SparkEnv.conf.")
+      }
+      val numFields = math.max(0, maxNumFields - 1)
+      seq.take(numFields).mkString(
+        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
+    } else {
+      seq.mkString(start, sep, end)
+    }
+  }
+
+  /** Shorthand for calling truncatedString() without start or end strings. */
+  def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -185,9 +238,11 @@ private[spark] object Utils extends Logging {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
+      val originalPosition = bb.position()
       val bbval = new Array[Byte](bb.remaining())
       bb.get(bbval)
       out.write(bbval)
+      bb.position(originalPosition)
     }
   }
 
@@ -198,9 +253,11 @@ private[spark] object Utils extends Logging {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
+      val originalPosition = bb.position()
       val bbval = new Array[Byte](bb.remaining())
       bb.get(bbval)
       out.write(bbval)
+      bb.position(originalPosition)
     }
   }
 
@@ -261,41 +318,22 @@ private[spark] object Utils extends Logging {
    * copying is disabled by default unless explicitly set transferToEnabled as true,
    * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
    */
-  def copyStream(in: InputStream,
-                 out: OutputStream,
-                 closeStreams: Boolean = false,
-                 transferToEnabled: Boolean = false): Long =
-  {
-    var count = 0L
+  def copyStream(
+      in: InputStream,
+      out: OutputStream,
+      closeStreams: Boolean = false,
+      transferToEnabled: Boolean = false): Long = {
     tryWithSafeFinally {
       if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]
         && transferToEnabled) {
         // When both streams are File stream, use transferTo to improve copy performance.
         val inChannel = in.asInstanceOf[FileInputStream].getChannel()
         val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
-        val initialPos = outChannel.position()
         val size = inChannel.size()
-
-        // In case transferTo method transferred less data than we have required.
-        while (count < size) {
-          count += inChannel.transferTo(count, size - count, outChannel)
-        }
-
-        // Check the position after transferTo loop to see if it is in the right position and
-        // give user information if not.
-        // Position will not be increased to the expected length after calling transferTo in
-        // kernel version 2.6.32, this issue can be seen in
-        // https://bugs.openjdk.java.net/browse/JDK-7052359
-        // This will lead to stream corruption issue when using sort-based shuffle (SPARK-3948).
-        val finalPos = outChannel.position()
-        assert(finalPos == initialPos + size,
-          s"""
-             |Current position $finalPos do not equal to expected position ${initialPos + size}
-             |after transferTo, please check your kernel version to see if it is 2.6.32,
-             |this is a kernel bug which will lead to unexpected behavior when using transferTo.
-             |You can set spark.file.transferTo = false to disable this NIO feature.
-           """.stripMargin)
+        copyFileStreamNIO(inChannel, outChannel, 0, size)
+        size
       } else {
+        var count = 0L
         val buf = new Array[Byte](8192)
         var n = 0
         while (n != -1) {
@@ -305,8 +343,8 @@ private[spark] object Utils extends Logging {
             count += n
           }
         }
+        count
       }
-      count
     } {
       if (closeStreams) {
         try {
@@ -316,6 +354,37 @@ private[spark] object Utils extends Logging {
         }
       }
     }
+  }
+
+  def copyFileStreamNIO(
+      input: FileChannel,
+      output: FileChannel,
+      startPosition: Long,
+      bytesToCopy: Long): Unit = {
+    val initialPos = output.position()
+    var count = 0L
+    // In case transferTo method transferred less data than we have required.
+    while (count < bytesToCopy) {
+      count += input.transferTo(count + startPosition, bytesToCopy - count, output)
+    }
+    assert(count == bytesToCopy,
+      s"request to copy $bytesToCopy bytes, but actually copied $count bytes.")
+
+    // Check the position after transferTo loop to see if it is in the right position and
+    // give user information if not.
+    // Position will not be increased to the expected length after calling transferTo in
+    // kernel version 2.6.32, this issue can be seen in
+    // https://bugs.openjdk.java.net/browse/JDK-7052359
+    // This will lead to stream corruption issue when using sort-based shuffle (SPARK-3948).
+    val finalPos = output.position()
+    val expectedPos = initialPos + bytesToCopy
+    assert(finalPos == expectedPos,
+      s"""
+         |Current position $finalPos do not equal to expected position $expectedPos
+         |after transferTo, please check your kernel version to see if it is 2.6.32,
+         |this is a kernel bug which will lead to unexpected behavior when using transferTo.
+         |You can set spark.file.transferTo = false to disable this NIO feature.
+           """.stripMargin)
   }
 
   /**
@@ -650,6 +719,26 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Validate that a given URI is actually a valid URL as well.
+   * @param uri The URI to validate
+   */
+  @throws[MalformedURLException]("when the URI is an invalid URL")
+  def validateURL(uri: URI): Unit = {
+    Option(uri.getScheme).getOrElse("file") match {
+      case "http" | "https" | "ftp" =>
+        try {
+          uri.toURL
+        } catch {
+          case e: MalformedURLException =>
+            val ex = new MalformedURLException(s"URI (${uri.toString}) is not a valid URL.")
+            ex.initCause(e)
+            throw ex
+        }
+      case _ => // will not be turned into a URL anyway
+    }
+  }
+
+  /**
    * Get the path of a temporary directory.  Spark's local directories can be configured through
    * multiple settings, which are used with the following precedence:
    *
@@ -662,7 +751,11 @@ private[spark] object Utils extends Logging {
    * always return a single directory.
    */
   def getLocalDir(conf: SparkConf): String = {
-    getOrCreateLocalRootDirs(conf)(0)
+    getOrCreateLocalRootDirs(conf).headOption.getOrElse {
+      val configuredLocalDirs = getConfiguredLocalDirs(conf)
+      throw new IOException(
+        s"Failed to get a temp directory under [${configuredLocalDirs.mkString(",")}].")
+    }
   }
 
   private[spark] def isRunningInYarnContainer(conf: SparkConf): Boolean = {
@@ -776,7 +869,7 @@ private[spark] object Utils extends Logging {
    */
   def randomizeInPlace[T](arr: Array[T], rand: Random = new Random): Array[T] = {
     for (i <- (arr.length - 1) to 1 by -1) {
-      val j = rand.nextInt(i)
+      val j = rand.nextInt(i + 1)
       val tmp = arr(j)
       arr(j) = arr(i)
       arr(i) = tmp
@@ -855,12 +948,13 @@ private[spark] object Utils extends Logging {
     customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
   }
 
-  def checkHost(host: String, message: String = "") {
-    assert(host.indexOf(':') == -1, message)
+  def checkHost(host: String) {
+    assert(host != null && host.indexOf(':') == -1, s"Expected hostname (not IP) but got $host")
   }
 
-  def checkHostPort(hostPort: String, message: String = "") {
-    assert(hostPort.indexOf(':') != -1, message)
+  def checkHostPort(hostPort: String) {
+    assert(hostPort != null && hostPort.indexOf(':') != -1,
+      s"Expected host and port but got $hostPort")
   }
 
   // Typically, this will be of order of number of nodes in cluster
@@ -932,7 +1026,9 @@ private[spark] object Utils extends Logging {
           ShutdownHookManager.removeShutdownDeleteDir(file)
         }
       } finally {
-        if (!file.delete()) {
+        if (file.delete()) {
+          logTrace(s"${file.getAbsolutePath} has been deleted")
+        } else {
           // Delete can also fail if the file simply did not exist
           if (file.exists()) {
             throw new IOException("Failed to delete: " + file.getAbsolutePath)
@@ -946,15 +1042,7 @@ private[spark] object Utils extends Logging {
    * Check to see if file is a symbolic link.
    */
   def isSymlink(file: File): Boolean = {
-    if (file == null) throw new NullPointerException("File must not be null")
-    if (isWindows) return false
-    val fileInCanonicalDir = if (file.getParent() == null) {
-      file
-    } else {
-      new File(file.getParentFile().getCanonicalFile(), file.getName())
-    }
-
-    !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile())
+    return Files.isSymbolicLink(Paths.get(file.toURI))
   }
 
   /**
@@ -1041,26 +1129,39 @@ private[spark] object Utils extends Logging {
   /**
    * Convert a quantity in bytes to a human-readable string such as "4.0 MB".
    */
-  def bytesToString(size: Long): String = {
+  def bytesToString(size: Long): String = bytesToString(BigInt(size))
+
+  def bytesToString(size: BigInt): String = {
+    val EB = 1L << 60
+    val PB = 1L << 50
     val TB = 1L << 40
     val GB = 1L << 30
     val MB = 1L << 20
     val KB = 1L << 10
 
-    val (value, unit) = {
-      if (size >= 2*TB) {
-        (size.asInstanceOf[Double] / TB, "TB")
-      } else if (size >= 2*GB) {
-        (size.asInstanceOf[Double] / GB, "GB")
-      } else if (size >= 2*MB) {
-        (size.asInstanceOf[Double] / MB, "MB")
-      } else if (size >= 2*KB) {
-        (size.asInstanceOf[Double] / KB, "KB")
-      } else {
-        (size.asInstanceOf[Double], "B")
+    if (size >= BigInt(1L << 11) * EB) {
+      // The number is too large, show it in scientific notation.
+      BigDecimal(size, new MathContext(3, RoundingMode.HALF_UP)).toString() + " B"
+    } else {
+      val (value, unit) = {
+        if (size >= 2 * EB) {
+          (BigDecimal(size) / EB, "EB")
+        } else if (size >= 2 * PB) {
+          (BigDecimal(size) / PB, "PB")
+        } else if (size >= 2 * TB) {
+          (BigDecimal(size) / TB, "TB")
+        } else if (size >= 2 * GB) {
+          (BigDecimal(size) / GB, "GB")
+        } else if (size >= 2 * MB) {
+          (BigDecimal(size) / MB, "MB")
+        } else if (size >= 2 * KB) {
+          (BigDecimal(size) / KB, "KB")
+        } else {
+          (BigDecimal(size), "B")
+        }
       }
+      "%.1f %s".formatLocal(Locale.US, value, unit)
     }
-    "%.1f %s".formatLocal(Locale.US, value, unit)
   }
 
   /**
@@ -1169,7 +1270,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a block of code that evaluates to Unit, stop SparkContext is there is any uncaught
+   * Execute a block of code that evaluates to Unit, stop SparkContext if there is any uncaught
    * exception
    *
    * NOTE: This method is to be called by the driver-side components to avoid stopping the
@@ -1185,7 +1286,7 @@ private[spark] object Utils extends Logging {
         val currentThreadName = Thread.currentThread().getName
         if (sc != null) {
           logError(s"uncaught error in thread $currentThreadName, stopping SparkContext", t)
-          sc.stop()
+          sc.stopInNewThread()
         }
         if (!NonFatal(t)) {
           logError(s"throw uncaught fatal error in thread $currentThreadName", t)
@@ -1355,8 +1456,12 @@ private[spark] object Utils extends Logging {
             }
             callStack(0) = ste.toString // Put last Spark method on top of the stack trace.
           } else {
-            firstUserLine = ste.getLineNumber
-            firstUserFile = ste.getFileName
+            if (ste.getFileName != null) {
+              firstUserFile = ste.getFileName
+              if (ste.getLineNumber >= 0) {
+                firstUserLine = ste.getLineNumber
+              }
+            }
             callStack += ste.toString
             insideSpark = false
           }
@@ -1380,14 +1485,77 @@ private[spark] object Utils extends Logging {
     CallSite(shortForm, longForm)
   }
 
+  private val UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF =
+    "spark.worker.ui.compressedLogFileLengthCacheSize"
+  private val DEFAULT_UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE = 100
+  private var compressedLogFileLengthCache: LoadingCache[String, java.lang.Long] = null
+  private def getCompressedLogFileLengthCache(
+      sparkConf: SparkConf): LoadingCache[String, java.lang.Long] = this.synchronized {
+    if (compressedLogFileLengthCache == null) {
+      val compressedLogFileLengthCacheSize = sparkConf.getInt(
+        UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF,
+        DEFAULT_UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE)
+      compressedLogFileLengthCache = CacheBuilder.newBuilder()
+        .maximumSize(compressedLogFileLengthCacheSize)
+        .build[String, java.lang.Long](new CacheLoader[String, java.lang.Long]() {
+        override def load(path: String): java.lang.Long = {
+          Utils.getCompressedFileLength(new File(path))
+        }
+      })
+    }
+    compressedLogFileLengthCache
+  }
+
+  /**
+   * Return the file length, if the file is compressed it returns the uncompressed file length.
+   * It also caches the uncompressed file size to avoid repeated decompression. The cache size is
+   * read from workerConf.
+   */
+  def getFileLength(file: File, workConf: SparkConf): Long = {
+    if (file.getName.endsWith(".gz")) {
+      getCompressedLogFileLengthCache(workConf).get(file.getAbsolutePath)
+    } else {
+      file.length
+    }
+  }
+
+  /** Return uncompressed file length of a compressed file. */
+  private def getCompressedFileLength(file: File): Long = {
+    var gzInputStream: GZIPInputStream = null
+    try {
+      // Uncompress .gz file to determine file size.
+      var fileSize = 0L
+      gzInputStream = new GZIPInputStream(new FileInputStream(file))
+      val bufSize = 1024
+      val buf = new Array[Byte](bufSize)
+      var numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
+      while (numBytes > 0) {
+        fileSize += numBytes
+        numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
+      }
+      fileSize
+    } catch {
+      case e: Throwable =>
+        logError(s"Cannot get file length of ${file}", e)
+        throw e
+    } finally {
+      if (gzInputStream != null) {
+        gzInputStream.close()
+      }
+    }
+  }
+
   /** Return a string containing part of a file from byte 'start' to 'end'. */
-  def offsetBytes(path: String, start: Long, end: Long): String = {
+  def offsetBytes(path: String, length: Long, start: Long, end: Long): String = {
     val file = new File(path)
-    val length = file.length()
     val effectiveEnd = math.min(length, end)
     val effectiveStart = math.max(0, start)
     val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
-    val stream = new FileInputStream(file)
+    val stream = if (path.endsWith(".gz")) {
+      new GZIPInputStream(new FileInputStream(file))
+    } else {
+      new FileInputStream(file)
+    }
 
     try {
       ByteStreams.skipFully(stream, effectiveStart)
@@ -1403,8 +1571,8 @@ private[spark] object Utils extends Logging {
    * and `endIndex` is based on the cumulative size of all the files take in
    * the given order. See figure below for more details.
    */
-  def offsetBytes(files: Seq[File], start: Long, end: Long): String = {
-    val fileLengths = files.map { _.length }
+  def offsetBytes(files: Seq[File], fileLengths: Seq[Long], start: Long, end: Long): String = {
+    assert(files.length == fileLengths.length)
     val startIndex = math.max(start, 0)
     val endIndex = math.min(end, fileLengths.sum)
     val fileToLength = files.zip(fileLengths).toMap
@@ -1412,7 +1580,7 @@ private[spark] object Utils extends Logging {
 
     val stringBuffer = new StringBuffer((endIndex - startIndex).toInt)
     var sum = 0L
-    for (file <- files) {
+    files.zip(fileLengths).foreach { case (file, fileLength) =>
       val startIndexOfFile = sum
       val endIndexOfFile = sum + fileToLength(file)
       logDebug(s"Processing file $file, " +
@@ -1431,19 +1599,19 @@ private[spark] object Utils extends Logging {
 
       if (startIndex <= startIndexOfFile  && endIndex >= endIndexOfFile) {
         // Case C: read the whole file
-        stringBuffer.append(offsetBytes(file.getAbsolutePath, 0, fileToLength(file)))
+        stringBuffer.append(offsetBytes(file.getAbsolutePath, fileLength, 0, fileToLength(file)))
       } else if (startIndex > startIndexOfFile && startIndex < endIndexOfFile) {
         // Case A and B: read from [start of required range] to [end of file / end of range]
         val effectiveStartIndex = startIndex - startIndexOfFile
         val effectiveEndIndex = math.min(endIndex - startIndexOfFile, fileToLength(file))
         stringBuffer.append(Utils.offsetBytes(
-          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+          file.getAbsolutePath, fileLength, effectiveStartIndex, effectiveEndIndex))
       } else if (endIndex > startIndexOfFile && endIndex < endIndexOfFile) {
         // Case D: read from [start of file] to [end of require range]
         val effectiveStartIndex = math.max(startIndex - startIndexOfFile, 0)
         val effectiveEndIndex = endIndex - startIndexOfFile
         stringBuffer.append(Utils.offsetBytes(
-          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+          file.getAbsolutePath, fileLength, effectiveStartIndex, effectiveEndIndex))
       }
       sum += fileToLength(file)
       logDebug(s"After processing file $file, string built is ${stringBuffer.toString}")
@@ -1547,8 +1715,8 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * NaN-safe version of [[java.lang.Double.compare()]] which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN > any non-NaN double.
+   * NaN-safe version of `java.lang.Double.compare()` which allows NaN values to be compared
+   * according to semantics where NaN == NaN and NaN is greater than any non-NaN double.
    */
   def nanSafeCompareDoubles(x: Double, y: Double): Int = {
     val xIsNan: Boolean = java.lang.Double.isNaN(x)
@@ -1561,8 +1729,8 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * NaN-safe version of [[java.lang.Float.compare()]] which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN > any non-NaN float.
+   * NaN-safe version of `java.lang.Float.compare()` which allows NaN values to be compared
+   * according to semantics where NaN == NaN and NaN is greater than any non-NaN float.
    */
   def nanSafeCompareFloats(x: Float, y: Float): Int = {
     val xIsNan: Boolean = java.lang.Float.isNaN(x)
@@ -1636,6 +1804,22 @@ private[spark] object Utils extends Logging {
       iterator.next()
     }
     count
+  }
+
+  /**
+   * Generate a zipWithIndex iterator, avoid index value overflowing problem
+   * in scala's zipWithIndex
+   */
+  def getIteratorZipWithIndex[T](iterator: Iterator[T], startIndex: Long): Iterator[(T, Long)] = {
+    new Iterator[(T, Long)] {
+      require(startIndex >= 0, "startIndex should be >= 0.")
+      var index: Long = startIndex - 1L
+      def hasNext: Boolean = iterator.hasNext
+      def next(): (T, Long) = {
+        index += 1L
+        (iterator.next(), index)
+      }
+    }
   }
 
   /**
@@ -1724,50 +1908,30 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Terminates a process waiting for at most the specified duration. Returns whether
-   * the process terminated.
+   * Terminates a process waiting for at most the specified duration.
+   *
+   * @return the process exit value if it was successfully terminated, else None
    */
   def terminateProcess(process: Process, timeoutMs: Long): Option[Int] = {
-    try {
-      // Java8 added a new API which will more forcibly kill the process. Use that if available.
-      val destroyMethod = process.getClass().getMethod("destroyForcibly");
-      destroyMethod.setAccessible(true)
-      destroyMethod.invoke(process)
-    } catch {
-      case NonFatal(e) =>
-        if (!e.isInstanceOf[NoSuchMethodException]) {
-          logWarning("Exception when attempting to kill process", e)
-        }
-        process.destroy()
-    }
-    if (waitForProcess(process, timeoutMs)) {
+    // Politely destroy first
+    process.destroy()
+    if (process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+      // Successful exit
       Option(process.exitValue())
     } else {
-      None
-    }
-  }
-
-  /**
-   * Wait for a process to terminate for at most the specified duration.
-   * Return whether the process actually terminated after the given timeout.
-   */
-  def waitForProcess(process: Process, timeoutMs: Long): Boolean = {
-    var terminated = false
-    val startTime = System.currentTimeMillis
-    while (!terminated) {
       try {
-        process.exitValue()
-        terminated = true
+        process.destroyForcibly()
       } catch {
-        case e: IllegalThreadStateException =>
-          // Process not terminated yet
-          if (System.currentTimeMillis - startTime > timeoutMs) {
-            return false
-          }
-          Thread.sleep(100)
+        case NonFatal(e) => logWarning("Exception when attempting to kill process", e)
+      }
+      // Wait, again, although this really should return almost immediately
+      if (process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+        Option(process.exitValue())
+      } else {
+        logWarning("Timed out waiting to forcibly kill process")
+        None
       }
     }
-    true
   }
 
   /**
@@ -1775,7 +1939,7 @@ private[spark] object Utils extends Logging {
    * If the process does not terminate within the specified timeout, return None.
    */
   def getStderr(process: Process, timeoutMs: Long): Option[String] = {
-    val terminated = Utils.waitForProcess(process, timeoutMs)
+    val terminated = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
     if (terminated) {
       Some(Source.fromInputStream(process.getErrorStream).getLines().mkString("\n"))
     } else {
@@ -1817,7 +1981,11 @@ private[spark] object Utils extends Logging {
   /** Returns true if the given exception was fatal. See docs for scala.util.control.NonFatal. */
   def isFatalError(e: Throwable): Boolean = {
     e match {
-      case NonFatal(_) | _: InterruptedException | _: NotImplementedError | _: ControlThrowable =>
+      case NonFatal(_) |
+           _: InterruptedException |
+           _: NotImplementedError |
+           _: ControlThrowable |
+           _: LinkageError =>
         false
       case _ =>
         true
@@ -1854,7 +2022,7 @@ private[spark] object Utils extends Logging {
     if (paths == null || paths.trim.isEmpty) {
       ""
     } else {
-      paths.split(",").map { p => Utils.resolveURI(p) }.mkString(",")
+      paths.split(",").filter(_.trim.nonEmpty).map { p => Utils.resolveURI(p) }.mkString(",")
     }
   }
 
@@ -1892,6 +2060,20 @@ private[spark] object Utils extends Logging {
       }
     }
     path
+  }
+
+  /**
+   * Updates Spark config with properties from a set of Properties.
+   * Provided properties have the highest priority.
+   */
+  def updateSparkConfigFromProperties(
+      conf: SparkConf,
+      properties: Map[String, String]) : Unit = {
+    properties.filter { case (k, v) =>
+      k.startsWith("spark.")
+    }.foreach { case (k, v) =>
+      conf.set(k, v)
+    }
   }
 
   /** Load properties present in the given file. */
@@ -1939,16 +2121,60 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  private implicit class Lock(lock: LockInfo) {
+    def lockString: String = {
+      lock match {
+        case monitor: MonitorInfo =>
+          s"Monitor(${lock.getClassName}@${lock.getIdentityHashCode}})"
+        case _ =>
+          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode}})"
+      }
+    }
+  }
+
   /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
   def getThreadDump(): Array[ThreadStackTrace] = {
     // We need to filter out null values here because dumpAllThreads() may return null array
     // elements for threads that are dead / don't exist.
     val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
-    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
-      val stackTrace = threadInfo.getStackTrace.map(_.toString).mkString("\n")
-      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName,
-        threadInfo.getThreadState, stackTrace)
+    threadInfos.sortBy(_.getThreadId).map(threadInfoToThreadStackTrace)
+  }
+
+  def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
+    if (threadId <= 0) {
+      None
+    } else {
+      // The Int.MaxValue here requests the entire untruncated stack trace of the thread:
+      val threadInfo =
+        Option(ManagementFactory.getThreadMXBean.getThreadInfo(threadId, Int.MaxValue))
+      threadInfo.map(threadInfoToThreadStackTrace)
     }
+  }
+
+  private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
+    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
+    val stackTrace = threadInfo.getStackTrace.map { frame =>
+      monitors.get(frame) match {
+        case Some(monitor) =>
+          monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
+        case None =>
+          frame.toString
+      }
+    }.mkString("\n")
+
+    // use a set to dedup re-entrant locks that are held at multiple places
+    val heldLocks =
+      (threadInfo.getLockedSynchronizers ++ threadInfo.getLockedMonitors).map(_.lockString).toSet
+
+    ThreadStackTrace(
+      threadId = threadInfo.getThreadId,
+      threadName = threadInfo.getThreadName,
+      threadState = threadInfo.getThreadState,
+      stackTrace = stackTrace,
+      blockedByThreadId =
+        if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
+      blockedByLock = Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
+      holdingLocks = heldLocks.toSeq)
   }
 
   /**
@@ -1971,6 +2197,14 @@ private[spark] object Utils extends Logging {
     } else {
       maxRetries.getOrElse(16)
     }
+  }
+
+  /**
+   * Returns the user port to try when trying to bind a service. Handles wrapping and skipping
+   * privileged ports.
+   */
+  def userPort(base: Int, offset: Int): Int = {
+    (base + offset - 1024) % (65536 - 1024) + 1024
   }
 
   /**
@@ -2000,8 +2234,7 @@ private[spark] object Utils extends Logging {
       val tryPort = if (startPort == 0) {
         startPort
       } else {
-        // If the new port wraps around, do not try a privilege port
-        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
+        userPort(startPort, offset)
       }
       try {
         val (service, port) = startService(tryPort)
@@ -2010,17 +2243,32 @@ private[spark] object Utils extends Logging {
       } catch {
         case e: Exception if isBindCollision(e) =>
           if (offset >= maxRetries) {
-            val exceptionMessage = s"${e.getMessage}: Service$serviceString failed after " +
-              s"$maxRetries retries! Consider explicitly setting the appropriate port for the " +
-              s"service$serviceString (for example spark.ui.port for SparkUI) to an available " +
-              "port or increasing spark.port.maxRetries."
+            val exceptionMessage = if (startPort == 0) {
+              s"${e.getMessage}: Service$serviceString failed after " +
+                s"$maxRetries retries (on a random free port)! " +
+                s"Consider explicitly setting the appropriate binding address for " +
+                s"the service$serviceString (for example spark.driver.bindAddress " +
+                s"for SparkDriver) to the correct binding address."
+            } else {
+              s"${e.getMessage}: Service$serviceString failed after " +
+                s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
+                s"the appropriate port for the service$serviceString (for example spark.ui.port " +
+                s"for SparkUI) to an available port or increasing spark.port.maxRetries."
+            }
             val exception = new BindException(exceptionMessage)
             // restore original stack trace
             exception.setStackTrace(e.getStackTrace)
             throw exception
           }
-          logWarning(s"Service$serviceString could not bind on port $tryPort. " +
-            s"Attempting port ${tryPort + 1}.")
+          if (startPort == 0) {
+            // As startPort 0 is for a random free port, it is most possibly binding address is
+            // not correct.
+            logWarning(s"Service$serviceString could not bind on a random free port. " +
+              "You may check whether configuring an appropriate binding address.")
+          } else {
+            logWarning(s"Service$serviceString could not bind on port $tryPort. " +
+              s"Attempting port ${tryPort + 1}.")
+          }
       }
     }
     // Should never happen
@@ -2039,6 +2287,9 @@ private[spark] object Utils extends Logging {
         isBindCollision(e.getCause)
       case e: MultiException =>
         e.getThrowables.asScala.exists(isBindCollision)
+      case e: NativeIoException =>
+        (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
+          isBindCollision(e.getCause)
       case e: Exception => isBindCollision(e.getCause)
       case _ => false
     }
@@ -2149,8 +2400,9 @@ private[spark] object Utils extends Logging {
    * A spark url (`spark://host:port`) is a special URI that its scheme is `spark` and only contains
    * host and port.
    *
-   * @throws SparkException if `sparkUrl` is invalid.
+   * @throws org.apache.spark.SparkException if sparkUrl is invalid.
    */
+  @throws(classOf[SparkException])
   def extractHostPortFromSparkUrl(sparkUrl: String): (String, Int) = {
     try {
       val uri = new java.net.URI(sparkUrl)
@@ -2262,19 +2514,39 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return whether dynamic allocation is enabled in the given conf
-   * Dynamic allocation and explicitly setting the number of executors are inherently
-   * incompatible. In environments where dynamic allocation is turned on by default,
-   * the latter should override the former (SPARK-9092).
+   * Return whether dynamic allocation is enabled in the given conf.
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
-    val numExecutor = conf.getInt("spark.executor.instances", 0)
     val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
-    if (numExecutor != 0 && dynamicAllocationEnabled) {
-      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
-    }
-    numExecutor == 0 && dynamicAllocationEnabled &&
+    dynamicAllocationEnabled &&
       (!isLocalMaster(conf) || conf.getBoolean("spark.dynamicAllocation.testing", false))
+  }
+
+  /**
+   * Return the initial number of executors for dynamic allocation.
+   */
+  def getDynamicAllocationInitialExecutors(conf: SparkConf): Int = {
+    if (conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS) < conf.get(DYN_ALLOCATION_MIN_EXECUTORS)) {
+      logWarning(s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key} less than " +
+        s"${DYN_ALLOCATION_MIN_EXECUTORS.key} is invalid, ignoring its setting, " +
+          "please update your configs.")
+    }
+
+    if (conf.get(EXECUTOR_INSTANCES).getOrElse(0) < conf.get(DYN_ALLOCATION_MIN_EXECUTORS)) {
+      logWarning(s"${EXECUTOR_INSTANCES.key} less than " +
+        s"${DYN_ALLOCATION_MIN_EXECUTORS.key} is invalid, ignoring its setting, " +
+          "please update your configs.")
+    }
+
+    val initialExecutors = Seq(
+      conf.get(DYN_ALLOCATION_MIN_EXECUTORS),
+      conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS),
+      conf.get(EXECUTOR_INSTANCES).getOrElse(0)).max
+
+    logInfo(s"Using initial executors = $initialExecutors, max of " +
+      s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key}, ${DYN_ALLOCATION_MIN_EXECUTORS.key} and " +
+        s"${EXECUTOR_INSTANCES.key}")
+    initialExecutors
   }
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
@@ -2304,6 +2576,181 @@ private[spark] object Utils extends Logging {
   def initDaemon(log: Logger): Unit = {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
     SignalUtils.registerLogger(log)
+  }
+
+  /**
+   * Unions two comma-separated lists of files and filters out empty strings.
+   */
+  def unionFileLists(leftList: Option[String], rightList: Option[String]): Set[String] = {
+    var allFiles = Set[String]()
+    leftList.foreach { value => allFiles ++= value.split(",") }
+    rightList.foreach { value => allFiles ++= value.split(",") }
+    allFiles.filter { _.nonEmpty }
+  }
+
+  /**
+   * In YARN mode this method returns a union of the jar files pointed by "spark.jars" and the
+   * "spark.yarn.dist.jars" properties, while in other modes it returns the jar files pointed by
+   * only the "spark.jars" property.
+   */
+  def getUserJars(conf: SparkConf, isShell: Boolean = false): Seq[String] = {
+    val sparkJars = conf.getOption("spark.jars")
+    if (conf.get("spark.master") == "yarn" && isShell) {
+      val yarnJars = conf.getOption("spark.yarn.dist.jars")
+      unionFileLists(sparkJars, yarnJars).toSeq
+    } else {
+      sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
+    }
+  }
+
+  private[spark] val REDACTION_REPLACEMENT_TEXT = "*********(redacted)"
+
+  /**
+   * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
+   * its value is replaced with a dummy text.
+   */
+  def redact(conf: SparkConf, kvs: Seq[(String, String)]): Seq[(String, String)] = {
+    val redactionPattern = conf.get(SECRET_REDACTION_PATTERN)
+    redact(redactionPattern, kvs)
+  }
+
+  /**
+   * Redact the sensitive information in the given string.
+   */
+  def redact(conf: SparkConf, text: String): String = {
+    if (text == null || text.isEmpty || !conf.contains(STRING_REDACTION_PATTERN)) return text
+    val regex = conf.get(STRING_REDACTION_PATTERN).get
+    regex.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+  }
+
+  private def redact(redactionPattern: Regex, kvs: Seq[(String, String)]): Seq[(String, String)] = {
+    // If the sensitive information regex matches with either the key or the value, redact the value
+    // While the original intent was to only redact the value if the key matched with the regex,
+    // we've found that especially in verbose mode, the value of the property may contain sensitive
+    // information like so:
+    // "sun.java.command":"org.apache.spark.deploy.SparkSubmit ... \
+    // --conf spark.executorEnv.HADOOP_CREDSTORE_PASSWORD=secret_password ...
+    //
+    // And, in such cases, simply searching for the sensitive information regex in the key name is
+    // not sufficient. The values themselves have to be searched as well and redacted if matched.
+    // This does mean we may be accounting more false positives - for example, if the value of an
+    // arbitrary property contained the term 'password', we may redact the value from the UI and
+    // logs. In order to work around it, user would have to make the spark.redaction.regex property
+    // more specific.
+    kvs.map { case (key, value) =>
+      redactionPattern.findFirstIn(key)
+        .orElse(redactionPattern.findFirstIn(value))
+        .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
+        .getOrElse((key, value))
+    }
+  }
+
+  /**
+   * Looks up the redaction regex from within the key value pairs and uses it to redact the rest
+   * of the key value pairs. No care is taken to make sure the redaction property itself is not
+   * redacted. So theoretically, the property itself could be configured to redact its own value
+   * when printing.
+   */
+  def redact(kvs: Map[String, String]): Seq[(String, String)] = {
+    val redactionPattern = kvs.getOrElse(
+      SECRET_REDACTION_PATTERN.key,
+      SECRET_REDACTION_PATTERN.defaultValueString
+    ).r
+    redact(redactionPattern, kvs.toArray)
+  }
+
+}
+
+private[util] object CallerContext extends Logging {
+  val callerContextSupported: Boolean = {
+    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false) && {
+      try {
+        Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+        Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+        true
+      } catch {
+        case _: ClassNotFoundException =>
+          false
+        case NonFatal(e) =>
+          logWarning("Fail to load the CallerContext class", e)
+          false
+      }
+    }
+  }
+}
+
+/**
+ * An utility class used to set up Spark caller contexts to HDFS and Yarn. The `context` will be
+ * constructed by parameters passed in.
+ * When Spark applications run on Yarn and HDFS, its caller contexts will be written into Yarn RM
+ * audit log and hdfs-audit.log. That can help users to better diagnose and understand how
+ * specific applications impacting parts of the Hadoop system and potential problems they may be
+ * creating (e.g. overloading NN). As HDFS mentioned in HDFS-9184, for a given HDFS operation, it's
+ * very helpful to track which upper level job issues it.
+ *
+ * @param from who sets up the caller context (TASK, CLIENT, APPMASTER)
+ *
+ * The parameters below are optional:
+ * @param upstreamCallerContext caller context the upstream application passes in
+ * @param appId id of the app this task belongs to
+ * @param appAttemptId attempt id of the app this task belongs to
+ * @param jobId id of the job this task belongs to
+ * @param stageId id of the stage this task belongs to
+ * @param stageAttemptId attempt id of the stage this task belongs to
+ * @param taskId task id
+ * @param taskAttemptNumber task attempt id
+ */
+private[spark] class CallerContext(
+  from: String,
+  upstreamCallerContext: Option[String] = None,
+  appId: Option[String] = None,
+  appAttemptId: Option[String] = None,
+  jobId: Option[Int] = None,
+  stageId: Option[Int] = None,
+  stageAttemptId: Option[Int] = None,
+  taskId: Option[Long] = None,
+  taskAttemptNumber: Option[Int] = None) extends Logging {
+
+  private val context = prepareContext("SPARK_" +
+    from +
+    appId.map("_" + _).getOrElse("") +
+    appAttemptId.map("_" + _).getOrElse("") +
+    jobId.map("_JId_" + _).getOrElse("") +
+    stageId.map("_SId_" + _).getOrElse("") +
+    stageAttemptId.map("_" + _).getOrElse("") +
+    taskId.map("_TId_" + _).getOrElse("") +
+    taskAttemptNumber.map("_" + _).getOrElse("") +
+    upstreamCallerContext.map("_" + _).getOrElse(""))
+
+  private def prepareContext(context: String): String = {
+    // The default max size of Hadoop caller context is 128
+    lazy val len = SparkHadoopUtil.get.conf.getInt("hadoop.caller.context.max.size", 128)
+    if (context == null || context.length <= len) {
+      context
+    } else {
+      val finalContext = context.substring(0, len)
+      logWarning(s"Truncated Spark caller context from $context to $finalContext")
+      finalContext
+    }
+  }
+
+  /**
+   * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
+   * [[org.apache.hadoop.ipc.CallerContext]], which was added in hadoop 2.8.
+   */
+  def setCurrentContext(): Unit = {
+    if (CallerContext.callerContextSupported) {
+      try {
+        val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+        val builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+        val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
+        val hdfsContext = builder.getMethod("build").invoke(builderInst)
+        callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Fail to set Spark caller context", e)
+      }
+    }
   }
 }
 
@@ -2344,29 +2791,24 @@ private[spark] class RedirectThread(
  * the toString method.
  */
 private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.OutputStream {
-  var pos: Int = 0
-  var buffer = new Array[Int](sizeInBytes)
+  private var pos: Int = 0
+  private var isBufferFull = false
+  private val buffer = new Array[Byte](sizeInBytes)
 
-  def write(i: Int): Unit = {
-    buffer(pos) = i
+  def write(input: Int): Unit = {
+    buffer(pos) = input.toByte
     pos = (pos + 1) % buffer.length
+    isBufferFull = isBufferFull || (pos == 0)
   }
 
   override def toString: String = {
-    val (end, start) = buffer.splitAt(pos)
-    val input = new java.io.InputStream {
-      val iterator = (start ++ end).iterator
+    if (!isBufferFull) {
+      return new String(buffer, 0, pos, StandardCharsets.UTF_8)
+    }
 
-      def read(): Int = if (iterator.hasNext) iterator.next() else -1
-    }
-    val reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
-    val stringBuilder = new StringBuilder
-    var line = reader.readLine()
-    while (line != null) {
-      stringBuilder.append(line)
-      stringBuilder.append("\n")
-      line = reader.readLine()
-    }
-    stringBuilder.toString()
+    val nonCircularBuffer = new Array[Byte](sizeInBytes)
+    System.arraycopy(buffer, pos, nonCircularBuffer, 0, buffer.length - pos)
+    System.arraycopy(buffer, 0, nonCircularBuffer, buffer.length - pos, pos)
+    new String(nonCircularBuffer, StandardCharsets.UTF_8)
   }
 }

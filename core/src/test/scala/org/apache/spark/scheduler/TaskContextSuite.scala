@@ -62,7 +62,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties, new TaskMetrics)
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
+      closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
@@ -83,7 +84,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties, new TaskMetrics)
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
+      closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
@@ -98,7 +100,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     context.addTaskCompletionListener(_ => throw new Exception("blah"))
 
     intercept[TaskCompletionListenerException] {
-      context.markTaskCompleted()
+      context.markTaskCompleted(None)
     }
 
     verify(listener, times(1)).onTaskCompletion(any())
@@ -146,14 +148,13 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("accumulators are updated on exception failures") {
     // This means use 1 core and 4 max task failures
     sc = new SparkContext("local[1,4]", "test")
-    val param = AccumulatorParam.LongAccumulatorParam
     // Create 2 accumulators, one that counts failed values and another that doesn't
-    val acc1 = new Accumulator(0L, param, Some("x"), countFailedValues = true)
-    val acc2 = new Accumulator(0L, param, Some("y"), countFailedValues = false)
+    val acc1 = AccumulatorSuite.createLongAccum("x", true)
+    val acc2 = AccumulatorSuite.createLongAccum("y", false)
     // Fail first 3 attempts of every task. This means each task should be run 4 times.
     sc.parallelize(1 to 10, 10).map { i =>
-      acc1 += 1
-      acc2 += 1
+      acc1.add(1)
+      acc2.add(1)
       if (TaskContext.get.attemptNumber() <= 2) {
         throw new Exception("you did something wrong")
       } else {
@@ -197,7 +198,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     sc = new SparkContext("local", "test")
     // Create a dummy task. We won't end up running this; we just want to collect
     // accumulator updates from it.
-    val taskMetrics = TaskMetrics.empty
+    val taskMetrics = TaskMetrics.registered
     val task = new Task[Int](0, 0, 0) {
       context = new TaskContextImpl(0, 0, 0L, 0,
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
@@ -225,6 +226,62 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       s"$inTask,$inDeser"
     }).collect()
     assert(res === Array("testPropValue,testPropValue"))
+  }
+
+  test("immediately call a completion listener if the context is completed") {
+    var invocations = 0
+    val context = TaskContext.empty()
+    context.markTaskCompleted(None)
+    context.addTaskCompletionListener(_ => invocations += 1)
+    assert(invocations == 1)
+    context.markTaskCompleted(None)
+    assert(invocations == 1)
+  }
+
+  test("immediately call a failure listener if the context has failed") {
+    var invocations = 0
+    var lastError: Throwable = null
+    val error = new RuntimeException
+    val context = TaskContext.empty()
+    context.markTaskFailed(error)
+    context.addTaskFailureListener { (_, e) =>
+      lastError = e
+      invocations += 1
+    }
+    assert(lastError == error)
+    assert(invocations == 1)
+    context.markTaskFailed(error)
+    assert(lastError == error)
+    assert(invocations == 1)
+  }
+
+  test("TaskCompletionListenerException.getMessage should include previousError") {
+    val listenerErrorMessage = "exception in listener"
+    val taskErrorMessage = "exception in task"
+    val e = new TaskCompletionListenerException(
+      Seq(listenerErrorMessage),
+      Some(new RuntimeException(taskErrorMessage)))
+    assert(e.getMessage.contains(listenerErrorMessage) && e.getMessage.contains(taskErrorMessage))
+  }
+
+  test("all TaskCompletionListeners should be called even if some fail or a task") {
+    val context = TaskContext.empty()
+    val listener = mock(classOf[TaskCompletionListener])
+    context.addTaskCompletionListener(_ => throw new Exception("exception in listener1"))
+    context.addTaskCompletionListener(listener)
+    context.addTaskCompletionListener(_ => throw new Exception("exception in listener3"))
+
+    val e = intercept[TaskCompletionListenerException] {
+      context.markTaskCompleted(Some(new Exception("exception in task")))
+    }
+
+    // Make sure listener 2 was called.
+    verify(listener, times(1)).onTaskCompletion(any())
+
+    // also need to check failure in TaskCompletionListener does not mask earlier exception
+    assert(e.getMessage.contains("exception in listener1"))
+    assert(e.getMessage.contains("exception in listener3"))
+    assert(e.getMessage.contains("exception in task"))
   }
 
 }

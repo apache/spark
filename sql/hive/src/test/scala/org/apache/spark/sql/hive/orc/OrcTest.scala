@@ -43,7 +43,7 @@ private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
   }
 
   /**
-   * Writes `data` to a Orc file and reads it back as a [[DataFrame]],
+   * Writes `data` to a Orc file and reads it back as a `DataFrame`,
    * which is then passed to `f`. The Orc file will be deleted after `f` returns.
    */
   protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
@@ -53,7 +53,7 @@ private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
   }
 
   /**
-   * Writes `data` to a Orc file, reads it back as a [[DataFrame]] and registers it as a
+   * Writes `data` to a Orc file, reads it back as a `DataFrame` and registers it as a
    * temporary table named `tableName`, then call `f`. The temporary table together with the
    * Orc file will be dropped/deleted after `f` returns.
    */
@@ -61,8 +61,8 @@ private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
     withOrcDataFrame(data) { df =>
-      spark.wrapped.registerDataFrameAsTable(df, tableName)
-      withTempTable(tableName)(f)
+      df.createOrReplaceTempView(tableName)
+      withTempView(tableName)(f)
     }
   }
 

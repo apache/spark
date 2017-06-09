@@ -24,30 +24,43 @@ This file is designed to be launched as a PYTHONSTARTUP script.
 import atexit
 import os
 import platform
+import warnings
 
 import py4j
 
-import pyspark
+from pyspark import SparkConf
 from pyspark.context import SparkContext
 from pyspark.sql import SparkSession, SQLContext
-from pyspark.storagelevel import StorageLevel
 
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-sc = SparkContext()
-atexit.register(lambda: sc.stop())
+SparkContext._ensure_initialized()
 
 try:
     # Try to access HiveConf, it will raise exception if Hive is not added
-    sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
-    spark = SparkSession.builder\
-        .enableHiveSupport()\
-        .getOrCreate()
+    conf = SparkConf()
+    if conf.get('spark.sql.catalogImplementation', 'hive').lower() == 'hive':
+        SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
+        spark = SparkSession.builder\
+            .enableHiveSupport()\
+            .getOrCreate()
+    else:
+        spark = SparkSession.builder.getOrCreate()
 except py4j.protocol.Py4JError:
-    spark = SparkSession(sc)
+    if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+        warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
+                      "please make sure you build spark with hive")
+    spark = SparkSession.builder.getOrCreate()
 except TypeError:
-    spark = SparkSession(sc)
+    if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+        warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
+                      "please make sure you build spark with hive")
+    spark = SparkSession.builder.getOrCreate()
+
+sc = spark.sparkContext
+sql = spark.sql
+atexit.register(lambda: sc.stop())
 
 # for compatibility
 sqlContext = spark._wrapped
