@@ -42,7 +42,7 @@ class RateSourceSuite extends StreamTest {
   test("basic") {
     val input = spark.readStream
       .format("rate")
-      .option("tuplesPerSecond", "10")
+      .option("rowsPerSecond", "10")
       .option("useManualClock", "true")
       .load()
     testStream(input)(
@@ -56,10 +56,10 @@ class RateSourceSuite extends StreamTest {
     )
   }
 
-  test("uniform distribution of event timestamps: tuplesPerSecond > 1000") {
+  test("uniform distribution of event timestamps: rowsPerSecond > 1000") {
     val input = spark.readStream
       .format("rate")
-      .option("tuplesPerSecond", "1500")
+      .option("rowsPerSecond", "1500")
       .option("useManualClock", "true")
       .load()
       .as[(java.sql.Timestamp, Long)]
@@ -73,10 +73,10 @@ class RateSourceSuite extends StreamTest {
     )
   }
 
-  test("uniform distribution of event timestamps: tuplesPerSecond < 1000") {
+  test("uniform distribution of event timestamps: rowsPerSecond < 1000") {
     val input = spark.readStream
       .format("rate")
-      .option("tuplesPerSecond", "400")
+      .option("rowsPerSecond", "400")
       .option("useManualClock", "true")
       .load()
       .as[(java.sql.Timestamp, Long)]
@@ -92,23 +92,23 @@ class RateSourceSuite extends StreamTest {
   test("valueAtSecond") {
     import RateStreamSource._
 
-    assert(valueAtSecond(seconds = 0, tuplesPerSecond = 5, rampUpTimeSeconds = 2) === 0)
-    assert(valueAtSecond(seconds = 1, tuplesPerSecond = 5, rampUpTimeSeconds = 2) === 1)
-    assert(valueAtSecond(seconds = 2, tuplesPerSecond = 5, rampUpTimeSeconds = 2) === 3)
-    assert(valueAtSecond(seconds = 3, tuplesPerSecond = 5, rampUpTimeSeconds = 2) === 8)
+    assert(valueAtSecond(seconds = 0, rowsPerSecond = 5, rampUpTimeSeconds = 2) === 0)
+    assert(valueAtSecond(seconds = 1, rowsPerSecond = 5, rampUpTimeSeconds = 2) === 1)
+    assert(valueAtSecond(seconds = 2, rowsPerSecond = 5, rampUpTimeSeconds = 2) === 3)
+    assert(valueAtSecond(seconds = 3, rowsPerSecond = 5, rampUpTimeSeconds = 2) === 8)
 
-    assert(valueAtSecond(seconds = 0, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 0)
-    assert(valueAtSecond(seconds = 1, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 2)
-    assert(valueAtSecond(seconds = 2, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 6)
-    assert(valueAtSecond(seconds = 3, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 12)
-    assert(valueAtSecond(seconds = 4, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 20)
-    assert(valueAtSecond(seconds = 5, tuplesPerSecond = 10, rampUpTimeSeconds = 4) === 30)
+    assert(valueAtSecond(seconds = 0, rowsPerSecond = 10, rampUpTimeSeconds = 4) === 0)
+    assert(valueAtSecond(seconds = 1, rowsPerSecond = 10, rampUpTimeSeconds = 4) === 2)
+    assert(valueAtSecond(seconds = 2, rowsPerSecond = 10, rampUpTimeSeconds = 4) === 6)
+    assert(valueAtSecond(seconds = 3, rowsPerSecond = 10, rampUpTimeSeconds = 4) === 12)
+    assert(valueAtSecond(seconds = 4, rowsPerSecond = 10, rampUpTimeSeconds = 4) === 20)
+    assert(valueAtSecond(seconds = 5, rowsPerSecond = 10, rampUpTimeSeconds = 4) === 30)
   }
 
   test("rampUpTime") {
     val input = spark.readStream
       .format("rate")
-      .option("tuplesPerSecond", "10")
+      .option("rowsPerSecond", "10")
       .option("rampUpTime", "4s")
       .option("useManualClock", "true")
       .load()
@@ -138,7 +138,7 @@ class RateSourceSuite extends StreamTest {
   test("numPartitions") {
     val input = spark.readStream
       .format("rate")
-      .option("tuplesPerSecond", "10")
+      .option("rowsPerSecond", "10")
       .option("numPartitions", "6")
       .option("useManualClock", "true")
       .load()
@@ -153,7 +153,7 @@ class RateSourceSuite extends StreamTest {
   testQuietly("overflow") {
     val input = spark.readStream
       .format("rate")
-      .option("tuplesPerSecond", Long.MaxValue.toString)
+      .option("rowsPerSecond", Long.MaxValue.toString)
       .option("useManualClock", "true")
       .load()
       .select(spark_partition_id())
@@ -161,7 +161,7 @@ class RateSourceSuite extends StreamTest {
     testStream(input)(
       AdvanceRateManualClock(2),
       ExpectFailure[ArithmeticException](t => {
-        Seq("overflow", "tuplesPerSecond").foreach { msg =>
+        Seq("overflow", "rowsPerSecond").foreach { msg =>
           assert(t.getMessage.contains(msg))
         }
       })
@@ -189,7 +189,7 @@ class RateSourceSuite extends StreamTest {
       }
     }
 
-    testIllegalOptionValue("tuplesPerSecond", "-1", Seq("-1", "tuplesPerSecond", "positive"))
+    testIllegalOptionValue("rowsPerSecond", "-1", Seq("-1", "rowsPerSecond", "positive"))
     testIllegalOptionValue("numPartitions", "-1", Seq("-1", "numPartitions", "positive"))
   }
 }

@@ -38,12 +38,12 @@ import org.apache.spark.util.{ManualClock, SystemClock}
  *  with 0L.
  *
  *  This source supports the following options:
- *  - `tuplesPerSecond` (e.g. 100, default: 1): How many tuples should be generated per second.
+ *  - `rowsPerSecond` (e.g. 100, default: 1): How many tuples should be generated per second.
  *  - `rampUpTime` (e.g. 5s, default: 0s): How long to ramp up before the generating speed
- *    becomes `tuplesPerSecond`. Using finer granularities than seconds will be truncated to integer
+ *    becomes `rowsPerSecond`. Using finer granularities than seconds will be truncated to integer
  *    seconds.
  *  - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for the
- *    generated tuples. The source will try its best to reach `tuplesPerSecond`, but the query may
+ *    generated tuples. The source will try its best to reach `rowsPerSecond`, but the query may
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
 class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
@@ -63,10 +63,10 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
       parameters: Map[String, String]): Source = {
     val params = CaseInsensitiveMap(parameters)
 
-    val tuplesPerSecond = params.get("tuplesPerSecond").map(_.toLong).getOrElse(1L)
-    if (tuplesPerSecond <= 0) {
+    val rowsPerSecond = params.get("rowsPerSecond").map(_.toLong).getOrElse(1L)
+    if (rowsPerSecond <= 0) {
       throw new IllegalArgumentException(
-        s"Invalid value '${params("tuplesPerSecond")}'. The option 'tuplesPerSecond' " +
+        s"Invalid value '${params("rowsPerSecond")}'. The option 'rowsPerSecond' " +
           "must be positive")
     }
 
@@ -89,7 +89,7 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
     new RateStreamSource(
       sqlContext,
       metadataPath,
-      tuplesPerSecond,
+      rowsPerSecond,
       rampUpTimeSeconds,
       numPartitions,
       params.get("useManualClock").map(_.toBoolean).getOrElse(false) // Only for testing
@@ -108,7 +108,7 @@ object RateSourceProvider {
 class RateStreamSource(
     sqlContext: SQLContext,
     metadataPath: String,
-    tuplesPerSecond: Long,
+    rowsPerSecond: Long,
     rampUpTimeSeconds: Long,
     numPartitions: Int,
     useManualClock: Boolean) extends Source with Logging {
@@ -118,11 +118,11 @@ class RateStreamSource(
 
   val clock = if (useManualClock) new ManualClock else new SystemClock
 
-  private val maxSeconds = Long.MaxValue / tuplesPerSecond
+  private val maxSeconds = Long.MaxValue / rowsPerSecond
 
   if (rampUpTimeSeconds > maxSeconds) {
     throw new ArithmeticException(
-      s"Integer overflow. Max offset with $tuplesPerSecond tuplesPerSecond" +
+      s"Integer overflow. Max offset with $rowsPerSecond rowsPerSecond" +
         s" is $maxSeconds, but 'rampUpTimeSeconds' is $rampUpTimeSeconds.")
   }
 
@@ -183,14 +183,14 @@ class RateStreamSource(
     assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")
     if (endSeconds > maxSeconds) {
       throw new ArithmeticException("Integer overflow. Max offset with " +
-        s"$tuplesPerSecond tuplesPerSecond is $maxSeconds, but it's $endSeconds now.")
+        s"$rowsPerSecond rowsPerSecond is $maxSeconds, but it's $endSeconds now.")
     }
     // Fix "lastTimeMs" for recovery
     if (lastTimeMs < TimeUnit.SECONDS.toMillis(endSeconds) + startTimeMs) {
       lastTimeMs = TimeUnit.SECONDS.toMillis(endSeconds) + startTimeMs
     }
-    val rangeStart = valueAtSecond(startSeconds, tuplesPerSecond, rampUpTimeSeconds)
-    val rangeEnd = valueAtSecond(endSeconds, tuplesPerSecond, rampUpTimeSeconds)
+    val rangeStart = valueAtSecond(startSeconds, rowsPerSecond, rampUpTimeSeconds)
+    val rangeEnd = valueAtSecond(endSeconds, rowsPerSecond, rampUpTimeSeconds)
     logDebug(s"startSeconds: $startSeconds, endSeconds: $endSeconds, " +
       s"rangeStart: $rangeStart, rangeEnd: $rangeEnd")
 
@@ -254,14 +254,14 @@ class RateStreamSource(
 object RateStreamSource {
 
   /** Calculate the end value we will emit at the time `seconds`. */
-  def valueAtSecond(seconds: Long, tuplesPerSecond: Long, rampUpTimeSeconds: Long): Long = {
-    // E.g., rampUpTimeSeconds = 4, tuplesPerSecond = 10
+  def valueAtSecond(seconds: Long, rowsPerSecond: Long, rampUpTimeSeconds: Long): Long = {
+    // E.g., rampUpTimeSeconds = 4, rowsPerSecond = 10
     // Then speedDeltaPerSecond = 2
     //
     // seconds   = 0 1 2  3  4  5  6
     // speed     = 0 2 4  6  8 10 10 (speedDeltaPerSecond * seconds)
     // end value = 0 2 6 12 20 30 40 (0 + speedDeltaPerSecond * seconds) * (seconds + 1) / 2
-    val speedDeltaPerSecond = tuplesPerSecond / (rampUpTimeSeconds + 1)
+    val speedDeltaPerSecond = rowsPerSecond / (rampUpTimeSeconds + 1)
     if (seconds <= rampUpTimeSeconds) {
       // Calculate "(0 + speedDeltaPerSecond * seconds) * (seconds + 1) / 2" in a special way to
       // avoid overflow
@@ -272,8 +272,8 @@ object RateStreamSource {
       }
     } else {
       // rampUpPart is just a special case of the above formula: rampUpTimeSeconds == seconds
-      val rampUpPart = valueAtSecond(rampUpTimeSeconds, tuplesPerSecond, rampUpTimeSeconds)
-      rampUpPart + (seconds - rampUpTimeSeconds) * tuplesPerSecond
+      val rampUpPart = valueAtSecond(rampUpTimeSeconds, rowsPerSecond, rampUpTimeSeconds)
+      rampUpPart + (seconds - rampUpTimeSeconds) * rowsPerSecond
     }
   }
 }
