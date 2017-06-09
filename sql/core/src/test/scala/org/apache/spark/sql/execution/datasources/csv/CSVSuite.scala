@@ -1179,22 +1179,28 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withTempPath { path =>
       Seq("0,1", "0,1,2,3").toDF().write.text(path.getAbsolutePath)
 
-      val msg = intercept[SparkException] {
-        spark.read.format("csv")
-          .schema("a INT, b INT")
-          .option("maxColumns", "3")
-          .option("mode", "FAILFAST")
-          .load(path.getAbsolutePath)
-          .collect
-      }.getMessage
-      assert(msg.contains("Number of columns processed may have exceeded limit of 3 columns."))
+      Seq(false).foreach { wholeFile =>
+        val msg = intercept[SparkException] {
+          spark.read.format("csv")
+            .schema("a INT, b INT")
+            .option("maxColumns", "2")
+            .option("mode", "FAILFAST")
+            .option("wholeFile", wholeFile)
+            .load(path.getAbsolutePath)
+            .collect
+        }.getMessage
+        assert(msg.contains("Number of columns processed may have exceeded limit of 2 columns."))
 
-      val df = spark.read.format("csv")
-        .schema(s"a INT, b INT")
-        .option("maxColumns", "2")
-        .option("mode", "PERMISSIVE")
-        .load(path.getAbsolutePath)
-      checkAnswer(df, Row(0, 1) :: Row(null, null) :: Nil)
+        val columnNameOfCorruptRecord = "_unparsed"
+        val df = spark.read.format("csv")
+          .schema(s"a INT, b INT, $columnNameOfCorruptRecord STRING")
+          .option("maxColumns", "2")
+          .option("mode", "PERMISSIVE")
+          .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+          .option("wholeFile", wholeFile)
+          .load(path.getAbsolutePath)
+        checkAnswer(df, Row(0, 1, null) :: Row(null, null, "0,1,2,") :: Nil)
+      }
     }
   }
 }

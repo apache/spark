@@ -25,7 +25,6 @@ import java.util.Locale
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import com.univocity.parsers.common.TextParsingException
 import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.internal.Logging
