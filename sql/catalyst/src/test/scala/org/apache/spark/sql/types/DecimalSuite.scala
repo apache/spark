@@ -35,6 +35,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     checkDecimal(Decimal(BigDecimal("0.09")), "0.09", 3, 2)
     checkDecimal(Decimal(BigDecimal("0.9")), "0.9", 2, 1)
     checkDecimal(Decimal(BigDecimal("0.90")), "0.90", 3, 2)
+    checkDecimal(Decimal(BigDecimal("0.0")), "0.0", 2, 1)
+    checkDecimal(Decimal(BigDecimal("0")), "0", 1, 0)
     checkDecimal(Decimal(BigDecimal("1.0")), "1.0", 2, 1)
     checkDecimal(Decimal(BigDecimal("-0.09")), "-0.09", 3, 2)
     checkDecimal(Decimal(BigDecimal("-0.9")), "-0.9", 2, 1)
