@@ -190,6 +190,12 @@ class DAGScheduler(
   /**
    * Number of consecutive stage attempts allowed before a stage is aborted.
    */
+  private[scheduler] val unRegisterOutputOnHostOnFetchFailure =
+    sc.getConf.getBoolean("spark.fetch.failure.unRegister.output.on.host", true)
+
+  /**
+   *
+   */
   private[scheduler] val maxConsecutiveStageAttempts =
     sc.getConf.getInt("spark.stage.maxConsecutiveAttempts",
       DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
@@ -548,6 +554,7 @@ class DAGScheduler(
    * @param callSite where in the user program this job was called
    * @param resultHandler callback to pass each result to
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
+   *
    * @return a JobWaiter object that can be used to block until the job finishes executing
    *         or can be used to cancel the job.
    * @throws IllegalArgumentException when partitions ids are illegal
@@ -1334,7 +1341,8 @@ class DAGScheduler(
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
-            val hostToUnregisterOutputs = if (env.blockManager.externalShuffleServiceEnabled) {
+            val hostToUnregisterOutputs = if (env.blockManager.externalShuffleServiceEnabled &&
+              unRegisterOutputOnHostOnFetchFailure) {
               // We had a fetch failure with the external shuffle service, so we
               // assume all shuffle data on the node is bad.
               Some(bmAddress.host)
