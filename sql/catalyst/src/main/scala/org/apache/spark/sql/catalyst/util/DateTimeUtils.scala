@@ -408,11 +408,6 @@ object DateTimeUtils {
       return None
     }
 
-    // Instead of return None, we truncate the fractional seconds to prevent inserting NULL
-    if (segments(6) > 999999) {
-      segments(6) = segments(6).toString.take(6).toInt
-    }
-
     if (segments(3) < 0 || segments(3) > 23 || segments(4) < 0 || segments(4) > 59 ||
         segments(5) < 0 || segments(5) > 59 || segments(6) < 0 || segments(6) > 999999 ||
         segments(7) < 0 || segments(7) > 23 || segments(8) < 0 || segments(8) > 59) {
