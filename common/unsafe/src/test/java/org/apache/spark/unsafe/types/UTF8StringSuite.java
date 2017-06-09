@@ -732,7 +732,7 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void trim() {
+  public void trimBothWithTrimString() {
     assertEquals(fromString("hello"), fromString("  hello ").trim(fromString(" ")));
     assertEquals(fromString("o"), fromString("  hello ").trim(fromString(" hle")));
     assertEquals(fromString("h e"), fromString("ooh e ooo").trim(fromString("o ")));
@@ -750,7 +750,10 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void trimLeft() {
+  public void trimLeftWithTrimString() {
+    assertEquals(fromString("  hello "), fromString("  hello ").trimLeft(fromString("")));
+    assertEquals(fromString(""), fromString("a").trimLeft(fromString("a")));
+    assertEquals(fromString("b"), fromString("b").trimLeft(fromString("a")));
     assertEquals(fromString("ba"), fromString("ba").trimLeft(fromString("a")));
     assertEquals(fromString(""), fromString("aaaaaaa").trimLeft(fromString("a")));
     assertEquals(fromString("trim"), fromString("oabtrim").trimLeft(fromString("bao")));
@@ -768,7 +771,7 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void trimRight() {
+  public void trimRightWithTrimString() {
     assertEquals(fromString("  hello "), fromString("  hello ").trimRight(fromString("")));
     assertEquals(fromString(""), fromString("a").trimRight(fromString("a")));
     assertEquals(fromString("cc"), fromString("ccbaaaa").trimRight(fromString("ba")));

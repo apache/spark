@@ -504,8 +504,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override def prettyName: String = "find_in_set"
 }
 
-trait String2TrimExpression extends ImplicitCastInputTypes {
-  self: Expression =>
+trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
@@ -526,9 +525,12 @@ trait String2TrimExpression extends ImplicitCastInputTypes {
 }
 
 /**
- * A function that takes a character string, removes the leading and/or trailing characters matching with the characters
- * in the trim string, returns the new string. If BOTH and trimStr keywords are not specified, it defaults to remove
- * space character from both ends.
+ * A function that takes a character string, removes the leading and trailing characters matching with the characters
+ * in the trim string, returns the new string.
+ * If BOTH and trimStr keywords are not specified, it defaults to remove space character from both ends. The trim
+ * function will have one argument, which contains the source string.
+ * If BOTH and trimStr keywords are specified, it trims the characters from both ends, and the trim function will have
+ * two arguments, the first argument contains trimStr, the second argument contains the source string.
  * trimStr: A character string to be trimmed from the source string, if it has multiple characters, the function
  * searches for each character in the source string, removes the characters from the source string until it
  * encounters the first non-match character.
@@ -551,18 +553,15 @@ trait String2TrimExpression extends ImplicitCastInputTypes {
        parkSQ
   """)
 case class StringTrim(children: Seq[Expression])
-  extends Expression with String2TrimExpression {
+  extends String2TrimExpression {
 
   require(children.size <= 2 && children.nonEmpty,
     s"$prettyName requires at least one argument and no more than two.")
 
   override def prettyName: String = "trim"
 
-  // trim function can take one or two arguments.
-  // Specify one child, it is for the trim space function.
-  // Specify the two children, it is for the trim function with BOTH option.
   override def eval(input: InternalRow): Any = {
-    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String]).reverse
     if (inputs(0) != null) {
       if (children.size == 1) {
         return inputs(0).trim()
@@ -580,7 +579,7 @@ case class StringTrim(children: Seq[Expression])
     val evals = children.map(_.genCode(ctx))
     val inputs = evals.map { eval =>
       s"${eval.isNull} ? null : ${eval.value}"
-    }
+    }.reverse
     val getTrimFunction = if (children.size == 1) {
       s"UTF8String ${ev.value} = ${inputs(0)}.trim();"
     } else {
@@ -597,8 +596,11 @@ case class StringTrim(children: Seq[Expression])
 }
 
 /**
- * A function that trims the characters from left end for a given string, If LEADING and trimStr keywords are not
- * specified, it defaults to remove space character from the left end.
+ * A function that trims the characters from left end for a given string.
+ * If LEADING and trimStr keywords are not specified, it defaults to remove space character from the left end. The ltrim
+ * function will have one argument, which contains the source string.
+ * If LEADING and trimStr keywords are not specified, it trims the characters from left end. The ltrim function will
+ * have two arguments, the first argument contains trimStr, the second argument contains the source string.
  * trimStr: the function removes any characters from the left end of the source string which matches with the characters
  * from trimStr, it stops at the first non-match character.
  * LEADING: removes any characters from the left end of the source string that matches characters in the trim string.
@@ -619,16 +621,13 @@ case class StringTrim(children: Seq[Expression])
        arkSQLS
   """)
 case class StringTrimLeft(children: Seq[Expression])
-  extends Expression with String2TrimExpression {
+  extends String2TrimExpression {
 
   require (children.size <= 2 && children.nonEmpty,
     "$prettyName requires at least one argument and no more than two.")
 
   override def prettyName: String = "ltrim"
 
-  // ltrim function can take one or two arguments.
-  // Specify one child, it is for the ltrim space function.
-  // Specify the two children, it is for the trim function with option LEADING.
   override def eval(input: InternalRow): Any = {
     val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
     if (inputs(0) != null) {
@@ -666,8 +665,11 @@ case class StringTrimLeft(children: Seq[Expression])
 }
 
 /**
- * A function that trims the characters from right end for a given string, If TRAILING and trimStr keywords are not
- * specified, it defaults to remove space character from the right end.
+ * A function that trims the characters from right end for a given string.
+ * If TRAILING and trimStr keywords are not specified, it defaults to remove space character from the right end. The
+ * rtrim function will have one argument, which contains the source string.
+ * If TRAILING and trimStr keywords are specified, it trims the characters from right end. The rtrim function will
+ * have two arguments, the first argument contains trimStr, the second argument contains the source string.
  * trimStr: the function removes any characters from the right end of source string which matches with the characters
  * from trimStr, it stops at the first non-match character.
  * TRAILING: removes any characters from the right end of the source string that matches characters in the trim string.
@@ -688,16 +690,13 @@ case class StringTrimLeft(children: Seq[Expression])
        SSpark
   """)
 case class StringTrimRight(children: Seq[Expression])
-  extends Expression with String2TrimExpression {
+  extends String2TrimExpression {
 
   require (children.size <= 2 && children.nonEmpty,
     "$prettyName requires at least one argument and no more than two.")
 
   override def prettyName: String = "rtrim"
 
-  // rtrim function can take one or two arguments.
-  // Specify one child, it is for the rtrim space function.
-  // Specify the two children, it is for the trim function with option TRAILING.
   override def eval(input: InternalRow): Any = {
     val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
     if (inputs(0) != null) {

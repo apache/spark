@@ -1208,7 +1208,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   /**
    * Create a function name LTRIM for TRIM(Leading), RTRIM for TRIM(Trailing), TRIM for TRIM(BOTH),
-   * otherwise, returnthe original funcID.
+   * otherwise, return the original function identifier.
    */
   private def replaceTrimFunction(funcID: FunctionIdentifier, ctx: FunctionCallContext)
     : FunctionIdentifier = {

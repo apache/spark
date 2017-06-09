@@ -511,7 +511,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes the given source string starting from both ends
+   * Based on the given trim string, trim this string starting from both ends
    * This method searches for each character in the source string, removes the character if it is found
    * in the trim string, stops at the first not found. It calls the trimLeft first, then trimRight.
    * It returns a new string in which both ends trim characters have been removed.
@@ -534,7 +534,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes the given source string from the left end
+   * Based on the given trim string, trim this string starting from left end
    * This method searches each character in the source string starting from the left end, removes the character if it
    * is in the trim string, stops at the first character which is not in the trim string, returns the new string.
    * @param trimString the trim character string
@@ -580,7 +580,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Removes the given source string from the right end
+   * Based on the given trim string, trim this string starting from right end
    * This method searches each character in the source string starting from the right end, removes the character if it
    * is in the trim string, stops at the first character which is not in the trim string, returns the new string.
    * @param trimString the trim character string
