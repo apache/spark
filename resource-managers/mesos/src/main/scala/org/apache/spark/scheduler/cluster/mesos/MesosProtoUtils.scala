@@ -17,10 +17,10 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.util
-
 import scala.collection.JavaConverters._
+
 import org.apache.mesos.Protos
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
