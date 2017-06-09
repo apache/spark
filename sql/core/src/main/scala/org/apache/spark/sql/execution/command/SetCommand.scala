@@ -149,13 +149,30 @@ object SetCommand {
 /**
  * This command is for resetting SQLConf to the default values. Command that runs
  * {{{
+ *   reset key;
  *   reset;
  * }}}
  */
-case object ResetCommand extends RunnableCommand with Logging {
+case class ResetCommand(key: Option[String]) extends RunnableCommand with Logging {
+
+  private val runFunc: (SparkSession => Unit) = key match {
+
+    case None =>
+      val runFunc = (sparkSession: SparkSession) => {
+        sparkSession.sessionState.conf.clear()
+      }
+      runFunc
+
+    // (In Hive, "UNSET key" clear a sepecific properties.)
+    case Some(key) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        sparkSession.sessionState.conf.unsetConf(key)
+      }
+      runFunc
+  }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.conf.clear()
+    runFunc(sparkSession)
     Seq.empty[Row]
   }
 }
