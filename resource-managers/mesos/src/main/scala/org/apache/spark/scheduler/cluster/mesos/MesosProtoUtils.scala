@@ -17,10 +17,10 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
+import java.util
+
 import scala.collection.JavaConverters._
-
 import org.apache.mesos.Protos
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
@@ -28,23 +28,26 @@ object MesosProtoUtils extends Logging {
 
   /** Parses a label string of the format specified in spark.mesos.task.labels. */
   def mesosLabels(labelsStr: String): Protos.Labels.Builder = {
-    val labels = labelsStr.split("""(?<!\\),""").toSeq.map { labelStr =>
-      val parts = labelStr.split("""(?<!\\):""")
-      if (parts.length != 2) {
-        throw new SparkException(s"Malformed label: ${labelStr}")
+    val labels: Seq[Protos.Label] = if (labelsStr == "") {
+      Seq()
+    } else {
+      labelsStr.split("""(?<!\\),""").toSeq.map { labelStr =>
+        val parts = labelStr.split("""(?<!\\):""")
+        if (parts.length != 2) {
+          throw new SparkException(s"Malformed label: ${labelStr}")
+        }
+
+        val cleanedParts = parts
+          .map(part => part.replaceAll("""\\,""", ","))
+          .map(part => part.replaceAll("""\\:""", ":"))
+
+        Protos.Label.newBuilder()
+          .setKey(cleanedParts(0))
+          .setValue(cleanedParts(1))
+          .build()
       }
+    }
 
-      val cleanedParts = parts
-        .map(part => part.replaceAll("""\\,""", ","))
-        .map(part => part.replaceAll("""\\:""", ":"))
-
-      Protos.Label.newBuilder()
-        .setKey(cleanedParts(0))
-        .setValue(cleanedParts(1))
-        .build()
-    }.asJava
-
-    Protos.Labels.newBuilder().addAllLabels(labels)
+    Protos.Labels.newBuilder().addAllLabels(labels.asJava)
   }
-
 }
