@@ -197,7 +197,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private String execId;
     private String shuffleId;
     // An array containing mapId and reduceId pairs.
-    private int[][] mapIdAndReduceIds;
+    private int[] mapIdAndReduceIds;
 
     ManagedBufferIterator(String appId, String execId, String[] blockIds) {
       this.appId = appId;
@@ -209,27 +209,27 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         throw new IllegalArgumentException("Expected shuffle block id, got: " + blockIds[0]);
       }
       this.shuffleId = blockId0Parts[1];
-      mapIdAndReduceIds = new int[blockIds.length][2];
+      mapIdAndReduceIds = new int[2 * blockIds.length];
       for (int i = 0; i< blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
         if (!blockIdParts[1].equals(shuffleId)) {
           throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
             ", got:" + blockIds[i]);
         }
-        mapIdAndReduceIds[i][0] = Integer.parseInt(blockIdParts[2]);
-        mapIdAndReduceIds[i][1] = Integer.parseInt(blockIdParts[3]);
+        mapIdAndReduceIds[2 * i] = Integer.parseInt(blockIdParts[2]);
+        mapIdAndReduceIds[2 * i + 1] = Integer.parseInt(blockIdParts[3]);
       }
     }
 
     @Override
     public boolean hasNext() {
-      return index < mapIdAndReduceIds.length;
+      return index < mapIdAndReduceIds.length / 2;
     }
 
     @Override
     public ManagedBuffer next() {
-      String blockId = "shuffle_" + shuffleId + "_" + mapIdAndReduceIds[index][0] + "_" +
-        mapIdAndReduceIds[index][1];
+      String blockId = "shuffle_" + shuffleId + "_" + mapIdAndReduceIds[2 * index] + "_" +
+        mapIdAndReduceIds[2 * index + 1];
       final ManagedBuffer block = blockManager.getBlockData(appId, execId, blockId);
       index++;
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
