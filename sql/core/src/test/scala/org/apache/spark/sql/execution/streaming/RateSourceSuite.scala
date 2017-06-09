@@ -56,7 +56,7 @@ class RateSourceSuite extends StreamTest {
     )
   }
 
-  test("uniform distribution of event timestamps: rowsPerSecond > 1000") {
+  test("uniform distribution of event timestamps") {
     val input = spark.readStream
       .format("rate")
       .option("rowsPerSecond", "1500")
@@ -64,25 +64,9 @@ class RateSourceSuite extends StreamTest {
       .load()
       .as[(java.sql.Timestamp, Long)]
       .map(v => (v._1.getTime, v._2))
-    val expectedAnswer =
-      (0 until 1000).map(v => (v / 2, v)) ++ // Two values share the same timestamp.
-        ((1000 until 1500).map(v => (v - 500, v))) // Each value has one timestamp
-    testStream(input)(
-      AdvanceRateManualClock(seconds = 1),
-      CheckLastBatch(expectedAnswer: _*)
-    )
-  }
-
-  test("uniform distribution of event timestamps: rowsPerSecond < 1000") {
-    val input = spark.readStream
-      .format("rate")
-      .option("rowsPerSecond", "400")
-      .option("useManualClock", "true")
-      .load()
-      .as[(java.sql.Timestamp, Long)]
-      .map(v => (v._1.getTime, v._2))
-    val expectedAnswer = (0 until 200).map(v => (v * 3, v)) ++
-      ((200 until 400).map(v => (600 + (v - 200) * 2, v)))
+    val expectedAnswer = (0 until 1500).map { v =>
+      (math.round(v * (1000.0 / 1500)), v)
+    }
     testStream(input)(
       AdvanceRateManualClock(seconds = 1),
       CheckLastBatch(expectedAnswer: _*)
@@ -121,7 +105,7 @@ class RateSourceSuite extends StreamTest {
       CheckLastBatch((2 until 6).map(v => 1000 + (v - 2) * 250 -> v): _*), // speed = 4
       AdvanceRateManualClock(seconds = 1),
       CheckLastBatch({
-        Seq(2000 -> 6, 2167 -> 7, 2334 -> 8, 2501 -> 9, 2668 -> 10, 2834 -> 11)
+        Seq(2000 -> 6, 2167 -> 7, 2333 -> 8, 2500 -> 9, 2667 -> 10, 2833 -> 11)
       }: _*), // speed = 6
       AdvanceRateManualClock(seconds = 1),
       CheckLastBatch((12 until 20).map(v => 3000 + (v - 12) * 125 -> v): _*), // speed = 8
