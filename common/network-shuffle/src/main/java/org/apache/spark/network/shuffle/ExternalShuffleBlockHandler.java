@@ -195,7 +195,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private int index = 0;
     private final String appId;
     private final String execId;
-    private final String shuffleId;
+    private final int shuffleId;
     // An array containing mapId and reduceId pairs.
     private final int[] mapIdAndReduceIds;
 
@@ -209,7 +209,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       if (!blockId0Parts[0].equals("shuffle")) {
         throw new IllegalArgumentException("Expected shuffle block id, got: " + blockIds[0]);
       }
-      this.shuffleId = blockId0Parts[1];
+      this.shuffleId = Integer.parseInt(blockId0Parts[1]);
       mapIdAndReduceIds = new int[2 * blockIds.length];
       for (int i = 0; i< blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
@@ -229,9 +229,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
 
     @Override
     public ManagedBuffer next() {
-      String blockId = "shuffle_" + shuffleId + "_" + mapIdAndReduceIds[2 * index] + "_" +
-        mapIdAndReduceIds[2 * index + 1];
-      final ManagedBuffer block = blockManager.getBlockData(appId, execId, blockId);
+      final ManagedBuffer block = blockManager.getBlockData(appId, execId, shuffleId,
+        mapIdAndReduceIds[2 * index], mapIdAndReduceIds[2 * index + 1]);
       index++;
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
       return block;
