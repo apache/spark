@@ -61,7 +61,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         | dataType: ${udf.dataType}
       """.stripMargin)
 
-    functionRegistry.registerFunction(name, udf.builder)
+    functionRegistry.createOrReplaceTempFunction(name, udf.builder)
   }
 
   /**
@@ -75,7 +75,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
     def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     udaf
   }
 
@@ -91,7 +91,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
     def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     udf
   }
 
@@ -113,7 +113,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
           val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
           val inputTypes = Try($inputTypes).toOption
           def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-          functionRegistry.registerFunction(name, builder)
+          functionRegistry.createOrReplaceTempFunction(name, builder)
           UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
         }""")
     }
@@ -130,7 +130,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
          | */
          |def register(name: String, f: UDF$i[$extTypeArgs, _], returnType: DataType): Unit = {
          |  val func = f$anyCast.call($anyParams)
-         |  functionRegistry.registerFunction(
+         |  functionRegistry.createOrReplaceTempFunction(
          |    name,
          |    (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
          |}""".stripMargin)
@@ -146,7 +146,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -159,7 +159,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -172,7 +172,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -185,7 +185,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -198,7 +198,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -211,7 +211,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -224,7 +224,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -237,7 +237,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -250,7 +250,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -263,7 +263,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -276,7 +276,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -289,7 +289,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -302,7 +302,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -315,7 +315,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -328,7 +328,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -341,7 +341,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -354,7 +354,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -367,7 +367,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -380,7 +380,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: ScalaReflection.schemaFor[A18].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -393,7 +393,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: ScalaReflection.schemaFor[A18].dataType :: ScalaReflection.schemaFor[A19].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -406,7 +406,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: ScalaReflection.schemaFor[A18].dataType :: ScalaReflection.schemaFor[A19].dataType :: ScalaReflection.schemaFor[A20].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -419,7 +419,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: ScalaReflection.schemaFor[A18].dataType :: ScalaReflection.schemaFor[A19].dataType :: ScalaReflection.schemaFor[A20].dataType :: ScalaReflection.schemaFor[A21].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -432,7 +432,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: ScalaReflection.schemaFor[A18].dataType :: ScalaReflection.schemaFor[A19].dataType :: ScalaReflection.schemaFor[A20].dataType :: ScalaReflection.schemaFor[A21].dataType :: ScalaReflection.schemaFor[A22].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
-    functionRegistry.registerFunction(name, builder)
+    functionRegistry.createOrReplaceTempFunction(name, builder)
     UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
   }
 
@@ -510,7 +510,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF1[_, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF1[Any, Any]].call(_: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -521,7 +521,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF2[_, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -532,7 +532,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF3[_, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF3[Any, Any, Any, Any]].call(_: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -543,7 +543,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF4[_, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF4[Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -554,7 +554,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF5[_, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -565,7 +565,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF6[_, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -576,7 +576,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -587,7 +587,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -598,7 +598,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -609,7 +609,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -620,7 +620,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -631,7 +631,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -642,7 +642,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -653,7 +653,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -664,7 +664,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -675,7 +675,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -686,7 +686,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF17[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -697,7 +697,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF18[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -708,7 +708,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF19[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -719,7 +719,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF20[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -730,7 +730,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF21[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }
@@ -741,7 +741,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   def register(name: String, f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
     val func = f.asInstanceOf[UDF22[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
-    functionRegistry.registerFunction(
+    functionRegistry.createOrReplaceTempFunction(
       name,
       (e: Seq[Expression]) => ScalaUDF(func, returnType, e))
   }

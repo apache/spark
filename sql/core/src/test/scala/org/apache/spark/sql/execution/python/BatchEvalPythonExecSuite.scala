@@ -21,7 +21,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.python.PythonFunction
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EqualTo, Expression, GreaterThan, In}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.BooleanType
@@ -36,7 +37,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   override def afterAll(): Unit = {
-    spark.sessionState.functionRegistry.dropFunction("dummyPythonUDF")
+    spark.sessionState.functionRegistry.dropFunction(FunctionIdentifier("dummyPythonUDF"))
     super.afterAll()
   }
 

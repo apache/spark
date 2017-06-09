@@ -297,7 +297,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("outer generator()") {
-    spark.sessionState.functionRegistry.registerFunction("empty_gen", _ => EmptyGenerator())
+    spark.sessionState.functionRegistry
+      .createOrReplaceTempFunction("empty_gen", _ => EmptyGenerator())
     checkAnswer(
       sql("select * from values 1, 2 lateral view outer empty_gen() a as b"),
       Row(1, null) :: Row(2, null) :: Nil)

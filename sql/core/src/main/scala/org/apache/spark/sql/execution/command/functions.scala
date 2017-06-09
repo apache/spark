@@ -160,7 +160,7 @@ case class DropFunctionCommand(
         throw new AnalysisException(s"Specifying a database in DROP TEMPORARY FUNCTION " +
           s"is not allowed: '${databaseName.get}'")
       }
-      if (FunctionRegistry.builtin.functionExists(functionName)) {
+      if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {
         throw new AnalysisException(s"Cannot drop native function '$functionName'")
       }
       catalog.dropTempFunction(functionName, ifExists)

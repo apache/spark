@@ -367,6 +367,7 @@ class CatalogSuite
       withUserDefinedFunction("fn1" -> true, s"$db.fn2" -> false) {
         // Try to find non existing functions.
         intercept[AnalysisException](spark.catalog.getFunction("fn1"))
+        intercept[AnalysisException](spark.catalog.getFunction(db, "fn1"))
         intercept[AnalysisException](spark.catalog.getFunction("fn2"))
         intercept[AnalysisException](spark.catalog.getFunction(db, "fn2"))
 
@@ -379,6 +380,8 @@ class CatalogSuite
         assert(fn1.name === "fn1")
         assert(fn1.database === null)
         assert(fn1.isTemporary)
+        // Find a temporary function with database
+        intercept[AnalysisException](spark.catalog.getFunction(db, "fn1"))
 
         // Find a qualified function
         val fn2 = spark.catalog.getFunction(db, "fn2")
@@ -455,6 +458,7 @@ class CatalogSuite
 
         // Find a temporary function
         assert(spark.catalog.functionExists("fn1"))
+        assert(!spark.catalog.functionExists(db, "fn1"))
 
         // Find a qualified function
         assert(spark.catalog.functionExists(db, "fn2"))
