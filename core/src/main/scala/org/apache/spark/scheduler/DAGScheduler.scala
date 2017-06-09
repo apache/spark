@@ -188,13 +188,13 @@ class DAGScheduler(
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
 
   /**
-   * Number of consecutive stage attempts allowed before a stage is aborted.
+   * If enabled, fetch failure will cause all the output on that host to be unregistered.
    */
   private[scheduler] val unRegisterOutputOnHostOnFetchFailure =
-    sc.getConf.getBoolean("spark.fetch.failure.unRegister.output.on.host", true)
+    sc.getConf.getBoolean("spark.files.fetchFailure.unRegisterOutputOnHost", true)
 
   /**
-   *
+   * Number of consecutive stage attempts allowed before a stage is aborted.
    */
   private[scheduler] val maxConsecutiveStageAttempts =
     sc.getConf.getInt("spark.stage.maxConsecutiveAttempts",
