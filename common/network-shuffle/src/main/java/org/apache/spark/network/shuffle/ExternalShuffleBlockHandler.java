@@ -193,11 +193,11 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   private class ManagedBufferIterator implements Iterator<ManagedBuffer> {
 
     private int index = 0;
-    private String appId;
-    private String execId;
-    private String shuffleId;
+    private final String appId;
+    private final String execId;
+    private final String shuffleId;
     // An array containing mapId and reduceId pairs.
-    private int[] mapIdAndReduceIds;
+    private final int[] mapIdAndReduceIds;
 
     ManagedBufferIterator(String appId, String execId, String[] blockIds) {
       this.appId = appId;
@@ -205,7 +205,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       String[] blockId0Parts = blockIds[0].split("_");
       if (blockId0Parts.length < 4) {
         throw new IllegalArgumentException("Unexpected block id format: " + blockIds[0]);
-      } else if (!blockId0Parts[0].equals("shuffle")) {
+      }
+      if (!blockId0Parts[0].equals("shuffle")) {
         throw new IllegalArgumentException("Expected shuffle block id, got: " + blockIds[0]);
       }
       this.shuffleId = blockId0Parts[1];
