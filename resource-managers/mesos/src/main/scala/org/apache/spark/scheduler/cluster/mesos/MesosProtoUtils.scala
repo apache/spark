@@ -28,33 +28,20 @@ object MesosProtoUtils extends Logging {
 
   /** Parses a label string of the format specified in spark.mesos.task.labels. */
   def mesosLabels(labelsStr: String): Protos.Labels.Builder = {
-
-    // Return str split around unescaped occurrences of c.
-    def splitUnescaped(str: String, c: Char): Seq[String] = {
-      if (str == "") {
-        return Seq()
-      }
-
-      val indices = (0 to str.length - 1).filter {
-        i => str(i) == c && (i == 0 || str(i-1) != '\\')
-      }
-
-      (-1 +: indices :+ str.length).sliding(2).map {
-        case t => str.substring(t(0) + 1, t(1))
-      }.toSeq
-    }
-
-    val labels = splitUnescaped(labelsStr, ',').map { labelStr =>
-      val parts = splitUnescaped(labelStr, ':')
+    val labels = labelsStr.split("""(?<!\\),""").toSeq.map { labelStr =>
+      val parts = labelStr.split("""(?<!\\):""")
       if (parts.length != 2) {
         throw new SparkException(s"Malformed label: ${labelStr}")
       }
 
       val cleanedParts = parts
-        .map(part => part.replaceAll("\\\\,", ","))
-        .map(part => part.replaceAll("\\\\:", ":"))
+        .map(part => part.replaceAll("""\\,""", ","))
+        .map(part => part.replaceAll("""\\:""", ":"))
 
-      Protos.Label.newBuilder().setKey(cleanedParts(0)).setValue(cleanedParts(1)).build()
+      Protos.Label.newBuilder()
+        .setKey(cleanedParts(0))
+        .setValue(cleanedParts(1))
+        .build()
     }.asJava
 
     Protos.Labels.newBuilder().addAllLabels(labels)
