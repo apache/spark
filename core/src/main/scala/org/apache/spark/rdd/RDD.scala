@@ -335,6 +335,7 @@ abstract class RDD[T: ClassTag](
       readCachedBlock = false
       computeOrReadCheckpoint(partition, context)
     }) match {
+      // Block hit.
       case Left(blockResult) =>
         if (readCachedBlock) {
           val existingMetrics = context.taskMetrics().inputMetrics
@@ -348,6 +349,7 @@ abstract class RDD[T: ClassTag](
         } else {
           new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
         }
+      // Need to compute the block.
       case Right(iter) =>
         new InterruptibleIterator(context, iter.asInstanceOf[Iterator[T]])
     }

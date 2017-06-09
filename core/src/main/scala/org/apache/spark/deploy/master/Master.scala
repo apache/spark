@@ -231,9 +231,8 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
-    case WorkerDecommission(id, workerHost, workerPort, workerRef) =>
-      logInfo("Recording worker %d decomissioning %s:%d".format(
-        id, workerHost, workerPort))
+    case WorkerDecommission(id, workerRef) =>
+      logInfo("Recording worker %d decommissioning".format(id))
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else {
@@ -309,6 +308,7 @@ private[deploy] class Master(
             // Only retry certain number of times so we don't go into an infinite loop.
             // Important note: this code path is not exercised by tests, so be very careful when
             // changing this `if` condition.
+            // We also don't count failures from decommissioned workers since they are "expected."
             if (!normalExit
                 && oldState != ExecutorState.DECOMMISSIONED
                 && appInfo.incrementRetryCount() >= MAX_EXECUTOR_RETRIES
@@ -783,17 +783,22 @@ private[deploy] class Master(
   }
 
   private def decommissionWorker(worker: WorkerInfo) {
-    logInfo("Decommissioning worker %d on %s:%d".format(worker.id, worker.host, worker.port))
-    worker.setState(WorkerState.DECOMMISSIONED)
-    for (exec <- worker.executors.values) {
-      logInfo("Telling app of decomission executors")
-      exec.application.driver.send(ExecutorUpdated(
-        exec.id, ExecutorState.DECOMMISSIONED,
-        Some("worker decommissioned"), None, workerLost = false))
-      exec.state = ExecutorState.DECOMMISSIONED
-      exec.application.removeExecutor(exec)
+    if (worker.state != WorkerState.DECOMMISSIONED) {
+      logInfo("Decommissioning worker %d on %s:%d".format(worker.id, worker.host, worker.port))
+      worker.setState(WorkerState.DECOMMISSIONED)
+      for (exec <- worker.executors.values) {
+        logInfo("Telling app of decomission executors")
+        exec.application.driver.send(ExecutorUpdated(
+          exec.id, ExecutorState.DECOMMISSIONED,
+          Some("worker decommissioned"), None, workerLost = false))
+        exec.state = ExecutorState.DECOMMISSIONED
+        exec.application.removeExecutor(exec)
+      }
+      persistenceEngine.removeWorker(worker)
+    } else {
+      logWarning("Skipping decommissioning worker %d on %s:%d as worker is already decommissioned".
+        format(worker.id, worker.host, worker.port))
     }
-    persistenceEngine.removeWorker(worker)
   }
 
   private def removeWorker(worker: WorkerInfo) {

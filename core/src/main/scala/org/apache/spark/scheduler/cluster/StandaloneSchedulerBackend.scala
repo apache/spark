@@ -161,6 +161,12 @@ private[spark] class StandaloneSchedulerBackend(
     removeExecutor(fullId.split("/")(1), reason)
   }
 
+  override def executorDecommissioned(fullId: String, message: String) {
+    logInfo("Executor %s decommissioned: %s".format(fullId, message))
+    decommissionExecutor(fullId.split("/")(1))
+  }
+
+
   override def sufficientResourcesRegistered(): Boolean = {
     totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
   }

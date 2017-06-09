@@ -101,6 +101,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Executors that have been lost, but for which we don't yet know the real exit reason.
     protected val executorsPendingLossReason = new HashSet[String]
+    // Executors which are being decommissioned
+    protected val executorsPendingDecommission = new HashSet[String]
 
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
@@ -270,7 +272,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     private def executorIsAlive(executorId: String): Boolean = synchronized {
       !executorsPendingToRemove.contains(executorId) &&
-        !executorsPendingLossReason.contains(executorId)
+      !executorsPendingLossReason.contains(executorId) &&
+      !executorsPendingDecommission.contains(executorId)
     }
 
     // Launch tasks returned by a set of resource offers
@@ -330,6 +333,30 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           logInfo(s"Asked to remove non-existent executor $executorId")
       }
     }
+
+    /**
+     * Stop making resource offers for the given executor. The executor is marked as lost with the
+     * loss reason as WorkerDecommission.
+     *
+     */
+    private def decommissionExecutor(executorId: String): Boolean = {
+      val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
+        // Only bother decommissioning executors which are alive.
+        if (executorIsAlive(executorId)) {
+          executorsPendingDecommission += executorId
+          true
+        } else {
+          false
+        }
+      }
+
+      if (shouldDisable) {
+        logInfo(s"Decommissioning executor $executorId.")
+        scheduler.executorDecommission(executorId)
+      }
+
+      shouldDisable
+  }
 
     /**
      * Stop making resource offers for the given executor. The executor is marked as lost with
@@ -450,6 +477,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     // Only log the failure since we don't care about the result.
     driverEndpoint.ask[Boolean](RemoveExecutor(executorId, reason)).onFailure { case t =>
+      logError(t.getMessage, t)
+    }(ThreadUtils.sameThread)
+  }
+
+  /**
+   * Called by subclasses when notified of a decommissioning worker.
+   */
+  protected def decommissionExecutor(executorId: String): Unit = {
+    // Only log the failure since we don't care about the result.
+    driverEndpoint.ask[Boolean](DecomissionExecutor(executorId)).onFailure { case t =>
       logError(t.getMessage, t)
     }(ThreadUtils.sameThread)
   }

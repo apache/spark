@@ -1006,6 +1006,12 @@ private[spark] class TaskSetManager(
     levels.toArray
   }
 
+  def executorDecommission(execId: String) {
+    recomputeLocality()
+    // Future consideration: if an executor is decommissioned it may make sense to add the current
+    // tasks to the spec exec queue.
+  }
+
   def recomputeLocality() {
     val previousLocalityLevel = myLocalityLevels(currentLocalityIndex)
     myLocalityLevels = computeValidLocalityLevels()

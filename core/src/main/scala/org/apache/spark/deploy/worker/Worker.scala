@@ -689,7 +689,7 @@ private[deploy] class Worker(
     decommissioned = true
     // TODO: Send decommission notification to executors & shuffle service.
     // Also send message to master program.
-
+    sendToMaster(WorkerDecommission(workerId, self))
   }
 
   private[worker] def handleDriverStateChanged(driverStateChanged: DriverStateChanged): Unit = {
