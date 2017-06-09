@@ -558,8 +558,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --verbose, -v               Print additional debug output.
         |  --version,                  Print the version of current Spark.
         |
-        | Spark standalone with cluster deploy mode only:
-        |  --driver-cores NUM          Cores for driver (Default: 1).
+        | Cluster deploy mode only:
+        |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
+        |                              (Default: 1).
         |
         | Spark standalone or Mesos with cluster deploy mode only:
         |  --supervise                 If given, restarts the driver on failure.
@@ -574,8 +575,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              or all available cores on the worker in standalone mode)
         |
         | YARN-only:
-        |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
-        |                              (Default: 1).
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |                              If dynamic allocation is enabled, the initial number of
