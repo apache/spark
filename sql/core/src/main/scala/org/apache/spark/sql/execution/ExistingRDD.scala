@@ -87,13 +87,6 @@ case class ExternalRDD[T](
   override def newInstance(): ExternalRDD.this.type =
     ExternalRDD(outputObjAttr.newInstance(), rdd)(session).asInstanceOf[this.type]
 
-  override def sameResult(plan: LogicalPlan): Boolean = {
-    plan.canonicalized match {
-      case ExternalRDD(_, otherRDD) => rdd.id == otherRDD.id
-      case _ => false
-    }
-  }
-
   override protected def stringArgs: Iterator[Any] = Iterator(output)
 
   @transient override def computeStats(conf: SQLConf): Statistics = Statistics(
@@ -160,13 +153,6 @@ case class LogicalRDD(
       rewrittenPartitioning,
       rewrittenOrdering
     )(session).asInstanceOf[this.type]
-  }
-
-  override def sameResult(plan: LogicalPlan): Boolean = {
-    plan.canonicalized match {
-      case LogicalRDD(_, otherRDD, _, _) => rdd.id == otherRDD.id
-      case _ => false
-    }
   }
 
   override protected def stringArgs: Iterator[Any] = Iterator(output)

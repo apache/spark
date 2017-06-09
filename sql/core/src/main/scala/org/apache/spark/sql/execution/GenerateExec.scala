@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 private[execution] sealed case class LazyIterator(func: () => TraversableOnce[InternalRow])
   extends Iterator[InternalRow] {
 
-  lazy val results = func().toIterator
+  lazy val results: Iterator[InternalRow] = func().toIterator
   override def hasNext: Boolean = results.hasNext
   override def next(): InternalRow = results.next()
 }
@@ -50,7 +50,7 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
- *              given `generator` is empty. `outer` has no effect when `join` is false.
+ *              given `generator` is empty.
  * @param generatorOutput the qualified output attributes of the generator of this node, which
  *                        constructed in analysis phase, and we can not change it, as the
  *                        parent node bound with it already.
@@ -78,15 +78,15 @@ case class GenerateExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  val boundGenerator = BindReferences.bindReference(generator, child.output)
+  lazy val boundGenerator: Generator = BindReferences.bindReference(generator, child.output)
 
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
-    val rows = if (join) {
-      child.execute().mapPartitionsInternal { iter =>
-        val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
+    val numOutputRows = longMetric("numOutputRows")
+    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
+      val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
+      val rows = if (join) {
         val joinedRow = new JoinedRow
-
         iter.flatMap { row =>
           // we should always set the left (child output)
           joinedRow.withLeft(row)
@@ -101,18 +101,21 @@ case class GenerateExec(
           // keep it the same as Hive does
           joinedRow.withRight(row)
         }
+      } else {
+        iter.flatMap { row =>
+          val outputRows = boundGenerator.eval(row)
+          if (outer && outputRows.isEmpty) {
+            Seq(generatorNullRow)
+          } else {
+            outputRows
+          }
+        } ++ LazyIterator(boundGenerator.terminate)
       }
-    } else {
-      child.execute().mapPartitionsInternal { iter =>
-        iter.flatMap(boundGenerator.eval) ++ LazyIterator(boundGenerator.terminate)
-      }
-    }
 
-    val numOutputRows = longMetric("numOutputRows")
-    rows.mapPartitionsWithIndexInternal { (index, iter) =>
+      // Convert the rows to unsafe rows.
       val proj = UnsafeProjection.create(output, output)
       proj.initialize(index)
-      iter.map { r =>
+      rows.map { r =>
         numOutputRows += 1
         proj(r)
       }

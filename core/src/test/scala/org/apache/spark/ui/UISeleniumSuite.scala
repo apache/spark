@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import java.net.{HttpURLConnection, URL}
+import java.util.Locale
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
@@ -319,12 +320,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         find(cssSelector(".stage-progress-cell")).get.text should be ("2/2 (1 failed)")
-        // Ideally, the following test would pass, but currently we overcount completed tasks
-        // if task recomputations occur:
-        // find(cssSelector(".progress-cell .progress")).get.text should be ("2/2 (1 failed)")
-        // Instead, we guarantee that the total number of tasks is always correct, while the number
-        // of completed tasks may be higher:
-        find(cssSelector(".progress-cell .progress")).get.text should be ("3/2 (1 failed)")
+        find(cssSelector(".progress-cell .progress")).get.text should be ("2/2 (1 failed)")
       }
       val jobJson = getJson(sc.ui.get, "jobs")
       (jobJson \ "numTasks").extract[Int]should be (2)
@@ -453,8 +449,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         findAll(cssSelector("tbody tr a")).foreach { link =>
-          link.text.toLowerCase should include ("count")
-          link.text.toLowerCase should not include "unknown"
+          link.text.toLowerCase(Locale.ROOT) should include ("count")
+          link.text.toLowerCase(Locale.ROOT) should not include "unknown"
         }
       }
     }

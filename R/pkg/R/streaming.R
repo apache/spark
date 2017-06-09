@@ -169,8 +169,10 @@ setMethod("isActive",
 #' immediately.
 #'
 #' @param x a StreamingQuery.
-#' @param timeout time to wait in milliseconds
-#' @return TRUE if query has terminated within the timeout period.
+#' @param timeout time to wait in milliseconds, if omitted, wait indefinitely until \code{stopQuery}
+#'                is called or an error has occured.
+#' @return TRUE if query has terminated within the timeout period; nothing if timeout is not
+#'         specified.
 #' @rdname awaitTermination
 #' @name awaitTermination
 #' @aliases awaitTermination,StreamingQuery-method
@@ -182,8 +184,12 @@ setMethod("isActive",
 #' @note experimental
 setMethod("awaitTermination",
           signature(x = "StreamingQuery"),
-          function(x, timeout) {
-            handledCallJMethod(x@ssq, "awaitTermination", as.integer(timeout))
+          function(x, timeout = NULL) {
+            if (is.null(timeout)) {
+              invisible(handledCallJMethod(x@ssq, "awaitTermination"))
+            } else {
+              handledCallJMethod(x@ssq, "awaitTermination", as.integer(timeout))
+            }
           })
 
 #' stopQuery

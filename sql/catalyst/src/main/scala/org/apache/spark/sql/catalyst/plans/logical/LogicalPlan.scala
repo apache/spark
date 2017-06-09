@@ -143,8 +143,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
-  override lazy val canonicalized: LogicalPlan = EliminateSubqueryAliases(this)
-
   /**
    * Resolves a given schema to concrete [[Attribute]] references in this query plan. This function
    * should only be called on analyzed plans since it will throw [[AnalysisException]] for
@@ -349,7 +347,7 @@ abstract class UnaryNode extends LogicalPlan {
     }
 
     // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = child.stats(conf).isBroadcastable)
+    Statistics(sizeInBytes = sizeInBytes, hints = child.stats(conf).hints)
   }
 }
 

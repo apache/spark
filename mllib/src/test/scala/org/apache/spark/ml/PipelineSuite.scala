@@ -230,7 +230,9 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 }
 
 
-/** Used to test [[Pipeline]] with [[MLWritable]] stages */
+/**
+ * Used to test [[Pipeline]] with `MLWritable` stages
+ */
 class WritableStage(override val uid: String) extends Transformer with MLWritable {
 
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")
@@ -257,7 +259,9 @@ object WritableStage extends MLReadable[WritableStage] {
   override def load(path: String): WritableStage = super.load(path)
 }
 
-/** Used to test [[Pipeline]] with non-[[MLWritable]] stages */
+/**
+ * Used to test [[Pipeline]] with non-`MLWritable` stages
+ */
 class UnWritableStage(override val uid: String) extends Transformer {
 
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")

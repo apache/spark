@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -33,7 +35,6 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 final class DataStreamReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
@@ -135,7 +136,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.0.0
    */
   def load(): DataFrame = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
     }

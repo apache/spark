@@ -411,4 +411,35 @@ class DataTypeSuite extends SparkFunSuite {
   checkCatalogString(ArrayType(createStruct(40)))
   checkCatalogString(MapType(IntegerType, StringType))
   checkCatalogString(MapType(IntegerType, createStruct(40)))
+
+  def checkEqualsStructurally(from: DataType, to: DataType, expected: Boolean): Unit = {
+    val testName = s"equalsStructurally: (from: $from, to: $to)"
+    test(testName) {
+      assert(DataType.equalsStructurally(from, to) === expected)
+    }
+  }
+
+  checkEqualsStructurally(BooleanType, BooleanType, true)
+  checkEqualsStructurally(IntegerType, IntegerType, true)
+  checkEqualsStructurally(IntegerType, LongType, false)
+  checkEqualsStructurally(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true)
+  checkEqualsStructurally(ArrayType(IntegerType, true), ArrayType(IntegerType, false), false)
+
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType),
+    new StructType().add("f2", IntegerType),
+    true)
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType),
+    new StructType().add("f2", IntegerType, false),
+    false)
+
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
+    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
+    true)
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType, false)),
+    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
+    false)
 }

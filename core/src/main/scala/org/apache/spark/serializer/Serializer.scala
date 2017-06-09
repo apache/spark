@@ -125,7 +125,7 @@ abstract class SerializerInstance {
  * A stream for writing serialized objects.
  */
 @DeveloperApi
-abstract class SerializationStream {
+abstract class SerializationStream extends Closeable {
   /** The most general-purpose method to write an object. */
   def writeObject[T: ClassTag](t: T): SerializationStream
   /** Writes the object representing the key of a key-value pair. */
@@ -133,7 +133,7 @@ abstract class SerializationStream {
   /** Writes the object representing the value of a key-value pair. */
   def writeValue[T: ClassTag](value: T): SerializationStream = writeObject(value)
   def flush(): Unit
-  def close(): Unit
+  override def close(): Unit
 
   def writeAll[T: ClassTag](iter: Iterator[T]): SerializationStream = {
     while (iter.hasNext) {
@@ -149,14 +149,14 @@ abstract class SerializationStream {
  * A stream for reading serialized objects.
  */
 @DeveloperApi
-abstract class DeserializationStream {
+abstract class DeserializationStream extends Closeable {
   /** The most general-purpose method to read an object. */
   def readObject[T: ClassTag](): T
   /** Reads the object representing the key of a key-value pair. */
   def readKey[T: ClassTag](): T = readObject[T]()
   /** Reads the object representing the value of a key-value pair. */
   def readValue[T: ClassTag](): T = readObject[T]()
-  def close(): Unit
+  override def close(): Unit
 
   /**
    * Read the elements of this stream through an iterator. This can only be called once, as

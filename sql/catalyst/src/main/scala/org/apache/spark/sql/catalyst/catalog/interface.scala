@@ -203,6 +203,8 @@ case class BucketSpec(
  *                           sensitive schema was unable to be read from the table properties.
  *                           Used to trigger case-sensitive schema inference at query time, when
  *                           configured.
+ * @param ignoredProperties is a list of table properties that are used by the underlying table
+ *                          but ignored by Spark SQL yet.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -221,7 +223,8 @@ case class CatalogTable(
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false,
-    schemaPreservesCase: Boolean = true) {
+    schemaPreservesCase: Boolean = true,
+    ignoredProperties: Map[String, String] = Map.empty) {
 
   import CatalogTable._
 
@@ -423,8 +426,15 @@ case class CatalogRelation(
     Objects.hashCode(tableMeta.identifier, output)
   }
 
-  /** Only compare table identifier. */
-  override lazy val cleanArgs: Seq[Any] = Seq(tableMeta.identifier)
+  override def preCanonicalized: LogicalPlan = copy(tableMeta = CatalogTable(
+    identifier = tableMeta.identifier,
+    tableType = tableMeta.tableType,
+    storage = CatalogStorageFormat.empty,
+    schema = tableMeta.schema,
+    partitionColumnNames = tableMeta.partitionColumnNames,
+    bucketSpec = tableMeta.bucketSpec,
+    createTime = -1
+  ))
 
   override def computeStats(conf: SQLConf): Statistics = {
     // For data source tables, we will create a `LogicalRelation` and won't call this method, for

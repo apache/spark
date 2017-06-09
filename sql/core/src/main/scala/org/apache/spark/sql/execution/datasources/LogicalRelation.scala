@@ -43,17 +43,8 @@ case class LogicalRelation(
     com.google.common.base.Objects.hashCode(relation, output)
   }
 
-  override def sameResult(otherPlan: LogicalPlan): Boolean = {
-    otherPlan.canonicalized match {
-      case LogicalRelation(otherRelation, _, _) => relation == otherRelation
-      case _ => false
-    }
-  }
-
-  // When comparing two LogicalRelations from within LogicalPlan.sameResult, we only need
-  // LogicalRelation.cleanArgs to return Seq(relation), since expectedOutputAttribute's
-  // expId can be different but the relation is still the same.
-  override lazy val cleanArgs: Seq[Any] = Seq(relation)
+  // Only care about relation when canonicalizing.
+  override def preCanonicalized: LogicalPlan = copy(catalogTable = None)
 
   @transient override def computeStats(conf: SQLConf): Statistics = {
     catalogTable.flatMap(_.stats.map(_.toPlanStats(output))).getOrElse(

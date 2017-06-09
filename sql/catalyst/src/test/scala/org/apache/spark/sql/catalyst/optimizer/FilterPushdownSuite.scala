@@ -241,6 +241,16 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("joins: do not push down non-deterministic filters into join condition") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = x.join(y).where(Rand(10) > 5.0).analyze
+    val optimized = Optimize.execute(originalQuery)
+
+    comparePlans(optimized, originalQuery)
+  }
+
   test("joins: push to one side after transformCondition") {
     val x = testRelation.subquery('x)
     val y = testRelation1.subquery('y)
@@ -788,12 +798,12 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("broadcast hint") {
-    val originalQuery = BroadcastHint(testRelation)
+    val originalQuery = ResolvedHint(testRelation)
       .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
-    val correctAnswer = BroadcastHint(testRelation.where('a === 2L))
+    val correctAnswer = ResolvedHint(testRelation.where('a === 2L))
       .where('b + Rand(10).as("rnd") === 3)
       .analyze
 

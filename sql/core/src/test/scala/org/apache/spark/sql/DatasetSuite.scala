@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -1167,6 +1168,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-20125: option of map") {
     val ds = Seq(WithMapInOption(Some(Map(1 -> 1)))).toDS()
     checkDataset(ds, WithMapInOption(Some(Map(1 -> 1))))
+  }
+
+  test("SPARK-20399: do not unescaped regex pattern when ESCAPED_STRING_LITERALS is enabled") {
+    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+      val data = Seq("\u0020\u0021\u0023", "abc")
+      val df = data.toDF()
+      val rlike1 = df.filter("value rlike '^\\x20[\\x20-\\x23]+$'")
+      val rlike2 = df.filter($"value".rlike("^\\x20[\\x20-\\x23]+$"))
+      val rlike3 = df.filter("value rlike '^\\\\x20[\\\\x20-\\\\x23]+$'")
+      checkAnswer(rlike1, rlike2)
+      assert(rlike3.count() == 0)
+    }
   }
 }
 

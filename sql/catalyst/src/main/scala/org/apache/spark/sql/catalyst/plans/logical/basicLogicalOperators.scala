@@ -83,7 +83,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
- *              given `generator` is empty. `outer` has no effect when `join` is false.
+ *              given `generator` is empty.
  * @param qualifier Qualifier for the attributes of generator(UDTF)
  * @param generatorOutput The output schema of the Generator.
  * @param child Children logical plan node
@@ -195,9 +195,9 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     val leftSize = left.stats(conf).sizeInBytes
     val rightSize = right.stats(conf).sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    val isBroadcastable = left.stats(conf).isBroadcastable || right.stats(conf).isBroadcastable
-
-    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = isBroadcastable)
+    Statistics(
+      sizeInBytes = sizeInBytes,
+      hints = left.stats(conf).hints.resetForJoin())
   }
 }
 
@@ -364,7 +364,8 @@ case class Join(
       case _ =>
         // Make sure we don't propagate isBroadcastable in other joins, because
         // they could explode the size.
-        super.computeStats(conf).copy(isBroadcastable = false)
+        val stats = super.computeStats(conf)
+        stats.copy(hints = stats.hints.resetForJoin())
     }
 
     if (conf.cboEnabled) {
@@ -373,26 +374,6 @@ case class Join(
       simpleEstimation
     }
   }
-}
-
-/**
- * A hint for the optimizer that we should broadcast the `child` if used in a join operator.
- */
-case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-
-  // set isBroadcastable to true so the child will be broadcasted
-  override def computeStats(conf: SQLConf): Statistics =
-    child.stats(conf).copy(isBroadcastable = true)
-}
-
-/**
- * A general hint for the child. This node will be eliminated post analysis.
- * A pair of (name, parameters).
- */
-case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) extends UnaryNode {
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = child.output
 }
 
 /**
@@ -410,17 +391,20 @@ case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) exten
  *                  would have Map('a' -> Some('1'), 'b' -> None).
  * @param query the logical plan representing data to write to.
  * @param overwrite overwrite existing table or partitions.
- * @param ifNotExists If true, only write if the table or partition does not exist.
+ * @param ifPartitionNotExists If true, only write if the partition does not exist.
+ *                             Only valid for static partitions.
  */
 case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifNotExists: Boolean)
+    ifPartitionNotExists: Boolean)
   extends LogicalPlan {
-  assert(overwrite || !ifNotExists)
-  assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
+  // IF NOT EXISTS is only valid in INSERT OVERWRITE
+  assert(overwrite || !ifPartitionNotExists)
+  // IF NOT EXISTS is only valid in static partitions
+  assert(partition.values.forall(_.nonEmpty) || !ifPartitionNotExists)
 
   // We don't want `table` in children as sometimes we don't want to transform it.
   override def children: Seq[LogicalPlan] = query :: Nil
@@ -577,7 +561,7 @@ case class Aggregate(
         Statistics(
           sizeInBytes = EstimationUtils.getOutputSize(output, outputRowCount = 1),
           rowCount = Some(1),
-          isBroadcastable = child.stats(conf).isBroadcastable)
+          hints = child.stats(conf).hints)
       } else {
         super.computeStats(conf)
       }
@@ -704,7 +688,7 @@ case class Expand(
  * We will transform GROUPING SETS into logical plan Aggregate(.., Expand) in Analyzer
  *
  * @param selectedGroupByExprs A sequence of selected GroupBy expressions, all exprs should
- *                     exists in groupByExprs.
+ *                     exist in groupByExprs.
  * @param groupByExprs The Group By expressions candidates.
  * @param child        Child operator
  * @param aggregations The Aggregation expressions, those non selected group by expressions
@@ -766,7 +750,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
     Statistics(
       sizeInBytes = EstimationUtils.getOutputSize(output, rowCount, childStats.attributeStats),
       rowCount = Some(rowCount),
-      isBroadcastable = childStats.isBroadcastable)
+      hints = childStats.hints)
   }
 }
 
@@ -787,7 +771,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
       Statistics(
         sizeInBytes = 1,
         rowCount = Some(0),
-        isBroadcastable = childStats.isBroadcastable)
+        hints = childStats.hints)
     } else {
       // The output row count of LocalLimit should be the sum of row counts from each partition.
       // However, since the number of partitions is not available here, we just use statistics of
@@ -798,10 +782,18 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
+/**
+ * Aliased subquery.
+ *
+ * @param alias the alias name for this subquery.
+ * @param child the logical plan of this subquery.
+ */
 case class SubqueryAlias(
     alias: String,
     child: LogicalPlan)
   extends UnaryNode {
+
+  override lazy val canonicalized: LogicalPlan = child.canonicalized
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
@@ -836,7 +828,7 @@ case class Sample(
     }
     val sampledRowCount = childStats.rowCount.map(c => EstimationUtils.ceil(BigDecimal(c) * ratio))
     // Don't propagate column stats, because we don't know the distribution after a sample operation
-    Statistics(sizeInBytes, sampledRowCount, isBroadcastable = childStats.isBroadcastable)
+    Statistics(sizeInBytes, sampledRowCount, hints = childStats.hints)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil

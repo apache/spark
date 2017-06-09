@@ -191,6 +191,23 @@ class DataFrame(object):
         """
         self._jdf.createGlobalTempView(name)
 
+    @since(2.2)
+    def createOrReplaceGlobalTempView(self, name):
+        """Creates or replaces a global temporary view using the given name.
+
+        The lifetime of this temporary view is tied to this Spark application.
+
+        >>> df.createOrReplaceGlobalTempView("people")
+        >>> df2 = df.filter(df.age > 3)
+        >>> df2.createOrReplaceGlobalTempView("people")
+        >>> df3 = spark.sql("select * from global_temp.people")
+        >>> sorted(df3.collect()) == sorted(df2.collect())
+        True
+        >>> spark.catalog.dropGlobalTempView("people")
+
+        """
+        self._jdf.createOrReplaceGlobalTempView(name)
+
     @property
     @since(1.4)
     def write(self):
@@ -209,7 +226,7 @@ class DataFrame(object):
         Interface for saving the content of the streaming :class:`DataFrame` out into external
         storage.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :return: :class:`DataStreamWriter`
         """
@@ -285,18 +302,20 @@ class DataFrame(object):
         :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
         source present.
 
-        .. note:: Experimental
+        .. note:: Evolving
         """
         return self._jdf.isStreaming()
 
     @since(1.3)
-    def show(self, n=20, truncate=True):
+    def show(self, n=20, truncate=True, vertical=False):
         """Prints the first ``n`` rows to the console.
 
         :param n: Number of rows to show.
         :param truncate: If set to True, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
+        :param vertical: If set to True, print output rows vertically (one line
+            per column value).
 
         >>> df
         DataFrame[age: int, name: string]
@@ -314,11 +333,18 @@ class DataFrame(object):
         |  2| Ali|
         |  5| Bob|
         +---+----+
+        >>> df.show(vertical=True)
+        -RECORD 0-----
+         age  | 2
+         name | Alice
+        -RECORD 1-----
+         age  | 5
+         name | Bob
         """
         if isinstance(truncate, bool) and truncate:
-            print(self._jdf.showString(n, 20))
+            print(self._jdf.showString(n, 20, vertical))
         else:
-            print(self._jdf.showString(n, int(truncate)))
+            print(self._jdf.showString(n, int(truncate), vertical))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -359,7 +385,7 @@ class DataFrame(object):
             latest record that has been processed in the form of an interval
             (e.g. "1 minute" or "5 hours").
 
-        .. note:: Experimental
+        .. note:: Evolving
 
         >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
@@ -369,6 +395,35 @@ class DataFrame(object):
         if not delayThreshold or type(delayThreshold) is not str:
             raise TypeError("delayThreshold should be provided as a string interval")
         jdf = self._jdf.withWatermark(eventTime, delayThreshold)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since(2.2)
+    def hint(self, name, *parameters):
+        """Specifies some hint on the current DataFrame.
+
+        :param name: A name of the hint.
+        :param parameters: Optional parameters.
+        :return: :class:`DataFrame`
+
+        >>> df.join(df2.hint("broadcast"), "name").show()
+        +----+---+------+
+        |name|age|height|
+        +----+---+------+
+        | Bob|  5|    85|
+        +----+---+------+
+        """
+        if len(parameters) == 1 and isinstance(parameters[0], list):
+            parameters = parameters[0]
+
+        if not isinstance(name, str):
+            raise TypeError("name should be provided as str, got {0}".format(type(name)))
+
+        for p in parameters:
+            if not isinstance(p, str):
+                raise TypeError(
+                    "all parameters should be str, got {0} of type {1}".format(p, type(p)))
+
+        jdf = self._jdf.hint(name, self._jseq(parameters))
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)
@@ -1234,11 +1289,11 @@ class DataFrame(object):
         """Replace null values, alias for ``na.fill()``.
         :func:`DataFrame.fillna` and :func:`DataFrameNaFunctions.fill` are aliases of each other.
 
-        :param value: int, long, float, string, or dict.
+        :param value: int, long, float, string, bool or dict.
             Value to replace null values with.
             If the value is a dict, then `subset` is ignored and `value` must be a mapping
             from column name (string) to replacement value. The replacement value must be
-            an int, long, float, or string.
+            an int, long, float, boolean, or string.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
@@ -1254,6 +1309,15 @@ class DataFrame(object):
         | 50|    50| null|
         +---+------+-----+
 
+        >>> df5.na.fill(False).show()
+        +----+-------+-----+
+        | age|   name|  spy|
+        +----+-------+-----+
+        |  10|  Alice|false|
+        |   5|    Bob|false|
+        |null|Mallory| true|
+        +----+-------+-----+
+
         >>> df4.na.fill({'age': 50, 'name': 'unknown'}).show()
         +---+------+-------+
         |age|height|   name|
@@ -1264,10 +1328,13 @@ class DataFrame(object):
         | 50|  null|unknown|
         +---+------+-------+
         """
-        if not isinstance(value, (float, int, long, basestring, dict)):
-            raise ValueError("value should be a float, int, long, string, or dict")
+        if not isinstance(value, (float, int, long, basestring, bool, dict)):
+            raise ValueError("value should be a float, int, long, string, bool or dict")
 
-        if isinstance(value, (int, long)):
+        # Note that bool validates isinstance(int), but we don't want to
+        # convert bools to floats
+
+        if not isinstance(value, bool) and isinstance(value, (int, long)):
             value = float(value)
 
         if isinstance(value, dict):
@@ -1764,6 +1831,9 @@ def _test():
                                    Row(name='Bob', age=5, height=None),
                                    Row(name='Tom', age=None, height=None),
                                    Row(name=None, age=None, height=None)]).toDF()
+    globs['df5'] = sc.parallelize([Row(name='Alice', spy=False, age=10),
+                                   Row(name='Bob', spy=None, age=5),
+                                   Row(name='Mallory', spy=True, age=None)]).toDF()
     globs['sdf'] = sc.parallelize([Row(name='Tom', time=1479441846),
                                    Row(name='Bob', time=1479442946)]).toDF()
 
