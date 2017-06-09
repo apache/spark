@@ -188,10 +188,12 @@ class DAGScheduler(
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
 
   /**
-   * If enabled, fetch failure will cause all the output on that host to be unregistered.
+   * Whether to unregister all the outputs on the host in condition that we receive a FetchFailure,
+   * this is set default to false, which means, we only unregister the outputs related to the exact
+   * executor(instead of the host) on a FetchFailure.
    */
   private[scheduler] val unRegisterOutputOnHostOnFetchFailure =
-    sc.getConf.getBoolean("spark.files.fetchFailure.unRegisterOutputOnHost", true)
+    sc.getConf.getBoolean("spark.files.fetchFailure.unRegisterOutputOnHost", false)
 
   /**
    * Number of consecutive stage attempts allowed before a stage is aborted.
@@ -557,6 +559,7 @@ class DAGScheduler(
    *
    * @return a JobWaiter object that can be used to block until the job finishes executing
    *         or can be used to cancel the job.
+   *
    * @throws IllegalArgumentException when partitions ids are illegal
    */
   def submitJob[T, U](
