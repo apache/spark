@@ -25,7 +25,7 @@ import scala.util.matching.Regex
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogTable}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -267,7 +267,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("get statistics when not analyzed in both Hive and Spark") {
+  test("get statistics when not analyzed in Hive or Spark") {
     val tabName = "tab1"
     withTable(tabName) {
       createNonPartitionedTable(tabName, analyzedByHive = false, analyzedBySpark = false)
@@ -313,58 +313,68 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("alter table SET TBLPROPERTIES after analyze table") {
-    Seq(true, false).foreach { analyzedBySpark =>
-      val tabName = "tab1"
+  test("alter table should not have the side effect to store statistics in Spark side") {
+    def getCatalogTable(tableName: String): CatalogTable = {
+      spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+    }
+
+    val table = "alter_table_side_effect"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (i string, j string)")
+      sql(s"INSERT INTO TABLE $table SELECT 'a', 'b'")
+      val catalogTable1 = getCatalogTable(table)
+      val hiveSize1 = BigInt(catalogTable1.ignoredProperties(StatsSetupConst.TOTAL_SIZE))
+
+      sql(s"ALTER TABLE $table SET TBLPROPERTIES ('prop1' = 'a')")
+
+      sql(s"INSERT INTO TABLE $table SELECT 'c', 'd'")
+      val catalogTable2 = getCatalogTable(table)
+      val hiveSize2 = BigInt(catalogTable2.ignoredProperties(StatsSetupConst.TOTAL_SIZE))
+      // After insertion, Hive's stats should be changed.
+      assert(hiveSize2 > hiveSize1)
+      // We haven't generate stats in Spark, so we should still use Hive's stats here.
+      assert(catalogTable2.stats.get.sizeInBytes == hiveSize2)
+    }
+  }
+
+  private def testAlterTableProperties(tabName: String, alterTablePropCmd: String): Unit = {
+    Seq(true).foreach { analyzedBySpark =>
       withTable(tabName) {
         createNonPartitionedTable(tabName, analyzedByHive = true, analyzedBySpark = analyzedBySpark)
-        val fetchedStats1 = checkTableStats(
-          tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('foo' = 'a')")
-        val fetchedStats2 = checkTableStats(
-          tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        assert(fetchedStats1 == fetchedStats2)
+        checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
+
+        // Run ALTER TABLE command
+        sql(alterTablePropCmd)
 
         val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $tabName")
 
         val totalSize = extractStatsPropValues(describeResult, "totalSize")
         assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
 
-        // ALTER TABLE SET TBLPROPERTIES invalidates some Hive specific statistics
-        // This is triggered by the Hive alterTable API
+        // ALTER TABLE SET TBLPROPERTIES invalidates some Hive specific statistics, but not Spark
+        // specific statistics. This is triggered by the Hive alterTable API.
         val numRows = extractStatsPropValues(describeResult, "numRows")
         assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
         val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
         assert(rawDataSize.isDefined && rawDataSize.get == -1, "rawDataSize is lost")
+
+        if (analyzedBySpark) {
+          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
+        } else {
+          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = None)
+        }
       }
     }
   }
 
+  test("alter table SET TBLPROPERTIES after analyze table") {
+    testAlterTableProperties("set_prop_table",
+      "ALTER TABLE set_prop_table SET TBLPROPERTIES ('foo' = 'a')")
+  }
+
   test("alter table UNSET TBLPROPERTIES after analyze table") {
-    Seq(true, false).foreach { analyzedBySpark =>
-      val tabName = "tab1"
-      withTable(tabName) {
-        createNonPartitionedTable(tabName, analyzedByHive = true, analyzedBySpark = analyzedBySpark)
-        val fetchedStats1 = checkTableStats(
-          tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        sql(s"ALTER TABLE $tabName UNSET TBLPROPERTIES ('prop1')")
-        val fetchedStats2 = checkTableStats(
-          tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        assert(fetchedStats1 == fetchedStats2)
-
-        val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $tabName")
-
-        val totalSize = extractStatsPropValues(describeResult, "totalSize")
-        assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
-
-        // ALTER TABLE UNSET TBLPROPERTIES invalidates some Hive specific statistics
-        // This is triggered by the Hive alterTable API
-        val numRows = extractStatsPropValues(describeResult, "numRows")
-        assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
-        val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
-        assert(rawDataSize.isDefined && rawDataSize.get == -1, "rawDataSize is lost")
-      }
-    }
+    testAlterTableProperties("unset_prop_table",
+      "ALTER TABLE unset_prop_table UNSET TBLPROPERTIES ('prop1')")
   }
 
   test("add/drop partitions - managed table") {

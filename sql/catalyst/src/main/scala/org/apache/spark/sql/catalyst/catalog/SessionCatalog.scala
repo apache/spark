@@ -377,6 +377,19 @@ class SessionCatalog(
   }
 
   /**
+   * Alter Spark's statistics of an existing metastore table identified by the provided table
+   * identifier.
+   */
+  def alterTableStats(identifier: TableIdentifier, newStats: CatalogStatistics): Unit = {
+    val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(identifier.table)
+    val tableIdentifier = TableIdentifier(table, Some(db))
+    requireDbExists(db)
+    requireTableExists(tableIdentifier)
+    externalCatalog.alterTableStats(db, table, newStats)
+  }
+
+  /**
    * Return whether a table/view with the specified name exists. If no database is specified, check
    * with current database.
    */
