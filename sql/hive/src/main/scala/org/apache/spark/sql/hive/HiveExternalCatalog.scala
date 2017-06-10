@@ -591,9 +591,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         TABLE_PARTITION_PROVIDER -> TABLE_PARTITION_PROVIDER_FILESYSTEM
       }
 
-      // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
-      // to retain the spark specific format if it is. Also add old data source properties to table
-      // properties, to retain the data source table format.
+      // Add old data source properties to table properties, to retain the data source table format.
+      // Add old stats properties to table properties, to retain spark's stats.
+      // Set the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
+      // to retain the spark specific format if it is.
       val propsFromOldTable = oldTableDef.properties.filter { case (k, v) =>
         k.startsWith(DATASOURCE_PREFIX) || k.startsWith(STATISTICS_PREFIX)
       }
