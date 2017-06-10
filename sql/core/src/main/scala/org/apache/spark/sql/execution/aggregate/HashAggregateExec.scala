@@ -55,20 +55,12 @@ case class HashAggregateExec(
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
-  private val enableHashMapProbe = sqlContext.conf.trackHashMapProbe
-
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time")) ++ {
-      if (enableHashMapProbe) {
-        Map("avgHashmapProbe" ->
-          SQLMetrics.createAverageMetric(sparkContext, "avg hashmap probe"))
-      } else {
-        Map.empty
-      }
-    }
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"),
+    "avgHashmapProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hashmap probe"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -102,11 +94,7 @@ case class HashAggregateExec(
     val numOutputRows = longMetric("numOutputRows")
     val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
-    val avgHashmapProbe = if (enableHashMapProbe) {
-      Some(longMetric("avgHashmapProbe"))
-    } else {
-      None
-    }
+    val avgHashmapProbe = longMetric("avgHashmapProbe")
 
     child.execute().mapPartitions { iter =>
 
@@ -328,7 +316,7 @@ case class HashAggregateExec(
       TaskContext.get().taskMemoryManager(),
       1024 * 16, // initial capacity
       TaskContext.get().taskMemoryManager().pageSizeBytes,
-      enableHashMapProbe // whether tracking of performance metrics
+      true // tracking of performance metrics
     )
   }
 
@@ -368,10 +356,8 @@ case class HashAggregateExec(
     metrics.incPeakExecutionMemory(maxMemory)
 
     // Update average hashmap probe
-    if (avgHashmapProbe != null) {
-      val avgProbes = hashMap.getAverageProbesPerLookup()
-      avgHashmapProbe.add(avgProbes.ceil.toLong)
-    }
+    val avgProbes = hashMap.getAverageProbesPerLookup()
+    avgHashmapProbe.add(avgProbes.ceil.toLong)
 
     if (sorter == null) {
       // not spilled
@@ -599,11 +585,7 @@ case class HashAggregateExec(
     val doAgg = ctx.freshName("doAggregateWithKeys")
     val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
-    val avgHashmapProbe = if (enableHashMapProbe) {
-      metricTerm(ctx, "avgHashmapProbe")
-    } else {
-      "null"
-    }
+    val avgHashmapProbe = metricTerm(ctx, "avgHashmapProbe")
 
     def generateGenerateCode(): String = {
       if (isFastHashMapEnabled) {

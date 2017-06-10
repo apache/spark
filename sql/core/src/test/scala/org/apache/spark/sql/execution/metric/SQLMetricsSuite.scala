@@ -148,62 +148,44 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Assume the execution plan is
     // ... -> HashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
     // -> HashAggregate(nodeId = 0)
-    Seq(true, false).map { trackProbe =>
-      withSQLConf(SQLConf.TRACK_HASHMAP_PROBE.key -> trackProbe.toString) {
-        val df = testData2.groupBy().count() // 2 partitions
-        val expected1 = if (trackProbe) {
-          Seq(
-            Map("number of output rows" -> 2L,
-              "avg hashmap probe (min, med, max)" -> "\n(1, 1, 1)"),
-            Map("number of output rows" -> 1L,
-              "avg hashmap probe (min, med, max)" -> "\n(1, 1, 1)"))
-        } else {
-          Seq(
-            Map("number of output rows" -> 2L),
-            Map("number of output rows" -> 1L))
-        }
-        testSparkPlanMetrics(df, 1, Map(
-          2L -> ("HashAggregate", expected1(0)),
-          0L -> ("HashAggregate", expected1(1)))
-        )
+    val df = testData2.groupBy().count() // 2 partitions
+    val expected1 = Seq(
+      Map("number of output rows" -> 2L,
+        "avg hashmap probe (min, med, max)" -> "\n(1, 1, 1)"),
+      Map("number of output rows" -> 1L,
+        "avg hashmap probe (min, med, max)" -> "\n(1, 1, 1)"))
+    testSparkPlanMetrics(df, 1, Map(
+      2L -> ("HashAggregate", expected1(0)),
+      0L -> ("HashAggregate", expected1(1)))
+    )
 
-        // 2 partitions and each partition contains 2 keys
-        val df2 = testData2.groupBy('a).count()
-        val expected2 = if (trackProbe) {
-          Seq(
-            Map("number of output rows" -> 4L,
-              "avg hashmap probe (min, med, max)" -> "\n(1, 1, 1)"),
-            Map("number of output rows" -> 3L,
-              "avg hashmap probe (min, med, max)" -> "\n(1, 1, 1)"))
-        } else {
-          Seq(
-            Map("number of output rows" -> 4L),
-            Map("number of output rows" -> 3L))
-        }
-        testSparkPlanMetrics(df2, 1, Map(
-          2L -> ("HashAggregate", expected2(0)),
-          0L -> ("HashAggregate", expected2(1)))
-        )
-      }
-    }
+    // 2 partitions and each partition contains 2 keys
+    val df2 = testData2.groupBy('a).count()
+    val expected2 = Seq(
+      Map("number of output rows" -> 4L,
+        "avg hashmap probe (min, med, max)" -> "\n(1, 1, 1)"),
+      Map("number of output rows" -> 3L,
+        "avg hashmap probe (min, med, max)" -> "\n(1, 1, 1)"))
+    testSparkPlanMetrics(df2, 1, Map(
+      2L -> ("HashAggregate", expected2(0)),
+      0L -> ("HashAggregate", expected2(1)))
+    )
   }
 
   test("Aggregate metrics: track avg probe") {
     val random = new Random()
-    withSQLConf(SQLConf.TRACK_HASHMAP_PROBE.key -> "true") {
-      val manyBytes = (0 until 65535).map { _ =>
-        val byteArrSize = random.nextInt(100)
-        val bytes = new Array[Byte](byteArrSize)
-        random.nextBytes(bytes)
-        (bytes, random.nextInt(100))
-      }
-      val df = manyBytes.toSeq.toDF("a", "b").repartition(1).groupBy('a).count()
-      val metrics = getSparkPlanMetrics(df, 1, Set(2L, 0L)).get
-      Seq(metrics(2L)._2("avg hashmap probe (min, med, max)"),
-          metrics(0L)._2("avg hashmap probe (min, med, max)")).foreach { probes =>
-        probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-          assert(probe.toInt > 1)
-        }
+    val manyBytes = (0 until 65535).map { _ =>
+      val byteArrSize = random.nextInt(100)
+      val bytes = new Array[Byte](byteArrSize)
+      random.nextBytes(bytes)
+      (bytes, random.nextInt(100))
+    }
+    val df = manyBytes.toSeq.toDF("a", "b").repartition(1).groupBy('a).count()
+    val metrics = getSparkPlanMetrics(df, 1, Set(2L, 0L)).get
+    Seq(metrics(2L)._2("avg hashmap probe (min, med, max)"),
+        metrics(0L)._2("avg hashmap probe (min, med, max)")).foreach { probes =>
+      probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
+        assert(probe.toInt > 1)
       }
     }
   }

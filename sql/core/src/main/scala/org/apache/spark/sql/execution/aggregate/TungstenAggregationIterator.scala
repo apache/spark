@@ -89,7 +89,7 @@ class TungstenAggregationIterator(
     numOutputRows: SQLMetric,
     peakMemory: SQLMetric,
     spillSize: SQLMetric,
-    avgHashmapProbe: Option[SQLMetric])
+    avgHashmapProbe: SQLMetric)
   extends AggregationIterator(
     groupingExpressions,
     originalInputAttributes,
@@ -164,7 +164,7 @@ class TungstenAggregationIterator(
     TaskContext.get().taskMemoryManager(),
     1024 * 16, // initial capacity
     TaskContext.get().taskMemoryManager().pageSizeBytes,
-    avgHashmapProbe.isDefined // whether tracking of performance metrics
+    true // tracking of performance metrics
   )
 
   // The function used to read and process input rows. When processing input rows,
@@ -423,10 +423,8 @@ class TungstenAggregationIterator(
         metrics.incPeakExecutionMemory(maxMemory)
 
         // Update average hashmap probe if this is the last record.
-        avgHashmapProbe.foreach { metrics =>
-          val averageProbes = hashMap.getAverageProbesPerLookup()
-          metrics.add(averageProbes.ceil.toLong)
-        }
+        val averageProbes = hashMap.getAverageProbesPerLookup()
+        avgHashmapProbe.add(averageProbes.ceil.toLong)
       }
       numOutputRows += 1
       res
