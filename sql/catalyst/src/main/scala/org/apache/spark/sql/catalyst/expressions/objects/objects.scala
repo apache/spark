@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -683,8 +683,8 @@ object CollectObjectsToMap {
 }
 
 /**
- * An equivalent to the [[MapObjects]] case class but returning an ObjectType containing
- * a Scala collection constructed using the associated builder, obtained by calling `newBuilder`
+ * Expression used to convert a Catalyst Map to an external Scala Map.
+ * The collection is constructed using the associated builder, obtained by calling `newBuilder`
  * on the collection's companion object.
  *
  * @param keyLoopValue the name of the loop variable that is used when iterating over the key
@@ -721,7 +721,14 @@ case class CollectObjectsToMap private(
   override def dataType: DataType = ObjectType(collClass)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val mapType = inputData.dataType.asInstanceOf[MapType]
+    // The data with PythonUserDefinedType are actually stored with the data type of its sqlType.
+    // When we want to apply MapObjects on it, we have to use it.
+    def inputDataType(dataType: DataType) = dataType match {
+      case p: PythonUserDefinedType => p.sqlType
+      case _ => dataType
+    }
+
+    val mapType = inputDataType(inputData.dataType).asInstanceOf[MapType]
     val keyElementJavaType = ctx.javaType(mapType.keyType)
     ctx.addMutableState(keyElementJavaType, keyLoopValue, "")
     val genKeyFunction = keyLambdaFunction.genCode(ctx)
@@ -735,25 +742,16 @@ case class CollectObjectsToMap private(
     val tupleLoopValue = ctx.freshName("tupleLoopValue")
     val builderValue = ctx.freshName("builderValue")
 
+    val getLength = s"${genInputData.value}.numElements()"
+
     val keyArray = ctx.freshName("keyArray")
     val valueArray = ctx.freshName("valueArray")
-
-    // The data with PythonUserDefinedType are actually stored with the data type of its sqlType.
-    // When we want to apply MapObjects on it, we have to use it.
-    def inputDataType(dataType: DataType) = dataType match {
-      case p: PythonUserDefinedType => p.sqlType
-      case _ => dataType
-    }
-
-    def lengthAndLoopVar(elementType: DataType, genInputData: ExprCode, method: String,
-                         array: String) =
-      s"${genInputData.value}.$method().numElements()" ->
-        ctx.getValue(s"${genInputData.value}.$method()", elementType, loopIndex)
-
-    val ((getKeyLength, getKeyLoopVar), (getValueLength, getValueLoopVar)) = (
-      lengthAndLoopVar(inputDataType(mapType.keyType), genInputData, "keyArray", keyArray),
-      lengthAndLoopVar(inputDataType(mapType.valueType), genInputData, "valueArray", valueArray)
-    )
+    val getKeyArray =
+      s"${classOf[ArrayData].getName} $keyArray = ${genInputData.value}.keyArray();"
+    val getKeyLoopVar = ctx.getValue(keyArray, inputDataType(mapType.keyType), loopIndex)
+    val getValueArray =
+      s"${classOf[ArrayData].getName} $valueArray = ${genInputData.value}.valueArray();"
+    val getValueLoopVar = ctx.getValue(valueArray, inputDataType(mapType.valueType), loopIndex)
 
     // Make a copy of the data if it's unsafe-backed
     def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
@@ -768,8 +766,7 @@ case class CollectObjectsToMap private(
     val genKeyFunctionValue = genFunctionValue(keyLambdaFunction, genKeyFunction)
     val genValueFunctionValue = genFunctionValue(valueLambdaFunction, genValueFunction)
 
-    val valueLoopNullCheck =
-      s"$valueLoopIsNull = ${genInputData.value}.valueArray().isNullAt($loopIndex);"
+    val valueLoopNullCheck = s"$valueLoopIsNull = $valueArray.isNullAt($loopIndex);"
 
     val builderClass = classOf[Builder[_, _]].getName
     val constructBuilder = s"""
@@ -796,11 +793,10 @@ case class CollectObjectsToMap private(
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
 
       if (!${genInputData.isNull}) {
-        if ($getKeyLength != $getValueLength) {
-          throw new RuntimeException("Invalid state: Inconsistent lengths of key-value arrays");
-        }
-        int $dataLength = $getKeyLength;
+        int $dataLength = $getLength;
         $constructBuilder
+        $getKeyArray
+        $getValueArray
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
