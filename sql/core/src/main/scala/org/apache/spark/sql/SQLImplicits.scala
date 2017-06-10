@@ -166,10 +166,6 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 2.2.0 */
   implicit def newSequenceEncoder[T <: Seq[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
-  /** @since 2.2.0 */
-  implicit def newJavaListEncoder[T <: java.util.List[_] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
-
   // Arrays
 
   /** @since 1.6.1 */
