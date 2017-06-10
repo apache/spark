@@ -1630,10 +1630,11 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
-   * This is equivalent to `UNION ALL` in SQL.
    *
-   * To do a SQL-style set union (that does deduplication of elements), use this function followed
-   * by a [[distinct]].
+   * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
+   * deduplication of elements), use this function followed by a [[distinct]].
+   *
+   * Also as standard in SQL, this function resolves columns by position (not by name).
    *
    * @group typedrel
    * @since 2.0.0
@@ -1643,10 +1644,11 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
-   * This is equivalent to `UNION ALL` in SQL.
    *
-   * To do a SQL-style set union (that does deduplication of elements), use this function followed
-   * by a [[distinct]].
+   * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
+   * deduplication of elements), use this function followed by a [[distinct]].
+   *
+   * Also as standard in SQL, this function resolves columns by position (not by name).
    *
    * @group typedrel
    * @since 2.0.0
