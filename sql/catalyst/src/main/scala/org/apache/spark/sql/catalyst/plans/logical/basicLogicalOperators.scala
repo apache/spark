@@ -504,7 +504,7 @@ case class Range(
   extends LeafNode with MultiInstanceRelation {
 
   require(step != 0, s"step ($step) cannot be 0")
-  require(start != end, s"start ($step) cannot be equal to end ($end)")
+  require(start != end, s"start ($start) cannot be equal to end ($end)")
   require(start < end ^ step < 0, s"the sign of step ($step) is invalid for range ($start, $end)")
 
   val numElements: BigInt = {
