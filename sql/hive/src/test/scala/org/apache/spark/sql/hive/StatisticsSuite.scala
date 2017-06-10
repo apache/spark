@@ -338,7 +338,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   private def testAlterTableProperties(tabName: String, alterTablePropCmd: String): Unit = {
-    Seq(true).foreach { analyzedBySpark =>
+    Seq(true, false).foreach { analyzedBySpark =>
       withTable(tabName) {
         createNonPartitionedTable(tabName, analyzedByHive = true, analyzedBySpark = analyzedBySpark)
         checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
@@ -351,8 +351,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         val totalSize = extractStatsPropValues(describeResult, "totalSize")
         assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
 
-        // ALTER TABLE SET TBLPROPERTIES invalidates some Hive specific statistics, but not Spark
-        // specific statistics. This is triggered by the Hive alterTable API.
+        // ALTER TABLE SET/UNSET TBLPROPERTIES invalidates some Hive specific statistics, but not
+        // Spark specific statistics. This is triggered by the Hive alterTable API.
         val numRows = extractStatsPropValues(describeResult, "numRows")
         assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
         val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
