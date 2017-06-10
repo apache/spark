@@ -729,6 +729,21 @@ test_that(
   expect_true(dropTempView("dfView"))
 })
 
+test_that(
+  "createGlobalTempView() results in a queryable table and sql() results in a new DataFrame", {
+  df <- read.json(jsonPath)
+  createGlobalTempView(df, "global_table1")
+  newdf <- sql("SELECT * FROM global_temp.global_table1 where name = 'Michael'")
+  expect_is(newdf, "SparkDataFrame")
+  expect_equal(count(newdf), 1)
+  createOrReplaceGlobalTempView(newdf, "global_table1")
+  newdf2 <- sql("SELECT * FROM global_temp.global_table1")
+  expect_is(newdf2, "SparkDataFrame")
+  expect_equal(count(newdf2), 1)
+  expect_true(dropGlobalTempView("global_table1"))
+  expect_false(dropGlobalTempView("global_table1"))
+})
+
 test_that("test cache, uncache and clearCache", {
   skip_on_cran()
 
