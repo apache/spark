@@ -18,6 +18,7 @@
 package org.apache.spark.launcher;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import org.apache.commons.io.FileUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -38,6 +40,10 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   @BeforeClass
   public static void setUp() throws Exception {
     dummyPropsFile = File.createTempFile("spark", "properties");
+    List<String> lines = new ArrayList<String>();
+    lines.add("spark.driver.memory=2g");
+    lines.add("spark.driver.extraLibraryPath=/native:/usr/lib");
+    FileUtils.writeLines(dummyPropsFile, "utf-8", lines);
     parser = new SparkSubmitOptionParser();
   }
 
@@ -213,7 +219,8 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     new SparkSubmitCommandBuilder().buildSparkSubmitArgs();
   }
 
-  private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {
+  private void testCmdBuilder(boolean isDriver, boolean useUserSpecifiedPropertyFile)
+      throws Exception {
     String deployMode = isDriver ? "client" : "cluster";
 
     SparkSubmitCommandBuilder launcher =
@@ -228,16 +235,11 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     launcher.appArgs.add("foo");
     launcher.appArgs.add("bar");
     launcher.conf.put("spark.foo", "foo");
-    // either set the property through "--conf" or through default property file
-    if (!useDefaultPropertyFile) {
+    launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
+      + "/launcher/src/test/resources");
+    // set the property through "--conf"
+    if (useUserSpecifiedPropertyFile) {
       launcher.setPropertiesFile(dummyPropsFile.getAbsolutePath());
-      launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
-      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
-      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver");
-      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
-    } else {
-      launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
-          + "/launcher/src/test/resources");
     }
 
     Map<String, String> env = new HashMap<>();
@@ -246,7 +248,11 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     // Checks below are different for driver and non-driver mode.
 
     if (isDriver) {
-      assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx1g"));
+      if (useUserSpecifiedPropertyFile) {
+        assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx2g"));
+      } else {
+        assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx1g"));
+      }
     } else {
       boolean found = false;
       for (String arg : cmd) {
@@ -270,12 +276,16 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       assertNotNull("Native library path should be set.", libPath);
       assertTrue("Native library path should contain provided entry.",
         contains("/native", libPath.split(Pattern.quote(File.pathSeparator))));
+      if (useUserSpecifiedPropertyFile) {
+        assertTrue("Native library path should contain provided entry.",
+          contains("/usr/lib", libPath.split(Pattern.quote(File.pathSeparator))));
+      }
     } else {
       assertNull("Native library should not be set.", libPath);
     }
 
     // Checks below are the same for both driver and non-driver mode.
-    if (!useDefaultPropertyFile) {
+    if (useUserSpecifiedPropertyFile) {
       assertEquals(dummyPropsFile.getAbsolutePath(), findArgValue(cmd, parser.PROPERTIES_FILE));
     }
     assertEquals("yarn", findArgValue(cmd, parser.MASTER));
