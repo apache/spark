@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -619,6 +620,108 @@ case class DescribeTableCommand(
   }
 }
 
+/**
+ * A command to list the info for a column, including name, data type, column stats and comment.
+ * This function creates a [[DescribeColumnCommand]] logical plan.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   DESCRIBE [EXTENDED|FORMATTED] table_name column_name;
+ * }}}
+ */
+case class DescribeColumnCommand(
+    table: TableIdentifier,
+    column: String,
+    isFormatted: Boolean)
+  extends RunnableCommand {
+
+  override val output: Seq[Attribute] = {
+    // The displayed names are based on Hive.
+    // (Link for the corresponding Hive Jira: https://issues.apache.org/jira/browse/HIVE-7050)
+    if (isFormatted) {
+      Seq(
+        AttributeReference("col_name", StringType, nullable = false,
+          new MetadataBuilder().putString("comment", "name of the column").build())(),
+        AttributeReference("data_type", StringType, nullable = false,
+          new MetadataBuilder().putString("comment", "data type of the column").build())(),
+        AttributeReference("min", StringType, nullable = true,
+          new MetadataBuilder().putString("comment", "min value of the column").build())(),
+        AttributeReference("max", StringType, nullable = true,
+          new MetadataBuilder().putString("comment", "max value of the column").build())(),
+        AttributeReference("num_nulls", StringType, nullable = true,
+          new MetadataBuilder().putString("comment", "number of nulls of the column").build())(),
+        AttributeReference("distinct_count", StringType, nullable = true,
+          new MetadataBuilder().putString("comment", "distinct count of the column").build())(),
+        AttributeReference("avg_col_len", StringType, nullable = true,
+          new MetadataBuilder().putString("comment",
+            "average length of the values of the column").build())(),
+        AttributeReference("max_col_len", StringType, nullable = true,
+          new MetadataBuilder().putString("comment",
+            "max length of the values of the column").build())(),
+        AttributeReference("comment", StringType, nullable = true,
+          new MetadataBuilder().putString("comment", "comment of the column").build())())
+    } else {
+      Seq(
+        AttributeReference("col_name", StringType, nullable = false,
+          new MetadataBuilder().putString("comment", "name of the column").build())(),
+        AttributeReference("data_type", StringType, nullable = false,
+          new MetadataBuilder().putString("comment", "data type of the column").build())(),
+        AttributeReference("comment", StringType, nullable = true,
+          new MetadataBuilder().putString("comment", "comment of the column").build())())
+    }
+  }
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val resolver = sparkSession.sessionState.conf.resolver
+    val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
+    val attribute = {
+      val field = catalogTable.schema.find(f => resolver(f.name, column))
+      field.getOrElse {
+        if (column.contains(".")) {
+          throw new AnalysisException(
+            s"DESC TABLE COLUMN is not supported for nested column: $column")
+        } else {
+          throw new AnalysisException(s"Column $column does not exist.")
+        }
+      }
+    }
+
+    val colStats: Map[String, ColumnStat] = if (catalog.isTemporaryTable(table)) {
+      Map.empty
+    } else {
+      catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
+    }
+    val cs = colStats.get(attribute.name)
+
+    val comment = if (attribute.metadata.contains("comment")) {
+      Option(attribute.metadata.getString("comment"))
+    } else {
+      None
+    }
+
+    val result = if (isFormatted) {
+      // Show column stats only when formatted is specified
+      Row(
+        attribute.name,
+        attribute.dataType.simpleString,
+        cs.flatMap(_.min.map(_.toString)).orNull,
+        cs.flatMap(_.max.map(_.toString)).orNull,
+        cs.map(_.nullCount.toString).orNull,
+        cs.map(_.distinctCount.toString).orNull,
+        cs.map(_.avgLen.toString).orNull,
+        cs.map(_.maxLen.toString).orNull,
+        comment.orNull)
+    } else {
+      Row(
+        attribute.name,
+        attribute.dataType.simpleString,
+        comment.orNull)
+    }
+
+    Seq(result)
+  }
+}
 
 /**
  * A command for users to get tables in the given database.

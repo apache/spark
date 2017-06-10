@@ -158,7 +158,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       BigInt(4444444444L) -> ("4.1 GB", "4.44E+9"),
       BigInt(5555555555555L) -> ("5.1 TB", "5.56E+12"),
       BigInt(6666666666666666L) -> ("5.9 PB", "6.67E+15"),
-      BigInt(1L << 10 ) * (1L << 60) -> ("1024.0 EB", "1.18E+21"),
+      BigInt(1L << 10) * (1L << 60) -> ("1024.0 EB", "1.18E+21"),
       BigInt(1L << 11) * (1L << 60) -> ("2.36E+21 B", "2.36E+21")
     )
     numbers.foreach { case (input, (expectedSize, expectedRows)) =>
@@ -166,6 +166,27 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows," +
         s" hints=none"
       assert(stats.simpleString == expectedString)
+    }
+  }
+
+  test("desc column with stats") {
+    withTable("desc_col_statsTable") {
+      val columns = stats.keys.toSeq
+      val df = data.toDF(columns :+ "carray" : _*)
+      df.write.saveAsTable("desc_col_statsTable")
+      sql(s"analyze table desc_col_statsTable compute statistics for columns " +
+        s"${columns.mkString(", ")}")
+      stats.zip(df.schema).foreach { case ((colName, columnStat), structField) =>
+        checkAnswer(sql(s"desc formatted desc_col_statsTable ${structField.name}"),
+          Row(colName, structField.dataType.simpleString,
+            columnStat.min.map(_.toString).orNull,
+            columnStat.max.map(_.toString).orNull,
+            columnStat.nullCount.toString,
+            columnStat.distinctCount.toString,
+            columnStat.avgLen.toString,
+            columnStat.maxLen.toString,
+            structField.getComment().orNull))
+      }
     }
   }
 }

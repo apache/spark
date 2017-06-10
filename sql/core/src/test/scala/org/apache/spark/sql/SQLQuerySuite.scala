@@ -39,6 +39,44 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   setupTestData()
 
+  test("describe table column") {
+    def checkDescColumn(
+        table: String,
+        column: String,
+        dataType: String,
+        comment: Option[String]): Unit = {
+      checkAnswer(sql(s"desc $table $column"), Row(column, dataType, comment.orNull))
+      checkAnswer(sql(s"desc extended $table $column"), Row(column, dataType, comment.orNull))
+      checkAnswer(sql(s"desc formatted $table $column"),
+        Row(column, dataType, null, null, null, null, null, null, comment.orNull))
+    }
+
+    val comment = "foo bar"
+    // Test temp table
+    withTempView("desc_col_tempTable") {
+      sql(s"create temporary view desc_col_tempTable (key int comment '$comment') using parquet")
+      checkDescColumn("desc_col_tempTable", "key", "int", Some(comment))
+
+      // Describe a non-existent column
+      val msg = intercept[AnalysisException](sql("desc desc_col_tempTable key1")).getMessage
+      assert(msg.contains("Column key1 does not exist."))
+    }
+
+    withTable("desc_col_persistentTable", "desc_col_complexTable") {
+      // Test persistent table
+      sql(s"create table desc_col_persistentTable (key int comment '$comment') using parquet")
+      checkDescColumn("desc_col_persistentTable", "key", "int", Some(comment))
+
+      // Test complex column
+      complexData.write.saveAsTable("desc_col_complexTable")
+      checkDescColumn("desc_col_complexTable", "s", "struct<key:int,value:string>", None)
+
+      // Describe a nested column
+      val msg = intercept[AnalysisException](sql("desc desc_col_complexTable s.key")).getMessage
+      assert(msg.contains("DESC TABLE COLUMN is not supported for nested column: s.key"))
+    }
+  }
+
   test("SPARK-8010: promote numeric to string") {
     val df = Seq((1, 1)).toDF("key", "value")
     df.createOrReplaceTempView("src")
