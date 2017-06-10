@@ -22,7 +22,6 @@ import java.lang.reflect.Modifier
 import scala.collection.mutable.Builder
 import scala.language.existentials
 import scala.reflect.ClassTag
-import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
@@ -657,7 +656,7 @@ object CollectObjectsToMap {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
   /**
-   * Construct an instance of CollectObjects case class.
+   * Construct an instance of CollectObjectsToMap case class.
    *
    * @param keyFunction The function applied on the key collection elements.
    * @param valueFunction The function applied on the value collection elements.
@@ -676,13 +675,10 @@ object CollectObjectsToMap {
     val valueLoopValue = s"CollectObjectsToMap_valueLoopValue$id"
     val valueLoopIsNull = s"CollectObjectsToMap_valueLoopIsNull$id"
     val valueLoopVar = LambdaVariable(valueLoopValue, valueLoopIsNull, mapType.valueType)
-    val tupleLoopVar = s"CollectObjectsToMap_tupleLoopValue$id"
-    val builderValue = s"CollectObjectsToMap_builderValue$id"
     CollectObjectsToMap(
       keyLoopValue, keyFunction(keyLoopVar),
       valueLoopValue, valueLoopIsNull, valueFunction(valueLoopVar),
-      inputData,
-      tupleLoopVar, collClass, builderValue)
+      inputData, collClass)
   }
 }
 
@@ -703,10 +699,7 @@ object CollectObjectsToMap {
  * @param valueLambdaFunction A function that takes the `valueLoopVar` as input, and is used as
  *                            a lambda function to handle collection elements.
  * @param inputData An expression that when evaluated returns a map object.
- * @param tupleLoopValue the name of the loop variable that holds the tuple to be added to the
-  *                      resulting map (used only for Scala Map)
  * @param collClass The type of the resulting collection.
- * @param builderValue The name of the builder variable used to construct the resulting collection.
  */
 case class CollectObjectsToMap private(
     keyLoopValue: String,
@@ -715,9 +708,7 @@ case class CollectObjectsToMap private(
     valueLoopIsNull: String,
     valueLambdaFunction: Expression,
     inputData: Expression,
-    tupleLoopValue: String,
-    collClass: Class[_],
-    builderValue: String) extends Expression with NonSQLExpression {
+    collClass: Class[_]) extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = inputData.nullable
 
@@ -741,6 +732,8 @@ case class CollectObjectsToMap private(
     val genInputData = inputData.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
     val loopIndex = ctx.freshName("loopIndex")
+    val tupleLoopValue = ctx.freshName("tupleLoopValue")
+    val builderValue = ctx.freshName("builderValue")
 
     val keyArray = ctx.freshName("keyArray")
     val valueArray = ctx.freshName("valueArray")
@@ -778,60 +771,25 @@ case class CollectObjectsToMap private(
     val valueLoopNullCheck =
       s"$valueLoopIsNull = ${genInputData.value}.valueArray().isNullAt($loopIndex);"
 
-    val constructBuilder = collClass match {
-      // Scala Map
-      case cls if classOf[scala.collection.Map[_, _]].isAssignableFrom(cls) =>
-        val builderClass = classOf[Builder[_, _]].getName
-        s"""
-          $builderClass $builderValue = ${collClass.getName}$$.MODULE$$.newBuilder();
-          $builderValue.sizeHint($dataLength);
-        """
-      // Java Map, AbstractMap => HashMap
-      case cls if classOf[java.util.Map[_, _]] == cls ||
-        classOf[java.util.AbstractMap[_, _]] == cls =>
-        val builderClass = classOf[java.util.HashMap[_, _]].getName
-        s"${collClass.getName} $builderValue = new $builderClass($dataLength);"
-      // Java SortedMap, NavigableMap => TreeMap
-      case cls if classOf[java.util.SortedMap[_, _]] == cls ||
-        classOf[java.util.NavigableMap[_, _]] == cls =>
-        val builderClass = classOf[java.util.TreeMap[_, _]].getName
-        s"${collClass.getName} $builderValue = new $builderClass();"
-      // Java ConcurrentMap => ConcurrentHashMap
-      case cls if classOf[java.util.concurrent.ConcurrentMap[_, _]] == cls =>
-        val builderClass = classOf[java.util.concurrent.ConcurrentHashMap[_, _]].getName
-        s"${collClass.getName} $builderValue = new $builderClass();"
-      // Java ConcurrentNavigableMap => ConcurrentSkipListMap
-      case cls if classOf[java.util.concurrent.ConcurrentNavigableMap[_, _]] == cls =>
-        val builderClass = classOf[java.util.concurrent.ConcurrentSkipListMap[_, _]].getName
-        s"${collClass.getName} $builderValue = new $builderClass();"
-      // Java concrete Map implementation
-      case cls =>
-        // Check for constructor with capacity specification
-        if (Try(cls.getConstructor(Integer.TYPE)).isSuccess) {
-          s"${collClass.getName} $builderValue = new ${cls.getName}($dataLength);"
-        } else {
-          s"${collClass.getName} $builderValue = new ${cls.getName}();"
-        }
-    }
+    val builderClass = classOf[Builder[_, _]].getName
+    val constructBuilder = s"""
+      $builderClass $builderValue = ${collClass.getName}$$.MODULE$$.newBuilder();
+      $builderValue.sizeHint($dataLength);
+    """
 
-    val (appendToBuilder, getBuilderResult) =
-      if (classOf[scala.collection.Map[_, _]].isAssignableFrom(collClass)) {
-        val tupleClass = classOf[(_, _)].getName
-        s"""
-          $tupleClass $tupleLoopValue;
+    val tupleClass = classOf[(_, _)].getName
+    val appendToBuilder = s"""
+      $tupleClass $tupleLoopValue;
 
-          if (${genValueFunction.isNull}) {
-            $tupleLoopValue = new $tupleClass($genKeyFunctionValue, null);
-          } else {
-            $tupleLoopValue = new $tupleClass($genKeyFunctionValue, $genValueFunctionValue);
-          }
-
-          $builderValue.$$plus$$eq($tupleLoopValue);
-         """ -> s"${ev.value} = (${collClass.getName}) $builderValue.result();"
+      if (${genValueFunction.isNull}) {
+        $tupleLoopValue = new $tupleClass($genKeyFunctionValue, null);
       } else {
-        s"$builderValue.put($genKeyFunctionValue, $genValueFunctionValue);" ->
-          s"${ev.value} = $builderValue;"
+        $tupleLoopValue = new $tupleClass($genKeyFunctionValue, $genValueFunctionValue);
       }
+
+      $builderValue.$$plus$$eq($tupleLoopValue);
+     """
+    val getBuilderResult = s"${ev.value} = (${collClass.getName}) $builderValue.result();"
 
     val code = s"""
       ${genInputData.code}
