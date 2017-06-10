@@ -110,6 +110,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       EliminateSerialization,
       RemoveRedundantAliases,
       RemoveRedundantProject,
+      RemoveInvalidRange,
       SimplifyCreateStructOps,
       SimplifyCreateArrayOps,
       SimplifyCreateMapOps,
@@ -267,6 +268,16 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 object RemoveRedundantProject extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p @ Project(_, child) if p.output == child.output => child
+  }
+}
+
+/**
+ * Replace invalid `range` with emtpy range.
+ */
+object RemoveInvalidRange extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p @ Range(start, end, step, a, b) if (start == end) || (start < end ^ 0 < step) =>
+      LocalRelation(p.output, data = Seq.empty)
   }
 }
 
