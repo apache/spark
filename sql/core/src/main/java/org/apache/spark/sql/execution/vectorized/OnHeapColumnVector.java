@@ -47,10 +47,6 @@ public final class OnHeapColumnVector extends ColumnVector {
   private float[] floatData;
   private double[] doubleData;
 
-  // Only set if type is Array.
-  private int[] arrayLengths;
-  private int[] arrayOffsets;
-
   protected OnHeapColumnVector(int capacity, DataType type) {
     super(capacity, type, MemoryMode.ON_HEAP);
     reserveInternal(capacity);
@@ -366,55 +362,23 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
-  //
-  // APIs dealing with Arrays
-  //
-
-  @Override
-  public int getArrayLength(int rowId) {
-    return arrayLengths[rowId];
-  }
-  @Override
-  public int getArrayOffset(int rowId) {
-    return arrayOffsets[rowId];
-  }
-
-  @Override
-  public void putArray(int rowId, int offset, int length) {
-    arrayOffsets[rowId] = offset;
-    arrayLengths[rowId] = length;
-  }
-
   @Override
   public void loadBytes(ColumnVector.Array array) {
     array.byteArray = byteData;
     array.byteArrayOffset = array.offset;
   }
 
-  //
-  // APIs dealing with Byte Arrays
-  //
-
-  @Override
-  public int putByteArray(int rowId, byte[] value, int offset, int length) {
-    int result = arrayData().appendBytes(length, value, offset);
-    arrayOffsets[rowId] = result;
-    arrayLengths[rowId] = length;
-    return result;
-  }
-
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
     if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
-      int[] newLengths = new int[newCapacity];
-      int[] newOffsets = new int[newCapacity];
-      if (this.arrayLengths != null) {
-        System.arraycopy(this.arrayLengths, 0, newLengths, 0, capacity);
-        System.arraycopy(this.arrayOffsets, 0, newOffsets, 0, capacity);
+      // need 2 ints as offset and length for each array.
+      if (intData == null || intData.length < newCapacity * 2) {
+        int[] newData = new int[newCapacity * 2];
+        if (intData != null) System.arraycopy(intData, 0, newData, 0, capacity * 2);
+        intData = newData;
       }
-      arrayLengths = newLengths;
-      arrayOffsets = newOffsets;
+      putInt(0, 0);
     } else if (type instanceof BooleanType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];

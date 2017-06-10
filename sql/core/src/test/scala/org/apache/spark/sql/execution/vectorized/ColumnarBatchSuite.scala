@@ -631,7 +631,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.arrayData().elementsAppended == 17)
 
       // Put the same "ll" at offset. This should not allocate more memory in the column.
-      column.putArray(idx, offset, 2)
+      column.arrayWriteEnd(idx, offset, 2)
       reference += "ll"
       idx += 1
       assert(column.arrayData().elementsAppended == 17)
@@ -644,7 +644,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.arrayData().elementsAppended == 17 + (s + s).length)
 
       reference.zipWithIndex.foreach { v =>
-        assert(v._1.length == column.getArrayLength(v._2), "MemoryMode=" + memMode)
+        assert(v._1.length == column.getInt(v._2 * 2 + 1), "MemoryMode=" + memMode)
         assert(v._1 == column.getUTF8String(v._2).toString,
           "MemoryMode" + memMode)
       }
@@ -659,7 +659,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val column = ColumnVector.allocate(10, new ArrayType(IntegerType, true), memMode)
 
       // Fill the underlying data with all the arrays back to back.
-      val data = column.arrayData();
+      val data = column.arrayData()
       var i = 0
       while (i < 6) {
         data.putInt(i, i)
@@ -667,10 +667,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
 
       // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
-      column.putArray(0, 0, 1)
-      column.putArray(1, 1, 2)
-      column.putArray(2, 2, 0)
-      column.putArray(3, 3, 3)
+      column.arrayWriteEnd(0, 0, 1)
+      column.arrayWriteEnd(1, 1, 2)
+      column.arrayWriteEnd(2, 2, 0)
+      column.arrayWriteEnd(3, 3, 3)
 
       val a1 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
       val a2 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(1)).asInstanceOf[Array[Int]]
@@ -703,7 +703,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       data.reserve(array.length)
       assert(data.capacity == array.length * 2)
       data.putInts(0, array.length, array, 0)
-      column.putArray(0, 0, array.length)
+      column.arrayWriteEnd(0, 0, array.length)
       assert(ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
         === array)
     }}
