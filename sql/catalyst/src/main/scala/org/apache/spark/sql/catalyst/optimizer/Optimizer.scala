@@ -92,6 +92,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       CombineUnions,
       // Constant folding and strength reduction
       NullPropagation(conf),
+      ConstantPropagation,
       FoldablePropagation,
       OptimizeIn(conf),
       ConstantFolding,
@@ -862,7 +863,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // Note that some operators (e.g. project, aggregate, union) are being handled separately
     // (earlier in this rule).
     case _: AppendColumns => true
-    case _: BroadcastHint => true
+    case _: ResolvedHint => true
     case _: Distinct => true
     case _: Generate => true
     case _: Pivot => true

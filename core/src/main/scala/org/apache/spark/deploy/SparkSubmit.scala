@@ -20,6 +20,7 @@ package org.apache.spark.deploy
 import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
+import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 
@@ -28,7 +29,8 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.Properties
 
 import org.apache.commons.lang3.StringUtils
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
@@ -309,6 +311,15 @@ object SparkSubmit extends CommandLineUtils {
     // Spark Packages may contain R source code inside the jar.
     if (args.isR && !StringUtils.isBlank(args.jars)) {
       RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
+    }
+
+    // In client mode, download remote files.
+    if (deployMode == CLIENT) {
+      val hadoopConf = new HadoopConfiguration()
+      args.primaryResource = Option(args.primaryResource).map(downloadFile(_, hadoopConf)).orNull
+      args.jars = Option(args.jars).map(downloadFileList(_, hadoopConf)).orNull
+      args.pyFiles = Option(args.pyFiles).map(downloadFileList(_, hadoopConf)).orNull
+      args.files = Option(args.files).map(downloadFileList(_, hadoopConf)).orNull
     }
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
@@ -844,6 +855,41 @@ object SparkSubmit extends CommandLineUtils {
                       .mkString(",")
     if (merged == "") null else merged
   }
+
+  /**
+   * Download a list of remote files to temp local files. If the file is local, the original file
+   * will be returned.
+   * @param fileList A comma separated file list.
+   * @return A comma separated local files list.
+   */
+  private[deploy] def downloadFileList(
+      fileList: String,
+      hadoopConf: HadoopConfiguration): String = {
+    require(fileList != null, "fileList cannot be null.")
+    fileList.split(",").map(downloadFile(_, hadoopConf)).mkString(",")
+  }
+
+  /**
+   * Download a file from the remote to a local temporary directory. If the input path points to
+   * a local path, returns it with no operation.
+   */
+  private[deploy] def downloadFile(path: String, hadoopConf: HadoopConfiguration): String = {
+    require(path != null, "path cannot be null.")
+    val uri = Utils.resolveURI(path)
+    uri.getScheme match {
+      case "file" | "local" =>
+        path
+
+      case _ =>
+        val fs = FileSystem.get(uri, hadoopConf)
+        val tmpFile = new File(Files.createTempDirectory("tmp").toFile, uri.getPath)
+        // scalastyle:off println
+        printStream.println(s"Downloading ${uri.toString} to ${tmpFile.getAbsolutePath}.")
+        // scalastyle:on println
+        fs.copyToLocalFile(new Path(uri), new Path(tmpFile.getAbsolutePath))
+        Utils.resolveURI(tmpFile.getAbsolutePath).toString
+    }
+  }
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
@@ -851,6 +897,15 @@ private[spark] object SparkSubmitUtils {
 
   // Exposed for testing
   var printStream = SparkSubmit.printStream
+
+  // Exposed for testing.
+  // These components are used to make the default exclusion rules for Spark dependencies.
+  // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
+  // other spark-streaming utility components. Underscore is there to differentiate between
+  // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
+  val IVY_DEFAULT_EXCLUDES = Seq("catalyst_", "core_", "graphx_", "launcher_", "mllib_",
+    "mllib-local_", "network-common_", "network-shuffle_", "repl_", "sketch_", "sql_", "streaming_",
+    "tags_", "unsafe_")
 
   /**
    * Represents a Maven Coordinate
@@ -980,13 +1035,7 @@ private[spark] object SparkSubmitUtils {
     // Add scala exclusion rule
     md.addExcludeRule(createExclusion("*:scala-library:*", ivySettings, ivyConfName))
 
-    // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
-    // other spark-streaming utility components. Underscore is there to differentiate between
-    // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
-    val components = Seq("catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
-      "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
-
-    components.foreach { comp =>
+    IVY_DEFAULT_EXCLUDES.foreach { comp =>
       md.addExcludeRule(createExclusion(s"org.apache.spark:spark-$comp*:*", ivySettings,
         ivyConfName))
     }

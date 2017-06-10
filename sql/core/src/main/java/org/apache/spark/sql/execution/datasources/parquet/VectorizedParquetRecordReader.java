@@ -154,12 +154,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     return (float) rowsReturned / totalRowCount;
   }
 
-  /**
-   * Returns the ColumnarBatch object that will be used for all rows returned by this reader.
-   * This object is reused. Calling this enables the vectorized reader. This should be called
-   * before any calls to nextKeyValue/nextBatch.
-   */
-
   // Creates a columnar batch that includes the schema from the data files and the additional
   // partition columns appended to the end of the batch.
   // For example, if the data contains two columns, with 2 partition columns:
@@ -204,12 +198,17 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     initBatch(DEFAULT_MEMORY_MODE, partitionColumns, partitionValues);
   }
 
+  /**
+   * Returns the ColumnarBatch object that will be used for all rows returned by this reader.
+   * This object is reused. Calling this enables the vectorized reader. This should be called
+   * before any calls to nextKeyValue/nextBatch.
+   */
   public ColumnarBatch resultBatch() {
     if (columnarBatch == null) initBatch();
     return columnarBatch;
   }
 
-  /*
+  /**
    * Can be called before any rows are returned to enable returning columnar batches directly.
    */
   public void enableReturningBatches() {
@@ -237,9 +236,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   private void initializeInternal() throws IOException, UnsupportedOperationException {
-    /**
-     * Check that the requested schema is supported.
-     */
+    // Check that the requested schema is supported.
     missingColumns = new boolean[requestedSchema.getFieldCount()];
     for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
       Type t = requestedSchema.getFields().get(i);
