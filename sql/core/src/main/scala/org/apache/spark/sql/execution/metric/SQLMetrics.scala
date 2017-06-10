@@ -105,7 +105,9 @@ object SQLMetrics {
   /**
    * Create a metric to report the average information (including min, med, max) like
    * avg hashmap probe. Because `SQLMetric` stores long values, we take the ceil of the average
-   * values before storing them.
+   * values before storing them. This metric is used to record an average value computed in the
+   * end of a task. It should be set once. The initial values (zeros) of this metrics will be
+   * excluded after.
    */
   def createAverageMetric(sc: SparkContext, name: String): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
