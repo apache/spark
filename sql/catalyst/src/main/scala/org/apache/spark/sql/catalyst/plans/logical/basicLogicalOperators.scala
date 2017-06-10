@@ -482,8 +482,7 @@ case class Sort(
 
 /** Factory for constructing new `Range` nodes. */
 object Range {
-  def apply(start: Long, end: Long, step: Long, numSlices: Option[Int])
-      : LeafNode with MultiInstanceRelation = {
+  def apply(start: Long, end: Long, step: Long, numSlices: Option[Int]): LogicalPlan = {
     val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
     if (start == end || (start < end ^ 0 < step)) {
       LocalRelation(output)
@@ -491,8 +490,7 @@ object Range {
       new Range(start, end, step, numSlices, output)
     }
   }
-  def apply(start: Long, end: Long, step: Long, numSlices: Int)
-      : LeafNode with MultiInstanceRelation = {
+  def apply(start: Long, end: Long, step: Long, numSlices: Int): LogicalPlan = {
     Range(start, end, step, Some(numSlices))
   }
 }
