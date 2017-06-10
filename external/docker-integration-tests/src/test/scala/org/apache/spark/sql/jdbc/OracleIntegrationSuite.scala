@@ -62,6 +62,37 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   }
 
   override def dataPreparation(conn: Connection): Unit = {
+    conn.prepareStatement("CREATE TABLE datetime (id NUMBER(10), d DATE, t TIMESTAMP)")
+      .executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetime VALUES
+        |(1, {d '1991-11-09'}, {ts '1996-01-01 01:23:45'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement("CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)")
+        .executeUpdate()
+    conn.prepareStatement("INSERT INTO ts_with_timezone VALUES (1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))")
+        .executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+        |CREATE TEMPORARY VIEW datetime
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$jdbcUrl', dbTable 'datetime', oracle.jdbc.mapDateToTimestamp 'false')
+      """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement("CREATE TABLE datetime1 (id NUMBER(10), d DATE, t TIMESTAMP)")
+      .executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+        |CREATE TEMPORARY VIEW datetime1
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$jdbcUrl', dbTable 'datetime1', oracle.jdbc.mapDateToTimestamp 'false')
+      """.stripMargin.replaceAll("\n", " "))
   }
 
   test("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
@@ -148,5 +179,23 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(values.getAs[Array[Byte]](8).mkString.equals("678"))
     assert(values.getDate(9).equals(dateVal))
     assert(values.getTimestamp(10).equals(timestampVal))
+  }
+
+  test("SPARK-19318: connection property keys should be case-sensitive") {
+    def checkRow(row: Row): Unit = {
+      assert(row.getInt(0) == 1)
+      assert(row.getDate(1).equals(Date.valueOf("1991-11-09")))
+      assert(row.getTimestamp(2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
+    }
+    checkRow(sql("SELECT * FROM datetime where id = 1").head())
+    sql("INSERT INTO TABLE datetime1 SELECT * FROM datetime where id = 1")
+    checkRow(sql("SELECT * FROM datetime1 where id = 1").head())
+  }
+
+  test("SPARK-20557: column type TIMESTAMP with TIME ZONE should be recognized") {
+    val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+    val rows = dfRead.collect()
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(1).equals("class java.sql.Timestamp"))
   }
 }

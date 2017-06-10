@@ -92,7 +92,7 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
   private[spark] def setRecordsRead(v: Long): Unit = _recordsRead.setValue(v)
 
   /**
-   * Resets the value of the current metrics (`this`) and and merges all the independent
+   * Resets the value of the current metrics (`this`) and merges all the independent
    * [[TempShuffleReadMetrics]] into `this`.
    */
   private[spark] def setMergeValues(metrics: Seq[TempShuffleReadMetrics]): Unit = {

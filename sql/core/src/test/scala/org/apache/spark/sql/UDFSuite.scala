@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
@@ -90,6 +91,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   test("Simple UDF") {
     spark.udf.register("strLenScala", (_: String).length)
     assert(sql("SELECT strLenScala('test')").head().getInt(0) === 4)
+  }
+
+  test("UDF defined using UserDefinedFunction") {
+    import functions.udf
+    val foo = udf((x: Int) => x + 1)
+    spark.udf.register("foo", foo)
+    assert(sql("select foo(5)").head().getInt(0) == 6)
   }
 
   test("ZeroArgument UDF") {
@@ -247,5 +255,20 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT tmp.t.* FROM (SELECT testDataFunc(a, b) AS t from testData2) tmp").toDF(),
       testData2)
+  }
+
+  test("SPARK-19338 Provide identical names for UDFs in the EXPLAIN output") {
+    def explainStr(df: DataFrame): String = {
+      val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+      val sparkPlan = spark.sessionState.executePlan(explain).executedPlan
+      sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
+    }
+    val udf1Name = "myUdf1"
+    val udf2Name = "myUdf2"
+    val udf1 = spark.udf.register(udf1Name, (n: Int) => n + 1)
+    val udf2 = spark.udf.register(udf2Name, (n: Int) => n * 1)
+    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+    assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
+      .contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
   }
 }

@@ -40,7 +40,10 @@ private[spark] object CoarseGrainedClusterMessages {
   // Driver to executors
   case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
-  case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
+  case class KillTask(taskId: Long, executor: String, interruptThread: Boolean, reason: String)
+    extends CoarseGrainedClusterMessage
+
+  case class KillExecutorsOnHost(host: String)
     extends CoarseGrainedClusterMessage
 
   sealed trait RegisterExecutorResponse

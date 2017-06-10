@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import warnings
 from collections import namedtuple
 
 from pyspark import since
@@ -71,10 +72,10 @@ class Catalog(object):
     @ignore_unicode_prefix
     @since(2.0)
     def listTables(self, dbName=None):
-        """Returns a list of tables in the specified database.
+        """Returns a list of tables/views in the specified database.
 
         If no database is specified, the current database is used.
-        This includes all temporary tables.
+        This includes all temporary views.
         """
         if dbName is None:
             dbName = self.currentDatabase()
@@ -114,7 +115,7 @@ class Catalog(object):
     @ignore_unicode_prefix
     @since(2.0)
     def listColumns(self, tableName, dbName=None):
-        """Returns a list of columns for the given table in the specified database.
+        """Returns a list of columns for the given table/view in the specified database.
 
         If no database is specified, the current database is used.
 
@@ -138,7 +139,7 @@ class Catalog(object):
 
     @since(2.0)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
-        """Creates an external table based on the dataset in a data source.
+        """Creates a table based on the dataset in a data source.
 
         It returns the DataFrame associated with the external table.
 
@@ -151,18 +152,39 @@ class Catalog(object):
 
         :return: :class:`DataFrame`
         """
+        warnings.warn(
+            "createExternalTable is deprecated since Spark 2.2, please use createTable instead.",
+            DeprecationWarning)
+        return self.createTable(tableName, path, source, schema, **options)
+
+    @since(2.2)
+    def createTable(self, tableName, path=None, source=None, schema=None, **options):
+        """Creates a table based on the dataset in a data source.
+
+        It returns the DataFrame associated with the table.
+
+        The data source is specified by the ``source`` and a set of ``options``.
+        If ``source`` is not specified, the default data source configured by
+        ``spark.sql.sources.default`` will be used. When ``path`` is specified, an external table is
+        created from the data at the given path. Otherwise a managed table is created.
+
+        Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
+        created table.
+
+        :return: :class:`DataFrame`
+        """
         if path is not None:
             options["path"] = path
         if source is None:
             source = self._sparkSession.conf.get(
                 "spark.sql.sources.default", "org.apache.spark.sql.parquet")
         if schema is None:
-            df = self._jcatalog.createExternalTable(tableName, source, options)
+            df = self._jcatalog.createTable(tableName, source, options)
         else:
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
-            df = self._jcatalog.createExternalTable(tableName, source, scala_datatype, options)
+            df = self._jcatalog.createTable(tableName, source, scala_datatype, options)
         return DataFrame(df, self._sparkSession._wrapped)
 
     @since(2.0)
@@ -215,23 +237,28 @@ class Catalog(object):
         :param name: name of the UDF
         :param f: python function
         :param returnType: a :class:`pyspark.sql.types.DataType` object
+        :return: a wrapped :class:`UserDefinedFunction`
 
-        >>> spark.catalog.registerFunction("stringLengthString", lambda x: len(x))
+        >>> strlen = spark.catalog.registerFunction("stringLengthString", len)
         >>> spark.sql("SELECT stringLengthString('test')").collect()
         [Row(stringLengthString(test)=u'4')]
 
+        >>> spark.sql("SELECT 'foo' AS text").select(strlen("text")).collect()
+        [Row(stringLengthString(text)=u'3')]
+
         >>> from pyspark.sql.types import IntegerType
-        >>> spark.catalog.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> _ = spark.catalog.registerFunction("stringLengthInt", len, IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> _ = spark.udf.register("stringLengthInt", len, IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """
         udf = UserDefinedFunction(f, returnType, name)
         self._jsparkSession.udf().registerPython(name, udf._judf)
+        return udf._wrapped()
 
     @since(2.0)
     def isCached(self, tableName):
@@ -255,13 +282,23 @@ class Catalog(object):
 
     @since(2.0)
     def refreshTable(self, tableName):
-        """Invalidate and refresh all the cached metadata of the given table."""
+        """Invalidates and refreshes all the cached data and metadata of the given table."""
         self._jcatalog.refreshTable(tableName)
 
     @since('2.1.1')
     def recoverPartitions(self, tableName):
-        """Recover all the partitions of the given table and update the catalog."""
+        """Recovers all the partitions of the given table and update the catalog.
+
+        Only works with a partitioned table, and not a view.
+        """
         self._jcatalog.recoverPartitions(tableName)
+
+    @since('2.2.0')
+    def refreshByPath(self, path):
+        """Invalidates and refreshes all the cached data (and the associated metadata) for any
+        DataFrame that contains the given data source path.
+        """
+        self._jcatalog.refreshByPath(path)
 
     def _reset(self):
         """(Internal use only) Drop all existing databases (except "default"), tables,

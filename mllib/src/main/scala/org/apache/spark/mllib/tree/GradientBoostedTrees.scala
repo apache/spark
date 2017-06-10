@@ -136,7 +136,7 @@ object GradientBoostedTrees extends Logging {
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees$#train]]
+   * Java-friendly API for `org.apache.spark.mllib.tree.GradientBoostedTrees.train`
    */
   @Since("1.2.0")
   def train(

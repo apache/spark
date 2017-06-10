@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
@@ -32,6 +33,25 @@ object SQLExecution {
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
 
+  private val executionIdToQueryExecution = new ConcurrentHashMap[Long, QueryExecution]()
+
+  def getQueryExecution(executionId: Long): QueryExecution = {
+    executionIdToQueryExecution.get(executionId)
+  }
+
+  private val testing = sys.props.contains("spark.testing")
+
+  private[sql] def checkSQLExecutionId(sparkSession: SparkSession): Unit = {
+    // only throw an exception during tests. a missing execution ID should not fail a job.
+    if (testing && sparkSession.sparkContext.getLocalProperty(EXECUTION_ID_KEY) == null) {
+      // Attention testers: when a test fails with this exception, it means that the action that
+      // started execution of a query didn't call withNewExecutionId. The execution ID should be
+      // set by calling withNewExecutionId in the action that begins execution, like
+      // Dataset.collect or DataFrameWriter.insertInto.
+      throw new IllegalStateException("Execution ID should be set")
+    }
+  }
+
   /**
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
@@ -44,6 +64,7 @@ object SQLExecution {
     if (oldExecutionId == null) {
       val executionId = SQLExecution.nextExecutionId
       sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+      executionIdToQueryExecution.put(executionId, queryExecution)
       val r = try {
         // sparkContext.getCallSite() would first try to pick up any call site that was previously
         // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
@@ -60,6 +81,7 @@ object SQLExecution {
             executionId, System.currentTimeMillis()))
         }
       } finally {
+        executionIdToQueryExecution.remove(executionId)
         sc.setLocalProperty(EXECUTION_ID_KEY, null)
       }
       r

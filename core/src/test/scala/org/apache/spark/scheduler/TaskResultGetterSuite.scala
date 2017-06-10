@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.File
+import java.io.{File, ObjectInputStream}
 import java.net.URL
 import java.nio.ByteBuffer
 
@@ -248,5 +248,24 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     assert(resSizeAfter.exists(_.toString.toLong > 0L))
   }
 
+  test("failed task is handled when error occurs deserializing the reason") {
+    sc = new SparkContext("local", "test", conf)
+    val rdd = sc.parallelize(Seq(1), 1).map { _ =>
+      throw new UndeserializableException
+    }
+    val message = intercept[SparkException] {
+      rdd.collect()
+    }.getMessage
+    // Job failed, even though the failure reason is unknown.
+    val unknownFailure = """(?s).*Lost task.*: UnknownReason.*""".r
+    assert(unknownFailure.findFirstMatchIn(message).isDefined)
+  }
+
+}
+
+private class UndeserializableException extends Exception {
+  private def readObject(in: ObjectInputStream): Unit = {
+    throw new NoClassDefFoundError()
+  }
 }
 

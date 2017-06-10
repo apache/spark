@@ -40,13 +40,13 @@ private[r] class LogisticRegressionWrapper private (
   private val lrModel: LogisticRegressionModel =
     pipeline.stages(1).asInstanceOf[LogisticRegressionModel]
 
-  val rFeatures: Array[String] = if (lrModel.getFitIntercept) {
+  lazy val rFeatures: Array[String] = if (lrModel.getFitIntercept) {
     Array("(Intercept)") ++ features
   } else {
     features
   }
 
-  val rCoefficients: Array[Double] = {
+  lazy val rCoefficients: Array[Double] = {
     val numRows = lrModel.coefficientMatrix.numRows
     val numCols = lrModel.coefficientMatrix.numCols
     val numColsWithIntercept = if (lrModel.getFitIntercept) numCols + 1 else numCols
@@ -96,7 +96,8 @@ private[r] object LogisticRegressionWrapper
       family: String,
       standardization: Boolean,
       thresholds: Array[Double],
-      weightCol: String
+      weightCol: String,
+      aggregationDepth: Int
       ): LogisticRegressionWrapper = {
 
     val rFormula = new RFormula()
@@ -119,16 +120,18 @@ private[r] object LogisticRegressionWrapper
       .setFitIntercept(fitIntercept)
       .setFamily(family)
       .setStandardization(standardization)
-      .setWeightCol(weightCol)
       .setFeaturesCol(rFormula.getFeaturesCol)
       .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
+      .setAggregationDepth(aggregationDepth)
 
     if (thresholds.length > 1) {
       lr.setThresholds(thresholds)
     } else {
       lr.setThreshold(thresholds(0))
     }
+
+    if (weightCol != null) lr.setWeightCol(weightCol)
 
     val idxToStr = new IndexToString()
       .setInputCol(PREDICTED_LABEL_INDEX_COL)

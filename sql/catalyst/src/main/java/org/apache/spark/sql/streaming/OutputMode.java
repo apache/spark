@@ -22,14 +22,11 @@ import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes;
 
 /**
- * :: Experimental ::
- *
  * OutputMode is used to what data will be written to a streaming sink when there is
  * new data available in a streaming DataFrame/Dataset.
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 public class OutputMode {
 
@@ -57,7 +54,8 @@ public class OutputMode {
 
   /**
    * OutputMode in which only the rows that were updated in the streaming DataFrame/Dataset will
-   * be written to the sink every time there are some updates.
+   * be written to the sink every time there are some updates. If the query doesn't contain
+   * aggregations, it will be equivalent to `Append` mode.
    *
    * @since 2.1.1
    */

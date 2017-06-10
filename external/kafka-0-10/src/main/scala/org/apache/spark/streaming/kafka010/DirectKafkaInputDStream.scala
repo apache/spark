@@ -42,15 +42,12 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
  *  of messages
  * per second that each '''partition''' will accept.
- * @param locationStrategy In most cases, pass in [[PreferConsistent]],
+ * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
  *   see [[LocationStrategy]] for more details.
- * @param executorKafkaParams Kafka
- * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
- * configuration parameters</a>.
- *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
- *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
- * @param consumerStrategy In most cases, pass in [[Subscribe]],
+ * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
  *   see [[ConsumerStrategy]] for more details
+ * @param ppc configuration of settings such as max rate on a per-partition basis.
+ *   see [[PerPartitionConfig]] for more details.
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
@@ -216,8 +213,10 @@ private[spark] class DirectKafkaInputDStream[K, V](
       val fo = currentOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
-    val rdd = new KafkaRDD[K, V](
-      context.sparkContext, executorKafkaParams, offsetRanges.toArray, getPreferredHosts, true)
+    val useConsumerCache = context.conf.getBoolean("spark.streaming.kafka.consumer.cache.enabled",
+      true)
+    val rdd = new KafkaRDD[K, V](context.sparkContext, executorKafkaParams, offsetRanges.toArray,
+      getPreferredHosts, useConsumerCache)
 
     // Report the record number and metadata of this batch interval to InputInfoTracker.
     val description = offsetRanges.filter { offsetRange =>
@@ -319,7 +318,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
            b.map(OffsetRange(_)),
            getPreferredHosts,
            // during restore, it's possible same partition will be consumed from multiple
-           // threads, so dont use cache
+           // threads, so do not use cache.
            false
          )
       }

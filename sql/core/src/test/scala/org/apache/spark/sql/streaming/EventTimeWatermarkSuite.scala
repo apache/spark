@@ -25,6 +25,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.OutputMode._
@@ -190,7 +191,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       assertEventStats { e =>
         assert(timestampFormat.parse(e.get("max")).getTime === (currentTimeMs / 1000) * 1000)
         val watermarkTime = timestampFormat.parse(e.get("watermark"))
-        assert(monthsSinceEpoch(currentTime) - monthsSinceEpoch(watermarkTime) === 29)
+        val monthDiff = monthsSinceEpoch(currentTime) - monthsSinceEpoch(watermarkTime)
+        // monthsSinceEpoch is like `math.floor(num)`, so monthDiff has two possible values.
+        assert(monthDiff === 29 || monthDiff === 30,
+          s"currentTime: $currentTime, watermarkTime: $watermarkTime")
       }
     )
   }
@@ -214,7 +218,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckLastBatch((10, 5)),
       StopStream,
-      AssertOnQuery { q => // clear the sink
+      AssertOnQuery { q => // purge commit and clear the sink
+        val commit = q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
+        q.batchCommitLog.purge(commit)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
@@ -300,6 +306,52 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 1))
     )
+  }
+
+  test("delay threshold should not be negative.") {
+    val inputData = MemoryStream[Int].toDF()
+    var e = intercept[IllegalArgumentException] {
+      inputData.withWatermark("value", "-1 year")
+    }
+    assert(e.getMessage contains "should not be negative.")
+
+    e = intercept[IllegalArgumentException] {
+      inputData.withWatermark("value", "1 year -13 months")
+    }
+    assert(e.getMessage contains "should not be negative.")
+
+    e = intercept[IllegalArgumentException] {
+      inputData.withWatermark("value", "1 month -40 days")
+    }
+    assert(e.getMessage contains "should not be negative.")
+
+    e = intercept[IllegalArgumentException] {
+      inputData.withWatermark("value", "-10 seconds")
+    }
+    assert(e.getMessage contains "should not be negative.")
+  }
+
+  test("the new watermark should override the old one") {
+    val df = MemoryStream[(Long, Long)].toDF()
+      .withColumn("first", $"_1".cast("timestamp"))
+      .withColumn("second", $"_2".cast("timestamp"))
+      .withWatermark("first", "1 minute")
+      .withWatermark("second", "2 minutes")
+
+    val eventTimeColumns = df.logicalPlan.output
+      .filter(_.metadata.contains(EventTimeWatermark.delayKey))
+    assert(eventTimeColumns.size === 1)
+    assert(eventTimeColumns(0).name === "second")
+  }
+
+  test("EventTime watermark should be ignored in batch query.") {
+    val df = testData
+      .withColumn("eventTime", $"key".cast("timestamp"))
+      .withWatermark("eventTime", "1 minute")
+      .select("eventTime")
+      .as[Long]
+
+    checkDataset[Long](df, 1L to 100L: _*)
   }
 
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>

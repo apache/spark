@@ -25,7 +25,7 @@ import org.apache.spark.util.collection.SortDataFormat;
  * Supports sorting an array of (record pointer, key prefix) pairs.
  * Used in {@link UnsafeInMemorySorter}.
  * <p>
- * Within each long[] buffer, position {@code 2 * i} holds a pointer pointer to the record at
+ * Within each long[] buffer, position {@code 2 * i} holds a pointer to the record at
  * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
  */
 public final class UnsafeSortDataFormat

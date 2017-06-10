@@ -97,6 +97,15 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-18952: regexes fail codegen when used as keys due to bad forward-slash escapes") {
+    val df = Seq(("some[thing]", "random-string")).toDF("key", "val")
+
+    checkAnswer(
+      df.groupBy(regexp_extract('key, "([a-z]+)\\[", 1)).count(),
+      Row("some", 1) :: Nil
+    )
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
@@ -520,5 +529,20 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       limit2Df.groupBy("id").count().select($"id"),
       limit2Df.select($"id"))
+  }
+
+  test("SPARK-17237 remove backticks in a pivot result schema") {
+    val df = Seq((2, 3, 4), (3, 4, 5)).toDF("a", "x", "y")
+    checkAnswer(
+      df.groupBy("a").pivot("x").agg(count("y"), avg("y")).na.fill(0),
+      Seq(Row(3, 0, 0.0, 1, 5.0), Row(2, 1, 4.0, 0, 0.0))
+    )
+  }
+
+  test("aggregate function in GROUP BY") {
+    val e = intercept[AnalysisException] {
+      testData.groupBy(sum($"key")).count()
+    }
+    assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
   }
 }
