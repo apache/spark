@@ -401,6 +401,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     afterEach()
     val conf = new SparkConf()
     conf.set("spark.shuffle.service.enabled", "true")
+    conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
     init(conf)
     runEvent(ExecutorAdded("exec-hostA1", "hostA"))
     runEvent(ExecutorAdded("exec-hostA2", "hostA"))
