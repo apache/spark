@@ -399,6 +399,7 @@ object DateTimeUtils {
       digitsMilli += 1
     }
 
+    // We are truncating the nanosecond part, which results in loss of precision
     while (digitsMilli > 6) {
       segments(6) /= 10
       digitsMilli -= 1
