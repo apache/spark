@@ -2635,6 +2635,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-20211: should be able to floor or ceil with a decimal when its precision < scale") {
+    val df = Seq(0).toDF("a")
+    withTempView("tb") {
+      df.createOrReplaceTempView("tb")
+      checkAnswer(sql("SELECT 1 > 0.00001 FROM tb"), Row(true))
+      checkAnswer(sql("SELECT floor(0.0001) FROM tb"), Row(0))
+      checkAnswer(sql("SELECT ceil(0.0001) FROM tb"), Row(1))
+      checkAnswer(sql("SELECT floor(0.00123) FROM tb"), Row(0))
+      checkAnswer(sql("SELECT floor(0.00010) FROM tb"), Row(0))
+    }
+  }
+
   test("SPARK-12868: Allow adding jars from hdfs ") {
     val jarFromHdfs = "hdfs://doesnotmatter/test.jar"
     val jarFromInvalidFs = "fffs://doesnotmatter/test.jar"

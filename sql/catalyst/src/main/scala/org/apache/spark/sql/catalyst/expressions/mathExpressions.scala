@@ -227,7 +227,8 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType.bounded(precision - scale + 1, 0)
+      val boundedPrecision = if (precision < scale) 1 else precision - scale + 1
+      DecimalType.bounded(boundedPrecision, 0)
     case _ => LongType
   }
 
@@ -344,7 +345,8 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
-      DecimalType.bounded(precision - scale + 1, 0)
+      val boundedPrecision = if (precision < scale) 1 else precision - scale + 1
+      DecimalType.bounded(boundedPrecision, 0)
     case _ => LongType
   }
 
