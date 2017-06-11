@@ -15,43 +15,62 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml
+package org.apache.spark.ml.feature
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
-import scala.reflect.runtime.universe.{typeOf, TypeTag}
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.ml.FuncTransformer.FuncTransformerWriter
+import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.feature.FuncTransformer.FuncTransformerWriter
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types.DataType
 
 /**
  * :: DeveloperApi ::
- * A wrapper to allow easily creation of simple data manipulation for DataFrame.
+ * A wrapper to allow easily creation of simple data manipulation for DataFrame, such like
+ * conditional conversion(if...else...), type conversion, array indexing and many string ops.
  * Note that FuncTransformer supports serialization via scala ObjectOutputStream and may not
  * guarantee save/load compatibility between different scala version.
  */
 @DeveloperApi
 @Since("2.3.0")
-class FuncTransformer [IN, OUT: TypeTag] @Since("2.3.0") (
+class FuncTransformer [IN: TypeTag, OUT: TypeTag] @Since("2.3.0") (
     @Since("2.3.0") override val uid: String,
     @Since("2.3.0") val func: IN => OUT,
     @Since("2.3.0") val outputDataType: DataType
   ) extends UnaryTransformer[IN, OUT, FuncTransformer[IN, OUT]] with DefaultParamsWritable {
 
+  /**
+   * Creates a FuncTransformer with specific function and output data type.
+   * @param fx function which converts an input object to output object.
+   * @param outputDataType specific output data type
+   */
   @Since("2.3.0")
   def this(fx: IN => OUT, outputDataType: DataType) =
     this(Identifiable.randomUID("FuncTransformer"), fx, outputDataType)
 
+  /**
+   * Creates a FuncTransformer with specific function and automatically infer the output data type.
+   * If the output data type cannot be automatically inferred, an exception will be thrown.
+   * @param fx function which converts an input object to output object.
+   */
   @Since("2.3.0")
-  def this(fx: IN => OUT) =
-    this(Identifiable.randomUID("FuncTransformer"), fx,
-      CatalystSqlParser.parseDataType(typeOf[OUT].typeSymbol.name.decodedName.toString))
+  def this(fx: IN => OUT) = this(Identifiable.randomUID("FuncTransformer"), fx,
+    try {
+      ScalaReflection.schemaFor[OUT].dataType
+    } catch {
+      case _: UnsupportedOperationException => throw new UnsupportedOperationException(
+        s"FuncTransformer outputDataType cannot be automatically inferred, please try" +
+          s" the constructor with specific outputDataType")
+    }
+   )
 
   setDefault(inputCol -> "input", outputCol -> "output")
 
@@ -61,6 +80,23 @@ class FuncTransformer [IN, OUT: TypeTag] @Since("2.3.0") (
   @Since("2.3.0")
   override def write: MLWriter = new FuncTransformerWriter(
     this.asInstanceOf[FuncTransformer[Nothing, Nothing]])
+
+  @Since("2.3.0")
+  override def copy(extra: ParamMap): FuncTransformer[IN, OUT] = {
+    copyValues(new FuncTransformer(uid, func, outputDataType), extra)
+  }
+
+  override protected def validateInputType(inputType: DataType): Unit = {
+    try {
+      val funcINType = ScalaReflection.schemaFor[IN].dataType
+      require(inputType.equals(funcINType),
+        s"$uid only accept input type $funcINType but got $inputType.")
+    } catch {
+      case _: UnsupportedOperationException =>
+        logWarning(s"FuncTransformer input Type cannot be automatically inferred," +
+          s"Type check omitted for $uid")
+    }
+  }
 }
 
 /**

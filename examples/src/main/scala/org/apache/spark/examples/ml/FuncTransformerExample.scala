@@ -18,15 +18,12 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.ml.{FuncTransformer, Pipeline, PipelineModel}
+import org.apache.spark.ml.feature.FuncTransformer
 // $example off$
 import org.apache.spark.sql.SparkSession
-// $example on$
-import org.apache.spark.util.Utils
-// $example off$
 
 /**
- * An example demonstrating creating a custom [[org.apache.spark.ml.FuncTransformer]].
+ * An example demonstrating creating a FuncTransformer.
  *
  * Run with
  * {{{
@@ -35,7 +32,6 @@ import org.apache.spark.util.Utils
  */
 object FuncTransformerExample {
 
-  // $example on$
   def main(args: Array[String]) {
     val spark = SparkSession
       .builder()
