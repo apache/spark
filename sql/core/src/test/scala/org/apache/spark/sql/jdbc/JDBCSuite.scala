@@ -907,7 +907,7 @@ class JDBCSuite extends SparkFunSuite
     assert(new JDBCOptions(CaseInsensitiveMap(parameters)).asConnectionProperties.isEmpty)
   }
 
-  test("SPARK-16848: jdbc API throws an exception for user specified schema") {
+  ignore("SPARK-16848: jdbc API throws an exception for user specified schema") {
     val schema = StructType(Seq(
       StructField("name", StringType, false), StructField("theid", IntegerType, false)))
     val parts = Array[String]("THEID < 2", "THEID >= 2")

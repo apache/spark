@@ -110,8 +110,8 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = if (!jdbcOptions.createTableColumnTypes.isEmpty) {
-    StructType.fromString(jdbcOptions.createTableColumnTypes.get)
+  override val schema: StructType = if (!jdbcOptions.customSchema.isEmpty) {
+    StructType.fromString(jdbcOptions.customSchema.get)
   } else {
     JDBCRDD.resolveTable(jdbcOptions)
   }
