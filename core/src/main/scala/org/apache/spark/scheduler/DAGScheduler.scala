@@ -172,7 +172,8 @@ class DAGScheduler(
 
   // For tracking failed nodes, we use the MapOutputTracker's epoch number, which is sent with
   // every task. When we detect a node failing, we note the current epoch number and failed
-  // executor, increment it for new tasks, and use this to ignore stray ShuffleMapTask results.
+  // executor or host, increment it for new tasks, and use this to ignore stray
+  // ShuffleMapTask results.
   //
   // TODO: Garbage collect information about failure epochs when we know there are no more
   //       stray messages to detect.
@@ -1349,7 +1350,14 @@ class DAGScheduler(
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
-            handleExecutorLost(bmAddress.executorId, filesLost = true, Some(task.epoch))
+            if (env.blockManager.externalShuffleServiceEnabled) {
+              val currentEpoch = Some(task.epoch).getOrElse(mapOutputTracker.getEpoch)
+              removeExecutor(bmAddress.executorId, currentEpoch)
+              handleExternalShuffleFailure(bmAddress.host, currentEpoch)
+            }
+            else {
+              handleExecutorLost(bmAddress.executorId, filesLost = true, Some(task.epoch))
+            }
           }
         }
 
@@ -1370,6 +1378,30 @@ class DAGScheduler(
   }
 
   /**
+   * Removes an executor from the driver endpoint.
+   *
+   * @param execId id of the executor to be removed
+   * @param currentEpoch epoch during which the executor failure was caught to avoid allowing
+   *                     stray failures from possibly retriggering the detection of an
+   *                     executor as lost.
+   *
+   * @return boolean value indicating whether the executor was removed or not
+   */
+  private[scheduler] def removeExecutor(execId: String, currentEpoch: Long): Boolean = {
+    if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
+      failedEpoch(execId) = currentEpoch
+      logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
+      blockManagerMaster.removeExecutor(execId)
+      true
+    }
+    else {
+      logDebug("Additional executor lost message for " + execId +
+        "(epoch " + currentEpoch + ")")
+      false
+    }
+  }
+
+  /**
    * Responds to an executor being lost. This is called inside the event loop, so it assumes it can
    * modify the scheduler's internal state. Use executorLost() to post a loss event from outside.
    *
@@ -1386,37 +1418,75 @@ class DAGScheduler(
       filesLost: Boolean,
       maybeEpoch: Option[Long] = None) {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
-    if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
-      failedEpoch(execId) = currentEpoch
-      logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
-      blockManagerMaster.removeExecutor(execId)
-
-      if (filesLost || !env.blockManager.externalShuffleServiceEnabled) {
-        logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
-        // TODO: This will be really slow if we keep accumulating shuffle map stages
-        for ((shuffleId, stage) <- shuffleIdToMapStage) {
-          stage.removeOutputsOnExecutor(execId)
-          mapOutputTracker.registerMapOutputs(
-            shuffleId,
-            stage.outputLocInMapOutputTrackerFormat(),
-            changeEpoch = true)
-        }
-        if (shuffleIdToMapStage.isEmpty) {
-          mapOutputTracker.incrementEpoch()
-        }
-        clearCacheLocs()
-      }
-    } else {
-      logDebug("Additional executor lost message for " + execId +
-               "(epoch " + currentEpoch + ")")
+    val executorRemoved = removeExecutor(execId, currentEpoch)
+    if (executorRemoved && (filesLost || !env.blockManager.externalShuffleServiceEnabled)) {
+      handleInternalShuffleFailure(execId, currentEpoch)
     }
+  }
+
+  /**
+   * Responds to an internal shuffle becoming unavailable for an executor.
+   *
+   * We will assume that we've lost all the shuffle blocks for the executor.
+   *
+   * @param execId id of the executor for which internal shuffle is unavailable
+   * @param currentEpoch epoch during which the failure was caught.
+   */
+  private[scheduler] def handleInternalShuffleFailure(execId: String, currentEpoch: Long): Unit = {
+    logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
+    cleanShuffleOutputs((stage: ShuffleMapStage) => {
+      stage.removeOutputsOnExecutor(execId)
+    })
+  }
+
+  /**
+   * Responds to an external shuffle service becoming unavailable on a host.
+   *
+   * We will assume that we've lost all the shuffle blocks on that host if FetchFailed occurred
+   * while external shuffle is being used.
+   *
+   * @param host address of the host on which external shuffle is unavailable
+   * @param currentEpoch epoch during which the failure was caught. This is passed to avoid
+   *                     allowing stray fetch failures from possibly retriggering the detection
+   *                     of external shuffle service becoming unavailable.
+   */
+  private[scheduler] def  handleExternalShuffleFailure(host: String, currentEpoch: Long): Unit = {
+    if (!failedEpoch.contains(host) || failedEpoch(host) < currentEpoch) {
+      failedEpoch(host) = currentEpoch
+      logInfo("Shuffle files lost for host: %s (epoch %d)".format(host, currentEpoch))
+      cleanShuffleOutputs((stage: ShuffleMapStage) => {
+        stage.removeOutputsOnHost(host)
+      })
+    } else {
+      logDebug(("Additional Shuffle files " +
+        "lost message for host: %s (epoch %d)").format(host, currentEpoch))
+    }
+  }
+
+  private[scheduler] def cleanShuffleOutputs(outputsCleaner: ShuffleMapStage => _): Unit = {
+    // TODO: This will be really slow if we keep accumulating shuffle map stages
+    for ((shuffleId, stage) <- shuffleIdToMapStage) {
+      outputsCleaner(stage)
+      mapOutputTracker.registerMapOutputs(
+        shuffleId,
+        stage.outputLocInMapOutputTrackerFormat(),
+        changeEpoch = true)
+    }
+    if (shuffleIdToMapStage.isEmpty) {
+      mapOutputTracker.incrementEpoch()
+    }
+    clearCacheLocs()
   }
 
   private[scheduler] def handleExecutorAdded(execId: String, host: String) {
     // remove from failedEpoch(execId) ?
     if (failedEpoch.contains(execId)) {
-      logInfo("Host added was in lost list earlier: " + host)
+      logInfo("Executor %s added was in lost list earlier.".format(execId))
       failedEpoch -= execId
+    }
+
+    if (failedEpoch.contains(host)) {
+      failedEpoch -= host
     }
   }
 
