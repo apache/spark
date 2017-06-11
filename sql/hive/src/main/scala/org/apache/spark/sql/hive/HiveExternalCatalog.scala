@@ -527,7 +527,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   /**
    * Alter a table whose name that matches the one specified in `tableDefinition`,
-   * assuming the table exists.
+   * assuming the table exists. This method does not change the properties for data source and
+   * statistics.
    *
    * Note: As of now, this doesn't support altering table schema, partition column names and bucket
    * specification. We will ignore them even if users do specify different values for these fields.
