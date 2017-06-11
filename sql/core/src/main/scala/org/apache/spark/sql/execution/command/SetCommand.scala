@@ -163,10 +163,10 @@ case class ResetCommand(key: Option[String]) extends RunnableCommand with Loggin
       }
       runFunc
 
-    // (In Hive, "UNSET key" clear a sepecific properties.)
+    // (In Hive, "RESET key" clear a specific property.)
     case Some(key) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.sessionState.conf.unsetConf(key)
+        sparkSession.conf.unset(key)
       }
       runFunc
   }
