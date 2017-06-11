@@ -498,8 +498,6 @@ class ALSSuite
     val itemFactorsNeg = modelWithNeg.itemFactors
     val userFactorsZero = modelWithZero.userFactors
     val itemFactorsZero = modelWithZero.itemFactors
-    userFactorsNeg.collect().foreach(arr => logInfo(s"implicit test " + arr.mkString(" ")))
-    userFactorsZero.collect().foreach(arr => logInfo(s"implicit test " + arr.mkString(" ")))
     assert(userFactorsNeg.intersect(userFactorsZero).count() == 0)
     assert(itemFactorsNeg.intersect(itemFactorsZero).count() == 0)
   }

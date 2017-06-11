@@ -345,13 +345,14 @@ object SQLConf {
     .createWithDefault(true)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = buildConf("spark.sql.columnNameOfCorruptRecord")
-    .doc("The name of internal column for storing raw/un-parsed JSON records that fail to parse.")
+    .doc("The name of internal column for storing raw/un-parsed JSON and CSV records that fail " +
+      "to parse.")
     .stringConf
     .createWithDefault("_corrupt_record")
 
   val BROADCAST_TIMEOUT = buildConf("spark.sql.broadcastTimeout")
     .doc("Timeout in seconds for the broadcast wait time in broadcast joins.")
-    .intConf
+    .timeConf(TimeUnit.SECONDS)
     .createWithDefault(5 * 60)
 
   // This is only used for the thriftserver
@@ -535,8 +536,7 @@ object SQLConf {
 
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
-      "encountering corrupted or non-existing and contents that have been read will still be " +
-      "returned.")
+      "encountering corrupted files and the contents that have been read will still be returned.")
     .booleanConf
     .createWithDefault(false)
 
@@ -549,6 +549,12 @@ object SQLConf {
   val EXCHANGE_REUSE_ENABLED = buildConf("spark.sql.exchange.reuse")
     .internal()
     .doc("When true, the planner will try to find out duplicated exchanges and re-use them.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val SUBQUERY_REUSE_ENABLED = buildConf("spark.sql.subquery.reuse")
+    .internal()
+    .doc("When true, the planner will try to find out duplicated subqueries and re-use them.")
     .booleanConf
     .createWithDefault(true)
 
@@ -932,6 +938,8 @@ class SQLConf extends Serializable with Logging {
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
+  def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
+
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
@@ -983,7 +991,7 @@ class SQLConf extends Serializable with Logging {
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
-  def broadcastTimeout: Int = getConf(BROADCAST_TIMEOUT)
+  def broadcastTimeout: Long = getConf(BROADCAST_TIMEOUT)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 
