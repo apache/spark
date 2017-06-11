@@ -61,7 +61,7 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
       boolean authEnabled) {
-    super(conf, secretKeyHolder, authEnabled);
+    super(conf, secretKeyHolder, authEnabled, 5000);
   }
 
   public void registerDriverWithShuffleService(

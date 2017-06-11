@@ -28,6 +28,7 @@ import scala.concurrent.Future
 import scala.language.{implicitConversions, postfixOps}
 import scala.reflect.ClassTag
 
+import org.apache.commons.lang3.RandomUtils
 import org.mockito.{Matchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
@@ -1286,12 +1287,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("SPARK-20640: Shuffle registration timeout and maxAttempts conf are working") {
-    val shufflePort = 10000
     val tryAgainMsg = "test_spark_20640_try_again"
-    conf.set("spark.shuffle.service.enabled", "true")
-    conf.set("spark.shuffle.service.port", shufflePort.toString)
     // a server which delays response 50ms and must try twice for success.
-    def newShuffleServer(): TransportServer = {
+    def newShuffleServer(port: Int): (TransportServer, Int) = {
       val attempts = new mutable.HashMap[String, Int]()
       val handler = new NoOpRpcHandler {
         override def receive(client: TransportClient, message: ByteBuffer,
@@ -1313,10 +1311,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
       val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 0)
       val transCtx = new TransportContext(transConf, handler, true)
-      transCtx.createServer(shufflePort, Nil.asInstanceOf[Seq[TransportServerBootstrap]].asJava)
+      (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
     }
-    newShuffleServer()
+    val candidatePort = RandomUtils.nextInt(1024, 65536)
+    val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
+      newShuffleServer, conf, "ShuffleServer")
 
+    conf.set("spark.shuffle.service.enabled", "true")
+    conf.set("spark.shuffle.service.port", shufflePort.toString)
     conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
     conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
     var e = intercept[SparkException]{
@@ -1334,6 +1336,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
     conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "2")
     makeBlockManager(8000, "executor3")
+    server.close()
   }
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {

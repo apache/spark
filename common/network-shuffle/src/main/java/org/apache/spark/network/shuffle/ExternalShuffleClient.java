@@ -69,13 +69,6 @@ public class ExternalShuffleClient extends ShuffleClient {
     this.registrationTimeoutMilli = registrationTimeoutMilli;
   }
 
-  public ExternalShuffleClient(
-      TransportConf conf,
-      SecretKeyHolder secretKeyHolder,
-      boolean authEnabled) {
-    this(conf, secretKeyHolder, authEnabled, 5000);
-  }
-
   protected void checkInit() {
     assert appId != null : "Called before init()";
   }

@@ -133,7 +133,7 @@ public class ExternalShuffleIntegrationSuite {
 
     final Semaphore requestsRemaining = new Semaphore(0);
 
-    ExternalShuffleClient client = new ExternalShuffleClient(clientConf, null, false);
+    ExternalShuffleClient client = new ExternalShuffleClient(clientConf, null, false, 5000);
     client.init(APP_ID);
     client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
       new BlockFetchingListener() {
@@ -242,7 +242,7 @@ public class ExternalShuffleIntegrationSuite {
 
   private static void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
       throws IOException, InterruptedException {
-    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false);
+    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false, 5000);
     client.init(APP_ID);
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),
       executorId, executorInfo);
