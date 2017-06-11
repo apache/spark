@@ -21,7 +21,7 @@ library(SparkR)
 # Turn all warnings into errors
 options("warn" = 2)
 
-if (is_windows()) {
+if (.Platform$OS.type == "windows") {
   Sys.setenv(TZ = "GMT")
 }
 
