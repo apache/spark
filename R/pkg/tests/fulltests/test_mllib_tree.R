@@ -28,8 +28,6 @@ absoluteSparkPath <- function(x) {
 }
 
 test_that("spark.gbt", {
-  skip_on_cran()
-
   # regression
   data <- suppressWarnings(createDataFrame(longley))
   model <- spark.gbt(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16, seed = 123)
@@ -224,8 +222,6 @@ test_that("spark.randomForest", {
 })
 
 test_that("spark.decisionTree", {
-  skip_on_cran()
-
   # regression
   data <- suppressWarnings(createDataFrame(longley))
   model <- spark.decisionTree(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16)

@@ -28,8 +28,6 @@ absoluteSparkPath <- function(x) {
 }
 
 test_that("spark.svmLinear", {
-  skip_on_cran()
-
   df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
   model <- spark.svmLinear(training,  Species ~ ., regParam = 0.01, maxIter = 10)
@@ -228,8 +226,6 @@ test_that("spark.logit", {
 })
 
 test_that("spark.mlp", {
-  skip_on_cran()
-
   df <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                 source = "libsvm")
   model <- spark.mlp(df, label ~ features, blockSize = 128, layers = c(4, 5, 4, 3),
