@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
@@ -339,14 +340,22 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       val wordVectors = instance.wordVectors.getVectors
       val dataSeq = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }
       val dataPath = new Path(path, "data").toString
+      val numPartitions = Word2VecModelWriter.calculateNumberOfPartitions(
+        sc, instance.wordVectors.wordIndex.size, instance.getVectorSize)
       sparkSession.createDataFrame(dataSeq)
-        .repartition(calculateNumberOfPartitions)
+        .repartition(numPartitions)
         .write
         .parquet(dataPath)
     }
+  }
 
-    def calculateNumberOfPartitions(): Int = {
-      val floatSize = 4
+  private[feature]
+  object Word2VecModelWriter {
+    def calculateNumberOfPartitions(
+        sc: SparkContext,
+        numWords: Int,
+        vectorSize: Int): Int = {
+      val floatSize = 4.0  // Use Double to help avoid overflow
       val averageWordSize = 15
       // [SPARK-11994] - We want to partition the model in partitions smaller than
       // spark.kryoserializer.buffer.max
@@ -355,8 +364,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       // Calculate the approximate size of the model.
       // Assuming an average word size of 15 bytes, the formula is:
       // (floatSize * vectorSize + 15) * numWords
-      val numWords = instance.wordVectors.wordIndex.size
-      val approximateSizeInBytes = (floatSize * instance.getVectorSize + averageWordSize) * numWords
+      val approximateSizeInBytes = (floatSize * vectorSize + averageWordSize) * numWords
       ((approximateSizeInBytes / bufferSizeInBytes) + 1).toInt
     }
   }

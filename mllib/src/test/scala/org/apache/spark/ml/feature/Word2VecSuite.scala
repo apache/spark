@@ -188,6 +188,15 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(math.abs(similarity(5) - similarityLarger(5) / similarity(5)) > 1E-5)
   }
 
+  test("Word2Vec read/write numPartitions calculation") {
+    val tinyModelNumPartitions = Word2VecModel.Word2VecModelWriter.calculateNumberOfPartitions(
+      sc, numWords = 10, vectorSize = 5)
+    assert(tinyModelNumPartitions === 1)
+    val mediumModelNumPartitions = Word2VecModel.Word2VecModelWriter.calculateNumberOfPartitions(
+      sc, numWords = 1000000, vectorSize = 5000)
+    assert(mediumModelNumPartitions > 1)
+  }
+
   test("Word2Vec read/write") {
     val t = new Word2Vec()
       .setInputCol("myInputCol")
