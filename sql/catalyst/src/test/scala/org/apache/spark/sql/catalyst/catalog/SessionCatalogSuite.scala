@@ -1209,7 +1209,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("func1")))
 
       // Returns false when the function is built-in or hive
-      assert(FunctionRegistry.builtin.functionExists("sum"))
+      assert(FunctionRegistry.builtin.functionExists(FunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("histogram_numeric")))
     }
