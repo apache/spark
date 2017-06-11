@@ -235,17 +235,20 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("describe table column") {
-    assertEqual("describe table t col",
+    assertEqual("DESCRIBE t col",
       DescribeColumnCommand(
         TableIdentifier("t"), "col", isFormatted = false))
-    assertEqual("describe table extended t col",
+    assertEqual("DESCRIBE TABLE t col",
       DescribeColumnCommand(
         TableIdentifier("t"), "col", isFormatted = false))
-    assertEqual("describe table formatted t col",
+    assertEqual("DESCRIBE TABLE EXTENDED t col",
+      DescribeColumnCommand(
+        TableIdentifier("t"), "col", isFormatted = false))
+    assertEqual("DESCRIBE TABLE FORMATTED t col",
       DescribeColumnCommand(
         TableIdentifier("t"), "col", isFormatted = true))
 
-    intercept("describe table t partition (ds='1970-01-01') col",
+    intercept("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col",
       "DESC TABLE COLUMN for a specific partition is not supported")
   }
 

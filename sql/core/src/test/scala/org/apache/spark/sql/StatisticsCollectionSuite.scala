@@ -174,10 +174,10 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val columns = stats.keys.toSeq
       val df = data.toDF(columns :+ "carray" : _*)
       df.write.saveAsTable("desc_col_statsTable")
-      sql(s"analyze table desc_col_statsTable compute statistics for columns " +
+      sql(s"ANALYZE TABLE desc_col_statsTable COMPUTE STATISTICS FOR COLUMNS " +
         s"${columns.mkString(", ")}")
       stats.zip(df.schema).foreach { case ((colName, columnStat), structField) =>
-        checkAnswer(sql(s"desc formatted desc_col_statsTable ${structField.name}"),
+        checkAnswer(sql(s"DESC FORMATTED desc_col_statsTable ${structField.name}"),
           Row(colName, structField.dataType.simpleString,
             columnStat.min.map(_.toString).orNull,
             columnStat.max.map(_.toString).orNull,
