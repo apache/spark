@@ -49,7 +49,7 @@ test_that("spark.svmLinear", {
   expect_equal(sort(as.list(take(select(prediction, "prediction"), 10))[[1]]), expected)
 
   # Test model save and load
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-svm-linear", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -129,7 +129,7 @@ test_that("spark.logit", {
   expect_true(all(abs(setosaCoefs - setosaCoefs) < 0.1))
 
   # Test model save and load
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-logit", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -246,7 +246,7 @@ test_that("spark.mlp", {
   expect_equal(head(mlpPredictions$prediction, 6), c("1.0", "0.0", "0.0", "0.0", "0.0", "0.0"))
 
   # Test model save/load
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-mlp", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -359,7 +359,7 @@ test_that("spark.naiveBayes", {
                                "Yes", "Yes", "No", "No"))
 
   # Test model save/load
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-naiveBayes", fileext = ".tmp")
     write.ml(m, modelPath)
     expect_error(write.ml(m, modelPath))

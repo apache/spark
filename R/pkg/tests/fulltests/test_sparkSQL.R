@@ -61,7 +61,7 @@ unsetHiveContext <- function() {
 # Tests for SparkSQL functions in SparkR
 
 filesBefore <- list.files(path = sparkRDir, all.files = TRUE)
-sparkSession <- if (not_cran_or_windows_with_hadoop()) {
+sparkSession <- if (windows_with_hadoop()) {
     sparkR.session(master = sparkRTestMaster)
   } else {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
@@ -100,7 +100,7 @@ mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}
 mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesMapType, mapTypeJsonPath)
 
-if (.Platform$OS.type == "windows") {
+if (is_windows()) {
   Sys.setenv(TZ = "GMT")
 }
 
@@ -320,7 +320,7 @@ test_that("createDataFrame uses files for large objects", {
 })
 
 test_that("read/write csv as DataFrame", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
     mockLinesCsv <- c("year,make,model,comment,blank",
                      "\"2012\",\"Tesla\",\"S\",\"No comment\",",
@@ -589,7 +589,7 @@ test_that("Collect DataFrame with complex types", {
 })
 
 test_that("read/write json files", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     # Test read.df
     df <- read.df(jsonPath, "json")
     expect_is(df, "SparkDataFrame")
@@ -720,7 +720,7 @@ test_that("test cache, uncache and clearCache", {
 })
 
 test_that("insertInto() on a registered table", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     df <- read.df(jsonPath, "json")
     write.df(df, parquetPath, "parquet", "overwrite")
     dfParquet <- read.df(parquetPath, "parquet")
@@ -928,7 +928,7 @@ test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", 
 })
 
 test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     checkpointDir <- file.path(tempdir(), "cproot")
     expect_true(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
 
@@ -1305,7 +1305,7 @@ test_that("column calculation", {
 })
 
 test_that("test HiveContext", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     setHiveContext(sc)
 
     schema <- structType(structField("name", "string"), structField("age", "integer"),
@@ -2394,7 +2394,7 @@ test_that("read/write ORC files - compression option", {
 })
 
 test_that("read/write Parquet files", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     df <- read.df(jsonPath, "json")
     # Test write.df and read.df
     write.df(df, parquetPath, "parquet", mode = "overwrite")

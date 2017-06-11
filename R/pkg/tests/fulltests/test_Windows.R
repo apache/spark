@@ -17,7 +17,7 @@
 context("Windows-specific tests")
 
 test_that("sparkJars tag in SparkContext", {
-  if (.Platform$OS.type != "windows") {
+  if (!is_windows()) {
     skip("This test is only for Windows, skipped")
   }
 

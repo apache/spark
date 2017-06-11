@@ -24,7 +24,7 @@ context("Structured Streaming")
 sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 jsonSubDir <- file.path("sparkr-test", "json", "")
-if (.Platform$OS.type == "windows") {
+if (is_windows()) {
   # file.path removes the empty separator on Windows, adds it back
   jsonSubDir <- paste0(jsonSubDir, .Platform$file.sep)
 }
