@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * :: DeveloperApi ::
- * A wrapper to allow easily creation of simple data manipulation for DataFrame, such like
+ * FuncTransformer allows easily creation of a custom feature transformer for DataFrame, such like
  * conditional conversion(if...else...), type conversion, array indexing and many string ops.
  * Note that FuncTransformer supports serialization via scala ObjectOutputStream and may not
  * guarantee save/load compatibility between different scala version.
@@ -48,7 +48,7 @@ class FuncTransformer [IN: TypeTag, OUT: TypeTag] @Since("2.3.0") (
   ) extends UnaryTransformer[IN, OUT, FuncTransformer[IN, OUT]] with DefaultParamsWritable {
 
   /**
-   * Creates a FuncTransformer with specific function and output data type.
+   * Create a FuncTransformer with specific function and output data type.
    * @param fx function which converts an input object to output object.
    * @param outputDataType specific output data type
    */
@@ -57,7 +57,7 @@ class FuncTransformer [IN: TypeTag, OUT: TypeTag] @Since("2.3.0") (
     this(Identifiable.randomUID("FuncTransformer"), fx, outputDataType)
 
   /**
-   * Creates a FuncTransformer with specific function and automatically infer the output data type.
+   * Create a FuncTransformer with specific function and automatically infer the output data type.
    * If the output data type cannot be automatically inferred, an exception will be thrown.
    * @param fx function which converts an input object to output object.
    */
@@ -93,6 +93,7 @@ class FuncTransformer [IN: TypeTag, OUT: TypeTag] @Since("2.3.0") (
         s"$uid only accept input type $funcINType but got $inputType.")
     } catch {
       case _: UnsupportedOperationException =>
+        // cannot infer the output data type, log warning but do not block transform
         logWarning(s"FuncTransformer input Type cannot be automatically inferred," +
           s"Type check omitted for $uid")
     }

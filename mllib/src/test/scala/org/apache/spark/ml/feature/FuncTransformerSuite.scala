@@ -89,18 +89,17 @@ class FuncTransformerSuite
   }
 
   test("FuncTransformer in pipeline") {
-    val df = Seq(0.0, 1.0, 2.0, 3.0).toDF("input")
-    val labelConverter = new FuncTransformer((i: Double) => if (i >= 1) 1.0 else 0.0)
-      .setInputCol("input").setOutputCol("binary")
+    val df = Seq(0.0, 1.0, 2.0, 4.0).toDF("input")
     val doubleToVector = new FuncTransformer((i: Double) => Vectors.dense(i))
-      .setInputCol("binary").setOutputCol("vectors")
-    val vectorIndexer = new FuncTransformer((v: Vector) => v(0))
-      .setInputCol("vectors").setOutputCol("output")
-    val pipeline = new Pipeline().setStages(Array(labelConverter, doubleToVector, vectorIndexer))
+      .setInputCol("input").setOutputCol("vectors")
+    val scaler = new MinMaxScaler()
+      .setInputCol("vectors").setOutputCol("scaled")
+    val vecToDouble = new  FuncTransformer((v: Vector) => v(0))
+      .setInputCol("scaled").setOutputCol("output")
+    val pipeline = new Pipeline()
+      .setStages(Array(doubleToVector, scaler, vecToDouble))
     val pipelineModel = pipeline.fit(df)
-    pipelineModel.transform(df).show()
-
-    val expectDF = Seq(0.0, 1.0, 1.0, 1.0).toDF("output")
+    val expectDF = Seq(0.0, 0.25, 0.5, 1.0).toDF("output")
     assert(pipelineModel.transform(df).select("output").collect().toSet.equals(
       expectDF.collect().toSet))
   }
