@@ -24,8 +24,6 @@ sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", 
 mockFile <- c("Spark is pretty.", "Spark is awesome.")
 
 test_that("textFile() on a local file returns an RDD", {
-  skip_on_cran()
-
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
@@ -38,8 +36,6 @@ test_that("textFile() on a local file returns an RDD", {
 })
 
 test_that("textFile() followed by a collect() returns the same content", {
-  skip_on_cran()
-
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
@@ -50,8 +46,6 @@ test_that("textFile() followed by a collect() returns the same content", {
 })
 
 test_that("textFile() word count works as expected", {
-  skip_on_cran()
-
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
@@ -70,8 +64,6 @@ test_that("textFile() word count works as expected", {
 })
 
 test_that("several transformations on RDD created by textFile()", {
-  skip_on_cran()
-
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
@@ -86,8 +78,6 @@ test_that("several transformations on RDD created by textFile()", {
 })
 
 test_that("textFile() followed by a saveAsTextFile() returns the same content", {
-  skip_on_cran()
-
   fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName1)
@@ -102,8 +92,6 @@ test_that("textFile() followed by a saveAsTextFile() returns the same content", 
 })
 
 test_that("saveAsTextFile() on a parallelized list works as expected", {
-  skip_on_cran()
-
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   l <- list(1, 2, 3)
   rdd <- parallelize(sc, l, 1L)
@@ -115,8 +103,6 @@ test_that("saveAsTextFile() on a parallelized list works as expected", {
 })
 
 test_that("textFile() and saveAsTextFile() word count works as expected", {
-  skip_on_cran()
-
   fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName1)
@@ -142,8 +128,6 @@ test_that("textFile() and saveAsTextFile() word count works as expected", {
 })
 
 test_that("textFile() on multiple paths", {
-  skip_on_cran()
-
   fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines("Spark is pretty.", fileName1)
@@ -157,8 +141,6 @@ test_that("textFile() on multiple paths", {
 })
 
 test_that("Pipelined operations on RDDs created using textFile", {
-  skip_on_cran()
-
   fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 

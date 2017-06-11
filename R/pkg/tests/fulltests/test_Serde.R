@@ -20,8 +20,6 @@ context("SerDe functionality")
 sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 test_that("SerDe of primitive types", {
-  skip_on_cran()
-
   x <- callJStatic("SparkRHandler", "echo", 1L)
   expect_equal(x, 1L)
   expect_equal(class(x), "integer")
@@ -40,8 +38,6 @@ test_that("SerDe of primitive types", {
 })
 
 test_that("SerDe of list of primitive types", {
-  skip_on_cran()
-
   x <- list(1L, 2L, 3L)
   y <- callJStatic("SparkRHandler", "echo", x)
   expect_equal(x, y)
@@ -69,8 +65,6 @@ test_that("SerDe of list of primitive types", {
 })
 
 test_that("SerDe of list of lists", {
-  skip_on_cran()
-
   x <- list(list(1L, 2L, 3L), list(1, 2, 3),
             list(TRUE, FALSE), list("a", "b", "c"))
   y <- callJStatic("SparkRHandler", "echo", x)

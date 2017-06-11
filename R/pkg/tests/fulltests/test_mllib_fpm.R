@@ -62,7 +62,7 @@ test_that("spark.fpGrowth", {
 
   expect_equivalent(expected_predictions, collect(predict(model, new_data)))
 
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-fpm", fileext = ".tmp")
     write.ml(model, modelPath, overwrite = TRUE)
     loaded_model <- read.ml(modelPath)

@@ -37,7 +37,7 @@ test_that("spark.als", {
   tolerance = 1e-4)
 
   # Test model save/load
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-als", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
