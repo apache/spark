@@ -168,9 +168,7 @@ object InMemoryFileIndex extends Logging {
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      return paths.map { path =>
-        (path, listLeafFiles(path, hadoopConf, filter, Some(sparkSession)))
-      }
+      return listLeafFiles(paths, hadoopConf, filter, Some(sparkSession))
     }
 
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
@@ -190,9 +188,8 @@ object InMemoryFileIndex extends Logging {
       .parallelize(serializedPaths, numParallelism)
       .mapPartitions { pathStrings =>
         val hadoopConf = serializableConfiguration.value
-        pathStrings.map(new Path(_)).toSeq.map { path =>
-          (path, listLeafFiles(path, hadoopConf, filter, None))
-        }.iterator
+        val paths = pathStrings.map(new Path(_)).toSeq
+        listLeafFiles(paths, hadoopConf, filter, None).iterator
       }.map { case (path, statuses) =>
       val serializableStatuses = statuses.map { status =>
         // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
@@ -248,60 +245,93 @@ object InMemoryFileIndex extends Logging {
    * @return all children of path that match the specified filter.
    */
   private def listLeafFiles(
-      path: Path,
+      paths: Seq[Path],
       hadoopConf: Configuration,
       filter: PathFilter,
-      sessionOpt: Option[SparkSession]): Seq[FileStatus] = {
-    logTrace(s"Listing $path")
-    val fs = path.getFileSystem(hadoopConf)
+      sessionOpt: Option[SparkSession]): Seq[(Path, Seq[FileStatus])] = {
+    logTrace(s"Listing ${paths.mkString(", ")}")
 
     // [SPARK-17599] Prevent InMemoryFileIndex from failing if path doesn't exist
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.
-    val statuses = try fs.listStatus(path) catch {
-      case _: FileNotFoundException =>
-        logWarning(s"The directory $path was not found. Was it deleted very recently?")
-        Array.empty[FileStatus]
+    val statuses = paths.flatMap { path =>
+      try {
+        val fs = path.getFileSystem(hadoopConf)
+        Some(path -> fs.listStatus(path))
+      } catch {
+        case _: FileNotFoundException =>
+          logWarning(s"The directory $paths was not found. Was it deleted very recently?")
+          None
+      }
     }
 
-    val filteredStatuses = statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
+    val filteredStatuses = statuses.flatMap { case (path, fStatuses) =>
+      val filtered = fStatuses.filterNot(status => shouldFilterOut(status.getPath.getName))
+        if (filtered.isEmpty) {
+          None
+        } else {
+          Some(path -> filtered)
+        }
+    }
 
     val allLeafStatuses = {
-      val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
-      val nestedFiles: Seq[FileStatus] = sessionOpt match {
-        case Some(session) =>
-          bulkListLeafFiles(dirs.map(_.getPath), hadoopConf, filter, session).flatMap(_._2)
-        case _ =>
-          dirs.flatMap(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
+      val (dirs, topLevelFiles) = filteredStatuses.flatMap { case (path, fStatuses) =>
+        fStatuses.map {f => path -> f }
+      }.partition { case (_, fStatus) => fStatus.isDirectory }
+      val pathsToList = dirs.map { case (_, fStatus) => fStatus.getPath }
+      val nestedFiles = if (pathsToList.nonEmpty) {
+        sessionOpt match {
+          case Some(session) =>
+            bulkListLeafFiles(pathsToList, hadoopConf, filter, session)
+          case _ =>
+            listLeafFiles(pathsToList, hadoopConf, filter, sessionOpt)
+        }
+      } else Seq.empty[(Path, Seq[FileStatus])]
+      val allFiles = topLevelFiles
+        .map { case (path, fStatus) => path -> Seq(fStatus) } ++ nestedFiles
+      allFiles.flatMap { case (path, fStatuses) =>
+        val accepted = if (filter != null) {
+          fStatuses.filter(f => filter.accept(f.getPath))
+        } else {
+          fStatuses
+        }.filterNot(status => shouldFilterOut(status.getPath.getName))
+        if (accepted.nonEmpty) {
+          Some(path -> accepted)
+        } else {
+          None
+        }
       }
-      val allFiles = topLevelFiles ++ nestedFiles
-      if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
     }
 
-    allLeafStatuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
-      case f: LocatedFileStatus =>
-        f
+    allLeafStatuses.map { case (path, fStatuses) =>
+      val fs = path.getFileSystem(hadoopConf)
+      path -> fStatuses.map {
+        case f: LocatedFileStatus =>
+          f
 
-      // NOTE:
-      //
-      // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
-      //   operations, calling `getFileBlockLocations` does no harm here since these file system
-      //   implementations don't actually issue RPC for this method.
-      //
-      // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
-      //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
-      //   paths exceeds threshold.
-      case f =>
-        // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
-        // which is very slow on some file system (RawLocalFileSystem, which is launch a
-        // subprocess and parse the stdout).
-        val locations = fs.getFileBlockLocations(f, 0, f.getLen)
-        val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
-          f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
-        if (f.isSymlink) {
-          lfs.setSymlink(f.getSymlink)
-        }
-        lfs
+        // NOTE:
+        //
+        // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
+        //   operations, calling `getFileBlockLocations` does no harm here since these file system
+        //   implementations don't actually issue RPC for this method.
+        //
+        // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
+        //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
+        //   paths exceeds threshold.
+        case f =>
+          // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
+          // which is very slow on some file system (RawLocalFileSystem, which is launch a
+          // subprocess and parse the stdout).
+          val locations = fs.getFileBlockLocations(f, 0, f.getLen)
+          val lfs = new LocatedFileStatus(
+            f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
+            f.getModificationTime, 0, null, null, null, null, f.getPath, locations
+          )
+          if (f.isSymlink) {
+            lfs.setSymlink(f.getSymlink)
+          }
+          lfs
+      }
     }
   }
 
