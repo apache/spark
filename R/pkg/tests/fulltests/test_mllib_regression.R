@@ -23,8 +23,6 @@ context("MLlib regression algorithms, except for tree-based algorithms")
 sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
 
 test_that("formula of spark.glm", {
-  skip_on_cran()
-
   training <- suppressWarnings(createDataFrame(iris))
   # directly calling the spark API
   # dot minus and intercept vs native glm
@@ -197,8 +195,6 @@ test_that("spark.glm summary", {
 })
 
 test_that("spark.glm save/load", {
-  skip_on_cran()
-
   training <- suppressWarnings(createDataFrame(iris))
   m <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species)
   s <- summary(m)
@@ -226,8 +222,6 @@ test_that("spark.glm save/load", {
 })
 
 test_that("formula of glm", {
-  skip_on_cran()
-
   training <- suppressWarnings(createDataFrame(iris))
   # dot minus and intercept vs native glm
   model <- glm(Sepal_Width ~ . - Species + 0, data = training)
@@ -254,8 +248,6 @@ test_that("formula of glm", {
 })
 
 test_that("glm and predict", {
-  skip_on_cran()
-
   training <- suppressWarnings(createDataFrame(iris))
   # gaussian family
   model <- glm(Sepal_Width ~ Sepal_Length + Species, data = training)
@@ -300,8 +292,6 @@ test_that("glm and predict", {
 })
 
 test_that("glm summary", {
-  skip_on_cran()
-
   # gaussian family
   training <- suppressWarnings(createDataFrame(iris))
   stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training))
@@ -351,8 +341,6 @@ test_that("glm summary", {
 })
 
 test_that("glm save/load", {
-  skip_on_cran()
-
   training <- suppressWarnings(createDataFrame(iris))
   m <- glm(Sepal_Width ~ Sepal_Length + Species, data = training)
   s <- summary(m)
@@ -401,7 +389,7 @@ test_that("spark.isoreg", {
   expect_equal(predict_result$prediction, c(7.0, 7.0, 6.0, 5.5, 5.0, 4.0, 1.0))
 
   # Test model save/load
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-isoreg", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -452,7 +440,7 @@ test_that("spark.survreg", {
                2.390146, 2.891269, 2.891269), tolerance = 1e-4)
 
   # Test model save/load
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-survreg", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
