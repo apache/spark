@@ -28,8 +28,6 @@ absoluteSparkPath <- function(x) {
 }
 
 test_that("spark.gbt", {
-  skip_on_cran()
-
   # regression
   data <- suppressWarnings(createDataFrame(longley))
   model <- spark.gbt(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16, seed = 123)
@@ -46,7 +44,7 @@ test_that("spark.gbt", {
   expect_equal(stats$numFeatures, 6)
   expect_equal(length(stats$treeWeights), 20)
 
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-gbtRegression", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -80,7 +78,7 @@ test_that("spark.gbt", {
   expect_equal(length(grep("setosa", predictions)), 50)
   expect_equal(length(grep("versicolor", predictions)), 50)
 
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-gbtClassification", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -105,7 +103,7 @@ test_that("spark.gbt", {
   expect_equal(stats$maxDepth, 5)
 
   # spark.gbt classification can work on libsvm data
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     data <- read.df(absoluteSparkPath("data/mllib/sample_binary_classification_data.txt"),
                   source = "libsvm")
     model <- spark.gbt(data, label ~ features, "classification")
@@ -144,7 +142,7 @@ test_that("spark.randomForest", {
   expect_equal(stats$numTrees, 20)
   expect_equal(stats$maxDepth, 5)
 
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-randomForestRegression", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -178,7 +176,7 @@ test_that("spark.randomForest", {
   expect_equal(length(grep("setosa", predictions)), 50)
   expect_equal(length(grep("versicolor", predictions)), 50)
 
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     modelPath <- tempfile(pattern = "spark-randomForestClassification", fileext = ".tmp")
     write.ml(model, modelPath)
     expect_error(write.ml(model, modelPath))
@@ -215,7 +213,7 @@ test_that("spark.randomForest", {
   expect_equal(length(grep("2.0", predictions)), 50)
 
   # spark.randomForest classification can work on libsvm data
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                   source = "libsvm")
     model <- spark.randomForest(data, label ~ features, "classification")

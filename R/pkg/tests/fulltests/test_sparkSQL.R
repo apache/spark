@@ -61,7 +61,7 @@ unsetHiveContext <- function() {
 # Tests for SparkSQL functions in SparkR
 
 filesBefore <- list.files(path = sparkRDir, all.files = TRUE)
-sparkSession <- if (not_cran_or_windows_with_hadoop()) {
+sparkSession <- if (windows_with_hadoop()) {
     sparkR.session(master = sparkRTestMaster)
   } else {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
@@ -100,26 +100,20 @@ mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}
 mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesMapType, mapTypeJsonPath)
 
-if (.Platform$OS.type == "windows") {
+if (is_windows()) {
   Sys.setenv(TZ = "GMT")
 }
 
 test_that("calling sparkRSQL.init returns existing SQL context", {
-  skip_on_cran()
-
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   expect_equal(suppressWarnings(sparkRSQL.init(sc)), sqlContext)
 })
 
 test_that("calling sparkRSQL.init returns existing SparkSession", {
-  skip_on_cran()
-
   expect_equal(suppressWarnings(sparkRSQL.init(sc)), sparkSession)
 })
 
 test_that("calling sparkR.session returns existing SparkSession", {
-  skip_on_cran()
-
   expect_equal(sparkR.session(), sparkSession)
 })
 
@@ -208,8 +202,6 @@ test_that("structField type strings", {
 })
 
 test_that("create DataFrame from RDD", {
-  skip_on_cran()
-
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
   df <- createDataFrame(rdd, list("a", "b"))
   dfAsDF <- as.DataFrame(rdd, list("a", "b"))
@@ -307,8 +299,6 @@ test_that("create DataFrame from RDD", {
 })
 
 test_that("createDataFrame uses files for large objects", {
-  skip_on_cran()
-
   # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
   conf <- callJMethod(sparkSession, "conf")
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
@@ -321,7 +311,7 @@ test_that("createDataFrame uses files for large objects", {
 })
 
 test_that("read/write csv as DataFrame", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
     mockLinesCsv <- c("year,make,model,comment,blank",
                      "\"2012\",\"Tesla\",\"S\",\"No comment\",",
@@ -371,8 +361,6 @@ test_that("read/write csv as DataFrame", {
 })
 
 test_that("Support other types for options", {
-  skip_on_cran()
-
   csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
   mockLinesCsv <- c("year,make,model,comment,blank",
   "\"2012\",\"Tesla\",\"S\",\"No comment\",",
@@ -427,8 +415,6 @@ test_that("convert NAs to null type in DataFrames", {
 })
 
 test_that("toDF", {
-  skip_on_cran()
-
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
   df <- toDF(rdd, list("a", "b"))
   expect_is(df, "SparkDataFrame")
@@ -540,8 +526,6 @@ test_that("create DataFrame with complex types", {
 })
 
 test_that("create DataFrame from a data.frame with complex types", {
-  skip_on_cran()
-
   ldf <- data.frame(row.names = 1:2)
   ldf$a_list <- list(list(1, 2), list(3, 4))
   ldf$an_envir <- c(as.environment(list(a = 1, b = 2)), as.environment(list(c = 3)))
@@ -554,8 +538,6 @@ test_that("create DataFrame from a data.frame with complex types", {
 })
 
 test_that("Collect DataFrame with complex types", {
-  skip_on_cran()
-
   # ArrayType
   df <- read.json(complexTypeJsonPath)
   ldf <- collect(df)
@@ -598,7 +580,7 @@ test_that("Collect DataFrame with complex types", {
 })
 
 test_that("read/write json files", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     # Test read.df
     df <- read.df(jsonPath, "json")
     expect_is(df, "SparkDataFrame")
@@ -645,8 +627,6 @@ test_that("read/write json files", {
 })
 
 test_that("read/write json files - compression option", {
-  skip_on_cran()
-
   df <- read.df(jsonPath, "json")
 
   jsonPath <- tempfile(pattern = "jsonPath", fileext = ".json")
@@ -660,8 +640,6 @@ test_that("read/write json files - compression option", {
 })
 
 test_that("jsonRDD() on a RDD with json string", {
-  skip_on_cran()
-
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   rdd <- parallelize(sc, mockLines)
   expect_equal(countRDD(rdd), 3)
@@ -721,8 +699,6 @@ test_that(
 })
 
 test_that("test cache, uncache and clearCache", {
-  skip_on_cran()
-
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
   cacheTable("table1")
@@ -735,7 +711,7 @@ test_that("test cache, uncache and clearCache", {
 })
 
 test_that("insertInto() on a registered table", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     df <- read.df(jsonPath, "json")
     write.df(df, parquetPath, "parquet", "overwrite")
     dfParquet <- read.df(parquetPath, "parquet")
@@ -778,8 +754,6 @@ test_that("tableToDF() returns a new DataFrame", {
 })
 
 test_that("toRDD() returns an RRDD", {
-  skip_on_cran()
-
   df <- read.json(jsonPath)
   testRDD <- toRDD(df)
   expect_is(testRDD, "RDD")
@@ -787,8 +761,6 @@ test_that("toRDD() returns an RRDD", {
 })
 
 test_that("union on two RDDs created from DataFrames returns an RRDD", {
-  skip_on_cran()
-
   df <- read.json(jsonPath)
   RDD1 <- toRDD(df)
   RDD2 <- toRDD(df)
@@ -799,8 +771,6 @@ test_that("union on two RDDs created from DataFrames returns an RRDD", {
 })
 
 test_that("union on mixed serialization types correctly returns a byte RRDD", {
-  skip_on_cran()
-
   # Byte RDD
   nums <- 1:10
   rdd <- parallelize(sc, nums, 2L)
@@ -830,8 +800,6 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
 })
 
 test_that("objectFile() works with row serialization", {
-  skip_on_cran()
-
   objectPath <- tempfile(pattern = "spark-test", fileext = ".tmp")
   df <- read.json(jsonPath)
   dfRDD <- toRDD(df)
@@ -844,8 +812,6 @@ test_that("objectFile() works with row serialization", {
 })
 
 test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
-  skip_on_cran()
-
   df <- read.json(jsonPath)
   testRDD <- lapply(df, function(row) {
     row$newCol <- row$age + 5
@@ -914,8 +880,6 @@ test_that("collect() support Unicode characters", {
 })
 
 test_that("multiple pipeline transformations result in an RDD with the correct values", {
-  skip_on_cran()
-
   df <- read.json(jsonPath)
   first <- lapply(df, function(row) {
     row$age <- row$age + 5
@@ -955,7 +919,7 @@ test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", 
 })
 
 test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     checkpointDir <- file.path(tempdir(), "cproot")
     expect_true(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
 
@@ -1322,7 +1286,7 @@ test_that("column calculation", {
 })
 
 test_that("test HiveContext", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     setHiveContext(sc)
 
     schema <- structType(structField("name", "string"), structField("age", "integer"),
@@ -1374,8 +1338,6 @@ test_that("column operators", {
 })
 
 test_that("column functions", {
-  skip_on_cran()
-
   c <- column("a")
   c1 <- abs(c) + acos(c) + approxCountDistinct(c) + ascii(c) + asin(c) + atan(c)
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
@@ -1697,8 +1659,6 @@ test_that("when(), otherwise() and ifelse() with column on a DataFrame", {
 })
 
 test_that("group by, agg functions", {
-  skip_on_cran()
-
   df <- read.json(jsonPath)
   df1 <- agg(df, name = "max", age = "sum")
   expect_equal(1, count(df1))
@@ -1854,8 +1814,6 @@ test_that("filter() on a DataFrame", {
 })
 
 test_that("join(), crossJoin() and merge() on a DataFrame", {
-  skip_on_cran()
-
   df <- read.json(jsonPath)
 
   mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
@@ -2124,8 +2082,6 @@ test_that("mutate(), transform(), rename() and names()", {
 })
 
 test_that("read/write ORC files", {
-  skip_on_cran()
-
   setHiveContext(sc)
   df <- read.df(jsonPath, "json")
 
@@ -2147,8 +2103,6 @@ test_that("read/write ORC files", {
 })
 
 test_that("read/write ORC files - compression option", {
-  skip_on_cran()
-
   setHiveContext(sc)
   df <- read.df(jsonPath, "json")
 
@@ -2164,7 +2118,7 @@ test_that("read/write ORC files - compression option", {
 })
 
 test_that("read/write Parquet files", {
-  if (not_cran_or_windows_with_hadoop()) {
+  if (windows_with_hadoop()) {
     df <- read.df(jsonPath, "json")
     # Test write.df and read.df
     write.df(df, parquetPath, "parquet", mode = "overwrite")
@@ -2197,8 +2151,6 @@ test_that("read/write Parquet files", {
 })
 
 test_that("read/write Parquet files - compression option/mode", {
-  skip_on_cran()
-
   df <- read.df(jsonPath, "json")
   tempPath <- tempfile(pattern = "tempPath", fileext = ".parquet")
 
@@ -2216,8 +2168,6 @@ test_that("read/write Parquet files - compression option/mode", {
 })
 
 test_that("read/write text files", {
-  skip_on_cran()
-
   # Test write.df and read.df
   df <- read.df(jsonPath, "text")
   expect_is(df, "SparkDataFrame")
@@ -2239,8 +2189,6 @@ test_that("read/write text files", {
 })
 
 test_that("read/write text files - compression option", {
-  skip_on_cran()
-
   df <- read.df(jsonPath, "text")
 
   textPath <- tempfile(pattern = "textPath", fileext = ".txt")
@@ -2474,8 +2422,6 @@ test_that("approxQuantile() on a DataFrame", {
 })
 
 test_that("SQL error message is returned from JVM", {
-  skip_on_cran()
-
   retError <- tryCatch(sql("select * from blah"), error = function(e) e)
   expect_equal(grepl("Table or view not found", retError), TRUE)
   expect_equal(grepl("blah", retError), TRUE)
@@ -2484,8 +2430,6 @@ test_that("SQL error message is returned from JVM", {
 irisDF <- suppressWarnings(createDataFrame(iris))
 
 test_that("Method as.data.frame as a synonym for collect()", {
-  skip_on_cran()
-
   expect_equal(as.data.frame(irisDF), collect(irisDF))
   irisDF2 <- irisDF[irisDF$Species == "setosa", ]
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
@@ -2708,8 +2652,6 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
 })
 
 test_that("dapplyCollect() on DataFrame with a binary column", {
-  skip_on_cran()
-
   df <- data.frame(key = 1:3)
   df$bytes <- lapply(df$key, serialize, connection = NULL)
 
@@ -2730,8 +2672,6 @@ test_that("dapplyCollect() on DataFrame with a binary column", {
 })
 
 test_that("repartition by columns on DataFrame", {
-  skip_on_cran()
-
   df <- createDataFrame(
     list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
@@ -2770,8 +2710,6 @@ test_that("repartition by columns on DataFrame", {
 })
 
 test_that("coalesce, repartition, numPartitions", {
-  skip_on_cran()
-
   df <- as.DataFrame(cars, numPartitions = 5)
   expect_equal(getNumPartitions(df), 5)
   expect_equal(getNumPartitions(coalesce(df, 3)), 3)
@@ -2791,8 +2729,6 @@ test_that("coalesce, repartition, numPartitions", {
 })
 
 test_that("gapply() and gapplyCollect() on a DataFrame", {
-  skip_on_cran()
-
   df <- createDataFrame (
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
@@ -2910,8 +2846,6 @@ test_that("Window functions on a DataFrame", {
 })
 
 test_that("createDataFrame sqlContext parameter backward compatibility", {
-  skip_on_cran()
-
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   a <- 1:3
   b <- c("a", "b", "c")
@@ -2945,8 +2879,6 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
 })
 
 test_that("randomSplit", {
-  skip_on_cran()
-
   num <- 4000
   df <- createDataFrame(data.frame(id = 1:num))
   weights <- c(2, 3, 5)
@@ -2993,8 +2925,6 @@ test_that("Setting and getting config on SparkSession, sparkR.conf(), sparkR.uiW
 })
 
 test_that("enableHiveSupport on SparkSession", {
-  skip_on_cran()
-
   setHiveContext(sc)
   unsetHiveContext()
   # if we are still here, it must be built with hive
@@ -3010,8 +2940,6 @@ test_that("Spark version from SparkSession", {
 })
 
 test_that("Call DataFrameWriter.save() API in Java without path and check argument types", {
-  skip_on_cran()
-
   df <- read.df(jsonPath, "json")
   # This tests if the exception is thrown from JVM not from SparkR side.
   # It makes sure that we can omit path argument in write.df API and then it calls
@@ -3038,8 +2966,6 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
 })
 
 test_that("Call DataFrameWriter.load() API in Java without path and check argument types", {
-  skip_on_cran()
-
   # This tests if the exception is thrown from JVM not from SparkR side.
   # It makes sure that we can omit path argument in read.df API and then it calls
   # DataFrameWriter.load() without path.
@@ -3164,8 +3090,6 @@ compare_list <- function(list1, list2) {
 
 # This should always be the **very last test** in this test file.
 test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
-  skip_on_cran() # skip because when run from R CMD check SPARK_HOME is not the current directory
-
   # Check that it is not creating any extra file.
   # Does not check the tempdir which would be cleaned up after.
   filesAfter <- list.files(path = sparkRDir, all.files = TRUE)

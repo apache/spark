@@ -18,8 +18,6 @@
 context("test functions in sparkR.R")
 
 test_that("Check masked functions", {
-  skip_on_cran()
-
   # Check that we are not masking any new function from base, stats, testthat unexpectedly
   # NOTE: We should avoid adding entries to *namesOfMaskedCompletely* as masked functions make it
   # hard for users to use base R functions. Please check when in doubt.
@@ -57,8 +55,6 @@ test_that("Check masked functions", {
 })
 
 test_that("repeatedly starting and stopping SparkR", {
-  skip_on_cran()
-
   for (i in 1:4) {
     sc <- suppressWarnings(sparkR.init(master = sparkRTestMaster))
     rdd <- parallelize(sc, 1:20, 2L)
@@ -77,8 +73,6 @@ test_that("repeatedly starting and stopping SparkSession", {
 })
 
 test_that("rdd GC across sparkR.stop", {
-  skip_on_cran()
-
   sc <- sparkR.sparkContext(master = sparkRTestMaster) # sc should get id 0
   rdd1 <- parallelize(sc, 1:20, 2L) # rdd1 should get id 1
   rdd2 <- parallelize(sc, 1:10, 2L) # rdd2 should get id 2
@@ -102,8 +96,6 @@ test_that("rdd GC across sparkR.stop", {
 })
 
 test_that("job group functions can be called", {
-  skip_on_cran()
-
   sc <- sparkR.sparkContext(master = sparkRTestMaster)
   setJobGroup("groupId", "job description", TRUE)
   cancelJobGroup("groupId")
@@ -116,16 +108,12 @@ test_that("job group functions can be called", {
 })
 
 test_that("utility function can be called", {
-  skip_on_cran()
-
   sparkR.sparkContext(master = sparkRTestMaster)
   setLogLevel("ERROR")
   sparkR.session.stop()
 })
 
 test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whitelist", {
-  skip_on_cran()
-
   e <- new.env()
   e[["spark.driver.memory"]] <- "512m"
   ops <- getClientModeSparkSubmitOpts("sparkrmain", e)
@@ -153,8 +141,6 @@ test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whiteli
 })
 
 test_that("sparkJars sparkPackages as comma-separated strings", {
-  skip_on_cran()
-
   expect_warning(processSparkJars(" a, b "))
   jars <- suppressWarnings(processSparkJars(" a, b "))
   expect_equal(lapply(jars, basename), list("a", "b"))
@@ -182,8 +168,6 @@ test_that("spark.lapply should perform simple transforms", {
 })
 
 test_that("add and get file to be downloaded with Spark job on every node", {
-  skip_on_cran()
-
   sparkR.sparkContext(master = sparkRTestMaster)
   # Test add file.
   path <- tempfile(pattern = "hello", fileext = ".txt")

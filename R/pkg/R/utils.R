@@ -900,10 +900,6 @@ isAtomicLengthOne <- function(x) {
   is.atomic(x) && length(x) == 1
 }
 
-is_cran <- function() {
-  !identical(Sys.getenv("NOT_CRAN"), "true")
-}
-
 is_windows <- function() {
   .Platform$OS.type == "windows"
 }
@@ -912,6 +908,6 @@ hadoop_home_set <- function() {
   !identical(Sys.getenv("HADOOP_HOME"), "")
 }
 
-not_cran_or_windows_with_hadoop <- function() {
-  !is_cran() && (!is_windows() || hadoop_home_set())
+windows_with_hadoop <- function() {
+  !is_windows() || hadoop_home_set()
 }
