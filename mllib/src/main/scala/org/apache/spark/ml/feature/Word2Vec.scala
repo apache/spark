@@ -355,7 +355,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
         sc: SparkContext,
         numWords: Int,
         vectorSize: Int): Int = {
-      val floatSize = 4.0  // Use Double to help avoid overflow
+      val floatSize = 4L  // Use Long to help avoid overflow
       val averageWordSize = 15
       // [SPARK-11994] - We want to partition the model in partitions smaller than
       // spark.kryoserializer.buffer.max
@@ -365,7 +365,11 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       // Assuming an average word size of 15 bytes, the formula is:
       // (floatSize * vectorSize + 15) * numWords
       val approximateSizeInBytes = (floatSize * vectorSize + averageWordSize) * numWords
-      ((approximateSizeInBytes / bufferSizeInBytes) + 1).toInt
+      val numPartitions = (approximateSizeInBytes / bufferSizeInBytes) + 1
+      require(numPartitions < 10e8, s"Word2VecModel calculated that it needs $numPartitions " +
+        s"partitions to save this model, which is too large.  Try increasing " +
+        s"spark.kryoserializer.buffer.max so that Word2VecModel can use fewer partitions.")
+      numPartitions.toInt
     }
   }
 
