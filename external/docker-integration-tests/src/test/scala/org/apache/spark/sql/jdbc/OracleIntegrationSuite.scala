@@ -70,10 +70,17 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.commit()
 
-    conn.prepareStatement("CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)")
-        .executeUpdate()
-    conn.prepareStatement("INSERT INTO ts_with_timezone VALUES (1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))")
-        .executeUpdate()
+    conn.prepareStatement(
+      "CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO ts_with_timezone VALUES " +
+        "(1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement(
+      "CREATE TABLE custom_column_types (id NUMBER, n1 number(1), n2 number(1))").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO custom_column_types values(12312321321321312312312312123, 1, 0)").executeUpdate()
     conn.commit()
 
     sql(
@@ -198,4 +205,37 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(1).equals("class java.sql.Timestamp"))
   }
+
+  test("SPARK-20427/SPARK-20921: read table use custom schema") {
+
+    // default will throw IllegalArgumentException
+    val e = intercept[org.apache.spark.SparkException] {
+      spark.read.jdbc(jdbcUrl, "custom_column_types", new Properties()).collect()
+    }
+    assert(e.getMessage.contains(
+      "requirement failed: Decimal precision 39 exceeds max precision 38"))
+
+    // custom schema can read data
+    val schema = StructType(Seq(
+      StructField("ID", DecimalType(DecimalType.MAX_PRECISION, 0), true,
+        new MetadataBuilder().putName("ID").build()),
+      StructField("N1", IntegerType, true, new MetadataBuilder().putName("N1").build()),
+      StructField("N2", BooleanType, true, new MetadataBuilder().putName("N2").build())))
+
+    val dfRead = spark.read.schema(schema).jdbc(jdbcUrl, "custom_column_types", new Properties())
+    val rows = dfRead.collect()
+
+    // verify the data type inserted
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(0).equals("class java.math.BigDecimal"))
+    assert(types(1).equals("class java.lang.Integer"))
+    assert(types(2).equals("class java.lang.Boolean"))
+
+    // verify the value inserted
+    val values = rows(0)
+    assert(values.getDecimal(0).equals(new java.math.BigDecimal("12312321321321312312312312123")))
+    assert(values.getInt(1).equals(1))
+    assert(values.getBoolean(2).equals(false))
+  }
+
 }

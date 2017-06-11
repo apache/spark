@@ -110,7 +110,11 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = JDBCRDD.resolveTable(jdbcOptions)
+  override val schema: StructType = if (!jdbcOptions.createTableColumnTypes.isEmpty) {
+    StructType.fromString(jdbcOptions.createTableColumnTypes.get)
+  } else {
+    JDBCRDD.resolveTable(jdbcOptions)
+  }
 
   // Check if JDBCRDD.compileFilter can accept input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {

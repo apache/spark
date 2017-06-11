@@ -273,6 +273,9 @@ class MetadataBuilder {
   /** Puts a [[Metadata]] array. */
   def putMetadataArray(key: String, value: Array[Metadata]): this.type = put(key, value)
 
+  /** Puts a name. */
+  def putName(name: String): this.type = put("name", name)
+
   /** Builds the [[Metadata]] instance. */
   def build(): Metadata = {
     new Metadata(map.toMap)
