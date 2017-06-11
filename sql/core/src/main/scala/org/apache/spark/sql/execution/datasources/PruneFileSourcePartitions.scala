@@ -60,6 +60,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)
         val prunedFsRelation =
           fsRelation.copy(location = prunedFileIndex)(sparkSession)
+        // Change table stats based on the sizeInBytes of pruned files
         val withStats = logicalRelation.catalogTable.map(_.copy(
           stats = Some(CatalogStatistics(sizeInBytes = BigInt(prunedFileIndex.sizeInBytes)))))
         val prunedLogicalRelation = logicalRelation.copy(

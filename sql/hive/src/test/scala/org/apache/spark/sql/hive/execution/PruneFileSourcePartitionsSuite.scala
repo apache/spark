@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
@@ -81,6 +82,13 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
             """.stripMargin)
         }
 
+        val tableName = "partTbl"
+        sql(s"analyze table partTbl compute STATISTICS")
+
+        val tableStats =
+          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).stats
+        assert(tableStats.isDefined && tableStats.get.sizeInBytes > 0, "tableStats is lost")
+
         withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
           val df = sql("SELECT * FROM partTbl where part = 1")
           val query = df.queryExecution.analyzed.analyze
@@ -88,12 +96,12 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
             case relation: LogicalRelation => relation.computeStats(conf).sizeInBytes
           }
           assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-          assert(sizes1(0) > 5000, s"expected > 5000 for test table 'src', got: ${sizes1(0)}")
+          assert(sizes1(0) == tableStats.get.sizeInBytes)
           val sizes2 = Optimize.execute(query).collect {
             case relation: LogicalRelation => relation.computeStats(conf).sizeInBytes
           }
           assert(sizes2.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-          assert(sizes2(0) < 5000, s"expected < 5000 for test table 'src', got: ${sizes2(0)}")
+          assert(sizes2(0) < tableStats.get.sizeInBytes)
         }
       }
     }
