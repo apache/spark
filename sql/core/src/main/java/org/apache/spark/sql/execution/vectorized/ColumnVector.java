@@ -523,7 +523,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * size of the written array.
    */
   public void putArrayOffsetAndSize(int rowId, int offset, int size) {
-    long offsetAndSize = (offset << 32) | size;
+    long offsetAndSize = (((long) offset) << 32) | size;
     putLong(rowId, offsetAndSize);
   }
 
