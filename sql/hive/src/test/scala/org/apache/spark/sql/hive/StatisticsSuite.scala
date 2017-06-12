@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -253,6 +254,113 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
           assert(getCatalogStatistics(tableName).sizeInBytes === BigInt(5812))
         }
+    }
+  }
+
+  test("analyze single partition") {
+    val tableName = "analyzeTable_part"
+
+    def queryStats(ds: String): CatalogStatistics = {
+      val partition =
+        spark.sessionState.catalog.getPartition(TableIdentifier(tableName), Map("ds" -> ds))
+      partition.stats.get
+    }
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
+      sql(
+        s"""
+           |INSERT INTO TABLE $tableName PARTITION (ds='2010-01-02')
+           |SELECT * FROM src
+           |UNION ALL
+           |SELECT * FROM src
+         """.stripMargin)
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-03') SELECT * FROM src")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS").collect()
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS").collect()
+
+      assert(queryStats("2010-01-01").rowCount.get === 500)
+      assert(queryStats("2010-01-01").sizeInBytes === 5812)
+
+      assert(queryStats("2010-01-02").rowCount.get === 2*500)
+      assert(queryStats("2010-01-02").sizeInBytes === 2*5812)
+    }
+  }
+
+  test("analyze single partition noscan") {
+    val tableName = "analyzeTable_part"
+
+    def queryStats(ds: String): CatalogStatistics = {
+      val partition =
+        spark.sessionState.catalog.getPartition(TableIdentifier(tableName), Map("ds" -> ds))
+      partition.stats.get
+    }
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
+      sql(
+        s"""
+           |INSERT INTO TABLE $tableName PARTITION (ds='2010-01-02')
+           |SELECT * FROM src
+           |UNION ALL
+           |SELECT * FROM src
+         """.stripMargin)
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-03') SELECT * FROM src")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
+        .collect()
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS NOSCAN")
+        .collect()
+
+      assert(queryStats("2010-01-01").rowCount === None)
+      assert(queryStats("2010-01-01").sizeInBytes === 5812)
+
+      assert(queryStats("2010-01-02").rowCount === None)
+      assert(queryStats("2010-01-02").sizeInBytes === 2*5812)
+    }
+  }
+
+  test("analyze non-existent partition") {
+    val tableName = "analyzeTable_part"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
+
+      intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS")
+      }
+
+      intercept[NoSuchPartitionException] {
+        sql(s"ANALYZE TABLE $tableName PARTITION (ds='2011-02-30') COMPUTE STATISTICS")
+      }
+    }
+  }
+
+  test("analyzing views is not supported") {
+    def assertAnalyzeUnsupported(analyzeCommand: String): Unit = {
+      val err = intercept[AnalysisException] {
+        sql(analyzeCommand)
+      }
+      assert(err.message.contains("ANALYZE TABLE is not supported"))
+    }
+
+    val tableName = "tbl"
+    withTable(tableName) {
+      spark.range(10).write.saveAsTable(tableName)
+      val viewName = "view"
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName AS SELECT * FROM $tableName")
+        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+      }
     }
   }
 

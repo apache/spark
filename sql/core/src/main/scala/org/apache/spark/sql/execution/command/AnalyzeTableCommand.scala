@@ -17,17 +17,22 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Column, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Expression, Literal}
 
 
 /**
- * Analyzes the given table to generate statistics, which will be used in query optimizations.
+ * Analyzes the given table or partition to generate statistics, which will be used in
+ * query optimizations.
  */
 case class AnalyzeTableCommand(
     tableIdent: TableIdentifier,
-    noscan: Boolean = true) extends RunnableCommand {
+    noscan: Boolean = true,
+    partitionSpec: Option[TablePartitionSpec] = None) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
@@ -37,10 +42,57 @@ case class AnalyzeTableCommand(
     if (tableMeta.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
-    val newTotalSize = CommandUtils.calculateTotalSize(sessionState, tableMeta)
 
-    val oldTotalSize = tableMeta.stats.map(_.sizeInBytes.toLong).getOrElse(-1L)
-    val oldRowCount = tableMeta.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
+    val partitionMeta = partitionSpec.map(
+      p => sessionState.catalog.getPartition(tableMeta.identifier, partitionSpec.get))
+
+    val oldStats =
+      if (partitionMeta.isDefined) {
+        partitionMeta.get.stats
+      } else {
+        tableMeta.stats
+      }
+
+    def calculateTotalSize(): BigInt = {
+      if (partitionMeta.isDefined) {
+        CommandUtils.calculateTotalSize(sessionState, tableMeta, partitionMeta.get)
+      } else {
+        CommandUtils.calculateTotalSize(sessionState, tableMeta)
+      }
+    }
+
+    def calculateRowCount(): Long = {
+      if (partitionSpec.isDefined) {
+        val filters = partitionSpec.get.map {
+          case (columnName, value) => EqualTo(UnresolvedAttribute(columnName), Literal(value))
+        }
+        val filter = filters match {
+          case head::tail =>
+            if (tail.isEmpty) head
+            else tail.foldLeft(head : Expression)((a, b) => And(a, b))
+        }
+        sparkSession.table(tableIdentWithDB).filter(Column(filter)).count()
+      } else {
+        sparkSession.table(tableIdentWithDB).count()
+      }
+    }
+
+    def updateStats(newStats: CatalogStatistics): Unit = {
+      if (partitionMeta.isDefined) {
+        sessionState.catalog.alterPartitions(tableMeta.identifier,
+          List(partitionMeta.get.copy(stats = Some(newStats))))
+      } else {
+        sessionState.catalog.alterTableStats(tableIdentWithDB, Some(newStats))
+        // Refresh the cached data source table in the catalog.
+        sessionState.catalog.refreshTable(tableIdentWithDB)
+      }
+    }
+
+    val newTotalSize = calculateTotalSize()
+
+    val oldTotalSize = oldStats.map(_.sizeInBytes.toLong).getOrElse(0L)
+    val oldRowCount = oldStats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
+
     var newStats: Option[CatalogStatistics] = None
     if (newTotalSize >= 0 && newTotalSize != oldTotalSize) {
       newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
@@ -50,7 +102,7 @@ case class AnalyzeTableCommand(
     // 2. when total size is changed, `oldRowCount` becomes invalid.
     // This is to make sure that we only record the right statistics.
     if (!noscan) {
-      val newRowCount = sparkSession.table(tableIdentWithDB).count()
+      val newRowCount = calculateRowCount()
       if (newRowCount >= 0 && newRowCount != oldRowCount) {
         newStats = if (newStats.isDefined) {
           newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
@@ -63,11 +115,8 @@ case class AnalyzeTableCommand(
     // Update the metastore if the above statistics of the table are different from those
     // recorded in the metastore.
     if (newStats.isDefined) {
-      sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
-      // Refresh the cached data source table in the catalog.
-      sessionState.catalog.refreshTable(tableIdentWithDB)
+      updateStats(newStats.get)
     }
-
     Seq.empty[Row]
   }
 }

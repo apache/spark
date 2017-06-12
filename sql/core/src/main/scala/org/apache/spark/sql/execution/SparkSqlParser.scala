@@ -101,19 +101,30 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.partitionSpec != null) {
-      logWarning(s"Partition specification is ignored: ${ctx.partitionSpec.getText}")
-    }
-    if (ctx.identifier != null) {
+    val noscan = if (ctx.identifier != null) {
       if (ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
         throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
       }
-      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier))
-    } else if (ctx.identifierSeq() == null) {
-      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier), noscan = false)
+      true
     } else {
+      false
+    }
+
+    val partitionSpec = if (ctx.partitionSpec != null) {
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    } else {
+      None
+    }
+
+    val table = visitTableIdentifier(ctx.tableIdentifier)
+    if (ctx.identifierSeq() == null) {
+      AnalyzeTableCommand(table, noscan, partitionSpec)
+    } else {
+      if (partitionSpec.isDefined) {
+        logWarning(s"Partition specification is ignored: ${ctx.partitionSpec.getText}")
+      }
       AnalyzeColumnCommand(
-        visitTableIdentifier(ctx.tableIdentifier),
+        table,
         visitIdentifierSeq(ctx.identifierSeq()))
     }
   }

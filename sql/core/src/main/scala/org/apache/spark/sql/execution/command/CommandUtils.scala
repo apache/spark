@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.internal.SessionState
 
 
@@ -57,6 +57,13 @@ object CommandUtils extends Logging {
         calculateLocationSize(sessionState, catalogTable.identifier, p.storage.locationUri)
       }.sum
     }
+  }
+
+  def calculateTotalSize(
+      sessionState: SessionState,
+      catalogTable: CatalogTable,
+      partition: CatalogTablePartition): Long = {
+    calculateLocationSize(sessionState, catalogTable.identifier, partition.storage.locationUri)
   }
 
   def calculateLocationSize(
