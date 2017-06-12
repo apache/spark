@@ -189,8 +189,6 @@
       <artifactId>libfb303</artifactId>
       <scope>provided</scope>
     </dependency>
-
-
   </dependencies>
 
   <build>

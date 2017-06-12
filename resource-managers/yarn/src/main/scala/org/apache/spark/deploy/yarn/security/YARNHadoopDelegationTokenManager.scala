@@ -26,33 +26,34 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.security.ConfigurableCredentialManager
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
- * This class loads credential providers registered under the YARN-specific
- * [[ServiceCredentialProvider]] interface, as well as the builtin credential providers defined
- * in [[ConfigurableCredentialManager]].
+ * This class loads delegation token providers registered under the YARN-specific
+ * [[ServiceCredentialProvider]] interface, as well as the builtin providers defined
+ * in [[HadoopDelegationTokenManager]].
  */
-private[yarn] class YARNConfigurableCredentialManager(
+private[yarn] class YARNHadoopDelegationTokenManager(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
     fileSystems: Set[FileSystem]) extends Logging {
 
-  private val configurableCredentialManager =
-    new ConfigurableCredentialManager(sparkConf, hadoopConf, fileSystems)
+  private val delegationTokenManager =
+    new HadoopDelegationTokenManager(sparkConf, hadoopConf, fileSystems)
 
   // public for testing
   val credentialProviders = getCredentialProviders
 
-  def obtainCredentials(
-      hadoopConf: Configuration,
-      creds: Credentials): Long = {
-
-    val superInterval = configurableCredentialManager.obtainCredentials(
-      hadoopConf,
-      creds)
+  /**
+   * Writes delegation tokens to creds.  Delegation tokens are fetched from all registered
+   * providers.
+   *
+   * @return Time after which the fetched delegation tokens should be renewed.
+   */
+  def obtainDelegationTokens(hadoopConf: Configuration, creds: Credentials): Long = {
+    val superInterval = delegationTokenManager.obtainDelegationTokens(hadoopConf, creds)
 
     credentialProviders.values.flatMap { provider =>
       if (provider.credentialsRequired(hadoopConf)) {
@@ -69,15 +70,13 @@ private[yarn] class YARNConfigurableCredentialManager(
     val providers = loadCredentialProviders
 
     providers.
-      filter { p => configurableCredentialManager.isServiceEnabled(p.serviceName) }
+      filter { p => delegationTokenManager.isServiceEnabled(p.serviceName) }
       .map { p => (p.serviceName, p) }
       .toMap
   }
 
   private def loadCredentialProviders: List[ServiceCredentialProvider] = {
-    ServiceLoader.load(
-      classOf[ServiceCredentialProvider],
-      Utils.getContextOrSparkClassLoader)
+    ServiceLoader.load(classOf[ServiceCredentialProvider], Utils.getContextOrSparkClassLoader)
       .asScala
       .toList
   }

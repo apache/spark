@@ -54,7 +54,7 @@ import org.apache.spark.util.ThreadUtils
 private[yarn] class AMCredentialRenewer(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    credentialManager: YARNConfigurableCredentialManager) extends Logging {
+    credentialManager: YARNHadoopDelegationTokenManager) extends Logging {
 
   private var lastCredentialsFileSuffix = 0
 
@@ -174,7 +174,7 @@ private[yarn] class AMCredentialRenewer(
     keytabLoggedInUGI.doAs(new PrivilegedExceptionAction[Void] {
       // Get a copy of the credentials
       override def run(): Void = {
-        nearestNextRenewalTime = credentialManager.obtainCredentials(
+        nearestNextRenewalTime = credentialManager.obtainDelegationTokens(
           freshHadoopConf,
           tempCreds)
         null

@@ -25,21 +25,21 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 
 /**
- * A ConfigurableCredentialManager to manage all the registered credential providers and offer
- * APIs for other modules to obtain credentials as well as renewal time. By default
- * [[HadoopFSCredentialProvider]], [[HiveCredentialProvider]] and [[HBaseCredentialProvider]] will
- * be loaded in if not explicitly disabled.
+ * Manages all the registered HadoopDelegationTokenProviders and offer APIs for other modules to
+ * obtain delegation tokens and their renewal time. By default [[HadoopFSDelegationTokenProvider]],
+ * [[HiveDelegationTokenProvider]] and [[HBaseDelegationTokenProvider]] will be loaded in if not
+ * explicitly disabled.
  *
- * Also each credential provider is controlled by spark.security.credentials.{service}.enabled,
- * it will not be loaded in if set to false.  For example, Hive's credential provider
- * [[HiveCredentialProvider]] can be enabled/disabled by the configuration
- * spark.security.credentials.hive.enabled.
+ * Also, each HadoopDelegationTokenProvider is controlled by
+ * spark.security.credentials.{service}.enabled, and will not be loaded if this config is set to
+ * false.  For example, Hive's delegation token provider [[HiveDelegationTokenProvider]] can be
+ * enabled/disabled by the configuration spark.security.credentials.hive.enabled.
  *
  * @param sparkConf Spark configuration
  * @param hadoopConf Hadoop configuration
  * @param fileSystems Delegation tokens will be fetched for these Hadoop filesystems.
  */
-private[spark] class ConfigurableCredentialManager(
+private[spark] class HadoopDelegationTokenManager(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
     fileSystems: Set[FileSystem])
@@ -50,16 +50,17 @@ private[spark] class ConfigurableCredentialManager(
     "spark.yarn.security.credentials.%s.enabled")
   private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
 
-  // Maintain all the registered credential providers
-  private val credentialProviders = getCredentialProviders
-  logDebug(s"Using the following credential providers: ${credentialProviders.keys.mkString(", ")}.")
+  // Maintain all the registered delegation token providers
+  private val delegationTokenProviders = getDelegationTokenProviders
+  logDebug(s"Using the following delegation token providers: " +
+    s"${delegationTokenProviders.keys.mkString(", ")}.")
 
-  private def getCredentialProviders: Map[String, HadoopDelegationTokenProvider] = {
-    val providers = List(new HadoopFSCredentialProvider(fileSystems),
-      new HiveCredentialProvider,
-      new HBaseCredentialProvider)
+  private def getDelegationTokenProviders: Map[String, HadoopDelegationTokenProvider] = {
+    val providers = List(new HadoopFSDelegationTokenProvider(fileSystems),
+      new HiveDelegationTokenProvider,
+      new HBaseDelegationTokenProvider)
 
-    // Filter out credentials in which spark.security.credentials.{service}.enabled is false.
+    // Filter out providers for which spark.security.credentials.{service}.enabled is false.
     providers
       .filter { p => isServiceEnabled(p.serviceName) }
       .map { p => (p.serviceName, p) }
@@ -90,10 +91,10 @@ private[spark] class ConfigurableCredentialManager(
   }
 
   /**
-   * Get credential provider for the specified service.
+   * Get delegation token provider for the specified service.
    */
-  def getServiceCredentialProvider(service: String): Option[HadoopDelegationTokenProvider] = {
-    credentialProviders.get(service)
+  def getServiceDelegationTokenProvider(service: String): Option[HadoopDelegationTokenProvider] = {
+    delegationTokenProviders.get(service)
   }
 
   /**
@@ -102,12 +103,12 @@ private[spark] class ConfigurableCredentialManager(
    *
    * @return Time after which the fetched delegation tokens should be renewed.
    */
-  def obtainCredentials(
+  def obtainDelegationTokens(
       hadoopConf: Configuration,
       creds: Credentials): Long = {
-    credentialProviders.values.flatMap { provider =>
-      if (provider.credentialsRequired(hadoopConf)) {
-        provider.obtainCredentials(hadoopConf, creds)
+    delegationTokenProviders.values.flatMap { provider =>
+      if (provider.delegationTokensRequired(hadoopConf)) {
+        provider.obtainDelegationTokens(hadoopConf, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")

@@ -29,16 +29,17 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
-private[deploy] class HadoopFSCredentialProvider(fileSystems: Set[FileSystem])
+private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Set[FileSystem])
     extends HadoopDelegationTokenProvider with Logging {
-  // Token renewal interval, this value will be set in the first call,
-  // if None means no token renewer specified or no token can be renewed,
-  // so cannot get token renewal interval.
+
+  // This tokenRenewalInterval will be set in the first call to obtainDelegationTokens.
+  // If None, no token renewer is specified or no token can be renewed,
+  // so we cannot get the token renewal interval.
   private var tokenRenewalInterval: Option[Long] = null
 
   override val serviceName: String = "hadoopfs"
 
-  override def obtainCredentials(
+  override def obtainDelegationTokens(
       hadoopConf: Configuration,
       creds: Credentials): Option[Long] = {
 
@@ -68,7 +69,7 @@ private[deploy] class HadoopFSCredentialProvider(fileSystems: Set[FileSystem])
     nextRenewalDate
   }
 
-  def credentialsRequired(hadoopConf: Configuration): Boolean = {
+  def delegationTokensRequired(hadoopConf: Configuration): Boolean = {
     UserGroupInformation.isSecurityEnabled
   }
 
@@ -86,8 +87,9 @@ private[deploy] class HadoopFSCredentialProvider(fileSystems: Set[FileSystem])
   }
 
   private def fetchDelegationTokens(
-    renewer: String,
-    filesystems: Set[FileSystem]): Credentials = {
+      renewer: String,
+      filesystems: Set[FileSystem]): Credentials = {
+
     val creds = new Credentials()
 
     filesystems.foreach { fs =>
@@ -99,8 +101,8 @@ private[deploy] class HadoopFSCredentialProvider(fileSystems: Set[FileSystem])
   }
 
   private def getTokenRenewalInterval(
-    hadoopConf: Configuration,
-    filesystems: Set[FileSystem]): Option[Long] = {
+      hadoopConf: Configuration,
+      filesystems: Set[FileSystem]): Option[Long] = {
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.

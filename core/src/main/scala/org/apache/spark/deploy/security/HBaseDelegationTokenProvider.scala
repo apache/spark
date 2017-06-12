@@ -27,12 +27,12 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[security] class HBaseCredentialProvider
+private[security] class HBaseDelegationTokenProvider
   extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "hbase"
 
-  override def obtainCredentials(
+  override def obtainDelegationTokens(
       hadoopConf: Configuration,
       creds: Credentials): Option[Long] = {
     try {
@@ -54,7 +54,7 @@ private[security] class HBaseCredentialProvider
     None
   }
 
-  override def credentialsRequired(hadoopConf: Configuration): Boolean = {
+  override def delegationTokensRequired(hadoopConf: Configuration): Boolean = {
     hbaseConf(hadoopConf).get("hbase.security.authentication") == "kerberos"
   }
 

@@ -26,25 +26,25 @@ import org.apache.hadoop.security.Credentials
 private[spark] trait HadoopDelegationTokenProvider {
 
   /**
-   * Name of the service to provide credentials. This name should be unique, Spark internally will
-   * use this name to differentiate credential provider.
+   * Name of the service to provide delegation tokens. This name should be unique.  Spark will
+   * internally use this name to differentiate delegation token providers.
    */
   def serviceName: String
 
   /**
-   * Returns true if credentials are required for this service. By default, it is based on whether
-   * Hadoop security is enabled.
+   * Returns true if delegation tokens are required for this service. By default, it is based on
+   * whether Hadoop security is enabled.
    */
-  def credentialsRequired(hadoopConf: Configuration): Boolean
+  def delegationTokensRequired(hadoopConf: Configuration): Boolean
 
   /**
-   * Obtain credentials for this service and get the time of the next renewal.
+   * Obtain delegation tokens for this service and get the time of the next renewal.
    * @param hadoopConf Configuration of current Hadoop Compatible system.
    * @param creds Credentials to add tokens and security keys to.
-   * @return If this Credential is renewable and can be renewed, return the time of the next
+   * @return If the returned tokens are renewable and can be renewed, return the time of the next
    *         renewal, otherwise None should be returned.
    */
-  def obtainCredentials(
+  def obtainDelegationTokens(
     hadoopConf: Configuration,
     creds: Credentials): Option[Long]
 }

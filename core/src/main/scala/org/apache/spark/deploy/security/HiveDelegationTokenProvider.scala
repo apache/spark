@@ -33,12 +33,13 @@ import org.apache.hadoop.security.token.Token
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[security] class HiveCredentialProvider extends HadoopDelegationTokenProvider with Logging {
+private[security] class HiveDelegationTokenProvider
+    extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "hive"
 
-  private val classNotFoundErrorStr = "You are attempting to use the HiveCredentialProvider," +
-    "but your Spark distribution is not built with Hive libraries."
+  private val classNotFoundErrorStr = s"You are attempting to use the " +
+    s"${getClass.getCanonicalName}, but your Spark distribution is not built with Hive libraries."
 
   private def hiveConf(hadoopConf: Configuration): Configuration = {
     try {
@@ -53,12 +54,12 @@ private[security] class HiveCredentialProvider extends HadoopDelegationTokenProv
     }
   }
 
-  override def credentialsRequired(hadoopConf: Configuration): Boolean = {
+  override def delegationTokensRequired(hadoopConf: Configuration): Boolean = {
     UserGroupInformation.isSecurityEnabled &&
       hiveConf(hadoopConf).getTrimmed("hive.metastore.uris", "").nonEmpty
   }
 
-  override def obtainCredentials(
+  override def obtainDelegationTokens(
       hadoopConf: Configuration,
       creds: Credentials): Option[Long] = {
     try {
@@ -74,30 +75,28 @@ private[security] class HiveCredentialProvider extends HadoopDelegationTokenProv
       logDebug(s"Getting Hive delegation token for ${currentUser.getUserName()} against " +
         s"$principal at $metastoreUri")
 
-      try {
-        doAsRealUser {
-          val hive = Hive.get(conf, classOf[HiveConf])
-          val tokenStr = hive.getDelegationToken(currentUser.getUserName(), principal)
+      doAsRealUser {
+        val hive = Hive.get(conf, classOf[HiveConf])
+        val tokenStr = hive.getDelegationToken(currentUser.getUserName(), principal)
 
-          val hive2Token = new Token[DelegationTokenIdentifier]()
-          hive2Token.decodeFromUrlString(tokenStr)
-          logInfo(s"Get Token from hive metastore: ${hive2Token.toString}")
-          creds.addToken(new Text("hive.server2.delegation.token"), hive2Token)
-        }
-      } catch {
-        case NonFatal(e) =>
-          logDebug(s"Fail to get token from service $serviceName", e)
-      } finally {
-        Utils.tryLogNonFatalError {
-          Hive.closeCurrent()
-        }
+        val hive2Token = new Token[DelegationTokenIdentifier]()
+        hive2Token.decodeFromUrlString(tokenStr)
+        logInfo(s"Get Token from hive metastore: ${hive2Token.toString}")
+        creds.addToken(new Text("hive.server2.delegation.token"), hive2Token)
       }
 
       None
     } catch {
+      case NonFatal(e) =>
+        logDebug(s"Failed to get token from service $serviceName", e)
+        None
       case e: NoClassDefFoundError =>
         logWarning(classNotFoundErrorStr)
         None
+    } finally {
+      Utils.tryLogNonFatalError {
+        Hive.closeCurrent()
+      }
     }
   }
 
