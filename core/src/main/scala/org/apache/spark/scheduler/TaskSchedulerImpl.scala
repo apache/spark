@@ -129,7 +129,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   var backend: SchedulerBackend = null
 
-  val mapOutputTracker = SparkEnv.get.mapOutputTracker
+  val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 
   private var schedulableBuilder: SchedulableBuilder = null
   // default scheduler is FIFO
