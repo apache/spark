@@ -644,7 +644,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.arrayData().elementsAppended == 17 + (s + s).length)
 
       reference.zipWithIndex.foreach { v =>
-        assert(v._1.length == column.getInt(v._2 * 2 + 1), "MemoryMode=" + memMode)
+        val offsetAndLength = column.getLong(v._2)
+        assert(v._1.length == offsetAndLength.toInt, "MemoryMode=" + memMode)
         assert(v._1 == column.getUTF8String(v._2).toString,
           "MemoryMode" + memMode)
       }
