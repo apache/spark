@@ -112,7 +112,7 @@ object SQLMetrics {
   def createAverageMetric(sc: SparkContext, name: String): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
     // probe avg (min, med, max):
-    // (1, 6, 2)
+    // (1, 2, 6)
     val acc = new SQLMetric(AVERAGE_METRIC)
     acc.register(sc, name = Some(s"$name (min, med, max)"), countFailedValues = false)
     acc

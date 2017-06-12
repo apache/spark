@@ -163,8 +163,7 @@ class TungstenAggregationIterator(
     StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
     TaskContext.get().taskMemoryManager(),
     1024 * 16, // initial capacity
-    TaskContext.get().taskMemoryManager().pageSizeBytes,
-    true // tracking of performance metrics
+    TaskContext.get().taskMemoryManager().pageSizeBytes
   )
 
   // The function used to read and process input rows. When processing input rows,
