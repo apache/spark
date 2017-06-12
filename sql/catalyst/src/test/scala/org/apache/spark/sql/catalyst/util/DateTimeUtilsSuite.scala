@@ -34,6 +34,22 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     ((timestamp + tz.getOffset(timestamp)) / MILLIS_PER_DAY).toInt
   }
 
+  test("nanoseconds truncation") {
+    def checkStringToTimestamp(originalTime: String, expectedParsedTime: String) {
+      val parsedTimestampOp = DateTimeUtils.stringToTimestamp(UTF8String.fromString(originalTime))
+      assert(parsedTimestampOp.isDefined, "timestamp with nanoseconds was not parsed correctly")
+      assert(DateTimeUtils.timestampToString(parsedTimestampOp.get) === expectedParsedTime)
+    }
+
+    checkStringToTimestamp("2015-01-02 00:00:00.123456789", "2015-01-02 00:00:00.123456")
+    checkStringToTimestamp("2015-01-02 00:00:00.100000009", "2015-01-02 00:00:00.1")
+    checkStringToTimestamp("2015-01-02 00:00:00.000050000", "2015-01-02 00:00:00.00005")
+    checkStringToTimestamp("2015-01-02 00:00:00.12005", "2015-01-02 00:00:00.12005")
+    checkStringToTimestamp("2015-01-02 00:00:00.100", "2015-01-02 00:00:00.1")
+    checkStringToTimestamp("2015-01-02 00:00:00.000456789", "2015-01-02 00:00:00.000456")
+    checkStringToTimestamp("1950-01-02 00:00:00.000456789", "1950-01-02 00:00:00.000456")
+  }
+
   test("timestamp and us") {
     val now = new Timestamp(System.currentTimeMillis())
     now.setNanos(1000)
