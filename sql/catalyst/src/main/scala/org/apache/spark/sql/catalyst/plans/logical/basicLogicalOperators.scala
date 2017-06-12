@@ -482,15 +482,11 @@ case class Sort(
 
 /** Factory for constructing new `Range` nodes. */
 object Range {
-  def apply(start: Long, end: Long, step: Long, numSlices: Option[Int]): LogicalPlan = {
+  def apply(start: Long, end: Long, step: Long, numSlices: Option[Int]): Range = {
     val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
-    if (start == end || (start < end ^ 0 < step)) {
-      LocalRelation(output)
-    } else {
-      new Range(start, end, step, numSlices, output)
-    }
+    new Range(start, end, step, numSlices, output)
   }
-  def apply(start: Long, end: Long, step: Long, numSlices: Int): LogicalPlan = {
+  def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
     Range(start, end, step, Some(numSlices))
   }
 }
@@ -504,8 +500,6 @@ case class Range(
   extends LeafNode with MultiInstanceRelation {
 
   require(step != 0, s"step ($step) cannot be 0")
-  require(start != end, s"start ($start) cannot be equal to end ($end)")
-  require(start < end ^ step < 0, s"the sign of step ($step) is invalid for range ($start, $end)")
 
   val numElements: BigInt = {
     val safeStart = BigInt(start)
