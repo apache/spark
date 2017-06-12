@@ -250,14 +250,14 @@ object InMemoryFileIndex extends Logging {
       filter: PathFilter,
       sessionOpt: Option[SparkSession]): Seq[(Path, Seq[FileStatus])] = {
     logTrace(s"Listing ${paths.mkString(", ")}")
+    val fs = paths.headOption.map(_.getFileSystem(hadoopConf))
 
     // [SPARK-17599] Prevent InMemoryFileIndex from failing if path doesn't exist
     // Note that statuses only include FileStatus for the files and dirs directly under path,
     // and does not include anything else recursively.
     val statuses = paths.flatMap { path =>
       try {
-        val fs = path.getFileSystem(hadoopConf)
-        Some(path -> fs.listStatus(path))
+        Some(path -> fs.get.listStatus(path))
       } catch {
         case _: FileNotFoundException =>
           logWarning(s"The directory $paths was not found. Was it deleted very recently?")
@@ -304,7 +304,6 @@ object InMemoryFileIndex extends Logging {
     }
 
     allLeafStatuses.map { case (path, fStatuses) =>
-      val fs = path.getFileSystem(hadoopConf)
       path -> fStatuses.map {
         case f: LocatedFileStatus =>
           f
@@ -322,7 +321,7 @@ object InMemoryFileIndex extends Logging {
           // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
           // which is very slow on some file system (RawLocalFileSystem, which is launch a
           // subprocess and parse the stdout).
-          val locations = fs.getFileBlockLocations(f, 0, f.getLen)
+          val locations = fs.get.getFileBlockLocations(f, 0, f.getLen)
           val lfs = new LocatedFileStatus(
             f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
             f.getModificationTime, 0, null, null, null, null, f.getPath, locations
