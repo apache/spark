@@ -160,6 +160,8 @@ abstract class ExternalCatalog
    */
   def alterTableSchema(db: String, table: String, schema: StructType): Unit
 
+  def alterTableStats(db: String, table: String, stats: CatalogStatistics): Unit
+
   def getTable(db: String, table: String): CatalogTable
 
   def getTableOption(db: String, table: String): Option[CatalogTable]

@@ -54,7 +54,7 @@ case class AnalyzeColumnCommand(
       // Newly computed column stats should override the existing ones.
       colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColStats)
 
-    sessionState.catalog.alterTable(tableMeta.copy(stats = Some(statistics)))
+    sessionState.catalog.alterTableStats(tableIdentWithDB, statistics)
 
     // Refresh the cached data source table in the catalog.
     sessionState.catalog.refreshTable(tableIdentWithDB)
