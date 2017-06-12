@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
@@ -518,19 +519,13 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract double getDouble(int rowId);
 
   /**
-   * Puts a byte array that already exists in this column.
+   * After writing array elements to the child column vector, call this method to set the offset and
+   * size of the written array.
    */
-  public abstract void putArray(int rowId, int offset, int length);
-
-  /**
-   * Returns the length of the array at rowid.
-   */
-  public abstract int getArrayLength(int rowId);
-
-  /**
-   * Returns the offset of the array at rowid.
-   */
-  public abstract int getArrayOffset(int rowId);
+  public void putArrayOffsetAndSize(int rowId, int offset, int size) {
+    long offsetAndSize = (((long) offset) << 32) | size;
+    putLong(rowId, offsetAndSize);
+  }
 
   /**
    * Returns a utility object to get structs.
@@ -553,8 +548,9 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the array at rowid.
    */
   public final Array getArray(int rowId) {
-    resultArray.length = getArrayLength(rowId);
-    resultArray.offset = getArrayOffset(rowId);
+    long offsetAndSize = getLong(rowId);
+    resultArray.offset = (int) (offsetAndSize >> 32);
+    resultArray.length = (int) offsetAndSize;
     return resultArray;
   }
 
@@ -566,7 +562,12 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Sets the value at rowId to `value`.
    */
-  public abstract int putByteArray(int rowId, byte[] value, int offset, int count);
+  public int putByteArray(int rowId, byte[] value, int offset, int length) {
+    int result = arrayData().appendBytes(length, value, offset);
+    putArrayOffsetAndSize(rowId, result, length);
+    return result;
+  }
+
   public final int putByteArray(int rowId, byte[] value) {
     return putByteArray(rowId, value, 0, value.length);
   }
@@ -829,13 +830,13 @@ public abstract class ColumnVector implements AutoCloseable {
   public final int appendByteArray(byte[] value, int offset, int length) {
     int copiedOffset = arrayData().appendBytes(length, value, offset);
     reserve(elementsAppended + 1);
-    putArray(elementsAppended, copiedOffset, length);
+    putArrayOffsetAndSize(elementsAppended, copiedOffset, length);
     return elementsAppended++;
   }
 
   public final int appendArray(int length) {
     reserve(elementsAppended + 1);
-    putArray(elementsAppended, arrayData().elementsAppended, length);
+    putArrayOffsetAndSize(elementsAppended, arrayData().elementsAppended, length);
     return elementsAppended++;
   }
 
