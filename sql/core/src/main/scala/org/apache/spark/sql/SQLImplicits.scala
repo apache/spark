@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.Map
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
@@ -165,6 +166,10 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
 
   /** @since 2.2.0 */
   implicit def newSequenceEncoder[T <: Seq[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
+
+  // Maps
+  /** @since 2.3.0 */
+  implicit def newMapEncoder[T <: Map[_, _] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   // Arrays
 
