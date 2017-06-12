@@ -656,9 +656,10 @@ object TypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s @ Stack(children) if s.childrenResolved && s.hasFoldableNumRows =>
         Stack(children.zipWithIndex.map {
+          // The first child is the number of rows for stack.
           case (e, 0) => e
           case (Literal(null, NullType), index: Int) =>
-            Literal.create(null, s.findDataType(index - 1))
+            Literal.create(null, s.findDataType(index))
           case (e, _) => e
         })
     }

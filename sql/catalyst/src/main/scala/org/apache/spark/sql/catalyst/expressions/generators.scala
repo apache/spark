@@ -163,9 +163,9 @@ case class Stack(children: Seq[Expression]) extends Generator {
     }
   }
 
-  def findDataType(column: Int): DataType = {
+  def findDataType(index: Int): DataType = {
     // Find the first data type except NullType.
-    val firstDataIndex = (column % numFields) + 1
+    val firstDataIndex = ((index - 1) % numFields) + 1
     for (i <- firstDataIndex until children.length by numFields) {
       if (children(i).dataType != NullType) {
         return children(i).dataType
