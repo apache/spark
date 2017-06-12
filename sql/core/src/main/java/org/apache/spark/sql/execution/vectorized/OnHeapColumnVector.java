@@ -42,7 +42,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   // Array for each type. Only 1 is populated for any type.
   private byte[] byteData;
   private short[] shortData;
-  // This is not used used to store data for int column vector, but also can store offsets and
+  // This is not only used to store data for int column vector, but also can store offsets and
   // lengths for array column vector.
   private int[] intData;
   private long[] longData;
@@ -377,10 +377,9 @@ public final class OnHeapColumnVector extends ColumnVector {
       // need 2 ints as offset and length for each array.
       if (intData == null || intData.length < newCapacity * 2) {
         int[] newData = new int[newCapacity * 2];
-        if (intData != null) System.arraycopy(intData, 0, newData, 0, capacity * 2);
+        if (intData != null) System.arraycopy(intData, 0, newData, 0, intData.length);
         intData = newData;
       }
-      putInt(0, 0);
     } else if (type instanceof BooleanType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];

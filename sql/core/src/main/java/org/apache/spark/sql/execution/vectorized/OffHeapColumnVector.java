@@ -34,7 +34,7 @@ public final class OffHeapColumnVector extends ColumnVector {
   // The data stored in these two allocations need to maintain binary compatible. We can
   // directly pass this buffer to external components.
   private long nulls;
-  // The actually data of this column vector will be store here. If it's an array column vector,
+  // The actually data of this column vector will be stored here. If it's an array column vector,
   // we will store the offsets and lengths here, and store the element data in child column vector.
   private long data;
 
@@ -403,7 +403,6 @@ public final class OffHeapColumnVector extends ColumnVector {
     if (this.resultArray != null) {
       // need 2 ints as offset and length for each array.
       this.data = Platform.reallocateMemory(data, oldCapacity * 8, newCapacity * 8);
-      putInt(0, 0);
     } else if (type instanceof ByteType || type instanceof BooleanType) {
       this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);
     } else if (type instanceof ShortType) {
