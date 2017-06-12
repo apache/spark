@@ -657,7 +657,7 @@ case class DescribeColumnCommand(
             "average length of the values of the column").build())(),
         AttributeReference("max_col_len", StringType, nullable = true,
           new MetadataBuilder().putString("comment",
-            "max length of the values of the column").build())(),
+            "maximum length of the values of the column").build())(),
         AttributeReference("comment", StringType, nullable = true,
           new MetadataBuilder().putString("comment", "comment of the column").build())())
     } else {
@@ -687,11 +687,7 @@ case class DescribeColumnCommand(
       }
     }
 
-    val colStats: Map[String, ColumnStat] = if (catalog.isTemporaryTable(table)) {
-      Map.empty
-    } else {
-      catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
-    }
+    val colStats = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
     val cs = colStats.get(attribute.name)
 
     val comment = if (attribute.metadata.contains("comment")) {
@@ -701,7 +697,7 @@ case class DescribeColumnCommand(
     }
 
     val result = if (isFormatted) {
-      // Show column stats only when formatted is specified
+      // Show column stats only when formatted is specified.
       Row(
         attribute.name,
         attribute.dataType.simpleString,
