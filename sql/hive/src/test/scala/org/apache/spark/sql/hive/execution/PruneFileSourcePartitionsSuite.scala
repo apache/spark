@@ -72,9 +72,9 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
   test("SPARK-20986 Reset table's statistics after PruneFileSourcePartitions rule") {
     withTempView("tempTbl") {
       withTable("partTbl") {
-        spark.range(1000).selectExpr("id").createOrReplaceTempView("tempTbl")
+        spark.range(10).selectExpr("id").createOrReplaceTempView("tempTbl")
         sql("CREATE TABLE partTbl (id INT) PARTITIONED BY (part INT) STORED AS parquet")
-        for (part <- Seq(1, 2, 3)) {
+        for (part <- Seq(1, 2)) {
           sql(
             s"""
                |INSERT OVERWRITE TABLE partTbl PARTITION (part='$part')
@@ -83,8 +83,7 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
         }
 
         val tableName = "partTbl"
-        sql(s"analyze table partTbl compute STATISTICS")
-
+        sql(s"ANALYZE TABLE partTbl COMPUTE STATISTICS")
         val tableStats =
           spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).stats
         assert(tableStats.isDefined && tableStats.get.sizeInBytes > 0, "tableStats is lost")
@@ -98,7 +97,7 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
           assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
           assert(sizes1(0) == tableStats.get.sizeInBytes)
           val sizes2 = Optimize.execute(query).collect {
-            case relation: LogicalRelation => relation.computeStats(conf).sizeInBytes
+            case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
           }
           assert(sizes2.size === 1, s"Size wrong for:\n ${df.queryExecution}")
           assert(sizes2(0) < tableStats.get.sizeInBytes)
