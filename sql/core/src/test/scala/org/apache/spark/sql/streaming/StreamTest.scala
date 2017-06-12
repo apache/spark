@@ -172,8 +172,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
    *
    * @param isFatalError if this is a fatal error. If so, the error should also be caught by
    *                     UncaughtExceptionHandler.
+   * @param assertFailure a function to verify the error.
    */
   case class ExpectFailure[T <: Throwable : ClassTag](
+      assertFailure: Throwable => Unit = _ => {},
       isFatalError: Boolean = false) extends StreamAction {
     val causeClass: Class[T] = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
     override def toString(): String =
@@ -455,6 +457,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                     s"\tExpected: ${ef.causeClass}\n\tReturned: $streamThreadDeathCause")
                 streamThreadDeathCause = null
               }
+              ef.assertFailure(exception.getCause)
             } catch {
               case _: InterruptedException =>
               case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
