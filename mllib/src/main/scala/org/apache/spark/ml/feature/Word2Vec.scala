@@ -340,8 +340,10 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       val wordVectors = instance.wordVectors.getVectors
       val dataSeq = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }
       val dataPath = new Path(path, "data").toString
+      val bufferSizeInBytes = Utils.byteStringAsBytes(
+        sc.conf.get("spark.kryoserializer.buffer.max", "64m"))
       val numPartitions = Word2VecModelWriter.calculateNumberOfPartitions(
-        sc, instance.wordVectors.wordIndex.size, instance.getVectorSize)
+        bufferSizeInBytes, instance.wordVectors.wordIndex.size, instance.getVectorSize)
       sparkSession.createDataFrame(dataSeq)
         .repartition(numPartitions)
         .write
@@ -351,16 +353,20 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
 
   private[feature]
   object Word2VecModelWriter {
+    /**
+     * Calculate the number of partitions to use in saving the model.
+     * [SPARK-11994] - We want to partition the model in partitions smaller than
+     * spark.kryoserializer.buffer.max
+     * @param bufferSizeInBytes  Set to spark.kryoserializer.buffer.max
+     * @param numWords  Vocab size
+     * @param vectorSize  Vector length for each word
+     */
     def calculateNumberOfPartitions(
-        sc: SparkContext,
+        bufferSizeInBytes: Long,
         numWords: Int,
         vectorSize: Int): Int = {
       val floatSize = 4L  // Use Long to help avoid overflow
       val averageWordSize = 15
-      // [SPARK-11994] - We want to partition the model in partitions smaller than
-      // spark.kryoserializer.buffer.max
-      val bufferSizeInBytes = Utils.byteStringAsBytes(
-        sc.conf.get("spark.kryoserializer.buffer.max", "64m"))
       // Calculate the approximate size of the model.
       // Assuming an average word size of 15 bytes, the formula is:
       // (floatSize * vectorSize + 15) * numWords

@@ -25,6 +25,7 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.feature.{Word2VecModel => OldWord2VecModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
+import org.apache.spark.util.Utils
 
 class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -189,12 +190,12 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   }
 
   test("Word2Vec read/write numPartitions calculation") {
-    val tinyModelNumPartitions = Word2VecModel.Word2VecModelWriter.calculateNumberOfPartitions(
-      sc, numWords = 10, vectorSize = 5)
-    assert(tinyModelNumPartitions === 1)
-    val mediumModelNumPartitions = Word2VecModel.Word2VecModelWriter.calculateNumberOfPartitions(
-      sc, numWords = 1000000, vectorSize = 5000)
-    assert(mediumModelNumPartitions > 1)
+    val smallModelNumPartitions = Word2VecModel.Word2VecModelWriter.calculateNumberOfPartitions(
+      Utils.byteStringAsBytes("64m"), numWords = 10, vectorSize = 5)
+    assert(smallModelNumPartitions === 1)
+    val largeModelNumPartitions = Word2VecModel.Word2VecModelWriter.calculateNumberOfPartitions(
+      Utils.byteStringAsBytes("64m"), numWords = 1000000, vectorSize = 5000)
+    assert(largeModelNumPartitions > 1)
   }
 
   test("Word2Vec read/write") {
