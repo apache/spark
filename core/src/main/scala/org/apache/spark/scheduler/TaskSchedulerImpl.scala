@@ -129,7 +129,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   var backend: SchedulerBackend = null
 
-  val mapOutputTracker = SparkEnv.get.mapOutputTracker
+  val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 
   private var schedulableBuilder: SchedulableBuilder = null
   // default scheduler is FIFO
@@ -240,8 +240,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
         // 2. The task set manager has been created but no tasks has been scheduled. In this case,
         //    simply abort the stage.
         tsm.runningTasksSet.foreach { tid =>
-          val execId = taskIdToExecutorId(tid)
-          backend.killTask(tid, execId, interruptThread, reason = "stage cancelled")
+            taskIdToExecutorId.get(tid).foreach(execId =>
+              backend.killTask(tid, execId, interruptThread, reason = "Stage cancelled"))
         }
         tsm.abort("Stage %s cancelled".format(stageId))
         logInfo("Stage %d was cancelled".format(stageId))

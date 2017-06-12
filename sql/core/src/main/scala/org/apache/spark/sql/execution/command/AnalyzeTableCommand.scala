@@ -56,7 +56,7 @@ case class AnalyzeTableCommand(
     // 2. when total size is changed, `oldRowCount` becomes invalid.
     // This is to make sure that we only record the right statistics.
     if (!noscan) {
-      val newRowCount = sparkSession.table(tableIdentWithDB).count()
+      val newRowCount = sparkSession.table(tableIdentWithDB).countInternal()
       if (newRowCount >= 0 && newRowCount != oldRowCount) {
         newStats = if (newStats.isDefined) {
           newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
@@ -69,7 +69,7 @@ case class AnalyzeTableCommand(
     // Update the metastore if the above statistics of the table are different from those
     // recorded in the metastore.
     if (newStats.isDefined) {
-      sessionState.catalog.alterTable(tableMeta.copy(stats = newStats))
+      sessionState.catalog.alterTableStats(tableIdentWithDB, newStats.get)
       // Refresh the cached data source table in the catalog.
       sessionState.catalog.refreshTable(tableIdentWithDB)
     }

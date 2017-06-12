@@ -519,7 +519,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   protected def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
   /**
-   * Appends the string represent of this node and its children to the given StringBuilder.
+   * Appends the string representation of this node and its children to the given StringBuilder.
    *
    * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
    * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and

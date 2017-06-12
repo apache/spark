@@ -128,6 +128,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   import testImplicits._
 
   private val userSchema = new StructType().add("s", StringType)
+  private val userSchemaString = "s STRING"
   private val textSchema = new StructType().add("value", StringType)
   private val data = Seq("1", "2", "3")
   private val dir = Utils.createTempDir(namePrefix = "input").getCanonicalPath
@@ -677,5 +678,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       }.getMessage
       assert(e.contains("User specified schema not supported with `table`"))
     }
+  }
+
+  test("SPARK-20431: Specify a schema by using a DDL-formatted string") {
+    spark.createDataset(data).write.mode(SaveMode.Overwrite).text(dir)
+    testRead(spark.read.schema(userSchemaString).text(), Seq.empty, userSchema)
+    testRead(spark.read.schema(userSchemaString).text(dir), data, userSchema)
+    testRead(spark.read.schema(userSchemaString).text(dir, dir), data ++ data, userSchema)
+    testRead(spark.read.schema(userSchemaString).text(Seq(dir, dir): _*), data ++ data, userSchema)
   }
 }

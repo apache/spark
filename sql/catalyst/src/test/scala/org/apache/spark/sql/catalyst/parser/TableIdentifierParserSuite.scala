@@ -49,7 +49,7 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "insert", "int", "into", "is", "lateral", "like", "local", "none", "null",
     "of", "order", "out", "outer", "partition", "percent", "procedure", "range", "reads", "revoke",
     "rollup", "row", "rows", "set", "smallint", "table", "timestamp", "to", "trigger",
-    "true", "truncate", "update", "user", "using", "values", "with", "regexp", "rlike",
+    "true", "truncate", "update", "user", "values", "with", "regexp", "rlike",
     "bigint", "binary", "boolean", "current_date", "current_timestamp", "date", "double", "float",
     "int", "smallint", "timestamp", "at")
 

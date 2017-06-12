@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.io.CharArrayWriter
 import java.sql.{Date, Timestamp}
-import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -132,7 +131,7 @@ private[sql] object Dataset {
  *
  *   people.filter("age > 30")
  *     .join(department, people("deptId") === department("id"))
- *     .groupBy(department("name"), "gender")
+ *     .groupBy(department("name"), people("gender"))
  *     .agg(avg(people("salary")), max(people("age")))
  * }}}
  *
@@ -142,9 +141,9 @@ private[sql] object Dataset {
  *   Dataset<Row> people = spark.read().parquet("...");
  *   Dataset<Row> department = spark.read().parquet("...");
  *
- *   people.filter("age".gt(30))
- *     .join(department, people.col("deptId").equalTo(department("id")))
- *     .groupBy(department.col("name"), "gender")
+ *   people.filter(people.col("age").gt(30))
+ *     .join(department, people.col("deptId").equalTo(department.col("id")))
+ *     .groupBy(department.col("name"), people.col("gender"))
  *     .agg(avg(people.col("salary")), max(people.col("age")));
  * }}}
  *
@@ -180,9 +179,9 @@ class Dataset[T] private[sql](
     // to happen right away to let these side effects take place eagerly.
     queryExecution.analyzed match {
       case c: Command =>
-        LocalRelation(c.output, queryExecution.executedPlan.executeCollect())
+        LocalRelation(c.output, withAction("command", queryExecution)(_.executeCollect()))
       case u @ Union(children) if children.forall(_.isInstanceOf[Command]) =>
-        LocalRelation(u.output, queryExecution.executedPlan.executeCollect())
+        LocalRelation(u.output, withAction("command", queryExecution)(_.executeCollect()))
       case _ =>
         queryExecution.analyzed
     }
@@ -246,10 +245,16 @@ class Dataset[T] private[sql](
       _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0)
     val takeResult = toDF().take(numRows + 1)
-    val hasMoreData = takeResult.length > numRows
-    val data = takeResult.take(numRows)
+    showString(takeResult, numRows, truncate, vertical)
+  }
 
-    lazy val timeZone = TimeZone.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
+  private def showString(
+      dataWithOneMoreRow: Array[Row], numRows: Int, truncate: Int, vertical: Boolean): String = {
+    val hasMoreData = dataWithOneMoreRow.length > numRows
+    val data = dataWithOneMoreRow.take(numRows)
+
+    lazy val timeZone =
+      DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
@@ -615,7 +620,8 @@ class Dataset[T] private[sql](
         .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
     require(parsedDelay.milliseconds >= 0 && parsedDelay.months >= 0,
       s"delay threshold ($delayThreshold) should not be negative.")
-    EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
+    EliminateEventTimeWatermark(
+      EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
   }
 
   /**
@@ -679,6 +685,18 @@ class Dataset[T] private[sql](
     println(showString(numRows, truncate = 20))
   } else {
     println(showString(numRows, truncate = 0))
+  }
+
+  // An internal version of `show`, which won't set execution id and trigger listeners.
+  private[sql] def showInternal(_numRows: Int, truncate: Boolean): Unit = {
+    val numRows = _numRows.max(0)
+    val takeResult = toDF().takeInternal(numRows + 1)
+
+    if (truncate) {
+      println(showString(takeResult, numRows, truncate = 20, vertical = false))
+    } else {
+      println(showString(takeResult, numRows, truncate = 0, vertical = false))
+    }
   }
   // scalastyle:on println
 
@@ -1172,8 +1190,8 @@ class Dataset[T] private[sql](
    * @since 2.2.0
    */
   @scala.annotation.varargs
-  def hint(name: String, parameters: String*): Dataset[T] = withTypedPlan {
-    Hint(name, parameters, logicalPlan)
+  def hint(name: String, parameters: Any*): Dataset[T] = withTypedPlan {
+    UnresolvedHint(name, parameters, logicalPlan)
   }
 
   /**
@@ -1716,10 +1734,11 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
-   * This is equivalent to `UNION ALL` in SQL.
    *
-   * To do a SQL-style set union (that does deduplication of elements), use this function followed
-   * by a [[distinct]].
+   * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
+   * deduplication of elements), use this function followed by a [[distinct]].
+   *
+   * Also as standard in SQL, this function resolves columns by position (not by name).
    *
    * @group typedrel
    * @since 2.0.0
@@ -1729,10 +1748,11 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
-   * This is equivalent to `UNION ALL` in SQL.
    *
-   * To do a SQL-style set union (that does deduplication of elements), use this function followed
-   * by a [[distinct]].
+   * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
+   * deduplication of elements), use this function followed by a [[distinct]].
+   *
+   * Also as standard in SQL, this function resolves columns by position (not by name).
    *
    * @group typedrel
    * @since 2.0.0
@@ -2449,6 +2469,11 @@ class Dataset[T] private[sql](
    */
   def take(n: Int): Array[T] = head(n)
 
+  // An internal version of `take`, which won't set execution id and trigger listeners.
+  private[sql] def takeInternal(n: Int): Array[T] = {
+    collectFromPlan(limit(n).queryExecution.executedPlan)
+  }
+
   /**
    * Returns the first `n` rows in the Dataset as a list.
    *
@@ -2472,6 +2497,11 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def collect(): Array[T] = withAction("collect", queryExecution)(collectFromPlan)
+
+  // An internal version of `collect`, which won't set execution id and trigger listeners.
+  private[sql] def collectInternal(): Array[T] = {
+    collectFromPlan(queryExecution.executedPlan)
+  }
 
   /**
    * Returns a Java list that contains all rows in this Dataset.
@@ -2512,6 +2542,11 @@ class Dataset[T] private[sql](
    */
   def count(): Long = withAction("count", groupBy().count().queryExecution) { plan =>
     plan.executeCollect().head.getLong(0)
+  }
+
+  // An internal version of `count`, which won't set execution id and trigger listeners.
+  private[sql] def countInternal(): Long = {
+    groupBy().count().queryExecution.executedPlan.executeCollect().head.getLong(0)
   }
 
   /**
@@ -2743,7 +2778,23 @@ class Dataset[T] private[sql](
     createTempViewCommand(viewName, replace = false, global = true)
   }
 
-  private def createTempViewCommand(
+  /**
+   * Creates or replaces a global temporary view using the given name. The lifetime of this
+   * temporary view is tied to this Spark application.
+   *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM _global_temp.view1`.
+   *
+   * @group basic
+   * @since 2.2.0
+   */
+  def createOrReplaceGlobalTempView(viewName: String): Unit = withPlan {
+    createTempViewCommand(viewName, replace = true, global = true)
+  }
+
+  private[spark] def createTempViewCommand(
       viewName: String,
       replace: Boolean,
       global: Boolean): CreateViewCommand = {
@@ -2781,13 +2832,11 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * :: Experimental ::
    * Interface for saving the content of the streaming Dataset out into external storage.
    *
    * @group basic
    * @since 2.0.0
    */
-  @Experimental
   @InterfaceStability.Evolving
   def writeStream: DataStreamWriter[T] = {
     if (!isStreaming) {
@@ -2805,7 +2854,7 @@ class Dataset[T] private[sql](
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
     val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
-    val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
+    mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JacksonGenerator(rowSchema, writer,
@@ -2814,7 +2863,7 @@ class Dataset[T] private[sql](
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
-          gen.write(iter.next())
+          gen.write(exprEnc.toRow(iter.next()))
           gen.flush()
 
           val json = writer.toString
@@ -2827,9 +2876,7 @@ class Dataset[T] private[sql](
           json
         }
       }
-    }
-    import sparkSession.implicits.newStringEncoder
-    sparkSession.createDataset(rdd)
+    } (Encoders.STRING)
   }
 
   /**
@@ -2938,17 +2985,17 @@ class Dataset[T] private[sql](
   }
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
-  @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
+  @inline private def withPlan(logicalPlan: LogicalPlan): DataFrame = {
     Dataset.ofRows(sparkSession, logicalPlan)
   }
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */
-  @inline private def withTypedPlan[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
+  @inline private def withTypedPlan[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
     Dataset(sparkSession, logicalPlan)
   }
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */
-  @inline private def withSetOperator[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
+  @inline private def withSetOperator[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
     if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
       // Set operators widen types (change the schema), so we cannot reuse the row encoder.
       Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
