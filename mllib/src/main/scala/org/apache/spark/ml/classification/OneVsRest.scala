@@ -33,7 +33,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamPair, Params, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -65,6 +65,12 @@ private[ml] trait OneVsRestParams extends PredictorParams with ClassifierTypeTra
 
   /** @group getParam */
   def getClassifier: ClassifierType = $(classifier)
+
+  val parallelism = new IntParam(this, "parallelism",
+    "parallelism parameter for tuning amount of parallelism", ParamValidators.gt(1))
+
+  /** @group getParam */
+  def getParallelism: Int = $(parallelism)
 }
 
 private[ml] object OneVsRestParams extends ClassifierTypeTrait {
@@ -280,6 +286,12 @@ final class OneVsRest @Since("1.4.0") (
   @Since("1.4.0")
   def setClassifier(value: Classifier[_, _, _]): this.type = {
     set(classifier, value.asInstanceOf[ClassifierType])
+  }
+
+  /** @group setParam */
+  @Since("1.4.0")
+  def setParallelism(value: Int): this.type = {
+    set(parallelism, value)
   }
 
   /** @group setParam */

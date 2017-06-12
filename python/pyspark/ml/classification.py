@@ -16,6 +16,7 @@
 #
 
 import operator
+from multiprocessing.pool import ThreadPool
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
@@ -1510,21 +1511,25 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     .. versionadded:: 2.0.0
     """
+    parallelism = Param(Params._dummy(), "parallelism",
+                        "Number of models to fit in parallel",
+                        typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 classifier=None):
+                 classifier=None, parallelism=8):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  classifier=None)
         """
         super(OneVsRest, self).__init__()
+        self._setDefault(parallelism=8)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
+    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None, parallelism=None):
         """
         setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
         Sets params for OneVsRest.
@@ -1561,12 +1566,27 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
             return classifier.fit(trainingDataset, paramMap)
 
         # TODO: Parallel training for all classes.
-        models = [trainSingleClass(i) for i in range(numClasses)]
+        pool = ThreadPool(processes=self.getParallelism())
+
+        models = pool.map(trainSingleClass, range(numClasses))
+        #models = [trainSingleClass(i) for i in range(numClasses)]
 
         if handlePersistence:
             multiclassLabeled.unpersist()
 
         return self._copyValues(OneVsRestModel(models=models))
+
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
+
+    def getParallelism(self):
+        """
+        Gets the value of parallelism or its default value.
+        """
+        return self.getOrDefault(self.parallelism)
 
     @since("2.0.0")
     def copy(self, extra=None):
@@ -1611,8 +1631,9 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         labelCol = java_stage.getLabelCol()
         predictionCol = java_stage.getPredictionCol()
         classifier = JavaParams._from_java(java_stage.getClassifier())
+        parallelism = java_stage.getParallelism()
         py_stage = cls(featuresCol=featuresCol, labelCol=labelCol, predictionCol=predictionCol,
-                       classifier=classifier)
+                       classifier=classifier, parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -1625,11 +1646,11 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
                                              self.uid)
         _java_obj.setClassifier(self.getClassifier()._to_java())
+        _java_obj.setParallelism(self.getParallelism())
         _java_obj.setFeaturesCol(self.getFeaturesCol())
         _java_obj.setLabelCol(self.getLabelCol())
         _java_obj.setPredictionCol(self.getPredictionCol())
         return _java_obj
-
 
 class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
     """
