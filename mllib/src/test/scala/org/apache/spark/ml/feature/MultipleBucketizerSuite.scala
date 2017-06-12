@@ -32,10 +32,6 @@ class MultipleBucketizerSuite extends SparkFunSuite with MLlibTestSparkContext
 
   import testImplicits._
 
-  test("params") {
-    ParamsSuite.checkParams(new MultipleBucketizer)
-  }
-
   test("Bucket continuous features, without -inf,inf") {
     // Check a set of valid feature values.
     val splits = Array(Array(-0.5, 0.0, 0.5), Array(-0.1, 0.3, 0.5))
@@ -49,10 +45,12 @@ class MultipleBucketizerSuite extends SparkFunSuite with MLlibTestSparkContext
     }
     val dataFrame: DataFrame = data.toSeq.toDF("feature1", "feature2", "expected1", "expected2")
 
-    val bucketizer1: MultipleBucketizer = new MultipleBucketizer()
+    val bucketizer1: Bucketizer = new Bucketizer()
       .setInputCols(Array("feature1", "feature2"))
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
+
+    assert(bucketizer1.isBucketizeMultipleInputCols())
 
     bucketizer1.transform(dataFrame).select("result1", "expected1", "result2", "expected2")
       .collect().foreach {
@@ -68,10 +66,12 @@ class MultipleBucketizerSuite extends SparkFunSuite with MLlibTestSparkContext
     val invalidData2 = Array(0.51) ++ validData1
     val badDF1 = invalidData1.zipWithIndex.toSeq.toDF("feature", "idx")
 
-    val bucketizer2: MultipleBucketizer = new MultipleBucketizer()
+    val bucketizer2: Bucketizer = new Bucketizer()
       .setInputCols(Array("feature"))
       .setOutputCols(Array("result"))
       .setSplitsArray(Array(splits(0)))
+
+    assert(bucketizer2.isBucketizeMultipleInputCols())
 
     withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
       intercept[SparkException] {
@@ -101,10 +101,12 @@ class MultipleBucketizerSuite extends SparkFunSuite with MLlibTestSparkContext
     }
     val dataFrame: DataFrame = data.toSeq.toDF("feature1", "feature2", "expected1", "expected2")
 
-    val bucketizer: MultipleBucketizer = new MultipleBucketizer()
+    val bucketizer: Bucketizer = new Bucketizer()
       .setInputCols(Array("feature1", "feature2"))
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
+
+    assert(bucketizer.isBucketizeMultipleInputCols())
 
     bucketizer.transform(dataFrame).select("result1", "expected1", "result2", "expected2")
       .collect().foreach {
@@ -131,10 +133,12 @@ class MultipleBucketizerSuite extends SparkFunSuite with MLlibTestSparkContext
     }
     val dataFrame: DataFrame = data.toSeq.toDF("feature1", "feature2", "expected1", "expected2")
 
-    val bucketizer: MultipleBucketizer = new MultipleBucketizer()
+    val bucketizer: Bucketizer = new Bucketizer()
       .setInputCols(Array("feature1", "feature2"))
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
+
+    assert(bucketizer.isBucketizeMultipleInputCols())
 
     bucketizer.setHandleInvalid("keep")
     bucketizer.transform(dataFrame).select("result1", "expected1", "result2", "expected2")
@@ -169,16 +173,17 @@ class MultipleBucketizerSuite extends SparkFunSuite with MLlibTestSparkContext
     val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity, Double.NaN)
     withClue("Invalid NaN split was not caught during Bucketizer initialization") {
       intercept[IllegalArgumentException] {
-        new MultipleBucketizer().setSplitsArray(Array(splits))
+        new Bucketizer().setSplitsArray(Array(splits))
       }
     }
   }
 
   test("read/write") {
-    val t = new MultipleBucketizer()
+    val t = new Bucketizer()
       .setInputCols(Array("myInputCol"))
       .setOutputCols(Array("myOutputCol"))
       .setSplitsArray(Array(Array(0.1, 0.8, 0.9)))
+    assert(t.isBucketizeMultipleInputCols())
     testDefaultReadWrite(t)
   }
 }
