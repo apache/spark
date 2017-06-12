@@ -38,12 +38,12 @@ import org.apache.spark.util.{ManualClock, SystemClock}
  *  with 0L.
  *
  *  This source supports the following options:
- *  - `rowsPerSecond` (e.g. 100, default: 1): How many tuples should be generated per second.
+ *  - `rowsPerSecond` (e.g. 100, default: 1): How many rows should be generated per second.
  *  - `rampUpTime` (e.g. 5s, default: 0s): How long to ramp up before the generating speed
  *    becomes `rowsPerSecond`. Using finer granularities than seconds will be truncated to integer
  *    seconds.
  *  - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for the
- *    generated tuples. The source will try its best to reach `rowsPerSecond`, but the query may
+ *    generated rows. The source will try its best to reach `rowsPerSecond`, but the query may
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
 class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
