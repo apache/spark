@@ -448,6 +448,18 @@ abstract class SessionCatalogSuite extends PlanTest {
     }
   }
 
+  test("alter table stats") {
+    withBasicCatalog { catalog =>
+      val tableId = TableIdentifier("tbl1", Some("db2"))
+      val oldTableStats = catalog.getTableMetadata(tableId).stats
+      assert(oldTableStats.isEmpty)
+      val newStats = CatalogStatistics(sizeInBytes = 1)
+      catalog.alterTableStats(tableId, newStats)
+      val newTableStats = catalog.getTableMetadata(tableId).stats
+      assert(newTableStats.get == newStats)
+    }
+  }
+
   test("alter table add columns") {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
