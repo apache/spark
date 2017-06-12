@@ -401,7 +401,7 @@ public final class OffHeapColumnVector extends ColumnVector {
   protected void reserveInternal(int newCapacity) {
     int oldCapacity = (this.data == 0L) ? 0 : capacity;
     if (this.resultArray != null) {
-      // need 2 ints as offset and length for each array.
+      // need a long as offset and length for each array.
       this.data = Platform.reallocateMemory(data, oldCapacity * 8, newCapacity * 8);
     } else if (type instanceof ByteType || type instanceof BooleanType) {
       this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);

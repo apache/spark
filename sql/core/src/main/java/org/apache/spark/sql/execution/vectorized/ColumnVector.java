@@ -520,11 +520,11 @@ public abstract class ColumnVector implements AutoCloseable {
 
   /**
    * After writing array elements to the child column vector, call this method to set the offset and
-   * length of the written array.
+   * size of the written array.
    */
-  public void putArrayOffsetAndLength(int rowId, int offset, int length) {
-    putInt(2 * rowId, offset);
-    putInt(2 * rowId + 1, length);
+  public void putArrayOffsetAndSize(int rowId, int offset, int size) {
+    long offsetAndSize = (offset << 32) | size;
+    putLong(rowId, offsetAndSize);
   }
 
   /**
@@ -548,8 +548,9 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the array at rowid.
    */
   public final Array getArray(int rowId) {
-    resultArray.offset = getInt(2 * rowId);
-    resultArray.length = getInt(2 * rowId + 1);
+    long offsetAndSize = getLong(rowId);
+    resultArray.offset = (int) (offsetAndSize >> 32);
+    resultArray.length = (int) offsetAndSize;
     return resultArray;
   }
 
@@ -563,7 +564,7 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public int putByteArray(int rowId, byte[] value, int offset, int length) {
     int result = arrayData().appendBytes(length, value, offset);
-    putArrayOffsetAndLength(rowId, result, length);
+    putArrayOffsetAndSize(rowId, result, length);
     return result;
   }
 
@@ -829,13 +830,13 @@ public abstract class ColumnVector implements AutoCloseable {
   public final int appendByteArray(byte[] value, int offset, int length) {
     int copiedOffset = arrayData().appendBytes(length, value, offset);
     reserve(elementsAppended + 1);
-    putArrayOffsetAndLength(elementsAppended, copiedOffset, length);
+    putArrayOffsetAndSize(elementsAppended, copiedOffset, length);
     return elementsAppended++;
   }
 
   public final int appendArray(int length) {
     reserve(elementsAppended + 1);
-    putArrayOffsetAndLength(elementsAppended, arrayData().elementsAppended, length);
+    putArrayOffsetAndSize(elementsAppended, arrayData().elementsAppended, length);
     return elementsAppended++;
   }
 
