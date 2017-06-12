@@ -22,6 +22,7 @@ import java.lang.reflect.Modifier
 import scala.collection.mutable.Builder
 import scala.language.existentials
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
@@ -597,8 +598,8 @@ case class MapObjects private(
 
     val (initCollection, addElement, getResult): (String, String => String, String) =
       customCollectionCls match {
-        case Some(cls) =>
-          // collection
+        case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+          // Scala sequence
           val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder()"
           val builder = ctx.freshName("collectionBuilder")
           (
@@ -608,6 +609,20 @@ case class MapObjects private(
              """,
             genValue => s"$builder.$$plus$$eq($genValue);",
             s"(${cls.getName}) $builder.result();"
+          )
+        case Some(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+          // Java list
+          val builder = ctx.freshName("collectionBuilder")
+          (
+            if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
+              cls == classOf[java.util.AbstractSequentialList[_]]) {
+              s"${cls.getName} $builder = new java.util.ArrayList($dataLength);"
+            } else {
+              val param = Try(cls.getConstructor(Integer.TYPE)).map(_ => dataLength).getOrElse("")
+              s"${cls.getName} $builder = new ${cls.getName}($param);"
+            },
+            genValue => s"$builder.add($genValue);",
+            s"$builder;"
           )
         case None =>
           // array
