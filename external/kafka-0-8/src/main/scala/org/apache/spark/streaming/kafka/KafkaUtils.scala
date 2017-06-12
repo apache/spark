@@ -197,7 +197,7 @@ object KafkaUtils {
     }
     val badRanges = KafkaCluster.checkErrors(result)
     if (!badRanges.isEmpty) {
-      throw new SparkException("Offsets not available on leader: " + badRanges.mkString(","))
+      throw new SparkException("Offsets are not available on leader: " + badRanges.mkString(","))
     }
   }
 
