@@ -197,8 +197,8 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     val end = java.lang.Long.MIN_VALUE + 2
     Seq("false", "true").foreach { value =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value) {
-        assert(spark.sparkContext.range(start, end, 1).collect.length == 0)
         assert(spark.range(start, end, 1).collect.length == 0)
+        assert(spark.range(start, start, 1).collect.length == 0)
       }
     }
   }
