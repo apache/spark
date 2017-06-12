@@ -298,7 +298,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     assertEqualPlans(query, expected)
   }
 
-  test("Test 5: Table stats not available for some of the joined tables") {
+  test("Test 5: Table stats are not available for some of the joined tables") {
     // Star join:
     //   (=)  (=)
     // d1 - f1 - d2

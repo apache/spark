@@ -293,7 +293,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getConfig(): Map[String, String] = {
     val safeMode = if (isFsInSafeMode()) {
-      Map("HDFS State" -> "In safe mode, application logs not available.")
+      Map("HDFS State" -> "In safe mode, application logs are not available.")
     } else {
       Map()
     }
