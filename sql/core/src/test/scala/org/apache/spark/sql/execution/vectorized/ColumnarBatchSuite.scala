@@ -669,7 +669,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
       column.putArrayOffsetAndLength(0, 0, 1)
       column.putArrayOffsetAndLength(1, 1, 2)
-      column.putArrayOffsetAndLength(2, 2, 0)
+      column.putArrayOffsetAndLength(2, 3, 0)
       column.putArrayOffsetAndLength(3, 3, 3)
 
       val a1 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
