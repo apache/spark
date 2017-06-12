@@ -210,6 +210,9 @@ class RateStreamSource(
   }
 
   override def stop(): Unit = {}
+
+  override def toString: String = s"RateSource[rowsPerSecond=$rowsPerSecond, " +
+    s"rampUpTimeSeconds=$rampUpTimeSeconds, numPartitions=$numPartitions]"
 }
 
 object RateStreamSource {
