@@ -375,7 +375,6 @@ struct<FLOOR(CAST(0 AS DOUBLE)):bigint>
 
 
 -- !query 45
-<<<<<<< 9bddb3c617ffd21ddc431f65fbbd1960fa70913c
 select floor(1)
 -- !query 45 schema
 struct<FLOOR(CAST(1 AS DOUBLE)):bigint>
@@ -409,10 +408,20 @@ struct<FLOOR(-0.10):decimal(1,0)>
 
 -- !query 49
 select 1 > 0.00001
+
+select BIT_LENGTH('abc')
 -- !query 49 schema
-struct<(CAST(1 AS BIGINT) > 0):boolean>
+struct<>
 -- !query 49 output
-true
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'select' expecting {<EOF>, ',', 'FROM', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'LIMIT', 'LATERAL', 'WINDOW', 'UNION', 'EXCEPT', 'MINUS', 'INTERSECT', 'SORT', 'CLUSTER', 'DISTRIBUTE'}(line 3, pos 0)
+
+== SQL ==
+select 1 > 0.00001
+
+select BIT_LENGTH('abc')
+^^^
 
 
 -- !query 50
