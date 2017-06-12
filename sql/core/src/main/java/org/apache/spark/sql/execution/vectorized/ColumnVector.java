@@ -522,7 +522,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * After writing array elements to the child column vector, call this method to set the offset and
    * length of the written array.
    */
-  public void arrayWriteEnd(int rowId, int offset, int length) {
+  public void putArrayOffsetAndLength(int rowId, int offset, int length) {
     putInt(2 * rowId, offset);
     putInt(2 * rowId + 1, length);
   }
@@ -563,7 +563,7 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public int putByteArray(int rowId, byte[] value, int offset, int length) {
     int result = arrayData().appendBytes(length, value, offset);
-    arrayWriteEnd(rowId, result, length);
+    putArrayOffsetAndLength(rowId, result, length);
     return result;
   }
 
@@ -829,13 +829,13 @@ public abstract class ColumnVector implements AutoCloseable {
   public final int appendByteArray(byte[] value, int offset, int length) {
     int copiedOffset = arrayData().appendBytes(length, value, offset);
     reserve(elementsAppended + 1);
-    arrayWriteEnd(elementsAppended, copiedOffset, length);
+    putArrayOffsetAndLength(elementsAppended, copiedOffset, length);
     return elementsAppended++;
   }
 
   public final int appendArray(int length) {
     reserve(elementsAppended + 1);
-    arrayWriteEnd(elementsAppended, arrayData().elementsAppended, length);
+    putArrayOffsetAndLength(elementsAppended, arrayData().elementsAppended, length);
     return elementsAppended++;
   }
 

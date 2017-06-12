@@ -42,6 +42,8 @@ public final class OnHeapColumnVector extends ColumnVector {
   // Array for each type. Only 1 is populated for any type.
   private byte[] byteData;
   private short[] shortData;
+  // This is not used used to store data for int column vector, but also can store offsets and
+  // lengths for array column vector.
   private int[] intData;
   private long[] longData;
   private float[] floatData;

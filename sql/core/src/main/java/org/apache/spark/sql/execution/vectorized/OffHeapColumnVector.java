@@ -34,6 +34,8 @@ public final class OffHeapColumnVector extends ColumnVector {
   // The data stored in these two allocations need to maintain binary compatible. We can
   // directly pass this buffer to external components.
   private long nulls;
+  // The actually data of this column vector will be store here. If it's an array column vector,
+  // we will store the offsets and lengths here, and store the element data in child column vector.
   private long data;
 
   protected OffHeapColumnVector(int capacity, DataType type) {

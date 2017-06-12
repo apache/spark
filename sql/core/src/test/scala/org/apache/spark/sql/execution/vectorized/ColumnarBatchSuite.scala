@@ -631,7 +631,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.arrayData().elementsAppended == 17)
 
       // Put the same "ll" at offset. This should not allocate more memory in the column.
-      column.arrayWriteEnd(idx, offset, 2)
+      column.putArrayOffsetAndLength(idx, offset, 2)
       reference += "ll"
       idx += 1
       assert(column.arrayData().elementsAppended == 17)
@@ -667,10 +667,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
 
       // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
-      column.arrayWriteEnd(0, 0, 1)
-      column.arrayWriteEnd(1, 1, 2)
-      column.arrayWriteEnd(2, 2, 0)
-      column.arrayWriteEnd(3, 3, 3)
+      column.putArrayOffsetAndLength(0, 0, 1)
+      column.putArrayOffsetAndLength(1, 1, 2)
+      column.putArrayOffsetAndLength(2, 2, 0)
+      column.putArrayOffsetAndLength(3, 3, 3)
 
       val a1 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
       val a2 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(1)).asInstanceOf[Array[Int]]
@@ -703,7 +703,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       data.reserve(array.length)
       assert(data.capacity == array.length * 2)
       data.putInts(0, array.length, array, 0)
-      column.arrayWriteEnd(0, 0, array.length)
+      column.putArrayOffsetAndLength(0, 0, array.length)
       assert(ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
         === array)
     }}
