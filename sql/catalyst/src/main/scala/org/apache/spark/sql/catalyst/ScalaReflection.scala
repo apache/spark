@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -335,31 +335,12 @@ object ScalaReflection extends ScalaReflection {
         // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
-        val keyData =
-          Invoke(
-            MapObjects(
-              p => deserializerFor(keyType, Some(p), walkedTypePath),
-              Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType),
-                returnNullable = false),
-              schemaFor(keyType).dataType),
-            "array",
-            ObjectType(classOf[Array[Any]]), returnNullable = false)
-
-        val valueData =
-          Invoke(
-            MapObjects(
-              p => deserializerFor(valueType, Some(p), walkedTypePath),
-              Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType),
-                returnNullable = false),
-              schemaFor(valueType).dataType),
-            "array",
-            ObjectType(classOf[Array[Any]]), returnNullable = false)
-
-        StaticInvoke(
-          ArrayBasedMapData.getClass,
-          ObjectType(classOf[scala.collection.immutable.Map[_, _]]),
-          "toScalaMap",
-          keyData :: valueData :: Nil)
+        CollectObjectsToMap(
+          p => deserializerFor(keyType, Some(p), walkedTypePath),
+          p => deserializerFor(valueType, Some(p), walkedTypePath),
+          getPath,
+          mirror.runtimeClass(t.typeSymbol.asClass)
+        )
 
       case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
