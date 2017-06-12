@@ -230,8 +230,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("describe table formatted t",
       DescribeTableCommand(
         TableIdentifier("t"), Map.empty, isExtended = true))
-
-    intercept("explain describe tables x", "Unsupported SQL statement")
   }
 
   test("describe table column") {
