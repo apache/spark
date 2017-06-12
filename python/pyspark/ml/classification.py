@@ -1529,7 +1529,8 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None, parallelism=None):
+    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None,
+                  classifier=None, parallelism=None):
         """
         setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
         Sets params for OneVsRest.
@@ -1565,11 +1566,9 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
                             (classifier.predictionCol, predictionCol)])
             return classifier.fit(trainingDataset, paramMap)
 
-        # TODO: Parallel training for all classes.
         pool = ThreadPool(processes=self.getParallelism())
 
         models = pool.map(trainSingleClass, range(numClasses))
-        #models = [trainSingleClass(i) for i in range(numClasses)]
 
         if handlePersistence:
             multiclassLabeled.unpersist()
@@ -1651,6 +1650,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         _java_obj.setLabelCol(self.getLabelCol())
         _java_obj.setPredictionCol(self.getPredictionCol())
         return _java_obj
+
 
 class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
     """

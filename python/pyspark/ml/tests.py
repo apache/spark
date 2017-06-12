@@ -1234,6 +1234,7 @@ class OneVsRestTests(SparkSessionTestCase):
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
 
+
 class ParOneVsRestTests(SparkSessionTestCase):
 
     def test_copy(self):
@@ -1260,6 +1261,7 @@ class ParOneVsRestTests(SparkSessionTestCase):
         model = ovr.fit(df)
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
+
 
 class HashingTFTest(SparkSessionTestCase):
 
