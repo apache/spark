@@ -76,7 +76,7 @@ select floor(0.01);
 select floor(-0.10);
 
 -- comparison operator
-select 1 > 0.00001
+select 1 > 0.00001;
 
 -- mod
 select mod(7, 2), mod(7, 0), mod(0, 2), mod(7, null), mod(null, 2), mod(null, null);

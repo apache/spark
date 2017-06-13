@@ -658,6 +658,8 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
        4
       > SELECT _FUNC_('bar', 'foobarbar', 5);
        7
+      > SELECT POSITION('bar' in 'foobarbar');
+       4
   """)
 // scalastyle:on line.size.limit
 case class StringLocate(substr: Expression, str: Expression, start: Expression)

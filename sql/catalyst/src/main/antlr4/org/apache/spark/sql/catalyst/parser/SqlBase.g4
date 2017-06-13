@@ -574,6 +574,7 @@ primaryExpression
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
+    | POSITION '(' valueExpression IN valueExpression ')'                                      #position
     ;
 
 constant
@@ -720,6 +721,7 @@ nonReserved
     | SET | RESET
     | VIEW | REPLACE
     | IF
+    | POSITION
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
@@ -850,6 +852,8 @@ MACRO: 'MACRO';
 IGNORE: 'IGNORE';
 
 IF: 'IF';
+
+POSITION: 'POSITION';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
