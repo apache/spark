@@ -50,7 +50,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   private var testDirPath: Path = _
 
   before {
-    testDir = Utils.createTempDir()
+    testDir = Utils.createTempDir(namePrefix = s"history log")
     testDir.deleteOnExit()
     testDirPath = new Path(testDir.getAbsolutePath())
   }
@@ -109,7 +109,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   test("Log overwriting") {
     val logUri = EventLoggingListener.getLogPath(testDir.toURI, "test", None)
-    val logPath = new URI(logUri).getPath
+    val logPath = new Path(logUri).toUri.getPath
     // Create file before writing the event log
     new FileOutputStream(new File(logPath)).close()
     // Expected IOException, since we haven't enabled log overwrite.
@@ -290,7 +290,7 @@ object EventLoggingListenerSuite {
     val conf = new SparkConf
     conf.set("spark.eventLog.enabled", "true")
     conf.set("spark.eventLog.testing", "true")
-    conf.set("spark.eventLog.dir", logDir.toUri.toString)
+    conf.set("spark.eventLog.dir", logDir.toString)
     compressionCodec.foreach { codec =>
       conf.set("spark.eventLog.compress", "true")
       conf.set("spark.io.compression.codec", codec)
