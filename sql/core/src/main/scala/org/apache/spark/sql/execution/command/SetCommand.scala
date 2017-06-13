@@ -155,24 +155,14 @@ object SetCommand {
  */
 case class ResetCommand(key: Option[String]) extends RunnableCommand with Logging {
 
-  private val runFunc: (SparkSession => Unit) = key match {
-
-    case None =>
-      val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.sessionState.conf.clear()
-      }
-      runFunc
-
-    // (In Hive, "RESET key" clear a specific property.)
-    case Some(key) =>
-      val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.conf.unset(key)
-      }
-      runFunc
-  }
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    runFunc(sparkSession)
+    key match {
+      case None =>
+        sparkSession.sessionState.conf.clear()
+      // "RESET key" clear a specific property.
+      case Some(key) =>
+        sparkSession.conf.unset(key)
+    }
     Seq.empty[Row]
   }
 }
