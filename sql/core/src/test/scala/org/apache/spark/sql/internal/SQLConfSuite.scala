@@ -114,97 +114,55 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("reset - public conf") {
-    spark.sessionState.conf.clear()
-    val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
-    try {
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
-      sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
-      assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
-      sql(s"reset")
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
-      assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
-    } finally {
-      sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
+  Seq("reset", s"reset ${SQLConf.GROUP_BY_ORDINAL.key}").foreach { resetCmd =>
+    test("reset - public conf") {
+      spark.sessionState.conf.clear()
+      val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
+      try {
+        assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+        sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
+        assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
+        assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
+        sql(resetCmd)
+        assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+        assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
+      } finally {
+        sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
+      }
     }
   }
 
-  test("reset specific property - public conf") {
-    spark.sessionState.conf.clear()
-    val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
-    try {
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
-      sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
-      assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
-      sql(s"reset ${SQLConf.GROUP_BY_ORDINAL.key}")
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
-      assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
-    } finally {
-      sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
+  Seq("reset", s"reset ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}").foreach { resetCmd =>
+    test("reset - internal conf") {
+      spark.sessionState.conf.clear()
+      val original = spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS)
+      try {
+        assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
+        sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}=10")
+        assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 10)
+        assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 1)
+        sql(resetCmd)
+        assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
+        assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 0)
+      } finally {
+        sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS}=$original")
+      }
     }
   }
 
-  test("reset - internal conf") {
-    spark.sessionState.conf.clear()
-    val original = spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS)
-    try {
-      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
-      sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}=10")
-      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 10)
-      assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 1)
-      sql(s"reset")
-      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
-      assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 0)
-    } finally {
-      sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS}=$original")
-    }
-  }
-
-  test("reset specific property - internal conf") {
-    spark.sessionState.conf.clear()
-    val original = spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS)
-    try {
-      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
-      sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}=10")
-      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 10)
-      assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 1)
-      sql(s"reset ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}")
-      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
-      assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 0)
-    } finally {
-      sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS}=$original")
-    }
-  }
-
-  test("reset - user-defined conf") {
-    spark.sessionState.conf.clear()
-    val userDefinedConf = "x.y.z.reset"
-    try {
-      assert(spark.conf.getOption(userDefinedConf).isEmpty)
-      sql(s"set $userDefinedConf=false")
-      assert(spark.conf.get(userDefinedConf) === "false")
-      assert(sql(s"set").where(s"key = '$userDefinedConf'").count() == 1)
-      sql(s"reset")
-      assert(spark.conf.getOption(userDefinedConf).isEmpty)
-    } finally {
-      spark.conf.unset(userDefinedConf)
-    }
-  }
-
-  test("reset specific property - user-defined conf") {
-    spark.sessionState.conf.clear()
-    val userDefinedConf = "x.y.z.reset"
-    try {
-      assert(spark.conf.getOption(userDefinedConf).isEmpty)
-      sql(s"set $userDefinedConf=false")
-      assert(spark.conf.get(userDefinedConf) === "false")
-      assert(sql(s"set").where(s"key = '$userDefinedConf'").count() == 1)
-      sql(s"reset $userDefinedConf")
-      assert(spark.conf.getOption(userDefinedConf).isEmpty)
-    } finally {
-      spark.conf.unset(userDefinedConf)
+  Seq("reset", s"reset $testKey").foreach { resetCmd =>
+    test("reset - user-defined conf") {
+      spark.sessionState.conf.clear()
+      try {
+        assert(spark.conf.getOption(testKey).isEmpty)
+        sql(s"set $testKey=false")
+        assert(spark.conf.get(testKey) === "false")
+        assert(sql(s"set").where(s"key = '$testKey'").count() == 1)
+        sql(resetCmd)
+        assert(spark.conf.getOption(testKey).isEmpty)
+      } finally {
+        spark.conf.unset(testKey)
+      }
     }
   }
 

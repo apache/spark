@@ -82,17 +82,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Example SQL :
    * {{{
    *   RESET;
-   *   RESET key;
+   *   RESET `special#$!`;
    * }}}
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
     val raw = remainder(ctx.RESET.getSymbol)
-    if (raw.nonEmpty) {
-      ResetCommand(Some(raw.trim))
-    } else {
-      ResetCommand(None)
-    }
+    if (raw.nonEmpty) ResetCommand(Some(raw.trim)) else ResetCommand(None)
   }
 
   /**

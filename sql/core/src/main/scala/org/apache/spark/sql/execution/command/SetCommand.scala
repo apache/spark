@@ -149,8 +149,8 @@ object SetCommand {
 /**
  * This command is for resetting SQLConf to the default values. Command that runs
  * {{{
- *   reset key;
  *   reset;
+ *   reset key;
  * }}}
  */
 case class ResetCommand(key: Option[String]) extends RunnableCommand with Logging {
