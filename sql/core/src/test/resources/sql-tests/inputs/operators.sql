@@ -65,11 +65,18 @@ select ceiling(0);
 select ceiling(1);
 select ceil(1234567890123456);
 select ceiling(1234567890123456);
+select ceil(0.01);
+select ceiling(-0.10);
 
 -- floor
 select floor(0);
 select floor(1);
 select floor(1234567890123456);
+select floor(0.01);
+select floor(-0.10);
+
+-- comparison operator
+select 1 > 0.00001
 
 -- mod
 select mod(7, 2), mod(7, 0), mod(0, 2), mod(7, null), mod(null, 2), mod(null, null);

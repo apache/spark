@@ -24,8 +24,6 @@ options("warn" = 2)
 if (.Platform$OS.type == "windows") {
   Sys.setenv(TZ = "GMT")
 }
-message("--- Start test ", as.POSIXct(Sys.time(), tz = "GMT"))
-timer_ptm <- proc.time()
 
 # Setup global test environment
 # Install Spark first to set SPARK_HOME
@@ -43,3 +41,11 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
 }
 
 test_package("SparkR")
+
+if (identical(Sys.getenv("NOT_CRAN"), "true")) {
+  # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
+  testthat:::run_tests("SparkR",
+                       file.path(sparkRDir, "pkg", "tests", "fulltests"),
+                       NULL,
+                       "summary")
+}
