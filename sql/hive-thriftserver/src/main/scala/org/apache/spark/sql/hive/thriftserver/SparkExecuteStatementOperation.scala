@@ -253,6 +253,8 @@ private[hive] class SparkExecuteStatementOperation(
           return
         } else {
           setState(OperationState.ERROR)
+          HiveThriftServer2.listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
           throw e
         }
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
