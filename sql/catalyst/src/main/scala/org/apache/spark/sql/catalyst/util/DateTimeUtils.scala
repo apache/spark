@@ -32,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Helper functions for converting between internal and external date and time representations.
  * Dates are exposed externally as java.sql.Date and are represented internally as the number of
  * dates since the Unix epoch (1970-01-01). Timestamps are exposed externally as java.sql.Timestamp
- * and are stored internally as longs, which are capable of storing timestamps with 100 nanosecond
+ * and are stored internally as longs, which are capable of storing timestamps with microsecond
  * precision.
  */
 object DateTimeUtils {
@@ -399,13 +399,14 @@ object DateTimeUtils {
       digitsMilli += 1
     }
 
-    if (!justTime && isInvalidDate(segments(0), segments(1), segments(2))) {
-      return None
+    // We are truncating the nanosecond part, which results in loss of precision
+    while (digitsMilli > 6) {
+      segments(6) /= 10
+      digitsMilli -= 1
     }
 
-    // Instead of return None, we truncate the fractional seconds to prevent inserting NULL
-    if (segments(6) > 999999) {
-      segments(6) = segments(6).toString.take(6).toInt
+    if (!justTime && isInvalidDate(segments(0), segments(1), segments(2))) {
+      return None
     }
 
     if (segments(3) < 0 || segments(3) > 23 || segments(4) < 0 || segments(4) > 59 ||
@@ -603,7 +604,14 @@ object DateTimeUtils {
    */
   private[this] def getYearAndDayInYear(daysSince1970: SQLDate): (Int, Int) = {
     // add the difference (in days) between 1.1.1970 and the artificial year 0 (-17999)
-    val daysNormalized = daysSince1970 + toYearZero
+    var  daysSince1970Tmp = daysSince1970
+    // Since Julian calendar was replaced with the Gregorian calendar,
+    // the 10 days after Oct. 4 were skipped.
+    // (1582-10-04) -141428 days since 1970-01-01
+    if (daysSince1970 <= -141428) {
+      daysSince1970Tmp -= 10
+    }
+    val daysNormalized = daysSince1970Tmp + toYearZero
     val numOfQuarterCenturies = daysNormalized / daysIn400Years
     val daysInThis400 = daysNormalized % daysIn400Years + 1
     val (years, dayInYear) = numYears(daysInThis400)

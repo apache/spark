@@ -90,38 +90,38 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   /**
    * A catalog that interacts with external systems.
    */
-  lazy val externalCatalog: ExternalCatalog =
-    SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
+  lazy val externalCatalog: ExternalCatalog = {
+    val externalCatalog = SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
       SharedState.externalCatalogClassName(sparkContext.conf),
       sparkContext.conf,
       sparkContext.hadoopConfiguration)
 
-  // Create the default database if it doesn't exist.
-  {
     val defaultDbDefinition = CatalogDatabase(
       SessionCatalog.DEFAULT_DATABASE,
       "default database",
       CatalogUtils.stringToURI(warehousePath),
       Map())
-    // Initialize default database if it doesn't exist
+    // Create default database if it doesn't exist
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
       // There may be another Spark application creating default database at the same time, here we
       // set `ignoreIfExists = true` to avoid `DatabaseAlreadyExists` exception.
       externalCatalog.createDatabase(defaultDbDefinition, ignoreIfExists = true)
     }
-  }
 
-  // Make sure we propagate external catalog events to the spark listener bus
-  externalCatalog.addListener(new ExternalCatalogEventListener {
-    override def onEvent(event: ExternalCatalogEvent): Unit = {
-      sparkContext.listenerBus.post(event)
-    }
-  })
+    // Make sure we propagate external catalog events to the spark listener bus
+    externalCatalog.addListener(new ExternalCatalogEventListener {
+      override def onEvent(event: ExternalCatalogEvent): Unit = {
+        sparkContext.listenerBus.post(event)
+      }
+    })
+
+    externalCatalog
+  }
 
   /**
    * A manager for global temporary views.
    */
-  val globalTempViewManager: GlobalTempViewManager = {
+  lazy val globalTempViewManager: GlobalTempViewManager = {
     // System preserved database should not exists in metastore. However it's hard to guarantee it
     // for every session, because case-sensitivity differs. Here we always lowercase it to make our
     // life easier.

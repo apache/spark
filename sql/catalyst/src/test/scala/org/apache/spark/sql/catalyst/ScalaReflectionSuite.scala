@@ -314,6 +314,31 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
   }
 
+  test("serialize and deserialize arbitrary map types") {
+    val mapSerializer = serializerFor[Map[Int, Int]](BoundReference(
+      0, ObjectType(classOf[Map[Int, Int]]), nullable = false))
+    assert(mapSerializer.dataType.head.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val mapDeserializer = deserializerFor[Map[Int, Int]]
+    assert(mapDeserializer.dataType == ObjectType(classOf[Map[_, _]]))
+
+    import scala.collection.immutable.HashMap
+    val hashMapSerializer = serializerFor[HashMap[Int, Int]](BoundReference(
+      0, ObjectType(classOf[HashMap[Int, Int]]), nullable = false))
+    assert(hashMapSerializer.dataType.head.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val hashMapDeserializer = deserializerFor[HashMap[Int, Int]]
+    assert(hashMapDeserializer.dataType == ObjectType(classOf[HashMap[_, _]]))
+
+    import scala.collection.mutable.{LinkedHashMap => LHMap}
+    val linkedHashMapSerializer = serializerFor[LHMap[Long, String]](BoundReference(
+      0, ObjectType(classOf[LHMap[Long, String]]), nullable = false))
+    assert(linkedHashMapSerializer.dataType.head.dataType ==
+      MapType(LongType, StringType, valueContainsNull = true))
+    val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]]
+    assert(linkedHashMapDeserializer.dataType == ObjectType(classOf[LHMap[_, _]]))
+  }
+
   private val dataTypeForComplexData = dataTypeFor[ComplexData]
   private val typeOfComplexData = typeOf[ComplexData]
 

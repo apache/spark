@@ -68,11 +68,11 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   }
 }
 
-
 object SQLMetrics {
   private val SUM_METRIC = "sum"
   private val SIZE_METRIC = "size"
   private val TIMING_METRIC = "timing"
+  private val AVERAGE_METRIC = "average"
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
     val acc = new SQLMetric(SUM_METRIC)
@@ -103,6 +103,22 @@ object SQLMetrics {
   }
 
   /**
+   * Create a metric to report the average information (including min, med, max) like
+   * avg hashmap probe. Because `SQLMetric` stores long values, we take the ceil of the average
+   * values before storing them. This metric is used to record an average value computed in the
+   * end of a task. It should be set once. The initial values (zeros) of this metrics will be
+   * excluded after.
+   */
+  def createAverageMetric(sc: SparkContext, name: String): SQLMetric = {
+    // The final result of this metric in physical operator UI may looks like:
+    // probe avg (min, med, max):
+    // (1, 2, 6)
+    val acc = new SQLMetric(AVERAGE_METRIC)
+    acc.register(sc, name = Some(s"$name (min, med, max)"), countFailedValues = false)
+    acc
+  }
+
+  /**
    * A function that defines how we aggregate the final accumulator results among all tasks,
    * and represent it in string for a SQL physical operator.
    */
@@ -110,6 +126,20 @@ object SQLMetrics {
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
+    } else if (metricsType == AVERAGE_METRIC) {
+      val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
+
+      val validValues = values.filter(_ > 0)
+      val Seq(min, med, max) = {
+        val metric = if (validValues.isEmpty) {
+          Seq.fill(3)(0L)
+        } else {
+          val sorted = validValues.sorted
+          Seq(sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+        }
+        metric.map(numberFormat.format)
+      }
+      s"\n($min, $med, $max)"
     } else {
       val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
         Utils.bytesToString
