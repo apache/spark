@@ -140,6 +140,8 @@ abstract class CommonWriteAheadLogTests(
       }
     }
     writeAheadLog.close()
+    // Make sure it is idempotent.
+    writeAheadLog.close()
   }
 
   test(testPrefix + "handling file errors while reading rotating logs") {

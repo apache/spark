@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-context("include R packages")
+context("broadcast variables")
 
 # JavaSparkContext handle
 sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
@@ -23,42 +23,29 @@ sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", 
 
 # Partitioned data
 nums <- 1:2
-rdd <- parallelize(sc, nums, 2L)
+rrdd <- parallelize(sc, nums, 2L)
 
-test_that("include inside function", {
-  skip_on_cran()
+test_that("using broadcast variable", {
+  randomMat <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
+  randomMatBr <- broadcastRDD(sc, randomMat)
 
-  # Only run the test if plyr is installed.
-  if ("plyr" %in% rownames(installed.packages())) {
-    suppressPackageStartupMessages(library(plyr))
-    generateData <- function(x) {
-      suppressPackageStartupMessages(library(plyr))
-      attach(airquality)
-      result <- transform(Ozone, logOzone = log(Ozone))
-      result
-    }
-
-    data <- lapplyPartition(rdd, generateData)
-    actual <- collectRDD(data)
+  useBroadcast <- function(x) {
+    sum(SparkR:::value(randomMatBr) * x)
   }
+  actual <- collectRDD(lapply(rrdd, useBroadcast))
+  expected <- list(sum(randomMat) * 1, sum(randomMat) * 2)
+  expect_equal(actual, expected)
 })
 
-test_that("use include package", {
-  skip_on_cran()
+test_that("without using broadcast variable", {
+  randomMat <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
 
-  # Only run the test if plyr is installed.
-  if ("plyr" %in% rownames(installed.packages())) {
-    suppressPackageStartupMessages(library(plyr))
-    generateData <- function(x) {
-      attach(airquality)
-      result <- transform(Ozone, logOzone = log(Ozone))
-      result
-    }
-
-    includePackage(sc, plyr)
-    data <- lapplyPartition(rdd, generateData)
-    actual <- collectRDD(data)
+  useBroadcast <- function(x) {
+    sum(randomMat * x)
   }
+  actual <- collectRDD(lapply(rrdd, useBroadcast))
+  expected <- list(sum(randomMat) * 1, sum(randomMat) * 2)
+  expect_equal(actual, expected)
 })
 
 sparkR.session.stop()
