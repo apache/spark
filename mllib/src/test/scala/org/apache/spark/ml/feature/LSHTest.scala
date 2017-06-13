@@ -29,8 +29,10 @@ private[ml] object LSHTest {
    * the following property is satisfied.
    *
    * There exist dist1, dist2, p1, p2, so that for any two elements e1 and e2,
-   * If dist(e1, e2) <= dist1, then Pr{h(x) == h(y)} >= p1
-   * If dist(e1, e2) >= dist2, then Pr{h(x) == h(y)} <= p2
+   * If dist(e1, e2) is less than or equal to dist1, then Pr{h(x) == h(y)} is greater than
+   * or equal to p1
+   * If dist(e1, e2) is greater than or equal to dist2, then Pr{h(x) == h(y)} is less than
+   * or equal to p2
    *
    * This is called locality sensitive property. This method checks the property on an
    * existing dataset and calculate the probabilities.
@@ -38,8 +40,10 @@ private[ml] object LSHTest {
    *
    * This method hashes each elements to hash buckets using LSH, and calculate the false positive
    * and false negative:
-   * False positive: Of all (e1, e2) sharing any bucket, the probability of dist(e1, e2) > distFP
-   * False negative: Of all (e1, e2) not sharing buckets, the probability of dist(e1, e2) < distFN
+   * False positive: Of all (e1, e2) sharing any bucket, the probability of dist(e1, e2) is greater
+   * than distFP
+   * False negative: Of all (e1, e2) not sharing buckets, the probability of dist(e1, e2) is less
+   * than distFN
    *
    * @param dataset The dataset to verify the locality sensitive hashing property.
    * @param lsh The lsh instance to perform the hashing

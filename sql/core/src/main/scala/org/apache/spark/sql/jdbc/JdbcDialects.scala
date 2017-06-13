@@ -174,6 +174,7 @@ object JdbcDialects {
   registerDialect(MsSqlServerDialect)
   registerDialect(DerbyDialect)
   registerDialect(OracleDialect)
+  registerDialect(TeradataDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.

@@ -32,6 +32,16 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("creating decimals") {
     checkDecimal(new Decimal(), "0", 1, 0)
+    checkDecimal(Decimal(BigDecimal("0.09")), "0.09", 3, 2)
+    checkDecimal(Decimal(BigDecimal("0.9")), "0.9", 2, 1)
+    checkDecimal(Decimal(BigDecimal("0.90")), "0.90", 3, 2)
+    checkDecimal(Decimal(BigDecimal("0.0")), "0.0", 2, 1)
+    checkDecimal(Decimal(BigDecimal("0")), "0", 1, 0)
+    checkDecimal(Decimal(BigDecimal("1.0")), "1.0", 2, 1)
+    checkDecimal(Decimal(BigDecimal("-0.09")), "-0.09", 3, 2)
+    checkDecimal(Decimal(BigDecimal("-0.9")), "-0.9", 2, 1)
+    checkDecimal(Decimal(BigDecimal("-0.90")), "-0.90", 3, 2)
+    checkDecimal(Decimal(BigDecimal("-1.0")), "-1.0", 2, 1)
     checkDecimal(Decimal(BigDecimal("10.030")), "10.030", 5, 3)
     checkDecimal(Decimal(BigDecimal("10.030"), 4, 1), "10.0", 4, 1)
     checkDecimal(Decimal(BigDecimal("-9.95"), 4, 1), "-10.0", 4, 1)
@@ -211,5 +221,11 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
         }
       }
     }
+  }
+
+  test("SPARK-20341: support BigInt's value does not fit in long value range") {
+    val bigInt = scala.math.BigInt("9223372036854775808")
+    val decimal = Decimal.apply(bigInt)
+    assert(decimal.toJavaBigDecimal.unscaledValue.toString === "9223372036854775808")
   }
 }

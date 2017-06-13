@@ -76,7 +76,7 @@ case class StarSchemaDetection(conf: SQLConf) extends PredicateHelper {
 
     val emptyStarJoinPlan = Seq.empty[LogicalPlan]
 
-    if (!conf.starSchemaDetection || input.size < 2) {
+    if (input.size < 2) {
       emptyStarJoinPlan
     } else {
       // Find if the input plans are eligible for star join detection.

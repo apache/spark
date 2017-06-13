@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Project, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
 
 
@@ -254,24 +255,24 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
   test("test join keys of different types") {
     /** Columns in a table with only one row */
     def genColumnData: mutable.LinkedHashMap[Attribute, ColumnStat] = {
-      val dec = new java.math.BigDecimal("1.000000000000000000")
-      val date = Date.valueOf("2016-05-08")
-      val timestamp = Timestamp.valueOf("2016-05-08 00:00:01")
+      val dec = Decimal("1.000000000000000000")
+      val date = DateTimeUtils.fromJavaDate(Date.valueOf("2016-05-08"))
+      val timestamp = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-08 00:00:01"))
       mutable.LinkedHashMap[Attribute, ColumnStat](
         AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = 1,
           min = Some(false), max = Some(false), nullCount = 0, avgLen = 1, maxLen = 1),
         AttributeReference("cbyte", ByteType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 1, maxLen = 1),
+          min = Some(1.toByte), max = Some(1.toByte), nullCount = 0, avgLen = 1, maxLen = 1),
         AttributeReference("cshort", ShortType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 2, maxLen = 2),
+          min = Some(1.toShort), max = Some(1.toShort), nullCount = 0, avgLen = 2, maxLen = 2),
         AttributeReference("cint", IntegerType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 4, maxLen = 4),
+          min = Some(1), max = Some(1), nullCount = 0, avgLen = 4, maxLen = 4),
         AttributeReference("clong", LongType)() -> ColumnStat(distinctCount = 1,
           min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 8, maxLen = 8),
         AttributeReference("cdouble", DoubleType)() -> ColumnStat(distinctCount = 1,
           min = Some(1.0), max = Some(1.0), nullCount = 0, avgLen = 8, maxLen = 8),
         AttributeReference("cfloat", FloatType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1.0), max = Some(1.0), nullCount = 0, avgLen = 4, maxLen = 4),
+          min = Some(1.0f), max = Some(1.0f), nullCount = 0, avgLen = 4, maxLen = 4),
         AttributeReference("cdec", DecimalType.SYSTEM_DEFAULT)() -> ColumnStat(distinctCount = 1,
           min = Some(dec), max = Some(dec), nullCount = 0, avgLen = 16, maxLen = 16),
         AttributeReference("cstring", StringType)() -> ColumnStat(distinctCount = 1,

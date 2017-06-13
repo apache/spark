@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.Locale
+
 import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
-import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -34,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 // Note: The definition of these commands are based on the ones described in
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -229,8 +230,12 @@ case class AlterTableSetPropertiesCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView)
-    // This overrides old properties
-    val newTable = table.copy(properties = table.properties ++ properties)
+    // This overrides old properties and update the comment parameter of CatalogTable
+    // with the newly added/modified comment since CatalogTable also holds comment as its
+    // direct property.
+    val newTable = table.copy(
+      properties = table.properties ++ properties,
+      comment = properties.get("comment"))
     catalog.alterTable(newTable)
     Seq.empty[Row]
   }
@@ -265,8 +270,10 @@ case class AlterTableUnsetPropertiesCommand(
         }
       }
     }
+    // If comment is in the table property, we reset it to None
+    val tableComment = if (propKeys.contains("comment")) None else table.properties.get("comment")
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
-    val newTable = table.copy(properties = newProperties)
+    val newTable = table.copy(properties = newProperties, comment = tableComment)
     catalog.alterTable(newTable)
     Seq.empty[Row]
   }
@@ -580,8 +587,15 @@ case class AlterTableRecoverPartitionsCommand(
     val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
     val hadoopConf = spark.sparkContext.hadoopConfiguration
     val pathFilter = getPathFilter(hadoopConf)
-    val partitionSpecsAndLocs = scanPartitions(spark, fs, pathFilter, root, Map(),
-      table.partitionColumnNames, threshold, spark.sessionState.conf.resolver)
+
+    val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
+    val partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)] =
+      try {
+        scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
+          spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
+      } finally {
+        evalPool.shutdown()
+      }
     val total = partitionSpecsAndLocs.length
     logInfo(s"Found $total partitions in $root")
 
@@ -602,8 +616,6 @@ case class AlterTableRecoverPartitionsCommand(
     Seq.empty[Row]
   }
 
-  @transient private lazy val evalTaskSupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
-
   private def scanPartitions(
       spark: SparkSession,
       fs: FileSystem,
@@ -612,7 +624,8 @@ case class AlterTableRecoverPartitionsCommand(
       spec: TablePartitionSpec,
       partitionNames: Seq[String],
       threshold: Int,
-      resolver: Resolver): GenSeq[(TablePartitionSpec, Path)] = {
+      resolver: Resolver,
+      evalTaskSupport: ForkJoinTaskSupport): GenSeq[(TablePartitionSpec, Path)] = {
     if (partitionNames.isEmpty) {
       return Seq(spec -> path)
     }
@@ -636,7 +649,7 @@ case class AlterTableRecoverPartitionsCommand(
         val value = ExternalCatalogUtils.unescapePathName(ps(1))
         if (resolver(columnName, partitionNames.head)) {
           scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(partitionNames.head -> value),
-            partitionNames.drop(1), threshold, resolver)
+            partitionNames.drop(1), threshold, resolver, evalTaskSupport)
         } else {
           logWarning(
             s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
@@ -764,11 +777,11 @@ object DDLUtils {
   val HIVE_PROVIDER = "hive"
 
   def isHiveTable(table: CatalogTable): Boolean = {
-    table.provider.isDefined && table.provider.get.toLowerCase == HIVE_PROVIDER
+    table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) == HIVE_PROVIDER
   }
 
   def isDatasourceTable(table: CatalogTable): Boolean = {
-    table.provider.isDefined && table.provider.get.toLowerCase != HIVE_PROVIDER
+    table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) != HIVE_PROVIDER
   }
 
   /**

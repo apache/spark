@@ -22,7 +22,7 @@ import scala.math.BigDecimal.RoundingMode
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.{DecimalType, _}
 
 
 object EstimationUtils {
@@ -41,6 +41,18 @@ object EstimationUtils {
   def nullColumnStat(dataType: DataType, rowCount: BigInt): ColumnStat = {
     ColumnStat(distinctCount = 0, min = None, max = None, nullCount = rowCount,
       avgLen = dataType.defaultSize, maxLen = dataType.defaultSize)
+  }
+
+  /**
+   * Updates (scales down) the number of distinct values if the number of rows decreases after
+   * some operation (such as filter, join). Otherwise keep it unchanged.
+   */
+  def updateNdv(oldNumRows: BigInt, newNumRows: BigInt, oldNdv: BigInt): BigInt = {
+    if (newNumRows < oldNumRows) {
+      ceil(BigDecimal(oldNdv) * BigDecimal(newNumRows) / BigDecimal(oldNumRows))
+    } else {
+      oldNdv
+    }
   }
 
   def ceil(bigDecimal: BigDecimal): BigInt = bigDecimal.setScale(0, RoundingMode.CEILING).toBigInt()
@@ -75,4 +87,32 @@ object EstimationUtils {
     // (simple computation of statistics returns product of children).
     if (outputRowCount > 0) outputRowCount * sizePerRow else 1
   }
+
+  /**
+   * For simplicity we use Decimal to unify operations for data types whose min/max values can be
+   * represented as numbers, e.g. Boolean can be represented as 0 (false) or 1 (true).
+   * The two methods below are the contract of conversion.
+   */
+  def toDecimal(value: Any, dataType: DataType): Decimal = {
+    dataType match {
+      case _: NumericType | DateType | TimestampType => Decimal(value.toString)
+      case BooleanType => if (value.asInstanceOf[Boolean]) Decimal(1) else Decimal(0)
+    }
+  }
+
+  def fromDecimal(dec: Decimal, dataType: DataType): Any = {
+    dataType match {
+      case BooleanType => dec.toLong == 1
+      case DateType => dec.toInt
+      case TimestampType => dec.toLong
+      case ByteType => dec.toByte
+      case ShortType => dec.toShort
+      case IntegerType => dec.toInt
+      case LongType => dec.toLong
+      case FloatType => dec.toFloat
+      case DoubleType => dec.toDouble
+      case _: DecimalType => dec
+    }
+  }
+
 }

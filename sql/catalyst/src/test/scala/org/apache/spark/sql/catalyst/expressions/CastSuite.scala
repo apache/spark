@@ -813,4 +813,18 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast(1.0.toFloat, DateType).checkInputDataTypes().isFailure)
     assert(cast(1.0, DateType).checkInputDataTypes().isFailure)
   }
+
+  test("SPARK-20302 cast with same structure") {
+    val from = new StructType()
+      .add("a", IntegerType)
+      .add("b", new StructType().add("b1", LongType))
+
+    val to = new StructType()
+      .add("a1", IntegerType)
+      .add("b1", new StructType().add("b11", LongType))
+
+    val input = Row(10, Row(12L))
+
+    checkEvaluation(cast(Literal.create(input, from), to), input)
+  }
 }

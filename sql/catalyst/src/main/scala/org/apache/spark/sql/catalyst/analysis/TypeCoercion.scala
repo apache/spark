@@ -54,6 +54,7 @@ object TypeCoercion {
       FunctionArgumentConversion ::
       CaseWhenCoercion ::
       IfCoercion ::
+      StackCoercion ::
       Division ::
       PropagateTypes ::
       ImplicitTypeCasts ::
@@ -571,6 +572,7 @@ object TypeCoercion {
         NaNvl(l, Cast(r, DoubleType))
       case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
         NaNvl(Cast(l, DoubleType), r)
+      case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
     }
   }
 
@@ -644,6 +646,22 @@ object TypeCoercion {
         If(Literal.create(null, BooleanType), left, right)
       case If(pred, left, right) if pred.dataType == NullType =>
         If(Cast(pred, BooleanType), left, right)
+    }
+  }
+
+  /**
+   * Coerces NullTypes in the Stack expression to the column types of the corresponding positions.
+   */
+  object StackCoercion extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case s @ Stack(children) if s.childrenResolved && s.hasFoldableNumRows =>
+        Stack(children.zipWithIndex.map {
+          // The first child is the number of rows for stack.
+          case (e, 0) => e
+          case (Literal(null, NullType), index: Int) =>
+            Literal.create(null, s.findDataType(index))
+          case (e, _) => e
+        })
     }
   }
 

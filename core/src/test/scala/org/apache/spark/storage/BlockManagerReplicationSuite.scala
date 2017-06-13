@@ -17,6 +17,8 @@
 
 package org.apache.spark.storage
 
+import java.util.Locale
+
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
@@ -98,7 +100,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     sc = new SparkContext("local", "test", conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(sc))), conf, true)
+        new LiveListenerBus(conf))), conf, true)
     allStores.clear()
   }
 
@@ -374,8 +376,8 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
     storageLevels.foreach { storageLevel =>
       // Put the block into one of the stores
-      val blockId = new TestBlockId(
-        "block-with-" + storageLevel.description.replace(" ", "-").toLowerCase)
+      val blockId = TestBlockId(
+        "block-with-" + storageLevel.description.replace(" ", "-").toLowerCase(Locale.ROOT))
       val testValue = Array.fill[Byte](blockSize)(1)
       stores(0).putSingle(blockId, testValue, storageLevel)
 

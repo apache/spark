@@ -217,32 +217,17 @@ case class InnerOuterEstimation(conf: SQLConf, join: Join) extends Logging {
       if (joinKeyStats.contains(a)) {
         outputAttrStats += a -> joinKeyStats(a)
       } else {
-        val leftRatio = if (leftRows != 0) {
-          BigDecimal(outputRows) / BigDecimal(leftRows)
-        } else {
-          BigDecimal(0)
-        }
-        val rightRatio = if (rightRows != 0) {
-          BigDecimal(outputRows) / BigDecimal(rightRows)
-        } else {
-          BigDecimal(0)
-        }
         val oldColStat = oldAttrStats(a)
         val oldNdv = oldColStat.distinctCount
-        // We only change (scale down) the number of distinct values if the number of rows
-        // decreases after join, because join won't produce new values even if the number of
-        // rows increases.
-        val newNdv = if (join.left.outputSet.contains(a) && leftRatio < 1) {
-          ceil(BigDecimal(oldNdv) * leftRatio)
-        } else if (join.right.outputSet.contains(a) && rightRatio < 1) {
-          ceil(BigDecimal(oldNdv) * rightRatio)
+        val newNdv = if (join.left.outputSet.contains(a)) {
+          updateNdv(oldNumRows = leftRows, newNumRows = outputRows, oldNdv = oldNdv)
         } else {
-          oldNdv
+          updateNdv(oldNumRows = rightRows, newNumRows = outputRows, oldNdv = oldNdv)
         }
+        val newColStat = oldColStat.copy(distinctCount = newNdv)
         // TODO: support nullCount updates for specific outer joins
-        outputAttrStats += a -> oldColStat.copy(distinctCount = newNdv)
+        outputAttrStats += a -> newColStat
       }
-
     }
     outputAttrStats
   }

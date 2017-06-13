@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -210,7 +211,7 @@ public class JavaUtils {
    * The unit is also considered the default if the given string does not specify a unit.
    */
   public static long timeStringAs(String str, TimeUnit unit) {
-    String lower = str.toLowerCase().trim();
+    String lower = str.toLowerCase(Locale.ROOT).trim();
 
     try {
       Matcher m = Pattern.compile("(-?[0-9]+)([a-z]+)?").matcher(lower);
@@ -258,7 +259,7 @@ public class JavaUtils {
    * provided, a direct conversion to the provided unit is attempted.
    */
   public static long byteStringAs(String str, ByteUnit unit) {
-    String lower = str.toLowerCase().trim();
+    String lower = str.toLowerCase(Locale.ROOT).trim();
 
     try {
       Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);

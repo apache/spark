@@ -156,7 +156,7 @@ passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `Mesos
 If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`). Note that the `MesosClusterDispatcher` not yet supports multiple instances for HA.
 
 The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper. This will allow the `MesosClusterDispatcher` to be able to recover all submitted and running containers on relaunch.   In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
-For more information about these configurations please refer to the configurations (doc)[configurations.html#deploy].
+For more information about these configurations please refer to the configurations [doc](configurations.html#deploy).
 
 From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master URL
 to the URL of the `MesosClusterDispatcher` (e.g: mesos://dispatcher:7077). You can view driver statuses on the
@@ -209,7 +209,7 @@ provide such guarantees on the offer stream.
 
 In this mode spark executors will honor port allocation if such is
 provided from the user. Specifically if the user defines
-`spark.executor.port` or `spark.blockManager.port` in Spark configuration,
+`spark.blockManager.port` in Spark configuration,
 the mesos scheduler will check the available offers for a valid port
 range containing the port numbers. If no such range is available it will
 not launch any task. If no restriction is imposed on port numbers by the
@@ -357,6 +357,16 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.executor.docker.parameters</code></td>
+  <td>(none)</td>
+  <td>
+    Set the list of custom parameters which will be passed into the <code>docker run</code> command when launching the Spark executor on Mesos using the docker containerizer. The format of this property is a comma-separated list of
+    key/value pairs. Example:
+
+    <pre>key1=val1,key2=val2,key3=val3</pre>
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.executor.docker.volumes</code></td>
   <td>(none)</td>
   <td>
@@ -372,8 +382,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Set the Mesos labels to add to each task. Labels are free-form key-value pairs.
-    Key-value pairs should be separated by a colon, and commas used to list more than one.
-    Ex. key:value,key2:value2.
+    Key-value pairs should be separated by a colon, and commas used to
+    list more than one.  If your label includes a colon or comma, you
+    can escape it with a backslash.  Ex. key:value,key2:a\:b.
   </td>
 </tr>
 <tr>
@@ -458,6 +469,15 @@ See the [configuration page](configuration.html) for information on Spark config
     If unset it will point to Spark's internal web UI.
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.driver.labels</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Mesos labels to add to the driver.  See <code>spark.mesos.task.labels</code>
+    for formatting information.
+  </td>
+</tr>
+
 <tr>
   <td><code>spark.mesos.driverEnv.[EnvironmentVariableName]</code></td>
   <td><code>(none)</code></td>

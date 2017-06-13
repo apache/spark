@@ -81,11 +81,12 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     case _ => Seq.empty[Attribute]
   }
 
-  // Collect aliases from expressions, so we may avoid producing recursive constraints.
-  private lazy val aliasMap = AttributeMap(
-    (expressions ++ children.flatMap(_.expressions)).collect {
+  // Collect aliases from expressions of the whole tree rooted by the current QueryPlan node, so
+  // we may avoid producing recursive constraints.
+  private lazy val aliasMap: AttributeMap[Expression] = AttributeMap(
+    expressions.collect {
       case a: Alias => (a.toAttribute, a.child)
-    })
+    } ++ children.flatMap(_.aliasMap))
 
   /**
    * Infers an additional set of constraints from a given set of equality constraints.
@@ -286,7 +287,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
     def recursiveTransform(arg: Any): AnyRef = arg match {
       case e: Expression => transformExpression(e)
-      case Some(e: Expression) => Some(transformExpression(e))
+      case Some(value) => Some(recursiveTransform(value))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map(recursiveTransform)
@@ -320,7 +321,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
     productIterator.flatMap {
       case e: Expression => e :: Nil
-      case Some(e: Expression) => e :: Nil
+      case s: Some[_] => seqToExpressions(s.toSeq)
       case seq: Traversable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
@@ -356,7 +357,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     })
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = subqueries
+  override def innerChildren: Seq[QueryPlan[_]] = subqueries
 
   /**
    * Returns a plan where a best effort attempt has been made to transform `this` in a way
@@ -377,7 +378,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         // As the root of the expression, Alias will always take an arbitrary exprId, we need to
         // normalize that for equality testing, by assigning expr id from 0 incrementally. The
         // alias name doesn't matter and should be erased.
-        Alias(normalizeExprId(a.child), "")(ExprId(id), a.qualifier, isGenerated = a.isGenerated)
+        val normalizedChild = QueryPlan.normalizeExprId(a.child, allAttributes)
+        Alias(normalizedChild, "")(ExprId(id), a.qualifier, isGenerated = a.isGenerated)
 
       case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
@@ -385,7 +387,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         id += 1
         ar.withExprId(ExprId(id))
 
-      case other => normalizeExprId(other)
+      case other => QueryPlan.normalizeExprId(other, allAttributes)
     }.withNewChildren(canonicalizedChildren)
   }
 
@@ -395,23 +397,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   protected def preCanonicalized: PlanType = this
 
-  /**
-   * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
-   * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
-   * do not use `BindReferences` here as the plan may take the expression as a parameter with type
-   * `Attribute`, and replace it with `BoundReference` will cause error.
-   */
-  protected def normalizeExprId[T <: Expression](e: T, input: AttributeSeq = allAttributes): T = {
-    e.transformUp {
-      case ar: AttributeReference =>
-        val ordinal = input.indexOf(ar.exprId)
-        if (ordinal == -1) {
-          ar
-        } else {
-          ar.withExprId(ExprId(ordinal))
-        }
-    }.canonicalized.asInstanceOf[T]
-  }
 
   /**
    * Returns true when the given query plan will return the same results as this query plan.
@@ -437,4 +422,38 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * All the attributes that are used for this plan.
    */
   lazy val allAttributes: AttributeSeq = children.flatMap(_.output)
+}
+
+object QueryPlan extends PredicateHelper {
+  /**
+   * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
+   * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
+   * do not use `BindReferences` here as the plan may take the expression as a parameter with type
+   * `Attribute`, and replace it with `BoundReference` will cause error.
+   */
+  def normalizeExprId[T <: Expression](e: T, input: AttributeSeq): T = {
+    e.transformUp {
+      case s: SubqueryExpression => s.canonicalize(input)
+      case ar: AttributeReference =>
+        val ordinal = input.indexOf(ar.exprId)
+        if (ordinal == -1) {
+          ar
+        } else {
+          ar.withExprId(ExprId(ordinal))
+        }
+    }.canonicalized.asInstanceOf[T]
+  }
+
+  /**
+   * Composes the given predicates into a conjunctive predicate, which is normalized and reordered.
+   * Then returns a new sequence of predicates by splitting the conjunctive predicate.
+   */
+  def normalizePredicates(predicates: Seq[Expression], output: AttributeSeq): Seq[Expression] = {
+    if (predicates.nonEmpty) {
+      val normalized = normalizeExprId(predicates.reduce(And), output)
+      splitConjunctivePredicates(normalized)
+    } else {
+      Nil
+    }
+  }
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -33,6 +35,7 @@ trait AnalysisTest extends PlanTest {
     val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
     catalog.createTempView("TaBlE", TestRelations.testRelation, overrideIfExists = true)
     catalog.createTempView("TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
+    catalog.createTempView("TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     }
@@ -79,7 +82,8 @@ trait AnalysisTest extends PlanTest {
       analyzer.checkAnalysis(analyzer.execute(inputPlan))
     }
 
-    if (!expectedErrors.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains)) {
+    if (!expectedErrors.map(_.toLowerCase(Locale.ROOT)).forall(
+        e.getMessage.toLowerCase(Locale.ROOT).contains)) {
       fail(
         s"""Exception message should contain the following substrings:
            |

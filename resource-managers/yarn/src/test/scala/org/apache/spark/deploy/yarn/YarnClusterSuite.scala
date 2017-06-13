@@ -24,6 +24,7 @@ import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.io.Source
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
@@ -87,24 +88,30 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testBasicYarnApp(false)
   }
 
-  test("run Spark in yarn-client mode with different configurations") {
+  test("run Spark in yarn-client mode with different configurations, ensuring redaction") {
     testBasicYarnApp(true,
       Map(
         "spark.driver.memory" -> "512m",
         "spark.executor.cores" -> "1",
         "spark.executor.memory" -> "512m",
-        "spark.executor.instances" -> "2"
+        "spark.executor.instances" -> "2",
+        // Sending some senstive information, which we'll make sure gets redacted
+        "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
+        "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
       ))
   }
 
-  test("run Spark in yarn-cluster mode with different configurations") {
+  test("run Spark in yarn-cluster mode with different configurations, ensuring redaction") {
     testBasicYarnApp(false,
       Map(
         "spark.driver.memory" -> "512m",
         "spark.driver.cores" -> "1",
         "spark.executor.cores" -> "1",
         "spark.executor.memory" -> "512m",
-        "spark.executor.instances" -> "2"
+        "spark.executor.instances" -> "2",
+        // Sending some senstive information, which we'll make sure gets redacted
+        "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
+        "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
       ))
   }
 
@@ -349,6 +356,7 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
 private object YarnClusterDriver extends Logging with Matchers {
 
   val WAIT_TIMEOUT_MILLIS = 10000
+  val SECRET_PASSWORD = "secret_password"
 
   def main(args: Array[String]): Unit = {
     if (args.length != 1) {
@@ -395,6 +403,13 @@ private object YarnClusterDriver extends Logging with Matchers {
     assert(executorInfos.nonEmpty)
     executorInfos.foreach { info =>
       assert(info.logUrlMap.nonEmpty)
+      info.logUrlMap.values.foreach { url =>
+        val log = Source.fromURL(url).mkString
+        assert(
+          !log.contains(SECRET_PASSWORD),
+          s"Executor logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
+        )
+      }
     }
 
     // If we are running in yarn-cluster mode, verify that driver logs links and present and are
@@ -406,8 +421,13 @@ private object YarnClusterDriver extends Logging with Matchers {
       assert(driverLogs.contains("stderr"))
       assert(driverLogs.contains("stdout"))
       val urlStr = driverLogs("stderr")
-      // Ensure that this is a valid URL, else this will throw an exception
-      new URL(urlStr)
+      driverLogs.foreach { kv =>
+        val log = Source.fromURL(kv._2).mkString
+        assert(
+          !log.contains(SECRET_PASSWORD),
+          s"Driver logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
+        )
+      }
       val containerId = YarnSparkHadoopUtil.get.getContainerId
       val user = Utils.getCurrentUserName()
       assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=-4096"))

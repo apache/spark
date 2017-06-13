@@ -19,6 +19,7 @@ package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.JavaConverters._
@@ -60,7 +61,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
   private val walWriteQueue = new LinkedBlockingQueue[Record]()
 
   // Whether the writer thread is active
-  @volatile private var active: Boolean = true
+  private val active: AtomicBoolean = new AtomicBoolean(true)
   private val buffer = new ArrayBuffer[Record]()
 
   private val batchedWriterThread = startBatchedWriterThread()
@@ -72,7 +73,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
   override def write(byteBuffer: ByteBuffer, time: Long): WriteAheadLogRecordHandle = {
     val promise = Promise[WriteAheadLogRecordHandle]()
     val putSuccessfully = synchronized {
-      if (active) {
+      if (active.get()) {
         walWriteQueue.offer(Record(byteBuffer, time, promise))
         true
       } else {
@@ -121,9 +122,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
    */
   override def close(): Unit = {
     logInfo(s"BatchedWriteAheadLog shutting down at time: ${System.currentTimeMillis()}.")
-    synchronized {
-      active = false
-    }
+    if (!active.getAndSet(false)) return
     batchedWriterThread.interrupt()
     batchedWriterThread.join()
     while (!walWriteQueue.isEmpty) {
@@ -138,7 +137,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
   private def startBatchedWriterThread(): Thread = {
     val thread = new Thread(new Runnable {
       override def run(): Unit = {
-        while (active) {
+        while (active.get()) {
           try {
             flushRecords()
           } catch {
@@ -166,7 +165,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
     }
     try {
       var segment: WriteAheadLogRecordHandle = null
-      if (buffer.length > 0) {
+      if (buffer.nonEmpty) {
         logDebug(s"Batched ${buffer.length} records for Write Ahead Log write")
         // threads may not be able to add items in order by time
         val sortedByTime = buffer.sortBy(_.time)

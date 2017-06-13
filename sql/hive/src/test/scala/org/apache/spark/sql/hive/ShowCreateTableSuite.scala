@@ -247,21 +247,16 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     }
   }
 
-  test("hive bucketing is not supported") {
+  test("hive bucketing is supported") {
     withTable("t1") {
-      createRawHiveTable(
+      sql(
         s"""CREATE TABLE t1 (a INT, b STRING)
            |CLUSTERED BY (a)
            |SORTED BY (b)
            |INTO 2 BUCKETS
          """.stripMargin
       )
-
-      val cause = intercept[AnalysisException] {
-        sql("SHOW CREATE TABLE t1")
-      }
-
-      assert(cause.getMessage.contains(" - bucketing"))
+      checkCreateTable("t1")
     }
   }
 
@@ -330,26 +325,20 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
         "last_modified_by",
         "last_modified_time",
         "Owner:",
-        "COLUMN_STATS_ACCURATE",
         // The following are hive specific schema parameters which we do not need to match exactly.
-        "numFiles",
-        "numRows",
-        "rawDataSize",
-        "totalSize",
         "totalNumberFiles",
         "maxFileSize",
-        "minFileSize",
-        // EXTERNAL is not non-deterministic, but it is filtered out for external tables.
-        "EXTERNAL"
+        "minFileSize"
       )
 
       table.copy(
         createTime = 0L,
         lastAccessTime = 0L,
-        properties = table.properties.filterKeys(!nondeterministicProps.contains(_))
+        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
+        stats = None,
+        ignoredProperties = Map.empty
       )
     }
-
     assert(normalize(actual) == normalize(expected))
   }
 }
