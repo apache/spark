@@ -70,7 +70,7 @@ def _create_window_function(name, doc=''):
 _lit_doc = """
     Creates a :class:`Column` of literal value.
 
-    >>> df.withColumn('height', lit(5) ).withColumn('spark_user', lit(True) ).collect()
+    >>> df.withColumn('height', lit(5)).withColumn('spark_user', lit(True)).collect()
     [Row(age=2, name=u'Alice', height=5, spark_user=True),
      Row(age=5, name=u'Bob', height=5, spark_user=True)]
     """
@@ -98,16 +98,17 @@ _functions = {
 _functions_1_4 = {
     # unary math functions
     'acos': 'Computes the cosine inverse of the given value; the returned angle is in the range' +
-            '0.0 through pi.\n\n:param col: float column, units in radians.',
-    'asin': """Computes the sine inverse of the given value; the returned angle is in the range
-            -pi/2 through pi/2.
-
-            :param col: float column, units in radians.""",
-    'atan': 'Computes the tangent inverse of the given value. Units in radians.',
+            '0.0 through pi.',
+    'asin': 'Computes the sine inverse of the given value; the returned angle is in the range' +
+            '-pi/2 through pi/2.',
+    'atan': 'Computes the tangent inverse of the given value; the returned angle is in the range' +
+            '-pi/2 through pi/2',
     'cbrt': 'Computes the cube-root of the given value.',
     'ceil': 'Computes the ceiling of the given value.',
-    'cos': 'Computes the cosine of the given value. Units in radians.',
-    'cosh': 'Computes the hyperbolic cosine of the given value. Units in radians.',
+    'cos': """Computes the cosine of the given value.
+
+           :param col: :class:`DoubleType` column, units in radians.""",
+    'cosh': 'Computes the hyperbolic cosine of the given value.',
     'exp': 'Computes the exponential of the given value.',
     'expm1': 'Computes the exponential of the given value minus one.',
     'floor': 'Computes the floor of the given value.',
@@ -117,10 +118,14 @@ _functions_1_4 = {
     'rint': 'Returns the double value that is closest in value to the argument and' +
             ' is equal to a mathematical integer.',
     'signum': 'Computes the signum of the given value.',
-    'sin': 'Computes the sine of the given value. Units in radians',
-    'sinh': 'Computes the hyperbolic sine of the given value. Units in radians.',
-    'tan': 'Computes the tangent of the given value. Units in radians.',
-    'tanh': 'Computes the hyperbolic tangent of the given value. Units in radians.',
+    'sin': """Computes the sine of the given value.
+
+           :param col: :class:`DoubleType` column, units in radians.""",
+    'sinh': 'Computes the hyperbolic sine of the given value.',
+    'tan': """Computes the tangent of the given value.
+
+           :param col: :class:`DoubleType` column, units in radians.""",
+    'tanh': 'Computes the hyperbolic tangent of the given value.',
     'toDegrees': '.. note:: Deprecated in 2.1, use :func:`degrees` instead.',
     'toRadians': '.. note:: Deprecated in 2.1, use :func:`radians` instead.',
     'bitwiseNOT': 'Computes bitwise not.',
@@ -129,14 +134,14 @@ _functions_1_4 = {
 _collect_list_doc = """
     Aggregate function: returns a list of objects with duplicates.
 
-    >>> df2 = spark.createDataFrame([('Alice', 2), ('Bob', 5),('Alice', 99)], ('name', 'age'))
+    >>> df2 = spark.createDataFrame([('Alice', 2), ('Bob', 5), ('Alice', 99)], ('name', 'age'))
     >>> df2.agg(collect_list('name')).collect()
     [Row(collect_list(name)=[u'Alice', u'Bob', u'Alice'])]
     """
 _collect_set_doc = """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
 
-    >>> df2 = spark.createDataFrame([('Alice', 2), ('Bob', 5),('Alice', 99)], ('name', 'age'))
+    >>> df2 = spark.createDataFrame([('Alice', 2), ('Bob', 5), ('Alice', 99)], ('name', 'age'))
     >>> df2.agg(collect_set('name')).collect()
     [Row(collect_set(name)=[u'Bob', u'Alice'])]
     """
@@ -227,11 +232,11 @@ def approxCountDistinct(col, rsd=None):
 
 
 @since(2.1)
-def approx_count_distinct(col, rsd=None):
-    """Returns a new :class:`Column` for approximate distinct count of column `col`.
+def approx_count_distinct(col, rsd=0.05):
+    """Aggregate function. Returns a new :class:`Column` for approximate distinct count of column `col`.
 
-    :param rsd: Residual (float). The approximate count will be within this fraction of the true
-        count. For rsd < 0.01, it is more efficient to use :func:`countDistinct`
+    :param rsd: maximum estimation error allowed (default = 0.05). For rsd < 0.01, it is more
+    efficient to use :func:`countDistinct`
 
     >>> df.agg(approx_count_distinct(df.age).alias('distinct_ages')).collect()
     [Row(distinct_ages=2)]
@@ -487,7 +492,7 @@ def rand(seed=None):
     """Generates a random column with independent and identically distributed (i.i.d.) samples
     from U[0.0, 1.0].
 
-    >>> df.withColumn('rand',rand(seed=42) * 3).collect()
+    >>> df.withColumn('rand', rand(seed=42) * 3).collect()
     [Row(age=2, name=u'Alice', rand=1.1568609015300986),
      Row(age=5, name=u'Bob', rand=1.403379671529166)]
     """
@@ -505,7 +510,7 @@ def randn(seed=None):
     """Generates a column with independent and identically distributed (i.i.d.) samples from
     the standard normal distribution.
 
-    >>> df.withColumn('randn',randn(seed=42) ).collect()
+    >>> df.withColumn('randn', randn(seed=42) ).collect()
     [Row(age=2, name=u'Alice', randn=-0.7556247885860078),
     Row(age=5, name=u'Bob', randn=-0.0861619008451133)]
     """
@@ -1293,19 +1298,19 @@ def hash(*cols):
 _lower_doc = """
     Converts a string column to lower case.
 
-    >>> df.select(lower(df.name) ).collect()
+    >>> df.select(lower(df.name)).collect()
     [Row(lower(name)=u'alice'), Row(lower(name)=u'bob')]
     """
 _upper_doc = """
     Converts a string column to upper case.
 
-    >>> df.select(upper(df.name) ).collect()
+    >>> df.select(upper(df.name)).collect()
     [Row(upper(name)=u'ALICE'), Row(upper(name)=u'BOB')]
     """
 _reverse_doc = """
     Reverses the string column and returns it as a new string column.
 
-    >>> df.select(reverse(df.name) ).collect()
+    >>> df.select(reverse(df.name)).collect()
     [Row(reverse(name)=u'ecilA'), Row(reverse(name)=u'boB')]
     """
 _string_functions = {
