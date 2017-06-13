@@ -200,7 +200,8 @@ case class Stack(children: Seq[Expression]) extends Generator {
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Rows - we write these into an array.
     val rowData = ctx.freshName("rows")
-    ctx.addMutableState("InternalRow[]", rowData, s"this.$rowData = new InternalRow[$numRows];")
+    val rowDataAccessor =
+      ctx.addMutableState("InternalRow[]", rowData, s"$rowData = new InternalRow[$numRows];")
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
     val code = ctx.splitExpressions(ctx.INPUT_ROW, Seq.tabulate(numRows) { row =>
@@ -209,16 +210,16 @@ case class Stack(children: Seq[Expression]) extends Generator {
         if (index < values.length) values(index) else Literal(null, dataTypes(col))
       }
       val eval = CreateStruct(fields).genCode(ctx)
-      s"${eval.code}\nthis.$rowData[$row] = ${eval.value};"
+      s"${eval.code}\n$rowDataAccessor[$row] = ${eval.value};"
     })
 
     // Create the collection.
     val wrapperClass = classOf[mutable.WrappedArray[_]].getName
-    ctx.addMutableState(
+    val valueAccessor = ctx.addMutableState(
       s"$wrapperClass<InternalRow>",
       ev.value,
-      s"this.${ev.value} = $wrapperClass$$.MODULE$$.make(this.$rowData);")
-    ev.copy(code = code, isNull = "false")
+      s"${ev.value} = $wrapperClass$$.MODULE$$.make($rowDataAccessor);")
+    ev.copy(code = code, isNull = "false", value = valueAccessor)
   }
 }
 

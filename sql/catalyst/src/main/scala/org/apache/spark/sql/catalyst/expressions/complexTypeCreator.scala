@@ -92,12 +92,12 @@ private [sql] object GenArrayData {
 
     if (!ctx.isPrimitiveType(elementType)) {
       val genericArrayClass = classOf[GenericArrayData].getName
-      ctx.addMutableState("Object[]", arrayName,
-        s"this.$arrayName = new Object[${numElements}];")
+      val arrayNameAccessor = ctx.addMutableState("Object[]", arrayName,
+        s"$arrayName = new Object[${numElements}];")
 
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
-          s"$arrayName[$i] = null;"
+          s"$arrayNameAccessor[$i] = null;"
         } else {
           "throw new RuntimeException(\"Cannot use null as map key!\");"
         }
@@ -105,26 +105,26 @@ private [sql] object GenArrayData {
          if (${eval.isNull}) {
            $isNullAssignment
          } else {
-           $arrayName[$i] = ${eval.value};
+           $arrayNameAccessor[$i] = ${eval.value};
          }
        """
       }
 
       ("",
        assignments,
-       s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
+       s"final ArrayData $arrayDataName = new $genericArrayClass($arrayNameAccessor);",
        arrayDataName)
     } else {
       val unsafeArraySizeInBytes =
         UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
-      ctx.addMutableState("UnsafeArrayData", arrayDataName, "");
+      val arrayDataNameAccessor = ctx.addMutableState("UnsafeArrayData", arrayDataName, "");
 
       val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
-          s"$arrayDataName.setNullAt($i);"
+          s"$arrayDataNameAccessor.setNullAt($i);"
         } else {
           "throw new RuntimeException(\"Cannot use null as map key!\");"
         }
@@ -132,20 +132,20 @@ private [sql] object GenArrayData {
          if (${eval.isNull}) {
            $isNullAssignment
          } else {
-           $arrayDataName.set$primitiveValueTypeName($i, ${eval.value});
+           $arrayDataNameAccessor.set$primitiveValueTypeName($i, ${eval.value});
          }
        """
       }
 
       (s"""
         byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
-        $arrayDataName = new UnsafeArrayData();
+        $arrayDataNameAccessor = new UnsafeArrayData();
         Platform.putLong($arrayName, $baseOffset, $numElements);
-        $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
+        $arrayDataNameAccessor.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
       """,
        assignments,
        "",
-       arrayDataName)
+       arrayDataNameAccessor)
     }
   }
 }
@@ -340,24 +340,24 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+    val valuesAccessor = ctx.addMutableState("Object[]", values, s"$values = null;")
 
     ev.copy(code = s"""
-      $values = new Object[${valExprs.size}];""" +
+      $valuesAccessor = new Object[${valExprs.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
         valExprs.zipWithIndex.map { case (e, i) =>
           val eval = e.genCode(ctx)
           eval.code + s"""
           if (${eval.isNull}) {
-            $values[$i] = null;
+            $valuesAccessor[$i] = null;
           } else {
-            $values[$i] = ${eval.value};
+            $valuesAccessor[$i] = ${eval.value};
           }"""
         }) +
       s"""
-        final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
+        final InternalRow ${ev.value} = new $rowClass($valuesAccessor);
+        $valuesAccessor = null;
       """, isNull = "false")
   }
 

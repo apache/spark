@@ -438,24 +438,27 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     val termDict = ctx.freshName("dict")
     val classNameDict = classOf[JMap[Character, Character]].getCanonicalName
 
-    ctx.addMutableState("UTF8String", termLastMatching, s"$termLastMatching = null;")
-    ctx.addMutableState("UTF8String", termLastReplace, s"$termLastReplace = null;")
-    ctx.addMutableState(classNameDict, termDict, s"$termDict = null;")
+    val termLastMatchingAccessor =
+      ctx.addMutableState("UTF8String", termLastMatching, s"$termLastMatching = null;")
+    val termLastReplaceAccessor =
+      ctx.addMutableState("UTF8String", termLastReplace, s"$termLastReplace = null;")
+    val termDictAccessor = ctx.addMutableState(classNameDict, termDict, s"$termDict = null;")
 
     nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
       val check = if (matchingExpr.foldable && replaceExpr.foldable) {
-        s"$termDict == null"
+        s"$termDictAccessor == null"
       } else {
-        s"!$matching.equals($termLastMatching) || !$replace.equals($termLastReplace)"
+        s"!$matching.equals($termLastMatchingAccessor) " +
+          s"|| !$replace.equals($termLastReplaceAccessor)"
       }
       s"""if ($check) {
         // Not all of them is literal or matching or replace value changed
-        $termLastMatching = $matching.clone();
-        $termLastReplace = $replace.clone();
-        $termDict = org.apache.spark.sql.catalyst.expressions.StringTranslate
-          .buildDict($termLastMatching, $termLastReplace);
+        $termLastMatchingAccessor = $matching.clone();
+        $termLastReplaceAccessor = $replace.clone();
+        $termDictAccessor = org.apache.spark.sql.catalyst.expressions.StringTranslate
+          .buildDict($termLastMatchingAccessor, $termLastReplaceAccessor);
       }
-      ${ev.value} = $src.translate($termDict);
+      ${ev.value} = $src.translate($termDictAccessor);
       """
     })
   }
@@ -1592,27 +1595,27 @@ case class FormatNumber(x: Expression, d: Expression)
       val numberFormat = ctx.freshName("numberFormat")
       val i = ctx.freshName("i")
       val dFormat = ctx.freshName("dFormat")
-      ctx.addMutableState("int", lastDValue, s"$lastDValue = -100;")
-      ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
-      ctx.addMutableState(df, numberFormat,
+      val lastDValueAccessor = ctx.addMutableState("int", lastDValue, s"$lastDValue = -100;")
+      val patternAccessor = ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
+      val numberFormatAccessor = ctx.addMutableState(df, numberFormat,
       s"""$numberFormat = new $df("", new $dfs($l.$usLocale));""")
 
       s"""
         if ($d >= 0) {
-          $pattern.delete(0, $pattern.length());
-          if ($d != $lastDValue) {
-            $pattern.append("#,###,###,###,###,###,##0");
+          $patternAccessor.delete(0, $patternAccessor.length());
+          if ($d != $lastDValueAccessor) {
+            $patternAccessor.append("#,###,###,###,###,###,##0");
 
             if ($d > 0) {
-              $pattern.append(".");
+              $patternAccessor.append(".");
               for (int $i = 0; $i < $d; $i++) {
-                $pattern.append("0");
+                $patternAccessor.append("0");
               }
             }
-            $lastDValue = $d;
-            $numberFormat.applyLocalizedPattern($pattern.toString());
+            $lastDValueAccessor = $d;
+            $numberFormatAccessor.applyLocalizedPattern($patternAccessor.toString());
           }
-          ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
+          ${ev.value} = UTF8String.fromString($numberFormatAccessor.format(${typeHelper(num)}));
         } else {
           ${ev.value} = null;
           ${ev.isNull} = true;

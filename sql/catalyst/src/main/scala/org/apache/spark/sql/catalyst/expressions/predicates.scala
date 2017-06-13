@@ -271,16 +271,17 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     ctx.references += this
     val hsetTerm = ctx.freshName("hset")
     val hasNullTerm = ctx.freshName("hasNull")
-    ctx.addMutableState(setName, hsetTerm,
-      s"$hsetTerm = (($InSetName)references[${ctx.references.size - 1}]).getHSet();")
-    ctx.addMutableState("boolean", hasNullTerm, s"$hasNullTerm = $hsetTerm.contains(null);")
+    val hsetTermAccessor = ctx.addMutableState(setName,
+      hsetTerm, s"$hsetTerm = (($InSetName)references[${ctx.references.size - 1}]).getHSet();")
+    val hasNullTermAccessor = ctx.addMutableState(
+      "boolean", hasNullTerm, s"$hasNullTerm = $hsetTermAccessor.contains(null);")
     ev.copy(code = s"""
       ${childGen.code}
       boolean ${ev.isNull} = ${childGen.isNull};
       boolean ${ev.value} = false;
       if (!${ev.isNull}) {
-        ${ev.value} = $hsetTerm.contains(${childGen.value});
-        if (!${ev.value} && $hasNullTerm) {
+        ${ev.value} = $hsetTermAccessor.contains(${childGen.value});
+        if (!${ev.value} && $hasNullTermAccessor) {
           ${ev.isNull} = true;
         }
       }

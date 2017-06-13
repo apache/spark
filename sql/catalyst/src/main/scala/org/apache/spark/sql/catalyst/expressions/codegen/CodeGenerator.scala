@@ -113,8 +113,8 @@ class CodegenContext {
     val idx = references.length
     references += obj
     val clsName = Option(className).getOrElse(obj.getClass.getName)
-    addMutableState(clsName, term, s"this.$term = ($clsName) references[$idx];")
-    term
+    val termAccessor = addMutableState(clsName, term, s"$term = ($clsName) references[$idx];")
+    termAccessor
   }
 
   /**
@@ -148,11 +148,85 @@ class CodegenContext {
    *
    * They will be kept as member variables in generated classes like `SpecificProjection`.
    */
-  val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
-    mutable.ArrayBuffer.empty[(String, String, String)]
+  val mutableState: mutable.ListBuffer[(String, String, String)] =
+    mutable.ListBuffer.empty[(String, String, String)]
 
-  def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
-    mutableStates += ((javaType, variableName, initCode))
+  // An array keyed by the tuple of mutable states' types and initialization codes, holds the
+  // current max index of the array
+  var mutableStateArrayIdx: mutable.Map[(String, String), Int] =
+    mutable.Map.empty[(String, String), Int]
+
+  // An array keyed by the tuple of mutable states' types and initialization codes, holds the name
+  // of the mutableStateArray into which state of the given key will be compacted
+  var mutableStateArrayNames: mutable.Map[(String, String), String] =
+    mutable.Map.empty[(String, String), String]
+
+  // An array keyed by the tuple of mutable states' types and initialization codes, holds the code
+  // that will initialize the mutableStateArray when initialized in loops
+  var mutableStateArrayInitCodes: mutable.Map[(String, String), String] =
+    mutable.Map.empty[(String, String), String]
+
+  /**
+   * Adds an instance of globally-accessible mutable state. Mutable state may either be inlined
+   * as a private member variable to the class, or it may be compacted into arrays of the same
+   * type and initialization in order to avoid Constant Pool limit errors for both state declaration
+   * and initialization.
+   *
+   * We compact state into arrays when we can anticipate variables of the same type and initCode
+   * may appear numerous times. Variable names with integer suffixes (as given by the `freshName`
+   * function), that are either simply assigned (null or no initialization) or are primitive are
+   * good candidates for array compaction, as these variables types are likely to appear numerous
+   * times, and can be easily initialized in loops.
+   *
+   * @param javaType the javaType
+   * @param variableName the variable name
+   * @param initCode the initialization code for the variable
+   * @return the name of the mutable state variable, which is either the original name if the
+   *         variable is inlined to the class, or an array access if the variable is to be stored
+   *         in an array of variables of the same type and initialization.
+   */
+  def addMutableState(
+    javaType: String,
+    variableName: String,
+    initCode: String,
+    inLine: Boolean = false): String = {
+    if (!inLine &&
+      // identifies a 'freshname' style variable with a numerical suffix
+      variableName.matches(".*\\d+.*") &&
+      // identifies a simply-assigned object, or a primitive type
+      (initCode.matches("(^.*\\s*=\\s*null;$|^$)") || isPrimitiveType(javaType))) {
+      // Create an initialization code agnostic to the actual variable name which we can key by
+      val initCodeKey = initCode.replaceAll(variableName, "*VALUE*")
+
+      if (mutableStateArrayIdx.contains((javaType, initCodeKey))) {
+        // a mutableStateArray for the given type and initialization has been declared, update the
+        // max index of the array and return the array-based alias for the variable
+        val arrayName = mutableStateArrayNames((javaType, initCodeKey))
+        val idx = mutableStateArrayIdx((javaType, initCodeKey)) + 1
+
+        mutableStateArrayIdx.update(
+          (javaType, initCodeKey),
+          mutableStateArrayIdx(javaType, initCodeKey) + 1)
+
+        s"$arrayName[$idx]"
+      } else {
+        // no mutableStateArray has been declared yet. Create a new name for the array, and add
+        // entries for keeping track of the new array name, its current index, and initialization
+        // code
+        val arrayName = freshName("mutableStateArray")
+        val qualifiedInitCode = initCode.replaceAll(variableName, s"$arrayName[i]")
+        mutableStateArrayNames += Tuple2(javaType, initCodeKey) -> arrayName
+        mutableStateArrayIdx += Tuple2(javaType, initCodeKey) -> 0
+        mutableStateArrayInitCodes += Tuple2(javaType, initCodeKey) -> qualifiedInitCode
+
+        s"$arrayName[0]"
+      }
+    } else {
+      // non-primitive and non-simply-assigned state is declared inline to the outer class
+      mutableState += Tuple3(javaType, variableName, initCode)
+
+      variableName
+    }
   }
 
   /**
@@ -162,30 +236,54 @@ class CodegenContext {
    */
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
     val value = freshName(variableName)
-    addMutableState(javaType(dataType), value, "")
+    val valueAccessor = addMutableState(javaType(dataType), value, "")
     val code = dataType match {
-      case StringType => s"$value = $initCode.clone();"
-      case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
-      case _ => s"$value = $initCode;"
+      case StringType => s"$valueAccessor = $initCode.clone();"
+      case _: StructType | _: ArrayType | _: MapType => s"$valueAccessor = $initCode.copy();"
+      case _ => s"$valueAccessor = $initCode;"
     }
-    ExprCode(code, "false", value)
+    ExprCode(code, "false", valueAccessor)
   }
 
   def declareMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map { case (javaType, variableName, _) =>
+    val inlinedStates = mutableState.distinct.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
-    }.mkString("\n")
+    }
+    val arrayStates = mutableStateArrayNames.map { case ((javaType, initCode), arrayName) =>
+      val length = mutableStateArrayIdx((javaType, initCode)) + 1
+      if (javaType.matches("^.*\\[\\]$")) {
+        val baseType = javaType.substring(0, javaType.length - 2)
+        s"private $javaType[] $arrayName = new $baseType[$length][];"
+      } else {
+        s"private $javaType[] $arrayName = new $javaType[$length];"
+      }
+    }
+
+    (inlinedStates ++ arrayStates).mkString("\n")
   }
 
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    val initCodes = mutableStates.distinct.map(_._3 + "\n")
+    val initCodes = mutableState.distinct.map(_._3 + "\n")
+    // Array state is initialized in loops
+    val arrayInitCodes = mutableStateArrayNames.map { case ((javaType, initCode), arrayName) =>
+      val qualifiedInitCode = mutableStateArrayInitCodes((javaType, initCode))
+      if (qualifiedInitCode.equals("")) {
+        ""
+      } else {
+        s"""
+           for (int i = 0; i < $arrayName.length; i++) {
+             $qualifiedInitCode
+           }
+         """
+      }
+    }
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
-    splitExpressions(initCodes, "init", Nil)
+    splitExpressions(initCodes ++ arrayInitCodes, "init", Nil)
   }
 
   /**
@@ -200,16 +298,6 @@ class CodegenContext {
 
   def initPartition(): String = {
     partitionInitializationStatements.mkString("\n")
-  }
-
-  /**
-   * Holding all the functions those will be added into generated class.
-   */
-  val addedFunctions: mutable.Map[String, String] =
-    mutable.Map.empty[String, String]
-
-  def addNewFunction(funcName: String, funcCode: String): Unit = {
-    addedFunctions += ((funcName, funcCode))
   }
 
   /**
@@ -233,9 +321,124 @@ class CodegenContext {
   // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
-  def declareAddedFunctions(): String = {
-    addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
+  /**
+   * The Class and instance names generated. `OuterClass` is a placeholder standing for whatever
+   * class is generated as the outermost class. All other classes and instance names in this list
+   * are private nested classes.
+   */
+  private val classes: mutable.ListBuffer[(String, String)] =
+    mutable.ListBuffer[(String, String)](("OuterClass", null))
+
+  // A map holding the current size in bytes of each class.
+  private val classSize: mutable.Map[String, Int] =
+    mutable.Map[String, Int](("OuterClass", 0))
+
+  // A map holding all functions and their names belonging to each class
+  private val classFunctions: mutable.Map[String, mutable.Map[String, String]] =
+    mutable.Map(("OuterClass", mutable.Map.empty[String, String]))
+
+  // Returns the size of the most recently added class
+  private def currClassSize(): Int = classSize(classes.head._1)
+
+  private def currClass(): (String, String) = classes.head
+
+  // Adds a new class. Requires the class' name, and its instance name
+  private def addClass(className: String, classInstance: String): Unit = {
+    classes.prepend(Tuple2(className, classInstance))
+    classSize += className -> 0
+    classFunctions += className -> mutable.Map.empty[String, String]
   }
+
+  /**
+   * Adds a function to the generated class. If the code for the `OuterClass` grows too large, the
+   * function will be inlined into a new private nested class, and a class-qualified name for
+   * the function will be returned. Otherwise, the function will be inlined to the `OuterClass`
+   * and the simple `funcName` will be returned.
+   *
+   * @param funcName the class-unqualified name of the function
+   * @param funcCode the body of the function
+   * @return the name of the function, qualified by class if it will be inlined to a private
+   *         nested class
+   */
+  def addNewFunction(
+    funcName: String,
+    funcCode: String,
+    inlineToOuterClass: Boolean = false): String = {
+    // The number of named constants that can exist in the class is limited by the Constant Pool
+    // limit, 65536. We cannot know how many constants will be inserted for a class, so we use a
+    // threshold of 1000K bytes to determine when a function should be inlined into a private
+    // NestedClass.
+    val classInfo = if (inlineToOuterClass) {
+      ("OuterClass", "")
+    } else if (currClassSize > 1600000) {
+      val className = freshName("NestedClass")
+      val classInstance = freshName("nestedClassInstance")
+
+      addClass(className, classInstance)
+
+      Tuple2(className, classInstance)
+    } else {
+      currClass()
+    }
+    val name = classInfo._1
+
+    classSize.update(name, classSize(name) + funcCode.length)
+    classFunctions.update(name, classFunctions(name) += funcName -> funcCode)
+    if (name.equals("OuterClass")) {
+      funcName
+    } else {
+      val classInstance = classInfo._2
+
+      s"$classInstance.$funcName"
+    }
+  }
+
+  /**
+   * Instantiates all nested private classes as objects to the OuterClass
+   */
+  def initNestedClasses(): String = {
+    // Nested private classes have no mutable state (though they do reference the outer class's
+    // mutable state), so we declare and initialize them inline to the OuterClass
+    classes.map {
+      case (className, classInstance) =>
+        if (className.equals("OuterClass")) {
+          ""
+        } else {
+          s"private $className $classInstance = new $className();"
+        }
+    }.mkString("\n")
+  }
+
+  /**
+   * Declares all functions that should be inlined to the `OuterClass`
+   */
+  def declareAddedFunctions(): String = {
+    classFunctions("OuterClass").map {
+      case (funcName, funcCode) => funcCode
+    }.mkString("\n")
+  }
+
+  /**
+   * Declares all nested private classes and functions that should be inlined to them
+   */
+  def declareNestedClasses(): String = {
+    classFunctions.map {
+      case (className, functions) =>
+        if (className.equals("OuterClass")) {
+          ""
+        } else {
+          val code = functions.map {
+            case (_, funcCode) =>
+              s"$funcCode"
+          }.mkString("\n")
+          s"""
+             |private class $className {
+             |  $code
+             |}
+           """.stripMargin
+        }
+    }
+  }.mkString("\n")
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -556,8 +759,7 @@ class CodegenContext {
             return 0;
           }
         """
-      addNewFunction(compareFunc, funcCode)
-      s"this.$compareFunc($c1, $c2)"
+      s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case schema: StructType =>
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
@@ -573,8 +775,7 @@ class CodegenContext {
             return 0;
           }
         """
-      addNewFunction(compareFunc, funcCode)
-      s"this.$compareFunc($c1, $c2)"
+      s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
@@ -644,7 +845,9 @@ class CodegenContext {
 
   /**
    * Splits the generated code of expressions into multiple functions, because function has
-   * 64kb code size limit in JVM
+   * 64kb code size limit in JVM. If the class the function is to be inlined to would beyond
+   * 1600kb, a private nested class is declared, and the function is inlined to it, because
+   * classes have a constant pool limit of 65536 named values.
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
@@ -688,8 +891,8 @@ class CodegenContext {
            |  ${makeSplitFunction(body)}
            |}
          """.stripMargin
+
         addNewFunction(name, code)
-        name
       }
 
       foldFunctions(functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")})"))
@@ -762,19 +965,6 @@ class CodegenContext {
       val isNull = s"${fnName}IsNull"
       val value = s"${fnName}Value"
 
-      // Generate the code for this expression tree and wrap it in a function.
-      val eval = expr.genCode(this)
-      val fn =
-        s"""
-           |private void $fnName(InternalRow $INPUT_ROW) {
-           |  ${eval.code.trim}
-           |  $isNull = ${eval.isNull};
-           |  $value = ${eval.value};
-           |}
-           """.stripMargin
-
-      addNewFunction(fnName, fn)
-
       // Add a state and a mapping of the common subexpressions that are associate with this
       // state. Adding this expression to subExprEliminationExprMap means it will call `fn`
       // when it is code generated. This decision should be a cost based one.
@@ -788,12 +978,23 @@ class CodegenContext {
       //   2. Less code.
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
-      addMutableState("boolean", isNull, s"$isNull = false;")
-      addMutableState(javaType(expr.dataType), value,
+      val isNullAccessor = addMutableState("boolean", isNull, s"$isNull = false;")
+      val valueAccessor = addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
 
-      subexprFunctions += s"$fnName($INPUT_ROW);"
-      val state = SubExprEliminationState(isNull, value)
+      // Generate the code for this expression tree and wrap it in a function.
+      val eval = expr.genCode(this)
+      val fn =
+        s"""
+           |private void $fnName(InternalRow $INPUT_ROW) {
+           |  ${eval.code.trim}
+           |  $isNullAccessor = ${eval.isNull};
+           |  $valueAccessor = ${eval.value};
+           |}
+           """.stripMargin
+
+      subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
+      val state = SubExprEliminationState(isNullAccessor, valueAccessor)
       e.foreach(subExprEliminationExprs.put(_, state))
     }
   }

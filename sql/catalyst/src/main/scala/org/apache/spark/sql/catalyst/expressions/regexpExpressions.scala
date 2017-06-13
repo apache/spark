@@ -118,7 +118,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
-        ctx.addMutableState(patternClass, pattern,
+        val patternAccessor = ctx.addMutableState(patternClass, pattern,
           s"""$pattern = ${patternClass}.compile("$regexStr");""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
@@ -128,7 +128,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
           boolean ${ev.isNull} = ${eval.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
+            ${ev.value} = $patternAccessor.matcher(${eval.value}.toString()).matches();
           }
         """)
       } else {
@@ -191,7 +191,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
-        ctx.addMutableState(patternClass, pattern,
+        val patternAccessor = ctx.addMutableState(patternClass, pattern,
           s"""$pattern = ${patternClass}.compile("$regexStr");""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
@@ -201,7 +201,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
           boolean ${ev.isNull} = ${eval.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);
+            ${ev.value} = $patternAccessor.matcher(${eval.value}.toString()).find(0);
           }
         """)
       } else {
@@ -326,12 +326,16 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     val matcher = ctx.freshName("matcher")
 
-    ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
-    ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
-    ctx.addMutableState("String", termLastReplacement, s"${termLastReplacement} = null;")
-    ctx.addMutableState("UTF8String",
-      termLastReplacementInUTF8, s"${termLastReplacementInUTF8} = null;")
-    ctx.addMutableState(classNameStringBuffer,
+    val termLastRegexAccessor =
+      ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
+    val termPatternAccessor =
+      ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
+    val termLastReplacementAccessor =
+      ctx.addMutableState("String", termLastReplacement, s"${termLastReplacement} = null;")
+    val termLastReplacementInUTF8Accessor =
+      ctx.addMutableState(
+        "UTF8String", termLastReplacementInUTF8, s"${termLastReplacementInUTF8} = null;")
+    val termResultAccessor = ctx.addMutableState(classNameStringBuffer,
       termResult, s"${termResult} = new $classNameStringBuffer();")
 
     val setEvNotNull = if (nullable) {
@@ -342,24 +346,24 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep) => {
     s"""
-      if (!$regexp.equals(${termLastRegex})) {
+      if (!$regexp.equals(${termLastRegexAccessor})) {
         // regex value changed
-        ${termLastRegex} = $regexp.clone();
-        ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
+        ${termLastRegexAccessor} = $regexp.clone();
+        ${termPatternAccessor} = ${classNamePattern}.compile(${termLastRegexAccessor}.toString());
       }
-      if (!$rep.equals(${termLastReplacementInUTF8})) {
+      if (!$rep.equals(${termLastReplacementInUTF8Accessor})) {
         // replacement string changed
-        ${termLastReplacementInUTF8} = $rep.clone();
-        ${termLastReplacement} = ${termLastReplacementInUTF8}.toString();
+        ${termLastReplacementInUTF8Accessor} = $rep.clone();
+        ${termLastReplacementAccessor} = ${termLastReplacementInUTF8Accessor}.toString();
       }
-      ${termResult}.delete(0, ${termResult}.length());
-      java.util.regex.Matcher ${matcher} = ${termPattern}.matcher($subject.toString());
+      ${termResultAccessor}.delete(0, ${termResultAccessor}.length());
+      java.util.regex.Matcher ${matcher} = ${termPatternAccessor}.matcher($subject.toString());
 
       while (${matcher}.find()) {
-        ${matcher}.appendReplacement(${termResult}, ${termLastReplacement});
+        ${matcher}.appendReplacement(${termResultAccessor}, ${termLastReplacementAccessor});
       }
-      ${matcher}.appendTail(${termResult});
-      ${ev.value} = UTF8String.fromString(${termResult}.toString());
+      ${matcher}.appendTail(${termResultAccessor});
+      ${ev.value} = UTF8String.fromString(${termResultAccessor}.toString());
       $setEvNotNull
     """
     })
@@ -419,8 +423,10 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val matcher = ctx.freshName("matcher")
     val matchResult = ctx.freshName("matchResult")
 
-    ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
-    ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
+    val termLastRegexAccessor =
+      ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
+    val termPatternAccessor =
+      ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
 
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
@@ -430,13 +436,13 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-      if (!$regexp.equals(${termLastRegex})) {
+      if (!$regexp.equals(${termLastRegexAccessor})) {
         // regex value changed
-        ${termLastRegex} = $regexp.clone();
-        ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
+        ${termLastRegexAccessor} = $regexp.clone();
+        ${termPatternAccessor} = ${classNamePattern}.compile(${termLastRegexAccessor}.toString());
       }
       java.util.regex.Matcher ${matcher} =
-        ${termPattern}.matcher($subject.toString());
+        ${termPatternAccessor}.matcher($subject.toString());
       if (${matcher}.find()) {
         java.util.regex.MatchResult ${matchResult} = ${matcher}.toMatchResult();
         if (${matchResult}.group($idx) == null) {

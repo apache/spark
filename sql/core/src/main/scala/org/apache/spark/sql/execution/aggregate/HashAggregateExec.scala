@@ -162,7 +162,7 @@ case class HashAggregateExec(
 
   private def doProduceWithoutKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
-    ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
+    val initAggAccessor = ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
     // generate variables for aggregation buffer
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
@@ -170,15 +170,15 @@ case class HashAggregateExec(
     bufVars = initExpr.map { e =>
       val isNull = ctx.freshName("bufIsNull")
       val value = ctx.freshName("bufValue")
-      ctx.addMutableState("boolean", isNull, "")
-      ctx.addMutableState(ctx.javaType(e.dataType), value, "")
+      val isNullAccessor = ctx.addMutableState("boolean", isNull, "")
+      val valueAccessor = ctx.addMutableState(ctx.javaType(e.dataType), value, "")
       // The initial expression should not access any column
       val ev = e.genCode(ctx)
       val initVars = s"""
-         | $isNull = ${ev.isNull};
-         | $value = ${ev.value};
+         | $isNullAccessor = ${ev.isNull};
+         | $valueAccessor = ${ev.value};
        """.stripMargin
-      ExprCode(ev.code + initVars, isNull, value)
+      ExprCode(ev.code + initVars, isNullAccessor, valueAccessor)
     }
     val initBufVar = evaluateVariables(bufVars)
 
@@ -209,7 +209,7 @@ case class HashAggregateExec(
     }
 
     val doAgg = ctx.freshName("doAggregateWithoutKey")
-    ctx.addNewFunction(doAgg,
+    val doAggFunc = ctx.addNewFunction(doAgg,
       s"""
          | private void $doAgg() throws java.io.IOException {
          |   // initialize aggregation buffer
@@ -223,10 +223,10 @@ case class HashAggregateExec(
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
     s"""
-       | while (!$initAgg) {
-       |   $initAgg = true;
+       | while (!$initAggAccessor) {
+       |   $initAggAccessor = true;
        |   long $beforeAgg = System.nanoTime();
-       |   $doAgg();
+       |   $doAggFunc();
        |   $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
        |
        |   // output the result
@@ -459,11 +459,11 @@ case class HashAggregateExec(
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
       // This should be the last operator in a stage, we should output UnsafeRow directly
       val joinerTerm = ctx.freshName("unsafeRowJoiner")
-      ctx.addMutableState(classOf[UnsafeRowJoiner].getName, joinerTerm,
+      val joinerTermAccessor = ctx.addMutableState(classOf[UnsafeRowJoiner].getName, joinerTerm,
         s"$joinerTerm = $plan.createUnsafeJoiner();")
       val resultRow = ctx.freshName("resultRow")
       s"""
-       UnsafeRow $resultRow = $joinerTerm.join($keyTerm, $bufferTerm);
+       UnsafeRow $resultRow = $joinerTermAccessor.join($keyTerm, $bufferTerm);
        ${consume(ctx, null, resultRow)}
        """
 
@@ -521,7 +521,7 @@ case class HashAggregateExec(
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
-    ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
+    val initAggAccessor = ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
     } else {
@@ -546,18 +546,20 @@ case class HashAggregateExec(
 
     // Create a name for iterator from vectorized HashMap
     val iterTermForFastHashMap = ctx.freshName("fastHashMapIter")
+    var iterTermForFastHashMapAccessor: String = iterTermForFastHashMap
     if (isFastHashMapEnabled) {
       if (isVectorizedHashMapEnabled) {
-        ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
+        // Reassign fastHashMapTerm value to potentially class-qualified name
+        fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName();")
-        ctx.addMutableState(
+        iterTermForFastHashMapAccessor = ctx.addMutableState(
           "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>",
           iterTermForFastHashMap, "")
       } else {
-        ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
+        fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName(" +
             s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());")
-        ctx.addMutableState(
+        iterTermForFastHashMapAccessor = ctx.addMutableState(
           "org.apache.spark.unsafe.KVIterator",
           iterTermForFastHashMap, "")
       }
@@ -566,13 +568,14 @@ case class HashAggregateExec(
     // create hashMap
     hashMapTerm = ctx.freshName("hashMap")
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
-    ctx.addMutableState(hashMapClassName, hashMapTerm, "")
+    hashMapTerm = ctx.addMutableState(hashMapClassName, hashMapTerm, "")
     sorterTerm = ctx.freshName("sorter")
-    ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, sorterTerm, "")
+    sorterTerm = ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, sorterTerm, "")
 
     // Create a name for iterator from HashMap
     val iterTerm = ctx.freshName("mapIter")
-    ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm, "")
+    val iterTermAccessor =
+      ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm, "")
 
     val doAgg = ctx.freshName("doAggregateWithKeys")
     val peakMemory = metricTerm(ctx, "peakMemory")
@@ -592,7 +595,7 @@ case class HashAggregateExec(
       } else ""
     }
 
-    ctx.addNewFunction(doAgg,
+    val doAggFunc = ctx.addNewFunction(doAgg,
       s"""
         ${generateGenerateCode}
         private void $doAgg() throws java.io.IOException {
@@ -600,9 +603,10 @@ case class HashAggregateExec(
           ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
 
           ${if (isFastHashMapEnabled) {
-              s"$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();"} else ""}
+              s"$iterTermForFastHashMapAccessor = $fastHashMapTerm.rowIterator();"} else ""}
 
-          $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm, $peakMemory, $spillSize);
+          $iterTermAccessor = $thisPlan.finishAggregate(
+            $hashMapTerm, $sorterTerm, $peakMemory, $spillSize);
         }
        """)
 
@@ -628,10 +632,10 @@ case class HashAggregateExec(
 
     def outputFromRowBasedMap: String = {
       s"""
-       while ($iterTermForFastHashMap.next()) {
+       while ($iterTermForFastHashMapAccessor.next()) {
          $numOutput.add(1);
-         UnsafeRow $keyTerm = (UnsafeRow) $iterTermForFastHashMap.getKey();
-         UnsafeRow $bufferTerm = (UnsafeRow) $iterTermForFastHashMap.getValue();
+         UnsafeRow $keyTerm = (UnsafeRow) $iterTermForFastHashMapAccessor.getKey();
+         UnsafeRow $bufferTerm = (UnsafeRow) $iterTermForFastHashMapAccessor.getValue();
          $outputCode
 
          if (shouldStop()) return;
@@ -650,11 +654,11 @@ case class HashAggregateExec(
         val generateRow = GenerateUnsafeProjection.createCode(ctx, schema.toAttributes.zipWithIndex
           .map { case (attr, i) => BoundReference(i, attr.dataType, attr.nullable) })
         s"""
-           | while ($iterTermForFastHashMap.hasNext()) {
+           | while ($iterTermForFastHashMapAccessor.hasNext()) {
            |   $numOutput.add(1);
            |   org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $row =
            |     (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row)
-           |     $iterTermForFastHashMap.next();
+           |     $iterTermForFastHashMapAccessor.next();
            |   ${generateRow.code}
            |   ${consume(ctx, Seq.empty, {generateRow.value})}
            |
@@ -669,26 +673,26 @@ case class HashAggregateExec(
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
     s"""
-     if (!$initAgg) {
-       $initAgg = true;
+     if (!$initAggAccessor) {
+       $initAggAccessor = true;
        long $beforeAgg = System.nanoTime();
-       $doAgg();
+       $doAggFunc();
        $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
      }
 
      // output the result
      ${outputFromGeneratedMap}
 
-     while ($iterTerm.next()) {
+     while ($iterTermAccessor.next()) {
        $numOutput.add(1);
-       UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
-       UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
+       UnsafeRow $keyTerm = (UnsafeRow) $iterTermAccessor.getKey();
+       UnsafeRow $bufferTerm = (UnsafeRow) $iterTermAccessor.getValue();
        $outputCode
 
        if (shouldStop()) return;
      }
 
-     $iterTerm.close();
+     $iterTermAccessor.close();
      if ($sorterTerm == null) {
        $hashMapTerm.free();
      }
@@ -728,9 +732,10 @@ case class HashAggregateExec(
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
     incCounter) = if (testFallbackStartsAt.isDefined) {
       val countTerm = ctx.freshName("fallbackCounter")
-      ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
-      (s"$countTerm < ${testFallbackStartsAt.get._1}",
-        s"$countTerm < ${testFallbackStartsAt.get._2}", s"$countTerm = 0;", s"$countTerm += 1;")
+      val counterTermAccessor = ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
+      (s"$counterTermAccessor < ${testFallbackStartsAt.get._1}",
+        s"$counterTermAccessor < ${testFallbackStartsAt.get._2}",
+        s"$counterTermAccessor = 0;", s"$counterTermAccessor += 1;")
     } else {
       ("true", "true", "", "")
     }

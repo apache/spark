@@ -402,14 +402,14 @@ case class SortMergeJoinExec(
   private def genScanner(ctx: CodegenContext): (String, String) = {
     // Create class member for next row from both sides.
     val leftRow = ctx.freshName("leftRow")
-    ctx.addMutableState("InternalRow", leftRow, "")
+    val leftRowAccessor = ctx.addMutableState("InternalRow", leftRow, "")
     val rightRow = ctx.freshName("rightRow")
-    ctx.addMutableState("InternalRow", rightRow, s"$rightRow = null;")
+    val rightRowAccessor = ctx.addMutableState("InternalRow", rightRow, s"$rightRow = null;")
 
     // Create variables for join keys from both sides.
-    val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
+    val leftKeyVars = createJoinKey(ctx, leftRowAccessor, leftKeys, left.output)
     val leftAnyNull = leftKeyVars.map(_.isNull).mkString(" || ")
-    val rightKeyTmpVars = createJoinKey(ctx, rightRow, rightKeys, right.output)
+    val rightKeyTmpVars = createJoinKey(ctx, rightRowAccessor, rightKeys, right.output)
     val rightAnyNull = rightKeyTmpVars.map(_.isNull).mkString(" || ")
     // Copy the right key as class members so they could be used in next function call.
     val rightKeyVars = copyKeys(ctx, rightKeyTmpVars)
@@ -420,7 +420,8 @@ case class SortMergeJoinExec(
 
     val spillThreshold = getSpillThreshold
 
-    ctx.addMutableState(clsName, matches, s"$matches = new $clsName($spillThreshold);")
+    val matchesAccessor = ctx.addMutableState(
+      clsName, matches, s"$matches = new $clsName($spillThreshold);")
     // Copy the left keys as class members so they could be used in next function call.
     val matchedKeyVars = copyKeys(ctx, leftKeyVars)
 
@@ -429,58 +430,58 @@ case class SortMergeJoinExec(
          |private boolean findNextInnerJoinRows(
          |    scala.collection.Iterator leftIter,
          |    scala.collection.Iterator rightIter) {
-         |  $leftRow = null;
+         |  $leftRowAccessor = null;
          |  int comp = 0;
-         |  while ($leftRow == null) {
+         |  while ($leftRowAccessor == null) {
          |    if (!leftIter.hasNext()) return false;
-         |    $leftRow = (InternalRow) leftIter.next();
+         |    $leftRowAccessor = (InternalRow) leftIter.next();
          |    ${leftKeyVars.map(_.code).mkString("\n")}
          |    if ($leftAnyNull) {
-         |      $leftRow = null;
+         |      $leftRowAccessor = null;
          |      continue;
          |    }
-         |    if (!$matches.isEmpty()) {
+         |    if (!$matchesAccessor.isEmpty()) {
          |      ${genComparision(ctx, leftKeyVars, matchedKeyVars)}
          |      if (comp == 0) {
          |        return true;
          |      }
-         |      $matches.clear();
+         |      $matchesAccessor.clear();
          |    }
          |
          |    do {
-         |      if ($rightRow == null) {
+         |      if ($rightRowAccessor == null) {
          |        if (!rightIter.hasNext()) {
          |          ${matchedKeyVars.map(_.code).mkString("\n")}
-         |          return !$matches.isEmpty();
+         |          return !$matchesAccessor.isEmpty();
          |        }
-         |        $rightRow = (InternalRow) rightIter.next();
+         |        $rightRowAccessor = (InternalRow) rightIter.next();
          |        ${rightKeyTmpVars.map(_.code).mkString("\n")}
          |        if ($rightAnyNull) {
-         |          $rightRow = null;
+         |          $rightRowAccessor = null;
          |          continue;
          |        }
          |        ${rightKeyVars.map(_.code).mkString("\n")}
          |      }
          |      ${genComparision(ctx, leftKeyVars, rightKeyVars)}
          |      if (comp > 0) {
-         |        $rightRow = null;
+         |        $rightRowAccessor = null;
          |      } else if (comp < 0) {
-         |        if (!$matches.isEmpty()) {
+         |        if (!$matchesAccessor.isEmpty()) {
          |          ${matchedKeyVars.map(_.code).mkString("\n")}
          |          return true;
          |        }
-         |        $leftRow = null;
+         |        $leftRowAccessor = null;
          |      } else {
-         |        $matches.add((UnsafeRow) $rightRow);
-         |        $rightRow = null;;
+         |        $matchesAccessor.add((UnsafeRow) $rightRowAccessor);
+         |        $rightRowAccessor = null;;
          |      }
-         |    } while ($leftRow != null);
+         |    } while ($leftRowAccessor != null);
          |  }
          |  return false; // unreachable
          |}
-       """.stripMargin)
+       """.stripMargin, inlineToOuterClass = true)
 
-    (leftRow, matches)
+    (leftRowAccessor, matchesAccessor)
   }
 
   /**
@@ -496,18 +497,18 @@ case class SortMergeJoinExec(
       val value = ctx.freshName("value")
       val valueCode = ctx.getValue(leftRow, a.dataType, i.toString)
       // declare it as class member, so we can access the column before or in the loop.
-      ctx.addMutableState(ctx.javaType(a.dataType), value, "")
+      val valueAccessor = ctx.addMutableState(ctx.javaType(a.dataType), value, "")
       if (a.nullable) {
         val isNull = ctx.freshName("isNull")
-        ctx.addMutableState("boolean", isNull, "")
+        val isNullAccessor = ctx.addMutableState("boolean", isNull, "")
         val code =
           s"""
-             |$isNull = $leftRow.isNullAt($i);
-             |$value = $isNull ? ${ctx.defaultValue(a.dataType)} : ($valueCode);
+             |$isNullAccessor = $leftRow.isNullAt($i);
+             |$valueAccessor = $isNullAccessor ? ${ctx.defaultValue(a.dataType)} : ($valueCode);
            """.stripMargin
-        ExprCode(code, isNull, value)
+        ExprCode(code, isNullAccessor, valueAccessor)
       } else {
-        ExprCode(s"$value = $valueCode;", "false", value)
+        ExprCode(s"$valueAccessor = $valueCode;", "false", valueAccessor)
       }
     }
   }
@@ -549,9 +550,11 @@ case class SortMergeJoinExec(
   override def doProduce(ctx: CodegenContext): String = {
     ctx.copyResult = true
     val leftInput = ctx.freshName("leftInput")
-    ctx.addMutableState("scala.collection.Iterator", leftInput, s"$leftInput = inputs[0];")
+    val leftInputAccessor =
+      ctx.addMutableState("scala.collection.Iterator", leftInput, s"$leftInput = inputs[0];")
     val rightInput = ctx.freshName("rightInput")
-    ctx.addMutableState("scala.collection.Iterator", rightInput, s"$rightInput = inputs[1];")
+    val rightInputAccessor =
+      ctx.addMutableState("scala.collection.Iterator", rightInput, s"$rightInput = inputs[1];")
 
     val (leftRow, matches) = genScanner(ctx)
 
@@ -592,7 +595,7 @@ case class SortMergeJoinExec(
     }
 
     s"""
-       |while (findNextInnerJoinRows($leftInput, $rightInput)) {
+       |while (findNextInnerJoinRows($leftInputAccessor, $rightInputAccessor)) {
        |  ${beforeLoop.trim}
        |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
        |  while ($iterator.hasNext()) {
