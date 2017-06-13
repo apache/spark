@@ -218,9 +218,9 @@ The run-tests script also can be limited to a specific Python version or a speci
 
 ## Running R Tests
 
-To run the SparkR tests you will need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first:
+To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
 
-    R -e 'install.packages("testthat", repos="http://cran.us.r-project.org")'
+    R -e 'install.packages(c("knitr", "rmarkdown", "testthat", "e1071", "survival"), repos="http://cran.us.r-project.org")'
 
 You can run just the SparkR tests using the command:
 
