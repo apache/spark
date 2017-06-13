@@ -34,15 +34,19 @@ public final class OffHeapColumnVector extends ColumnVector {
   // The data stored in these two allocations need to maintain binary compatible. We can
   // directly pass this buffer to external components.
   private long nulls;
-  // The actually data of this column vector will be stored here. If it's an array column vector,
-  // we will store the offsets and lengths here, and store the element data in child column vector.
   private long data;
+
+  // Set iff the type is array.
+  private long lengthData;
+  private long offsetData;
 
   protected OffHeapColumnVector(int capacity, DataType type) {
     super(capacity, type, MemoryMode.OFF_HEAP);
 
     nulls = 0;
     data = 0;
+    lengthData = 0;
+    offsetData = 0;
 
     reserveInternal(capacity);
     reset();
@@ -62,8 +66,12 @@ public final class OffHeapColumnVector extends ColumnVector {
   public void close() {
     Platform.freeMemory(nulls);
     Platform.freeMemory(data);
+    Platform.freeMemory(lengthData);
+    Platform.freeMemory(offsetData);
     nulls = 0;
     data = 0;
+    lengthData = 0;
+    offsetData = 0;
   }
 
   //
@@ -387,6 +395,35 @@ public final class OffHeapColumnVector extends ColumnVector {
     }
   }
 
+  //
+  // APIs dealing with Arrays.
+  //
+  @Override
+  public void putArray(int rowId, int offset, int length) {
+    assert(offset >= 0 && offset + length <= childColumns[0].capacity);
+    Platform.putInt(null, lengthData + 4 * rowId, length);
+    Platform.putInt(null, offsetData + 4 * rowId, offset);
+  }
+
+  @Override
+  public int getArrayLength(int rowId) {
+    return Platform.getInt(null, lengthData + 4 * rowId);
+  }
+
+  @Override
+  public int getArrayOffset(int rowId) {
+    return Platform.getInt(null, offsetData + 4 * rowId);
+  }
+
+  // APIs dealing with ByteArrays
+  @Override
+  public int putByteArray(int rowId, byte[] value, int offset, int length) {
+    int result = arrayData().appendBytes(length, value, offset);
+    Platform.putInt(null, lengthData + 4 * rowId, length);
+    Platform.putInt(null, offsetData + 4 * rowId, result);
+    return result;
+  }
+
   @Override
   public void loadBytes(ColumnVector.Array array) {
     if (array.tmpByteArray.length < array.length) array.tmpByteArray = new byte[array.length];
@@ -401,8 +438,10 @@ public final class OffHeapColumnVector extends ColumnVector {
   protected void reserveInternal(int newCapacity) {
     int oldCapacity = (this.data == 0L) ? 0 : capacity;
     if (this.resultArray != null) {
-      // need a long as offset and length for each array.
-      this.data = Platform.reallocateMemory(data, oldCapacity * 8, newCapacity * 8);
+      this.lengthData =
+          Platform.reallocateMemory(lengthData, oldCapacity * 4, newCapacity * 4);
+      this.offsetData =
+          Platform.reallocateMemory(offsetData, oldCapacity * 4, newCapacity * 4);
     } else if (type instanceof ByteType || type instanceof BooleanType) {
       this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);
     } else if (type instanceof ShortType) {
