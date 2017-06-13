@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
@@ -32,7 +32,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   private var _analyzed: Boolean = false
 
   /**
-   * Marks this plan as already analyzed.  This should only be called by CheckAnalysis.
+   * Marks this plan as already analyzed. This should only be called by [[CheckAnalysis]].
    */
   private[catalyst] def setAnalyzed(): Unit = { _analyzed = true }
 
@@ -56,7 +56,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     if (!analyzed) {
-      val afterRuleOnChildren = transformChildren(rule, (t, r) => t.resolveOperators(r))
+      val afterRuleOnChildren = mapChildren(_.resolveOperators(rule))
       if (this fastEquals afterRuleOnChildren) {
         CurrentOrigin.withOrigin(origin) {
           rule.applyOrElse(this, identity[LogicalPlan])
@@ -81,6 +81,26 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }
   }
 
+  /** A cache for the estimated statistics, such that it will only be computed once. */
+  private var statsCache: Option[Statistics] = None
+
+  /**
+   * Returns the estimated statistics for the current logical plan node. Under the hood, this
+   * method caches the return value, which is computed based on the configuration passed in the
+   * first time. If the configuration changes, the cache can be invalidated by calling
+   * [[invalidateStatsCache()]].
+   */
+  final def stats(conf: SQLConf): Statistics = statsCache.getOrElse {
+    statsCache = Some(computeStats(conf))
+    statsCache.get
+  }
+
+  /** Invalidates the stats cache. See [[stats]] for more information. */
+  final def invalidateStatsCache(): Unit = {
+    statsCache = None
+    children.foreach(_.invalidateStatsCache())
+  }
+
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
    * cardinality is the product of all child plan's cardinality, i.e. applies in the case
@@ -88,35 +108,16 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    *
    * [[LeafNode]]s must override this.
    */
-  def statistics: Statistics = {
+  protected def computeStats(conf: SQLConf): Statistics = {
     if (children.isEmpty) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
-    Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)
+    Statistics(sizeInBytes = children.map(_.stats(conf).sizeInBytes).product)
   }
 
-  /**
-   * Returns the default statistics or statistics estimated by cbo based on configuration.
-   */
-  final def planStats(conf: CatalystConf): Statistics = {
-    if (conf.cboEnabled) {
-      if (estimatedStats.isEmpty) {
-        estimatedStats = Some(cboStatistics(conf))
-      }
-      estimatedStats.get
-    } else {
-      statistics
-    }
+  override def verboseStringWithSuffix: String = {
+    super.verboseString + statsCache.map(", " + _.toString).getOrElse("")
   }
-
-  /**
-   * Returns statistics estimated by cbo. If the plan doesn't override this, it returns the
-   * default statistics.
-   */
-  protected def cboStatistics(conf: CatalystConf): Statistics = statistics
-
-  /** A cache for the estimated statistics, such that it will only be computed once. */
-  private var estimatedStats: Option[Statistics] = None
 
   /**
    * Returns the maximum number of rows that this plan may compute.
@@ -141,8 +142,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * Returns true if all its children of this query plan have been resolved.
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
-
-  override lazy val canonicalized: LogicalPlan = EliminateSubqueryAliases(this)
 
   /**
    * Resolves a given schema to concrete [[Attribute]] references in this query plan. This function
@@ -334,20 +333,21 @@ abstract class UnaryNode extends LogicalPlan {
 
   override protected def validConstraints: Set[Expression] = child.constraints
 
-  override def statistics: Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     // There should be some overhead in Row object, the size should not be zero when there is
     // no columns, this help to prevent divide-by-zero error.
     val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
     val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
     // Assume there will be the same number of rows as child has.
-    var sizeInBytes = (child.statistics.sizeInBytes * outputRowSize) / childRowSize
+    var sizeInBytes = (child.stats(conf).sizeInBytes * outputRowSize) / childRowSize
     if (sizeInBytes == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
       // (product of children).
       sizeInBytes = 1
     }
 
-    child.statistics.copy(sizeInBytes = sizeInBytes)
+    // Don't propagate rowCount and attributeStats, since they are not estimated here.
+    Statistics(sizeInBytes = sizeInBytes, hints = child.stats(conf).hints)
   }
 }
 

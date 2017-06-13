@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Locale
+
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.InterfaceStability
@@ -65,7 +67,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   override def toString: String = s"DecimalType($precision,$scale)"
 
-  override def sql: String = typeName.toUpperCase
+  override def sql: String = typeName.toUpperCase(Locale.ROOT)
 
   /**
    * Returns whether this DecimalType is wider than `other`. If yes, it means `other`

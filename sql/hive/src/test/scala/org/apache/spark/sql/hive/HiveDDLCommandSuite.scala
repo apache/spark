@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URI
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -31,7 +34,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformati
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
@@ -48,7 +50,13 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     val e = intercept[ParseException] {
       parser.parsePlan(sql)
     }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
+  }
+
+  private def analyzeCreateTable(sql: String): CatalogTable = {
+    TestHive.sessionState.analyzer.execute(parser.parsePlan(sql)).collect {
+      case CreateTableCommand(tableDesc, _) => tableDesc
+    }.head
   }
 
   test("Test CTAS #1") {
@@ -65,18 +73,19 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.identifier.database == Some("mydb"))
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some("/user/external/page_view"))
+    assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
     assert(desc.schema.isEmpty) // will be populated later when the table is actually created
     assert(desc.comment == Some("This is the staging page view table"))
     // TODO will be SQLText
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
     assert(desc.storage.serde ==
       Some("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
-    assert(desc.properties == Map(("p1", "v1"), ("p2", "v2")))
+    assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
   }
 
   test("Test CTAS #2") {
@@ -96,18 +105,19 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.identifier.database == Some("mydb"))
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some("/user/external/page_view"))
+    assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
     assert(desc.schema.isEmpty) // will be populated later when the table is actually created
     // TODO will be SQLText
     assert(desc.comment == Some("This is the staging page view table"))
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
     assert(desc.storage.outputFormat == Some("parquet.hive.DeprecatedParquetOutputFormat"))
     assert(desc.storage.serde == Some("parquet.hive.serde.ParquetHiveSerDe"))
-    assert(desc.properties == Map(("p1", "v1"), ("p2", "v2")))
+    assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
   }
 
   test("Test CTAS #3") {
@@ -120,12 +130,13 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.storage.locationUri == None)
     assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
       Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde.isEmpty)
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc.properties == Map())
   }
 
@@ -156,7 +167,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.storage.locationUri == None)
     assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.properties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
@@ -299,13 +311,14 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.locationUri.isEmpty)
     assert(desc.storage.inputFormat ==
       Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
       Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde.isEmpty)
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc.storage.properties.isEmpty)
     assert(desc.properties.isEmpty)
     assert(desc.comment.isEmpty)
@@ -328,7 +341,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
     val (desc, _) = extractTableDesc(query)
     assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some("/path/to/nowhere"))
+    assert(desc.storage.locationUri == Some(new URI("/path/to/nowhere")))
   }
 
   test("create table - if not exists") {
@@ -354,13 +367,32 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
   }
 
   test("create table - clustered by") {
-    val baseQuery = "CREATE TABLE my_table (id int, name string) CLUSTERED BY(id)"
-    val query1 = s"$baseQuery INTO 10 BUCKETS"
-    val query2 = s"$baseQuery SORTED BY(id) INTO 10 BUCKETS"
-    val e1 = intercept[ParseException] { parser.parsePlan(query1) }
-    val e2 = intercept[ParseException] { parser.parsePlan(query2) }
-    assert(e1.getMessage.contains("Operation not allowed"))
-    assert(e2.getMessage.contains("Operation not allowed"))
+    val numBuckets = 10
+    val bucketedColumn = "id"
+    val sortColumn = "id"
+    val baseQuery =
+      s"""
+         CREATE TABLE my_table (
+           $bucketedColumn int,
+           name string)
+         CLUSTERED BY($bucketedColumn)
+       """
+
+    val query1 = s"$baseQuery INTO $numBuckets BUCKETS"
+    val (desc1, _) = extractTableDesc(query1)
+    assert(desc1.bucketSpec.isDefined)
+    val bucketSpec1 = desc1.bucketSpec.get
+    assert(bucketSpec1.numBuckets == numBuckets)
+    assert(bucketSpec1.bucketColumnNames.head.equals(bucketedColumn))
+    assert(bucketSpec1.sortColumnNames.isEmpty)
+
+    val query2 = s"$baseQuery SORTED BY($sortColumn) INTO $numBuckets BUCKETS"
+    val (desc2, _) = extractTableDesc(query2)
+    assert(desc2.bucketSpec.isDefined)
+    val bucketSpec2 = desc2.bucketSpec.get
+    assert(bucketSpec2.numBuckets == numBuckets)
+    assert(bucketSpec2.bucketColumnNames.head.equals(bucketedColumn))
+    assert(bucketSpec2.sortColumnNames.head.equals(sortColumn))
   }
 
   test("create table - skewed by") {
@@ -412,7 +444,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     val (desc2, _) = extractTableDesc(query2)
     assert(desc1.storage.inputFormat == Some("winput"))
     assert(desc1.storage.outputFormat == Some("wowput"))
-    assert(desc1.storage.serde.isEmpty)
+    assert(desc1.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc2.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
     assert(desc2.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
     assert(desc2.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
@@ -457,8 +489,9 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.partitionColumnNames == Seq("month"))
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
-    assert(desc.storage.locationUri == Some("/path/to/mercury"))
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
+    assert(desc.storage.locationUri == Some(new URI("/path/to/mercury")))
     assert(desc.storage.inputFormat == Some("winput"))
     assert(desc.storage.outputFormat == Some("wowput"))
     assert(desc.storage.serde == Some("org.apache.poof.serde.Baff"))
@@ -513,24 +546,48 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
 
   test("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
-    val (target, source, exists) = parser.parsePlan(v1).collect {
-      case CreateTableLikeCommand(t, s, allowExisting) => (t, s, allowExisting)
+    val (target, source, location, exists) = parser.parsePlan(v1).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
     }.head
     assert(exists == false)
     assert(target.database.isEmpty)
     assert(target.table == "table1")
     assert(source.database.isEmpty)
     assert(source.table == "table2")
+    assert(location.isEmpty)
 
     val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
-    val (target2, source2, exists2) = parser.parsePlan(v2).collect {
-      case CreateTableLikeCommand(t, s, allowExisting) => (t, s, allowExisting)
+    val (target2, source2, location2, exists2) = parser.parsePlan(v2).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
     }.head
     assert(exists2)
     assert(target2.database.isEmpty)
     assert(target2.table == "table1")
     assert(source2.database.isEmpty)
     assert(source2.table == "table2")
+    assert(location2.isEmpty)
+
+    val v3 = "CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'"
+    val (target3, source3, location3, exists3) = parser.parsePlan(v3).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
+    }.head
+    assert(!exists3)
+    assert(target3.database.isEmpty)
+    assert(target3.table == "table1")
+    assert(source3.database.isEmpty)
+    assert(source3.table == "table2")
+    assert(location3 == Some("/spark/warehouse"))
+
+    val v4 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2  LOCATION '/spark/warehouse'"
+    val (target4, source4, location4, exists4) = parser.parsePlan(v4).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
+    }.head
+    assert(exists4)
+    assert(target4.database.isEmpty)
+    assert(target4.table == "table1")
+    assert(source4.database.isEmpty)
+    assert(source4.table == "table2")
+    assert(location4 == Some("/spark/warehouse"))
   }
 
   test("load data") {
@@ -589,7 +646,96 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
   }
 
   test("SPARK-15887: hive-site.xml should be loaded") {
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
     assert(hiveClient.getConf("hive.in.test", "") == "true")
+  }
+
+  test("create hive serde table with new syntax - basic") {
+    val sql =
+      """
+        |CREATE TABLE t
+        |(id int, name string COMMENT 'blabla')
+        |USING hive
+        |OPTIONS (fileFormat 'parquet', my_prop 1)
+        |LOCATION '/tmp/file'
+        |COMMENT 'BLABLA'
+      """.stripMargin
+
+    val table = analyzeCreateTable(sql)
+    assert(table.schema == new StructType()
+      .add("id", "int")
+      .add("name", "string", nullable = true, comment = "blabla"))
+    assert(table.provider == Some(DDLUtils.HIVE_PROVIDER))
+    assert(table.storage.locationUri == Some(new URI("/tmp/file")))
+    assert(table.storage.properties == Map("my_prop" -> "1"))
+    assert(table.comment == Some("BLABLA"))
+
+    assert(table.storage.inputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+    assert(table.storage.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+    assert(table.storage.serde ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+  }
+
+  test("create hive serde table with new syntax - with partition and bucketing") {
+    val v1 = "CREATE TABLE t (c1 int, c2 int) USING hive PARTITIONED BY (c2)"
+    val table = analyzeCreateTable(v1)
+    assert(table.schema == new StructType().add("c1", "int").add("c2", "int"))
+    assert(table.partitionColumnNames == Seq("c2"))
+    // check the default formats
+    assert(table.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    assert(table.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
+    assert(table.storage.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+
+    val v2 = "CREATE TABLE t (c1 int, c2 int) USING hive CLUSTERED BY (c2) INTO 4 BUCKETS"
+    val e2 = intercept[AnalysisException](analyzeCreateTable(v2))
+    assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
+
+    val v3 =
+      """
+        |CREATE TABLE t (c1 int, c2 int) USING hive
+        |PARTITIONED BY (c2)
+        |CLUSTERED BY (c2) INTO 4 BUCKETS""".stripMargin
+    val e3 = intercept[AnalysisException](analyzeCreateTable(v3))
+    assert(e3.message.contains("Creating bucketed Hive serde table is not supported yet"))
+  }
+
+  test("create hive serde table with new syntax - Hive options error checking") {
+    val v1 = "CREATE TABLE t (c1 int) USING hive OPTIONS (inputFormat 'abc')"
+    val e1 = intercept[IllegalArgumentException](analyzeCreateTable(v1))
+    assert(e1.getMessage.contains("Cannot specify only inputFormat or outputFormat"))
+
+    val v2 = "CREATE TABLE t (c1 int) USING hive OPTIONS " +
+      "(fileFormat 'x', inputFormat 'a', outputFormat 'b')"
+    val e2 = intercept[IllegalArgumentException](analyzeCreateTable(v2))
+    assert(e2.getMessage.contains(
+      "Cannot specify fileFormat and inputFormat/outputFormat together"))
+
+    val v3 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'parquet', serde 'a')"
+    val e3 = intercept[IllegalArgumentException](analyzeCreateTable(v3))
+    assert(e3.getMessage.contains("fileFormat 'parquet' already specifies a serde"))
+
+    val v4 = "CREATE TABLE t (c1 int) USING hive OPTIONS (serde 'a', fieldDelim ' ')"
+    val e4 = intercept[IllegalArgumentException](analyzeCreateTable(v4))
+    assert(e4.getMessage.contains("Cannot specify delimiters with a custom serde"))
+
+    val v5 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fieldDelim ' ')"
+    val e5 = intercept[IllegalArgumentException](analyzeCreateTable(v5))
+    assert(e5.getMessage.contains("Cannot specify delimiters without fileFormat"))
+
+    val v6 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'parquet', fieldDelim ' ')"
+    val e6 = intercept[IllegalArgumentException](analyzeCreateTable(v6))
+    assert(e6.getMessage.contains(
+      "Cannot specify delimiters as they are only compatible with fileFormat 'textfile'"))
+
+    // The value of 'fileFormat' option is case-insensitive.
+    val v7 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'TEXTFILE', lineDelim ',')"
+    val e7 = intercept[IllegalArgumentException](analyzeCreateTable(v7))
+    assert(e7.getMessage.contains("Hive data source only support newline '\\n' as line delimiter"))
+
+    val v8 = "CREATE TABLE t (c1 int) USING hive OPTIONS (fileFormat 'wrong')"
+    val e8 = intercept[IllegalArgumentException](analyzeCreateTable(v8))
+    assert(e8.getMessage.contains("invalid fileFormat: 'wrong'"))
   }
 }

@@ -25,10 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
  * identity (tuples remain unchanged) or hashed (tuples are converted into some hash index).
  */
 abstract class RowBroadcastMode extends BroadcastMode[InternalRow] {
-  /**
-   * Returns true iff this [[RowBroadcastMode]] generates the same result as `other`.
-   */
-  def compatibleWith(other: RowBroadcastMode): Boolean
+  override def canonicalized: RowBroadcastMode = this
 }
 
 /**
@@ -37,8 +34,4 @@ abstract class RowBroadcastMode extends BroadcastMode[InternalRow] {
 case object IdentityBroadcastMode extends RowBroadcastMode {
   // TODO: pack the UnsafeRows into single bytes array.
   override def transform(rows: Array[InternalRow]): Array[InternalRow] = rows
-
-  override def compatibleWith(other: RowBroadcastMode): Boolean = {
-    this eq other
-  }
 }

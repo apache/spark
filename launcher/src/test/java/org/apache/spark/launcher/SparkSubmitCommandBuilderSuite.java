@@ -217,7 +217,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     String deployMode = isDriver ? "client" : "cluster";
 
     SparkSubmitCommandBuilder launcher =
-      newCommandBuilder(Collections.<String>emptyList());
+      newCommandBuilder(Collections.emptyList());
     launcher.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME,
       System.getProperty("spark.test.home"));
     launcher.master = "yarn";
@@ -233,7 +233,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       launcher.setPropertiesFile(dummyPropsFile.getAbsolutePath());
       launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
-      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
+      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver");
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
     } else {
       launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
@@ -256,12 +256,6 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
         }
       }
       assertFalse("Memory arguments should not be set.", found);
-    }
-
-    for (String arg : cmd) {
-      if (arg.startsWith("-XX:MaxPermSize=")) {
-        assertEquals("-XX:MaxPermSize=256m", arg);
-      }
     }
 
     String[] cp = findArgValue(cmd, "-cp").split(Pattern.quote(File.pathSeparator));

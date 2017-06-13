@@ -147,6 +147,11 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 
+    // Driver accumulator updates don't belong to this execution should be filtered and no
+    // exception will be thrown.
+    listener.onOtherEvent(SparkListenerDriverAccumUpdates(0, Seq((999L, 2L))))
+    checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
+
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, accum updates)
       (0L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo)),
@@ -472,9 +477,11 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExe
 
   override def doExecute(): RDD[InternalRow] = {
     longMetric("dummy") += expectedValue
-    sc.listenerBus.post(SparkListenerDriverAccumUpdates(
-      sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY).toLong,
-      metrics.values.map(m => m.id -> m.value).toSeq))
+
+    SQLMetrics.postDriverMetricUpdates(
+      sc,
+      sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+      metrics.values.toSeq)
     sc.emptyRDD
   }
 }

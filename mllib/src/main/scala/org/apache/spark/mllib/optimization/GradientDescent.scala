@@ -246,6 +246,7 @@ object GradientDescent extends Logging {
             // c: (grad, loss, count)
             (c1._1 += c2._1, c1._2 + c2._2, c1._3 + c2._3)
           })
+      bcWeights.destroy(blocking = false)
 
       if (miniBatchSize > 0) {
         /**
@@ -279,7 +280,7 @@ object GradientDescent extends Logging {
   }
 
   /**
-   * Alias of [[runMiniBatchSGD]] with convergenceTol set to default value of 0.001.
+   * Alias of `runMiniBatchSGD` with convergenceTol set to default value of 0.001.
    */
   def runMiniBatchSGD(
       data: RDD[(Double, Vector)],

@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.Locale
+
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.{MemoryStream, MetadataLogFileIndex}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -143,8 +147,45 @@ class FileStreamSinkSuite extends StreamTest {
     }
   }
 
+  test("partitioned writing and batch reading with 'basePath'") {
+    withTempDir { outputDir =>
+      withTempDir { checkpointDir =>
+        val outputPath = outputDir.getAbsolutePath
+        val inputData = MemoryStream[Int]
+        val ds = inputData.toDS()
+
+        var query: StreamingQuery = null
+
+        try {
+          query =
+            ds.map(i => (i, -i, i * 1000))
+              .toDF("id1", "id2", "value")
+              .writeStream
+              .partitionBy("id1", "id2")
+              .option("checkpointLocation", checkpointDir.getAbsolutePath)
+              .format("parquet")
+              .start(outputPath)
+
+          inputData.addData(1, 2, 3)
+          failAfter(streamingTimeout) {
+            query.processAllAvailable()
+          }
+
+          val readIn = spark.read.option("basePath", outputPath).parquet(s"$outputDir/*/*")
+          checkDatasetUnorderly(
+            readIn.as[(Int, Int, Int)],
+            (1000, 1, -1), (2000, 2, -2), (3000, 3, -3))
+        } finally {
+          if (query != null) {
+            query.stop()
+          }
+        }
+      }
+    }
+  }
+
   // This tests whether FileStreamSink works with aggregations. Specifically, it tests
-  // whether the the correct streaming QueryExecution (i.e. IncrementalExecution) is used to
+  // whether the correct streaming QueryExecution (i.e. IncrementalExecution) is used to
   // to execute the trigger for writing data to file sink. See SPARK-18440 for more details.
   test("writing with aggregation") {
 
@@ -221,7 +262,7 @@ class FileStreamSinkSuite extends StreamTest {
           df.writeStream.format("parquet").outputMode(mode).start(dir.getCanonicalPath)
         }
         Seq(mode, "not support").foreach { w =>
-          assert(e.getMessage.toLowerCase.contains(w))
+          assert(e.getMessage.toLowerCase(Locale.ROOT).contains(w))
         }
       }
 
@@ -263,5 +304,23 @@ class FileStreamSinkSuite extends StreamTest {
         query.stop()
       }
     }
+  }
+
+  test("FileStreamSink.ancestorIsMetadataDirectory()") {
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    def assertAncestorIsMetadataDirectory(path: String): Unit =
+      assert(FileStreamSink.ancestorIsMetadataDirectory(new Path(path), hadoopConf))
+    def assertAncestorIsNotMetadataDirectory(path: String): Unit =
+      assert(!FileStreamSink.ancestorIsMetadataDirectory(new Path(path), hadoopConf))
+
+    assertAncestorIsMetadataDirectory(s"/${FileStreamSink.metadataDir}")
+    assertAncestorIsMetadataDirectory(s"/${FileStreamSink.metadataDir}/")
+    assertAncestorIsMetadataDirectory(s"/a/${FileStreamSink.metadataDir}")
+    assertAncestorIsMetadataDirectory(s"/a/${FileStreamSink.metadataDir}/")
+    assertAncestorIsMetadataDirectory(s"/a/b/${FileStreamSink.metadataDir}/c")
+    assertAncestorIsMetadataDirectory(s"/a/b/${FileStreamSink.metadataDir}/c/")
+
+    assertAncestorIsNotMetadataDirectory(s"/a/b/c")
+    assertAncestorIsNotMetadataDirectory(s"/a/b/c/${FileStreamSink.metadataDir}extra")
   }
 }

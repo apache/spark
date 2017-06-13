@@ -52,7 +52,7 @@ class AttributeSetSuite extends SparkFunSuite {
     assert((aSet ++ bSet).contains(aLower) === true)
   }
 
-  test("extracts all references references") {
+  test("extracts all references ") {
     val addSet = AttributeSet(Add(aUpper, Alias(bUpper, "test")()):: Nil)
     assert(addSet.contains(aUpper))
     assert(addSet.contains(aLower))

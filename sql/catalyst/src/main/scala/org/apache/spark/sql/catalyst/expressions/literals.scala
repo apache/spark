@@ -32,11 +32,13 @@ import java.util.Objects
 import javax.xml.bind.DatatypeConverter
 
 import scala.math.{BigDecimal, BigInt}
+import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import org.json4s.JsonAST._
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -153,6 +155,14 @@ object Literal {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
 
+  def create[T : TypeTag](v: T): Literal = Try {
+    val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
+    val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+    Literal(convert(v), dataType)
+  }.getOrElse {
+    Literal(v)
+  }
+
   /**
    * Create a literal with default value for given DataType
    */
@@ -175,6 +185,7 @@ object Literal {
     case map: MapType => create(Map(), map)
     case struct: StructType =>
       create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
+    case udt: UserDefinedType[_] => default(udt.sqlType)
     case other =>
       throw new RuntimeException(s"no default for type $dataType")
   }
@@ -266,33 +277,41 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = ctx.javaType(dataType)
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      ev.copy(s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};")
+      ev.copy(s"final $javaType ${ev.value} = ${ctx.defaultValue(dataType)};")
     } else {
       ev.isNull = "false"
-      ev.value = dataType match {
-        case BooleanType | IntegerType | DateType => value.toString
+      dataType match {
+        case BooleanType | IntegerType | DateType =>
+          ev.copy(code = "", value = value.toString)
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            ctx.addReferenceMinorObj(v)
+            val boxedValue = ctx.addReferenceMinorObj(v)
+            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
+            ev.copy(code = code)
           } else {
-            s"${value}f"
+            ev.copy(code = "", value = s"${value}f")
           }
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            ctx.addReferenceMinorObj(v)
+            val boxedValue = ctx.addReferenceMinorObj(v)
+            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
+            ev.copy(code = code)
           } else {
-            s"${value}D"
+            ev.copy(code = "", value = s"${value}D")
           }
-        case ByteType | ShortType => s"(${ctx.javaType(dataType)})$value"
-        case TimestampType | LongType => s"${value}L"
-        case other => ctx.addReferenceMinorObj(value, ctx.javaType(dataType))
+        case ByteType | ShortType =>
+          ev.copy(code = "", value = s"($javaType)$value")
+        case TimestampType | LongType =>
+          ev.copy(code = "", value = s"${value}L")
+        case other =>
+          ev.copy(code = "", value = ctx.addReferenceMinorObj(value, ctx.javaType(dataType)))
       }
-      ev.copy("")
     }
   }
 

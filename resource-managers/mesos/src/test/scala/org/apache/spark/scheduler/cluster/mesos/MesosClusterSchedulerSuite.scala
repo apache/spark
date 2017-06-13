@@ -21,7 +21,7 @@ import java.util.{Collection, Collections, Date}
 
 import scala.collection.JavaConverters._
 
-import org.apache.mesos.Protos._
+import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Value.{Scalar, Type}
 import org.apache.mesos.SchedulerDriver
 import org.mockito.{ArgumentCaptor, Matchers}
@@ -53,19 +53,32 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       override def start(): Unit = { ready = true }
     }
     scheduler.start()
+    scheduler.registered(driver, Utils.TEST_FRAMEWORK_ID, Utils.TEST_MASTER_INFO)
+  }
+
+  private def testDriverDescription(submissionId: String): MesosDriverDescription = {
+    new MesosDriverDescription(
+      "d1",
+      "jar",
+      1000,
+      1,
+      true,
+      command,
+      Map[String, String](),
+      submissionId,
+      new Date())
   }
 
   test("can queue drivers") {
     setScheduler()
 
-    val response = scheduler.submitDriver(
-      new MesosDriverDescription("d1", "jar", 1000, 1, true,
-        command, Map[String, String](), "s1", new Date()))
+    val response = scheduler.submitDriver(testDriverDescription("s1"))
     assert(response.success)
-    val response2 =
-      scheduler.submitDriver(new MesosDriverDescription(
-        "d1", "jar", 1000, 1, true, command, Map[String, String](), "s2", new Date()))
+    verify(driver, times(1)).reviveOffers()
+
+    val response2 = scheduler.submitDriver(testDriverDescription("s2"))
     assert(response2.success)
+
     val state = scheduler.getSchedulerState()
     val queuedDrivers = state.queuedDrivers.toList
     assert(queuedDrivers(0).submissionId == response.submissionId)
@@ -75,9 +88,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
   test("can kill queued drivers") {
     setScheduler()
 
-    val response = scheduler.submitDriver(
-        new MesosDriverDescription("d1", "jar", 1000, 1, true,
-          command, Map[String, String](), "s1", new Date()))
+    val response = scheduler.submitDriver(testDriverDescription("s1"))
     assert(response.success)
     val killResponse = scheduler.killDriver(response.submissionId)
     assert(killResponse.success)
@@ -235,5 +246,91 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     val networkInfos = launchedTasks.head.getContainer.getNetworkInfosList
     assert(networkInfos.size == 1)
     assert(networkInfos.get(0).getName == "test-network-name")
+  }
+
+  test("supports spark.mesos.driver.labels") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", mem, cpu, true,
+        command,
+        Map("spark.mesos.executor.home" -> "test",
+          "spark.app.name" -> "test",
+          "spark.mesos.driver.labels" -> "key:value"),
+        "s1",
+        new Date()))
+
+    assert(response.success)
+
+    val offer = Utils.createOffer("o1", "s1", mem, cpu)
+    scheduler.resourceOffers(driver, List(offer).asJava)
+
+    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
+    val labels = launchedTasks.head.getLabels
+    assert(labels.getLabelsCount == 1)
+    assert(labels.getLabels(0).getKey == "key")
+    assert(labels.getLabels(0).getValue == "value")
+  }
+
+  test("can kill supervised drivers") {
+    val conf = new SparkConf()
+    conf.setMaster("mesos://localhost:5050")
+    conf.setAppName("spark mesos")
+    setScheduler(conf.getAll.toMap)
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", 100, 1, true, command,
+        Map(("spark.mesos.executor.home", "test"), ("spark.app.name", "test")), "s1", new Date()))
+    assert(response.success)
+    val slaveId = SlaveID.newBuilder().setValue("s1").build()
+    val offer = Offer.newBuilder()
+      .addResources(
+        Resource.newBuilder().setRole("*")
+          .setScalar(Scalar.newBuilder().setValue(1).build()).setName("cpus").setType(Type.SCALAR))
+      .addResources(
+        Resource.newBuilder().setRole("*")
+          .setScalar(Scalar.newBuilder().setValue(1000).build())
+          .setName("mem")
+          .setType(Type.SCALAR))
+      .setId(OfferID.newBuilder().setValue("o1").build())
+      .setFrameworkId(FrameworkID.newBuilder().setValue("f1").build())
+      .setSlaveId(slaveId)
+      .setHostname("host1")
+      .build()
+    // Offer the resource to launch the submitted driver
+    scheduler.resourceOffers(driver, Collections.singletonList(offer))
+    var state = scheduler.getSchedulerState()
+    assert(state.launchedDrivers.size == 1)
+    // Issue the request to kill the launched driver
+    val killResponse = scheduler.killDriver(response.submissionId)
+    assert(killResponse.success)
+
+    val taskStatus = TaskStatus.newBuilder()
+      .setTaskId(TaskID.newBuilder().setValue(response.submissionId).build())
+      .setSlaveId(slaveId)
+      .setState(MesosTaskState.TASK_KILLED)
+      .build()
+    // Update the status of the killed task
+    scheduler.statusUpdate(driver, taskStatus)
+    // Driver should be moved to finishedDrivers for kill
+    state = scheduler.getSchedulerState()
+    assert(state.pendingRetryDrivers.isEmpty)
+    assert(state.launchedDrivers.isEmpty)
+    assert(state.finishedDrivers.size == 1)
+  }
+
+  test("Declines offer with refuse seconds = 120.") {
+    setScheduler()
+
+    val filter = Filters.newBuilder().setRefuseSeconds(120).build()
+    val offerId = OfferID.newBuilder().setValue("o1").build()
+    val offer = Utils.createOffer(offerId.getValue, "s1", 1000, 1)
+
+    scheduler.resourceOffers(driver, Collections.singletonList(offer))
+
+    verify(driver, times(1)).declineOffer(offerId, filter)
   }
 }

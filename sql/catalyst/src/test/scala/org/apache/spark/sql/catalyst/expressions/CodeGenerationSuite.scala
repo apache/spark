@@ -25,8 +25,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.objects.{CreateExternalRow, GetExternalRowField, ValidateExternalType}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, CreateExternalRow, GetExternalRowField, ValidateExternalType}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -312,5 +312,16 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-17160: field names are properly escaped by AssertTrue") {
     GenerateUnsafeProjection.generate(AssertTrue(Cast(Literal("\""), BooleanType)) :: Nil)
+  }
+
+  test("should not apply common subexpression elimination on conditional expressions") {
+    val row = InternalRow(null)
+    val bound = BoundReference(0, IntegerType, true)
+    val assertNotNull = AssertNotNull(bound, Nil)
+    val expr = If(IsNull(bound), Literal(1), Add(assertNotNull, assertNotNull))
+    val projection = GenerateUnsafeProjection.generate(
+      Seq(expr), subexpressionEliminationEnabled = true)
+    // should not throw exception
+    projection(row)
   }
 }

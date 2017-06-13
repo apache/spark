@@ -23,6 +23,8 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.*;
 
+import org.apache.spark.sql.streaming.GroupStateTimeout;
+import org.apache.spark.sql.streaming.OutputMode;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -96,12 +98,7 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testTypedFilterPreservingSchema() {
     Dataset<Long> ds = spark.range(10);
-    Dataset<Long> ds2 = ds.filter(new FilterFunction<Long>() {
-      @Override
-      public boolean call(Long value) throws Exception {
-        return value > 3;
-      }
-    });
+    Dataset<Long> ds2 = ds.filter((FilterFunction<Long>) value -> value > 3);
     Assert.assertEquals(ds.schema(), ds2.schema());
   }
 
@@ -111,44 +108,29 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
     Assert.assertEquals("hello", ds.first());
 
-    Dataset<String> filtered = ds.filter(new FilterFunction<String>() {
-      @Override
-      public boolean call(String v) throws Exception {
-        return v.startsWith("h");
-      }
-    });
+    Dataset<String> filtered = ds.filter((FilterFunction<String>) v -> v.startsWith("h"));
     Assert.assertEquals(Arrays.asList("hello"), filtered.collectAsList());
 
 
-    Dataset<Integer> mapped = ds.map(new MapFunction<String, Integer>() {
-      @Override
-      public Integer call(String v) throws Exception {
-        return v.length();
-      }
-    }, Encoders.INT());
+    Dataset<Integer> mapped =
+      ds.map((MapFunction<String, Integer>) String::length, Encoders.INT());
     Assert.assertEquals(Arrays.asList(5, 5), mapped.collectAsList());
 
-    Dataset<String> parMapped = ds.mapPartitions(new MapPartitionsFunction<String, String>() {
-      @Override
-      public Iterator<String> call(Iterator<String> it) {
-        List<String> ls = new LinkedList<>();
-        while (it.hasNext()) {
-          ls.add(it.next().toUpperCase(Locale.ENGLISH));
-        }
-        return ls.iterator();
+    Dataset<String> parMapped = ds.mapPartitions((MapPartitionsFunction<String, String>) it -> {
+      List<String> ls = new LinkedList<>();
+      while (it.hasNext()) {
+        ls.add(it.next().toUpperCase(Locale.ROOT));
       }
+      return ls.iterator();
     }, Encoders.STRING());
     Assert.assertEquals(Arrays.asList("HELLO", "WORLD"), parMapped.collectAsList());
 
-    Dataset<String> flatMapped = ds.flatMap(new FlatMapFunction<String, String>() {
-      @Override
-      public Iterator<String> call(String s) {
-        List<String> ls = new LinkedList<>();
-        for (char c : s.toCharArray()) {
-          ls.add(String.valueOf(c));
-        }
-        return ls.iterator();
+    Dataset<String> flatMapped = ds.flatMap((FlatMapFunction<String, String>) s -> {
+      List<String> ls = new LinkedList<>();
+      for (char c : s.toCharArray()) {
+        ls.add(String.valueOf(c));
       }
+      return ls.iterator();
     }, Encoders.STRING());
     Assert.assertEquals(
       Arrays.asList("h", "e", "l", "l", "o", "w", "o", "r", "l", "d"),
@@ -157,16 +139,11 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testForeach() {
-    final LongAccumulator accum = jsc.sc().longAccumulator();
+    LongAccumulator accum = jsc.sc().longAccumulator();
     List<String> data = Arrays.asList("a", "b", "c");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
 
-    ds.foreach(new ForeachFunction<String>() {
-      @Override
-      public void call(String s) throws Exception {
-        accum.add(1);
-      }
-    });
+    ds.foreach((ForeachFunction<String>) s -> accum.add(1));
     Assert.assertEquals(3, accum.value().intValue());
   }
 
@@ -175,12 +152,7 @@ public class JavaDatasetSuite implements Serializable {
     List<Integer> data = Arrays.asList(1, 2, 3);
     Dataset<Integer> ds = spark.createDataset(data, Encoders.INT());
 
-    int reduced = ds.reduce(new ReduceFunction<Integer>() {
-      @Override
-      public Integer call(Integer v1, Integer v2) throws Exception {
-        return v1 + v2;
-      }
-    });
+    int reduced = ds.reduce((ReduceFunction<Integer>) (v1, v2) -> v1 + v2);
     Assert.assertEquals(6, reduced);
   }
 
@@ -188,49 +160,62 @@ public class JavaDatasetSuite implements Serializable {
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
-    KeyValueGroupedDataset<Integer, String> grouped = ds.groupByKey(
-      new MapFunction<String, Integer>() {
-        @Override
-        public Integer call(String v) throws Exception {
-          return v.length();
-        }
-      },
-      Encoders.INT());
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
 
-    Dataset<String> mapped = grouped.mapGroups(new MapGroupsFunction<Integer, String, String>() {
-      @Override
-      public String call(Integer key, Iterator<String> values) throws Exception {
+    Dataset<String> mapped = grouped.mapGroups(
+      (MapGroupsFunction<Integer, String, String>) (key, values) -> {
         StringBuilder sb = new StringBuilder(key.toString());
         while (values.hasNext()) {
           sb.append(values.next());
         }
         return sb.toString();
-      }
-    }, Encoders.STRING());
+      }, Encoders.STRING());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped.collectAsList()));
 
     Dataset<String> flatMapped = grouped.flatMapGroups(
-      new FlatMapGroupsFunction<Integer, String, String>() {
-        @Override
-        public Iterator<String> call(Integer key, Iterator<String> values) {
+        (FlatMapGroupsFunction<Integer, String, String>) (key, values) -> {
           StringBuilder sb = new StringBuilder(key.toString());
           while (values.hasNext()) {
             sb.append(values.next());
           }
           return Collections.singletonList(sb.toString()).iterator();
-        }
-      },
+        },
       Encoders.STRING());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped.collectAsList()));
 
-    Dataset<Tuple2<Integer, String>> reduced = grouped.reduceGroups(new ReduceFunction<String>() {
-      @Override
-      public String call(String v1, String v2) throws Exception {
-        return v1 + v2;
-      }
-    });
+    Dataset<String> mapped2 = grouped.mapGroupsWithState(
+        (MapGroupsWithStateFunction<Integer, String, Long, String>) (key, values, s) -> {
+          StringBuilder sb = new StringBuilder(key.toString());
+          while (values.hasNext()) {
+            sb.append(values.next());
+          }
+          return sb.toString();
+        },
+        Encoders.LONG(),
+        Encoders.STRING());
+
+    Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped2.collectAsList()));
+
+    Dataset<String> flatMapped2 = grouped.flatMapGroupsWithState(
+        (FlatMapGroupsWithStateFunction<Integer, String, Long, String>) (key, values, s) -> {
+          StringBuilder sb = new StringBuilder(key.toString());
+          while (values.hasNext()) {
+            sb.append(values.next());
+          }
+          return Collections.singletonList(sb.toString()).iterator();
+        },
+      OutputMode.Append(),
+      Encoders.LONG(),
+      Encoders.STRING(),
+      GroupStateTimeout.NoTimeout());
+
+    Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
+
+    Dataset<Tuple2<Integer, String>> reduced =
+      grouped.reduceGroups((ReduceFunction<String>) (v1, v2) -> v1 + v2);
 
     Assert.assertEquals(
       asSet(tuple2(1, "a"), tuple2(3, "foobar")),
@@ -239,29 +224,21 @@ public class JavaDatasetSuite implements Serializable {
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = spark.createDataset(data2, Encoders.INT());
     KeyValueGroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(
-      new MapFunction<Integer, Integer>() {
-        @Override
-        public Integer call(Integer v) throws Exception {
-          return v / 2;
-        }
-      },
+        (MapFunction<Integer, Integer>) v -> v / 2,
       Encoders.INT());
 
     Dataset<String> cogrouped = grouped.cogroup(
       grouped2,
-      new CoGroupFunction<Integer, String, Integer, String>() {
-        @Override
-        public Iterator<String> call(Integer key, Iterator<String> left, Iterator<Integer> right) {
-          StringBuilder sb = new StringBuilder(key.toString());
-          while (left.hasNext()) {
-            sb.append(left.next());
-          }
-          sb.append("#");
-          while (right.hasNext()) {
-            sb.append(right.next());
-          }
-          return Collections.singletonList(sb.toString()).iterator();
+      (CoGroupFunction<Integer, String, Integer, String>) (key, left, right) -> {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (left.hasNext()) {
+          sb.append(left.next());
         }
+        sb.append("#");
+        while (right.hasNext()) {
+          sb.append(right.next());
+        }
+        return Collections.singletonList(sb.toString()).iterator();
       },
       Encoders.STRING());
 
@@ -671,11 +648,11 @@ public class JavaDatasetSuite implements Serializable {
     obj1.setD(new String[]{"hello", null});
     obj1.setE(Arrays.asList("a", "b"));
     obj1.setF(Arrays.asList(100L, null, 200L));
-    Map<Integer, String> map1 = new HashMap<Integer, String>();
+    Map<Integer, String> map1 = new HashMap<>();
     map1.put(1, "a");
     map1.put(2, "b");
     obj1.setG(map1);
-    Map<String, String> nestedMap1 = new HashMap<String, String>();
+    Map<String, String> nestedMap1 = new HashMap<>();
     nestedMap1.put("x", "1");
     nestedMap1.put("y", "2");
     Map<List<Long>, Map<String, String>> complexMap1 = new HashMap<>();
@@ -689,11 +666,11 @@ public class JavaDatasetSuite implements Serializable {
     obj2.setD(new String[]{null, "world"});
     obj2.setE(Arrays.asList("x", "y"));
     obj2.setF(Arrays.asList(300L, null, 400L));
-    Map<Integer, String> map2 = new HashMap<Integer, String>();
+    Map<Integer, String> map2 = new HashMap<>();
     map2.put(3, "c");
     map2.put(4, "d");
     obj2.setG(map2);
-    Map<String, String> nestedMap2 = new HashMap<String, String>();
+    Map<String, String> nestedMap2 = new HashMap<>();
     nestedMap2.put("q", "1");
     nestedMap2.put("w", "2");
     Map<List<Long>, Map<String, String>> complexMap2 = new HashMap<>();
@@ -1296,7 +1273,7 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void test() {
     /* SPARK-15285 Large numbers of Nested JavaBeans generates more than 64KB java bytecode */
-    List<NestedComplicatedJavaBean> data = new ArrayList<NestedComplicatedJavaBean>();
+    List<NestedComplicatedJavaBean> data = new ArrayList<>();
     data.add(NestedComplicatedJavaBean.newBuilder().build());
 
     NestedComplicatedJavaBean obj3 = new NestedComplicatedJavaBean();
@@ -1304,5 +1281,183 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<NestedComplicatedJavaBean> ds =
       spark.createDataset(data, Encoders.bean(NestedComplicatedJavaBean.class));
     ds.collectAsList();
+  }
+
+  public static class EmptyBean implements Serializable {}
+
+  @Test
+  public void testEmptyBean() {
+    EmptyBean bean = new EmptyBean();
+    List<EmptyBean> data = Arrays.asList(bean);
+    Dataset<EmptyBean> df = spark.createDataset(data, Encoders.bean(EmptyBean.class));
+    Assert.assertEquals(df.schema().length(), 0);
+    Assert.assertEquals(df.collectAsList().size(), 1);
+  }
+
+  public class CircularReference1Bean implements Serializable {
+    private CircularReference2Bean child;
+
+    public CircularReference2Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference2Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference2Bean implements Serializable {
+    private CircularReference1Bean child;
+
+    public CircularReference1Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference1Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference3Bean implements Serializable {
+    private CircularReference3Bean[] child;
+
+    public CircularReference3Bean[] getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference3Bean[] child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference4Bean implements Serializable {
+    private Map<String, CircularReference5Bean> child;
+
+    public Map<String, CircularReference5Bean> getChild() {
+      return child;
+    }
+
+    public void setChild(Map<String, CircularReference5Bean> child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference5Bean implements Serializable {
+    private String id;
+    private List<CircularReference4Bean> child;
+
+    public String getId() {
+      return id;
+    }
+
+    public List<CircularReference4Bean> getChild() {
+      return child;
+    }
+
+    public void setId(String id) {
+      this.id = id;
+    }
+
+    public void setChild(List<CircularReference4Bean> child) {
+      this.child = child;
+    }
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean1() {
+    CircularReference1Bean bean = new CircularReference1Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class));
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean2() {
+    CircularReference3Bean bean = new CircularReference3Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference3Bean.class));
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean3() {
+    CircularReference4Bean bean = new CircularReference4Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class));
+  }
+
+  @Test(expected = RuntimeException.class)
+  public void testNullInTopLevelBean() {
+    NestedSmallBean bean = new NestedSmallBean();
+    // We cannot set null in top-level bean
+    spark.createDataset(Arrays.asList(bean, null), Encoders.bean(NestedSmallBean.class));
+  }
+
+  @Test
+  public void testSerializeNull() {
+    NestedSmallBean bean = new NestedSmallBean();
+    Encoder<NestedSmallBean> encoder = Encoders.bean(NestedSmallBean.class);
+    List<NestedSmallBean> beans = Arrays.asList(bean);
+    Dataset<NestedSmallBean> ds1 = spark.createDataset(beans, encoder);
+    Assert.assertEquals(beans, ds1.collectAsList());
+    Dataset<NestedSmallBean> ds2 =
+      ds1.map((MapFunction<NestedSmallBean, NestedSmallBean>) b -> b, encoder);
+    Assert.assertEquals(beans, ds2.collectAsList());
+  }
+
+  @Test
+  public void testSpecificLists() {
+    SpecificListsBean bean = new SpecificListsBean();
+    ArrayList<Integer> arrayList = new ArrayList<>();
+    arrayList.add(1);
+    bean.setArrayList(arrayList);
+    LinkedList<Integer> linkedList = new LinkedList<>();
+    linkedList.add(1);
+    bean.setLinkedList(linkedList);
+    bean.setList(Collections.singletonList(1));
+    List<SpecificListsBean> beans = Collections.singletonList(bean);
+    Dataset<SpecificListsBean> dataset =
+      spark.createDataset(beans, Encoders.bean(SpecificListsBean.class));
+    Assert.assertEquals(beans, dataset.collectAsList());
+  }
+
+  public static class SpecificListsBean implements Serializable {
+    private ArrayList<Integer> arrayList;
+    private LinkedList<Integer> linkedList;
+    private List<Integer> list;
+
+    public ArrayList<Integer> getArrayList() {
+      return arrayList;
+    }
+
+    public void setArrayList(ArrayList<Integer> arrayList) {
+      this.arrayList = arrayList;
+    }
+
+    public LinkedList<Integer> getLinkedList() {
+      return linkedList;
+    }
+
+    public void setLinkedList(LinkedList<Integer> linkedList) {
+      this.linkedList = linkedList;
+    }
+
+    public List<Integer> getList() {
+      return list;
+    }
+
+    public void setList(List<Integer> list) {
+      this.list = list;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      SpecificListsBean that = (SpecificListsBean) o;
+      return Objects.equal(arrayList, that.arrayList) &&
+        Objects.equal(linkedList, that.linkedList) &&
+        Objects.equal(list, that.list);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(arrayList, linkedList, list);
+    }
   }
 }

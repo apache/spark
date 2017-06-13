@@ -18,17 +18,13 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.text.NumberFormat
-import java.util.Locale
 
 import scala.util.control.Exception._
-import scala.util.Try
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 private[csv] object CSVInferSchema {
 
@@ -39,22 +35,27 @@ private[csv] object CSVInferSchema {
    *     3. Replace any null types with string type
    */
   def infer(
-      tokenRdd: RDD[Array[String]],
+      tokenRDD: RDD[Array[String]],
       header: Array[String],
       options: CSVOptions): StructType = {
-    val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-    val rootTypes: Array[DataType] =
-      tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
+    val fields = if (options.inferSchemaFlag) {
+      val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
+      val rootTypes: Array[DataType] =
+        tokenRDD.aggregate(startType)(inferRowType(options), mergeRowTypes)
 
-    val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
-      val dType = rootType match {
-        case _: NullType => StringType
-        case other => other
+      header.zip(rootTypes).map { case (thisHeader, rootType) =>
+        val dType = rootType match {
+          case _: NullType => StringType
+          case other => other
+        }
+        StructField(thisHeader, dType, nullable = true)
       }
-      StructField(thisHeader, dType, nullable = true)
+    } else {
+      // By default fields are assumed to be StringType
+      header.map(fieldName => StructField(fieldName, StringType, nullable = true))
     }
 
-    StructType(structFields)
+    StructType(fields)
   }
 
   private def inferRowType(options: CSVOptions)
@@ -85,7 +86,9 @@ private[csv] object CSVInferSchema {
         case NullType => tryParseInteger(field, options)
         case IntegerType => tryParseInteger(field, options)
         case LongType => tryParseLong(field, options)
-        case _: DecimalType => tryParseDecimal(field, options)
+        case _: DecimalType =>
+          // DecimalTypes have different precisions and scales, so we try to find the common type.
+          findTightestCommonType(typeSoFar, tryParseDecimal(field, options)).getOrElse(StringType)
         case DoubleType => tryParseDouble(field, options)
         case TimestampType => tryParseTimestamp(field, options)
         case BooleanType => tryParseBoolean(field, options)
@@ -94,6 +97,10 @@ private[csv] object CSVInferSchema {
           throw new UnsupportedOperationException(s"Unexpected data type $other")
       }
     }
+  }
+
+  private def isInfOrNan(field: String, options: CSVOptions): Boolean = {
+    field == options.nanValue || field == options.negativeInf || field == options.positiveInf
   }
 
   private def tryParseInteger(field: String, options: CSVOptions): DataType = {
@@ -131,7 +138,7 @@ private[csv] object CSVInferSchema {
   }
 
   private def tryParseDouble(field: String, options: CSVOptions): DataType = {
-    if ((allCatch opt field.toDouble).isDefined) {
+    if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field, options)) {
       DoubleType
     } else {
       tryParseTimestamp(field, options)
@@ -211,152 +218,5 @@ private[csv] object CSVInferSchema {
       }
 
     case _ => None
-  }
-}
-
-private[csv] object CSVTypeCast {
-  // A `ValueConverter` is responsible for converting the given value to a desired type.
-  private type ValueConverter = String => Any
-
-  /**
-   * Create converters which cast each given string datum to each specified type in given schema.
-   * Currently, we do not support complex types (`ArrayType`, `MapType`, `StructType`).
-   *
-   * For string types, this is simply the datum.
-   * For other types, this is converted into the value according to the type.
-   * For other nullable types, returns null if it is null or equals to the value specified
-   * in `nullValue` option.
-   *
-   * @param schema schema that contains data types to cast the given value into.
-   * @param options CSV options.
-   */
-  def makeConverters(
-      schema: StructType,
-      options: CSVOptions = CSVOptions()): Array[ValueConverter] = {
-    schema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
-  }
-
-  /**
-   * Create a converter which converts the string value to a value according to a desired type.
-   */
-  def makeConverter(
-       name: String,
-       dataType: DataType,
-       nullable: Boolean = true,
-       options: CSVOptions = CSVOptions()): ValueConverter = dataType match {
-    case _: ByteType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toByte)
-
-    case _: ShortType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toShort)
-
-    case _: IntegerType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toInt)
-
-    case _: LongType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toLong)
-
-    case _: FloatType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) {
-        case options.nanValue => Float.NaN
-        case options.negativeInf => Float.NegativeInfinity
-        case options.positiveInf => Float.PositiveInfinity
-        case datum =>
-          Try(datum.toFloat)
-            .getOrElse(NumberFormat.getInstance(Locale.US).parse(datum).floatValue())
-      }
-
-    case _: DoubleType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) {
-        case options.nanValue => Double.NaN
-        case options.negativeInf => Double.NegativeInfinity
-        case options.positiveInf => Double.PositiveInfinity
-        case datum =>
-          Try(datum.toDouble)
-            .getOrElse(NumberFormat.getInstance(Locale.US).parse(datum).doubleValue())
-      }
-
-    case _: BooleanType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toBoolean)
-
-    case dt: DecimalType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        val value = new BigDecimal(datum.replaceAll(",", ""))
-        Decimal(value, dt.precision, dt.scale)
-      }
-
-    case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.
-        Try(options.timestampFormat.parse(datum).getTime * 1000L)
-          .getOrElse {
-            // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
-            DateTimeUtils.stringToTime(datum).getTime * 1000L
-          }
-      }
-
-    case _: DateType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.x
-        Try(DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime))
-          .getOrElse {
-            // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
-            DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
-          }
-      }
-
-    case _: StringType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(UTF8String.fromString(_))
-
-    case udt: UserDefinedType[_] => (datum: String) =>
-      makeConverter(name, udt.sqlType, nullable, options)
-
-    case _ => throw new RuntimeException(s"Unsupported type: ${dataType.typeName}")
-  }
-
-  private def nullSafeDatum(
-      datum: String,
-      name: String,
-      nullable: Boolean,
-      options: CSVOptions)(converter: ValueConverter): Any = {
-    if (datum == options.nullValue || datum == null) {
-      if (!nullable) {
-        throw new RuntimeException(s"null value found but field $name is not nullable.")
-      }
-      null
-    } else {
-      converter.apply(datum)
-    }
-  }
-
-  /**
-   * Helper method that converts string representation of a character to actual character.
-   * It handles some Java escaped strings and throws exception if given string is longer than one
-   * character.
-   */
-  @throws[IllegalArgumentException]
-  def toChar(str: String): Char = {
-    if (str.charAt(0) == '\\') {
-      str.charAt(1)
-      match {
-        case 't' => '\t'
-        case 'r' => '\r'
-        case 'b' => '\b'
-        case 'f' => '\f'
-        case '\"' => '\"' // In case user changes quote char and uses \" as delimiter in options
-        case '\'' => '\''
-        case 'u' if str == """\u0000""" => '\u0000'
-        case _ =>
-          throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
-      }
-    } else if (str.length == 1) {
-      str.charAt(0)
-    } else {
-      throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
-    }
   }
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -33,7 +32,7 @@ class LimitPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Limit pushdown", FixedPoint(100),
-        LimitPushDown(SimpleCatalystConf(caseSensitiveAnalysis = true)),
+        LimitPushDown(conf),
         CombineLimits,
         ConstantFolding,
         BooleanSimplification) :: Nil
@@ -111,7 +110,7 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   test("full outer join where neither side is limited and both sides have same statistics") {
-    assert(x.statistics.sizeInBytes === y.statistics.sizeInBytes)
+    assert(x.stats(conf).sizeInBytes === y.stats(conf).sizeInBytes)
     val originalQuery = x.join(y, FullOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = Limit(1, LocalLimit(1, x).join(y, FullOuter)).analyze
@@ -120,7 +119,7 @@ class LimitPushdownSuite extends PlanTest {
 
   test("full outer join where neither side is limited and left side has larger statistics") {
     val xBig = testRelation.copy(data = Seq.fill(2)(null)).subquery('x)
-    assert(xBig.statistics.sizeInBytes > y.statistics.sizeInBytes)
+    assert(xBig.stats(conf).sizeInBytes > y.stats(conf).sizeInBytes)
     val originalQuery = xBig.join(y, FullOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = Limit(1, LocalLimit(1, xBig).join(y, FullOuter)).analyze
@@ -129,7 +128,7 @@ class LimitPushdownSuite extends PlanTest {
 
   test("full outer join where neither side is limited and right side has larger statistics") {
     val yBig = testRelation.copy(data = Seq.fill(2)(null)).subquery('y)
-    assert(x.statistics.sizeInBytes < yBig.statistics.sizeInBytes)
+    assert(x.stats(conf).sizeInBytes < yBig.stats(conf).sizeInBytes)
     val originalQuery = x.join(yBig, FullOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = Limit(1, x.join(LocalLimit(1, yBig), FullOuter)).analyze

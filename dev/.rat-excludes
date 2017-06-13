@@ -73,6 +73,8 @@ logs
 .*dependency-reduced-pom.xml
 known_translations
 json_expectation
+app-20161115172038-0000
+app-20161116163331-0000
 local-1422981759269
 local-1422981780767
 local-1425081759269
@@ -103,3 +105,4 @@ org.apache.spark.scheduler.ExternalClusterManager
 org.apache.spark.deploy.yarn.security.ServiceCredentialProvider
 spark-warehouse
 structured-streaming/*
+kafka-source-initial-offset-version-2.1.0.bin

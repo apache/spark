@@ -17,45 +17,47 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.util.control.NonFatal
+import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, RowOrdering}
-import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
+import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
 
 /**
- * Try to replaces [[UnresolvedRelation]]s with [[ResolveDataSource]].
+ * Try to replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
-class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
+    sparkSession.sessionState.conf.runSQLonFile && u.tableIdentifier.database.isDefined
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case u: UnresolvedRelation if u.tableIdentifier.database.isDefined =>
+    case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
         val dataSource = DataSource(
           sparkSession,
           paths = u.tableIdentifier.table :: Nil,
           className = u.tableIdentifier.database.get)
 
-        val notSupportDirectQuery = try {
-          !classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
-        } catch {
-          case NonFatal(e) => false
-        }
-        if (notSupportDirectQuery) {
+        // `dataSource.providingClass` may throw ClassNotFoundException, then the outer try-catch
+        // will catch it and return the original plan, so that the analyzer can report table not
+        // found later.
+        val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
+        if (!isFileFormat ||
+            dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
           throw new AnalysisException("Unsupported data source type for direct query on files: " +
             s"${u.tableIdentifier.database.get}")
         }
-        val plan = LogicalRelation(dataSource.resolveRelation())
-        u.alias.map(a => SubqueryAlias(u.alias.get, plan, None)).getOrElse(plan)
+        LogicalRelation(dataSource.resolveRelation())
       } catch {
-        case e: ClassNotFoundException => u
+        case _: ClassNotFoundException => u
         case e: Exception =>
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(e.getMessage)
@@ -64,10 +66,11 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 }
 
 /**
- * Analyze [[CreateTable]] and do some normalization and checking.
- * For CREATE TABLE AS SELECT, the SELECT query is also analyzed.
+ * Preprocess [[CreateTable]], to do some normalization and checking.
  */
-case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  // catalog is a def and not a val/lazy val as the latter would introduce a circular reference
+  private def catalog = sparkSession.sessionState.catalog
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
@@ -90,16 +93,10 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
     // bucket spec, etc. match the existing table, and adjust the columns order of the given query
     // if necessary.
     case c @ CreateTable(tableDesc, SaveMode.Append, Some(query))
-        if sparkSession.sessionState.catalog.tableExists(tableDesc.identifier) =>
+        if query.resolved && catalog.tableExists(tableDesc.identifier) =>
       // This is guaranteed by the parser and `DataFrameWriter`
-      assert(tableDesc.schema.isEmpty && tableDesc.provider.isDefined)
+      assert(tableDesc.provider.isDefined)
 
-      // Analyze the query in CTAS and then we can do the normalization and checking.
-      val qe = sparkSession.sessionState.executePlan(query)
-      qe.assertAnalyzed()
-      val analyzedQuery = qe.analyzed
-
-      val catalog = sparkSession.sessionState.catalog
       val db = tableDesc.identifier.database.getOrElse(catalog.getCurrentDatabase)
       val tableIdentWithDB = tableDesc.identifier.copy(database = Some(db))
       val tableName = tableIdentWithDB.unquotedString
@@ -107,11 +104,6 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
 
       if (existingTable.tableType == CatalogTableType.VIEW) {
         throw new AnalysisException("Saving data into a view is not allowed.")
-      }
-
-      if (existingTable.provider.get == DDLUtils.HIVE_PROVIDER) {
-        throw new AnalysisException(s"Saving data in the Hive serde table $tableName is " +
-          "not supported yet. Please use the insertInto() API as an alternative.")
       }
 
       // Check if the specified data source match the data source of the existing table.
@@ -125,7 +117,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
           s"`${specifiedProvider.getSimpleName}`.")
       }
 
-      if (analyzedQuery.schema.length != existingTable.schema.length) {
+      if (query.schema.length != existingTable.schema.length) {
         throw new AnalysisException(
           s"The column number of the existing table $tableName" +
             s"(${existingTable.schema.catalogString}) doesn't match the data schema" +
@@ -139,8 +131,8 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       // adjust the column order of the given dataframe according to it, or throw exception
       // if the column names do not match.
       val adjustedColumns = tableCols.map { col =>
-        analyzedQuery.resolve(Seq(col), resolver).getOrElse {
-          val inputColumns = analyzedQuery.schema.map(_.name).mkString(", ")
+        query.resolve(Seq(col), resolver).getOrElse {
+          val inputColumns = query.schema.map(_.name).mkString(", ")
           throw new AnalysisException(
             s"cannot resolve '$col' given input columns: [$inputColumns]")
         }
@@ -176,16 +168,14 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
           """.stripMargin)
       }
 
-      val newQuery = if (adjustedColumns != analyzedQuery.output) {
-        Project(adjustedColumns, analyzedQuery)
+      val newQuery = if (adjustedColumns != query.output) {
+        Project(adjustedColumns, query)
       } else {
-        analyzedQuery
+        query
       }
 
       c.copy(
-        // trust everything from the existing table, except schema as we assume it's empty in a lot
-        // of places, when we do CTAS.
-        tableDesc = existingTable.copy(schema = new StructType()),
+        tableDesc = existingTable,
         query = Some(newQuery))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
@@ -196,31 +186,64 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
     //   * can't use all table columns as partition columns.
     //   * partition columns' type must be AtomicType.
     //   * sort columns' type must be orderable.
-    case c @ CreateTable(tableDesc, _, query) =>
-      val analyzedQuery = query.map { q =>
-        // Analyze the query in CTAS and then we can do the normalization and checking.
-        val qe = sparkSession.sessionState.executePlan(q)
-        qe.assertAnalyzed()
-        qe.analyzed
-      }
-      val schema = if (analyzedQuery.isDefined) {
-        analyzedQuery.get.schema
+    //   * reorder table schema or output of query plan, to put partition columns at the end.
+    case c @ CreateTable(tableDesc, _, query) if query.forall(_.resolved) =>
+      if (query.isDefined) {
+        assert(tableDesc.schema.isEmpty,
+          "Schema may not be specified in a Create Table As Select (CTAS) statement")
+
+        val analyzedQuery = query.get
+        val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
+
+        val output = analyzedQuery.output
+        val partitionAttrs = normalizedTable.partitionColumnNames.map { partCol =>
+          output.find(_.name == partCol).get
+        }
+        val newOutput = output.filterNot(partitionAttrs.contains) ++ partitionAttrs
+        val reorderedQuery = if (newOutput == output) {
+          analyzedQuery
+        } else {
+          Project(newOutput, analyzedQuery)
+        }
+
+        c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
-        tableDesc.schema
+        val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
+
+        val partitionSchema = normalizedTable.partitionColumnNames.map { partCol =>
+          normalizedTable.schema.find(_.name == partCol).get
+        }
+
+        val reorderedSchema =
+          StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
+
+        c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
+  }
 
-      val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-        schema.map(_.name)
-      } else {
-        schema.map(_.name.toLowerCase)
+  private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
+    val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
+      schema.map(_.name)
+    } else {
+      schema.map(_.name.toLowerCase)
+    }
+    checkDuplication(columnNames, "table definition of " + table.identifier)
+
+    val normalizedPartCols = normalizePartitionColumns(schema, table)
+    val normalizedBucketSpec = normalizeBucketSpec(schema, table)
+
+    normalizedBucketSpec.foreach { spec =>
+      for (bucketCol <- spec.bucketColumnNames if normalizedPartCols.contains(bucketCol)) {
+        throw new AnalysisException(s"bucketing column '$bucketCol' should not be part of " +
+          s"partition columns '${normalizedPartCols.mkString(", ")}'")
       }
-      checkDuplication(columnNames, "table definition of " + tableDesc.identifier)
+      for (sortCol <- spec.sortColumnNames if normalizedPartCols.contains(sortCol)) {
+        throw new AnalysisException(s"bucket sorting column '$sortCol' should not be part of " +
+          s"partition columns '${normalizedPartCols.mkString(", ")}'")
+      }
+    }
 
-      val normalizedTable = tableDesc.copy(
-        partitionColumnNames = normalizePartitionColumns(schema, tableDesc),
-        bucketSpec = normalizeBucketSpec(schema, tableDesc))
-
-      c.copy(tableDesc = normalizedTable, query = analyzedQuery)
+    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec)
   }
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {
@@ -233,7 +256,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
     checkDuplication(normalizedPartitionCols, "partition")
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
-      if (table.provider.get == DDLUtils.HIVE_PROVIDER) {
+      if (DDLUtils.isHiveTable(table)) {
         // When we hit this branch, it means users didn't specify schema for the table to be
         // created, as we always include partition columns in table schema for hive serde tables.
         // The real schema will be inferred at hive metastore by hive serde, plus the given
@@ -292,7 +315,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
+case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
@@ -301,16 +324,15 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
       insert.partition, partColNames, tblName, conf.resolver)
 
-    val expectedColumns = {
-      val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
-      insert.table.output.filterNot(a => staticPartCols.contains(a.name))
-    }
+    val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
+    val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
 
-    if (expectedColumns.length != insert.child.schema.length) {
+    if (expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
-        s"Cannot insert into table $tblName because the number of columns are different: " +
-          s"need ${expectedColumns.length} columns, " +
-          s"but query has ${insert.child.schema.length} columns.")
+        s"$tblName requires that the data to be inserted have the same number of columns as the " +
+          s"target table: target table has ${insert.table.output.size} column(s) but the " +
+          s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
+          s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
     if (normalizedPartSpec.nonEmpty) {
@@ -335,7 +357,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   private def castAndRenameChildOutput(
       insert: InsertIntoTable,
       expectedOutput: Seq[Attribute]): InsertIntoTable = {
-    val newChildOutput = expectedOutput.zip(insert.child.output).map {
+    val newChildOutput = expectedOutput.zip(insert.query.output).map {
       case (expected, actual) =>
         if (expected.dataType.sameType(actual.dataType) &&
             expected.name == actual.name &&
@@ -345,23 +367,23 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           // Renaming is needed for handling the following cases like
           // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
           // 2) Target tables have column metadata
-          Alias(Cast(actual, expected.dataType), expected.name)(
+          Alias(cast(actual, expected.dataType), expected.name)(
             explicitMetadata = Option(expected.metadata))
         }
     }
 
-    if (newChildOutput == insert.child.output) {
+    if (newChildOutput == insert.query.output) {
       insert
     } else {
-      insert.copy(child = Project(newChildOutput, insert.child))
+      insert.copy(query = Project(newChildOutput, insert.query))
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(table, partition, child, _, _) if table.resolved && child.resolved =>
+    case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: CatalogRelation =>
-          val metadata = relation.catalogTable
+          val metadata = relation.tableMeta
           preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
         case LogicalRelation(h: HadoopFsRelation, _, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
@@ -369,7 +391,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
         case LogicalRelation(_: InsertableRelation, _, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, Nil)
-        case other => i
+        case _ => i
       }
   }
 }
@@ -380,10 +402,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 object HiveOnlyCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case CreateTable(tableDesc, _, Some(_))
-          if tableDesc.provider.get == DDLUtils.HIVE_PROVIDER =>
-        throw new AnalysisException("Hive support is required to use CREATE Hive TABLE AS SELECT")
-
+      case CreateTable(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
+        throw new AnalysisException("Hive support is required to CREATE Hive TABLE (AS SELECT)")
       case _ => // OK
     }
   }
@@ -392,63 +412,40 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
 /**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
-case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
-  extends (LogicalPlan => Unit) {
+object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case logical.InsertIntoTable(
-          l @ LogicalRelation(t: InsertableRelation, _, _), partition, query, _, _) =>
-        // Right now, we do not support insert into a data source table with partition specs.
-        if (partition.nonEmpty) {
-          failAnalysis(s"Insert into a partition is not allowed because $l is not partitioned.")
-        } else {
-          // Get all input data source relations of the query.
-          val srcRelations = query.collect {
-            case LogicalRelation(src: BaseRelation, _, _) => src
-          }
-          if (srcRelations.contains(t)) {
-            failAnalysis(
-              "Cannot insert overwrite into table that is also being read from.")
-          } else {
-            // OK
-          }
-        }
-
-      case logical.InsertIntoTable(
-        LogicalRelation(r: HadoopFsRelation, _, _), part, query, _, _) =>
-        // We need to make sure the partition columns specified by users do match partition
-        // columns of the relation.
-        val existingPartitionColumns = r.partitionSchema.fieldNames.toSet
-        val specifiedPartitionColumns = part.keySet
-        if (existingPartitionColumns != specifiedPartitionColumns) {
-          failAnalysis("Specified partition columns " +
-            s"(${specifiedPartitionColumns.mkString(", ")}) " +
-            "do not match the partition columns of the table. Please use " +
-            s"(${existingPartitionColumns.mkString(", ")}) as the partition columns.")
-        } else {
-          // OK
-        }
-
-        PartitioningUtils.validatePartitionColumn(
-          r.schema, part.keySet.toSeq, conf.caseSensitiveAnalysis)
-
+      case InsertIntoTable(l @ LogicalRelation(relation, _, _), partition, query, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
-          case LogicalRelation(src: BaseRelation, _, _) => src
+          case LogicalRelation(src, _, _) => src
         }
-        if (srcRelations.contains(r)) {
-          failAnalysis(
-            "Cannot insert overwrite into table that is also being read from.")
+        if (srcRelations.contains(relation)) {
+          failAnalysis("Cannot insert into table that is also being read from.")
         } else {
           // OK
         }
 
-      case logical.InsertIntoTable(l: LogicalRelation, _, _, _, _) =>
-        // The relation in l is not an InsertableRelation.
-        failAnalysis(s"$l does not allow insertion.")
+        relation match {
+          case _: HadoopFsRelation => // OK
+
+          // Right now, we do not support insert into a non-file-based data source table with
+          // partition specs.
+          case _: InsertableRelation if partition.nonEmpty =>
+            failAnalysis(s"Insert into a partition is not allowed because $l is not partitioned.")
+
+          case _ => failAnalysis(s"$relation does not allow insertion.")
+        }
+
+      case InsertIntoTable(t, _, _, _, _)
+        if !t.isInstanceOf[LeafNode] ||
+          t.isInstanceOf[Range] ||
+          t == OneRowRelation ||
+          t.isInstanceOf[LocalRelation] =>
+        failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 
       case _ => // OK
     }

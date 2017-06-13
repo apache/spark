@@ -30,8 +30,9 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.util.Utils
 
@@ -77,9 +78,9 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       eventually(Timeout(streamingTimeout)) {
         require(!q2.isActive)
         require(q2.exception.isDefined)
+        assert(spark.streams.get(q2.id) === null)
+        assert(spark.streams.active.toSet === Set(q3))
       }
-      assert(spark.streams.get(q2.id) === null)
-      assert(spark.streams.active.toSet === Set(q3))
     }
   }
 
@@ -237,7 +238,6 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       }
     }
   }
-
 
   /** Run a body of code by defining a query on each dataset */
   private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[StreamingQuery] => Unit): Unit = {

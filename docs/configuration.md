@@ -59,6 +59,7 @@ The following format is accepted:
     1p or 1pb (pebibytes = 1024 tebibytes)
 
 ## Dynamically Loading Spark Properties
+
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, if you'd like to run the same application with different masters or different
 amounts of memory. Spark allows you to simply create an empty conf:
@@ -106,7 +107,8 @@ line will appear. For all other configuration properties, you can assume the def
 Most of the properties that control internal settings have reasonable default values. Some
 of the most common options to set are:
 
-#### Application Properties
+### Application Properties
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -211,11 +213,20 @@ of the most common options to set are:
     and typically can have up to 50 characters.
   </td>
 </tr>
+<tr>
+  <td><code>spark.driver.supervise</code></td>
+  <td>false</td>
+  <td>
+    If true, restarts the driver automatically if it fails with a non-zero exit status.
+    Only has effect in Spark standalone mode or Mesos cluster deploy mode.
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
 
-#### Runtime Environment
+### Runtime Environment
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -361,8 +372,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>(?i)secret|password</td>
   <td>
     Regex to decide which Spark configuration properties and environment variables in driver and
-    executor environments contain sensitive information. When this regex matches a property, its
-    value is redacted from the environment UI and various logs like YARN and event logs.
+    executor environments contain sensitive information. When this regex matches a property key or
+    value, the value is redacted from the environment UI and various logs like YARN and event logs.
   </td>
 </tr>
 <tr>
@@ -432,10 +443,12 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.jars.packages</code></td>
   <td></td>
   <td>
-    Comma-separated list of maven coordinates of jars to include on the driver and executor
-    classpaths. Will search the local maven repo, then maven central and any additional remote
-    repositories given by <code>spark.jars.ivy</code>. The format for the coordinates should be
-    groupId:artifactId:version.
+    Comma-separated list of Maven coordinates of jars to include on the driver and executor
+    classpaths. The coordinates should be groupId:artifactId:version. If <code>spark.jars.ivySettings</code>
+    is given artifacts will be resolved according to the configuration in the file, otherwise artifacts
+    will be searched for in the local maven repo, then maven central and finally any additional remote
+    repositories given by the command-line option <code>--repositories</code>. For more details, see
+    <a href="submitting-applications.html#advanced-dependency-management">Advanced Dependency Management</a>.
   </td>
 </tr>
 <tr>
@@ -450,8 +463,29 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.jars.ivy</code></td>
   <td></td>
   <td>
-    Comma-separated list of additional remote repositories to search for the coordinates given
-    with <code>spark.jars.packages</code>.
+    Path to specify the Ivy user directory, used for the local Ivy cache and package files from
+    <code>spark.jars.packages</code>. This will override the Ivy property <code>ivy.default.ivy.user.dir</code>
+    which defaults to ~/.ivy2.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.jars.ivySettings</code></td>
+  <td></td>
+  <td>
+    Path to an Ivy settings file to customize resolution of jars specified using <code>spark.jars.packages</code>
+    instead of the built-in defaults, such as maven central. Additional repositories given by the command-line
+    option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
+    Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
+    artifact server like Artifactory. Details on the settings file format can be
+    found at http://ant.apache.org/ivy/history/latest-milestone/settings.html
+  </td>
+</tr>
+ <tr>
+  <td><code>spark.jars.repositories</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of additional remote repositories to search for the maven coordinates
+    given with <code>--packages</code> or <code>spark.jars.packages</code>.
   </td>
 </tr>
 <tr>
@@ -471,7 +505,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Shuffle Behavior
+### Shuffle Behavior
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -491,6 +526,14 @@ Apart from these, the following properties are also available, and may be useful
     When the number of hosts in the cluster increase, it might lead to very large number
     of in-bound connections to one or more nodes, causing the workers to fail under load.
     By allowing it to limit the number of fetch requests, this scenario can be mitigated.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
+  <td>200m</td>
+  <td>
+    The blocks of a shuffle request will be fetched to disk when size of the request is above
+    this threshold. This is to avoid a giant request takes too much memory.
   </td>
 </tr>
 <tr>
@@ -587,6 +630,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.accurateBlockThreshold</code></td>
+  <td>100 * 1024 * 1024</td>
+  <td>
+    When we compress the size of shuffle blocks in HighlyCompressedMapStatus, we will record the
+    size accurately if it's above this config. This helps to prevent OOM by avoiding
+    underestimating shuffle block size when fetch shuffle blocks.
+  </td>
+</tr>
+<tr>
   <td><code>spark.io.encryption.enabled</code></td>
   <td>false</td>
   <td>
@@ -612,7 +664,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Spark UI
+### Spark UI
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -620,6 +673,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
+    Compression will use <code>spark.io.compression.codec</code>.
   </td>
 </tr>
 <tr>
@@ -665,24 +719,24 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedJobs</code></td>
   <td>1000</td>
   <td>
-    How many jobs the Spark UI and status APIs remember before garbage
-    collecting.
+    How many jobs the Spark UI and status APIs remember before garbage collecting. 
+    This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
 <tr>
   <td><code>spark.ui.retainedStages</code></td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI and status APIs remember before garbage
-    collecting.
+    How many stages the Spark UI and status APIs remember before garbage collecting. 
+    This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
 <tr>
   <td><code>spark.ui.retainedTasks</code></td>
   <td>100000</td>
   <td>
-    How many tasks the Spark UI and status APIs remember before garbage
-    collecting.
+    How many tasks the Spark UI and status APIs remember before garbage collecting. 
+    This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
 <tr>
@@ -745,7 +799,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Compression and Serialization
+### Compression and Serialization
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -753,14 +808,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>true</td>
   <td>
     Whether to compress broadcast variables before sending them. Generally a good idea.
+    Compression will use <code>spark.io.compression.codec</code>.
   </td>
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
   <td>lz4</td>
   <td>
-    The codec used to compress internal data such as RDD partitions, broadcast variables and
-    shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
+    The codec used to compress internal data such as RDD partitions, event log, broadcast variables
+    and shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
     and <code>snappy</code>. You can also use fully qualified class names to specify the codec,
     e.g.
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,
@@ -861,6 +917,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>StorageLevel.MEMORY_ONLY_SER</code> in Java
     and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python).
     Can save substantial space at the cost of some extra CPU time.
+    Compression will use <code>spark.io.compression.codec</code>.
   </td>
 </tr>
 <tr>
@@ -891,7 +948,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Memory Management
+### Memory Management
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -979,9 +1037,19 @@ Apart from these, the following properties are also available, and may be useful
     storage space to unroll the new block in its entirety.
   </td>
 </tr>
+<tr>
+  <td><code>spark.storage.replication.proactive<code></td>
+  <td>false</td>
+  <td>
+    Enables proactive block replication for RDD blocks. Cached RDD block replicas lost due to
+    executor failures are replenished if there are any existing available replicas. This tries
+    to get the replication level of the block to the initial number.
+  </td>
+</tr>
 </table>
 
-#### Execution Behavior
+### Execution Behavior
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1106,9 +1174,19 @@ Apart from these, the following properties are also available, and may be useful
     mapping has high overhead for blocks close to or below the page size of the operating system.
   </td>
 </tr>
+<tr>
+  <td><code>spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version</code></td>
+  <td>1</td>
+  <td>
+    The file output committer algorithm version, valid algorithm version number: 1 or 2.
+    Version 2 may have better performance, but version 1 may handle failures better in certain situations,
+    as per <a href="https://issues.apache.org/jira/browse/MAPREDUCE-4815">MAPREDUCE-4815</a>.
+  </td>
+</tr>
 </table>
 
-#### Networking
+### Networking
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1139,13 +1217,13 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.driver.bindAddress</code></td>
   <td>(value of spark.driver.host)</td>
   <td>
-    <p>Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
-    environment variable (see below).</p>
+    Hostname or IP address where to bind listening sockets. This config overrides the SPARK_LOCAL_IP
+    environment variable (see below).
 
-    <p>It also allows a different address from the local one to be advertised to executors or external systems.
+    <br />It also allows a different address from the local one to be advertised to executors or external systems.
     This is useful, for example, when running containers with bridged networking. For this to properly work,
     the different ports used by the driver (RPC, block manager and UI) need to be forwarded from the
-    container's host.</p>
+    container's host.
   </td>
 </tr>
 <tr>
@@ -1217,7 +1295,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Scheduling
+### Scheduling
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1378,6 +1457,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.blacklist.killBlacklistedExecutors</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) If set to "true", allow Spark to automatically kill, and attempt to re-create,
+    executors when they are blacklisted.  Note that, when an entire node is added to the blacklist,
+    all of the executors on that node will be killed.
+  </td>
+</tr>
+<tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>
@@ -1430,7 +1518,7 @@ Apart from these, the following properties are also available, and may be useful
     Enables monitoring of killed / interrupted tasks. When set to true, any task which is killed
     will be monitored by the executor until that task actually finishes executing. See the other
     <code>spark.task.reaper.*</code> configurations for details on how to control the exact behavior
-    of this monitoring</code>. When set to false (the default), task killing will use an older code
+    of this monitoring. When set to false (the default), task killing will use an older code
     path which lacks such monitoring.
   </td>
 </tr>
@@ -1464,10 +1552,16 @@ Apart from these, the following properties are also available, and may be useful
     of this setting is to act as a safety-net to prevent runaway uncancellable tasks from rendering
     an executor unusable.
   </td>
+  <td><code>spark.stage.maxConsecutiveAttempts</code></td>
+  <td>4</td>
+  <td>
+    Number of consecutive stage attempts allowed before a stage is aborted.
+  </td>
 </tr>
 </table>
 
-#### Dynamic Allocation
+### Dynamic Allocation
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1548,7 +1642,8 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### Security
+### Security
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1613,6 +1708,48 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.network.crypto.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enable encryption using the commons-crypto library for RPC and block transfer service.
+    Requires <code>spark.authenticate</code> to be enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.keyLength</code></td>
+  <td>128</td>
+  <td>
+    The length in bits of the encryption key to generate. Valid values are 128, 192 and 256.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.keyFactoryAlgorithm</code></td>
+  <td>PBKDF2WithHmacSHA1</td>
+  <td>
+    The key factory algorithm to use when generating encryption keys. Should be one of the
+    algorithms supported by the javax.crypto.SecretKeyFactory class in the JRE being used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.saslFallback</code></td>
+  <td>true</td>
+  <td>
+    Whether to fall back to SASL authentication if authentication fails using Spark's internal
+    mechanism. This is useful when the application is connecting to old shuffle services that
+    do not support the internal Spark authentication protocol. On the server side, this can be
+    used to block older clients from authenticating against a new shuffle service.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.config.*</code></td>
+  <td>None</td>
+  <td>
+    Configuration values for the commons-crypto library, such as which cipher implementations to
+    use. The config name should be the name of commons-crypto configuration without the
+    "commons.crypto" prefix.
+  </td>
+</tr>
+<tr>
   <td><code>spark.authenticate.enableSaslEncryption</code></td>
   <td>false</td>
   <td>
@@ -1625,33 +1762,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.network.sasl.serverAlwaysEncrypt</code></td>
   <td>false</td>
   <td>
-    Disable unencrypted connections for services that support SASL authentication. This is
-    currently supported by the external shuffle service.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.network.aes.enabled</code></td>
-  <td>false</td>
-  <td>
-    Enable AES for over-the-wire encryption. This is supported for RPC and the block transfer service.
-    This option has precedence over SASL-based encryption if both are enabled.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.network.aes.keySize</code></td>
-  <td>16</td>
-  <td>
-    The bytes of AES cipher key which is effective when AES cipher is enabled. AES
-    works with 16, 24 and 32 bytes keys.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.network.aes.config.*</code></td>
-  <td>None</td>
-  <td>
-    Configuration values for the commons-crypto library, such as which cipher implementations to
-    use. The config name should be the name of commons-crypto configuration without the
-    "commons.crypto" prefix.
+    Disable unencrypted connections for services that support SASL authentication.
   </td>
 </tr>
 <tr>
@@ -1729,7 +1840,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-#### TLS / SSL
+### TLS / SSL
 
 <table class="table">
     <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -1737,21 +1848,35 @@ Apart from these, the following properties are also available, and may be useful
         <td><code>spark.ssl.enabled</code></td>
         <td>false</td>
         <td>
-            <p>Whether to enable SSL connections on all supported protocols.</p>
+            Whether to enable SSL connections on all supported protocols.
 
-            <p>When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
-            is required.</p>
+            <br />When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
+            is required.
 
-            <p>All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
+            <br />All the SSL settings like <code>spark.ssl.xxx</code> where <code>xxx</code> is a
             particular configuration property, denote the global configuration for all the supported
             protocols. In order to override the global configuration for the particular protocol,
-            the properties must be overwritten in the protocol-specific namespace.</p>
+            the properties must be overwritten in the protocol-specific namespace.
 
-            <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
+            <br />Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
             particular protocol denoted by <code>YYY</code>. Example values for <code>YYY</code>
             include <code>fs</code>, <code>ui</code>, <code>standalone</code>, and
             <code>historyServer</code>.  See <a href="security.html#ssl-configuration">SSL
-            Configuration</a> for details on hierarchical SSL configuration for services.</p>
+            Configuration</a> for details on hierarchical SSL configuration for services.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.[namespace].port</code></td>
+        <td>None</td>
+        <td>
+            The port where the SSL service will listen on.
+
+            <br />The port must be defined within a namespace configuration; see
+            <a href="security.html#ssl-configuration">SSL Configuration</a> for the available
+            namespaces.
+
+            <br />When not set, the SSL port will be derived from the non-SSL port for the
+            same service. A value of "0" will make the service bind to an ephemeral port.
         </td>
     </tr>
     <tr>
@@ -1835,7 +1960,8 @@ Apart from these, the following properties are also available, and may be useful
 </table>
 
 
-#### Spark SQL
+### Spark SQL
+
 Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
 
 <div class="codetabs">
@@ -1877,7 +2003,8 @@ showDF(properties, numRows = 200, truncate = FALSE)
 </div>
 
 
-#### Spark Streaming
+### Spark Streaming
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -1998,7 +2125,8 @@ showDF(properties, numRows = 200, truncate = FALSE)
 </tr>
 </table>
 
-#### SparkR
+### SparkR
+
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
@@ -2047,7 +2175,21 @@ showDF(properties, numRows = 200, truncate = FALSE)
 
 </table>
 
-#### Deploy
+### GraphX
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.graphx.pregel.checkpointInterval</code></td>
+  <td>-1</td>
+  <td>
+    Checkpoint interval for graph and message in Pregel. It used to avoid stackOverflowError due to long lineage chains
+  after lots of iterations. The checkpoint is disabled by default.
+  </td>
+</tr>
+</table>
+
+### Deploy
 
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -2070,15 +2212,16 @@ showDF(properties, numRows = 200, truncate = FALSE)
 </table>
 
 
-#### Cluster Managers
+### Cluster Managers
+
 Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
 
-##### [YARN](running-on-yarn.html#configuration)
+#### [YARN](running-on-yarn.html#configuration)
 
-##### [Mesos](running-on-mesos.html#configuration)
+#### [Mesos](running-on-mesos.html#configuration)
 
-##### [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
+#### [Standalone Mode](spark-standalone.html#cluster-launch-scripts)
 
 # Environment Variables
 
@@ -2153,8 +2296,8 @@ should be included on Spark's classpath:
 * `hdfs-site.xml`, which provides default behaviors for the HDFS client.
 * `core-site.xml`, which sets the default filesystem name.
 
-The location of these configuration files varies across CDH and HDP versions, but
-a common location is inside of `/etc/hadoop/conf`. Some tools, such as Cloudera Manager, create
+The location of these configuration files varies across Hadoop versions, but
+a common location is inside of `/etc/hadoop/conf`. Some tools create
 configurations on-the-fly, but offer a mechanisms to download copies of them.
 
 To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/spark-env.sh`

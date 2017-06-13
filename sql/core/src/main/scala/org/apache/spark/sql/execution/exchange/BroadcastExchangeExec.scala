@@ -59,10 +59,8 @@ case class BroadcastExchangeExec[T: ClassTag](
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
-  override def sameResult(plan: SparkPlan): Boolean = plan match {
-    case p: BroadcastExchangeExec[_] =>
-      mode.compatibleWith(p.mode) && child.sameResult(p.child)
-    case _ => false
+  override lazy val canonicalized: SparkPlan = {
+    BroadcastExchangeExec(mode.canonicalized, child.canonicalized)
   }
 
   @transient
@@ -144,13 +142,7 @@ case class BroadcastExchangeExec[T: ClassTag](
             driverSideBroadcast()
           }
 
-          // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
-          // directly without setting an execution id. We should be tolerant to it.
-          if (executionId != null) {
-            sparkContext.listenerBus.post(SparkListenerDriverAccumUpdates(
-              executionId.toLong, metrics.values.map(m => m.id -> m.value).toSeq))
-          }
-
+          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
           broadcasted
         } catch {
           case oe: OutOfMemoryError =>

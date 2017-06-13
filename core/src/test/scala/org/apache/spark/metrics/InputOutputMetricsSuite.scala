@@ -33,9 +33,8 @@ import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutput
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   with BeforeAndAfter {
@@ -186,10 +185,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     sc.listenerBus.waitUntilEmpty(500)
     assert(inputRead == numRecords)
 
-    // Only supported on newer Hadoop
-    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback().isDefined) {
-      assert(outputWritten == numBuckets)
-    }
+    assert(outputWritten == numBuckets)
     assert(shuffleRead == shuffleWritten)
   }
 
@@ -262,57 +258,49 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   }
 
   test("output metrics on records written") {
-    // Only supported on newer Hadoop
-    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback().isDefined) {
-      val file = new File(tmpDir, getClass.getSimpleName)
-      val filePath = "file://" + file.getAbsolutePath
+    val file = new File(tmpDir, getClass.getSimpleName)
+    val filePath = file.toURI.toURL.toString
 
-      val records = runAndReturnRecordsWritten {
-        sc.parallelize(1 to numRecords).saveAsTextFile(filePath)
-      }
-      assert(records == numRecords)
+    val records = runAndReturnRecordsWritten {
+      sc.parallelize(1 to numRecords).saveAsTextFile(filePath)
     }
+    assert(records == numRecords)
   }
 
   test("output metrics on records written - new Hadoop API") {
-    // Only supported on newer Hadoop
-    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback().isDefined) {
-      val file = new File(tmpDir, getClass.getSimpleName)
-      val filePath = "file://" + file.getAbsolutePath
+    val file = new File(tmpDir, getClass.getSimpleName)
+    val filePath = file.toURI.toURL.toString
 
-      val records = runAndReturnRecordsWritten {
-        sc.parallelize(1 to numRecords).map(key => (key.toString, key.toString))
-          .saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](filePath)
-      }
-      assert(records == numRecords)
+    val records = runAndReturnRecordsWritten {
+      sc.parallelize(1 to numRecords).map(key => (key.toString, key.toString))
+        .saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](filePath)
     }
+    assert(records == numRecords)
   }
 
   test("output metrics when writing text file") {
     val fs = FileSystem.getLocal(new Configuration())
     val outPath = new Path(fs.getWorkingDirectory, "outdir")
 
-    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback().isDefined) {
-      val taskBytesWritten = new ArrayBuffer[Long]()
-      sc.addSparkListener(new SparkListener() {
-        override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-          taskBytesWritten += taskEnd.taskMetrics.outputMetrics.bytesWritten
-        }
-      })
-
-      val rdd = sc.parallelize(Array("a", "b", "c", "d"), 2)
-
-      try {
-        rdd.saveAsTextFile(outPath.toString)
-        sc.listenerBus.waitUntilEmpty(500)
-        assert(taskBytesWritten.length == 2)
-        val outFiles = fs.listStatus(outPath).filter(_.getPath.getName != "_SUCCESS")
-        taskBytesWritten.zip(outFiles).foreach { case (bytes, fileStatus) =>
-          assert(bytes >= fileStatus.getLen)
-        }
-      } finally {
-        fs.delete(outPath, true)
+    val taskBytesWritten = new ArrayBuffer[Long]()
+    sc.addSparkListener(new SparkListener() {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+        taskBytesWritten += taskEnd.taskMetrics.outputMetrics.bytesWritten
       }
+    })
+
+    val rdd = sc.parallelize(Array("a", "b", "c", "d"), 2)
+
+    try {
+      rdd.saveAsTextFile(outPath.toString)
+      sc.listenerBus.waitUntilEmpty(500)
+      assert(taskBytesWritten.length == 2)
+      val outFiles = fs.listStatus(outPath).filter(_.getPath.getName != "_SUCCESS")
+      taskBytesWritten.zip(outFiles).foreach { case (bytes, fileStatus) =>
+        assert(bytes >= fileStatus.getLen)
+      }
+    } finally {
+      fs.delete(outPath, true)
     }
   }
 
@@ -328,6 +316,35 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     val bytesRead = runAndReturnBytesRead {
       sc.newAPIHadoopFile(tmpFilePath, classOf[NewCombineTextInputFormat], classOf[LongWritable],
         classOf[Text], new Configuration()).count()
+    }
+    assert(bytesRead >= tmpFile.length())
+  }
+
+  test("input metrics with old Hadoop API in different thread") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.textFile(tmpFilePath, 4).mapPartitions { iter =>
+        val buf = new ArrayBuffer[String]()
+        ThreadUtils.runInNewThread("testThread", false) {
+          iter.flatMap(_.split(" ")).foreach(buf.append(_))
+        }
+
+        buf.iterator
+      }.count()
+    }
+    assert(bytesRead >= tmpFile.length())
+  }
+
+  test("input metrics with new Hadoop API in different thread") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.newAPIHadoopFile(tmpFilePath, classOf[NewTextInputFormat], classOf[LongWritable],
+        classOf[Text]).mapPartitions { iter =>
+        val buf = new ArrayBuffer[String]()
+        ThreadUtils.runInNewThread("testThread", false) {
+          iter.map(_._2.toString).flatMap(_.split(" ")).foreach(buf.append(_))
+        }
+
+        buf.iterator
+      }.count()
     }
     assert(bytesRead >= tmpFile.length())
   }

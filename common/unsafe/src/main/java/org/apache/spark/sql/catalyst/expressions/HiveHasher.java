@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions;
 import org.apache.spark.unsafe.Platform;
 
 /**
- * Simulates Hive's hashing function at
+ * Simulates Hive's hashing function from Hive v1.2.1
  * org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#hashcode()
  */
 public class HiveHasher {

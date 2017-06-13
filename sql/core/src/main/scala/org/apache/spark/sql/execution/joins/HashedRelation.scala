@@ -829,15 +829,10 @@ private[execution] case class HashedRelationBroadcastMode(key: Seq[Expression])
   extends RowBroadcastMode {
 
   override def transform(rows: Array[InternalRow]): HashedRelation = {
-    HashedRelation(rows.iterator, canonicalizedKey, rows.length)
+    HashedRelation(rows.iterator, canonicalized.key, rows.length)
   }
 
-  private lazy val canonicalizedKey: Seq[Expression] = {
-    key.map { e => e.canonicalized }
-  }
-
-  override def compatibleWith(other: RowBroadcastMode): Boolean = other match {
-    case m: HashedRelationBroadcastMode => canonicalizedKey == m.canonicalizedKey
-    case _ => false
+  override lazy val canonicalized: HashedRelationBroadcastMode = {
+    this.copy(key = key.map(_.canonicalized))
   }
 }

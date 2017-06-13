@@ -22,10 +22,9 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 
 /**
- * :: Experimental ::
  * Reports information about the instantaneous status of a streaming query.
  *
  * @param message A human readable description of what the stream is currently doing.
@@ -35,7 +34,6 @@ import org.apache.spark.annotation.{Experimental, InterfaceStability}
  *
  * @since 2.1.0
  */
-@Experimental
 @InterfaceStability.Evolving
 class StreamingQueryStatus protected[sql](
     val message: String,

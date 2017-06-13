@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URI
+
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -26,8 +30,8 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   private def checkTablePath(dbName: String, tableName: String): Unit = {
     val metastoreTable = spark.sharedState.externalCatalog.getTable(dbName, tableName)
-    val expectedPath =
-      spark.sharedState.externalCatalog.getDatabase(dbName).locationUri + "/" + tableName
+    val expectedPath = new Path(new Path(
+      spark.sharedState.externalCatalog.getDatabase(dbName).locationUri), tableName).toUri
 
     assert(metastoreTable.location === expectedPath)
   }

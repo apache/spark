@@ -23,14 +23,18 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
+import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
+import org.apache.commons.lang3.exception.ExceptionUtils
+import org.codehaus.commons.compiler.CompileException
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, JaninoRuntimeException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
-import scala.language.existentials
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
+import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
@@ -555,7 +559,6 @@ class CodegenContext {
       addNewFunction(compareFunc, funcCode)
       s"this.$compareFunc($c1, $c2)"
     case schema: StructType =>
-      INPUT_ROW = "i"
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
       val funcCode: String =
@@ -566,7 +569,6 @@ class CodegenContext {
             if (a instanceof UnsafeRow && b instanceof UnsafeRow && a.equals(b)) {
               return 0;
             }
-            InternalRow i = null;
             $comparisons
             return 0;
           }
@@ -640,8 +642,24 @@ class CodegenContext {
     splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
   }
 
-  private def splitExpressions(
-      expressions: Seq[String], funcName: String, arguments: Seq[(String, String)]): String = {
+  /**
+   * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM
+   *
+   * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param arguments the list of (type, name) of the arguments of the split function.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
+   */
+  def splitExpressions(
+      expressions: Seq[String],
+      funcName: String,
+      arguments: Seq[(String, String)],
+      returnType: String = "void",
+      makeSplitFunction: String => String = identity,
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -662,18 +680,19 @@ class CodegenContext {
       blocks.head
     } else {
       val func = freshName(funcName)
+      val argString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
         val name = s"${func}_$i"
         val code = s"""
-           |private void $name(${arguments.map { case (t, name) => s"$t $name" }.mkString(", ")}) {
-           |  $body
+           |private $returnType $name($argString) {
+           |  ${makeSplitFunction(body)}
            |}
          """.stripMargin
         addNewFunction(name, code)
         name
       }
 
-      functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")});").mkString("\n")
+      foldFunctions(functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")})"))
     }
   }
 
@@ -709,7 +728,7 @@ class CodegenContext {
     val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
     // Add each expression tree and compute the common subexpressions.
-    expressions.foreach(equivalentExpressions.addExprTree(_, true, false))
+    expressions.foreach(equivalentExpressions.addExprTree)
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
@@ -717,10 +736,10 @@ class CodegenContext {
     val codes = commonExprs.map { e =>
       val expr = e.head
       // Generate the code for this expression tree.
-      val code = expr.genCode(this)
-      val state = SubExprEliminationState(code.isNull, code.value)
+      val eval = expr.genCode(this)
+      val state = SubExprEliminationState(eval.isNull, eval.value)
       e.foreach(subExprEliminationExprs.put(_, state))
-      code.code.trim
+      eval.code.trim
     }
     SubExprCodes(codes, subExprEliminationExprs.toMap)
   }
@@ -730,7 +749,7 @@ class CodegenContext {
    * common subexpressions, generates the functions that evaluate those expressions and populates
    * the mapping of common subexpressions to the generated functions.
    */
-  private def subexpressionElimination(expressions: Seq[Expression]) = {
+  private def subexpressionElimination(expressions: Seq[Expression]): Unit = {
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
@@ -744,13 +763,13 @@ class CodegenContext {
       val value = s"${fnName}Value"
 
       // Generate the code for this expression tree and wrap it in a function.
-      val code = expr.genCode(this)
+      val eval = expr.genCode(this)
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
-           |  ${code.code.trim}
-           |  $isNull = ${code.isNull};
-           |  $value = ${code.value};
+           |  ${eval.code.trim}
+           |  $isNull = ${eval.isNull};
+           |  $value = ${eval.value};
            |}
            """.stripMargin
 
@@ -763,9 +782,6 @@ class CodegenContext {
       // The cost of doing subexpression elimination is:
       //   1. Extra function call, although this is probably *good* as the JIT can decide to
       //      inline or not.
-      //   2. Extra branch to check isLoaded. This branch is likely to be predicted correctly
-      //      very often. The reason it is not loaded is because of a prior branch.
-      //   3. Extra store into isLoaded.
       // The benefit doing subexpression elimination is:
       //   1. Running the expression logic. Even for a simple expression, it is likely more than 3
       //      above.
@@ -784,7 +800,7 @@ class CodegenContext {
 
   /**
    * Generates code for expressions. If doSubexpressionElimination is true, subexpression
-   * elimination will be performed. Subexpression elimination assumes that the code will for each
+   * elimination will be performed. Subexpression elimination assumes that the code for each
    * expression will be combined in the `expressions` order.
    */
   def generateExpressions(expressions: Seq[Expression],
@@ -886,8 +902,14 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  def compile(code: CodeAndComment): GeneratedClass = {
+  def compile(code: CodeAndComment): GeneratedClass = try {
     cache.get(code)
+  } catch {
+    // Cache.get() may wrap the original exception. See the following URL
+    // http://google.github.io/guava/releases/14.0/api/docs/com/google/common/cache/
+    //   Cache.html#get(K,%20java.util.concurrent.Callable)
+    case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
+      throw e.getCause
   }
 
   /**
@@ -919,7 +941,10 @@ object CodeGenerator extends Logging {
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
       classOf[UnsafeMapData].getName,
-      classOf[Expression].getName
+      classOf[Expression].getName,
+      classOf[TaskContext].getName,
+      classOf[TaskKilledException].getName,
+      classOf[InputMetrics].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
@@ -935,10 +960,14 @@ object CodeGenerator extends Logging {
       evaluator.cook("generated.java", code.body)
       recordCompilationStats(evaluator)
     } catch {
-      case e: Exception =>
+      case e: JaninoRuntimeException =>
         val msg = s"failed to compile: $e\n$formatted"
         logError(msg, e)
-        throw new Exception(msg, e)
+        throw new JaninoRuntimeException(msg, e)
+      case e: CompileException =>
+        val msg = s"failed to compile: $e\n$formatted"
+        logError(msg, e)
+        throw new CompileException(msg, e.getLocation)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
   }

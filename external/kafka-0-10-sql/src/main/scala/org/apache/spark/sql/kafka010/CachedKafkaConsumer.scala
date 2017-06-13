@@ -28,6 +28,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.kafka010.KafkaSource._
+import org.apache.spark.util.UninterruptibleThread
 
 
 /**
@@ -44,6 +45,9 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   private var consumer = createConsumer
 
+  /** indicates whether this consumer is in use or not */
+  private var inuse = true
+
   /** Iterator to the already fetch data */
   private var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
   private var nextOffsetInFetchedData = UNKNOWN_OFFSET
@@ -55,6 +59,29 @@ private[kafka010] case class CachedKafkaConsumer private(
     tps.add(topicPartition)
     c.assign(tps)
     c
+  }
+
+  case class AvailableOffsetRange(earliest: Long, latest: Long)
+
+  private def runUninterruptiblyIfPossible[T](body: => T): T = Thread.currentThread match {
+    case ut: UninterruptibleThread =>
+      ut.runUninterruptibly(body)
+    case _ =>
+      logWarning("CachedKafkaConsumer is not running in UninterruptibleThread. " +
+        "It may hang when CachedKafkaConsumer's methods are interrupted because of KAFKA-1894")
+      body
+  }
+
+  /**
+   * Return the available offset range of the current partition. It's a pair of the earliest offset
+   * and the latest offset.
+   */
+  def getAvailableOffsetRange(): AvailableOffsetRange = runUninterruptiblyIfPossible {
+    consumer.seekToBeginning(Set(topicPartition).asJava)
+    val earliestOffset = consumer.position(topicPartition)
+    consumer.seekToEnd(Set(topicPartition).asJava)
+    val latestOffset = consumer.position(topicPartition)
+    AvailableOffsetRange(earliestOffset, latestOffset)
   }
 
   /**
@@ -75,7 +102,8 @@ private[kafka010] case class CachedKafkaConsumer private(
       offset: Long,
       untilOffset: Long,
       pollTimeoutMs: Long,
-      failOnDataLoss: Boolean): ConsumerRecord[Array[Byte], Array[Byte]] = {
+      failOnDataLoss: Boolean):
+    ConsumerRecord[Array[Byte], Array[Byte]] = runUninterruptiblyIfPossible {
     require(offset < untilOffset,
       s"offset must always be less than untilOffset [offset: $offset, untilOffset: $untilOffset]")
     logDebug(s"Get $groupId $topicPartition nextOffset $nextOffsetInFetchedData requested $offset")
@@ -107,9 +135,9 @@ private[kafka010] case class CachedKafkaConsumer private(
    * `UNKNOWN_OFFSET`.
    */
   private def getEarliestAvailableOffsetBetween(offset: Long, untilOffset: Long): Long = {
-    val (earliestOffset, latestOffset) = getAvailableOffsetRange()
-    logWarning(s"Some data may be lost. Recovering from the earliest offset: $earliestOffset")
-    if (offset >= latestOffset || earliestOffset >= untilOffset) {
+    val range = getAvailableOffsetRange()
+    logWarning(s"Some data may be lost. Recovering from the earliest offset: ${range.earliest}")
+    if (offset >= range.latest || range.earliest >= untilOffset) {
       // [offset, untilOffset) and [earliestOffset, latestOffset) have no overlap,
       // either
       // --------------------------------------------------------
@@ -124,13 +152,13 @@ private[kafka010] case class CachedKafkaConsumer private(
       //   offset   untilOffset   earliestOffset   latestOffset
       val warningMessage =
         s"""
-          |The current available offset range is [$earliestOffset, $latestOffset).
+          |The current available offset range is $range.
           | Offset ${offset} is out of range, and records in [$offset, $untilOffset) will be
           | skipped ${additionalMessage(failOnDataLoss = false)}
         """.stripMargin
       logWarning(warningMessage)
       UNKNOWN_OFFSET
-    } else if (offset >= earliestOffset) {
+    } else if (offset >= range.earliest) {
       // -----------------------------------------------------------------------------
       //         ^            ^                  ^                                 ^
       //         |            |                  |                                 |
@@ -149,12 +177,12 @@ private[kafka010] case class CachedKafkaConsumer private(
       //   offset   earliestOffset   min(untilOffset,latestOffset)   max(untilOffset, latestOffset)
       val warningMessage =
         s"""
-           |The current available offset range is [$earliestOffset, $latestOffset).
-           | Offset ${offset} is out of range, and records in [$offset, $earliestOffset) will be
+           |The current available offset range is $range.
+           | Offset ${offset} is out of range, and records in [$offset, ${range.earliest}) will be
            | skipped ${additionalMessage(failOnDataLoss = false)}
         """.stripMargin
       logWarning(warningMessage)
-      earliestOffset
+      range.earliest
     }
   }
 
@@ -183,8 +211,8 @@ private[kafka010] case class CachedKafkaConsumer private(
       // - `offset` is out of range so that Kafka returns nothing. Just throw
       // `OffsetOutOfRangeException` to let the caller handle it.
       // - Cannot fetch any data before timeout. TimeoutException will be thrown.
-      val (earliestOffset, latestOffset) = getAvailableOffsetRange()
-      if (offset < earliestOffset || offset >= latestOffset) {
+      val range = getAvailableOffsetRange()
+      if (offset < range.earliest || offset >= range.latest) {
         throw new OffsetOutOfRangeException(
           Map(topicPartition -> java.lang.Long.valueOf(offset)).asJava)
       } else {
@@ -256,22 +284,10 @@ private[kafka010] case class CachedKafkaConsumer private(
       message: String,
       cause: Throwable = null): Unit = {
     val finalMessage = s"$message ${additionalMessage(failOnDataLoss)}"
-    if (failOnDataLoss) {
-      if (cause != null) {
-        throw new IllegalStateException(finalMessage)
-      } else {
-        throw new IllegalStateException(finalMessage, cause)
-      }
-    } else {
-      if (cause != null) {
-        logWarning(finalMessage)
-      } else {
-        logWarning(finalMessage, cause)
-      }
-    }
+    reportDataLoss0(failOnDataLoss, finalMessage, cause)
   }
 
-  private def close(): Unit = consumer.close()
+  def close(): Unit = consumer.close()
 
   private def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $groupId $topicPartition $offset")
@@ -283,18 +299,6 @@ private[kafka010] case class CachedKafkaConsumer private(
     val r = p.records(topicPartition)
     logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
     fetchedData = r.iterator
-  }
-
-  /**
-   * Return the available offset range of the current partition. It's a pair of the earliest offset
-   * and the latest offset.
-   */
-  private def getAvailableOffsetRange(): (Long, Long) = {
-    consumer.seekToBeginning(Set(topicPartition).asJava)
-    val earliestOffset = consumer.position(topicPartition)
-    consumer.seekToEnd(Set(topicPartition).asJava)
-    val latestOffset = consumer.position(topicPartition)
-    (earliestOffset, latestOffset)
   }
 }
 
@@ -310,7 +314,7 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
     new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer](capacity, 0.75f, true) {
       override def removeEldestEntry(
         entry: ju.Map.Entry[CacheKey, CachedKafkaConsumer]): Boolean = {
-        if (this.size > capacity) {
+        if (entry.getValue.inuse == false && this.size > capacity) {
           logWarning(s"KafkaConsumer cache hitting max capacity of $capacity, " +
             s"removing consumer for ${entry.getKey}")
           try {
@@ -323,6 +327,43 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
         } else {
           false
         }
+      }
+    }
+  }
+
+  def releaseKafkaConsumer(
+      topic: String,
+      partition: Int,
+      kafkaParams: ju.Map[String, Object]): Unit = {
+    val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
+    val topicPartition = new TopicPartition(topic, partition)
+    val key = CacheKey(groupId, topicPartition)
+
+    synchronized {
+      val consumer = cache.get(key)
+      if (consumer != null) {
+        consumer.inuse = false
+      } else {
+        logWarning(s"Attempting to release consumer that does not exist")
+      }
+    }
+  }
+
+  /**
+   * Removes (and closes) the Kafka Consumer for the given topic, partition and group id.
+   */
+  def removeKafkaConsumer(
+      topic: String,
+      partition: Int,
+      kafkaParams: ju.Map[String, Object]): Unit = {
+    val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
+    val topicPartition = new TopicPartition(topic, partition)
+    val key = CacheKey(groupId, topicPartition)
+
+    synchronized {
+      val removedConsumer = cache.remove(key)
+      if (removedConsumer != null) {
+        removedConsumer.close()
       }
     }
   }
@@ -341,17 +382,46 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
 
     // If this is reattempt at running the task, then invalidate cache and start with
     // a new consumer
-    if (TaskContext.get != null && TaskContext.get.attemptNumber > 1) {
-      val removedConsumer = cache.remove(key)
-      if (removedConsumer != null) {
-        removedConsumer.close()
-      }
-      new CachedKafkaConsumer(topicPartition, kafkaParams)
+    if (TaskContext.get != null && TaskContext.get.attemptNumber >= 1) {
+      removeKafkaConsumer(topic, partition, kafkaParams)
+      val consumer = new CachedKafkaConsumer(topicPartition, kafkaParams)
+      consumer.inuse = true
+      cache.put(key, consumer)
+      consumer
     } else {
       if (!cache.containsKey(key)) {
         cache.put(key, new CachedKafkaConsumer(topicPartition, kafkaParams))
       }
-      cache.get(key)
+      val consumer = cache.get(key)
+      consumer.inuse = true
+      consumer
+    }
+  }
+
+  /** Create an [[CachedKafkaConsumer]] but don't put it into cache. */
+  def createUncached(
+      topic: String,
+      partition: Int,
+      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer = {
+    new CachedKafkaConsumer(new TopicPartition(topic, partition), kafkaParams)
+  }
+
+  private def reportDataLoss0(
+      failOnDataLoss: Boolean,
+      finalMessage: String,
+      cause: Throwable = null): Unit = {
+    if (failOnDataLoss) {
+      if (cause != null) {
+        throw new IllegalStateException(finalMessage, cause)
+      } else {
+        throw new IllegalStateException(finalMessage)
+      }
+    } else {
+      if (cause != null) {
+        logWarning(finalMessage, cause)
+      } else {
+        logWarning(finalMessage)
+      }
     }
   }
 }
