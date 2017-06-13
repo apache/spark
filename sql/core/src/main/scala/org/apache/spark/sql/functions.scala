@@ -1007,6 +1007,24 @@ object functions {
   def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
 
   /**
+   * Returns the keys from map as a array.
+   *
+   * @group collection_funcs
+   */
+  def map_keys(column: Column): Column = withExpr {
+    MapKeys(column.expr)
+  }
+
+  /**
+   * Returns the values from map as a array.
+   *
+   * @group collection_funcs
+   */
+  def map_values(column: Column): Column = withExpr {
+    MapValues(column.expr)
+  }
+
+  /**
    * Marks a DataFrame as small enough for use in broadcast joins.
    *
    * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
