@@ -1511,8 +1511,9 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     .. versionadded:: 2.0.0
     """
+
     parallelism = Param(Params._dummy(), "parallelism",
-                        "Number of models to fit in parallel",
+                        "number of processors to use when fitting models in parallel",
                         typeConverter=TypeConverters.toInt)
 
     @keyword_only
@@ -1537,6 +1538,20 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    @since("2.3.0")
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
+
+    @since("2.3.0")
+    def getParallelism(self):
+        """
+        Gets the value of parallelism or its default value.
+        """
+        return self.getOrDefault(self.parallelism)
 
     def _fit(self, dataset):
         labelCol = self.getLabelCol()
@@ -1566,7 +1581,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
                             (classifier.predictionCol, predictionCol)])
             return classifier.fit(trainingDataset, paramMap)
 
-        pool = ThreadPool(processes=self.getParallelism())
+        pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
 
         models = pool.map(trainSingleClass, range(numClasses))
 
@@ -1574,18 +1589,6 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
             multiclassLabeled.unpersist()
 
         return self._copyValues(OneVsRestModel(models=models))
-
-    def setParallelism(self, value):
-        """
-        Sets the value of :py:attr:`parallelism`.
-        """
-        return self._set(parallelism=value)
-
-    def getParallelism(self):
-        """
-        Gets the value of parallelism or its default value.
-        """
-        return self.getOrDefault(self.parallelism)
 
     @since("2.0.0")
     def copy(self, extra=None):

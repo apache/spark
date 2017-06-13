@@ -101,38 +101,35 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(expectedMetrics.confusionMatrix ~== ovaMetrics.confusionMatrix absTol 400)
   }
 
-  test("one-vs-rest: tuning parallelism produces correct output") {
+  test("one-vs-rest: tuning parallelism does not change output") {
     val numClasses = 3
-    val ova = new OneVsRest()
+    val ovaPar2 = new OneVsRest()
       .setClassifier(new LogisticRegression)
-      .setParallelism(8)
-    assert(ova.getLabelCol === "label")
-    assert(ova.getPredictionCol === "prediction")
-    val ovaModel = ova.fit(dataset)
+      .setParallelism(2)
 
-    MLTestingUtils.checkCopyAndUids(ova, ovaModel)
+    val ovaModelPar2 = ovaPar2.fit(dataset)
 
-    assert(ovaModel.models.length === numClasses)
-    val transformedDataset = ovaModel.transform(dataset)
+    val transformedDatasetPar2 = ovaModelPar2.transform(dataset)
 
-    // check for label metadata in prediction col
-    val predictionColSchema = transformedDataset.schema(ovaModel.getPredictionCol)
-    assert(MetadataUtils.getNumClasses(predictionColSchema) === Some(3))
-
-    val ovaResults = transformedDataset.select("prediction", "label").rdd.map {
+    val ovaResultsPar2 = transformedDatasetPar2.select("prediction", "label").rdd.map {
       row => (row.getDouble(0), row.getDouble(1))
     }
 
-    val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(numClasses)
-    lr.optimizer.setRegParam(0.1).setNumIterations(100)
+    val ovaPar4 = new OneVsRest()
+      .setClassifier(new LogisticRegression)
+      .setParallelism(4)
 
-    val model = lr.run(rdd.map(OldLabeledPoint.fromML))
-    val results = model.predict(rdd.map(p => OldVectors.fromML(p.features))).zip(rdd.map(_.label))
-    // determine the #confusion matrix in each class.
-    // bound how much error we allow compared to multinomial logistic regression.
-    val expectedMetrics = new MulticlassMetrics(results)
-    val ovaMetrics = new MulticlassMetrics(ovaResults)
-    assert(expectedMetrics.confusionMatrix ~== ovaMetrics.confusionMatrix absTol 400)
+    val ovaModelPar4 = ovaPar4.fit(dataset)
+
+    val transformedDatasetPar4 = ovaModelPar4.transform(dataset)
+
+    val ovaResultsPar4 = transformedDatasetPar4.select("prediction", "label").rdd.map {
+      row => (row.getDouble(0), row.getDouble(1))
+    }
+
+    val metricsPar2 = new MulticlassMetrics(ovaResultsPar2)
+    val metricsPar4 = new MulticlassMetrics(ovaResultsPar4)
+    assert(metricsPar2.confusionMatrix ~== metricsPar4.confusionMatrix absTol 400)
   }
 
   test("one-vs-rest: pass label metadata correctly during train") {

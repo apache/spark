@@ -1234,33 +1234,16 @@ class OneVsRestTests(SparkSessionTestCase):
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
 
-
-class ParOneVsRestTests(SparkSessionTestCase):
-
-    def test_copy(self):
+    def test_parallelism_doesnt_change_output(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))],
                                         ["label", "features"])
-        lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr, parallelism=8)
-        ovr1 = ovr.copy({lr.maxIter: 10})
-        self.assertEqual(ovr.getClassifier().getMaxIter(), 5)
-        self.assertEqual(ovr1.getClassifier().getMaxIter(), 10)
-        model = ovr.fit(df)
-        model1 = model.copy({model.predictionCol: "indexed"})
-        self.assertEqual(model1.getPredictionCol(), "indexed")
-
-    def test_output_columns(self):
-        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
-                                         (1.0, Vectors.sparse(2, [], [])),
-                                         (2.0, Vectors.dense(0.5, 0.5))],
-                                        ["label", "features"])
-        lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr, parallelism=8)
-        model = ovr.fit(df)
-        output = model.transform(df)
-        self.assertEqual(output.columns, ["label", "features", "prediction"])
+        ovrPar2 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=2)
+        modelPar2 = ovrPar2.fit(df)
+        ovrPar4 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=4)
+        modelPar4 = ovrPar4.fit(df)
+        self.assertEqual(modelPar2.getPredictionCol(), modelPar4.getPredictionCol())
 
 
 class HashingTFTest(SparkSessionTestCase):

@@ -67,12 +67,6 @@ private[ml] trait OneVsRestParams extends PredictorParams with ClassifierTypeTra
 
   /** @group getParam */
   def getClassifier: ClassifierType = $(classifier)
-
-  val parallelism = new IntParam(this, "parallelism",
-    "parallelism parameter for tuning amount of parallelism", ParamValidators.gtEq(1))
-
-  /** @group getParam */
-  def getParallelism: Int = $(parallelism)
 }
 
 private[ml] object OneVsRestParams extends ClassifierTypeTrait {
@@ -281,12 +275,25 @@ final class OneVsRest @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends Estimator[OneVsRestModel] with OneVsRestParams with MLWritable {
 
+  /**
+   * param for the number of processes to use when running parallel one vs. rest
+   * The implementation of parallel one vs. rest runs the classification for
+   * each class in a separate process.
+   * @group param
+   */
+  @Since("2.3.0")
+  val parallelism = new IntParam(this, "parallelism",
+    "the number of processes to use when running parallel one vs. rest", ParamValidators.gtEq(1))
+
   setDefault(
     parallelism -> 4
   )
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("oneVsRest"))
+
+  /** @group getParam */
+  def getParallelism: Int = $(parallelism)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -295,7 +302,7 @@ final class OneVsRest @Since("1.4.0") (
   }
 
   /** @group setParam */
-  @Since("1.4.0")
+  @Since("2.3.0")
   def setParallelism(value: Int): this.type = {
     set(parallelism, value)
   }
@@ -345,7 +352,7 @@ final class OneVsRest @Since("1.4.0") (
 
     val iters = Range(0, numClasses).par
     iters.tasksupport = new ForkJoinTaskSupport(
-      new ForkJoinPool(getParallelism)
+      new ForkJoinPool(Math.min(getParallelism, numClasses))
     )
 
     // create k columns, one for each binary classifier.
