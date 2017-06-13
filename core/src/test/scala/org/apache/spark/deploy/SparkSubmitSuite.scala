@@ -505,8 +505,8 @@ class SparkSubmitSuite
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    val rScriptDir =
-      Seq(sparkHome, "R", "pkg", "inst", "tests", "packageInAJarTest.R").mkString(File.separator)
+    val rScriptDir = Seq(
+      sparkHome, "R", "pkg", "tests", "fulltests", "packageInAJarTest.R").mkString(File.separator)
     assert(new File(rScriptDir).exists)
     IvyTestUtils.withRepository(main, None, None, withR = true) { repo =>
       val args = Seq(
@@ -527,7 +527,7 @@ class SparkSubmitSuite
     // Check if the SparkR package is installed
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
     val rScriptDir =
-      Seq(sparkHome, "R", "pkg", "inst", "tests", "testthat", "jarTest.R").mkString(File.separator)
+      Seq(sparkHome, "R", "pkg", "tests", "fulltests", "jarTest.R").mkString(File.separator)
     assert(new File(rScriptDir).exists)
 
     // compile a small jar containing a class that will be called from R code.
