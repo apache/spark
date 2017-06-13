@@ -2055,6 +2055,11 @@ You can access them by doing
   </td>
 </tr>
 <tr>
+  <td> <b>CalendarIntervalType</b> </td>
+  <td> org.apache.spark.unsafe.types.CalendarInterval </td>
+  <td>CalendarIntervalType</td>
+</tr>
+<tr>
   <td> <b>ArrayType</b> </td>
   <td> scala.collection.Seq </td>
   <td>
@@ -2188,6 +2193,11 @@ please use factory methods provided in
   <td>
   DataTypes.DateType
   </td>
+</tr>
+<tr>
+  <td> <b>CalendarIntervalType</b> </td>
+  <td> org.apache.spark.unsafe.types.CalendarInterval </td>
+  <td>DataTypes.CalendarIntervalType</td>
 </tr>
 <tr>
   <td> <b>ArrayType</b> </td>
@@ -2344,6 +2354,11 @@ from pyspark.sql.types import *
   </td>
 </tr>
 <tr>
+  <td> <b>CalendarIntervalType</b> </td>
+  <td> Not supported </td>
+  <td> Not supported </td>
+</tr>
+<tr>
   <td> <b>ArrayType</b> </td>
   <td> list, tuple, or array </td>
   <td>
@@ -2489,6 +2504,11 @@ from pyspark.sql.types import *
   <td>
   "date"
   </td>
+</tr>
+<tr>
+  <td> <b>CalendarIntervalType</b> </td>
+  <td> Not supported </td>
+  <td> Not supported </td>
 </tr>
 <tr>
   <td> <b>ArrayType</b> </td>
