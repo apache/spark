@@ -45,7 +45,8 @@ private[spark] class ZippedPartitionsPartition(
 private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
     sc: SparkContext,
     var rdds: Seq[RDD[_]],
-    preservesPartitioning: Boolean = false)
+    preservesPartitioning: Boolean = false,
+    useFirstParentPreferredLocations: Boolean = false)
   extends RDD[V](sc, rdds.map(x => new OneToOneDependency(x))) {
 
   override val partitioner =
@@ -58,10 +59,18 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
         s"Can't zip RDDs with unequal numbers of partitions: ${rdds.map(_.partitions.length)}")
     }
     Array.tabulate[Partition](numParts) { i =>
-      val prefs = rdds.map(rdd => rdd.preferredLocations(rdd.partitions(i)))
-      // Check whether there are any hosts that match all RDDs; otherwise return the union
-      val exactMatchLocations = prefs.reduce((x, y) => x.intersect(y))
-      val locs = if (!exactMatchLocations.isEmpty) exactMatchLocations else prefs.flatten.distinct
+      var locs: Seq[String] = Nil
+      if (useFirstParentPreferredLocations) {
+        locs = rdds(0).preferredLocations(rdds(0).partitions(i))
+      }
+      if (locs.isEmpty) {
+        // if we do not specify the preferredLocationRDD, or the specified preferredLocationRDD
+        // preferred location is `Nil`, we use default location strategy.
+        val prefs = rdds.map(rdd => rdd.preferredLocations(rdd.partitions(i)))
+        // Check whether there are any hosts that match all RDDs; otherwise return the union
+        val exactMatchLocations = prefs.reduce((x, y) => x.intersect(y))
+        locs = if (!exactMatchLocations.isEmpty) exactMatchLocations else prefs.flatten.distinct
+      }
       new ZippedPartitionsPartition(i, rdds, locs)
     }
   }
@@ -81,8 +90,10 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
     var f: (Iterator[A], Iterator[B]) => Iterator[V],
     var rdd1: RDD[A],
     var rdd2: RDD[B],
-    preservesPartitioning: Boolean = false)
-  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2), preservesPartitioning) {
+    preservesPartitioning: Boolean = false,
+    useFirstParentPreferredLocations: Boolean = false)
+  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2), preservesPartitioning,
+    useFirstParentPreferredLocations) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
@@ -104,8 +115,10 @@ private[spark] class ZippedPartitionsRDD3
     var rdd1: RDD[A],
     var rdd2: RDD[B],
     var rdd3: RDD[C],
-    preservesPartitioning: Boolean = false)
-  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3), preservesPartitioning) {
+    preservesPartitioning: Boolean = false,
+    useFirstParentPreferredLocations: Boolean = false)
+  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3), preservesPartitioning,
+    useFirstParentPreferredLocations) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
@@ -131,8 +144,10 @@ private[spark] class ZippedPartitionsRDD4
     var rdd2: RDD[B],
     var rdd3: RDD[C],
     var rdd4: RDD[D],
-    preservesPartitioning: Boolean = false)
-  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3, rdd4), preservesPartitioning) {
+    preservesPartitioning: Boolean = false,
+    useFirstParentPreferredLocations: Boolean = false)
+  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3, rdd4), preservesPartitioning,
+    useFirstParentPreferredLocations) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
