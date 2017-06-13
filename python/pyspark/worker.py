@@ -178,7 +178,7 @@ def main(infile, outfile):
     except Exception:
         try:
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(traceback.format_exc().encode("utf-8"), outfile)
+            write_with_length(traceback.format_exc(), outfile)
         except IOError:
             # JVM close the socket
             pass
