@@ -46,9 +46,9 @@ import org.apache.spark.util.Utils
  * @tparam T The type of the element of RDD to be broadcasted.
  * @tparam U The type of object transformed from the collection of elements of the RDD.
  *
- @ @param rdd The RDD to be broadcasted on executors.
- * @param mode The [[BroadcastMode]] object used to transform the result of RDD to the object which
- *             will be stored in the [[BlockManager]].
+ * @param rdd The RDD to be broadcasted on executors.
+ * @param mode The [[org.apache.spark.broadcast.BroadcastMode]] object used to transform the result
+ *             of RDD to the object which will be stored in block manager.
  * @param id A unique identifier for the broadcast variable.
  */
 private[spark] class TorrentExecutorBroadcast[T: ClassTag, U: ClassTag](
