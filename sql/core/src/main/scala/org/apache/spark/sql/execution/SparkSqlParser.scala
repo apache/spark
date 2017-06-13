@@ -82,7 +82,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Example SQL :
    * {{{
    *   RESET;
-   *   RESET `special#$!`;
+   *   RESET key;
    * }}}
    */
   override def visitResetConfiguration(
