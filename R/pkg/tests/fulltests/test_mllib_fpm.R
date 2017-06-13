@@ -44,7 +44,8 @@ test_that("spark.fpGrowth", {
   expected_association_rules <- data.frame(
     antecedent = I(list(list("2"), list("3"))),
     consequent = I(list(list("1"), list("1"))),
-    confidence = c(1, 1)
+    confidence = c(1, 1),
+    support = c(0.75, 0.5)
   )
 
   expect_equivalent(expected_association_rules, collect(spark.associationRules(model)))

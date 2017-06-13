@@ -186,29 +186,29 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
     |[z]                     |
     |[x, z, y, r, q, t, p]   |
     +------------------------+
-    >>> fp = FPGrowth(minSupport=0.2, minConfidence=0.7)
+    >>> fp = FPGrowth(minSupport=0.4, minConfidence=0.7)
     >>> fpm = fp.fit(data)
     >>> fpm.freqItemsets.show(5)
-    +---------+----+
-    |    items|freq|
-    +---------+----+
-    |      [s]|   3|
-    |   [s, x]|   3|
-    |[s, x, z]|   2|
-    |   [s, z]|   2|
-    |      [r]|   3|
-    +---------+----+
+    +------+----+
+    | items|freq|
+    +------+----+
+    |   [s]|   3|
+    |[s, x]|   3|
+    |   [r]|   3|
+    |   [y]|   3|
+    |[y, x]|   3|
+    +------+----+
     only showing top 5 rows
     >>> fpm.associationRules.show(5)
-    +----------+----------+----------+
-    |antecedent|consequent|confidence|
-    +----------+----------+----------+
-    |    [t, s]|       [y]|       1.0|
-    |    [t, s]|       [x]|       1.0|
-    |    [t, s]|       [z]|       1.0|
-    |       [p]|       [r]|       1.0|
-    |       [p]|       [z]|       1.0|
-    +----------+----------+----------+
+    +----------+----------+----------+-------+
+    |antecedent|consequent|confidence|support|
+    +----------+----------+----------+-------+
+    |       [t]|       [y]|       1.0|    0.5|
+    |       [t]|       [x]|       1.0|    0.5|
+    |       [t]|       [z]|       1.0|    0.5|
+    | [y, t, x]|       [z]|       1.0|    0.5|
+    |       [x]|       [s]|      0.75|    0.5|
+    +----------+----------+----------+-------+
     only showing top 5 rows
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().prediction)
