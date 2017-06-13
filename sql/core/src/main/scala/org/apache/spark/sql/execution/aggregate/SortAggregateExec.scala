@@ -22,9 +22,11 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 /**
@@ -38,11 +40,7 @@ case class SortAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode {
-
-  private[this] val aggregateBufferAttributes = {
-    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-  }
+  extends AggregateExec with CodegenSupport with AggregateCodegenHelper {
 
   override def producedAttributes: AttributeSet =
     AttributeSet(aggregateAttributes) ++
@@ -50,7 +48,8 @@ case class SortAggregateExec(
       AttributeSet(aggregateBufferAttributes)
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -104,6 +103,126 @@ case class SortAggregateExec(
         }
       }
     }
+  }
+
+  override def supportCodegen: Boolean = {
+    val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
+    aggregationBufferSchema.forall(f => UnsafeRow.isMutable(f.dataType)) &&
+      // ImperativeAggregate is not supported right now
+      !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  override protected def doProduce(ctx: CodegenContext): String = {
+    if (groupingExpressions.isEmpty) {
+      doProduceWithoutKeys(ctx)
+    } else {
+      doProduceWithKeys(ctx)
+    }
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    if (groupingExpressions.isEmpty) {
+      doConsumeWithoutKeys(ctx, input)
+    } else {
+      doConsumeWithKeys(ctx, input)
+    }
+  }
+
+  private def doProduceWithoutKeys(ctx: CodegenContext): String = {
+    generateBufVarsEvalCode(ctx)
+  }
+
+  private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    generateBufVarsUpdateCode(ctx, input)
+  }
+
+  // The grouping keys of a current partition
+  private var currentGroupingKeyTerm: String = _
+
+  // The output code for a single partition
+  private var outputCode: String = _
+
+  private def generateOutputCode(ctx: CodegenContext): String = {
+    ctx.currentVars = bufVars
+    val bufferEv = GenerateUnsafeProjection.createCode(
+      ctx, aggregateBufferAttributes.map(
+        BindReferences.bindReference[Expression](_, aggregateBufferAttributes)))
+    val sortAggregate = ctx.addReferenceObj("sortAggregate", this)
+    s"""
+       |${bufferEv.code}
+       |${generateResultCode(ctx, currentGroupingKeyTerm, bufferEv.value, sortAggregate)}
+     """.stripMargin
+  }
+
+  private def doProduceWithKeys(ctx: CodegenContext): String = {
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    s"""
+      |${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
+      |
+      |if ($currentGroupingKeyTerm != null) {
+      |  // for the last aggregation
+      |  do {
+      |    $numOutput.add(1);
+      |    $outputCode
+      |    $currentGroupingKeyTerm = null;
+      |
+      |    if (shouldStop()) return;
+      |  } while (false);
+      |}
+    """.stripMargin
+  }
+
+  def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    // Create the grouping keys of a current partition
+    currentGroupingKeyTerm = ctx.freshName("currentGroupingKey")
+    ctx.addMutableState("UnsafeRow", currentGroupingKeyTerm, s"$currentGroupingKeyTerm = null;")
+
+    // Generate buffer-handling code
+    val initBufVarsCodes = generateBufVarsInitCode(ctx)
+    val updateBufVarsCode = generateBufVarsUpdateCode(ctx, input)
+
+    // Create grouping keys for input
+    ctx.currentVars = input
+    val groupingEv = GenerateUnsafeProjection.createCode(
+      ctx, groupingExpressions.map(BindReferences.bindReference[Expression](_, child.output)))
+    val groupingKeys = groupingEv.value
+
+    // Generate code for output
+    outputCode = generateOutputCode(ctx)
+
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    s"""
+      |// generate grouping keys
+      |${groupingEv.code.trim}
+      |
+      |if ($currentGroupingKeyTerm == null) {
+      |  $currentGroupingKeyTerm = $groupingKeys.copy();
+      |  // init aggregation buffer vars
+      |  $initBufVarsCodes
+      |  // do aggregation
+      |  $updateBufVarsCode
+      |} else {
+      |  if ($currentGroupingKeyTerm.equals($groupingKeys)) {
+      |    $updateBufVarsCode
+      |  } else {
+      |    do {
+      |      $numOutput.add(1);
+      |      $outputCode
+      |    } while (false);
+      |
+      |    // init buffer vars for a next partition
+      |    $currentGroupingKeyTerm = $groupingKeys.copy();
+      |    $initBufVarsCodes
+      |    $updateBufVarsCode
+      |
+      |    if (shouldStop()) return;
+      |  }
+      |}
+    """.stripMargin
   }
 
   override def simpleString: String = toString(verbose = false)

@@ -37,6 +37,20 @@ class PlannerSuite extends SharedSQLContext {
 
   setupTestData()
 
+  test("Use sort aggregate if PREFER_SORTAGGREGATE is true") {
+    withSQLConf(SQLConf.PREFER_SORTAGGREGATE.key -> "true") {
+      val planner = spark.sessionState.planner
+      import planner._
+      val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
+      val planned = Aggregation(query).headOption
+      assert(planned.nonEmpty, s"An input query has no aggregation: $query")
+      planned.foreach { planned =>
+        val aggregations = planned.collect { case n if n.nodeName contains "SortAggregate" => n }
+        assert(aggregations.size > 0, "")
+      }
+    }
+  }
+
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val planner = spark.sessionState.planner
     import planner._

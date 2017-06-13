@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -35,10 +34,43 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    val useHash = HashAggregateExec.supportsAggregate(
-      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
-    if (useHash) {
-      HashAggregateExec(
+    val hashAggregateOption = {
+      val preferSortAggregate = child.sqlContext.conf.preferSortAggregate
+      val useHash = HashAggregateExec.supportsAggregate(
+        aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
+      if (preferSortAggregate) {
+        None
+      } else if (useHash) {
+        val agg = HashAggregateExec(
+          requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+          groupingExpressions = groupingExpressions,
+          aggregateExpressions = aggregateExpressions,
+          aggregateAttributes = aggregateAttributes,
+          initialInputBufferOffset = initialInputBufferOffset,
+          resultExpressions = resultExpressions,
+          child = child)
+        Some(agg)
+      } else {
+        val objectHashEnabled = child.sqlContext.conf.useObjectHashAggregation
+        val useObjectHash = ObjectHashAggregateExec.supportsAggregate(aggregateExpressions)
+
+        if (objectHashEnabled && useObjectHash) {
+          val agg = ObjectHashAggregateExec(
+            requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+            groupingExpressions = groupingExpressions,
+            aggregateExpressions = aggregateExpressions,
+            aggregateAttributes = aggregateAttributes,
+            initialInputBufferOffset = initialInputBufferOffset,
+            resultExpressions = resultExpressions,
+            child = child)
+          Some(agg)
+        } else {
+          None
+        }
+      }
+    }
+    hashAggregateOption.getOrElse {
+      SortAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
@@ -46,29 +78,6 @@ object AggUtils {
         initialInputBufferOffset = initialInputBufferOffset,
         resultExpressions = resultExpressions,
         child = child)
-    } else {
-      val objectHashEnabled = child.sqlContext.conf.useObjectHashAggregation
-      val useObjectHash = ObjectHashAggregateExec.supportsAggregate(aggregateExpressions)
-
-      if (objectHashEnabled && useObjectHash) {
-        ObjectHashAggregateExec(
-          requiredChildDistributionExpressions = requiredChildDistributionExpressions,
-          groupingExpressions = groupingExpressions,
-          aggregateExpressions = aggregateExpressions,
-          aggregateAttributes = aggregateAttributes,
-          initialInputBufferOffset = initialInputBufferOffset,
-          resultExpressions = resultExpressions,
-          child = child)
-      } else {
-        SortAggregateExec(
-          requiredChildDistributionExpressions = requiredChildDistributionExpressions,
-          groupingExpressions = groupingExpressions,
-          aggregateExpressions = aggregateExpressions,
-          aggregateAttributes = aggregateAttributes,
-          initialInputBufferOffset = initialInputBufferOffset,
-          resultExpressions = resultExpressions,
-          child = child)
-      }
     }
   }
 
