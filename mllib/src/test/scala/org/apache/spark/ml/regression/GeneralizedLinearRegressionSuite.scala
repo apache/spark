@@ -197,8 +197,7 @@ class GeneralizedLinearRegressionSuite
     val model = glr.setFamily("gaussian").setLink("identity")
       .fit(datasetGaussianIdentity)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(glr, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
@@ -739,6 +738,61 @@ class GeneralizedLinearRegressionSuite
                 s"and variancePower = $variancePower.")
           }
         idx += 1
+      }
+    }
+  }
+
+  test("generalized linear regression: intercept only") {
+    /*
+      R code:
+
+      library(statmod)
+      y <- c(1.0, 0.5, 0.7, 0.3)
+      w <- c(1, 2, 3, 4)
+      for (fam in list(gaussian(), poisson(), binomial(), Gamma(), tweedie(1.6))) {
+        model1 <- glm(y ~ 1, family = fam)
+        model2 <- glm(y ~ 1, family = fam, weights = w)
+        print(as.vector(c(coef(model1), coef(model2))))
+      }
+      [1] 0.625 0.530
+      [1] -0.4700036 -0.6348783
+      [1] 0.5108256 0.1201443
+      [1] 1.600000 1.886792
+      [1] 1.325782 1.463641
+     */
+
+    val dataset = Seq(
+      Instance(1.0, 1.0, Vectors.zeros(0)),
+      Instance(0.5, 2.0, Vectors.zeros(0)),
+      Instance(0.7, 3.0, Vectors.zeros(0)),
+      Instance(0.3, 4.0, Vectors.zeros(0))
+    ).toDF()
+
+    val expected = Seq(0.625, 0.530, -0.4700036, -0.6348783, 0.5108256, 0.1201443,
+      1.600000, 1.886792, 1.325782, 1.463641)
+
+    import GeneralizedLinearRegression._
+
+    var idx = 0
+    for (family <- Seq("gaussian", "poisson", "binomial", "gamma", "tweedie")) {
+      for (useWeight <- Seq(false, true)) {
+        val trainer = new GeneralizedLinearRegression().setFamily(family)
+        if (useWeight) trainer.setWeightCol("weight")
+        if (family == "tweedie") trainer.setVariancePower(1.6)
+        val model = trainer.fit(dataset)
+        val actual = model.intercept
+        assert(actual ~== expected(idx) absTol 1E-3, "Model mismatch: intercept only GLM with " +
+          s"useWeight = $useWeight and family = $family.")
+        assert(model.coefficients === new DenseVector(Array.empty[Double]))
+        idx += 1
+      }
+    }
+
+    // throw exception for empty model
+    val trainer = new GeneralizedLinearRegression().setFitIntercept(false)
+    withClue("Specified model is empty with neither intercept nor feature") {
+      intercept[IllegalArgumentException] {
+        trainer.fit(dataset)
       }
     }
   }
@@ -1363,6 +1417,7 @@ class GeneralizedLinearRegressionSuite
 
     val glr = new GeneralizedLinearRegression()
     testEstimatorAndModelReadWrite(glr, datasetPoissonLog,
+      GeneralizedLinearRegressionSuite.allParamSettings,
       GeneralizedLinearRegressionSuite.allParamSettings, checkModelData)
   }
 

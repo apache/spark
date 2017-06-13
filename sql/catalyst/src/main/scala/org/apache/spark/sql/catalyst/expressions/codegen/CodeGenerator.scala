@@ -23,14 +23,18 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
-import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
+import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
+import org.apache.commons.lang3.exception.ExceptionUtils
+import org.codehaus.commons.compiler.CompileException
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, JaninoRuntimeException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
-import scala.language.existentials
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
+import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
@@ -555,7 +559,6 @@ class CodegenContext {
       addNewFunction(compareFunc, funcCode)
       s"this.$compareFunc($c1, $c2)"
     case schema: StructType =>
-      INPUT_ROW = "i"
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
       val funcCode: String =
@@ -566,7 +569,6 @@ class CodegenContext {
             if (a instanceof UnsafeRow && b instanceof UnsafeRow && a.equals(b)) {
               return 0;
             }
-            InternalRow i = null;
             $comparisons
             return 0;
           }
@@ -798,7 +800,7 @@ class CodegenContext {
 
   /**
    * Generates code for expressions. If doSubexpressionElimination is true, subexpression
-   * elimination will be performed. Subexpression elimination assumes that the code will for each
+   * elimination will be performed. Subexpression elimination assumes that the code for each
    * expression will be combined in the `expressions` order.
    */
   def generateExpressions(expressions: Seq[Expression],
@@ -900,8 +902,14 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  def compile(code: CodeAndComment): GeneratedClass = {
+  def compile(code: CodeAndComment): GeneratedClass = try {
     cache.get(code)
+  } catch {
+    // Cache.get() may wrap the original exception. See the following URL
+    // http://google.github.io/guava/releases/14.0/api/docs/com/google/common/cache/
+    //   Cache.html#get(K,%20java.util.concurrent.Callable)
+    case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
+      throw e.getCause
   }
 
   /**
@@ -933,7 +941,10 @@ object CodeGenerator extends Logging {
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
       classOf[UnsafeMapData].getName,
-      classOf[Expression].getName
+      classOf[Expression].getName,
+      classOf[TaskContext].getName,
+      classOf[TaskKilledException].getName,
+      classOf[InputMetrics].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
@@ -949,10 +960,14 @@ object CodeGenerator extends Logging {
       evaluator.cook("generated.java", code.body)
       recordCompilationStats(evaluator)
     } catch {
-      case e: Exception =>
+      case e: JaninoRuntimeException =>
         val msg = s"failed to compile: $e\n$formatted"
         logError(msg, e)
-        throw new Exception(msg, e)
+        throw new JaninoRuntimeException(msg, e)
+      case e: CompileException =>
+        val msg = s"failed to compile: $e\n$formatted"
+        logError(msg, e)
+        throw new CompileException(msg, e.getLocation)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
   }

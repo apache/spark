@@ -65,8 +65,8 @@ object PhysicalOperation extends PredicateHelper {
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
 
-      case BroadcastHint(child) =>
-        collectProjectsAndFilters(child)
+      case h: ResolvedHint =>
+        collectProjectsAndFilters(h.child)
 
       case other =>
         (None, Nil, other, Map.empty)
@@ -167,8 +167,8 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
     case Join(left, right, joinType: InnerLike, cond) =>
       val (plans, conditions) = flattenJoin(left, joinType)
-      (plans ++ Seq((right, joinType)), conditions ++ cond.toSeq)
-
+      (plans ++ Seq((right, joinType)), conditions ++
+        cond.toSeq.flatMap(splitConjunctivePredicates))
     case Filter(filterCondition, j @ Join(left, right, _: InnerLike, joinCondition)) =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))

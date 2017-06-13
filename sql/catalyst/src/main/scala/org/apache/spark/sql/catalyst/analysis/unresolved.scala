@@ -36,10 +36,20 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
+ * We could add alias names for columns in a relation:
+ * {{{
+ *   // Assign alias names
+ *   SELECT col1, col2 FROM testData AS t(col1, col2);
+ * }}}
+ *
+ * @param tableIdentifier table name
+ * @param outputColumnNames alias names of columns. If these names given, an analyzer adds
+ *                          [[Project]] to rename the columns.
  */
 case class UnresolvedRelation(
     tableIdentifier: TableIdentifier,
-    alias: Option[String] = None) extends LeafNode {
+    outputColumnNames: Seq[String] = Seq.empty)
+  extends LeafNode {
 
   /** Returns a `.` separated name for this relation. */
   def tableName: String = tableIdentifier.unquotedString
@@ -69,10 +79,21 @@ case class UnresolvedInlineTable(
 /**
  * A table-valued function, e.g.
  * {{{
- *   select * from range(10);
+ *   select id from range(10);
+ *
+ *   // Assign alias names
+ *   select t.a from range(10) t(a);
  * }}}
+ *
+ * @param functionName name of this table-value function
+ * @param functionArgs list of function arguments
+ * @param outputNames alias names of function output columns. If these names given, an analyzer
+ *                    adds [[Project]] to rename the output columns.
  */
-case class UnresolvedTableValuedFunction(functionName: String, functionArgs: Seq[Expression])
+case class UnresolvedTableValuedFunction(
+    functionName: String,
+    functionArgs: Seq[Expression],
+    outputNames: Seq[String])
   extends LeafNode {
 
   override def output: Seq[Attribute] = Nil

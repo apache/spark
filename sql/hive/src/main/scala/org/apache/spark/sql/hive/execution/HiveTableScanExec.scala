@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
+import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
@@ -29,10 +30,13 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.hive._
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.types.{BooleanType, DataType}
 import org.apache.spark.util.Utils
 
@@ -46,12 +50,12 @@ import org.apache.spark.util.Utils
 private[hive]
 case class HiveTableScanExec(
     requestedAttributes: Seq[Attribute],
-    relation: MetastoreRelation,
+    relation: CatalogRelation,
     partitionPruningPred: Seq[Expression])(
     @transient private val sparkSession: SparkSession)
   extends LeafExecNode {
 
-  require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
+  require(partitionPruningPred.isEmpty || relation.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
 
   override lazy val metrics = Map(
@@ -60,42 +64,56 @@ case class HiveTableScanExec(
   override def producedAttributes: AttributeSet = outputSet ++
     AttributeSet(partitionPruningPred.flatMap(_.references))
 
-  // Retrieve the original attributes based on expression ID so that capitalization matches.
-  val attributes = requestedAttributes.map(relation.attributeMap)
+  private val originalAttributes = AttributeMap(relation.output.map(a => a -> a))
+
+  override val output: Seq[Attribute] = {
+    // Retrieve the original attributes based on expression ID so that capitalization matches.
+    requestedAttributes.map(originalAttributes)
+  }
 
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
-  private[this] val boundPruningPred = partitionPruningPred.reduceLeftOption(And).map { pred =>
+  private lazy val boundPruningPred = partitionPruningPred.reduceLeftOption(And).map { pred =>
     require(
       pred.dataType == BooleanType,
       s"Data type of predicate $pred must be BooleanType rather than ${pred.dataType}.")
 
-    BindReferences.bindReference(pred, relation.partitionKeys)
+    BindReferences.bindReference(pred, relation.partitionCols)
   }
+
+  @transient private lazy val hiveQlTable = HiveClientImpl.toHiveTable(relation.tableMeta)
+  @transient private lazy val tableDesc = new TableDesc(
+    hiveQlTable.getInputFormatClass,
+    hiveQlTable.getOutputFormatClass,
+    hiveQlTable.getMetadata)
 
   // Create a local copy of hadoopConf,so that scan specific modifications should not impact
   // other queries
-  @transient
-  private[this] val hadoopConf = sparkSession.sessionState.newHadoopConf()
+  @transient private lazy val hadoopConf = {
+    val c = sparkSession.sessionState.newHadoopConf()
+    // append columns ids and names before broadcast
+    addColumnMetadataToConf(c)
+    c
+  }
 
-  // append columns ids and names before broadcast
-  addColumnMetadataToConf(hadoopConf)
+  @transient private lazy val hadoopReader = new HadoopTableReader(
+    output,
+    relation.partitionCols,
+    tableDesc,
+    sparkSession,
+    hadoopConf)
 
-  @transient
-  private[this] val hadoopReader =
-    new HadoopTableReader(attributes, relation, sparkSession, hadoopConf)
-
-  private[this] def castFromString(value: String, dataType: DataType) = {
+  private def castFromString(value: String, dataType: DataType) = {
     Cast(Literal(value), dataType).eval(null)
   }
 
-  private def addColumnMetadataToConf(hiveConf: Configuration) {
+  private def addColumnMetadataToConf(hiveConf: Configuration): Unit = {
     // Specifies needed column IDs for those non-partitioning columns.
-    val neededColumnIDs = attributes.flatMap(relation.columnOrdinals.get).map(o => o: Integer)
+    val columnOrdinals = AttributeMap(relation.dataCols.zipWithIndex)
+    val neededColumnIDs = output.flatMap(columnOrdinals.get).map(o => o: Integer)
 
-    HiveShim.appendReadColumns(hiveConf, neededColumnIDs, attributes.map(_.name))
+    HiveShim.appendReadColumns(hiveConf, neededColumnIDs, output.map(_.name))
 
-    val tableDesc = relation.tableDesc
     val deserializer = tableDesc.getDeserializerClass.newInstance
     deserializer.initialize(hiveConf, tableDesc.getProperties)
 
@@ -113,7 +131,7 @@ case class HiveTableScanExec(
       .mkString(",")
 
     hiveConf.set(serdeConstants.LIST_COLUMN_TYPES, columnTypeNames)
-    hiveConf.set(serdeConstants.LIST_COLUMNS, relation.attributes.map(_.name).mkString(","))
+    hiveConf.set(serdeConstants.LIST_COLUMNS, relation.dataCols.map(_.name).mkString(","))
   }
 
   /**
@@ -126,7 +144,7 @@ case class HiveTableScanExec(
     boundPruningPred match {
       case None => partitions
       case Some(shouldKeep) => partitions.filter { part =>
-        val dataTypes = relation.partitionKeys.map(_.dataType)
+        val dataTypes = relation.partitionCols.map(_.dataType)
         val castedValues = part.getValues.asScala.zip(dataTypes)
           .map { case (value, dataType) => castFromString(value, dataType) }
 
@@ -138,27 +156,36 @@ case class HiveTableScanExec(
     }
   }
 
+  // exposed for tests
+  @transient lazy val rawPartitions = {
+    val prunedPartitions = if (sparkSession.sessionState.conf.metastorePartitionPruning) {
+      // Retrieve the original attributes based on expression ID so that capitalization matches.
+      val normalizedFilters = partitionPruningPred.map(_.transform {
+        case a: AttributeReference => originalAttributes(a)
+      })
+      sparkSession.sharedState.externalCatalog.listPartitionsByFilter(
+        relation.tableMeta.database,
+        relation.tableMeta.identifier.table,
+        normalizedFilters,
+        sparkSession.sessionState.conf.sessionLocalTimeZone)
+    } else {
+      sparkSession.sharedState.externalCatalog.listPartitions(
+        relation.tableMeta.database,
+        relation.tableMeta.identifier.table)
+    }
+    prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // with multiple partitions.
-    val rdd = if (!relation.hiveQlTable.isPartitioned) {
+    val rdd = if (!relation.isPartitioned) {
       Utils.withDummyCallSite(sqlContext.sparkContext) {
-        hadoopReader.makeRDDForTable(relation.hiveQlTable)
+        hadoopReader.makeRDDForTable(hiveQlTable)
       }
     } else {
-      // The attribute name of predicate could be different than the one in schema in case of
-      // case insensitive, we should change them to match the one in schema, so we do not need to
-      // worry about case sensitivity anymore.
-      val normalizedFilters = partitionPruningPred.map { e =>
-        e transform {
-          case a: AttributeReference =>
-            a.withName(relation.output.find(_.semanticEquals(a)).get.name)
-        }
-      }
-
       Utils.withDummyCallSite(sqlContext.sparkContext) {
-        hadoopReader.makeRDDForPartitionedTable(
-          prunePartitions(relation.getHiveQlPartitions(normalizedFilters)))
+        hadoopReader.makeRDDForPartitionedTable(prunePartitions(rawPartitions))
       }
     }
     val numOutputRows = longMetric("numOutputRows")
@@ -174,20 +201,13 @@ case class HiveTableScanExec(
     }
   }
 
-  override def output: Seq[Attribute] = attributes
-
-  override def sameResult(plan: SparkPlan): Boolean = plan match {
-    case other: HiveTableScanExec =>
-      val thisPredicates = partitionPruningPred.map(cleanExpression)
-      val otherPredicates = other.partitionPruningPred.map(cleanExpression)
-
-      val result = relation.sameResult(other.relation) &&
-        output.length == other.output.length &&
-          output.zip(other.output)
-            .forall(p => p._1.name == p._2.name && p._1.dataType == p._2.dataType) &&
-              thisPredicates.length == otherPredicates.length &&
-                thisPredicates.zip(otherPredicates).forall(p => p._1.semanticEquals(p._2))
-      result
-    case _ => false
+  override lazy val canonicalized: HiveTableScanExec = {
+    val input: AttributeSeq = relation.output
+    HiveTableScanExec(
+      requestedAttributes.map(QueryPlan.normalizeExprId(_, input)),
+      relation.canonicalized.asInstanceOf[CatalogRelation],
+      QueryPlan.normalizePredicates(partitionPruningPred, input))(sparkSession)
   }
+
+  override def otherCopyArgs: Seq[AnyRef] = Seq(sparkSession)
 }

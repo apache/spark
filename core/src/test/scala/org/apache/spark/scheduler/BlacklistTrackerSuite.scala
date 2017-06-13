@@ -17,7 +17,10 @@
 
 package org.apache.spark.scheduler
 
-import org.mockito.Mockito.{verify, when}
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{never, verify, when}
+import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mock.MockitoSugar
 
@@ -43,7 +46,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     clock.setTime(0)
 
     listenerBusMock = mock[LiveListenerBus]
-    blacklist = new BlacklistTracker(listenerBusMock, conf, clock)
+    blacklist = new BlacklistTracker(listenerBusMock, conf, None, clock)
   }
 
   override def afterEach(): Unit = {
@@ -83,7 +86,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     sc = new SparkContext(conf)
     val scheduler = mock[TaskSchedulerImpl]
     when(scheduler.sc).thenReturn(sc)
-    when(scheduler.mapOutputTracker).thenReturn(SparkEnv.get.mapOutputTracker)
+    when(scheduler.mapOutputTracker).thenReturn(
+      SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster])
     scheduler
   }
 
@@ -272,12 +276,14 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // if task failures are spaced out by more than the timeout period, the first failure is timed
     // out, and the executor isn't blacklisted.
     var stageId = 0
+
     def failOneTaskInTaskSet(exec: String): Unit = {
       val taskSetBlacklist = createTaskSetBlacklist(stageId = stageId)
       taskSetBlacklist.updateBlacklistForFailedTask("host-" + exec, exec, 0)
       blacklist.updateBlacklistForSuccessfulTaskSet(stageId, 0, taskSetBlacklist.execToFailures)
       stageId += 1
     }
+
     failOneTaskInTaskSet(exec = "1")
     // We have one sporadic failure on exec 2, but that's it.  Later checks ensure that we never
     // blacklist executor 2 despite this one failure.
@@ -411,7 +417,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // if you explicitly set the legacy conf to 0, that also would disable blacklisting
     conf.set(config.BLACKLIST_LEGACY_TIMEOUT_CONF, 0L)
     assert(!BlacklistTracker.isBlacklistEnabled(conf))
-    // but again, the new conf takes precendence
+    // but again, the new conf takes precedence
     conf.set(config.BLACKLIST_ENABLED, true)
     assert(BlacklistTracker.isBlacklistEnabled(conf))
     assert(1000 === BlacklistTracker.getBlacklistTimeout(conf))
@@ -455,5 +461,73 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       assert(excMsg.contains(s"${config.key} was 0, but must be > 0."))
       conf.remove(config)
     }
+  }
+
+  test("blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
+    val allocationClientMock = mock[ExecutorAllocationClient]
+    when(allocationClientMock.killExecutors(any(), any(), any())).thenReturn(Seq("called"))
+    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
+      // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
+      // is updated before we ask the executor allocation client to kill all the executors
+      // on a particular host.
+      override def answer(invocation: InvocationOnMock): Boolean = {
+        if (blacklist.nodeBlacklist.contains("hostA") == false) {
+          throw new IllegalStateException("hostA should be on the blacklist")
+        }
+        true
+      }
+    })
+    blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
+
+    // Disable auto-kill. Blacklist an executor and make sure killExecutors is not called.
+    conf.set(config.BLACKLIST_KILL_ENABLED, false)
+
+    val taskSetBlacklist0 = createTaskSetBlacklist(stageId = 0)
+    // Fail 4 tasks in one task set on executor 1, so that executor gets blacklisted for the whole
+    // application.
+    (0 until 4).foreach { partition =>
+      taskSetBlacklist0.updateBlacklistForFailedTask("hostA", exec = "1", index = partition)
+    }
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist0.execToFailures)
+
+    verify(allocationClientMock, never).killExecutor(any())
+
+    val taskSetBlacklist1 = createTaskSetBlacklist(stageId = 1)
+    // Fail 4 tasks in one task set on executor 2, so that executor gets blacklisted for the whole
+    // application.  Since that's the second executor that is blacklisted on the same node, we also
+    // blacklist that node.
+    (0 until 4).foreach { partition =>
+      taskSetBlacklist1.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
+    }
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist1.execToFailures)
+
+    verify(allocationClientMock, never).killExecutors(any(), any(), any())
+    verify(allocationClientMock, never).killExecutorsOnHost(any())
+
+    // Enable auto-kill. Blacklist an executor and make sure killExecutors is called.
+    conf.set(config.BLACKLIST_KILL_ENABLED, true)
+    blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
+
+    val taskSetBlacklist2 = createTaskSetBlacklist(stageId = 0)
+    // Fail 4 tasks in one task set on executor 1, so that executor gets blacklisted for the whole
+    // application.
+    (0 until 4).foreach { partition =>
+      taskSetBlacklist2.updateBlacklistForFailedTask("hostA", exec = "1", index = partition)
+    }
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist2.execToFailures)
+
+    verify(allocationClientMock).killExecutors(Seq("1"), true, true)
+
+    val taskSetBlacklist3 = createTaskSetBlacklist(stageId = 1)
+    // Fail 4 tasks in one task set on executor 2, so that executor gets blacklisted for the whole
+    // application.  Since that's the second executor that is blacklisted on the same node, we also
+    // blacklist that node.
+    (0 until 4).foreach { partition =>
+      taskSetBlacklist3.updateBlacklistForFailedTask("hostA", exec = "2", index = partition)
+    }
+    blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist3.execToFailures)
+
+    verify(allocationClientMock).killExecutors(Seq("2"), true, true)
+    verify(allocationClientMock).killExecutorsOnHost("hostA")
   }
 }

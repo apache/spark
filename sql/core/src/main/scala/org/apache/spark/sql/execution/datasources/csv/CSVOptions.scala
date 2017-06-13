@@ -18,18 +18,29 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
+import org.apache.spark.sql.catalyst.util._
 
-private[csv] class CSVOptions(@transient private val parameters: CaseInsensitiveMap)
+class CSVOptions(
+    @transient private val parameters: CaseInsensitiveMap[String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable {
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(
+    parameters: Map[String, String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String = "") = {
+      this(
+        CaseInsensitiveMap(parameters),
+        defaultTimeZoneId,
+        defaultColumnNameOfCorruptRecord)
+  }
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
@@ -60,18 +71,19 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
     val param = parameters.getOrElse(paramName, default.toString)
     if (param == null) {
       default
-    } else if (param.toLowerCase == "true") {
+    } else if (param.toLowerCase(Locale.ROOT) == "true") {
       true
-    } else if (param.toLowerCase == "false") {
+    } else if (param.toLowerCase(Locale.ROOT) == "false") {
       false
     } else {
       throw new Exception(s"$paramName flag can be true or false")
     }
   }
 
-  val delimiter = CSVTypeCast.toChar(
+  val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
-  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  val parseMode: ParseMode =
+    parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
   val charset = parameters.getOrElse("encoding",
     parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 
@@ -81,17 +93,16 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
 
   val headerFlag = getBool("header")
   val inferSchemaFlag = getBool("inferSchema")
-  val ignoreLeadingWhiteSpaceFlag = getBool("ignoreLeadingWhiteSpace")
-  val ignoreTrailingWhiteSpaceFlag = getBool("ignoreTrailingWhiteSpace")
+  val ignoreLeadingWhiteSpaceInRead = getBool("ignoreLeadingWhiteSpace", default = false)
+  val ignoreTrailingWhiteSpaceInRead = getBool("ignoreTrailingWhiteSpace", default = false)
 
-  // Parse mode flags
-  if (!ParseModes.isValidMode(parseMode)) {
-    logWarning(s"$parseMode is not a valid parse mode. Using ${ParseModes.DEFAULT}.")
-  }
+  // For write, both options were `true` by default. We leave it as `true` for
+  // backwards compatibility.
+  val ignoreLeadingWhiteSpaceFlagInWrite = getBool("ignoreLeadingWhiteSpace", default = true)
+  val ignoreTrailingWhiteSpaceFlagInWrite = getBool("ignoreTrailingWhiteSpace", default = true)
 
-  val failFast = ParseModes.isFailFastMode(parseMode)
-  val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
-  val permissive = ParseModes.isPermissiveMode(parseMode)
+  val columnNameOfCorruptRecord =
+    parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
@@ -106,21 +117,24 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
     name.map(CompressionCodecs.getCodecClassName)
   }
 
+  val timeZone: TimeZone = DateTimeUtils.getTimeZone(
+    parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
+
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =
     FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"), Locale.US)
 
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
-      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), Locale.US)
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), timeZone, Locale.US)
+
+  val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
 
   val maxColumns = getInt("maxColumns", 20480)
 
   val maxCharsPerColumn = getInt("maxCharsPerColumn", -1)
 
   val escapeQuotes = getBool("escapeQuotes", true)
-
-  val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
 
   val quoteAll = getBool("quoteAll", false)
 
@@ -135,6 +149,8 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     format.setComment(comment)
+    writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
+    writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
     writerSettings.setEmptyValue(nullValue)
     writerSettings.setSkipEmptyLines(true)
@@ -150,8 +166,8 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     format.setComment(comment)
-    settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlag)
-    settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlag)
+    settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
+    settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
     settings.setInputBufferSize(inputBufferSize)
     settings.setMaxColumns(maxColumns)
@@ -159,14 +175,5 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
     settings
-  }
-}
-
-object CSVOptions {
-
-  def apply(): CSVOptions = new CSVOptions(new CaseInsensitiveMap(Map.empty))
-
-  def apply(paramName: String, paramValue: String): CSVOptions = {
-    new CSVOptions(Map(paramName -> paramValue))
   }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.{Timer, TimerTask}
+import java.util.{Locale, Timer, TimerTask}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -38,7 +38,7 @@ import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
- * It can also work with a local setup by using a [[LocalSchedulerBackend]] and setting
+ * It can also work with a local setup by using a `LocalSchedulerBackend` and setting
  * isLocal to true. It handles common logic, like determining a scheduling order across jobs, waking
  * up to launch speculative tasks, etc.
  *
@@ -54,10 +54,11 @@ import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 private[spark] class TaskSchedulerImpl private[scheduler](
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    blacklistTrackerOpt: Option[BlacklistTracker],
+    private[scheduler] val blacklistTrackerOpt: Option[BlacklistTracker],
     isLocal: Boolean = false)
-  extends TaskScheduler with Logging
-{
+  extends TaskScheduler with Logging {
+
+  import TaskSchedulerImpl._
 
   def this(sc: SparkContext) = {
     this(
@@ -128,18 +129,20 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   var backend: SchedulerBackend = null
 
-  val mapOutputTracker = SparkEnv.get.mapOutputTracker
+  val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 
-  var schedulableBuilder: SchedulableBuilder = null
-  var rootPool: Pool = null
+  private var schedulableBuilder: SchedulableBuilder = null
   // default scheduler is FIFO
-  private val schedulingModeConf = conf.get("spark.scheduler.mode", "FIFO")
-  val schedulingMode: SchedulingMode = try {
-    SchedulingMode.withName(schedulingModeConf.toUpperCase)
-  } catch {
-    case e: java.util.NoSuchElementException =>
-      throw new SparkException(s"Unrecognized spark.scheduler.mode: $schedulingModeConf")
-  }
+  private val schedulingModeConf = conf.get(SCHEDULER_MODE_PROPERTY, SchedulingMode.FIFO.toString)
+  val schedulingMode: SchedulingMode =
+    try {
+      SchedulingMode.withName(schedulingModeConf.toUpperCase(Locale.ROOT))
+    } catch {
+      case e: java.util.NoSuchElementException =>
+        throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
+    }
+
+  val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
@@ -150,8 +153,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   def initialize(backend: SchedulerBackend) {
     this.backend = backend
-    // temporarily set rootPool name to empty
-    rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
         case SchedulingMode.FIFO =>
@@ -159,7 +160,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
         case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool, conf)
         case _ =>
-          throw new IllegalArgumentException(s"Unsupported spark.scheduler.mode: $schedulingMode")
+          throw new IllegalArgumentException(s"Unsupported $SCHEDULER_MODE_PROPERTY: " +
+          s"$schedulingMode")
       }
     }
     schedulableBuilder.buildPools()
@@ -172,7 +174,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
-      speculationScheduler.scheduleAtFixedRate(new Runnable {
+      speculationScheduler.scheduleWithFixedDelay(new Runnable {
         override def run(): Unit = Utils.tryOrStopSparkContext(sc) {
           checkSpeculatableTasks()
         }
@@ -238,12 +240,24 @@ private[spark] class TaskSchedulerImpl private[scheduler](
         // 2. The task set manager has been created but no tasks has been scheduled. In this case,
         //    simply abort the stage.
         tsm.runningTasksSet.foreach { tid =>
-          val execId = taskIdToExecutorId(tid)
-          backend.killTask(tid, execId, interruptThread)
+            taskIdToExecutorId.get(tid).foreach(execId =>
+              backend.killTask(tid, execId, interruptThread, reason = "Stage cancelled"))
         }
         tsm.abort("Stage %s cancelled".format(stageId))
         logInfo("Stage %d was cancelled".format(stageId))
       }
+    }
+  }
+
+  override def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Boolean = {
+    logInfo(s"Killing task $taskId: $reason")
+    val execId = taskIdToExecutorId.get(taskId)
+    if (execId.isDefined) {
+      backend.killTask(taskId, execId.get, interruptThread, reason)
+      true
+    } else {
+      logWarning(s"Could not kill task $taskId because no task with that ID was found.")
+      false
     }
   }
 
@@ -337,8 +351,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       }
     }.getOrElse(offers)
 
-    // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
-    val shuffledOffers = Random.shuffle(filteredOffers)
+    val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
@@ -373,6 +386,14 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       hasLaunchedTask = true
     }
     return tasks
+  }
+
+  /**
+   * Shuffle offers around to avoid always placing tasks on the same workers.  Exposed to allow
+   * overriding in tests, so it can be deterministic.
+   */
+  protected def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
+    Random.shuffle(offers)
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
@@ -460,7 +481,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       taskState: TaskState,
       reason: TaskFailedReason): Unit = synchronized {
     taskSetManager.handleFailedTask(tid, taskState, reason)
-    if (!taskSetManager.isZombie && taskState != TaskState.KILLED) {
+    if (!taskSetManager.isZombie && !taskSetManager.someAttemptSucceeded(tid)) {
       // Need to revive offers again now that the task set manager state has been updated to
       // reflect failed tasks that need to be re-run.
       backend.reviveOffers()
@@ -676,16 +697,19 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
 
 private[spark] object TaskSchedulerImpl {
+
+  val SCHEDULER_MODE_PROPERTY = "spark.scheduler.mode"
+
   /**
    * Used to balance containers across hosts.
    *
    * Accepts a map of hosts to resource offers for that host, and returns a prioritized list of
-   * resource offers representing the order in which the offers should be used.  The resource
+   * resource offers representing the order in which the offers should be used. The resource
    * offers are ordered such that we'll allocate one container on each host before allocating a
    * second container on any host, and so on, in order to reduce the damage if a host fails.
    *
-   * For example, given <h1, [o1, o2, o3]>, <h2, [o4]>, <h1, [o5, o6]>, returns
-   * [o1, o5, o4, 02, o6, o3]
+   * For example, given {@literal <h1, [o1, o2, o3]>}, {@literal <h2, [o4]>} and
+   * {@literal <h3, [o5, o6]>}, returns {@literal [o1, o5, o4, o2, o6, o3]}.
    */
   def prioritizeContainers[K, T] (map: HashMap[K, ArrayBuffer[T]]): List[T] = {
     val _keyList = new ArrayBuffer[K](map.size)
@@ -719,7 +743,11 @@ private[spark] object TaskSchedulerImpl {
 
   private def maybeCreateBlacklistTracker(sc: SparkContext): Option[BlacklistTracker] = {
     if (BlacklistTracker.isBlacklistEnabled(sc.conf)) {
-      Some(new BlacklistTracker(sc))
+      val executorAllocClient: Option[ExecutorAllocationClient] = sc.schedulerBackend match {
+        case b: ExecutorAllocationClient => Some(b)
+        case _ => None
+      }
+      Some(new BlacklistTracker(sc, executorAllocClient))
     } else {
       None
     }

@@ -48,7 +48,7 @@ object Row {
   def apply(values: Any*): Row = new GenericRow(values.toArray)
 
   /**
-   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
+   * This method can be used to construct a [[Row]] from a `Seq` of values.
    */
   def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
 
@@ -283,7 +283,7 @@ trait Row extends Serializable {
   def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
 
   /**
-   * Returns the value at position i of array type as [[java.util.List]].
+   * Returns the value at position i of array type as `java.util.List`.
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -298,7 +298,7 @@ trait Row extends Serializable {
   def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
-   * Returns the value at position i of array type as a [[java.util.Map]].
+   * Returns the value at position i of array type as a `java.util.Map`.
    *
    * @throws ClassCastException when data type does not match.
    */

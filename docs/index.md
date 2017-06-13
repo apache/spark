@@ -26,13 +26,13 @@ Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
 or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 7+, Python 2.6+/3.4+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}}
+Spark runs on Java 8+, Python 2.7+/3.4+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}}
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).
 
-Note that support for Java 7 and Python 2.6 are deprecated as of Spark 2.0.0, and support for 
-Scala 2.10 and versions of Hadoop before 2.6 are deprecated as of Spark 2.1.0, and may be 
-removed in Spark 2.2.0.
+Note that support for Java 7, Python 2.6 and old Hadoop versions before 2.6.5 were removed as of Spark 2.2.0.
+
+Note that support for Scala 2.10 is deprecated as of Spark 2.1.0, and may be removed in Spark 2.3.0.
 
 # Running the Examples and Shell
 
@@ -113,6 +113,7 @@ options for deployment:
   * [Mesos](running-on-mesos.html): deploy a private cluster using
       [Apache Mesos](http://mesos.apache.org)
   * [YARN](running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
+  * [Kubernetes (experimental)](https://github.com/apache-spark-on-k8s/spark): deploy Spark on top of Kubernetes
 
 **Other Documents:**
 
@@ -123,6 +124,7 @@ options for deployment:
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
 * Integration with other storage systems:
+  * [Cloud Infrastructures](cloud-integration.html)
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system
 * [Contributing to Spark](http://spark.apache.org/contributing.html)

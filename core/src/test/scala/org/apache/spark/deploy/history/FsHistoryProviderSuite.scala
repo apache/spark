@@ -27,6 +27,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Matchers.any
@@ -47,7 +48,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   private var testDir: File = null
 
   before {
-    testDir = Utils.createTempDir()
+    testDir = Utils.createTempDir(namePrefix = s"a b%20c+d")
   }
 
   after {
@@ -108,7 +109,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           user: String,
           completed: Boolean): ApplicationHistoryInfo = {
         ApplicationHistoryInfo(id, name,
-          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed)))
+          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed, "")))
       }
 
       // For completed files, lastUpdated would be lastModified time.
@@ -130,9 +131,19 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
-  test("SPARK-3697: ignore directories that cannot be read.") {
+  test("SPARK-3697: ignore files that cannot be read.") {
     // setReadable(...) does not work on Windows. Please refer JDK-6728842.
     assume(!Utils.isWindows)
+
+    class TestFsHistoryProvider extends FsHistoryProvider(createTestConf()) {
+      var mergeApplicationListingCall = 0
+      override protected def mergeApplicationListing(fileStatus: FileStatus): Unit = {
+        super.mergeApplicationListing(fileStatus)
+        mergeApplicationListingCall += 1
+      }
+    }
+    val provider = new TestFsHistoryProvider
+
     val logFile1 = newLogFile("new1", None, inProgress = false)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1-1", Some("app1-1"), 1L, "test", None),
@@ -145,10 +156,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       )
     logFile2.setReadable(false, false)
 
-    val provider = new FsHistoryProvider(createTestConf())
     updateAndCheck(provider) { list =>
       list.size should be (1)
     }
+
+    provider.mergeApplicationListingCall should be (1)
   }
 
   test("history file is renamed from inprogress to completed") {
@@ -594,7 +606,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     if (isNewFormat) {
       val newFormatStream = new FileOutputStream(file)
       Utils.tryWithSafeFinally {
-        EventLoggingListener.initEventLog(newFormatStream)
+        EventLoggingListener.initEventLog(newFormatStream, false, null)
       } {
         newFormatStream.close()
       }

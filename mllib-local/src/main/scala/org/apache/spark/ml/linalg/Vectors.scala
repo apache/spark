@@ -169,7 +169,7 @@ sealed trait Vector extends Serializable {
 /**
  * Factory methods for [[org.apache.spark.ml.linalg.Vector]].
  * We don't use the name `Vector` because Scala imports
- * [[scala.collection.immutable.Vector]] by default.
+ * `scala.collection.immutable.Vector` by default.
  */
 @Since("2.0.0")
 object Vectors {
@@ -657,6 +657,8 @@ class SparseVector @Since("2.0.0") (
   override def argmax: Int = {
     if (size == 0) {
       -1
+    } else if (numActives == 0) {
+      0
     } else {
       // Find the max active entry.
       var maxIdx = indices(0)

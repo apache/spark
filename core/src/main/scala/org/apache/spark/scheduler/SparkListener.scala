@@ -87,8 +87,13 @@ case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(S
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerBlockManagerAdded(time: Long, blockManagerId: BlockManagerId, maxMem: Long)
-  extends SparkListenerEvent
+case class SparkListenerBlockManagerAdded(
+    time: Long,
+    blockManagerId: BlockManagerId,
+    maxMem: Long,
+    maxOnHeapMem: Option[Long] = None,
+    maxOffHeapMem: Option[Long] = None) extends SparkListenerEvent {
+}
 
 @DeveloperApi
 case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockManagerId)
@@ -155,9 +160,9 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
 /**
  * An internal class that describes the metadata of an event log.
- * This event is not meant to be posted to listeners downstream.
  */
-private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
+@DeveloperApi
+case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 /**
  * Interface for creating history listeners defined in other modules like SQL, which are used to
@@ -294,7 +299,7 @@ private[spark] trait SparkListenerInterface {
 
 /**
  * :: DeveloperApi ::
- * A default implementation for [[SparkListenerInterface]] that has no-op implementations for
+ * A default implementation for `SparkListenerInterface` that has no-op implementations for
  * all callbacks.
  *
  * Note that this is an internal interface which might change in different Spark releases.

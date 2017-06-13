@@ -47,7 +47,7 @@ object StreamMetadata extends Logging {
 
   /** Read the metadata from file if it exists */
   def read(metadataFile: Path, hadoopConf: Configuration): Option[StreamMetadata] = {
-    val fs = FileSystem.get(hadoopConf)
+    val fs = metadataFile.getFileSystem(hadoopConf)
     if (fs.exists(metadataFile)) {
       var input: FSDataInputStream = null
       try {
@@ -72,7 +72,7 @@ object StreamMetadata extends Logging {
       hadoopConf: Configuration): Unit = {
     var output: FSDataOutputStream = null
     try {
-      val fs = FileSystem.get(hadoopConf)
+      val fs = metadataFile.getFileSystem(hadoopConf)
       output = fs.create(metadataFile)
       val writer = new OutputStreamWriter(output)
       Serialization.write(metadata, writer)

@@ -72,8 +72,9 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' df <- createDataFrame(iris)
-#' model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- spark.bisectingKmeans(df, Class ~ Survived, k = 4)
 #' summary(model)
 #'
 #' # get fitted result from a bisecting k-means model
@@ -82,7 +83,7 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #'
 #' # fitted values on training data
 #' fitted <- predict(model, df)
-#' head(select(fitted, "Sepal_Length", "prediction"))
+#' head(select(fitted, "Class", "prediction"))
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
@@ -338,14 +339,14 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data(iris)
-#' df <- createDataFrame(iris)
-#' model <- spark.kmeans(df, Sepal_Length ~ Sepal_Width, k = 4, initMode = "random")
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- spark.kmeans(df, Class ~ Survived, k = 4, initMode = "random")
 #' summary(model)
 #'
 #' # fitted values on training data
 #' fitted <- predict(model, df)
-#' head(select(fitted, "Sepal_Length", "prediction"))
+#' head(select(fitted, "Class", "prediction"))
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
@@ -375,10 +376,13 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
 
 #' @param object a fitted k-means model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list includes the model's \code{k} (number of cluster centers),
+#'         The list includes the model's \code{k} (the configured number of cluster centers),
 #'         \code{coefficients} (model cluster centers),
-#'         \code{size} (number of data points in each cluster), and \code{cluster}
-#'         (cluster centers of the transformed data).
+#'         \code{size} (number of data points in each cluster), \code{cluster}
+#'         (cluster centers of the transformed data), {is.loaded} (whether the model is loaded
+#'         from a saved file), and \code{clusterSize}
+#'         (the actual number of cluster centers. When using initMode = "random",
+#'         \code{clusterSize} may not equal to \code{k}).
 #' @rdname spark.kmeans
 #' @export
 #' @note summary(KMeansModel) since 2.0.0
@@ -390,16 +394,17 @@ setMethod("summary", signature(object = "KMeansModel"),
             coefficients <- callJMethod(jobj, "coefficients")
             k <- callJMethod(jobj, "k")
             size <- callJMethod(jobj, "size")
-            coefficients <- t(matrix(unlist(coefficients), ncol = k))
+            clusterSize <- callJMethod(jobj, "clusterSize")
+            coefficients <- t(matrix(unlist(coefficients), ncol = clusterSize))
             colnames(coefficients) <- unlist(features)
-            rownames(coefficients) <- 1:k
+            rownames(coefficients) <- 1:clusterSize
             cluster <- if (is.loaded) {
               NULL
             } else {
               dataFrame(callJMethod(jobj, "cluster"))
             }
             list(k = k, coefficients = coefficients, size = size,
-                 cluster = cluster, is.loaded = is.loaded)
+                 cluster = cluster, is.loaded = is.loaded, clusterSize = clusterSize)
           })
 
 #  Predicted values based on a k-means model
@@ -493,11 +498,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @export
 #' @examples
 #' \dontrun{
-#' # nolint start
-#' # An example "path/to/file" can be
-#' # paste0(Sys.getenv("SPARK_HOME"), "/data/mllib/sample_lda_libsvm_data.txt")
-#' # nolint end
-#' text <- read.df("path/to/file", source = "libsvm")
+#' text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")
 #' model <- spark.lda(data = text, optimizer = "em")
 #'
 #' # get a summary of the model

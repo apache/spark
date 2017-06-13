@@ -191,26 +191,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
-   * Returns a copy of this node where `f` has been applied to all the nodes children.
-   */
-  def mapChildren(f: BaseType => BaseType): BaseType = {
-    var changed = false
-    val newArgs = mapProductIterator {
-      case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (newChild fastEquals arg) {
-          arg
-        } else {
-          changed = true
-          newChild
-        }
-      case nonChild: AnyRef => nonChild
-      case null => null
-    }
-    if (changed) makeCopy(newArgs) else this
-  }
-
-  /**
    * Returns a copy of this node with the children replaced.
    * TODO: Validate somewhere (in debug mode?) that children are ordered correctly.
    */
@@ -289,9 +269,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
-      transformChildren(rule, (t, r) => t.transformDown(r))
+      mapChildren(_.transformDown(rule))
     } else {
-      afterRule.transformChildren(rule, (t, r) => t.transformDown(r))
+      afterRule.mapChildren(_.transformDown(rule))
     }
   }
 
@@ -303,7 +283,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param rule the function use to transform this nodes children
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRuleOnChildren = transformChildren(rule, (t, r) => t.transformUp(r))
+    val afterRuleOnChildren = mapChildren(_.transformUp(rule))
     if (this fastEquals afterRuleOnChildren) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])
@@ -316,18 +296,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
-   * Returns a copy of this node where `rule` has been recursively applied to all the children of
-   * this node.  When `rule` does not apply to a given node it is left unchanged.
-   * @param rule the function used to transform this nodes children
+   * Returns a copy of this node where `f` has been applied to all the nodes children.
    */
-  protected def transformChildren(
-      rule: PartialFunction[BaseType, BaseType],
-      nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = {
+  def mapChildren(f: BaseType => BaseType): BaseType = {
     if (children.nonEmpty) {
       var changed = false
       val newArgs = mapProductIterator {
         case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+          val newChild = f(arg.asInstanceOf[BaseType])
           if (!(newChild fastEquals arg)) {
             changed = true
             newChild
@@ -335,7 +311,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
             arg
           }
         case Some(arg: TreeNode[_]) if containsChild(arg) =>
-          val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+          val newChild = f(arg.asInstanceOf[BaseType])
           if (!(newChild fastEquals arg)) {
             changed = true
             Some(newChild)
@@ -344,7 +320,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
           }
         case m: Map[_, _] => m.mapValues {
           case arg: TreeNode[_] if containsChild(arg) =>
-            val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+            val newChild = f(arg.asInstanceOf[BaseType])
             if (!(newChild fastEquals arg)) {
               changed = true
               newChild
@@ -356,7 +332,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case d: DataType => d // Avoid unpacking Structs
         case args: Traversable[_] => args.map {
           case arg: TreeNode[_] if containsChild(arg) =>
-            val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+            val newChild = f(arg.asInstanceOf[BaseType])
             if (!(newChild fastEquals arg)) {
               changed = true
               newChild
@@ -364,8 +340,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
               arg
             }
           case tuple@(arg1: TreeNode[_], arg2: TreeNode[_]) =>
-            val newChild1 = nextOperation(arg1.asInstanceOf[BaseType], rule)
-            val newChild2 = nextOperation(arg2.asInstanceOf[BaseType], rule)
+            val newChild1 = f(arg1.asInstanceOf[BaseType])
+            val newChild2 = f(arg2.asInstanceOf[BaseType])
             if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
               changed = true
               (newChild1, newChild2)
@@ -468,6 +444,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case None => Nil
     case Some(null) => Nil
     case Some(any) => any :: Nil
+    case table: CatalogTable =>
+      table.storage.serde match {
+        case Some(serde) => table.identifier :: serde :: Nil
+        case _ => table.identifier :: Nil
+      }
     case other => other :: Nil
   }.mkString(", ")
 
@@ -477,13 +458,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /** ONE line description of this node with more information */
   def verboseString: String
 
+  /** ONE line description of this node with some suffix information */
+  def verboseStringWithSuffix: String = verboseString
+
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
   def treeString: String = treeString(verbose = true)
 
-  def treeString(verbose: Boolean): String = {
-    generateTreeString(0, Nil, new StringBuilder, verbose).toString
+  def treeString(verbose: Boolean, addSuffix: Boolean = false): String = {
+    generateTreeString(0, Nil, new StringBuilder, verbose = verbose, addSuffix = addSuffix).toString
   }
 
   /**
@@ -535,7 +519,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   protected def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
   /**
-   * Appends the string represent of this node and its children to the given StringBuilder.
+   * Appends the string representation of this node and its children to the given StringBuilder.
    *
    * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
    * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and
@@ -548,7 +532,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       lastChildren: Seq[Boolean],
       builder: StringBuilder,
       verbose: Boolean,
-      prefix: String = ""): StringBuilder = {
+      prefix: String = "",
+      addSuffix: Boolean = false): StringBuilder = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -557,22 +542,29 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       builder.append(if (lastChildren.last) "+- " else ":- ")
     }
 
+    val str = if (verbose) {
+      if (addSuffix) verboseStringWithSuffix else verboseString
+    } else {
+      simpleString
+    }
     builder.append(prefix)
-    builder.append(if (verbose) verboseString else simpleString)
+    builder.append(str)
     builder.append("\n")
 
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ false, builder, verbose))
+        depth + 2, lastChildren :+ children.isEmpty :+ false, builder, verbose,
+        addSuffix = addSuffix))
       innerChildren.last.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ true, builder, verbose)
+        depth + 2, lastChildren :+ children.isEmpty :+ true, builder, verbose,
+        addSuffix = addSuffix)
     }
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, builder, verbose, prefix))
+        depth + 1, lastChildren :+ false, builder, verbose, prefix, addSuffix))
       children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, builder, verbose, prefix)
+        depth + 1, lastChildren :+ true, builder, verbose, prefix, addSuffix)
     }
 
     builder

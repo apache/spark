@@ -132,7 +132,7 @@ The `Pipeline.fit()` method is called on the original `DataFrame`, which has raw
 The `Tokenizer.transform()` method splits the raw text documents into words, adding a new column with words to the `DataFrame`.
 The `HashingTF.transform()` method converts the words column into feature vectors, adding a new column with those vectors to the `DataFrame`.
 Now, since `LogisticRegression` is an `Estimator`, the `Pipeline` first calls `LogisticRegression.fit()` to produce a `LogisticRegressionModel`.
-If the `Pipeline` had more stages, it would call the `LogisticRegressionModel`'s `transform()`
+If the `Pipeline` had more `Estimator`s, it would call the `LogisticRegressionModel`'s `transform()`
 method on the `DataFrame` before passing the `DataFrame` to the next stage.
 
 A `Pipeline` is an `Estimator`.
@@ -206,7 +206,7 @@ This example covers the concepts of `Estimator`, `Transformer`, and `Param`.
 
 <div class="codetabs">
 
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 
 Refer to the [`Estimator` Scala docs](api/scala/index.html#org.apache.spark.ml.Estimator),
 the [`Transformer` Scala docs](api/scala/index.html#org.apache.spark.ml.Transformer) and
@@ -215,7 +215,7 @@ the [`Params` Scala docs](api/scala/index.html#org.apache.spark.ml.param.Params)
 {% include_example scala/org/apache/spark/examples/ml/EstimatorTransformerParamExample.scala %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 
 Refer to the [`Estimator` Java docs](api/java/org/apache/spark/ml/Estimator.html),
 the [`Transformer` Java docs](api/java/org/apache/spark/ml/Transformer.html) and
@@ -224,7 +224,7 @@ the [`Params` Java docs](api/java/org/apache/spark/ml/param/Params.html) for det
 {% include_example java/org/apache/spark/examples/ml/JavaEstimatorTransformerParamExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 
 Refer to the [`Estimator` Python docs](api/python/pyspark.ml.html#pyspark.ml.Estimator),
 the [`Transformer` Python docs](api/python/pyspark.ml.html#pyspark.ml.Transformer) and
@@ -241,14 +241,14 @@ This example follows the simple text document `Pipeline` illustrated in the figu
 
 <div class="codetabs">
 
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 
 Refer to the [`Pipeline` Scala docs](api/scala/index.html#org.apache.spark.ml.Pipeline) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/PipelineExample.scala %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 
 
 Refer to the [`Pipeline` Java docs](api/java/org/apache/spark/ml/Pipeline.html) for details on the API.
@@ -256,7 +256,7 @@ Refer to the [`Pipeline` Java docs](api/java/org/apache/spark/ml/Pipeline.html) 
 {% include_example java/org/apache/spark/examples/ml/JavaPipelineExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 
 Refer to the [`Pipeline` Python docs](api/python/pyspark.ml.html#pyspark.ml.Pipeline) for more details on the API.
 

@@ -175,13 +175,14 @@ private[ui] trait PagedTable[T] {
 
       val hiddenFormFields = {
         if (goButtonFormPath.contains('?')) {
-          val querystring = goButtonFormPath.split("\\?", 2)(1)
+          val queryString = goButtonFormPath.split("\\?", 2)(1)
+          val search = queryString.split("#")(0)
           Splitter
             .on('&')
             .trimResults()
             .omitEmptyStrings()
             .withKeyValueSeparator("=")
-            .split(querystring)
+            .split(search)
             .asScala
             .filterKeys(_ != pageSizeFormField)
             .filterKeys(_ != prevPageSizeFormField)

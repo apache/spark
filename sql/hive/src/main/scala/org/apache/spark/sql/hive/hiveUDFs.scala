@@ -44,7 +44,7 @@ private[hive] case class HiveSimpleUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with CodegenFallback with Logging {
 
-  override def deterministic: Boolean = isUDFDeterministic
+  override def deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
   override def nullable: Boolean = true
 
@@ -70,7 +70,7 @@ private[hive] case class HiveSimpleUDF(
   @transient
   private lazy val conversionHelper = new ConversionHelper(method, arguments)
 
-  override lazy val dataType = javaClassToDataType(method.getReturnType)
+  override lazy val dataType = javaTypeToDataType(method.getGenericReturnType)
 
   @transient
   private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
@@ -108,12 +108,13 @@ private[hive] case class HiveSimpleUDF(
 private[hive] class DeferredObjectAdapter(oi: ObjectInspector, dataType: DataType)
   extends DeferredObject with HiveInspectors {
 
+  private val wrapper = wrapperFor(oi, dataType)
   private var func: () => Any = _
   def set(func: () => Any): Unit = {
     this.func = func
   }
   override def prepare(i: Int): Unit = {}
-  override def get(): AnyRef = wrap(func(), oi, dataType)
+  override def get(): AnyRef = wrapper(func()).asInstanceOf[AnyRef]
 }
 
 private[hive] case class HiveGenericUDF(
@@ -122,7 +123,7 @@ private[hive] case class HiveGenericUDF(
 
   override def nullable: Boolean = true
 
-  override def deterministic: Boolean = isUDFDeterministic
+  override def deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
   override def foldable: Boolean =
     isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]

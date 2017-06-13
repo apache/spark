@@ -138,6 +138,13 @@ case class Stack(children: Seq[Expression]) extends Generator {
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
   private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
 
+  /**
+   * Return true iff the first child exists and has a foldable IntegerType.
+   */
+  def hasFoldableNumRows: Boolean = {
+    children.nonEmpty && children.head.dataType == IntegerType && children.head.foldable
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least 2 arguments.")
@@ -156,6 +163,18 @@ case class Stack(children: Seq[Expression]) extends Generator {
     }
   }
 
+  def findDataType(index: Int): DataType = {
+    // Find the first data type except NullType.
+    val firstDataIndex = ((index - 1) % numFields) + 1
+    for (i <- firstDataIndex until children.length by numFields) {
+      if (children(i).dataType != NullType) {
+        return children(i).dataType
+      }
+    }
+    // If all values of the column are NullType, use it.
+    NullType
+  }
+
   override def elementSchema: StructType =
     StructType(children.tail.take(numFields).zipWithIndex.map {
       case (e, index) => StructField(s"col$index", e.dataType)
@@ -172,7 +191,6 @@ case class Stack(children: Seq[Expression]) extends Generator {
       InternalRow(fields: _*)
     }
   }
-
 
   /**
    * Only support code generation when stack produces 50 rows or less.
@@ -204,6 +222,10 @@ case class Stack(children: Seq[Expression]) extends Generator {
   }
 }
 
+/**
+ * Wrapper around another generator to specify outer behavior. This is used to implement functions
+ * such as explode_outer. This expression gets replaced during analysis.
+ */
 case class GeneratorOuter(child: Generator) extends UnaryExpression with Generator {
   final override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
@@ -212,7 +234,10 @@ case class GeneratorOuter(child: Generator) extends UnaryExpression with Generat
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   override def elementSchema: StructType = child.elementSchema
+
+  override lazy val resolved: Boolean = false
 }
+
 /**
  * A base class for [[Explode]] and [[PosExplode]].
  */

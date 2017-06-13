@@ -18,17 +18,13 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.text.NumberFormat
-import java.util.Locale
 
 import scala.util.control.Exception._
-import scala.util.Try
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 private[csv] object CSVInferSchema {
 
@@ -39,22 +35,27 @@ private[csv] object CSVInferSchema {
    *     3. Replace any null types with string type
    */
   def infer(
-      tokenRdd: RDD[Array[String]],
+      tokenRDD: RDD[Array[String]],
       header: Array[String],
       options: CSVOptions): StructType = {
-    val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-    val rootTypes: Array[DataType] =
-      tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
+    val fields = if (options.inferSchemaFlag) {
+      val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
+      val rootTypes: Array[DataType] =
+        tokenRDD.aggregate(startType)(inferRowType(options), mergeRowTypes)
 
-    val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
-      val dType = rootType match {
-        case _: NullType => StringType
-        case other => other
+      header.zip(rootTypes).map { case (thisHeader, rootType) =>
+        val dType = rootType match {
+          case _: NullType => StringType
+          case other => other
+        }
+        StructField(thisHeader, dType, nullable = true)
       }
-      StructField(thisHeader, dType, nullable = true)
+    } else {
+      // By default fields are assumed to be StringType
+      header.map(fieldName => StructField(fieldName, StringType, nullable = true))
     }
 
-    StructType(structFields)
+    StructType(fields)
   }
 
   private def inferRowType(options: CSVOptions)
@@ -98,6 +99,10 @@ private[csv] object CSVInferSchema {
     }
   }
 
+  private def isInfOrNan(field: String, options: CSVOptions): Boolean = {
+    field == options.nanValue || field == options.negativeInf || field == options.positiveInf
+  }
+
   private def tryParseInteger(field: String, options: CSVOptions): DataType = {
     if ((allCatch opt field.toInt).isDefined) {
       IntegerType
@@ -133,7 +138,7 @@ private[csv] object CSVInferSchema {
   }
 
   private def tryParseDouble(field: String, options: CSVOptions): DataType = {
-    if ((allCatch opt field.toDouble).isDefined) {
+    if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field, options)) {
       DoubleType
     } else {
       tryParseTimestamp(field, options)
@@ -213,34 +218,5 @@ private[csv] object CSVInferSchema {
       }
 
     case _ => None
-  }
-}
-
-private[csv] object CSVTypeCast {
-  /**
-   * Helper method that converts string representation of a character to actual character.
-   * It handles some Java escaped strings and throws exception if given string is longer than one
-   * character.
-   */
-  @throws[IllegalArgumentException]
-  def toChar(str: String): Char = {
-    if (str.charAt(0) == '\\') {
-      str.charAt(1)
-      match {
-        case 't' => '\t'
-        case 'r' => '\r'
-        case 'b' => '\b'
-        case 'f' => '\f'
-        case '\"' => '\"' // In case user changes quote char and uses \" as delimiter in options
-        case '\'' => '\''
-        case 'u' if str == """\u0000""" => '\u0000'
-        case _ =>
-          throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
-      }
-    } else if (str.length == 1) {
-      str.charAt(0)
-    } else {
-      throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
-    }
   }
 }

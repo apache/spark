@@ -26,6 +26,7 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -112,36 +113,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       spark.sessionState.conf.autoBroadcastJoinThreshold)
   }
 
-  test("estimates the size of limit") {
-    withTempView("test") {
-      Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4)).toDF("k", "v")
-        .createOrReplaceTempView("test")
-      Seq((0, 1), (1, 24), (2, 48)).foreach { case (limit, expected) =>
-        val df = sql(s"""SELECT * FROM test limit $limit""")
-
-        val sizesGlobalLimit = df.queryExecution.analyzed.collect { case g: GlobalLimit =>
-          g.stats(conf).sizeInBytes
-        }
-        assert(sizesGlobalLimit.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-        assert(sizesGlobalLimit.head === BigInt(expected),
-          s"expected exact size $expected for table 'test', got: ${sizesGlobalLimit.head}")
-
-        val sizesLocalLimit = df.queryExecution.analyzed.collect { case l: LocalLimit =>
-          l.stats(conf).sizeInBytes
-        }
-        assert(sizesLocalLimit.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-        assert(sizesLocalLimit.head === BigInt(expected),
-          s"expected exact size $expected for table 'test', got: ${sizesLocalLimit.head}")
-      }
-    }
-  }
-
   test("column stats round trip serialization") {
     // Make sure we serialize and then deserialize and we will get the result data
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
     stats.zip(df.schema).foreach { case ((k, v), field) =>
       withClue(s"column $k with type ${field.dataType}") {
-        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap)
+        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap(k, field.dataType))
         assert(roundtrip == Some(v))
       }
     }
@@ -169,6 +146,27 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       (s"col$idx", ColumnStat(0, None, None, 1, tpe.defaultSize.toLong, tpe.defaultSize.toLong))
     }
     checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
+  }
+
+  test("number format in statistics") {
+    val numbers = Seq(
+      BigInt(0) -> ("0.0 B", "0"),
+      BigInt(100) -> ("100.0 B", "100"),
+      BigInt(2047) -> ("2047.0 B", "2.05E+3"),
+      BigInt(2048) -> ("2.0 KB", "2.05E+3"),
+      BigInt(3333333) -> ("3.2 MB", "3.33E+6"),
+      BigInt(4444444444L) -> ("4.1 GB", "4.44E+9"),
+      BigInt(5555555555555L) -> ("5.1 TB", "5.56E+12"),
+      BigInt(6666666666666666L) -> ("5.9 PB", "6.67E+15"),
+      BigInt(1L << 10 ) * (1L << 60) -> ("1024.0 EB", "1.18E+21"),
+      BigInt(1L << 11) * (1L << 60) -> ("2.36E+21 B", "2.36E+21")
+    )
+    numbers.foreach { case (input, (expectedSize, expectedRows)) =>
+      val stats = Statistics(sizeInBytes = input, rowCount = Some(input))
+      val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows," +
+        s" hints=none"
+      assert(stats.simpleString == expectedString)
+    }
   }
 }
 
@@ -204,17 +202,19 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   /** A mapping from column to the stats collected. */
   protected val stats = mutable.LinkedHashMap(
     "cbool" -> ColumnStat(2, Some(false), Some(true), 1, 1, 1),
-    "cbyte" -> ColumnStat(2, Some(1L), Some(2L), 1, 1, 1),
-    "cshort" -> ColumnStat(2, Some(1L), Some(3L), 1, 2, 2),
-    "cint" -> ColumnStat(2, Some(1L), Some(4L), 1, 4, 4),
+    "cbyte" -> ColumnStat(2, Some(1.toByte), Some(2.toByte), 1, 1, 1),
+    "cshort" -> ColumnStat(2, Some(1.toShort), Some(3.toShort), 1, 2, 2),
+    "cint" -> ColumnStat(2, Some(1), Some(4), 1, 4, 4),
     "clong" -> ColumnStat(2, Some(1L), Some(5L), 1, 8, 8),
     "cdouble" -> ColumnStat(2, Some(1.0), Some(6.0), 1, 8, 8),
-    "cfloat" -> ColumnStat(2, Some(1.0), Some(7.0), 1, 4, 4),
-    "cdecimal" -> ColumnStat(2, Some(dec1), Some(dec2), 1, 16, 16),
+    "cfloat" -> ColumnStat(2, Some(1.0f), Some(7.0f), 1, 4, 4),
+    "cdecimal" -> ColumnStat(2, Some(Decimal(dec1)), Some(Decimal(dec2)), 1, 16, 16),
     "cstring" -> ColumnStat(2, None, None, 1, 3, 3),
     "cbinary" -> ColumnStat(2, None, None, 1, 3, 3),
-    "cdate" -> ColumnStat(2, Some(d1), Some(d2), 1, 4, 4),
-    "ctimestamp" -> ColumnStat(2, Some(t1), Some(t2), 1, 8, 8)
+    "cdate" -> ColumnStat(2, Some(DateTimeUtils.fromJavaDate(d1)),
+      Some(DateTimeUtils.fromJavaDate(d2)), 1, 4, 4),
+    "ctimestamp" -> ColumnStat(2, Some(DateTimeUtils.fromJavaTimestamp(t1)),
+      Some(DateTimeUtils.fromJavaTimestamp(t2)), 1, 8, 8)
   )
 
   private val randomName = new Random(31)
@@ -285,7 +285,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     // Analyze only one column.
     sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
     val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
-      case catalogRel: CatalogRelation => (catalogRel, catalogRel.catalogTable)
+      case catalogRel: CatalogRelation => (catalogRel, catalogRel.tableMeta)
       case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
     }.head
     val emptyColStat = ColumnStat(0, None, None, 0, 4, 4)

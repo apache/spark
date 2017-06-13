@@ -12,7 +12,7 @@ Spark currently supports authentication via a shared secret. Authentication can 
 ## Web UI
 
 The Spark UI can be secured by using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html) via the `spark.ui.filters` setting
-and by using [https/SSL](http://en.wikipedia.org/wiki/HTTPS) via the `spark.ui.https.enabled` setting.
+and by using [https/SSL](http://en.wikipedia.org/wiki/HTTPS) via [SSL settings](security.html#ssl-configuration).
 
 ### Authentication
 
@@ -28,11 +28,7 @@ If your applications are using event logging, the directory where the event logs
 ## Encryption
 
 Spark supports SSL for HTTP protocols. SASL encryption is supported for the block transfer service
-and the RPC endpoints.
-
-Encryption is not yet supported for data stored by Spark in temporary local storage, such as shuffle
-files, cached data, and other application files. If encrypting this data is desired, a workaround is
-to configure your cluster manager to store application data on encrypted disks.
+and the RPC endpoints. Shuffle files can also be encrypted if desired.
 
 ### SSL Configuration
 
@@ -50,7 +46,7 @@ component-specific configuration namespaces used to override the default setting
   </tr>
   <tr>
     <td><code>spark.ssl.fs</code></td>
-    <td>HTTP file server and broadcast server</td>
+    <td>File download client (used to download jars and files from HTTPS-enabled servers).</td>
   </tr>
   <tr>
     <td><code>spark.ssl.ui</code></td>

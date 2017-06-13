@@ -240,13 +240,6 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the YARN Application Master to listen on. In YARN client mode, this is used to communicate between the Spark driver running on a gateway and the YARN Application Master running on YARN. In YARN cluster mode, this is used for the dynamic executor feature, where it handles the kill from the scheduler backend.
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.queue</code></td>
   <td><code>default</code></td>
   <td>
@@ -337,7 +330,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>
   Defines the validity interval for AM failure tracking.
   If the AM has been running for at least the defined interval, the AM failure count will be reset.
-  This feature is not enabled if not configured, and only supported in Hadoop 2.6+.
+  This feature is not enabled if not configured.
   </td>
 </tr>
 <tr>
@@ -445,7 +438,7 @@ To use a custom metrics.properties for the application master and executors, upd
   This will be used with YARN's rolling log aggregation, to enable this feature in YARN side
   <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
   configured in yarn-site.xml.
-  This feature can only be used with Hadoop 2.6.1+. The Spark log4j appender needs be changed to use
+  This feature can only be used with Hadoop 2.6.4+. The Spark log4j appender needs be changed to use
   FileAppender or another appender that can handle the files being removed while its running. Based
   on the file name configured in the log4j configuration (like spark.log), the user should set the
   regex (spark*) to include all the log files that need to be aggregated.
@@ -524,8 +517,8 @@ pre-packaged distribution.
 1. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
 then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
 `org.apache.spark.network.yarn.YarnShuffleService`.
-1. Increase `NodeManager's` heap size by setting `YARN_HEAPSIZE` (1000 by default) in `etc/hadoop/yarn-env.sh` 
-to avoid garbage collection issues during shuffle. 
+1. Increase `NodeManager's` heap size by setting `YARN_HEAPSIZE` (1000 by default) in `etc/hadoop/yarn-env.sh`
+to avoid garbage collection issues during shuffle.
 1. Restart all `NodeManager`s in your cluster.
 
 The following extra configuration options are available when the shuffle service is running on YARN:
@@ -604,3 +597,18 @@ spark.yarn.am.extraJavaOptions -Dsun.security.krb5.debug=true -Dsun.security.spn
 
 Finally, if the log level for `org.apache.spark.deploy.yarn.Client` is set to `DEBUG`, the log
 will include a list of all tokens obtained, and their expiry details
+
+## Using the Spark History Server to replace the Spark Web UI
+
+It is possible to use the Spark History Server application page as the tracking URL for running
+applications when the application UI is disabled. This may be desirable on secure clusters, or to
+reduce the memory usage of the Spark driver. To set up tracking through the Spark History Server,
+do the following:
+
+- On the application side, set <code>spark.yarn.historyServer.allowTracking=true</code> in Spark's
+  configuration. This will tell Spark to use the history server's URL as the tracking URL if
+  the application's UI is disabled.
+- On the Spark History Server, add <code>org.apache.spark.deploy.yarn.YarnProxyRedirectFilter</code>
+  to the list of filters in the <code>spark.ui.filters</code> configuration.
+
+Be aware that the history server information may not be up-to-date with the application's state.

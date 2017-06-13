@@ -58,12 +58,12 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       .setInputCol("features")
       .setOutputCol("pca_features")
       .setK(3)
-      .fit(df)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(pca)
+    val pcaModel = pca.fit(df)
 
-    pca.transform(df).select("pca_features", "expected").collect().foreach {
+    MLTestingUtils.checkCopyAndUids(pca, pcaModel)
+
+    pcaModel.transform(df).select("pca_features", "expected").collect().foreach {
       case Row(x: Vector, y: Vector) =>
         assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
     }
