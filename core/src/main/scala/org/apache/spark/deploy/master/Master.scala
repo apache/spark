@@ -542,26 +542,31 @@ private[deploy] class Master(
     // Ensure "only-once" recovery semantics using a short synchronization period.
     if (state != RecoveryState.RECOVERING) { return }
     state = RecoveryState.COMPLETING_RECOVERY
+    try{
+      // Kill off any workers and apps that didn't respond to us.
+      workers.filter(_.state == WorkerState.UNKNOWN).foreach(removeWorker)
+      apps.filter(_.state == ApplicationState.UNKNOWN).foreach(finishApplication)
 
-    // Kill off any workers and apps that didn't respond to us.
-    workers.filter(_.state == WorkerState.UNKNOWN).foreach(removeWorker)
-    apps.filter(_.state == ApplicationState.UNKNOWN).foreach(finishApplication)
-
-    // Reschedule drivers which were not claimed by any workers
-    drivers.filter(_.worker.isEmpty).foreach { d =>
-      logWarning(s"Driver ${d.id} was not found after master recovery")
-      if (d.desc.supervise) {
-        logWarning(s"Re-launching ${d.id}")
-        relaunchDriver(d)
-      } else {
-        removeDriver(d.id, DriverState.ERROR, None)
-        logWarning(s"Did not re-launch ${d.id} because it was not supervised")
+      // Reschedule drivers which were not claimed by any workers
+      drivers.filter(_.worker.isEmpty).foreach { d =>
+        logWarning(s"Driver ${d.id} was not found after master recovery")
+        if (d.desc.supervise) {
+          logWarning(s"Re-launching ${d.id}")
+          relaunchDriver(d)
+        } else {
+          removeDriver(d.id, DriverState.ERROR, None)
+          logWarning(s"Did not re-launch ${d.id} because it was not supervised")
+        }
       }
-    }
 
-    state = RecoveryState.ALIVE
-    schedule()
-    logInfo("Recovery complete - resuming operations!")
+      state = RecoveryState.ALIVE
+      schedule()
+      logInfo("Recovery complete - resuming operations!")
+    } catch {
+      case e: Throwable =>
+        logError("Shutting down Master for the exception during recovery", e)
+        rpcEnv.shutdown()
+    }
   }
 
   /**
