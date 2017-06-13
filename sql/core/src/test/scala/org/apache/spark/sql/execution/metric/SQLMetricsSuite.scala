@@ -356,21 +356,33 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
     assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
 
-    withTempDir { tempDir =>
-      val dir = new File(tempDir, "pqS").getCanonicalPath
+    Seq(true, false).foreach { executorBroadcast =>
+      withSQLConf(SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED.key -> executorBroadcast.toString) {
+        withTempDir { tempDir =>
+          val dir = new File(tempDir, "pqS").getCanonicalPath
 
-      spark.range(10).write.parquet(dir)
-      spark.read.parquet(dir).createOrReplaceTempView("pqS")
+          spark.range(10).write.parquet(dir)
+          spark.read.parquet(dir).createOrReplaceTempView("pqS")
 
-      val res3 = InputOutputMetricsHelper.run(
-        spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
-      )
-      // The query above is executed in the following stages:
-      //   1. sql("select * from pqS")    => (10, 0, 10)
-      //   2. range(30)                   => (30, 0, 30)
-      //   3. crossJoin(...) of 1. and 2. => (0, 30, 300)
-      //   4. shuffle & return results    => (0, 300, 0)
-      assert(res3 === (10L, 0L, 10L) :: (30L, 0L, 30L) :: (0L, 30L, 300L) :: (0L, 300L, 0L) :: Nil)
+          val res3 = InputOutputMetricsHelper.run(
+            spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
+          )
+          // The query above is executed in the following stages:
+          //   1a. sql("select * from pqS")   => (10, 0, 10)
+          //   1b. (only when `SQLConf.EXECUTOR_SIDE_BROADCAST_ENABLED` is enabled)
+          //       executor-size-broadcast    => (0, 0, 0)
+          //   2. range(30)                   => (30, 0, 30)
+          //   3. crossJoin(...) of 1. and 2. => (0, 30, 300)
+          //   4. shuffle & return results    => (0, 300, 0)
+          val expected = if (executorBroadcast) {
+            (10L, 0L, 10L) :: (0L, 0L, 0L) :: (30L, 0L, 30L) :: (0L, 30L, 300L) ::
+              (0L, 300L, 0L) :: Nil
+          } else {
+            (10L, 0L, 10L) :: (30L, 0L, 30L) :: (0L, 30L, 300L) :: (0L, 300L, 0L) :: Nil
+          }
+          assert(res3 === expected)
+        }
+      }
     }
   }
 }
