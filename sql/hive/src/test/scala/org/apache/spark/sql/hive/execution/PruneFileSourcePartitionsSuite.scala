@@ -70,43 +70,26 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("SPARK-20986 Reset table's statistics after PruneFileSourcePartitions rule") {
-    withTempView("tempTbl") {
-      withTable("partTbl") {
-        spark.range(10).selectExpr("id").createOrReplaceTempView("tempTbl")
-        sql("CREATE TABLE partTbl (id INT) PARTITIONED BY (part INT) STORED AS parquet")
-        for (part <- Seq(1, 2)) {
-          sql(
-            s"""
-               |INSERT OVERWRITE TABLE partTbl PARTITION (part='$part')
-               |select id from tempTbl
-            """.stripMargin)
-        }
+    withTable("tbl") {
+      spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
+      sql(s"ANALYZE TABLE tbl COMPUTE STATISTICS")
+      val tableStats = spark.sessionState.catalog.getTableMetadata(TableIdentifier("tbl")).stats
+      assert(tableStats.isDefined && tableStats.get.sizeInBytes > 0, "tableStats is lost")
 
-        val tableName = "partTbl"
-        sql(s"ANALYZE TABLE partTbl COMPUTE STATISTICS")
-        val tableStats =
-          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).stats
-        assert(tableStats.isDefined && tableStats.get.sizeInBytes > 0, "tableStats is lost")
-
-        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
-          val df = sql("SELECT * FROM partTbl where part = 1")
-          val query = df.queryExecution.analyzed.analyze
-          val sizes1 = query.collect {
-            case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
-          }
-          assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-          assert(sizes1(0) == tableStats.get.sizeInBytes)
-          val relations = Optimize.execute(query).collect {
-            case relation: LogicalRelation => relation
-          }
-          assert(relations.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-          val size2 = relations(0).computeStats(conf).sizeInBytes
-          val size3 = relations(0).catalogTable.get.stats.get.sizeInBytes
-          assert(size2 == size3)
-          assert(size2 < tableStats.get.sizeInBytes)
-          assert(size3 < tableStats.get.sizeInBytes)
-        }
+      val df = sql("SELECT * FROM tbl WHERE p = 1")
+      val sizes1 = df.queryExecution.analyzed.collect {
+        case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
       }
+      assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
+      assert(sizes1(0) == tableStats.get.sizeInBytes)
+
+      val relations = df.queryExecution.optimizedPlan.collect {
+        case relation: LogicalRelation => relation
+      }
+      assert(relations.size === 1, s"Size wrong for:\n ${df.queryExecution}")
+      val size2 = relations(0).computeStats(conf).sizeInBytes
+      assert(size2 == relations(0).catalogTable.get.stats.get.sizeInBytes)
+      assert(size2 < tableStats.get.sizeInBytes)
     }
   }
 }
