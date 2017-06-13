@@ -17,16 +17,14 @@
 
 package org.apache.spark.kvstore;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import org.iq80.leveldb.DBIterator;
 
 class LevelDBIterator<T> implements KVStoreIterator<T> {

@@ -17,19 +17,21 @@
 
 package org.apache.spark.kvstore;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
-import static java.nio.charset.StandardCharsets.UTF_8;
-
 import org.apache.commons.io.FileUtils;
 import org.iq80.leveldb.DBIterator;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import static org.junit.Assert.*;
 
 public class LevelDBSuite {
 

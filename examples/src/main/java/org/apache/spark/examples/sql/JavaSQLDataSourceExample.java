@@ -124,7 +124,8 @@ public class JavaSQLDataSourceExample {
     peopleDF.write().bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed");
     // $example off:write_sorting_and_bucketing$
     // $example on:write_partitioning$
-    usersDF.write().partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet");
+    usersDF.write().partitionBy("favorite_color").format("parquet")
+            .save("namesPartByColor.parquet");
     // $example off:write_partitioning$
     // $example on:write_partition_and_bucket$
     peopleDF

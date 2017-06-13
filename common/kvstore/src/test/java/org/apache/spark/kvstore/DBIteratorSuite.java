@@ -17,26 +17,24 @@
 
 package org.apache.spark.kvstore;
 
-import java.util.Arrays;
+import static org.junit.Assert.assertEquals;
+
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
-
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import org.apache.commons.io.FileUtils;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import static org.junit.Assert.*;
 
 public abstract class DBIteratorSuite {
 
@@ -50,7 +48,7 @@ public abstract class DBIteratorSuite {
   private static List<CustomType1> clashingEntries;
   private static KVStore db;
 
-  private static interface BaseComparator extends Comparator<CustomType1> {
+  private interface BaseComparator extends Comparator<CustomType1> {
     /**
      * Returns a comparator that falls back to natural order if this comparator's ordering
      * returns equality for two elements. Used to mimic how the index sorts things internally.

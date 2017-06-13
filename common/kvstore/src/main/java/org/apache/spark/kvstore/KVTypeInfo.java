@@ -17,15 +17,12 @@
 
 package org.apache.spark.kvstore;
 
+import com.google.common.base.Preconditions;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
-
-import com.google.common.base.Preconditions;
 
 /**
  * Wrapper around types managed in a KVStore, providing easy access to their indexed fields.
