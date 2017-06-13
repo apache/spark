@@ -323,7 +323,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
       partColNames: Seq[String]): InsertIntoTable = {
 
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
-      insert.partition, partColNames, tblName, conf.resolver)
+      insert.partition, partColNames, tblName, conf.resolver, conf.caseSensitiveAnalysis)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))

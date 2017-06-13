@@ -39,7 +39,8 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
@@ -188,19 +189,6 @@ class SessionCatalog(
     }
   }
 
-  private def checkDuplication(fields: Seq[StructField]): Unit = {
-    val columnNames = if (conf.caseSensitiveAnalysis) {
-      fields.map(_.name)
-    } else {
-      fields.map(_.name.toLowerCase)
-    }
-    if (columnNames.distinct.length != columnNames.length) {
-      val duplicateColumns = columnNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      throw new AnalysisException(s"Found duplicate column(s): ${duplicateColumns.mkString(", ")}")
-    }
-  }
   // ----------------------------------------------------------------------------
   // Databases
   // ----------------------------------------------------------------------------
@@ -353,7 +341,9 @@ class SessionCatalog(
     val tableIdentifier = TableIdentifier(table, Some(db))
     requireDbExists(db)
     requireTableExists(tableIdentifier)
-    checkDuplication(newSchema)
+
+    SchemaUtils.checkSchemaColumnNameDuplication(
+      newSchema, "table definition of " + tableIdentifier.identifier, conf.caseSensitiveAnalysis)
 
     val catalogTable = externalCatalog.getTable(db, table)
     val oldSchema = catalogTable.schema

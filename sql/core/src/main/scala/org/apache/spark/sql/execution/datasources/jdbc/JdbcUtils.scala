@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
@@ -749,14 +750,7 @@ object JdbcUtils extends Logging {
     val nameEquality = df.sparkSession.sessionState.conf.resolver
 
     // checks duplicate columns in the user specified column types.
-    userSchema.fieldNames.foreach { col =>
-      val duplicatesCols = userSchema.fieldNames.filter(nameEquality(_, col))
-      if (duplicatesCols.size >= 2) {
-        throw new AnalysisException(
-          "Found duplicate column(s) in createTableColumnTypes option value: " +
-            duplicatesCols.mkString(", "))
-      }
-    }
+    SchemaUtils.checkSchemaColumnNameDuplication(userSchema, "createTableColumnTypes option value")
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>

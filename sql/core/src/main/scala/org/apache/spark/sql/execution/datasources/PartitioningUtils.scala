@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 // TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
@@ -293,7 +294,8 @@ object PartitioningUtils {
       partitionSpec: Map[String, T],
       partColNames: Seq[String],
       tblName: String,
-      resolver: Resolver): Map[String, T] = {
+      resolver: Resolver,
+      caseSensitiveAnalysis: Boolean): Map[String, T] = {
     val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
       val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
         throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
@@ -301,13 +303,8 @@ object PartitioningUtils {
       normalizedKey -> value
     }
 
-    if (normalizedPartSpec.map(_._1).distinct.length != normalizedPartSpec.length) {
-      val duplicateColumns = normalizedPartSpec.map(_._1).groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      throw new AnalysisException(s"Found duplicated columns in partition specification: " +
-        duplicateColumns.mkString(", "))
-    }
+    SchemaUtils.checkColumnNameDuplication(
+      normalizedPartSpec.map(_._1), "partition specification", caseSensitiveAnalysis)
 
     normalizedPartSpec.toMap
   }
