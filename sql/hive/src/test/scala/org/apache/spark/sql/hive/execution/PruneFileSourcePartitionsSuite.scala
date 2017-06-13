@@ -92,15 +92,19 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
           val df = sql("SELECT * FROM partTbl where part = 1")
           val query = df.queryExecution.analyzed.analyze
           val sizes1 = query.collect {
-            case relation: LogicalRelation => relation.computeStats(conf).sizeInBytes
+            case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
           }
           assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
           assert(sizes1(0) == tableStats.get.sizeInBytes)
-          val sizes2 = Optimize.execute(query).collect {
-            case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
+          val relations = Optimize.execute(query).collect {
+            case relation: LogicalRelation => relation
           }
-          assert(sizes2.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-          assert(sizes2(0) < tableStats.get.sizeInBytes)
+          assert(relations.size === 1, s"Size wrong for:\n ${df.queryExecution}")
+          val size2 = relations(0).computeStats(conf).sizeInBytes
+          val size3 = relations(0).catalogTable.get.stats.get.sizeInBytes
+          assert(size2 == size3)
+          assert(size2 < tableStats.get.sizeInBytes)
+          assert(size3 < tableStats.get.sizeInBytes)
         }
       }
     }
