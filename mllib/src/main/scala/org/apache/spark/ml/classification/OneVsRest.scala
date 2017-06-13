@@ -21,6 +21,8 @@ import java.util.{List => JList}
 import java.util.UUID
 
 import scala.collection.JavaConverters._
+import scala.collection.parallel.ForkJoinTaskSupport
+import scala.concurrent.forkjoin.ForkJoinPool
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
@@ -67,7 +69,7 @@ private[ml] trait OneVsRestParams extends PredictorParams with ClassifierTypeTra
   def getClassifier: ClassifierType = $(classifier)
 
   val parallelism = new IntParam(this, "parallelism",
-    "parallelism parameter for tuning amount of parallelism", ParamValidators.gt(1))
+    "parallelism parameter for tuning amount of parallelism", ParamValidators.gtEq(1))
 
   /** @group getParam */
   def getParallelism: Int = $(parallelism)
@@ -279,6 +281,10 @@ final class OneVsRest @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends Estimator[OneVsRestModel] with OneVsRestParams with MLWritable {
 
+  setDefault(
+    parallelism -> 4
+  )
+
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("oneVsRest"))
 
@@ -337,8 +343,13 @@ final class OneVsRest @Since("1.4.0") (
       multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
+    val iters = Range(0, numClasses).par
+    iters.tasksupport = new ForkJoinTaskSupport(
+      new ForkJoinPool(getParallelism)
+    )
+
     // create k columns, one for each binary classifier.
-    val models = Range(0, numClasses).par.map { index =>
+    val models = iters.map { index =>
       // generate new label metadata for the binary problem.
       val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
       val labelColName = "mc2b$" + index

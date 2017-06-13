@@ -1517,13 +1517,13 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 classifier=None, parallelism=8):
+                 classifier=None, parallelism=4):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  classifier=None)
         """
         super(OneVsRest, self).__init__()
-        self._setDefault(parallelism=8)
+        self._setDefault(parallelism=4)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
