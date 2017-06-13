@@ -180,11 +180,19 @@ class MasterSuite extends SparkFunSuite
       val fakeExecutors = List(
         new ExecutorDescription(fakeAppInfo.id, 0, 8, ExecutorState.RUNNING),
         new ExecutorDescription(fakeAppInfo.id, 0, 7, ExecutorState.RUNNING))
+
+      fakeAppInfo.state should be(ApplicationState.UNKNOWN)
+
       master.self.send(MasterChangeAcknowledged(fakeAppInfo.id))
       master.self.send(
         WorkerSchedulerStateResponse(fakeWorkerInfo.id, fakeExecutors, Seq(fakeDriverInfo.id)))
 
-      eventually(timeout(5 seconds), interval(100 microseconds)) {
+      eventually(timeout(1 second), interval(10 milliseconds)) {
+        // Application state should be WAITING when "MasterChangeAcknowledged" event executed.
+        fakeAppInfo.state should be(ApplicationState.WAITING)
+      }
+
+      eventually(timeout(5 seconds), interval(100 milliseconds)) {
         getState(master) should be(RecoveryState.ALIVE)
       }
 
