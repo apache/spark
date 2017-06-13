@@ -66,11 +66,7 @@ To run one of them, use `./bin/spark-submit <filename> <args>`. For example:
 ```bash
 ./bin/spark-submit examples/src/main/r/dataframe.R
 ```
-You can also run the unit tests for SparkR by running. You need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
-```bash
-R -e 'install.packages(c("knitr", "rmarkdown", "testthat", "e1071", "survival"), repos="http://cran.us.r-project.org")'
-./R/run-tests.sh
-```
+You can run the unit tests following [running-r-tests](http://spark.apache.org/docs/latest/building-spark.html#running-r-tests).
 
 ### Running on YARN
 
