@@ -45,7 +45,28 @@ import org.apache.spark.sql.functions.{col, lit}
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasThreshold with HasAggregationDepth with HasSolver
+  with HasThreshold with HasAggregationDepth with HasSolver {
+
+  /**
+   * Specifies the loss function. Currently "hinge" and "squared_hinge" are supported.
+   * "hinge" is the standard SVM loss (a.k.a. L1 loss) while "squared_hinge" is the square of
+   * the hinge loss (a.k.a. L2 loss).
+   *
+   * @see <a href="https://en.wikipedia.org/wiki/Hinge_loss">Hinge loss (Wikipedia)</a>
+   *
+   * @group param
+   */
+  @Since("2.3.0")
+  final val loss: Param[String] = new Param(this, "loss", "Specifies the loss " +
+    "function. hinge is the standard SVM loss while squared_hinge is the square of the hinge loss.",
+    (s: String) => LinearSVC.supportedLoss.contains(s.toLowerCase(Locale.ROOT)))
+
+  setDefault(loss -> "squared_hinge")
+
+  /** @group getParam */
+  @Since("2.3.0")
+  def getLoss: String = $(loss)
+}
 
 /**
  * :: Experimental ::
@@ -53,8 +74,11 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
  * <a href = "https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM">
  *   Linear SVM Classifier</a>
  *
- * This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
- * Only supports L2 regularization currently.
+ * This binary classifier implements a linear SVM classifier. Currently "hinge" and
+ * "squared_hinge" loss functions are supported. "hinge" is the standard SVM loss (a.k.a. L1 loss)
+ * while "squared_hinge" is the square of the hinge loss (a.k.a. L2 loss). Both LBFGS and OWL-QN
+ * optimizers are supported and can be specified via setting the solver param.
+ * By default, L2 SVM (Squared Hinge Loss) and L-BFGS optimizer are used.
  *
  */
 @Since("2.2.0")
@@ -152,6 +176,14 @@ class LinearSVC @Since("2.2.0") (
   setDefault(aggregationDepth -> 2)
 
   /**
+   * Set the loss function. Default is "squared_hinge".
+   *
+   * @group setParam
+   */
+  @Since("2.3.0")
+  def setLoss(value: String): this.type = set(loss, value)
+
+  /**
    * Set solver for LinearSVC. Supported options: "l-bfgs" and "owlqn" (case insensitve).
    * - "l-bfgs" denotes Limited-memory BFGS which is a limited-memory quasi-Newton
    * optimization method.
@@ -166,7 +198,7 @@ class LinearSVC @Since("2.2.0") (
       s"Solver $value was not supported. Supported options: l-bfgs, owlqn")
     set(solver, lowercaseValue)
   }
-  setDefault(solver -> "owlqn")
+  setDefault(solver -> "l-bfgs")
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
@@ -225,10 +257,10 @@ class LinearSVC @Since("2.2.0") (
       val featuresStd = summarizer.variance.toArray.map(math.sqrt)
       val regParamL2 = $(regParam)
       val bcFeaturesStd = instances.context.broadcast(featuresStd)
-      val costFun = new LinearSVCCostFun(instances, $(fitIntercept),
-        $(standardization), bcFeaturesStd, regParamL2, $(aggregationDepth))
+      val costFun = new LinearSVCCostFun(instances, $(fitIntercept), $(standardization),
+        bcFeaturesStd, regParamL2, $(aggregationDepth), $(loss).toLowerCase(Locale.ROOT))
 
-      val optimizer = $(solver) match {
+      val optimizer = $(solver).toLowerCase(Locale.ROOT) match {
         case LBFGS => new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
         case OWLQN =>
           def regParamL1Fun = (index: Int) => 0D
@@ -298,6 +330,8 @@ object LinearSVC extends DefaultParamsReadable[LinearSVC] {
 
   @Since("2.2.0")
   override def load(path: String): LinearSVC = super.load(path)
+
+  private[classification] val supportedLoss = Array("hinge", "squared_hinge")
 }
 
 /**
@@ -393,7 +427,8 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
 }
 
 /**
- * LinearSVCCostFun implements Breeze's DiffFunction[T] for hinge loss function
+ * LinearSVCCostFun implements Breeze's DiffFunction[T] for loss function ("hinge" or
+ * "squared_hinge").
  */
 private class LinearSVCCostFun(
     instances: RDD[Instance],
@@ -401,7 +436,8 @@ private class LinearSVCCostFun(
     standardization: Boolean,
     bcFeaturesStd: Broadcast[Array[Double]],
     regParamL2: Double,
-    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
+    aggregationDepth: Int,
+    loss: String) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
@@ -414,7 +450,7 @@ private class LinearSVCCostFun(
       val combOp = (c1: LinearSVCAggregator, c2: LinearSVCAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LinearSVCAggregator(bcCoeffs, bcFeaturesStd, fitIntercept)
+        new LinearSVCAggregator(bcCoeffs, bcFeaturesStd, fitIntercept, loss)
       )(seqOp, combOp, aggregationDepth)
     }
 
@@ -459,8 +495,9 @@ private class LinearSVCCostFun(
 }
 
 /**
- * LinearSVCAggregator computes the gradient and loss for hinge loss function, as used
- * in binary classification for instances in sparse or dense vector in an online fashion.
+ * LinearSVCAggregator computes the gradient and loss for loss function ("hinge" or
+ * "squared_hinge", as used in binary classification for instances in sparse or dense
+ * vector in an online fashion.
  *
  * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
@@ -474,7 +511,8 @@ private class LinearSVCCostFun(
 private class LinearSVCAggregator(
     bcCoefficients: Broadcast[Vector],
     bcFeaturesStd: Broadcast[Array[Double]],
-    fitIntercept: Boolean) extends Serializable {
+    fitIntercept: Boolean,
+    lossFunction: String) extends Serializable {
 
   private val numFeatures: Int = bcFeaturesStd.value.length
   private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
@@ -516,13 +554,24 @@ private class LinearSVCAggregator(
       // Therefore the gradient is -(2y - 1)*x
       val labelScaled = 2 * label - 1.0
       val loss = if (1.0 > labelScaled * dotProduct) {
-        weight * (1.0 - labelScaled * dotProduct)
+        val hingeLoss = 1.0 - labelScaled * dotProduct
+        lossFunction match {
+          case "hinge" => hingeLoss * weight
+          case "squared_hinge" => hingeLoss * hingeLoss * weight
+          case unexpected => throw new SparkException(
+            s"unexpected lossFunction in LinearSVCAggregator: $unexpected")
+        }
       } else {
         0.0
       }
 
       if (1.0 > labelScaled * dotProduct) {
-        val gradientScale = -labelScaled * weight
+        val gradientScale = lossFunction match {
+          case "hinge" => -labelScaled * weight
+          case "squared_hinge" => (labelScaled * dotProduct - 1) * labelScaled * 2
+          case unexpected => throw new SparkException(
+            s"unexpected lossFunction in LinearSVCAggregator: $unexpected")
+        }
         features.foreachActive { (index, value) =>
           if (localFeaturesStd(index) != 0.0 && value != 0.0) {
             localGradientSumArray(index) += value * gradientScale / localFeaturesStd(index)
