@@ -27,7 +27,15 @@ trait QueryPlanConstraints[PlanType <: QueryPlan[PlanType]] { self: QueryPlan[Pl
    * example, if this set contains the expression `a = 2` then that expression is guaranteed to
    * evaluate to `true` for all rows produced.
    */
-  lazy val constraints: ExpressionSet = ExpressionSet(getRelevantConstraints(validConstraints))
+  lazy val constraints: ExpressionSet =
+    ExpressionSet(
+      validConstraints
+        .union(inferAdditionalConstraints(constraints))
+        .union(constructIsNotNullConstraints(constraints))
+        .filter { c =>
+          c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
+        }
+    )
 
   /**
    * Returns [[constraints]] depending on the config of enabling constraint propagation. If the
@@ -49,19 +57,6 @@ trait QueryPlanConstraints[PlanType <: QueryPlan[PlanType]] { self: QueryPlan[Pl
    * See [[Canonicalize]] for more details.
    */
   protected def validConstraints: Set[Expression] = Set.empty
-
-  /**
-   * Extracts the relevant constraints from a given set of constraints based on the attributes that
-   * appear in the [[outputSet]].
-   */
-  protected def getRelevantConstraints(constraints: Set[Expression]): Set[Expression] = {
-    constraints
-      .union(inferAdditionalConstraints(constraints))
-      .union(constructIsNotNullConstraints(constraints))
-      .filter(constraint =>
-        constraint.references.nonEmpty && constraint.references.subsetOf(outputSet) &&
-          constraint.deterministic)
-  }
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
