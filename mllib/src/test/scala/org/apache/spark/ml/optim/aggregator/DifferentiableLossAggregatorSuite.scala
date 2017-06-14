@@ -21,8 +21,8 @@ import org.apache.spark.ml.classification.MultiClassSummarizer
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 
 class DifferentiableLossAggregatorSuite extends SparkFunSuite {
 
@@ -162,7 +162,7 @@ object DifferentiableLossAggregatorSuite {
   }
 
   /** Get feature and label summarizers for provided data. */
-  def getRegressionSummarizers(
+  private[ml] def getRegressionSummarizers(
       instances: Array[Instance]): (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer) = {
     val seqOp = (c: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
                  instance: Instance) =>
@@ -179,9 +179,8 @@ object DifferentiableLossAggregatorSuite {
   }
 
   /** Get feature and label summarizers for provided data. */
-  def getClassificationSummarizers(
-                                instances: Array[Instance]):
-  (MultivariateOnlineSummarizer, MultiClassSummarizer) = {
+  private[ml] def getClassificationSummarizers(
+      instances: Array[Instance]): (MultivariateOnlineSummarizer, MultiClassSummarizer) = {
     val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
                  instance: Instance) =>
       (c._1.add(instance.features, instance.weight),

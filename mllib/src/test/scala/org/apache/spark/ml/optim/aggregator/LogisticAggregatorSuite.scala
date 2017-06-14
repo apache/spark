@@ -98,7 +98,6 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     instances.foreach(aggIntercept.add)
     instances.foreach(aggNoIntercept.add)
 
-    // least squares agg does not include intercept in its gradient array
     assert(aggIntercept.gradient.size === (numFeatures + 1) * numClasses)
     assert(aggNoIntercept.gradient.size === numFeatures * numClasses)
   }
@@ -116,7 +115,6 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     binaryInstances.foreach(aggIntercept.add)
     binaryInstances.foreach(aggNoIntercept.add)
 
-    // least squares agg does not include intercept in its gradient array
     assert(aggIntercept.gradient.size === numFeatures + 1)
     assert(aggNoIntercept.gradient.size === numFeatures)
   }

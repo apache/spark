@@ -17,6 +17,7 @@
 package org.apache.spark.ml.optim.loss
 
 import breeze.optimize.DiffFunction
+
 import org.apache.spark.ml.linalg._
 
 /**
@@ -39,11 +40,11 @@ private[ml] trait DifferentiableRegularization[T] extends DiffFunction[T] {
  * @param regParam The magnitude of the regularization.
  * @param shouldApply A function (Int => Boolean) indicating whether a given index should have
  *                    regularization applied to it.
- * @param featuresStd Option indicating whether the regularization should be scaled by the standard
- *                    deviation of the features.
+ * @param featuresStd Option for a function which maps coefficient index (column major) to the
+ *                    feature standard deviation. If `None`, no standardization is applied.
  */
 private[ml] class L2Regularization(
-    val regParam: Double,
+    override val regParam: Double,
     shouldApply: Int => Boolean,
     featuresStd: Option[Int => Double]) extends DifferentiableRegularization[Vector] {
 
