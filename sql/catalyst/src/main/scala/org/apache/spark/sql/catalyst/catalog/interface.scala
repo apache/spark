@@ -75,7 +75,7 @@ case class CatalogStorageFormat(
     CatalogUtils.maskCredentials(properties) match {
       case props if props.isEmpty => // No-op
       case props =>
-        map.put("Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
+        map.put("Storage Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
     }
     map
   }
@@ -313,7 +313,7 @@ case class CatalogTable(
       }
     }
 
-    if (properties.nonEmpty) map.put("Properties", tableProperties)
+    if (properties.nonEmpty) map.put("Table Properties", tableProperties)
     stats.foreach(s => map.put("Statistics", s.simpleString))
     map ++= storage.toLinkedHashMap
     if (tracksPartitionsInCatalog) map.put("Partition Provider", "Catalog")
