@@ -25,6 +25,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.optim.aggregator.SquaredHingeAggregator
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -156,7 +157,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   test("sparse coefficients in SVCAggregator") {
     val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val agg = new LinearSVCAggregator(bcCoefficients, bcFeaturesStd, true, "squared_hinge")
+    val agg = new SquaredHingeAggregator(bcFeaturesStd, true)(bcCoefficients)
     val thrown = withClue("LinearSVCAggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))

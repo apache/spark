@@ -32,7 +32,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.linalg.BLAS._
+import org.apache.spark.ml.optim.aggregator.{HingeAggregator, SquaredHingeAggregator}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -445,13 +445,22 @@ private class LinearSVCCostFun(
     val featuresStd = bcFeaturesStd.value
     val numFeatures = featuresStd.length
 
-    val svmAggregator = {
-      val seqOp = (c: LinearSVCAggregator, instance: Instance) => c.add(instance)
-      val combOp = (c1: LinearSVCAggregator, c2: LinearSVCAggregator) => c1.merge(c2)
+    val svmAggregator = loss match {
+      case "hinge" =>
+        val seqOp = (c: HingeAggregator, instance: Instance) => c.add(instance)
+        val combOp = (c1: HingeAggregator, c2: HingeAggregator) => c1.merge(c2)
+        instances.treeAggregate(
+          new HingeAggregator(bcFeaturesStd, fitIntercept)(bcCoeffs)
+        )(seqOp, combOp, aggregationDepth)
+      case "squared_hinge" =>
+        val seqOp = (c: SquaredHingeAggregator, instance: Instance) => c.add(instance)
+        val combOp = (c1: SquaredHingeAggregator, c2: SquaredHingeAggregator) => c1.merge(c2)
 
-      instances.treeAggregate(
-        new LinearSVCAggregator(bcCoeffs, bcFeaturesStd, fitIntercept, loss)
-      )(seqOp, combOp, aggregationDepth)
+        instances.treeAggregate(
+          new SquaredHingeAggregator(bcFeaturesStd, fitIntercept)(bcCoeffs)
+        )(seqOp, combOp, aggregationDepth)
+      case unexpected => throw new SparkException(
+        s"unexpected lossFunction in LinearSVCAggregator: $unexpected")
     }
 
     val totalGradientArray = svmAggregator.gradient.toArray
@@ -491,138 +500,5 @@ private class LinearSVCCostFun(
     bcCoeffs.destroy(blocking = false)
 
     (svmAggregator.loss + regVal, new BDV(totalGradientArray))
-  }
-}
-
-/**
- * LinearSVCAggregator computes the gradient and loss for loss function ("hinge" or
- * "squared_hinge", as used in binary classification for instances in sparse or dense
- * vector in an online fashion.
- *
- * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
- * the corresponding joint dataset.
- *
- * This class standardizes feature values during computation using bcFeaturesStd.
- *
- * @param bcCoefficients The coefficients corresponding to the features.
- * @param fitIntercept Whether to fit an intercept term.
- * @param bcFeaturesStd The standard deviation values of the features.
- */
-private class LinearSVCAggregator(
-    bcCoefficients: Broadcast[Vector],
-    bcFeaturesStd: Broadcast[Array[Double]],
-    fitIntercept: Boolean,
-    lossFunction: String) extends Serializable {
-
-  private val numFeatures: Int = bcFeaturesStd.value.length
-  private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
-  private var weightSum: Double = 0.0
-  private var lossSum: Double = 0.0
-  @transient private lazy val coefficientsArray = bcCoefficients.value match {
-    case DenseVector(values) => values
-    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
-      s" but got type ${bcCoefficients.value.getClass}.")
-  }
-  private lazy val gradientSumArray = new Array[Double](numFeaturesPlusIntercept)
-
-  /**
-   * Add a new training instance to this LinearSVCAggregator, and update the loss and gradient
-   * of the objective function.
-   *
-   * @param instance The instance of data point to be added.
-   * @return This LinearSVCAggregator object.
-   */
-  def add(instance: Instance): this.type = {
-    instance match { case Instance(label, weight, features) =>
-
-      if (weight == 0.0) return this
-      val localFeaturesStd = bcFeaturesStd.value
-      val localCoefficients = coefficientsArray
-      val localGradientSumArray = gradientSumArray
-
-      val dotProduct = {
-        var sum = 0.0
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-            sum += localCoefficients(index) * value / localFeaturesStd(index)
-          }
-        }
-        if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
-        sum
-      }
-      // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
-      // Therefore the gradient is -(2y - 1)*x
-      val labelScaled = 2 * label - 1.0
-      val loss = if (1.0 > labelScaled * dotProduct) {
-        val hingeLoss = 1.0 - labelScaled * dotProduct
-        lossFunction match {
-          case "hinge" => hingeLoss * weight
-          case "squared_hinge" => hingeLoss * hingeLoss * weight
-          case unexpected => throw new SparkException(
-            s"unexpected lossFunction in LinearSVCAggregator: $unexpected")
-        }
-      } else {
-        0.0
-      }
-
-      if (1.0 > labelScaled * dotProduct) {
-        val gradientScale = lossFunction match {
-          case "hinge" => -labelScaled * weight
-          case "squared_hinge" => (labelScaled * dotProduct - 1) * labelScaled * 2
-          case unexpected => throw new SparkException(
-            s"unexpected lossFunction in LinearSVCAggregator: $unexpected")
-        }
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-            localGradientSumArray(index) += value * gradientScale / localFeaturesStd(index)
-          }
-        }
-        if (fitIntercept) {
-          localGradientSumArray(localGradientSumArray.length - 1) += gradientScale
-        }
-      }
-
-      lossSum += loss
-      weightSum += weight
-      this
-    }
-  }
-
-  /**
-   * Merge another LinearSVCAggregator, and update the loss and gradient
-   * of the objective function.
-   * (Note that it's in place merging; as a result, `this` object will be modified.)
-   *
-   * @param other The other LinearSVCAggregator to be merged.
-   * @return This LinearSVCAggregator object.
-   */
-  def merge(other: LinearSVCAggregator): this.type = {
-
-    if (other.weightSum != 0.0) {
-      weightSum += other.weightSum
-      lossSum += other.lossSum
-
-      var i = 0
-      val localThisGradientSumArray = this.gradientSumArray
-      val localOtherGradientSumArray = other.gradientSumArray
-      val len = localThisGradientSumArray.length
-      while (i < len) {
-        localThisGradientSumArray(i) += localOtherGradientSumArray(i)
-        i += 1
-      }
-    }
-    this
-  }
-
-  def loss: Double = if (weightSum != 0) lossSum / weightSum else 0.0
-
-  def gradient: Vector = {
-    if (weightSum != 0) {
-      val result = Vectors.dense(gradientSumArray.clone())
-      scal(1.0 / weightSum, result)
-      result
-    } else {
-      Vectors.dense(new Array[Double](numFeaturesPlusIntercept))
-    }
   }
 }
