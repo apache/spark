@@ -127,8 +127,9 @@ Provider            	parquet
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
-Properties          	[a=1, b=2]          	                    
+Table Properties    	[e=3]               	                    
 Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
 
 
@@ -156,8 +157,9 @@ Provider            	parquet
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
-Properties          	[a=1, b=2]          	                    
+Table Properties    	[e=3]               	                    
 Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
 
 
@@ -195,14 +197,14 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
-Properties          	[a=1, b=2]          	                    
+Storage Properties  	[a=1, b=2]          	                    
                     	                    	                    
 # Storage Information	                    	                    
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Location [not included in comparison]sql/core/spark-warehouse/t	                    
-Properties          	[a=1, b=2]
+Storage Properties  	[a=1, b=2]
 
 
 -- !query 13
@@ -224,14 +226,14 @@ Database            	default
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
-Properties          	[a=1, b=2]          	                    
+Storage Properties  	[a=1, b=2]          	                    
                     	                    	                    
 # Storage Information	                    	                    
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Location [not included in comparison]sql/core/spark-warehouse/t	                    
-Properties          	[a=1, b=2]
+Storage Properties  	[a=1, b=2]
 
 
 -- !query 14
@@ -385,7 +387,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Default Database	default             	                    
 View Query Output Columns	[a, b, c, d]        	                    
-Properties          	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]
+Table Properties    	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]
 
 
 -- !query 26
@@ -407,7 +409,7 @@ Type                	VIEW
 View Text           	SELECT * FROM t     	                    
 View Default Database	default             	                    
 View Query Output Columns	[a, b, c, d]        	                    
-Properties          	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]
+Table Properties    	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]
 
 
 -- !query 27
