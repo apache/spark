@@ -426,7 +426,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
             }
           case None =>
             logError(
-
               ("Ignoring update with state %s for TID %s because its task set is gone (this is " +
                 "likely the result of receiving duplicate task finished status updates) or its " +
                 "executor has been marked as failed.")
