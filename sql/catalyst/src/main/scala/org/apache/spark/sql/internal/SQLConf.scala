@@ -19,6 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -63,6 +64,27 @@ object SQLConf {
       SQLConf.register(entry)
     }
   }
+
+  /** Default config. Only used when there is no active SparkSession for the thread. */
+  private val fallbackConf = new ThreadLocal[SQLConf] {
+    override def initialValue: SQLConf = new SQLConf
+  }
+
+  def getFallbackConf: SQLConf = fallbackConf.get()
+
+  /** Defines a getter that returns the SQLConf within scope. */
+  private val confGetter = new AtomicReference[() => SQLConf](() => fallbackConf.get())
+
+  /** Sets the active config object within the current scope. */
+  def setSQLConfGetter(getter: () => SQLConf): Unit = {
+    confGetter.set(getter)
+  }
+
+  /**
+   * Returns the active config object within the current scope. If there is an active SparkSession,
+   * the proper SQLConf associated with the thread's session is used.
+   */
+  def get: SQLConf = confGetter.get()()
 
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
     .internal()

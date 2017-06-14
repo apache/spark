@@ -730,7 +730,7 @@ case class PruneFilters(conf: SQLConf) extends Rule[LogicalPlan] with PredicateH
     case f @ Filter(fc, p: LogicalPlan) =>
       val (prunedPredicates, remainingPredicates) =
         splitConjunctivePredicates(fc).partition { cond =>
-          cond.deterministic && p.getConstraints(conf.constraintPropagationEnabled).contains(cond)
+          cond.deterministic && p.constraints.contains(cond)
         }
       if (prunedPredicates.isEmpty) {
         f

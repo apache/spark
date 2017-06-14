@@ -27,18 +27,13 @@ trait QueryPlanConstraints[PlanType <: QueryPlan[PlanType]] { self: QueryPlan[Pl
    * example, if this set contains the expression `a = 2` then that expression is guaranteed to
    * evaluate to `true` for all rows produced.
    */
-  lazy val constraints: ExpressionSet = ExpressionSet(getRelevantConstraints(validConstraints))
-
-  /**
-   * Returns [[constraints]] depending on the config of enabling constraint propagation. If the
-   * flag is disabled, simply returning an empty constraints.
-   */
-  def getConstraints(constraintPropagationEnabled: Boolean): ExpressionSet =
-    if (constraintPropagationEnabled) {
-      constraints
+  lazy val constraints: ExpressionSet = {
+    if (conf.constraintPropagationEnabled) {
+      ExpressionSet(getRelevantConstraints(validConstraints))
     } else {
       ExpressionSet(Set.empty)
     }
+  }
 
   /**
    * This method can be overridden by any child class of QueryPlan to specify a set of constraints
