@@ -130,5 +130,5 @@ abstract class AbstractSparkAppHandle implements SparkAppHandle {
     }
   }
 
-  protected abstract void waitFor() throws InterruptedException;
+  abstract void waitFor() throws InterruptedException;
 }

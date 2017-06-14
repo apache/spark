@@ -58,7 +58,7 @@ class ChildProcAppHandle extends AbstractSparkAppHandle {
       SparkLauncher.REDIRECTOR_FACTORY);
   }
 
-  protected void waitFor() throws InterruptedException {
+  void waitFor() throws InterruptedException {
     this.childProc.waitFor();
   }
 }
