@@ -138,6 +138,7 @@
     <okhttp3.version>3.8.0</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
     <okio.version>1.13.0</okio.version>
+    <retrofit.version>2.2.0</retrofit.version>
     <bouncycastle.version>1.54</bouncycastle.version>
     <jetty.version>9.4.5.v20170502</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
@@ -350,24 +351,47 @@
       </dependency>
 
       <dependency>
-        <groupId>com.netflix.feign</groupId>
-        <artifactId>feign-core</artifactId>
-        <version>${feign.version}</version>
+        <groupId>com.squareup.retrofit2</groupId>
+        <artifactId>retrofit</artifactId>
+        <version>${retrofit.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.netflix.feign</groupId>
-        <artifactId>feign-okhttp</artifactId>
-        <version>${feign.version}</version>
+        <groupId>com.squareup.retrofit2</groupId>
+        <artifactId>converter-jackson</artifactId>
+        <version>${retrofit.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.netflix.feign</groupId>
-        <artifactId>feign-jackson</artifactId>
-        <version>${feign.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.netflix.feign</groupId>
-        <artifactId>feign-jaxrs</artifactId>
-        <version>${feign.version}</version>
+        <groupId>com.squareup.retrofit2</groupId>
+        <artifactId>converter-scalars</artifactId>
+        <version>${retrofit.version}</version>
       </dependency>
       <dependency>
         <groupId>org.bouncycastle</groupId>
@@ -727,6 +751,11 @@
         <artifactId>jackson-annotations</artifactId>
         <version>${fasterxml.jackson.version}</version>
       </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.dataformat</groupId>
+        <artifactId>jackson-dataformat-yaml</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
       <!-- Guava is excluded because of SPARK-6149.  The Guava version referenced in this module is
            15.0, which causes runtime incompatibility issues. -->
       <dependency>
@@ -824,6 +853,11 @@
         <groupId>javax.activation</groupId>
         <artifactId>activation</artifactId>
         <version>${javax-activation.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey.media</groupId>
+        <artifactId>jersey-media-multipart</artifactId>
+        <version>${jersey.version}</version>
       </dependency>
       <dependency>
         <groupId>javax.ws.rs</groupId>

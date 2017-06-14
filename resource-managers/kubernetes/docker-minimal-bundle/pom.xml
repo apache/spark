@@ -31,7 +31,7 @@
   <packaging>pom</packaging>
 
   <properties>
-    <sbt.project.name>docker-minimal-bundle</sbt.project.name>
+    <sbt.project.name>kubernetes-docker-minimal-bundle</sbt.project.name>
     <build.testJarPhase>none</build.testJarPhase>
     <build.copyDependenciesPhase>pre-integration-test</build.copyDependenciesPhase>
   </properties>
@@ -72,27 +72,14 @@
         <artifactId>maven-assembly-plugin</artifactId>
         <executions>
           <execution>
-            <id>driver-docker-dist</id>
+            <id>docker-dist</id>
             <phase>pre-integration-test</phase>
             <goals>
               <goal>single</goal>
             </goals>
             <configuration>
               <descriptors>
-                <descriptor>src/main/assembly/driver-assembly.xml</descriptor>
-              </descriptors>
-              <tarLongFileMode>posix</tarLongFileMode>
-            </configuration>
-          </execution>
-          <execution>
-            <id>executor-docker-dist</id>
-            <phase>pre-integration-test</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-              <descriptors>
-                <descriptor>src/main/assembly/executor-assembly.xml</descriptor>
+                <descriptor>src/main/assembly/docker-assembly.xml</descriptor>
               </descriptors>
               <tarLongFileMode>posix</tarLongFileMode>
             </configuration>

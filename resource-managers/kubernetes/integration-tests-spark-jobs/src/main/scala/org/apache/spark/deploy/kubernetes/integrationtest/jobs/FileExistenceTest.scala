@@ -28,7 +28,9 @@ private[spark] object FileExistenceTest {
 
   def main(args: Array[String]): Unit = {
     if (args.length < 2) {
-      throw new IllegalArgumentException("Usage: WordCount <source-file> <expected contents>")
+      throw new IllegalArgumentException(
+          s"Invalid args: ${args.mkString}, " +
+            "Usage: FileExistenceTest <source-file> <expected contents>")
     }
     // Can't use SparkContext.textFile since the file is local to the driver
     val file = Paths.get(args(0)).toFile
@@ -39,16 +41,15 @@ private[spark] object FileExistenceTest {
       val contents = Files.toString(file, Charsets.UTF_8)
       if (args(1) != contents) {
         throw new SparkException(s"Contents do not match. Expected: ${args(1)}," +
-          s" actual, $contents")
+          s" actual: $contents")
       } else {
         println(s"File found at ${file.getAbsolutePath} with correct contents.")
       }
       // scalastyle:on println
     }
-    val spark = SparkSession.builder()
-      .appName("Test")
-      .getOrCreate()
-    spark.stop()
+    while (true) {
+      Thread.sleep(600000)
+    }
   }
 
 }

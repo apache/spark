@@ -19,14 +19,23 @@ package org.apache.spark.deploy.kubernetes.integrationtest.docker
 import java.net.URI
 import java.nio.file.Paths
 
-import com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider
-import com.spotify.docker.client.{DefaultDockerClient, DockerCertificates}
+import com.spotify.docker.client.{DefaultDockerClient, DockerCertificates, LoggingBuildHandler}
 import org.apache.http.client.utils.URIBuilder
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 private[spark] class SparkDockerImageBuilder(private val dockerEnv: Map[String, String]) {
 
+  private val DOCKER_BUILD_PATH = Paths.get("target", "docker")
+  // Dockerfile paths must be relative to the build path.
+  private val BASE_DOCKER_FILE = "dockerfiles/spark-base/Dockerfile"
+  private val DRIVER_DOCKER_FILE = "dockerfiles/driver/Dockerfile"
+  private val EXECUTOR_DOCKER_FILE = "dockerfiles/executor/Dockerfile"
+  private val SHUFFLE_SERVICE_DOCKER_FILE = "dockerfiles/shuffle-service/Dockerfile"
+  private val INIT_CONTAINER_DOCKER_FILE = "dockerfiles/init-container/Dockerfile"
+  private val STAGING_SERVER_DOCKER_FILE = "dockerfiles/resource-staging-server/Dockerfile"
+  private val STATIC_ASSET_SERVER_DOCKER_FILE =
+    "dockerfiles/integration-test-asset-server/Dockerfile"
   private val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
   private val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
   private val dockerHost = dockerEnv.getOrElse("DOCKER_HOST",
@@ -52,7 +61,20 @@ private[spark] class SparkDockerImageBuilder(private val dockerEnv: Map[String, 
 
   def buildSparkDockerImages(): Unit = {
     Eventually.eventually(TIMEOUT, INTERVAL) { dockerClient.ping() }
-    dockerClient.build(Paths.get("target", "docker", "driver"), "spark-driver")
-    dockerClient.build(Paths.get("target", "docker", "executor"), "spark-executor")
+    buildImage("spark-base", BASE_DOCKER_FILE)
+    buildImage("spark-driver", DRIVER_DOCKER_FILE)
+    buildImage("spark-executor", EXECUTOR_DOCKER_FILE)
+    buildImage("spark-shuffle", SHUFFLE_SERVICE_DOCKER_FILE)
+    buildImage("spark-resource-staging-server", STAGING_SERVER_DOCKER_FILE)
+    buildImage("spark-init", INIT_CONTAINER_DOCKER_FILE)
+    buildImage("spark-integration-test-asset-server", STATIC_ASSET_SERVER_DOCKER_FILE)
+  }
+
+  private def buildImage(name: String, dockerFile: String): Unit = {
+    dockerClient.build(
+      DOCKER_BUILD_PATH,
+      name,
+      dockerFile,
+      new LoggingBuildHandler())
   }
 }
