@@ -66,7 +66,7 @@ To run one of them, use `./bin/spark-submit <filename> <args>`. For example:
 ```bash
 ./bin/spark-submit examples/src/main/r/dataframe.R
 ```
-You can run the unit tests following [running-r-tests](http://spark.apache.org/docs/latest/building-spark.html#running-r-tests).
+You can run R unit tests by following the instructions under [Running R Tests](http://spark.apache.org/docs/latest/building-spark.html#running-r-tests).
 
 ### Running on YARN
 
