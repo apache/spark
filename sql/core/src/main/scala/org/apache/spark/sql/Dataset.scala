@@ -1734,6 +1734,68 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
+   *
+   * To do a SQL-style set union (that does deduplication of elements), use this function
+   * followed by a [[distinct]].
+   *
+   * The difference between this function and [[union]] is that this function
+   * resolves columns by name:
+   *
+   * {{{
+   *   val df1 = Seq((1, 2, 3)).toDF("col0", "col1", "col2")
+   *   val df2 = Seq((4, 5, 6)).toDF("col1", "col2", "col0")
+   *   df1.unionByName(df2).show
+   *
+   *   // output:
+   *   // +----+----+----+
+   *   // |col0|col1|col2|
+   *   // +----+----+----+
+   *   // |   1|   2|   3|
+   *   // |   6|   4|   5|
+   *   // +----+----+----+
+   * }}}
+   *
+   * @group typedrel
+   * @since 2.3.0
+   */
+  def unionByName(other: Dataset[T]): Dataset[T] = withSetOperator {
+    // Creates a `Union` node and resolves it first to reorder output attributes in `other` by name
+    val unionPlan = sparkSession.sessionState.executePlan(Union(logicalPlan, other.logicalPlan))
+    unionPlan.assertAnalyzed()
+    val Seq(left, right) = unionPlan.analyzed.children
+
+    // Make a pair for union from children output
+    val outputPosMap = AttributeMap(left.output.zipWithIndex)
+    val childrenOutputAttrs = if (!sparkSession.sessionState.conf.caseSensitiveAnalysis) {
+      (left :: right :: Nil).map(_.output.map(a => (a.name.toLowerCase, a)))
+    } else {
+      (left :: right :: Nil).map(_.output.map(a => (a.name, a)))
+    }
+    val unionAttrPair = childrenOutputAttrs.map(_.sortBy(_._1)).transpose.map {
+      case attrs => (attrs.head, attrs.last)
+    }
+
+    // Check if column names are the same with each other
+    unionAttrPair.foreach { case ((lattrName, _), (rattrName, _)) =>
+      if (lattrName != rattrName) {
+        throw new AnalysisException(
+          s"(${right.output.map(_.name).mkString(", ")}) must have the same name set with " +
+            s"""(${left.output.map(_.name).mkString(", ")})""")
+      }
+    }
+
+    // Builds a project list for `other` based on `logicalPlan` output names
+    val rightProjectList = unionAttrPair.map { case ((_, lattr), (_, rattr)) =>
+      (outputPosMap(lattr), rattr)
+    }.sortBy(_._1).map(_._2)
+
+    // This breaks caching, but it's usually ok because it addresses a very specific use case:
+    // using union to union many files or partitions.
+    CombineUnions(Union(left, Project(rightProjectList, right)))
+  }
+
+  /**
    * Returns a new Dataset containing rows only in both this Dataset and another Dataset.
    * This is equivalent to `INTERSECT` in SQL.
    *

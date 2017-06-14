@@ -111,6 +111,52 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("union by name") {
+    // Simple case
+    val df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
+    val df2 = Seq(("a", "7", "bc")).toDF("c", "a", "b")
+    val df3 = Seq((3.8, 1.2, 5.6)).toDF("b", "c", "a")
+    val unionDf = df1.unionByName(df2.unionByName(df3))
+    checkAnswer(unionDf,
+      Row("1", "2", "3") :: Row("7", "bc", "a") :: Row("5.6", "3.8", "1.2") :: Nil
+    )
+
+    // Check if adjacent unions are combined into a single one
+    assert(unionDf.queryExecution.optimizedPlan.collect { case u: Union => true }.size == 1)
+
+    // Failure cases
+    val df4 = Seq((1, 2, 3)).toDF("a", "b", "c")
+    val df5 = Seq((4, 5)).toDF("a", "c")
+    val errMsg1 = intercept[AnalysisException] {
+      df4.unionByName(df5)
+    }.getMessage
+    assert(errMsg1.contains(
+      "Union can only be performed on tables with the same number of columns, " +
+        "but the first table has 3 columns and the second table has 2 columns"))
+
+    val df6 = Seq((1, 2, 3)).toDF("a", "b", "c")
+    val df7 = Seq((4, 5, 6)).toDF("a", "c", "d")
+    val errMsg2 = intercept[AnalysisException] {
+      df6.unionByName(df7)
+    }.getMessage
+    assert(errMsg2.contains("(a, c, d) must have the same name set with (a, b, c)"))
+
+    def checkCaseSensitiveTest(): Unit = {
+      val df1 = Seq((1, 2, 3)).toDF("ab", "cd", "ef")
+      val df2 = Seq((4, 5, 6)).toDF("cd", "ef", "AB")
+      checkAnswer(df1.unionByName(df2), Row(1, 2, 3) :: Row(6, 4, 5) :: Nil)
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val errMsg2 = intercept[AnalysisException] {
+        checkCaseSensitiveTest()
+      }.getMessage
+      assert(errMsg2.contains("(cd, ef, AB) must have the same name set with (ab, cd, ef)"))
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkCaseSensitiveTest()
+    }
+  }
+
   test("empty data frame") {
     assert(spark.emptyDataFrame.columns.toSeq === Seq.empty[String])
     assert(spark.emptyDataFrame.count() === 0)
