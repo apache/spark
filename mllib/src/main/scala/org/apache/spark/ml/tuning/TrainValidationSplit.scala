@@ -102,21 +102,21 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
 
-    // Create execution context from the executor service factory
-    val executionContext = ExecutionContext.fromExecutorService(
-      executorServiceFactory.create($(numParallelEval)))
+    // Create execution context (defaults to thread-pool of size $numParallelEval)
+    val (executor, executorDesc) = getExecutorService
+    val executionContext = ExecutionContext.fromExecutorService(executor)
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(trainRatio, seed)
     logTuningParams(instr)
 
-    logDebug(s"Running validation with level of parallelism: $numParallelEval.")
+    logDebug(s"Running validation with ExecutorService: $executorDesc.")
     val Array(trainingDataset, validationDataset) =
       dataset.randomSplit(Array($(trainRatio), 1 - $(trainRatio)), $(seed))
     trainingDataset.cache()
     validationDataset.cache()
 
-    // Fit models in a Future with thread-pool size determined by '$numParallelEval'
+    // Fit models in a Future with thread-pool size of '$numParallelEval' or custom executor
     logDebug(s"Train split with multiple sets of parameters.")
     val models = epm.map { paramMap =>
       Future[Model[_]] {
@@ -129,15 +129,13 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
       trainingDataset.unpersist()
     } (executionContext)
 
-    // Evaluate models in a Future with thread-pool size determined by '$numParallelEval'
+    // Evaluate models in a Future with thread-pool size of '$numParallelEval' or custom executor
     val metricFutures = models.zip(epm).map { case (modelFuture, paramMap) =>
-      modelFuture.flatMap { model =>
-        Future {
-          // TODO: duplicate evaluator to take extra params from input
-          val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-          logDebug(s"Got metric $metric for model trained with $paramMap.")
-          metric
-        } (executionContext)
+      modelFuture.map { model =>
+        // TODO: duplicate evaluator to take extra params from input
+        val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+        logDebug(s"Got metric $metric for model trained with $paramMap.")
+        metric
       } (executionContext)
     }
 

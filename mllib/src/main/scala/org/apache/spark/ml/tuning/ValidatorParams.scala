@@ -37,22 +37,6 @@ import org.apache.spark.util.ThreadUtils
 
 
 /**
- * Interface for defining a custom ExecutorService factory
- */
-@Experimental
-@InterfaceStability.Unstable
-trait ExecutorServiceFactory {
-
-  /**
-   * Creates an ExecutorService
-   *
-   * @param requestedMaxThreads requested max thread-pool size, optional for the ExecutorService
-   * @return an instance of the ExecutorService
-   */
-  def create(requestedMaxThreads: Int): ExecutorService
-}
-
-/**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
  */
 private[ml] trait ValidatorParams extends HasSeed with Params {
@@ -103,33 +87,36 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
   def getNumParallelEval: Int = $(numParallelEval)
 
   /**
-   * Creates a execution service to be used for validation, defaults to a thread-pool with
-   * size of `numParallelEval`, will run same-thread executor if requested pool size is 1
-   */
-  protected var executorServiceFactory: ExecutorServiceFactory = {
-    new ExecutorServiceFactory {
-      override def create(requestedMaxThreads: Int): ExecutorService = {
-        requestedMaxThreads match {
-          case 1 =>
-            MoreExecutors.sameThreadExecutor()
-          case n =>
-            ThreadUtils.newDaemonCachedThreadPool(
-              s"${this.getClass.getSimpleName}-thread-pool", requestedMaxThreads)
-        }
-      }
-    }
-  }
-
-  /**
    * Sets a factory to create an ExecutorService to be used for evaluation thread-pool
    *
-   * @param factory instance of an ExecutorServiceFactory for using custom ExecutorService
+   * @param executor instance of an ExecutorServiceFactory for using custom ExecutorService
    */
   @Experimental
   @InterfaceStability.Unstable
-  def setExecutorService(factory: ExecutorServiceFactory): Unit = {
-    executorServiceFactory = factory
+  def setExecutorService(executor: ExecutorService): Unit = {
+    customExecutor = executor
   }
+
+  /**
+   * Get an ExecutorService that will be a custom one, if previously set, or a new thread-pool
+   * with maximum threads set to the param `numParallelEval`. If this param is set to 1, a
+   * same-thread executor will be used to run in serial.
+   */
+  @Experimental
+  @InterfaceStability.Unstable
+  def getExecutorService: (ExecutorService, String) = {
+    (Option(customExecutor), $(numParallelEval)) match {
+      case (Some(executor), _) =>
+        (executor, s"Custom executor [$executor]")
+      case (None, 1) =>
+        (MoreExecutors.sameThreadExecutor(), "Same-thread executor")
+      case (None, n) =>
+        (ThreadUtils.newDaemonCachedThreadPool(s"${this.getClass.getSimpleName}-thread-pool", n),
+          s"Thread-pool with $n threads")
+    }
+  }
+
+  protected var customExecutor: ExecutorService = _
 
   protected def transformSchemaImpl(schema: StructType): StructType = {
     require($(estimatorParamMaps).nonEmpty, s"Validator requires non-empty estimatorParamMaps")
