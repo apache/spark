@@ -211,7 +211,7 @@ public class SparkLauncherSuite {
 
     public static void main(String[] args) throws Exception {
       assertEquals(1, args.length);
-      if("proc".equalsIgnoreCase(args[0])) {
+      if ("proc".equalsIgnoreCase(args[0])) {
         assertEquals("proc", args[0]);
         assertEquals("bar", System.getProperty("foo"));
       } else {
