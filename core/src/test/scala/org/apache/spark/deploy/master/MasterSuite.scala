@@ -66,16 +66,16 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   }
 
   val appDesc = DeployTestUtils.createAppDesc()
-  val drivers = new mutable.HashMap[String, String]
+  val drivers = mutable.HashSet[String]()
   override def receive: PartialFunction[Any, Unit] = {
     case RegisteredWorker(masterRef, _, _) =>
-      masterRef.send(WorkerLatestState(id, Nil, drivers.keys.toSeq))
+      masterRef.send(WorkerLatestState(id, Nil, drivers.toSeq))
     case LaunchDriver(driverId, desc) =>
-      drivers(driverId) = driverId
+      drivers += driverId
       master.send(RegisterApplication(appDesc, newDriver(driverId)))
     case KillDriver(driverId) =>
       master.send(DriverStateChanged(driverId, DriverState.KILLED, None))
-      drivers.remove(driverId)
+      drivers -= driverId
       driverIdToAppId.get(driverId) match {
         case Some(appId) =>
           apps.remove(appId)
