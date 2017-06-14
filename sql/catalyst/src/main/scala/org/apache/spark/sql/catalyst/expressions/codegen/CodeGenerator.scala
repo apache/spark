@@ -222,22 +222,24 @@ class CodegenContext {
   // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
+  val outerClassName = "OuterClass"
+
   /**
-   * Holds the class and instance names to be generated. `OuterClass` is a placeholder standing for
-   * whichever class is generated as the outermost class and which will contain any nested
-   * sub-classes. All other classes and instance names in this list will represent private, nested
-   * sub-classes.
+   * Holds the class and instance names to be generated, where `OuterClass` is a placeholder
+   * standing for whichever class is generated as the outermost class and which will contain any
+   * nested sub-classes. All other classes and instance names in this list will represent private,
+   * nested sub-classes.
    */
   private val classes: mutable.ListBuffer[(String, String)] =
-    mutable.ListBuffer[(String, String)]("OuterClass" -> null)
+    mutable.ListBuffer[(String, String)](outerClassName -> null)
 
   // A map holding the current size in bytes of each class to be generated.
   private val classSize: mutable.Map[String, Int] =
-    mutable.Map[String, Int]("OuterClass" -> 0)
+    mutable.Map[String, Int](outerClassName -> 0)
 
   // Nested maps holding function names and their code belonging to each class.
   private val classFunctions: mutable.Map[String, mutable.Map[String, String]] =
-    mutable.Map("OuterClass" -> mutable.Map.empty[String, String])
+    mutable.Map(outerClassName -> mutable.Map.empty[String, String])
 
   // Returns the size of the most recently added class.
   private def currClassSize(): Int = classSize(classes.head._1)
@@ -276,7 +278,7 @@ class CodegenContext {
     // threshold of 1600k bytes to determine when a function should be inlined to a private, nested
     // sub-class.
     val (className, classInstance) = if (inlineToOuterClass) {
-      "OuterClass" -> ""
+      outerClassName -> ""
     } else if (currClassSize > 1600000) {
       val className = freshName("NestedClass")
       val classInstance = freshName("nestedClassInstance")
@@ -291,7 +293,7 @@ class CodegenContext {
     classSize(className) += funcCode.length
     classFunctions(className) += funcName -> funcCode
 
-    if (className.equals("OuterClass")) {
+    if (className == outerClassName) {
       funcName
     } else {
 
@@ -305,13 +307,9 @@ class CodegenContext {
   private[sql] def initNestedClasses(): String = {
     // Nested, private sub-classes have no mutable state (though they do reference the outer class'
     // mutable state), so we declare and initialize them inline to the OuterClass.
-    classes.map {
+    classes.filter(_._1 != outerClassName).map {
       case (className, classInstance) =>
-        if (className.equals("OuterClass")) {
-          ""
-        } else {
-          s"private $className $classInstance = new $className();"
-        }
+        s"private $className $classInstance = new $className();"
     }.mkString("\n")
   }
 
@@ -319,24 +317,20 @@ class CodegenContext {
    * Declares all function code that should be inlined to the `OuterClass`.
    */
   private[sql] def declareAddedFunctions(): String = {
-    classFunctions("OuterClass").values.mkString("\n")
+    classFunctions(outerClassName).values.mkString("\n")
   }
 
   /**
    * Declares all nested, private sub-classes and the function code that should be inlined to them.
    */
   private[sql] def declareNestedClasses(): String = {
-    classFunctions.map {
+    classFunctions.filterKeys(_ != outerClassName).map {
       case (className, functions) =>
-        if (className.equals("OuterClass")) {
-          ""
-        } else {
-          s"""
-             |private class $className {
-             |  ${functions.values.mkString("\n")}
-             |}
+        s"""
+           |private class $className {
+           |  ${functions.values.mkString("\n")}
+           |}
            """.stripMargin
-        }
     }
   }.mkString("\n")
 
@@ -730,9 +724,9 @@ class CodegenContext {
 
   /**
    * Splits the generated code of expressions into multiple functions, because function has
-   * 64kb code size limit in JVM. If the class the function is to be inlined to would grow beyond
-   * 1600kb, a private, nested sub-class is declared, and the function is inlined to it, because
-   * classes have a constant pool limit of 65,536 named values.
+   * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
+   * beyond 1600kb, we declare a private, nested sub-class, and the function is inlined to it
+   * instead, because classes have a constant pool limit of 65,536 named values.
    *
    * @param row the variable name of row that is used by expressions
    * @param expressions the codes to evaluate expressions.
