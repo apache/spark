@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 
 /**
- * :: Experimental ::
  * Exception that stopped a [[StreamingQuery]]. Use `cause` get the actual exception
  * that caused the failure.
  * @param message     Message of this exception
@@ -29,7 +28,6 @@ import org.apache.spark.annotation.{Experimental, InterfaceStability}
  * @param endOffset   Ending offset in json of the range of data in exception occurred
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 class StreamingQueryException private[sql](
     private val queryDebugString: String,
