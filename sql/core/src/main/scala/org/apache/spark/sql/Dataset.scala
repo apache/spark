@@ -1767,18 +1767,15 @@ class Dataset[T] private[sql](
 
     // Make a pair for union from children output
     val outputPosMap = AttributeMap(left.output.zipWithIndex)
-    val childrenOutputAttrs = if (!sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-      (left :: right :: Nil).map(_.output.map(a => (a.name.toLowerCase, a)))
-    } else {
-      (left :: right :: Nil).map(_.output.map(a => (a.name, a)))
-    }
-    val unionAttrPair = childrenOutputAttrs.map(_.sortBy(_._1)).transpose.map {
+    val childrenOutputAttrs = (left :: right :: Nil).map(_.output)
+    val unionAttrPair = childrenOutputAttrs.map(_.sortBy(_.name)).transpose.map {
       case attrs => (attrs.head, attrs.last)
     }
 
     // Check if column names are the same with each other
-    unionAttrPair.foreach { case ((lattrName, _), (rattrName, _)) =>
-      if (lattrName != rattrName) {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    unionAttrPair.foreach { case (lattr, rattr) =>
+      if (resolver(lattr.name, rattr.name)) {
         throw new AnalysisException(
           s"(${right.output.map(_.name).mkString(", ")}) must have the same name set with " +
             s"""(${left.output.map(_.name).mkString(", ")})""")
@@ -1786,7 +1783,7 @@ class Dataset[T] private[sql](
     }
 
     // Builds a project list for `other` based on `logicalPlan` output names
-    val rightProjectList = unionAttrPair.map { case ((_, lattr), (_, rattr)) =>
+    val rightProjectList = unionAttrPair.map { case (lattr, rattr) =>
       (outputPosMap(lattr), rattr)
     }.sortBy(_._1).map(_._2)
 
