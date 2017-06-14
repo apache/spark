@@ -90,6 +90,7 @@ class CSVOptions(
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
   val comment = getChar("comment", '\u0000')
+  val lineSeparator = "\n"
 
   val headerFlag = getBool("header")
   val inferSchemaFlag = getBool("inferSchema")
@@ -149,6 +150,7 @@ class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     format.setComment(comment)
+    format.setLineSeparator(lineSeparator)
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
@@ -166,6 +168,7 @@ class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     format.setComment(comment)
+    format.setLineSeparator(lineSeparator)
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
