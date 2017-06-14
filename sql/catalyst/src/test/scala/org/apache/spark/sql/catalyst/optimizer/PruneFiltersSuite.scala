@@ -161,7 +161,7 @@ class PruneFiltersSuite extends PlanTest {
           Inner, Some("tr1.a".attr === "tr2.a".attr)).analyze
       comparePlans(optimized, correctAnswer)
     } finally {
-      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, true)
+      SQLConf.get.unsetConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED)
     }
   }
 }
