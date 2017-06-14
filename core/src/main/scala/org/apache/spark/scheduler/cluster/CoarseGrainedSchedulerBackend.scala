@@ -93,9 +93,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   protected var localityAwareTasks = 0
 
-  // The num of current max ExecutorId used to re-register appMaster
-  @volatile protected var currentExecutorIdCounter = 0
-
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
@@ -184,9 +181,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
             executorDataMap.put(executorId, data)
-            if (currentExecutorIdCounter < executorId.toInt) {
-              currentExecutorIdCounter = executorId.toInt
-            }
+            setCurrentExecutorIdCounter(executorId.toInt)
             if (numPendingExecutors > 0) {
               numPendingExecutors -= 1
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
@@ -636,6 +631,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     defaultAskTimeout.awaitResult(response)
   }
+
+  // Set the num of current max ExecutorId used to re-register appMaster
+  protected def setCurrentExecutorIdCounter(executorId: Int): Unit = {}
 
   /**
    * Kill the given list of executors through the cluster manager.

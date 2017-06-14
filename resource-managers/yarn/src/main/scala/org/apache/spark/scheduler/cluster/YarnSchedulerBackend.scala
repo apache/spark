@@ -29,7 +29,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.ui.JettyUtils
-import org.apache.spark.util.{RpcUtils, ThreadUtils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -68,6 +68,12 @@ private[spark] abstract class YarnSchedulerBackend(
   // Flag to specify whether this schedulerBackend should be reset.
   private var shouldResetOnAmRegister = false
 
+  private val currentState = new CurrentAMState(0,
+    RequestExecutors(Utils.getDynamicAllocationInitialExecutors(conf), 0, Map.empty, Set.empty))
+
+  protected class CurrentAMState(
+    var executorIdCounter: Int,
+    var requestExecutors: RequestExecutors)
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
    *
@@ -135,7 +141,20 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
-    yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(requestedTotal))
+    val requestExecutors = prepareRequestExecutors(requestedTotal)
+    val future = yarnSchedulerEndpointRef.ask[Boolean](requestExecutors)
+    setCurrentRequestExecutors(requestExecutors)
+    future
+  }
+
+  override def setCurrentExecutorIdCounter(executorId: Int): Unit = synchronized {
+    if (currentState.executorIdCounter < executorId.toInt) {
+      currentState.executorIdCounter = executorId.toInt
+    }
+  }
+
+  def setCurrentRequestExecutors(requestExecutors: RequestExecutors): Unit = synchronized {
+    currentState.requestExecutors = requestExecutors
   }
 
   /**
@@ -305,8 +324,8 @@ private[spark] abstract class YarnSchedulerBackend(
             context.reply(false)
         }
 
-      case RetrieveLastAllocatedExecutorId =>
-        context.reply(currentExecutorIdCounter)
+      case GetAMInitialState =>
+        context.reply((currentState.executorIdCounter, currentState.requestExecutors))
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

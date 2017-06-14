@@ -358,6 +358,14 @@ private[spark] class ApplicationMaster(
       dummyRunner.launchContextDebugInfo()
     }
 
+    /**
+     * (executorIdCounter, requestExecutors) should be the initial state
+     * or the last state AM restart.
+     *
+     * @see SPARK-12864, SPARK-20079
+     */
+    val (executorIdCounter, requestExecutors) =
+      driverRef.askSync[(Int, RequestExecutors)](GetAMInitialState)
     allocator = client.register(driverUrl,
       driverRef,
       yarnConf,
@@ -365,7 +373,11 @@ private[spark] class ApplicationMaster(
       uiAddress,
       historyAddress,
       securityMgr,
-      localResources)
+      localResources,
+      executorIdCounter)
+    if (requestExecutors.requestedTotal != allocator.getTargetNumExecutors) {
+      amEndpoint.send(requestExecutors)
+    }
 
     allocator.allocateResources()
     reporterThread = launchReporterThread()
