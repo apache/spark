@@ -1143,11 +1143,11 @@ abstract class SessionCatalogSuite extends AnalysisTest {
   test("basic create and list functions") {
     withEmptyCatalog { catalog =>
       catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
-      catalog.createFunction(newFunc("myfunc", Some("mydb")), ignoreIfExists = false)
+      catalog.createFunction(newFunc("myfunc", Some("mydb")), ifNotExists = false)
       assert(catalog.externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc"))
       // Create function without explicitly specifying database
       catalog.setCurrentDatabase("mydb")
-      catalog.createFunction(newFunc("myfunc2"), ignoreIfExists = false)
+      catalog.createFunction(newFunc("myfunc2"), ifNotExists = false)
       assert(catalog.externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc", "myfunc2"))
     }
   }
@@ -1156,7 +1156,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     withBasicCatalog { catalog =>
       intercept[NoSuchDatabaseException] {
         catalog.createFunction(
-          newFunc("func5", Some("does_not_exist")), ignoreIfExists = false)
+          newFunc("func5", Some("does_not_exist")), ifNotExists = false)
       }
     }
   }
@@ -1164,9 +1164,9 @@ abstract class SessionCatalogSuite extends AnalysisTest {
   test("create function that already exists") {
     withBasicCatalog { catalog =>
       intercept[FunctionAlreadyExistsException] {
-        catalog.createFunction(newFunc("func1", Some("db2")), ignoreIfExists = false)
+        catalog.createFunction(newFunc("func1", Some("db2")), ifNotExists = false)
       }
-      catalog.createFunction(newFunc("func1", Some("db2")), ignoreIfExists = true)
+      catalog.createFunction(newFunc("func1", Some("db2")), ifNotExists = true)
     }
   }
 
@@ -1227,6 +1227,17 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
+  test("alter function") {
+    val externalCatalog = newBasicCatalog()
+    val sessionCatalog = new SessionCatalog(externalCatalog)
+    assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func1"))
+    val myNewFunc = CatalogFunction(FunctionIdentifier("func1", Some("db2")),
+      newFuncClass, Seq.empty[FunctionResource])
+    sessionCatalog.alterFunction(myNewFunc)
+    val newFunc = sessionCatalog.getFunctionMetadata(FunctionIdentifier("func1", Some("db2")))
+    assert(newFunc.className == newFuncClass)
+  }
+
   test("drop function") {
     withBasicCatalog { catalog =>
       assert(catalog.externalCatalog.listFunctions("db2", "*").toSet == Set("func1"))
@@ -1235,7 +1246,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(catalog.externalCatalog.listFunctions("db2", "*").isEmpty)
       // Drop function without explicitly specifying database
       catalog.setCurrentDatabase("db2")
-      catalog.createFunction(newFunc("func2", Some("db2")), ignoreIfExists = false)
+      catalog.createFunction(newFunc("func2", Some("db2")), ifNotExists = false)
       assert(catalog.externalCatalog.listFunctions("db2", "*").toSet == Set("func2"))
       catalog.dropFunction(FunctionIdentifier("func2"), ignoreIfNotExists = false)
       assert(catalog.externalCatalog.listFunctions("db2", "*").isEmpty)
@@ -1316,8 +1327,10 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val funcMeta2 = newFunc("yes_me", None)
       val tempFunc1 = (e: Seq[Expression]) => e.head
       val tempFunc2 = (e: Seq[Expression]) => e.last
-      catalog.createFunction(newFunc("func2", Some("db2")), ignoreIfExists = false)
-      catalog.createFunction(newFunc("not_me", Some("db2")), ignoreIfExists = false)
+      catalog.registerFunction(
+        funcMeta1, overrideIfExists = false, functionBuilder = Some(tempFunc1))
+      catalog.registerFunction(
+        funcMeta2, overrideIfExists = false, functionBuilder = Some(tempFunc2))
       catalog.registerFunction(
         funcMeta1, overrideIfExists = false, functionBuilder = Some(tempFunc1))
       catalog.registerFunction(

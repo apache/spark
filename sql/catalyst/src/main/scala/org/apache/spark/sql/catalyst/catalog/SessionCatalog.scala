@@ -1021,14 +1021,14 @@ class SessionCatalog(
    * Create a metastore function in the database specified in `funcDefinition`.
    * If no such database is specified, create it in the current database.
    */
-  def createFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
+  def createFunction(funcDefinition: CatalogFunction, ifNotExists: Boolean): Unit = {
     val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
     requireDbExists(db)
     val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
     val newFuncDefinition = funcDefinition.copy(identifier = identifier)
     if (!functionExists(identifier)) {
       externalCatalog.createFunction(db, newFuncDefinition)
-    } else if (!ignoreIfExists) {
+    } else if (!ifNotExists) {
       throw new FunctionAlreadyExistsException(db = db, func = identifier.toString)
     }
   }
@@ -1052,6 +1052,27 @@ class SessionCatalog(
       externalCatalog.dropFunction(db, name.funcName)
     } else if (!ignoreIfNotExists) {
       throw new NoSuchFunctionException(db = db, func = identifier.toString)
+    }
+  }
+
+  /**
+   * overwirte a metastore function in the database specified in `funcDefinition`..
+   * If no database is specified, assume the function is in the current database.
+   */
+  def alterFunction(funcDefinition: CatalogFunction): Unit = {
+    val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    requireDbExists(db)
+    val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
+    val newFuncDefinition = funcDefinition.copy(identifier = identifier)
+    if (functionExists(identifier)) {
+      if (functionRegistry.functionExists(identifier)) {
+        // If we have loaded this function into the FunctionRegistry,
+        // also drop it from there.
+        // For a permanent function, because we loaded it to the FunctionRegistry
+        // when it's first used, we also need to drop it from the FunctionRegistry.
+        functionRegistry.dropFunction(identifier)
+      }
+      externalCatalog.alterFunction(db, newFuncDefinition)
     }
   }
 

@@ -590,6 +590,14 @@ class InMemoryCatalog(
     catalog(db).functions.remove(funcName)
   }
 
+  override protected def doAlterFunction(db: String, func: CatalogFunction): Unit = synchronized {
+    requireDbExists(db)
+    requireFunctionExists(db, func.identifier.funcName)
+    catalog(db).functions.remove(func.identifier.funcName)
+    requireFunctionNotExists(db, func.identifier.funcName)
+    catalog(db).functions.put(func.identifier.funcName, func)
+  }
+
   override protected def doRenameFunction(
       db: String,
       oldName: String,

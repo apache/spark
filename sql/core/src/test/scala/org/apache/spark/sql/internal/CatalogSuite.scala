@@ -72,7 +72,7 @@ class CatalogSuite
   }
 
   private def createFunction(name: String, db: Option[String] = None): Unit = {
-    sessionCatalog.createFunction(utils.newFunc(name, db), ignoreIfExists = false)
+    sessionCatalog.createFunction(utils.newFunc(name, db), ifNotExists = false)
   }
 
   private def createTempFunction(name: String): Unit = {
