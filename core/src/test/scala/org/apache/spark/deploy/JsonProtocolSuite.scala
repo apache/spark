@@ -105,7 +105,7 @@ object JsonConstants {
   val appInfoJsonStr =
     """
       |{"starttime":3,"id":"id","name":"name",
-      |"cores":4,"user":"%s",
+      |"cores":0,"user":"%s",
       |"memoryperslave":1234,"submitdate":"%s",
       |"state":"WAITING","duration":%d}
     """.format(System.getProperty("user.name", "<unknown>"),
@@ -114,6 +114,7 @@ object JsonConstants {
   val workerInfoJsonStr =
     """
       |{"id":"id","host":"host","port":8080,
+      |"address":"host:8080",
       |"webuiaddress":"http://publicAddress:80",
       |"cores":4,"coresused":0,"coresfree":4,
       |"memory":1234,"memoryused":0,"memoryfree":1234,
@@ -134,19 +135,24 @@ object JsonConstants {
 
   val driverInfoJsonStr =
     """
-      |{"id":"driver-3","starttime":"3","state":"SUBMITTED","cores":3,"memory":100}
-    """.stripMargin
+      |{"id":"driver-3","starttime":"3",
+      |"state":"SUBMITTED","cores":3,"memory":100,
+      |"submitdate":"%s","worker":"None",
+      |"mainclass":"mainClass"}
+    """.format(submitDate.toString).stripMargin
 
   val masterStateJsonStr =
     """
       |{"url":"spark://host:8080",
       |"workers":[%s,%s],
+      |"aliveworkers":2,
       |"cores":8,"coresused":0,"memory":2468,"memoryused":0,
       |"activeapps":[%s],"completedapps":[],
       |"activedrivers":[%s],
+      |"completeddrivers":[%s],
       |"status":"ALIVE"}
     """.format(workerInfoJsonStr, workerInfoJsonStr,
-        appInfoJsonStr, driverInfoJsonStr).stripMargin
+        appInfoJsonStr, driverInfoJsonStr, driverInfoJsonStr).stripMargin
 
   val workerStateJsonStr =
     """

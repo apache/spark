@@ -29,6 +29,7 @@ private[deploy] object JsonProtocol {
    ("id" -> obj.id) ~
    ("host" -> obj.host) ~
    ("port" -> obj.port) ~
+   ("address" -> obj.hostPort) ~
    ("webuiaddress" -> obj.webUiAddress) ~
    ("cores" -> obj.cores) ~
    ("coresused" -> obj.coresUsed) ~
@@ -44,7 +45,7 @@ private[deploy] object JsonProtocol {
     ("starttime" -> obj.startTime) ~
     ("id" -> obj.id) ~
     ("name" -> obj.desc.name) ~
-    ("cores" -> obj.desc.maxCores) ~
+    ("cores" -> obj.coresGranted) ~
     ("user" -> obj.desc.user) ~
     ("memoryperslave" -> obj.desc.memoryPerExecutorMB) ~
     ("submitdate" -> obj.submitDate.toString) ~
@@ -54,7 +55,7 @@ private[deploy] object JsonProtocol {
 
   def writeApplicationDescription(obj: ApplicationDescription): JObject = {
     ("name" -> obj.name) ~
-    ("cores" -> obj.maxCores) ~
+    ("cores" -> obj.maxCores.getOrElse(0)) ~
     ("memoryperslave" -> obj.memoryPerExecutorMB) ~
     ("user" -> obj.user) ~
     ("command" -> obj.command.toString)
@@ -72,13 +73,17 @@ private[deploy] object JsonProtocol {
     ("starttime" -> obj.startTime.toString) ~
     ("state" -> obj.state.toString) ~
     ("cores" -> obj.desc.cores) ~
-    ("memory" -> obj.desc.mem)
+    ("memory" -> obj.desc.mem) ~
+    ("submitdate" -> obj.submitDate.toString) ~
+    ("worker" -> obj.worker.map(_.id).getOrElse("None")) ~
+    ("mainclass" -> obj.desc.command.arguments(2))
   }
 
   def writeMasterState(obj: MasterStateResponse): JObject = {
     val aliveWorkers = obj.workers.filter(_.isAlive())
     ("url" -> obj.uri) ~
     ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
+    ("aliveworkers" -> aliveWorkers.length) ~
     ("cores" -> aliveWorkers.map(_.cores).sum) ~
     ("coresused" -> aliveWorkers.map(_.coresUsed).sum) ~
     ("memory" -> aliveWorkers.map(_.memory).sum) ~
@@ -86,6 +91,7 @@ private[deploy] object JsonProtocol {
     ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
     ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
     ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~
+    ("completeddrivers" -> obj.completedDrivers.toList.map(writeDriverInfo)) ~
     ("status" -> obj.status.toString)
   }
 
