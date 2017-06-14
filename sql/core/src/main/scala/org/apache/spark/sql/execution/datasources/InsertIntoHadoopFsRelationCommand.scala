@@ -61,7 +61,7 @@ case class InsertIntoHadoopFsRelationCommand(
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
-      fileCommandExec: FileWritingCommandExec): Seq[Row] = {
+      fileCommandExec: Option[FileWritingCommandExec]): Seq[Row] = {
     assert(children.length == 1)
 
     // Most formats don't do well with duplicate columns, so lets not allow that
@@ -133,7 +133,7 @@ case class InsertIntoHadoopFsRelationCommand(
           .distinct.map(PartitioningUtils.parsePathFragment)
 
         // Updating metrics.
-        fileCommandExec.postDriverMetrics(summary)
+        fileCommandExec.get.postDriverMetrics(summary)
 
         // Updating metastore partition metadata.
         if (partitionsTrackedByCatalog) {

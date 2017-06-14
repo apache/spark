@@ -31,10 +31,13 @@ import org.apache.spark.util.Utils
  * wrapped in `FileWritingCommandExec` during execution.
  */
 trait FileWritingCommand extends logical.Command {
+  // Whether this command will update the wrapping `FileWritingCommandExec`'s metrics.
+  protected[sql] val canUpdateMetrics: Boolean = true
+
   def run(
     sparkSession: SparkSession,
     children: Seq[SparkPlan],
-    fileCommandExec: FileWritingCommandExec): Seq[Row]
+    fileCommandExec: Option[FileWritingCommandExec]): Seq[Row]
 }
 
 /**
@@ -44,24 +47,32 @@ trait FileWritingCommand extends logical.Command {
 case class FileWritingCommandExec(
     cmd: FileWritingCommand,
     children: Seq[SparkPlan],
-    givenMetrics: Option[Map[String, SQLMetric]] = None) extends CommandExec {
+    parentCommandExec: Option[FileWritingCommandExec] = None) extends CommandExec {
 
-  override val metrics = givenMetrics.getOrElse {
-    val sparkContext = sqlContext.sparkContext
-    Map(
-      // General metrics.
-      "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
-      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
-      "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
-      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
-    )
-  }
+  override val metrics: Map[String, SQLMetric] =
+    if (parentCommandExec.isDefined && cmd.canUpdateMetrics) {
+      // When this operator is invoked by another `FileWritingCommandExec`, we need to update
+      // the caller's metrics.
+      parentCommandExec.get.metrics
+    } else if (cmd.canUpdateMetrics) {
+      val sparkContext = sqlContext.sparkContext
+      Map(
+        "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
+        "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
+        "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
+        "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+        "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
+      )
+    } else {
+      // The command declares it won't update metrics. Just use an empty map.
+      Map.empty
+    }
 
   /**
    * Callback function that update metrics collected from the writing operation.
    */
   private[sql] def postDriverMetrics(writeSummaries: Seq[ExecutedWriteSummary]): Unit = {
+    assert(cmd.canUpdateMetrics, s"This $cmd shouldn't update metrics")
     var numPartitions = 0
     var numFiles = 0
     var totalNumBytes: Long = 0L
@@ -78,16 +89,19 @@ case class FileWritingCommandExec(
     // lower actual time of writing to zero when calculating average, so excluding them.
     val avgWritingTime =
       Utils.average(writeSummaries.flatMap(_.writingTimePerFile.filter(_ > 0))).toLong
-    // Note: for simplifying metric values assignment, we put the values as the alphabetically
-    // sorted of the metric keys.
-    val metricsNames = metrics.keys.toSeq.sorted
-    val metricsValues = Seq(avgWritingTime, numFiles, totalNumBytes, totalNumOutput, numPartitions)
-    metricsNames.zip(metricsValues).foreach(x => metrics(x._1).add(x._2))
+
+    metrics("avgTime").add(avgWritingTime)
+    metrics("numFiles").add(numFiles)
+    metrics("numOutputBytes").add(totalNumBytes)
+    metrics("numOutputRows").add(totalNumOutput)
+    metrics("numParts").add(numPartitions)
 
     val executionId = sqlContext.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId,
-      metricsNames.map(metrics(_)))
+    SQLMetrics.postDriverMetricUpdates(sqlContext.sparkContext, executionId, metrics.values.toList)
   }
 
-  protected[sql] lazy val invokeCommand: Seq[Row] = cmd.run(sqlContext.sparkSession, children, this)
+  protected[sql] def invokeCommand(): Seq[Row] = {
+    val exec = if (cmd.canUpdateMetrics) Some(this) else None
+    cmd.run(sqlContext.sparkSession, children, exec)
+  }
 }

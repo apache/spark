@@ -441,7 +441,7 @@ case class DataSource(
   def writeAndRead(
       mode: SaveMode,
       data: LogicalPlan,
-      externalMetrics: Option[Map[String, SQLMetric]] = None): BaseRelation = {
+      fileCommandExec: Option[FileWritingCommandExec] = None): BaseRelation = {
     if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
@@ -456,7 +456,7 @@ case class DataSource(
         // update the correct metrics for showing on UI.
         qe.executedPlan.transform {
           case FileWritingCommandExec(cmd, children, None) =>
-            FileWritingCommandExec(cmd, children, externalMetrics)
+            FileWritingCommandExec(cmd, children, fileCommandExec)
         }.execute()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()

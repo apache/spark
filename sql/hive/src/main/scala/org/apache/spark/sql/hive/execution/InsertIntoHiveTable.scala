@@ -235,7 +235,7 @@ case class InsertIntoHiveTable(
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
-      fileCommandExec: FileWritingCommandExec): Seq[Row] = {
+      fileCommandExec: Option[FileWritingCommandExec]): Seq[Row] = {
     assert(children.length == 1)
 
     val sessionState = sparkSession.sessionState
@@ -358,7 +358,7 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
-      refreshFunction = fileCommandExec.postDriverMetrics,
+      refreshFunction = fileCommandExec.get.postDriverMetrics,
       options = Map.empty)
 
     if (partition.nonEmpty) {

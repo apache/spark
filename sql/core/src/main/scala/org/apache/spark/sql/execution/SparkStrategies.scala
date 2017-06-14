@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 import org.apache.spark.sql.execution.streaming._
@@ -347,12 +346,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      // For non `FileFormat` datasource table, don't need to update the writing metrics.
-      case c @ CreateDataSourceTableAsSelectCommand(table, _, _)
-          if (!classOf[FileFormat].isAssignableFrom(
-            DataSource.lookupDataSource(table.provider.get))) =>
-        FileWritingCommandExec(c, Seq.empty, Some(Map.empty)) :: Nil
-
       case f: FileWritingCommand => FileWritingCommandExec(f, f.children.map(planLater)) :: Nil
 
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil

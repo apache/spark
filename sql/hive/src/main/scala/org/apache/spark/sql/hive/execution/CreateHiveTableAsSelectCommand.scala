@@ -48,7 +48,7 @@ case class CreateHiveTableAsSelectCommand(
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
-      fileCommandExec: FileWritingCommandExec): Seq[Row] = {
+      fileCommandExec: Option[FileWritingCommandExec]): Seq[Row] = {
     if (sparkSession.sessionState.catalog.tableExists(tableIdentifier)) {
       assert(mode != SaveMode.Overwrite,
         s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
@@ -71,7 +71,7 @@ case class CreateHiveTableAsSelectCommand(
       // the correct metrics for showing on UI.
       qe.executedPlan.transform {
         case FileWritingCommandExec(cmd, children, None) =>
-          FileWritingCommandExec(cmd, children, Some(fileCommandExec.metrics))
+          FileWritingCommandExec(cmd, children, fileCommandExec)
       }.execute()
     } else {
       // TODO ideally, we should get the output data ready first and then
@@ -93,7 +93,7 @@ case class CreateHiveTableAsSelectCommand(
         // the correct metrics for showing on UI.
         qe.executedPlan.transform {
           case FileWritingCommandExec(cmd, children, None) =>
-            FileWritingCommandExec(cmd, children, Some(fileCommandExec.metrics))
+            FileWritingCommandExec(cmd, children, fileCommandExec)
         }.execute()
       } catch {
         case NonFatal(e) =>

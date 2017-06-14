@@ -56,10 +56,10 @@ trait CommandExec extends SparkPlan {
    */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    invokeCommand.map(converter(_).asInstanceOf[InternalRow])
+    invokeCommand().map(converter(_).asInstanceOf[InternalRow])
   }
 
-  protected[sql] val invokeCommand: Seq[Row]
+  protected[sql] def invokeCommand(): Seq[Row]
 
   override def innerChildren: Seq[QueryPlan[_]] = cmd.innerChildren
 
@@ -83,7 +83,7 @@ trait CommandExec extends SparkPlan {
  * save the result to prevent multiple executions.
  */
 case class ExecutedCommandExec(cmd: RunnableCommand) extends CommandExec {
-  protected[sql] lazy val invokeCommand: Seq[Row] = cmd.run(sqlContext.sparkSession)
+  protected[sql] def invokeCommand: Seq[Row] = cmd.run(sqlContext.sparkSession)
   override def children: Seq[SparkPlan] = Nil
 }
 

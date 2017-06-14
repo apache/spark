@@ -127,10 +127,15 @@ case class CreateDataSourceTableAsSelectCommand(
 
   override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
+  // This command updates parent `FileWritingCommandExec`'s metrics only if the table is
+  // `FileFormat`-based.
+  override protected[sql] val canUpdateMetrics = classOf[FileFormat].isAssignableFrom(
+    DataSource.lookupDataSource(table.provider.get))
+
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
-      fileCommandExec: FileWritingCommandExec): Seq[Row] = {
+      fileCommandExec: Option[FileWritingCommandExec]): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
 
@@ -153,7 +158,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
       saveDataIntoTable(
         sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true,
-        metrics = fileCommandExec.metrics)
+        fileCommandExec = fileCommandExec)
     } else {
       assert(table.schema.isEmpty)
 
@@ -164,7 +169,7 @@ case class CreateDataSourceTableAsSelectCommand(
       }
       val result = saveDataIntoTable(
         sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false,
-        metrics = fileCommandExec.metrics)
+        fileCommandExec = fileCommandExec)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -192,7 +197,7 @@ case class CreateDataSourceTableAsSelectCommand(
       data: LogicalPlan,
       mode: SaveMode,
       tableExists: Boolean,
-      metrics: Map[String, SQLMetric]): BaseRelation = {
+      fileCommandExec: Option[FileWritingCommandExec]): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
     val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
@@ -204,7 +209,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, query, Some(metrics))
+      dataSource.writeAndRead(mode, query, fileCommandExec)
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)
