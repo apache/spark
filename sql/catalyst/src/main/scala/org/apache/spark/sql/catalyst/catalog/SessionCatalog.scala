@@ -1021,14 +1021,14 @@ class SessionCatalog(
    * Create a metastore function in the database specified in `funcDefinition`.
    * If no such database is specified, create it in the current database.
    */
-  def createFunction(funcDefinition: CatalogFunction, ifNotExists: Boolean): Unit = {
+  def createFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
     val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
     requireDbExists(db)
     val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
     val newFuncDefinition = funcDefinition.copy(identifier = identifier)
     if (!functionExists(identifier)) {
       externalCatalog.createFunction(db, newFuncDefinition)
-    } else if (!ifNotExists) {
+    } else if (!ignoreIfExists) {
       throw new FunctionAlreadyExistsException(db = db, func = identifier.toString)
     }
   }
@@ -1073,6 +1073,8 @@ class SessionCatalog(
         functionRegistry.dropFunction(identifier)
       }
       externalCatalog.alterFunction(db, newFuncDefinition)
+    } else {
+      throw new NoSuchFunctionException(db = db, func = identifier.toString)
     }
   }
 

@@ -249,7 +249,6 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
     comparePlans(parsed5, expected5)
-
   }
 
   test("drop function") {

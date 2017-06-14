@@ -75,7 +75,7 @@ case class CreateFunctionCommand(
     if (isTemp) {
       // We first load resources and then put the builder in the function registry.
       catalog.loadFunctionResources(resources)
-      catalog.registerFunction(func, overrideIfExists = false)
+      catalog.registerFunction(func, overrideIfExists = replace)
     } else {
       // Handles `CREATE OR REPLACE FUNCTION AS ... USING ...`
       if (replace && catalog.functionExists(func.identifier)) {

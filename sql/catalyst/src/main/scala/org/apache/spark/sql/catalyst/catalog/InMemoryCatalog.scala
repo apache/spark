@@ -594,7 +594,6 @@ class InMemoryCatalog(
     requireDbExists(db)
     requireFunctionExists(db, func.identifier.funcName)
     catalog(db).functions.remove(func.identifier.funcName)
-    requireFunctionNotExists(db, func.identifier.funcName)
     catalog(db).functions.put(func.identifier.funcName, func)
   }
 
