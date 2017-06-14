@@ -70,7 +70,7 @@ private[r] object LinearSVCWrapper
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
-  def fit(
+  def fit( // scalastyle:ignore
       data: DataFrame,
       formula: String,
       regParam: Double,
@@ -79,7 +79,9 @@ private[r] object LinearSVCWrapper
       standardization: Boolean,
       threshold: Double,
       weightCol: String,
-      aggregationDepth: Int
+      aggregationDepth: Int,
+      solver: String,
+      loss: String
       ): LinearSVCWrapper = {
 
     val rFormula = new RFormula()
@@ -105,6 +107,8 @@ private[r] object LinearSVCWrapper
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
       .setThreshold(threshold)
       .setAggregationDepth(aggregationDepth)
+      .setSolver(solver)
+      .setLoss(loss)
 
     if (weightCol != null) svc.setWeightCol(weightCol)
 

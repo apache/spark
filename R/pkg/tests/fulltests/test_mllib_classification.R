@@ -30,7 +30,8 @@ absoluteSparkPath <- function(x) {
 test_that("spark.svmLinear", {
   df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
-  model <- spark.svmLinear(training,  Species ~ ., regParam = 0.01, maxIter = 10)
+  model <- spark.svmLinear(training,  Species ~ ., regParam = 0.01, maxIter = 10,
+                           loss = "hinge", solver = "owlqn")
   summary <- summary(model)
 
   # test summary coefficients return matrix type
