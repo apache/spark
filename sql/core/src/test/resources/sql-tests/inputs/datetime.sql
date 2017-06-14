@@ -10,10 +10,10 @@ select to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('20
 select dayofweek('2007-02-03'), dayofweek('2009-07-30'), dayofweek('2017-05-27'), dayofweek(null), dayofweek('1582-10-15 13:10:15');
 
 -- trunc date
-select trunc(to_date('2015-07-22'), 'yyyy'), trunc(to_date('2015-07-22'), 'YYYY'),
-  trunc(to_date('2015-07-22'), 'year'), trunc(to_date('2015-07-22'), 'YEAR'),
-  trunc(to_date('2015-07-22'), 'yy'), trunc(to_date('2015-07-22'), 'YY');
-select trunc(to_date('2015-07-22'), 'month'), trunc(to_date('2015-07-22'), 'MONTH'),
-  trunc(to_date('2015-07-22'), 'mon'), trunc(to_date('2015-07-22'), 'MON'),
+select trunc('2015-07-22', 'yyyy'), trunc('2015-07-22', 'YYYY'),
+  trunc('2015-07-22', 'year'), trunc('2015-07-22', 'YEAR'),
+  trunc(to_date('2015-07-22'), 'yy'), trunc('2015-07-22', 'YY');
+select trunc('2015-07-22', 'month'), trunc('2015-07-22', 'MONTH'),
+  trunc('2015-07-22', 'mon'), trunc('2015-07-22', 'MON'),
   trunc(to_date('2015-07-22'), 'mm'), trunc(to_date('2015-07-22'), 'MM');
 select trunc('2015-07-22', 'DD'), trunc('2015-07-22', null), trunc(null, 'MON'), trunc(null, null);

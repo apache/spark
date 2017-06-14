@@ -47,7 +47,6 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("trunc") {
-
     // numeric
     def testTruncNumber(input: Double, fmt: Int, expected: Double): Unit = {
       checkEvaluation(Trunc(Literal.create(input, DoubleType),

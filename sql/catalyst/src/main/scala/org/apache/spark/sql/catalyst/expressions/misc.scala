@@ -141,45 +141,57 @@ case class Uuid() extends LeafExpression {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-      _FUNC_(data, fmt) - Returns `data` truncated by the format model `fmt`.
-        If `data` is DateType, returns `data` with the time portion of the day truncated to the unit specified by the format model `fmt`.
-        If `data` is DoubleType, returns `data` truncated to `fmt` decimal places.
+      _FUNC_(data[, fmt]) - Returns `data` truncated by the format model `fmt`.
+        If `data` is DateType/StringType, returns `data` with the time portion of the day truncated to the unit specified by the format model `fmt`.
+        If `data` is DecimalType/DoubleType, returns `data` truncated to `fmt` decimal places.
   """,
   extended = """
     Examples:
       > SELECT _FUNC_('2009-02-12', 'MM');
-       2009-02-01
+       2009-02-01.
       > SELECT _FUNC_('2015-10-27', 'YEAR');
        2015-01-01
+      > SELECT _FUNC_('2015-10-27');
+       2015-10-01
       > SELECT _FUNC_(1234567891.1234567891, 4);
        1234567891.1234
       > SELECT _FUNC_(1234567891.1234567891, -4);
        1234560000
-             """)
+      > SELECT _FUNC_(1234567891.1234567891);
+       1234567891
+  """)
 // scalastyle:on line.size.limit
-case class Trunc(data: Expression, format: Expression = Literal(0))
+case class Trunc(data: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  def this(numeric: Expression) = {
-    this(numeric, Literal(0))
+  def this(data: Expression) = {
+    this(data, Literal(
+      if (data.dataType.isInstanceOf[DecimalType] || data.dataType.isInstanceOf[DoubleType]) {
+        0
+      } else {
+        "MM"
+      }))
   }
 
   override def left: Expression = data
   override def right: Expression = format
 
+  val isTruncNumber = format.dataType.isInstanceOf[IntegerType]
+
   override def dataType: DataType = data.dataType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DateType), TypeCollection(StringType, IntegerType))
+    Seq(TypeCollection(DateType, StringType, DoubleType, DecimalType),
+      TypeCollection(StringType, IntegerType))
 
   override def nullable: Boolean = true
+
   override def prettyName: String = "trunc"
 
-  private lazy val truncFormat: Int = dataType match {
-    case doubleType: DoubleType =>
-      format.eval().asInstanceOf[Int]
-    case dateType: DateType =>
-      DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
+  private lazy val truncFormat: Int = if (isTruncNumber) {
+    format.eval().asInstanceOf[Int]
+  } else {
+    DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
   }
 
   override def eval(input: InternalRow): Any = {
@@ -188,73 +200,70 @@ case class Trunc(data: Expression, format: Expression = Literal(0))
     if (null == d || null == form) {
       null
     } else {
-      dataType match {
-        case doubleType: DoubleType =>
-          val scale = if (format.foldable) {
-            truncFormat
-          } else {
-            format.eval().asInstanceOf[Int]
-          }
-          BigDecimalUtils.trunc(d.asInstanceOf[Double], scale)
-        case dateType: DateType =>
-          val level = if (format.foldable) {
-            truncFormat
-          } else {
-            DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
-          }
-          if (level == -1) {
-            // unknown format
-            null
-          } else {
-            DateTimeUtils.truncDate(d.asInstanceOf[Int], level)
-          }
+      if (isTruncNumber) {
+        val scale = if (format.foldable) truncFormat else format.eval().asInstanceOf[Int]
+        data.dataType match {
+          case DoubleType => BigDecimalUtils.trunc(d.asInstanceOf[Double], scale)
+          case DecimalType.Fixed(_, _) =>
+            BigDecimalUtils.trunc(d.asInstanceOf[Decimal].toJavaBigDecimal, scale)
+        }
+      } else {
+        val level = if (format.foldable) {
+          truncFormat
+        } else {
+          DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
+        }
+        if (level == -1) {
+          // unknown format
+          null
+        } else {
+          DateTimeUtils.truncDate(d.asInstanceOf[Int], level)
+        }
       }
     }
-
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
 
-    dataType match {
-      case doubleType: DoubleType =>
-        val bdu = BigDecimalUtils.getClass.getName.stripSuffix("$")
+    if (isTruncNumber) {
+      val bdu = BigDecimalUtils.getClass.getName.stripSuffix("$")
 
-        if (format.foldable) {
-          val d = data.genCode(ctx)
-          ev.copy(code = s"""
+      if (format.foldable) {
+        val d = data.genCode(ctx)
+        ev.copy(code = s"""
             ${d.code}
             boolean ${ev.isNull} = ${d.isNull};
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
             if (!${ev.isNull}) {
               ${ev.value} = $bdu.trunc(${d.value}, $truncFormat);
             }""")
-        } else {
-          nullSafeCodeGen(ctx, ev, (doubleVal, fmt) => {
-            s"${ev.value} = $bdu.trunc($doubleVal, $fmt);"
-          })
-        }
-      case dateType: DateType =>
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      } else {
+        nullSafeCodeGen(ctx, ev, (doubleVal, fmt) => {
+          s"${ev.value} = $bdu.trunc($doubleVal, $fmt);"
+        })
+      }
+    } else {
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
 
-        if (format.foldable) {
-          if (truncFormat == -1) {
-            ev.copy(code = s"""
+      if (format.foldable) {
+        if (truncFormat == -1) {
+          ev.copy(code = s"""
               boolean ${ev.isNull} = true;
               ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
-          } else {
-            val d = data.genCode(ctx)
-            ev.copy(code = s"""
+        } else {
+          val d = data.genCode(ctx)
+          ev.copy(code = s"""
               ${d.code}
               boolean ${ev.isNull} = ${d.isNull};
               ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
               if (!${ev.isNull}) {
                 ${ev.value} = $dtu.truncDate(${d.value}, $truncFormat);
               }""")
-          }
-        } else {
-          nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {
-            val form = ctx.freshName("form")
-            s"""
+        }
+      } else {
+        nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {
+          val form = ctx.freshName("form")
+          s"""
               int $form = $dtu.parseTruncLevel($fmt);
               if ($form == -1) {
                 ${ev.isNull} = true;
@@ -262,9 +271,8 @@ case class Trunc(data: Expression, format: Expression = Literal(0))
                 ${ev.value} = $dtu.truncDate($dateVal, $form);
               }
             """
-          })
-        }
+        })
+      }
     }
-
   }
 }
