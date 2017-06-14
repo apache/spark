@@ -18,12 +18,12 @@ package org.apache.spark.deploy.kubernetes.submit
 
 import io.fabric8.kubernetes.api.model.{PodBuilder, Secret, SecretBuilder}
 import scala.collection.JavaConverters._
+import scala.language.implicitConversions
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.KubernetesCredentials
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.internal.config.OptionalConfigEntry
 
 private[spark] trait DriverPodKubernetesCredentialsMounter {
 

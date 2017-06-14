@@ -2,7 +2,6 @@ JavaEWAH-0.3.2.jar
 RoaringBitmap-0.6.43.jar
 ST4-4.0.4.jar
 activation-1.1.1.jar
-animal-sniffer-annotation-1.0.jar
 antlr-2.7.7.jar
 antlr-runtime-3.4.jar
 antlr4-runtime-4.7.jar
@@ -71,10 +70,6 @@ dropwizard-util-1.0.0.jar
 dropwizard-validation-1.0.0.jar
 eigenbase-properties-1.1.5.jar
 fastutil-7.0.13.jar
-feign-core-8.18.0.jar
-feign-jackson-8.18.0.jar
-feign-jaxrs-8.18.0.jar
-feign-okhttp-8.18.0.jar
 generex-1.0.1.jar
 gson-2.2.4.jar
 guava-14.0.1.jar
