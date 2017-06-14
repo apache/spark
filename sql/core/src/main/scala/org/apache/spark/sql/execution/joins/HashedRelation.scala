@@ -587,6 +587,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     var pos = firstSlot(key)
     assert(numKeys < array.length / 2)
     numKeyLookups += 1
+    numProbes += 1
     while (array(pos) != key && array(pos + 1) != 0) {
       pos = nextSlot(pos)
       numProbes += 1
@@ -701,6 +702,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     writeLong(maxKey)
     writeLong(numKeys)
     writeLong(numValues)
+    writeLong(numKeyLookups)
+    writeLong(numProbes)
 
     writeLong(array.length)
     writeLongArray(writeBuffer, array, array.length)
@@ -742,6 +745,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     maxKey = readLong()
     numKeys = readLong()
     numValues = readLong()
+    numKeyLookups = readLong()
+    numProbes = readLong()
 
     val length = readLong().toInt
     mask = length - 2
