@@ -42,6 +42,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       maxOffHeapExecutionMemory: Long): UnifiedMemoryManager = {
     val conf = new SparkConf()
       .set("spark.memory.fraction", "1")
+      .set("spark.testing", "true")
       .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
       .set("spark.memory.offHeap.size", maxOffHeapExecutionMemory.toString)
       .set("spark.memory.storageFraction", storageFraction.toString)
@@ -259,6 +260,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set("spark.memory.fraction", "1")
       .set("spark.memory.storageFraction", "0")
       .set("spark.testing.memory", "1000")
+      .set("spark.testing", "true")
     val mm = UnifiedMemoryManager(conf, numCores = 2)
     val ms = makeMemoryStore(mm)
     val memoryMode = MemoryMode.ON_HEAP
@@ -285,6 +287,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set("spark.memory.fraction", "1")
       .set("spark.memory.storageFraction", "0")
       .set("spark.testing.memory", "1000")
+      .set("spark.testing", "true")
     val mm = UnifiedMemoryManager(conf, numCores = 2)
     makeBadMemoryStore(mm)
     val memoryMode = MemoryMode.ON_HEAP
