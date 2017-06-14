@@ -28,11 +28,10 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.streaming.util.BlockingSource
-import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.util.Utils
 
 class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
