@@ -35,7 +35,6 @@ private[spark] class KubernetesExternalShuffleServiceSuite extends SparkFunSuite
     val shuffleClient = new KubernetesExternalShuffleClient(
       SparkTransportConf.fromSparkConf(SPARK_CONF, "shuffle"),
       new SecurityManager(SPARK_CONF),
-      false,
       false)
 
     shuffleService.start()

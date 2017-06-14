@@ -47,12 +47,12 @@ public class KubernetesExternalShuffleClient extends ExternalShuffleClient {
   public KubernetesExternalShuffleClient(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
-      boolean saslEnabled,
-      boolean saslEncryptionEnabled) {
-    super(conf, secretKeyHolder, saslEnabled, saslEncryptionEnabled);
+      boolean authEnabled) {
+    super(conf, secretKeyHolder, authEnabled);
   }
 
-  public void registerDriverWithShuffleService(String host, int port) throws IOException {
+  public void registerDriverWithShuffleService(String host, int port)
+      throws IOException, InterruptedException {
     checkInit();
     ByteBuffer registerDriver = new RegisterDriver(appId, 0).toByteBuffer();
     TransportClient client = clientFactory.createClient(host, port);

@@ -206,8 +206,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     new KubernetesExternalShuffleClient(
       SparkTransportConf.fromSparkConf(conf, "shuffle"),
       sc.env.securityManager,
-      sc.env.securityManager.isAuthenticationEnabled(),
-      sc.env.securityManager.isSaslEncryptionEnabled())
+      sc.env.securityManager.isAuthenticationEnabled())
   }
 
   private def getInitialTargetExecutorNumber(defaultNumExecutors: Int = 1): Int = {
