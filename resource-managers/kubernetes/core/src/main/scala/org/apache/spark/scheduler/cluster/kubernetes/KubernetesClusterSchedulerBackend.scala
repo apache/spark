@@ -327,7 +327,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         case (node, taskCount) =>
           (node, scaleToRange(taskCount, 1, taskTotal, rangeMin = 1, rangeMax = 100))}
       val weightToNodes = nodeToWeight.groupBy(_._2).mapValues(_.keys)
-      // @see https://kubernetes.io/docs/concepts/configuration/assign-pod-node
+      // see https://kubernetes.io/docs/concepts/configuration/assign-pod-node
       val nodeAffinityJson = objectMapper.writeValueAsString(SchedulerAffinity(NodeAffinity(
           preferredDuringSchedulingIgnoredDuringExecution =
             for ((weight, nodes) <- weightToNodes) yield
@@ -599,7 +599,8 @@ private object KubernetesClusterSchedulerBackend {
 /**
  * These case classes model K8s node affinity syntax for
  * preferredDuringSchedulingIgnoredDuringExecution.
- * @see https://kubernetes.io/docs/concepts/configuration/assign-pod-node
+ *
+ * see https://kubernetes.io/docs/concepts/configuration/assign-pod-node
  */
 case class SchedulerAffinity(nodeAffinity: NodeAffinity)
 case class NodeAffinity(preferredDuringSchedulingIgnoredDuringExecution:
