@@ -647,7 +647,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     withTable("t") {
       withTempPath { path =>
         Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
-        sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
+        sql(s"CREATE TABLE t USING parquet LOCATION '${path.toURI}'")
         spark.catalog.cacheTable("t")
         spark.table("t").select($"i").cache()
         checkAnswer(spark.table("t").select($"i"), Row(1))

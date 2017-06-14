@@ -484,24 +484,50 @@ class TypeCoercionSuite extends PlanTest {
   }
 
   test("coalesce casts") {
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
-      Coalesce(Literal(1.0)
-        :: Literal(1)
-        :: Literal.create(1.0, FloatType)
-        :: Nil),
-      Coalesce(Cast(Literal(1.0), DoubleType)
-        :: Cast(Literal(1), DoubleType)
-        :: Cast(Literal.create(1.0, FloatType), DoubleType)
-        :: Nil))
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
-      Coalesce(Literal(1L)
-        :: Literal(1)
-        :: Literal(new java.math.BigDecimal("1000000000000000000000"))
-        :: Nil),
-      Coalesce(Cast(Literal(1L), DecimalType(22, 0))
-        :: Cast(Literal(1), DecimalType(22, 0))
-        :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
-        :: Nil))
+    val rule = TypeCoercion.FunctionArgumentConversion
+
+    val intLit = Literal(1)
+    val longLit = Literal.create(1L)
+    val doubleLit = Literal(1.0)
+    val stringLit = Literal.create("c", StringType)
+    val nullLit = Literal.create(null, NullType)
+    val floatNullLit = Literal.create(null, FloatType)
+    val floatLit = Literal.create(1.0f, FloatType)
+    val timestampLit = Literal.create("2017-04-12", TimestampType)
+    val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
+
+    ruleTest(rule,
+      Coalesce(Seq(doubleLit, intLit, floatLit)),
+      Coalesce(Seq(Cast(doubleLit, DoubleType),
+        Cast(intLit, DoubleType), Cast(floatLit, DoubleType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(longLit, intLit, decimalLit)),
+      Coalesce(Seq(Cast(longLit, DecimalType(22, 0)),
+        Cast(intLit, DecimalType(22, 0)), Cast(decimalLit, DecimalType(22, 0)))))
+
+    ruleTest(rule,
+      Coalesce(Seq(nullLit, intLit)),
+      Coalesce(Seq(Cast(nullLit, IntegerType), Cast(intLit, IntegerType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(timestampLit, stringLit)),
+      Coalesce(Seq(Cast(timestampLit, StringType), Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(nullLit, floatNullLit, intLit)),
+      Coalesce(Seq(Cast(nullLit, FloatType), Cast(floatNullLit, FloatType),
+        Cast(intLit, FloatType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(nullLit, intLit, decimalLit, doubleLit)),
+      Coalesce(Seq(Cast(nullLit, DoubleType), Cast(intLit, DoubleType),
+        Cast(decimalLit, DoubleType), Cast(doubleLit, DoubleType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(nullLit, floatNullLit, doubleLit, stringLit)),
+      Coalesce(Seq(Cast(nullLit, StringType), Cast(floatNullLit, StringType),
+        Cast(doubleLit, StringType), Cast(stringLit, StringType))))
   }
 
   test("CreateArray casts") {
@@ -675,6 +701,14 @@ class TypeCoercionSuite extends PlanTest {
 
   test("type coercion for If") {
     val rule = TypeCoercion.IfCoercion
+    val intLit = Literal(1)
+    val doubleLit = Literal(1.0)
+    val trueLit = Literal.create(true, BooleanType)
+    val falseLit = Literal.create(false, BooleanType)
+    val stringLit = Literal.create("c", StringType)
+    val floatLit = Literal.create(1.0f, FloatType)
+    val timestampLit = Literal.create("2017-04-12", TimestampType)
+    val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
 
     ruleTest(rule,
       If(Literal(true), Literal(1), Literal(1L)),
@@ -685,12 +719,32 @@ class TypeCoercionSuite extends PlanTest {
       If(Literal.create(null, BooleanType), Literal(1), Literal(1)))
 
     ruleTest(rule,
-      If(AssertTrue(Literal.create(true, BooleanType)), Literal(1), Literal(2)),
-      If(Cast(AssertTrue(Literal.create(true, BooleanType)), BooleanType), Literal(1), Literal(2)))
+      If(AssertTrue(trueLit), Literal(1), Literal(2)),
+      If(Cast(AssertTrue(trueLit), BooleanType), Literal(1), Literal(2)))
 
     ruleTest(rule,
-      If(AssertTrue(Literal.create(false, BooleanType)), Literal(1), Literal(2)),
-      If(Cast(AssertTrue(Literal.create(false, BooleanType)), BooleanType), Literal(1), Literal(2)))
+      If(AssertTrue(falseLit), Literal(1), Literal(2)),
+      If(Cast(AssertTrue(falseLit), BooleanType), Literal(1), Literal(2)))
+
+    ruleTest(rule,
+      If(trueLit, intLit, doubleLit),
+      If(trueLit, Cast(intLit, DoubleType), doubleLit))
+
+    ruleTest(rule,
+      If(trueLit, floatLit, doubleLit),
+      If(trueLit, Cast(floatLit, DoubleType), doubleLit))
+
+    ruleTest(rule,
+      If(trueLit, floatLit, decimalLit),
+      If(trueLit, Cast(floatLit, DoubleType), Cast(decimalLit, DoubleType)))
+
+    ruleTest(rule,
+      If(falseLit, stringLit, doubleLit),
+      If(falseLit, stringLit, Cast(doubleLit, StringType)))
+
+    ruleTest(rule,
+      If(trueLit, timestampLit, stringLit),
+      If(trueLit, Cast(timestampLit, StringType), stringLit))
   }
 
   test("type coercion for CaseKeyWhen") {
@@ -712,6 +766,63 @@ class TypeCoercionSuite extends PlanTest {
       CaseWhen(Seq((Literal(true), Cast(Literal(100L), DecimalType(22, 2)))),
         Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2)))
     )
+  }
+
+  test("type coercion for Stack") {
+    val rule = TypeCoercion.StackCoercion
+
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(1), Literal(2), Literal(null))),
+      Stack(Seq(Literal(3), Literal(1), Literal(2), Literal.create(null, IntegerType))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(1.0), Literal(null), Literal(3.0))),
+      Stack(Seq(Literal(3), Literal(1.0), Literal.create(null, DoubleType), Literal(3.0))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(null), Literal("2"), Literal("3"))),
+      Stack(Seq(Literal(3), Literal.create(null, StringType), Literal("2"), Literal("3"))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(null), Literal(null), Literal(null))),
+      Stack(Seq(Literal(3), Literal(null), Literal(null), Literal(null))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(1), Literal("2"),
+        Literal(null), Literal(null))),
+      Stack(Seq(Literal(2),
+        Literal(1), Literal("2"),
+        Literal.create(null, IntegerType), Literal.create(null, StringType))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(1), Literal(null),
+        Literal(null), Literal("2"))),
+      Stack(Seq(Literal(2),
+        Literal(1), Literal.create(null, StringType),
+        Literal.create(null, IntegerType), Literal("2"))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(null), Literal(1),
+        Literal("2"), Literal(null))),
+      Stack(Seq(Literal(2),
+        Literal.create(null, StringType), Literal(1),
+        Literal("2"), Literal.create(null, IntegerType))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(null), Literal(null),
+        Literal(1), Literal("2"))),
+      Stack(Seq(Literal(2),
+        Literal.create(null, IntegerType), Literal.create(null, StringType),
+        Literal(1), Literal("2"))))
+
+    ruleTest(rule,
+      Stack(Seq(Subtract(Literal(3), Literal(1)),
+        Literal(1), Literal("2"),
+        Literal(null), Literal(null))),
+      Stack(Seq(Subtract(Literal(3), Literal(1)),
+        Literal(1), Literal("2"),
+        Literal.create(null, IntegerType), Literal.create(null, StringType))))
   }
 
   test("BooleanEquality type cast") {

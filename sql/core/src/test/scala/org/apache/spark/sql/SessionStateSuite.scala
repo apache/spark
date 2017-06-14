@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.QueryExecution
@@ -71,10 +72,10 @@ class SessionStateSuite extends SparkFunSuite
   }
 
   test("fork new session and inherit function registry and udf") {
-    val testFuncName1 = "strlenScala"
-    val testFuncName2 = "addone"
+    val testFuncName1 = FunctionIdentifier("strlenScala")
+    val testFuncName2 = FunctionIdentifier("addone")
     try {
-      activeSession.udf.register(testFuncName1, (_: String).length + (_: Int))
+      activeSession.udf.register(testFuncName1.funcName, (_: String).length + (_: Int))
       val forkedSession = activeSession.cloneSession()
 
       // inheritance
@@ -86,7 +87,7 @@ class SessionStateSuite extends SparkFunSuite
       // independence
       forkedSession.sessionState.functionRegistry.dropFunction(testFuncName1)
       assert(activeSession.sessionState.functionRegistry.lookupFunction(testFuncName1).nonEmpty)
-      activeSession.udf.register(testFuncName2, (_: Int) + 1)
+      activeSession.udf.register(testFuncName2.funcName, (_: Int) + 1)
       assert(forkedSession.sessionState.functionRegistry.lookupFunction(testFuncName2).isEmpty)
     } finally {
       activeSession.sessionState.functionRegistry.dropFunction(testFuncName1)

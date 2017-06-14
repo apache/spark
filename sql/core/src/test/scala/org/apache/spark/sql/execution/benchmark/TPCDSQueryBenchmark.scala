@@ -74,13 +74,13 @@ object TPCDSQueryBenchmark {
       // per-row processing time for those cases.
       val queryRelations = scala.collection.mutable.HashSet[String]()
       spark.sql(queryString).queryExecution.logical.map {
-        case ur @ UnresolvedRelation(t: TableIdentifier) =>
+        case UnresolvedRelation(t: TableIdentifier, _) =>
           queryRelations.add(t.table)
         case lp: LogicalPlan =>
           lp.expressions.foreach { _ foreach {
             case subquery: SubqueryExpression =>
               subquery.plan.foreach {
-                case ur @ UnresolvedRelation(t: TableIdentifier) =>
+                case UnresolvedRelation(t: TableIdentifier, _) =>
                   queryRelations.add(t.table)
                 case _ =>
               }
