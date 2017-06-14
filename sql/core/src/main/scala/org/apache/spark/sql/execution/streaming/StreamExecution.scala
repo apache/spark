@@ -696,6 +696,7 @@ class StreamExecution(
    * batch. This method blocks until the thread stops running.
    */
   override def stop(): Unit = {
+    logInfo(s"Stopping query $prettyIdString")
     // Set the state to TERMINATED so that the batching thread knows that it was interrupted
     // intentionally
     state.set(TERMINATED)

@@ -239,6 +239,15 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("stopAllQueries") {
+    val datasets = Seq.fill(5)(makeDataset._2)
+    withQueriesOn(datasets: _*) { queries =>
+      assert(queries.forall(_.isActive))
+      spark.sessionState.streamingQueryManager.stopAllQueries()
+      assert(queries.forall(_.isActive == false), "Queries are still running")
+    }
+  }
+
   /** Run a body of code by defining a query on each dataset */
   private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[StreamingQuery] => Unit): Unit = {
     failAfter(streamingTimeout) {

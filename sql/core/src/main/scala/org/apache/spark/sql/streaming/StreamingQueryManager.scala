@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
 
 /**
  * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
@@ -52,6 +52,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQuery: StreamingQuery = null
+
+  ShutdownHookManager.addShutdownHook(stopAllQueries _)
 
   /**
    * Returns a list of active queries associated with this SQLContext
@@ -319,6 +321,17 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
         throw e
     }
     query
+  }
+
+  private[sql] def stopAllQueries(): Unit = {
+    active.foreach { query =>
+      try {
+        query.stop()
+      } catch {
+        case e: Throwable =>
+          logError(s"Exception while stopping query ${query.id}", e)
+      }
+    }
   }
 
   /** Notify (by the StreamingQuery) that the query has been terminated */
