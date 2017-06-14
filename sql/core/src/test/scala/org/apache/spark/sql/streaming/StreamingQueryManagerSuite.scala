@@ -24,16 +24,15 @@ import scala.util.Random
 import scala.util.control.NonFatal
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Dataset}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
+import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.util.Utils
 
 class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
@@ -243,9 +242,34 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     val datasets = Seq.fill(5)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       assert(queries.forall(_.isActive))
-      spark.sessionState.streamingQueryManager.stopAllQueries()
+      spark.streams.stopAllQueries()
       assert(queries.forall(_.isActive == false), "Queries are still running")
     }
+  }
+
+  test("stop session stops all queries") {
+    val inputData = MemoryStream[Int]
+    val mapped = inputData.toDS.map(6 / _)
+    var query: StreamingQuery = null
+    try {
+      query = mapped.toDF.writeStream
+        .format("memory")
+        .queryName(s"queryInNewSession")
+        .outputMode("append")
+        .start()
+      assert(query.isActive)
+      spark.stop()
+      assert(spark.sparkContext.isStopped)
+      assert(query.isActive == false, "Query is still running")
+    } catch {
+      case NonFatal(e) =>
+        if (query != null) query.stop()
+        throw e
+    }
+    // set spark session back up
+    super.afterAll()
+    super.beforeAll()
+    assert(spark.sparkContext.isStopped == false)
   }
 
   /** Run a body of code by defining a query on each dataset */

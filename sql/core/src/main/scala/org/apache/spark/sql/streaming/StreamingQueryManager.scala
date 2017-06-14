@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
@@ -52,8 +52,6 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQuery: StreamingQuery = null
-
-  ShutdownHookManager.addShutdownHook(stopAllQueries _)
 
   /**
    * Returns a list of active queries associated with this SQLContext

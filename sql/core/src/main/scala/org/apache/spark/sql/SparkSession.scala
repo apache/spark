@@ -690,6 +690,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def stop(): Unit = {
+    streams.stopAllQueries()
     sparkContext.stop()
   }
 
