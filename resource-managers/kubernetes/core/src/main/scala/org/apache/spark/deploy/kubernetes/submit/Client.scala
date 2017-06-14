@@ -29,6 +29,7 @@ import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.rest.kubernetes.ResourceStagingServerSslOptionsProviderImpl
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.Utils
 
@@ -82,17 +83,25 @@ private[spark] class Client(
   def run(): Unit = {
     validateNoDuplicateFileNames(sparkJars)
     validateNoDuplicateFileNames(sparkFiles)
-    val parsedCustomLabels = ConfigurationUtils.parseKeyValuePairs(
-        customLabels, KUBERNETES_DRIVER_LABELS.key, "labels")
-    require(!parsedCustomLabels.contains(SPARK_APP_ID_LABEL), s"Label with key " +
-      s" $SPARK_APP_ID_LABEL is not allowed as it is reserved for Spark bookkeeping" +
-      s" operations.")
-    val parsedCustomAnnotations = ConfigurationUtils.parseKeyValuePairs(
-      customAnnotations, KUBERNETES_DRIVER_ANNOTATIONS.key, "annotations")
-    require(!parsedCustomAnnotations.contains(SPARK_APP_NAME_ANNOTATION), s"Annotation with key" +
-      s" $SPARK_APP_NAME_ANNOTATION is not allowed as it is reserved for Spark bookkeeping" +
-      s" operations.")
-    val allLabels = parsedCustomLabels ++ Map(
+
+    val driverCustomLabels = ConfigurationUtils.combinePrefixedKeyValuePairsWithDeprecatedConf(
+      sparkConf,
+      KUBERNETES_DRIVER_LABEL_PREFIX,
+      KUBERNETES_DRIVER_LABELS,
+      "label")
+    require(!driverCustomLabels.contains(SPARK_APP_ID_LABEL), s"Label with key " +
+        s" $SPARK_APP_ID_LABEL is not allowed as it is reserved for Spark bookkeeping" +
+        s" operations.")
+
+    val driverCustomAnnotations = ConfigurationUtils.combinePrefixedKeyValuePairsWithDeprecatedConf(
+      sparkConf,
+      KUBERNETES_DRIVER_ANNOTATION_PREFIX,
+      KUBERNETES_DRIVER_ANNOTATIONS,
+      "annotation")
+    require(!driverCustomAnnotations.contains(SPARK_APP_NAME_ANNOTATION),
+        s"Annotation with key $SPARK_APP_NAME_ANNOTATION is not allowed as it is reserved for" +
+        s" Spark bookkeeping operations.")
+    val allDriverLabels = driverCustomLabels ++ Map(
         SPARK_APP_ID_LABEL -> kubernetesAppId,
         SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
 
@@ -138,8 +147,8 @@ private[spark] class Client(
     val basePod = new PodBuilder()
       .withNewMetadata()
         .withName(kubernetesDriverPodName)
-        .addToLabels(allLabels.asJava)
-        .addToAnnotations(parsedCustomAnnotations.asJava)
+        .addToLabels(allDriverLabels.asJava)
+        .addToAnnotations(driverCustomAnnotations.toMap.asJava)
         .addToAnnotations(SPARK_APP_NAME_ANNOTATION, appName)
         .endMetadata()
       .withNewSpec()
@@ -148,7 +157,7 @@ private[spark] class Client(
         .endSpec()
 
     val maybeSubmittedDependencyUploader = initContainerComponentsProvider
-        .provideInitContainerSubmittedDependencyUploader(allLabels)
+        .provideInitContainerSubmittedDependencyUploader(allDriverLabels)
     val maybeSubmittedResourceIdentifiers = maybeSubmittedDependencyUploader.map { uploader =>
       SubmittedResources(uploader.uploadJars(), uploader.uploadFiles())
     }

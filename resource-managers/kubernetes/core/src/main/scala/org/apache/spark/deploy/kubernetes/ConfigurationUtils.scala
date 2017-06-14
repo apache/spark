@@ -17,9 +17,11 @@
 
 package org.apache.spark.deploy.kubernetes
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.OptionalConfigEntry
 
-object ConfigurationUtils {
+object ConfigurationUtils extends Logging {
   def parseKeyValuePairs(
     maybeKeyValues: Option[String],
     configKey: String,
@@ -37,5 +39,30 @@ object ConfigurationUtils {
         }
       }).toMap
     }).getOrElse(Map.empty[String, String])
+  }
+
+  def combinePrefixedKeyValuePairsWithDeprecatedConf(
+      sparkConf: SparkConf,
+      prefix: String,
+      deprecatedConf: OptionalConfigEntry[String],
+      configType: String): Map[String, String] = {
+    val deprecatedKeyValuePairsString = sparkConf.get(deprecatedConf)
+    deprecatedKeyValuePairsString.foreach { _ =>
+      logWarning(s"Configuration with key ${deprecatedConf.key} is deprecated. Use" +
+        s" configurations with prefix $prefix<key> instead.")
+    }
+    val fromDeprecated = parseKeyValuePairs(
+        deprecatedKeyValuePairsString,
+        deprecatedConf.key,
+        configType)
+    val fromPrefix = sparkConf.getAllWithPrefix(prefix)
+    val combined = fromDeprecated.toSeq ++ fromPrefix
+    combined.groupBy(_._1).foreach {
+      case (key, values) =>
+        require(values.size == 1,
+          s"Cannot have multiple values for a given $configType key, got key $key with" +
+            s" values $values")
+    }
+    combined.toMap
   }
 }

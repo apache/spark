@@ -62,10 +62,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
     org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
   private val executorJarsDownloadDir = conf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
 
-  private val executorLabels = ConfigurationUtils.parseKeyValuePairs(
-      conf.get(KUBERNETES_EXECUTOR_LABELS),
-      KUBERNETES_EXECUTOR_LABELS.key,
-      "executor labels")
+  private val executorLabels = ConfigurationUtils.combinePrefixedKeyValuePairsWithDeprecatedConf(
+      conf,
+      KUBERNETES_EXECUTOR_LABEL_PREFIX,
+      KUBERNETES_EXECUTOR_LABELS,
+      "executor label")
   require(
       !executorLabels.contains(SPARK_APP_ID_LABEL),
       s"Custom executor labels cannot contain $SPARK_APP_ID_LABEL as it is" +
@@ -74,11 +75,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
       !executorLabels.contains(SPARK_EXECUTOR_ID_LABEL),
       s"Custom executor labels cannot contain $SPARK_EXECUTOR_ID_LABEL as it is reserved for" +
         s" Spark.")
-  private val executorAnnotations = ConfigurationUtils.parseKeyValuePairs(
-      conf.get(KUBERNETES_EXECUTOR_ANNOTATIONS),
-      KUBERNETES_EXECUTOR_ANNOTATIONS.key,
-      "executor annotations")
 
+  private val executorAnnotations =
+      ConfigurationUtils.combinePrefixedKeyValuePairsWithDeprecatedConf(
+          conf,
+          KUBERNETES_EXECUTOR_ANNOTATION_PREFIX,
+          KUBERNETES_EXECUTOR_ANNOTATIONS,
+          "executor annotation")
   private var shufflePodCache: Option[ShufflePodCache] = None
   private val executorDockerImage = conf.get(EXECUTOR_DOCKER_IMAGE)
   private val dockerImagePullPolicy = conf.get(DOCKER_IMAGE_PULL_POLICY)

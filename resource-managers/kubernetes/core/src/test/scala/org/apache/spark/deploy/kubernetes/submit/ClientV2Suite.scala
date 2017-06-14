@@ -49,12 +49,17 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
   private val APP_ID = "spark-id"
   private val CUSTOM_LABEL_KEY = "customLabel"
   private val CUSTOM_LABEL_VALUE = "customLabelValue"
+  private val DEPRECATED_CUSTOM_LABEL_KEY = "deprecatedCustomLabel"
+  private val DEPRECATED_CUSTOM_LABEL_VALUE = "deprecatedCustomLabelValue"
   private val ALL_EXPECTED_LABELS = Map(
       CUSTOM_LABEL_KEY -> CUSTOM_LABEL_VALUE,
+      DEPRECATED_CUSTOM_LABEL_KEY -> DEPRECATED_CUSTOM_LABEL_VALUE,
       SPARK_APP_ID_LABEL -> APP_ID,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
   private val CUSTOM_ANNOTATION_KEY = "customAnnotation"
   private val CUSTOM_ANNOTATION_VALUE = "customAnnotationValue"
+  private val DEPRECATED_CUSTOM_ANNOTATION_KEY = "deprecatedCustomAnnotation"
+  private val DEPRECATED_CUSTOM_ANNOTATION_VALUE = "deprecatedCustomAnnotationValue"
   private val INIT_CONTAINER_SECRET_NAME = "init-container-secret"
   private val INIT_CONTAINER_SECRET_DATA = Map("secret-key" -> "secret-data")
   private val MAIN_CLASS = "org.apache.spark.examples.SparkPi"
@@ -94,8 +99,11 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
       .set(DRIVER_DOCKER_IMAGE, CUSTOM_DRIVER_IMAGE)
       .set(org.apache.spark.internal.config.DRIVER_MEMORY, DRIVER_MEMORY_MB.toLong)
       .set(KUBERNETES_DRIVER_MEMORY_OVERHEAD, DRIVER_MEMORY_OVERHEAD_MB.toLong)
-      .set(KUBERNETES_DRIVER_LABELS, s"$CUSTOM_LABEL_KEY=$CUSTOM_LABEL_VALUE")
-      .set(KUBERNETES_DRIVER_ANNOTATIONS, s"$CUSTOM_ANNOTATION_KEY=$CUSTOM_ANNOTATION_VALUE")
+      .set(KUBERNETES_DRIVER_LABELS, s"$DEPRECATED_CUSTOM_LABEL_KEY=$DEPRECATED_CUSTOM_LABEL_VALUE")
+      .set(KUBERNETES_DRIVER_ANNOTATIONS,
+          s"$DEPRECATED_CUSTOM_ANNOTATION_KEY=$DEPRECATED_CUSTOM_ANNOTATION_VALUE")
+      .set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$CUSTOM_LABEL_KEY", CUSTOM_LABEL_VALUE)
+      .set(s"$KUBERNETES_DRIVER_ANNOTATION_PREFIX$CUSTOM_ANNOTATION_KEY", CUSTOM_ANNOTATION_VALUE)
       .set(org.apache.spark.internal.config.DRIVER_CLASS_PATH, DRIVER_EXTRA_CLASSPATH)
       .set(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS, DRIVER_JAVA_OPTIONS)
   private val EXECUTOR_INIT_CONF_KEY = "executor-init-conf"
@@ -444,6 +452,7 @@ class ClientV2Suite extends SparkFunSuite with BeforeAndAfter {
 
   private def podHasCorrectAnnotations(pod: Pod): Boolean = {
     val expectedAnnotations = Map(
+      DEPRECATED_CUSTOM_ANNOTATION_KEY -> DEPRECATED_CUSTOM_ANNOTATION_VALUE,
       CUSTOM_ANNOTATION_KEY -> CUSTOM_ANNOTATION_VALUE,
       SPARK_APP_NAME_ANNOTATION -> APP_NAME,
       BOOTSTRAPPED_POD_ANNOTATION -> TRUE)
