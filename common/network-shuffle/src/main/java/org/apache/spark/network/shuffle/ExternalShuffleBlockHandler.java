@@ -213,7 +213,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       mapIdAndReduceIds = new int[2 * blockIds.length];
       for (int i = 0; i< blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
-        if (!blockIdParts[1].equals(shuffleId)) {
+        if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
           throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
             ", got:" + blockIds[i]);
         }
