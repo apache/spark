@@ -17,20 +17,21 @@
 package org.apache.spark.ml.optim.loss
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{BLAS, Vectors}
 
 class DifferentiableRegularizationSuite extends SparkFunSuite {
 
   test("L2 regularization") {
     val shouldApply = (_: Int) => true
     val regParam = 0.3
-    val coefficients = Array(1.0, 3.0, -2.0)
+    val coefficients = Vectors.dense(Array(1.0, 3.0, -2.0))
     val numFeatures = coefficients.size
 
     // check without features standard
     val regFun = new L2Regularization(regParam, shouldApply, None)
     val (loss, grad) = regFun.calculate(coefficients)
-    assert(loss === 0.5 * regParam * coefficients.map(x => x * x).sum)
-    assert(grad === coefficients.map(_ * regParam))
+    assert(loss === 0.5 * regParam * BLAS.dot(coefficients, coefficients))
+    assert(grad === coefficients.toArray.map(_ * regParam))
 
     // check with features standard
     val featuresStd = Array(0.1, 1.1, 0.5)

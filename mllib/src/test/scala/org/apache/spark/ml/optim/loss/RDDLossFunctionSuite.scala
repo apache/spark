@@ -46,11 +46,11 @@ class RDDLossFunctionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val lossWithReg = new RDDLossFunction(instances, getAgg, Some(regLossFun))
 
     val (loss1, grad1) = lossNoReg.calculate(coefficients.asBreeze.toDenseVector)
-    val (regLoss, regGrad) = regLossFun.calculate(coefficients.toArray)
+    val (regLoss, regGrad) = regLossFun.calculate(coefficients)
     val (loss2, grad2) = lossWithReg.calculate(coefficients.asBreeze.toDenseVector)
 
-    BLAS.axpy(1.0, Vectors.fromBreeze(grad1), Vectors.dense(regGrad))
-    assert(Vectors.dense(regGrad) ~== Vectors.fromBreeze(grad2) relTol 1e-5)
+    BLAS.axpy(1.0, Vectors.fromBreeze(grad1), regGrad)
+    assert(regGrad ~== Vectors.fromBreeze(grad2) relTol 1e-5)
     assert(loss1 + regLoss === loss2)
   }
 

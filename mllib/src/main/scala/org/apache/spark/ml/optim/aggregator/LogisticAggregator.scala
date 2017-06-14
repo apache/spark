@@ -193,7 +193,6 @@ private[ml] class LogisticAggregator(
   private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   private val coefficientSize = bcCoefficients.value.size
   protected override val dim: Int = coefficientSize
-  private val numCoefficientSets = if (multinomial) numClasses else 1
   if (multinomial) {
     require(numClasses ==  coefficientSize / numFeaturesPlusIntercept, s"The number of " +
       s"coefficients should be ${numClasses * numFeaturesPlusIntercept} but was $coefficientSize")
@@ -218,10 +217,7 @@ private[ml] class LogisticAggregator(
   }
 
   /** Update gradient and loss using binary loss function. */
-  private def binaryUpdateInPlace(
-                                   features: Vector,
-                                   weight: Double,
-                                   label: Double): Unit = {
+  private def binaryUpdateInPlace(features: Vector, weight: Double, label: Double): Unit = {
 
     val localFeaturesStd = bcFeaturesStd.value
     val localCoefficients = coefficientsArray
@@ -258,10 +254,7 @@ private[ml] class LogisticAggregator(
   }
 
   /** Update gradient and loss using multinomial (softmax) loss function. */
-  private def multinomialUpdateInPlace(
-                                        features: Vector,
-                                        weight: Double,
-                                        label: Double): Unit = {
+  private def multinomialUpdateInPlace(features: Vector, weight: Double, label: Double): Unit = {
     // TODO: use level 2 BLAS operations
     /*
       Note: this can still be used when numClasses = 2 for binary
@@ -323,8 +316,7 @@ private[ml] class LogisticAggregator(
         val stdValue = value / localFeaturesStd(index)
         var j = 0
         while (j < numClasses) {
-          localGradientArray(index * numClasses + j) +=
-            weight * multipliers(j) * stdValue
+          localGradientArray(index * numClasses + j) += weight * multipliers(j) * stdValue
           j += 1
         }
       }
@@ -354,6 +346,9 @@ private[ml] class LogisticAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
+      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+        s" Expecting $numFeatures but got ${features.size}.")
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
 
@@ -366,12 +361,4 @@ private[ml] class LogisticAggregator(
       this
     }
   }
-
-//  def gradient: Matrix = {
-//    require(weightSum > 0.0, s"The effective number of instances should be " +
-//      s"greater than 0.0, but $weightSum.")
-//    val result = Vectors.dense(gradientSumArray.clone())
-//    BLAS.scal(1.0 / weightSum, result)
-//    new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept, result.toArray)
-//  }
 }
