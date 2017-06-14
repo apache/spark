@@ -2185,9 +2185,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Computes statistics for numeric and string columns, including count, mean, stddev, min, and
-   * max. If no columns are given, this function computes statistics for all numerical or string
-   * columns.
+   * Computes statistics for numeric and string columns, including count, mean, stddev, min,
+   * 25th, 50th and 75th percentiles and max. If no columns are given, this function computes
+   * statistics for all numerical or string columns.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
    * backward compatibility of the schema of the resulting Dataset. If you want to
@@ -2202,6 +2202,9 @@ class Dataset[T] private[sql](
    *   // mean    53.3  178.05
    *   // stddev  11.6  15.7
    *   // min     18.0  163.0
+   *   // 25%     24.0  176.0
+   *   // 50%     24.0  176.0
+   *   // 75%     32.0  180.0
    *   // max     92.0  192.0
    * }}}
    *
@@ -2217,6 +2220,12 @@ class Dataset[T] private[sql](
       "mean" -> ((child: Expression) => Average(child).toAggregateExpression()),
       "stddev" -> ((child: Expression) => StddevSamp(child).toAggregateExpression()),
       "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
+      "25%" -> ((child: Expression) =>
+        new ApproximatePercentile(child, Literal(0.25)).toAggregateExpression()),
+      "50%" -> ((child: Expression) =>
+        new ApproximatePercentile(child, Literal(0.5)).toAggregateExpression()),
+      "75%" -> ((child: Expression) =>
+        new ApproximatePercentile(child, Literal(0.75)).toAggregateExpression()),
       "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
     val outputCols =

@@ -675,6 +675,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row("mean", null, "33.0", "178.0"),
       Row("stddev", null, "19.148542155126762", "11.547005383792516"),
       Row("min", "Alice", "16", "164"),
+      Row("25%", null, "24.0", "176.0"),
+      Row("50%", null, "24.0", "176.0"),
+      Row("75%", null, "32.0", "180.0"),
       Row("max", "David", "60", "192"))
 
     val emptyDescribeResult = Seq(
@@ -682,6 +685,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row("mean", null, null, null),
       Row("stddev", null, null, null),
       Row("min", null, null, null),
+      Row("25%", null, null, null),
+      Row("50%", null, null, null),
+      Row("75%", null, null, null),
       Row("max", null, null, null))
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
