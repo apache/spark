@@ -1080,7 +1080,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Position expression.
    */
   override def visitPosition(ctx: PositionContext): Expression = withOrigin(ctx) {
-    StringLocate(expression(ctx.valueExpression(0)), expression(ctx.valueExpression(1)), Literal(1))
+    new StringLocate(expression(ctx.substr), expression(ctx.str))
   }
 
   /**

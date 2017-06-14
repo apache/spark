@@ -563,6 +563,7 @@ primaryExpression
     | CAST '(' expression AS dataType ')'                                                      #cast
     | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
     | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
+    | POSITION '(' substr=valueExpression IN str=valueExpression ')'                           #position
     | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
@@ -574,7 +575,6 @@ primaryExpression
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
     | '(' expression ')'                                                                       #parenthesizedExpression
-    | POSITION '(' valueExpression IN valueExpression ')'                                      #position
     ;
 
 constant
@@ -852,7 +852,6 @@ MACRO: 'MACRO';
 IGNORE: 'IGNORE';
 
 IF: 'IF';
-
 POSITION: 'POSITION';
 
 EQ  : '=' | '==';
