@@ -55,7 +55,8 @@ private class ShuffleStatus(numPartitions: Int) {
    * locations is so small that we choose to ignore that case and store only a single location
    * for each output.
    */
-  private[this] val mapStatuses = new Array[MapStatus](numPartitions)
+  // Exposed for testing
+  val mapStatuses = new Array[MapStatus](numPartitions)
 
   /**
    * The cached result of serializing the map statuses array. This cache is lazily populated when
@@ -106,13 +107,29 @@ private class ShuffleStatus(numPartitions: Int) {
   }
 
   /**
+   * Removes all shuffle outputs associated with this host. Note that this will also remove
+   * outputs which are served by an external shuffle server (if one exists).
+   */
+  def removeOutputsOnHost(host: String): Unit = {
+    removeOutputsByFilter(x => x.host == host)
+  }
+
+  /**
    * Removes all map outputs associated with the specified executor. Note that this will also
    * remove outputs which are served by an external shuffle server (if one exists), as they are
    * still registered with that execId.
    */
   def removeOutputsOnExecutor(execId: String): Unit = synchronized {
+    removeOutputsByFilter(x => x.executorId == execId)
+  }
+
+  /**
+   * Removes all shuffle outputs which satisfies the filter. Note that this will also
+   * remove outputs which are served by an external shuffle server (if one exists).
+   */
+  def removeOutputsByFilter(f: (BlockManagerId) => Boolean): Unit = synchronized {
     for (mapId <- 0 until mapStatuses.length) {
-      if (mapStatuses(mapId) != null && mapStatuses(mapId).location.executorId == execId) {
+      if (mapStatuses(mapId) != null && f(mapStatuses(mapId).location)) {
         _numAvailableOutputs -= 1
         mapStatuses(mapId) = null
         invalidateSerializedMapOutputStatusCache()
@@ -317,7 +334,8 @@ private[spark] class MapOutputTrackerMaster(
 
   // HashMap for storing shuffleStatuses in the driver.
   // Statuses are dropped only by explicit de-registering.
-  private val shuffleStatuses = new ConcurrentHashMap[Int, ShuffleStatus]().asScala
+  // Exposed for testing
+  val shuffleStatuses = new ConcurrentHashMap[Int, ShuffleStatus]().asScala
 
   private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
 
@@ -413,6 +431,15 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
     }
+  }
+
+  /**
+   * Removes all shuffle outputs associated with this host. Note that this will also remove
+   * outputs which are served by an external shuffle server (if one exists).
+   */
+  def removeOutputsOnHost(host: String): Unit = {
+    shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnHost(host) }
+    incrementEpoch()
   }
 
   /**
