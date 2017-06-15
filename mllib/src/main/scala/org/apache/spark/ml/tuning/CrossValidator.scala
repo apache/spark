@@ -132,7 +132,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
           models(i) match {
             case w: MLWritable =>
               val path = new Path($(modelPath), epm(i).toSeq.map(p => p.param.name + "-" + p.value)
-                .mkString("-") + s"-split$splitIndex-$metric")
+                .mkString("-") + s"-split$splitIndex-${math.rint(metric * 1000) / 1000}")
               w.save(path.toString)
             case _ =>
               logWarning(models(i).uid + " did not implement MLWritable. Serialization omitted.")

@@ -127,8 +127,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
       if (isDefined(modelPath)) {
         models(i) match {
           case w: MLWritable =>
-            val path = new Path($(modelPath), epm(i).toSeq
-              .map(p => p.param.name + "-" + p.value).mkString("-") + s"-$metric")
+            val path = new Path($(modelPath), epm(i).toSeq.map(p => p.param.name + "-" + p.value)
+              .mkString("-") + s"-${math.rint(metric * 1000) / 1000}")
             w.save(path.toString)
           case _ =>
             logWarning(models(i).uid + " did not implement MLWritable. Serialization omitted.")
