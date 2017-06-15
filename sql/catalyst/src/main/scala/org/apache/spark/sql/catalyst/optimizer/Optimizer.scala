@@ -77,12 +77,12 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       // Operator push down
       PushProjectionThroughUnion,
       ReorderJoin(conf),
-      EliminateOuterJoin(conf),
+      EliminateOuterJoin,
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown(conf),
       ColumnPruning,
-      InferFiltersFromConstraints(conf),
+      InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -619,14 +619,15 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * Note: While this optimization is applicable to all types of join, it primarily benefits Inner and
  * LeftSemi joins.
  */
-case class InferFiltersFromConstraints(conf: SQLConf)
-    extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = if (conf.constraintPropagationEnabled) {
-    inferFilters(plan)
-  } else {
-    plan
-  }
+object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
 
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.constraintPropagationEnabled) {
+      inferFilters(plan)
+    } else {
+      plan
+    }
+  }
 
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
