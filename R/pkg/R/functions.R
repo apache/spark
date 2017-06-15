@@ -4040,6 +4040,7 @@ setMethod("input_file_name", signature("missing"),
 setMethod("trunc",
           signature(x = "Column"),
           function(x, format) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "trunc", x@jc, format)
+            jc <- callJStatic("org.apache.spark.sql.functions", "trunc",
+                              x@jc, as.character(format))
             column(jc)
           })
