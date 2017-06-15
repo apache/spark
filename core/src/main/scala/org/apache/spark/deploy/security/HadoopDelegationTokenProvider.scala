@@ -15,44 +15,36 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-
-import org.apache.spark.SparkConf
+import org.apache.hadoop.security.Credentials
 
 /**
- * A credential provider for a service. User must implement this if they need to access a
- * secure service from Spark.
+ * Hadoop delegation token provider.
  */
-trait ServiceCredentialProvider {
+private[spark] trait HadoopDelegationTokenProvider {
 
   /**
-   * Name of the service to provide credentials. This name should unique, Spark internally will
-   * use this name to differentiate credential provider.
+   * Name of the service to provide delegation tokens. This name should be unique.  Spark will
+   * internally use this name to differentiate delegation token providers.
    */
   def serviceName: String
 
   /**
-   * Returns true if credentials are required by this service. By default, it is based on whether
-   * Hadoop security is enabled.
+   * Returns true if delegation tokens are required for this service. By default, it is based on
+   * whether Hadoop security is enabled.
    */
-  def credentialsRequired(hadoopConf: Configuration): Boolean = {
-    UserGroupInformation.isSecurityEnabled
-  }
+  def delegationTokensRequired(hadoopConf: Configuration): Boolean
 
   /**
-   * Obtain credentials for this service and get the time of the next renewal.
-   *
+   * Obtain delegation tokens for this service and get the time of the next renewal.
    * @param hadoopConf Configuration of current Hadoop Compatible system.
-   * @param sparkConf Spark configuration.
    * @param creds Credentials to add tokens and security keys to.
-   * @return If this Credential is renewable and can be renewed, return the time of the next
+   * @return If the returned tokens are renewable and can be renewed, return the time of the next
    *         renewal, otherwise None should be returned.
    */
-  def obtainCredentials(
-      hadoopConf: Configuration,
-      sparkConf: SparkConf,
-      creds: Credentials): Option[Long]
+  def obtainDelegationTokens(
+    hadoopConf: Configuration,
+    creds: Credentials): Option[Long]
 }

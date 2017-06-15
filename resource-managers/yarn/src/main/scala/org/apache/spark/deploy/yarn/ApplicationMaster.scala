@@ -38,7 +38,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, ConfigurableCredentialManager}
+import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, YARNHadoopDelegationTokenManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
@@ -247,8 +247,12 @@ private[spark] class ApplicationMaster(
       if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
         // If a principal and keytab have been set, use that to create new credentials for executors
         // periodically
-        credentialRenewer =
-          new ConfigurableCredentialManager(sparkConf, yarnConf).credentialRenewer()
+        val credentialManager = new YARNHadoopDelegationTokenManager(
+          sparkConf,
+          yarnConf,
+          YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, yarnConf))
+
+        val credentialRenewer = new AMCredentialRenewer(sparkConf, yarnConf, credentialManager)
         credentialRenewer.scheduleLoginFromKeytab()
       }
 
