@@ -234,15 +234,20 @@ private[hive] trait HiveStrategies {
         // hive table scan operator to be used for partition pruning.
         val partitionKeyIds = AttributeSet(relation.partitionCols)
         val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
-          !predicate.references.isEmpty &&
+          predicate.references.nonEmpty &&
           predicate.references.subsetOf(partitionKeyIds)
         }
+        val additionalPartPredicates =
+          PhysicalOperation.extractPartitionKeyExpression(
+            otherPredicates.foldLeft[Expression](Literal(true))(And(_, _)), partitionKeyIds)
 
         pruneFilterProject(
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession)) :: Nil
+        HiveTableScanExec(_,
+            relation,
+            pruningPredicates ++ additionalPartPredicates)(sparkSession)) :: Nil
       case _ =>
         Nil
     }

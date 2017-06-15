@@ -88,6 +88,36 @@ object PhysicalOperation extends PredicateHelper {
           .map(Alias(_, a.name)(a.exprId, a.qualifier, isGenerated = a.isGenerated)).getOrElse(a)
     }
   }
+
+  /**
+   * Drop the non-partition key expression from the given expression, to optimize the
+   * partition pruning. For instances: (We assume part1 & part2 are the partition keys):
+   * (part1 == 1 and a > 3) or (part2 == 2 and a < 5)  ==> (part1 == 1 or part1 == 2)
+   * (part1 == 1 and a > 3) or (a < 100) => None
+   * (a > 100 && b < 100) or (part1 = 10) => None
+   * (a > 100 && b < 100 and part1 = 10) or (part1 == 2) => (part1 = 10 or part1 == 2)
+   * @param predicate The given expression
+   * @param partitionKeyIds partition keys in attribute set
+   * @return
+   */
+  def extractPartitionKeyExpression(
+    predicate: Expression, partitionKeyIds: AttributeSet): Option[Expression] = {
+    // drop the non-partition key expression in conjunction of the expression tree
+    val additionalPartPredicate = predicate transformUp {
+      case a @ And(left, right) if a.deterministic &&
+        left.references.intersect(partitionKeyIds).isEmpty => right
+      case a @ And(left, right) if a.deterministic &&
+        right.references.intersect(partitionKeyIds).isEmpty => left
+    }
+
+    if (additionalPartPredicate.references.nonEmpty &&
+      additionalPartPredicate.references.subsetOf(partitionKeyIds)) {
+      // the expression attribute keys are all from the partition keys
+      Some(additionalPartPredicate)
+    } else {
+      None
+    }
+  }
 }
 
 /**
