@@ -347,14 +347,14 @@ private[arrow] class UTF8StringColumnWriter(
     ordinal: Int,
     allocator: BufferAllocator)
   extends PrimitiveColumnWriter(ordinal) {
-  override val valueVector: NullableVarBinaryVector
-    = new NullableVarBinaryVector("UTF8StringValue", getFieldType(dtype), allocator)
-  override val valueMutator: NullableVarBinaryVector#Mutator = valueVector.getMutator
+  override val valueVector: NullableVarCharVector
+    = new NullableVarCharVector("UTF8StringValue", getFieldType(dtype), allocator)
+  override val valueMutator: NullableVarCharVector#Mutator = valueVector.getMutator
 
   override def setNull(): Unit = valueMutator.setNull(count)
   override def setValue(row: InternalRow): Unit = {
-    val bytes = row.getUTF8String(ordinal).getBytes
-    valueMutator.setSafe(count, bytes, 0, bytes.length)
+    val str = row.getUTF8String(ordinal)
+    valueMutator.setSafe(count, str.getByteBuffer, 0, str.numBytes)
   }
 }
 
