@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
 /** Holds a cached logical plan and its data */
 case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
@@ -88,8 +87,8 @@ class CacheManager extends Logging {
    */
   def cacheQuery(
       query: Dataset[_],
-      tableName: Option[String] = None,
-      storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
+      tableName: Option[String],
+      storageLevel: StorageLevel): Unit = writeLock {
     val planToCache = query.logicalPlan
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
@@ -104,6 +103,11 @@ class CacheManager extends Logging {
           sparkSession.sessionState.executePlan(planToCache).executedPlan,
           tableName)))
     }
+  }
+
+  def cacheQuery(query: Dataset[_], tableName: Option[String] = None): Unit = writeLock {
+    cacheQuery(query, tableName, StorageLevel.fromString(
+      query.sparkSession.sessionState.conf.cacheStorageLevel))
   }
 
   /**

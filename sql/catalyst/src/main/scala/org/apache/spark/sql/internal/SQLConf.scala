@@ -126,6 +126,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val CACHE_STORAGE_LEVEL = buildConf("spark.sql.inMemoryColumnarStorage.level")
+    .internal()
+    .doc("Configures the storage level of the cached tables.")
+    .stringConf
+    .createWithDefault("MEMORY_AND_DISK")
+
   val COLUMN_BATCH_SIZE = buildConf("spark.sql.inMemoryColumnarStorage.batchSize")
     .internal()
     .doc("Controls the size of batches for columnar caching.  Larger batch sizes can improve " +
@@ -929,6 +935,8 @@ class SQLConf extends Serializable with Logging {
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
+
+  def cacheStorageLevel: String = getConf(CACHE_STORAGE_LEVEL)
 
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
