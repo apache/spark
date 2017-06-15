@@ -87,6 +87,15 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /**
+   * If set, all the models fitted during the cross validation will be saved
+   * under the specific directory path. By default the models will not be saved.
+   *
+   * @group expertSetParam
+   */
+  @Since("2.3.0")
+  def setModelPath(value: String): this.type = set(modelPath, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): TrainValidationSplitModel = {
     val schema = dataset.schema
@@ -109,15 +118,26 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     // multi-model training
     logDebug(s"Train split with multiple sets of parameters.")
     val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
-    trainingDataset.unpersist()
+
     var i = 0
     while (i < numModels) {
       // TODO: duplicate evaluator to take extra params from input
       val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
       logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
+      if (isDefined(modelPath)) {
+        models(i) match {
+          case w: MLWritable =>
+            val path = new Path($(modelPath), epm(i).toSeq
+              .map(p => p.param.name + "-" + p.value).mkString("-") + s"-$metric")
+            w.save(path.toString)
+          case _ =>
+            logWarning(models(i).uid + " did not implement MLWritable. Serialization omitted.")
+        }
+      }
       metrics(i) += metric
       i += 1
     }
+    trainingDataset.unpersist()
     validationDataset.unpersist()
 
     logInfo(s"Train validation split metrics: ${metrics.toSeq}")

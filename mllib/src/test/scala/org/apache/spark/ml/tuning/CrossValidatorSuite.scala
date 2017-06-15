@@ -23,7 +23,7 @@ import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressio
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
 import org.apache.spark.ml.feature.HashingTF
-import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
@@ -31,6 +31,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 class CrossValidatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -56,6 +57,7 @@ class CrossValidatorSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setNumFolds(3)
+    assert(!cv.isDefined(cv.modelPath))
     val cvModel = cv.fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(cv, cvModel)
@@ -239,6 +241,29 @@ class CrossValidatorSuite
       intercept[IllegalArgumentException] {
         cv.write
       }
+    }
+  }
+
+  test("cross validation with model path to save trained models") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 5))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(3)
+      .setModelPath(path)
+    try {
+      cv.fit(dataset)
+      assert(tempDir.list().length === 3 * 2 * 2)
+    } finally {
+      Utils.deleteRecursively(tempDir)
     }
   }
 

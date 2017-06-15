@@ -30,6 +30,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 class TrainValidationSplitSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -53,6 +54,7 @@ class TrainValidationSplitSuite
       .setSeed(42L)
     val tvsModel = tvs.fit(dataset)
     val parent = tvsModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(!tvs.isDefined(tvs.modelPath))
     assert(tvs.getTrainRatio === 0.5)
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
@@ -114,6 +116,32 @@ class TrainValidationSplitSuite
     tvs.setEstimatorParamMaps(invalidParamMaps)
     intercept[IllegalArgumentException] {
       tvs.transformSchema(new StructType())
+    }
+  }
+
+  test("train validation with modelPath to save trained models") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 10))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val tvs = new TrainValidationSplit()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setTrainRatio(0.5)
+      .setSeed(42L)
+      .setModelPath(path)
+    try {
+      tvs.fit(dataset)
+      assert(tempDir.list().length === 2 * 2)
+    } finally {
+      Utils.deleteRecursively(tempDir)
     }
   }
 
