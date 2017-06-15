@@ -22,17 +22,16 @@ import java.util.Locale
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
-import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS,
-  OWLQN => BreezeOWLQN}
+import breeze.optimize.{CachedDiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator.{HingeAggregator, SquaredHingeAggregator}
+import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -257,8 +256,27 @@ class LinearSVC @Since("2.2.0") (
       val featuresStd = summarizer.variance.toArray.map(math.sqrt)
       val regParamL2 = $(regParam)
       val bcFeaturesStd = instances.context.broadcast(featuresStd)
-      val costFun = new LinearSVCCostFun(instances, $(fitIntercept), $(standardization),
-        bcFeaturesStd, regParamL2, $(aggregationDepth), $(loss).toLowerCase(Locale.ROOT))
+
+      val regularization = if (regParamL2 != 0.0) {
+        val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
+        Some(new L2Regularization(regParamL2, shouldApply,
+          if ($(standardization)) None else Some(featuresStd)))
+      } else {
+        None
+      }
+
+      val costFun = $(loss) match {
+        case "hinge" =>
+          val getAggregatorFunc = new HingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
+          new RDDLossFunction(instances, getAggregatorFunc, regularization,
+            $(aggregationDepth))
+        case "squared_hinge" =>
+          val getAggregatorFunc = new SquaredHingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
+          new RDDLossFunction(instances, getAggregatorFunc, regularization,
+            $(aggregationDepth))
+        case unexpected => throw new SparkException(
+          s"unexpected lossFunction in LinearSVCAggregator: $unexpected")
+      }
 
       val optimizer = $(solver).toLowerCase(Locale.ROOT) match {
         case LBFGS => new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -426,79 +444,3 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
   }
 }
 
-/**
- * LinearSVCCostFun implements Breeze's DiffFunction[T] for loss function ("hinge" or
- * "squared_hinge").
- */
-private class LinearSVCCostFun(
-    instances: RDD[Instance],
-    fitIntercept: Boolean,
-    standardization: Boolean,
-    bcFeaturesStd: Broadcast[Array[Double]],
-    regParamL2: Double,
-    aggregationDepth: Int,
-    loss: String) extends DiffFunction[BDV[Double]] {
-
-  override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
-    val coeffs = Vectors.fromBreeze(coefficients)
-    val bcCoeffs = instances.context.broadcast(coeffs)
-    val featuresStd = bcFeaturesStd.value
-    val numFeatures = featuresStd.length
-
-    val svmAggregator = loss match {
-      case "hinge" =>
-        val seqOp = (c: HingeAggregator, instance: Instance) => c.add(instance)
-        val combOp = (c1: HingeAggregator, c2: HingeAggregator) => c1.merge(c2)
-        instances.treeAggregate(
-          new HingeAggregator(bcFeaturesStd, fitIntercept)(bcCoeffs)
-        )(seqOp, combOp, aggregationDepth)
-      case "squared_hinge" =>
-        val seqOp = (c: SquaredHingeAggregator, instance: Instance) => c.add(instance)
-        val combOp = (c1: SquaredHingeAggregator, c2: SquaredHingeAggregator) => c1.merge(c2)
-
-        instances.treeAggregate(
-          new SquaredHingeAggregator(bcFeaturesStd, fitIntercept)(bcCoeffs)
-        )(seqOp, combOp, aggregationDepth)
-      case unexpected => throw new SparkException(
-        s"unexpected lossFunction in LinearSVCAggregator: $unexpected")
-    }
-
-    val totalGradientArray = svmAggregator.gradient.toArray
-    // regVal is the sum of coefficients squares excluding intercept for L2 regularization.
-    val regVal = if (regParamL2 == 0.0) {
-      0.0
-    } else {
-      var sum = 0.0
-      coeffs.foreachActive { case (index, value) =>
-        // We do not apply regularization to the intercepts
-        if (index != numFeatures) {
-          // The following code will compute the loss of the regularization; also
-          // the gradient of the regularization, and add back to totalGradientArray.
-          sum += {
-            if (standardization) {
-              totalGradientArray(index) += regParamL2 * value
-              value * value
-            } else {
-              if (featuresStd(index) != 0.0) {
-                // If `standardization` is false, we still standardize the data
-                // to improve the rate of convergence; as a result, we have to
-                // perform this reverse standardization by penalizing each component
-                // differently to get effectively the same objective function when
-                // the training dataset is not standardized.
-                val temp = value / (featuresStd(index) * featuresStd(index))
-                totalGradientArray(index) += regParamL2 * temp
-                value * temp
-              } else {
-                0.0
-              }
-            }
-          }
-        }
-      }
-      0.5 * regParamL2 * sum
-    }
-    bcCoeffs.destroy(blocking = false)
-
-    (svmAggregator.loss + regVal, new BDV(totalGradientArray))
-  }
-}
