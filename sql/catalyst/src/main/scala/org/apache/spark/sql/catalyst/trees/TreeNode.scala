@@ -351,10 +351,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
             } else {
               arg2
             }
-            
+
             if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
               changed = true
-              (newChild1, newChild2)
+              (newChild1.asInstanceOf[BaseType], newChild2.asInstanceOf[BaseType])
             } else {
               tuple
             }

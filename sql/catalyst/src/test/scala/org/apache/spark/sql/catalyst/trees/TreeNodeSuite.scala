@@ -61,6 +61,14 @@ case class ExpressionInMap(map: Map[String, Expression]) extends Expression with
   override lazy val resolved = true
 }
 
+case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
+    notsons: Seq[(Expression, Expression)]) extends Expression with Unevaluable {
+  override def children: Seq[Expression] = sons.flatMap(t => Iterator(t._1, t._2))
+  override def nullable: Boolean = true
+  override def dataType: NullType = NullType
+  override lazy val resolved = true
+}
+
 case class JsonTestTreeNode(arg: Any) extends LeafNode {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 }
@@ -144,6 +152,23 @@ class TreeNodeSuite extends SparkFunSuite {
 
     actual = dummy2 transform toZero
     assert(actual === Dummy(None))
+  }
+
+  test("mapChildren should only works on children") {
+    val children = Seq((Literal(1), Literal(2)))
+    val notChildren = Seq((Literal(3), Literal(4)))
+    val before = SeqTupleExpression(children, notChildren)
+    val toZero: PartialFunction[Expression, Expression] = { case Literal(_, _) => Literal(0) }
+    val expect = SeqTupleExpression(Seq((Literal(0), Literal(0))), notChildren)
+
+    var actual = before transformDown toZero
+    assert(actual === expect)
+
+    actual = before transformUp toZero
+    assert(actual === expect)
+
+    actual = before transform toZero
+    assert(actual === expect)
   }
 
   test("preserves origin") {
