@@ -135,7 +135,7 @@ trait CodegenSupport extends SparkPlan {
         // generate the code to create a UnsafeRow
         ctx.INPUT_ROW = row
         ctx.currentVars = outputVars
-        val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
+        val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false, true)
         val code = s"""
           |$evaluateInputs
           |${ev.code.trim}
