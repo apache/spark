@@ -21,6 +21,7 @@ import java.io.CharArrayWriter
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -1765,27 +1766,20 @@ class Dataset[T] private[sql](
     unionPlan.assertAnalyzed()
     val Seq(left, right) = unionPlan.analyzed.children
 
-    // Make a pair for union from children output
-    val outputPosMap = AttributeMap(left.output.zipWithIndex)
-    val childrenOutputAttrs = (left :: right :: Nil).map(_.output)
-    val unionAttrPair = childrenOutputAttrs.map(_.sortBy(_.name)).transpose.map {
-      case attrs => (attrs.head, attrs.last)
-    }
-
-    // Check if column names are the same with each other
+    // Builds a project list for `other` based on `logicalPlan` output names
     val resolver = sparkSession.sessionState.analyzer.resolver
-    unionAttrPair.foreach { case (lattr, rattr) =>
-      if (resolver(lattr.name, rattr.name)) {
+    val rightProjectList = mutable.ArrayBuffer.empty[Attribute]
+    val rightOutputAttrs = right.output
+    for (lattr <- left.output) {
+      // To handle duplicate names, we first compute diff between `rightOutputAttrs` and
+      // already-found attrs in `rightProjectList`.
+      rightOutputAttrs.diff(rightProjectList).find { rattr => resolver(lattr.name, rattr.name)}
+          .map(rightProjectList.append(_)).getOrElse {
         throw new AnalysisException(
-          s"(${right.output.map(_.name).mkString(", ")}) must have the same name set with " +
-            s"""(${left.output.map(_.name).mkString(", ")})""")
+          s"""Cannot resolve column name "${lattr.name}" among """ +
+            s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
       }
     }
-
-    // Builds a project list for `other` based on `logicalPlan` output names
-    val rightProjectList = unionAttrPair.map { case (lattr, rattr) =>
-      (outputPosMap(lattr), rattr)
-    }.sortBy(_._1).map(_._2)
 
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.

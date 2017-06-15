@@ -139,7 +139,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val errMsg2 = intercept[AnalysisException] {
       df6.unionByName(df7)
     }.getMessage
-    assert(errMsg2.contains("(a, c, d) must have the same name set with (a, b, c)"))
+    assert(errMsg2.contains("""Cannot resolve column name "b" among (a, c, d)"""))
 
     def checkCaseSensitiveTest(): Unit = {
       val df1 = Seq((1, 2, 3)).toDF("ab", "cd", "ef")
@@ -150,7 +150,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val errMsg2 = intercept[AnalysisException] {
         checkCaseSensitiveTest()
       }.getMessage
-      assert(errMsg2.contains("(cd, ef, AB) must have the same name set with (ab, cd, ef)"))
+      assert(errMsg2.contains("""Cannot resolve column name "ab" among (cd, ef, AB)"""))
     }
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       checkCaseSensitiveTest()
