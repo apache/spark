@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.CONSTRAINT_PROPAGATION_ENABLED
 
 class PruneFiltersSuite extends PlanTest {
@@ -34,18 +35,7 @@ class PruneFiltersSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown and Pruning", Once,
         CombineFilters,
-        PruneFilters(conf),
-        PushDownPredicate,
-        PushPredicateThroughJoin) :: Nil
-  }
-
-  object OptimizeWithConstraintPropagationDisabled extends RuleExecutor[LogicalPlan] {
-    val batches =
-      Batch("Subqueries", Once,
-        EliminateSubqueryAliases) ::
-      Batch("Filter Pushdown and Pruning", Once,
-        CombineFilters,
-        PruneFilters(conf.copy(CONSTRAINT_PROPAGATION_ENABLED -> false)),
+        PruneFilters,
         PushDownPredicate,
         PushPredicateThroughJoin) :: Nil
   }
@@ -159,15 +149,19 @@ class PruneFiltersSuite extends PlanTest {
         ("tr1.a".attr > 10 || "tr1.c".attr < 10) &&
           'd.attr < 100)
 
-    val optimized =
-      OptimizeWithConstraintPropagationDisabled.execute(queryWithUselessFilter.analyze)
-    // When constraint propagation is disabled, the useless filter won't be pruned.
-    // It gets pushed down. Because the rule `CombineFilters` runs only once, there are redundant
-    // and duplicate filters.
-    val correctAnswer = tr1
-      .where("tr1.a".attr > 10 || "tr1.c".attr < 10).where("tr1.a".attr > 10 || "tr1.c".attr < 10)
-      .join(tr2.where('d.attr < 100).where('d.attr < 100),
+    SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, false)
+    try {
+      val optimized = Optimize.execute(queryWithUselessFilter.analyze)
+      // When constraint propagation is disabled, the useless filter won't be pruned.
+      // It gets pushed down. Because the rule `CombineFilters` runs only once, there are redundant
+      // and duplicate filters.
+      val correctAnswer = tr1
+        .where("tr1.a".attr > 10 || "tr1.c".attr < 10).where("tr1.a".attr > 10 || "tr1.c".attr < 10)
+        .join(tr2.where('d.attr < 100).where('d.attr < 100),
           Inner, Some("tr1.a".attr === "tr2.a".attr)).analyze
-    comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, correctAnswer)
+    } finally {
+      SQLConf.get.unsetConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED)
+    }
   }
 }

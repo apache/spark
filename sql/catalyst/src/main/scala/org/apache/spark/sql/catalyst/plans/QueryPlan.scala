@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
@@ -26,6 +27,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   with QueryPlanConstraints[PlanType] {
 
   self: PlanType =>
+
+  def conf: SQLConf = SQLConf.get
 
   def output: Seq[Attribute]
 

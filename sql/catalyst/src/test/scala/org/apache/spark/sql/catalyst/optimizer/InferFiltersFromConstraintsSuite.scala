@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf.CONSTRAINT_PROPAGATION_ENABLED
+import org.apache.spark.sql.internal.SQLConf
 
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
@@ -32,18 +32,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       Batch("InferAndPushDownFilters", FixedPoint(100),
         PushPredicateThroughJoin,
         PushDownPredicate,
-        InferFiltersFromConstraints(conf),
+        InferFiltersFromConstraints,
         CombineFilters,
         BooleanSimplification) :: Nil
-  }
-
-  object OptimizeWithConstraintPropagationDisabled extends RuleExecutor[LogicalPlan] {
-    val batches =
-      Batch("InferAndPushDownFilters", FixedPoint(100),
-        PushPredicateThroughJoin,
-        PushDownPredicate,
-        InferFiltersFromConstraints(conf.copy(CONSTRAINT_PROPAGATION_ENABLED -> false)),
-        CombineFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -215,8 +206,13 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("No inferred filter when constraint propagation is disabled") {
-    val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
-    val optimized = OptimizeWithConstraintPropagationDisabled.execute(originalQuery)
-    comparePlans(optimized, originalQuery)
+    try {
+      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, false)
+      val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    } finally {
+      SQLConf.get.unsetConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED)
+    }
   }
 }
