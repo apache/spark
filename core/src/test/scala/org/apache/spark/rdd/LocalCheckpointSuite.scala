@@ -174,7 +174,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     bmm.removeBlock(blockId)
     // Wait until the block has been removed successfully.
     eventually(timeout(1 seconds), interval(100 milliseconds)) {
-      assert(bmm.getBlockStatus(blockId).size == 0)
+      assert(bmm.getBlockStatus(blockId).isEmpty)
     }
     try {
       rdd.collect()
