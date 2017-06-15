@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import scala.reflect.runtime.universe
 import scala.util.control.NonFatal
@@ -24,17 +24,16 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
-import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[security] class HBaseCredentialProvider extends ServiceCredentialProvider with Logging {
+private[security] class HBaseDelegationTokenProvider
+  extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "hbase"
 
-  override def obtainCredentials(
+  override def obtainDelegationTokens(
       hadoopConf: Configuration,
-      sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
     try {
       val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
@@ -55,7 +54,7 @@ private[security] class HBaseCredentialProvider extends ServiceCredentialProvide
     None
   }
 
-  override def credentialsRequired(hadoopConf: Configuration): Boolean = {
+  override def delegationTokensRequired(hadoopConf: Configuration): Boolean = {
     hbaseConf(hadoopConf).get("hbase.security.authentication") == "kerberos"
   }
 
