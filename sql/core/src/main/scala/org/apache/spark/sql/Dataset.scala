@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
+import org.apache.spark.internal.Logging
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
@@ -159,7 +160,7 @@ class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
     @DeveloperApi @InterfaceStability.Unstable @transient val queryExecution: QueryExecution,
     encoder: Encoder[T])
-  extends Serializable {
+  extends Serializable with Logging {
 
   queryExecution.assertAnalyzed()
 
@@ -554,35 +555,40 @@ class Dataset[T] private[sql](
   @Experimental
   @InterfaceStability.Evolving
   def checkpoint(eager: Boolean): Dataset[T] = {
-    val internalRdd = queryExecution.toRdd.map(_.copy())
-    internalRdd.checkpoint()
+    if (isStreaming) {
+      logWarning("Checkpoint is no-op in queries with streaming sources.")
+      this
+    } else {
+      val internalRdd = queryExecution.toRdd.map(_.copy())
+      internalRdd.checkpoint()
 
-    if (eager) {
-      internalRdd.count()
-    }
-
-    val physicalPlan = queryExecution.executedPlan
-
-    // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
-    // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
-    // joins.
-    def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
-      partitioning match {
-        case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
-        case p => p
+      if (eager) {
+        internalRdd.count()
       }
+
+      val physicalPlan = queryExecution.executedPlan
+
+      // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
+      // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
+      // joins.
+      def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
+        partitioning match {
+          case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
+          case p => p
+        }
+      }
+
+      val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
+
+      Dataset.ofRows(
+        sparkSession,
+        LogicalRDD(
+          logicalPlan.output,
+          internalRdd,
+          outputPartitioning,
+          physicalPlan.outputOrdering
+        )(sparkSession)).as[T]
     }
-
-    val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
-
-    Dataset.ofRows(
-      sparkSession,
-      LogicalRDD(
-        logicalPlan.output,
-        internalRdd,
-        outputPartitioning,
-        physicalPlan.outputOrdering
-      )(sparkSession)).as[T]
   }
 
   /**
@@ -2629,7 +2635,11 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def persist(): this.type = {
-    sparkSession.sharedState.cacheManager.cacheQuery(this)
+    if (isStreaming) {
+      logWarning("Persist is no-op in queries with streaming sources.")
+    } else {
+      sparkSession.sharedState.cacheManager.cacheQuery(this)
+    }
     this
   }
 
@@ -2651,7 +2661,11 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def persist(newLevel: StorageLevel): this.type = {
-    sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
+    if (isStreaming) {
+      logWarning("Persist is no-op in queries with streaming sources.")
+    } else {
+      sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
+    }
     this
   }
 
@@ -2676,7 +2690,11 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def unpersist(blocking: Boolean): this.type = {
-    sparkSession.sharedState.cacheManager.uncacheQuery(this, blocking)
+    if (isStreaming) {
+      logWarning("Unpersist is no-op in queries with streaming sources.")
+    } else {
+      sparkSession.sharedState.cacheManager.uncacheQuery(this, blocking)
+    }
     this
   }
 
