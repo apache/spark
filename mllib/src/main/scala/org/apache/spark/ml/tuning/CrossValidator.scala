@@ -92,7 +92,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * If set, all the models fitted during the cross validation will be saved
+   * If set, all the models fitted during the cross validation will be preserved
    * under the specific directory path. By default the models will not be saved.
    *
    * @group expertSetParam
