@@ -208,7 +208,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       nodeIds.foreach { nodeId =>
         val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
         probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-          assert(probe.toInt > 1)
+          assert(probe.toDouble > 1.0)
         }
       }
     }
@@ -329,7 +329,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       nodeIds.foreach { nodeId =>
         val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
         probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-          assert(probe.toInt > 1)
+          assert(probe.toDouble > 1.0)
         }
       }
     }
@@ -389,7 +389,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         nodeIds.foreach { nodeId =>
           val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
           probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-            assert(probe.toInt > 1)
+            assert(probe.toDouble > 1.0)
           }
         }
       }

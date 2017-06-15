@@ -216,7 +216,7 @@ trait HashJoin {
     joinedIter.map { r =>
       numOutputRows += 1
       // `SQLMetric` stores only long value. Record the ceil of the average.
-      avgHashProbe.set(hashed.getAverageProbesPerLookup().ceil.toLong)
+      avgHashProbe.setWithDouble(hashed.getAverageProbesPerLookup())
       resultProj(r)
     }
   }

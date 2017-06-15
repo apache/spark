@@ -422,8 +422,7 @@ class TungstenAggregationIterator(
         metrics.incPeakExecutionMemory(maxMemory)
 
         // Update average hashmap probe if this is the last record.
-        val averageProbes = hashMap.getAverageProbesPerLookup()
-        avgHashmapProbe.add(averageProbes.ceil.toLong)
+        avgHashmapProbe.setWithDouble(hashMap.getAverageProbesPerLookup())
       }
       numOutputRows += 1
       res

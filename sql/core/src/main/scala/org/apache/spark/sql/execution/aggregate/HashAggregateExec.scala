@@ -355,8 +355,7 @@ case class HashAggregateExec(
     metrics.incPeakExecutionMemory(maxMemory)
 
     // Update average hashmap probe
-    val avgProbes = hashMap.getAverageProbesPerLookup()
-    avgHashProbe.add(avgProbes.ceil.toLong)
+    avgHashProbe.setWithDouble(hashMap.getAverageProbesPerLookup())
 
     if (sorter == null) {
       // not spilled

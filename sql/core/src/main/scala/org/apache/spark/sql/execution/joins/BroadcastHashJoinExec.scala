@@ -212,7 +212,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |$avgHashProbe.set((long) Math.ceil($relationTerm.getAverageProbesPerLookup()));
+         |$avgHashProbe.setWithDouble($relationTerm.getAverageProbesPerLookup());
          |if ($matched == null) continue;
          |$checkCondition
          |$numOutput.add(1);
@@ -228,7 +228,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |$avgHashProbe.set((long) Math.ceil($relationTerm.getAverageProbesPerLookup()));
+         |$avgHashProbe.setWithDouble($relationTerm.getAverageProbesPerLookup());
          |if ($matches == null) continue;
          |while ($matches.hasNext()) {
          |  UnsafeRow $matched = (UnsafeRow) $matches.next();
@@ -282,7 +282,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |$avgHashProbe.set((long) Math.ceil($relationTerm.getAverageProbesPerLookup()));
+         |$avgHashProbe.setWithDouble($relationTerm.getAverageProbesPerLookup());
          |${checkCondition.trim}
          |if (!$conditionPassed) {
          |  $matched = null;
@@ -303,7 +303,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |$avgHashProbe.set((long) Math.ceil($relationTerm.getAverageProbesPerLookup()));
+         |$avgHashProbe.setWithDouble($relationTerm.getAverageProbesPerLookup());
          |boolean $found = false;
          |// the last iteration of this loop is to emit an empty row if there is no matched rows.
          |while ($matches != null && $matches.hasNext() || !$found) {
@@ -334,7 +334,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |$avgHashProbe.set((long) Math.ceil($relationTerm.getAverageProbesPerLookup()));
+         |$avgHashProbe.setWithDouble($relationTerm.getAverageProbesPerLookup());
          |if ($matched == null) continue;
          |$checkCondition
          |$numOutput.add(1);
@@ -349,7 +349,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |$avgHashProbe.set((long) Math.ceil($relationTerm.getAverageProbesPerLookup()));
+         |$avgHashProbe.setWithDouble($relationTerm.getAverageProbesPerLookup());
          |if ($matches == null) continue;
          |boolean $found = false;
          |while (!$found && $matches.hasNext()) {
@@ -388,7 +388,7 @@ case class BroadcastHashJoinExec(
          |    $checkCondition
          |  }
          |}
-         |$avgHashProbe.set((long) Math.ceil($relationTerm.getAverageProbesPerLookup()));
+         |$avgHashProbe.setWithDouble($relationTerm.getAverageProbesPerLookup());
          |$numOutput.add(1);
          |${consume(ctx, input)}
        """.stripMargin
@@ -414,7 +414,7 @@ case class BroadcastHashJoinExec(
          |    if ($found) continue;
          |  }
          |}
-         |$avgHashProbe.set((long) Math.ceil($relationTerm.getAverageProbesPerLookup()));
+         |$avgHashProbe.setWithDouble($relationTerm.getAverageProbesPerLookup());
          |$numOutput.add(1);
          |${consume(ctx, input)}
        """.stripMargin
@@ -457,7 +457,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |$avgHashProbe.set((long) Math.ceil($relationTerm.getAverageProbesPerLookup()));
+         |$avgHashProbe.setWithDouble($relationTerm.getAverageProbesPerLookup());
          |boolean $existsVar = false;
          |if ($matched != null) {
          |  $checkCondition
@@ -473,7 +473,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |$avgHashProbe.set((long) Math.ceil($relationTerm.getAverageProbesPerLookup()));
+         |$avgHashProbe.setWithDouble($relationTerm.getAverageProbesPerLookup());
          |boolean $existsVar = false;
          |if ($matches != null) {
          |  while (!$existsVar && $matches.hasNext()) {
