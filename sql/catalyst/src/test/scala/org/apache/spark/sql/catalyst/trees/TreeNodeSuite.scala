@@ -62,7 +62,7 @@ case class ExpressionInMap(map: Map[String, Expression]) extends Expression with
 }
 
 case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
-    notsons: Seq[(Expression, Expression)]) extends Expression with Unevaluable {
+    nonSons: Seq[(Expression, Expression)]) extends Expression with Unevaluable {
   override def children: Seq[Expression] = sons.flatMap(t => Iterator(t._1, t._2))
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
@@ -156,18 +156,12 @@ class TreeNodeSuite extends SparkFunSuite {
 
   test("mapChildren should only works on children") {
     val children = Seq((Literal(1), Literal(2)))
-    val notChildren = Seq((Literal(3), Literal(4)))
-    val before = SeqTupleExpression(children, notChildren)
+    val nonChildren = Seq((Literal(3), Literal(4)))
+    val before = SeqTupleExpression(children, nonChildren)
     val toZero: PartialFunction[Expression, Expression] = { case Literal(_, _) => Literal(0) }
-    val expect = SeqTupleExpression(Seq((Literal(0), Literal(0))), notChildren)
+    val expect = SeqTupleExpression(Seq((Literal(0), Literal(0))), nonChildren)
 
-    var actual = before transformDown toZero
-    assert(actual === expect)
-
-    actual = before transformUp toZero
-    assert(actual === expect)
-
-    actual = before transform toZero
+    val actual = before mapChildren  toZero
     assert(actual === expect)
   }
 
