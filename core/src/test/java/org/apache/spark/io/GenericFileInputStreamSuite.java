@@ -31,7 +31,7 @@ import static org.junit.Assert.assertEquals;
 /**
  * Tests functionality of {@link NioBufferedFileInputStream}
  */
-public class GenericFileInputStreamSuite {
+public abstract class GenericFileInputStreamSuite {
 
   private byte[] randomBytes;
 
