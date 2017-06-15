@@ -84,18 +84,20 @@ object AnalyzeTableCommand extends Logging {
 
   def calculateTotalSize(sessionState: SessionState, catalogTable: CatalogTable): Long = {
     if (catalogTable.partitionColumnNames.isEmpty) {
-      calculateTotalSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
+      calculateLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
     } else {
-      // Table = Sum(partitions)
+      // Calculate table size as a sum of its partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       partitions.map(p =>
-        calculateTotalSize(sessionState, catalogTable.identifier, p.storage.locationUri)
+        calculateLocationSize(sessionState, catalogTable.identifier, p.storage.locationUri)
       ).sum
     }
   }
 
-  private def calculateTotalSize(sessionState: SessionState, tableId: TableIdentifier,
-                                 locationUri: Option[URI]): Long = {
+  private def calculateLocationSize(
+      sessionState: SessionState,
+      tableId: TableIdentifier,
+      locationUri: Option[URI]): Long = {
     // This method is mainly based on
     // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
     // in Hive 0.13 (except that we do not use fs.getContentSummary).

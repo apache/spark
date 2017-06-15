@@ -128,6 +128,40 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
   }
 
+  test("SPARK-21079 - analyze table with location different than that of individual partitions") {
+    def queryTotalSize(tableName: String): BigInt =
+      spark.table(tableName).queryExecution.analyzed.stats(conf).sizeInBytes
+
+    sql(
+      """
+        |CREATE TABLE analyzeTable_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
+      """.stripMargin).collect()
+    sql(
+      """
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-01')
+        |SELECT * FROM src
+      """.stripMargin).collect()
+    sql(
+      """
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-02')
+        |SELECT * FROM src
+      """.stripMargin).collect()
+    sql(
+      """
+        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-03')
+        |SELECT * FROM src
+      """.stripMargin).collect()
+
+    // Modify table location to not match location of individual partitions
+    sql("ALTER TABLE analyzeTable_part SET LOCATION 'file:/do/not/use'").collect()
+
+    sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
+
+    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
+
+    sql("DROP TABLE analyzeTable_part").collect()
+  }
+
   test("analyzing views is not supported") {
     def assertAnalyzeUnsupported(analyzeCommand: String): Unit = {
       val err = intercept[AnalysisException] {
