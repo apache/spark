@@ -14,6 +14,7 @@
 package org.apache.spark.io;
 
 import com.google.common.base.Preconditions;
+import org.apache.spark.storage.StorageUtils;
 
 import javax.annotation.concurrent.GuardedBy;
 import java.io.IOException;
@@ -267,5 +268,12 @@ public class ReadAheadInputStream extends InputStream {
     readAheadBuffer.flip();
     long skippedFromInputStream = underlyingInputStream.skip(toSkip);
     return skippedBytes + skippedFromInputStream;
+  }
+
+  @Override
+  public synchronized void close() throws IOException {
+    executorService.shutdown();
+    StorageUtils.dispose(activeBuffer);
+    StorageUtils.dispose(readAheadBuffer);
   }
 }
