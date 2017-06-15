@@ -49,7 +49,7 @@ import org.apache.hadoop.yarn.util.Records
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
+import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
@@ -121,7 +121,10 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
-  private val credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+  private val credentialManager = new YARNHadoopDelegationTokenManager(
+    sparkConf,
+    hadoopConf,
+    YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, hadoopConf))
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
@@ -368,7 +371,7 @@ private[spark] class Client(
     val fs = destDir.getFileSystem(hadoopConf)
 
     // Merge credentials obtained from registered providers
-    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
+    val nearestTimeOfNextRenewal = credentialManager.obtainDelegationTokens(hadoopConf, credentials)
 
     if (credentials != null) {
       // Add credentials to current user's UGI, so that following operations don't need to use the
