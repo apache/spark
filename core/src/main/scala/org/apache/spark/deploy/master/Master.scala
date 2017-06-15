@@ -799,9 +799,19 @@ private[deploy] class Master(
   }
 
   private def relaunchDriver(driver: DriverInfo) {
-    driver.worker = None
-    driver.state = DriverState.RELAUNCHING
-    waitingDrivers += driver
+    // We must setup a new driver with a new driver id here, because the original driver may
+    // be still running. Consider this scenario: a worker is network partitioned with master,
+    // the master then relaunches driver driverID1 with a driver id driverID2, then the worker
+    // reconnects to master. From this point on, if driverID2 is equal to driverID1, then master
+    // can not distinguish the statusUpdate of the original driver and the newly relaunched one,
+    // for example, when DriverStateChanged(driverID1, KILLED) arrives at master, master will
+    // remove driverID1, so the newly relaunched driver disappears too. See SPARK-19900 for details.
+    removeDriver(driver.id, DriverState.RELAUNCHING, None)
+    val newDriver = createDriver(driver.desc)
+    persistenceEngine.addDriver(newDriver)
+    drivers.add(newDriver)
+    waitingDrivers += newDriver
+
     schedule()
   }
 
