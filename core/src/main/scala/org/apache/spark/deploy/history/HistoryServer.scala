@@ -65,13 +65,10 @@ class HistoryServer(
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
 
-  private[history] val metricsSystem = MetricsSystem.createMetricsSystem("history",
+  private val metricsSystem = MetricsSystem.createMetricsSystem("history",
     conf, securityManager)
 
   private[history] var metricsRegistry = metricsSystem.getMetricRegistry
-
-  // and its metrics, for testing as well as monitoring
-  val cacheMetrics = appCache.metrics
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
@@ -117,13 +114,7 @@ class HistoryServer(
     appCache.getSparkUI(appKey)
   }
 
-  val historyMetrics = new HistoryMetrics(this, "history.server")
-
-  /**
-   * Provider metrics are None until the provider is started, and only after that
-   * point if the provider returns any.
-   */
-  var providerMetrics: Option[Source] = None
+  private val historyMetrics = new HistoryMetrics(this, "history.server")
 
   initialize()
 
@@ -153,8 +144,8 @@ class HistoryServer(
    * 3. Bind to the HTTP server behind this web interface.
    */
   override def bind() {
-    providerMetrics = provider.start()
-    startMetrics()
+    val providerMetrics = provider.start()
+    startMetrics(providerMetrics)
     super.bind()
   }
 
@@ -163,8 +154,9 @@ class HistoryServer(
    * This includes registering any metrics defined in `providerMetrics`; the provider
    * needs its `start()` method to be invoked to get these metric *prior to this method
    * being invoked*.
+   * @param providerMetrics optional provider metrics
    */
-  private def startMetrics(): Unit = {
+  private def startMetrics(providerMetrics: Option[Source]): Unit = {
     // hook up metrics
     metricsSystem.registerSource(historyMetrics)
     metricsSystem.registerSource(appCache.metrics)

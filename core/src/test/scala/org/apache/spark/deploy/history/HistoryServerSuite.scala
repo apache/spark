@@ -23,6 +23,7 @@ import java.util.zip.ZipInputStream
 import javax.servlet._
 import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -43,7 +44,6 @@ import org.scalatest.mock.MockitoSugar
 import org.scalatest.selenium.WebBrowser
 
 import org.apache.spark._
-import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.util.{ResetSystemProperties, Utils}
@@ -420,33 +420,48 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server.initialize()
     server.bind()
     val port = server.boundPort
-    val cacheMetrics = server.cacheMetrics
-    val historyMetrics = server.historyMetrics
-    val providerMetrics = server.providerMetrics.get.asInstanceOf[HistoryMetricSource]
+    val registry = server.metricsRegistry;
 
-    // assert that a metric counter evaluates as expected; if not dump the whole metrics instance
+    def listCounters: String = {
+      registry.getCounters.asScala.map(f => s"${f._1}=${f._2.getCount}")
+        .mkString("\n====\n", "\n", "\n====\n")
+    }
+    def listGauges: String = {
+      registry.getGauges.asScala.map( f => s"${f._1}=${f._2.getValue().toString}")
+        .mkString("\n====\n", "\n", "\n====\n")
+    }
+
+    def getCounter(name: String): Counter = {
+      val counter = registry.getCounters.get(name)
+      assert(counter != null, s"No counter $name in $listCounters or $listGauges")
+      counter
+    }
+
+    def getGaugeValue(name: String): Long = {
+      val gauge = registry.getGauges.get(name)
+      assert(gauge != null, s"No gauge $name in $listGauges")
+      gauge.asInstanceOf[Gauge[Long]].getValue
+    }
+
+    // assert that a metric counter evaluates as expected
     def assertCounterEvaluates(
-        source: Source,
         name: String,
-        counter: Counter,
         evaluation: (Long => Boolean)): Unit = {
-      val value = counter.getCount
+      val value = getCounter(name).getCount
       if (!evaluation(value)) {
         // this is here because Scalatest loses stack depth
-        fail(s"Wrong $name value: $value in metrics\n$source")
+        fail(s"Wrong $name value: $value in metrics\n$listCounters")
       }
     }
 
-    // assert that a long metric gauge evaluates as expected; if not dump the whole metrics instance
+    // assert that a long metric gauge evaluates as expected
     def assertGaugeEvaluates(
-        source: Source,
         name: String,
-        gauge: Gauge[Long],
         evaluation: (Long => Boolean)): Unit = {
-      val value = gauge.getValue
+      val value = getGaugeValue(name)
       if (!evaluation(value)) {
         // this is here because Scalatest loses stack depth
-        fail(s"Wrong $name value: $value in metrics\n$source")
+        fail(s"Wrong $name value: $value in metrics\n$listGauges")
       }
     }
 
@@ -461,9 +476,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
 
     // check that a dynamically calculated average returns 0 and not a division by zero error.
-    val replayTime = "appui.event.replay.time"
-    assertGaugeEvaluates(providerMetrics, replayTime,
-      providerMetrics.getLongGauge(replayTime).get, _ == 0)
+    val providerMetrics = "history.fs.history.provider."
+    assertGaugeEvaluates(providerMetrics + "appui.event.replay.time", _ == 0)
 
     // start initial job
     val d = sc.parallelize(1 to 10)
@@ -538,8 +552,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     getNumJobs("") should be (1)
     getNumJobs("/jobs") should be (1)
     getNumJobsRestful() should be (1)
-    assertCounterEvaluates(cacheMetrics, "lookup count",
-      cacheMetrics.lookupCount, _ > 1)
+    assertCounterEvaluates("application.cache.history.cache.lookup.count", _ > 1)
 
     // dump state before the next bit of test, which is where update
     // checking really gets stressed
@@ -589,19 +602,11 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     // print out the metrics. This forces a run through all the counters and gauges
     // the evaluation is done outside the log statement to guarantee that the evaluation
-    // always takes place
-    val metricsDump = s"$historyMetrics\n$providerMetrics\n$cacheMetrics"
+    // always takes place. Why? Catches problems in evaluation closures.
+    val metricsDump = s"$listCounters\n$listGauges"
     logInfo(s"Metrics:\n$metricsDump")
-    // make some assertions about internal state of providers via the metrics
-    val loadcount = "appui.load.count"
-    assert(metricsDump.contains(loadcount),
-      s"No $loadcount in metrics dump <$metricsDump>")
-    assertCounterEvaluates(providerMetrics, loadcount,
-      providerMetrics.getCounter(loadcount).get, _ > 0)
-
-    val evictionCount = cacheMetrics.fullname("eviction.count")
-    assert(metricsDump.contains(evictionCount),
-      s"No $evictionCount in metrics dump <$metricsDump>")
+    assertCounterEvaluates(providerMetrics + "appui.load.count", _ > 0)
+    assertCounterEvaluates("application.cache.history.cache.eviction.count", _ >= 0)
 
     // no need to retain the test dir now the tests complete
     logDir.deleteOnExit()

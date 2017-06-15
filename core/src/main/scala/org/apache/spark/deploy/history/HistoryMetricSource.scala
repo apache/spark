@@ -57,7 +57,7 @@ private[history] abstract class HistoryMetricSource(val prefix: String) extends 
    */
   override def toString: String = {
     val sb = new StringBuilder(s"Metrics for $sourceName:\n")
-    def robustAppend(s : => Long) = {
+    def robustAppend[T](s : => T) = {
       try {
         sb.append(s)
       } catch {
@@ -69,18 +69,13 @@ private[history] abstract class HistoryMetricSource(val prefix: String) extends 
     sb.append("  Counters\n")
 
     metricRegistry.getCounters.asScala.foreach { case (name, counter) =>
-        sb.append("    ").append(name).append(" = ")
-            .append(counter.getCount).append('\n')
+      sb.append("    ").append(name).append(" = ")
+        .append(counter.getCount).append('\n')
     }
     sb.append("  Gauges\n")
     metricRegistry.getGauges.asScala.foreach { case (name, gauge) =>
       sb.append("    ").append(name).append(" = ")
-      try {
-        sb.append(gauge.getValue)
-      } catch {
-        case e: Exception =>
-          sb.append(s"(exception: $e)")
-      }
+      robustAppend(gauge.getValue)
       sb.append('\n')
     }
     sb.toString()

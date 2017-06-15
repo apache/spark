@@ -102,9 +102,7 @@ private[history] abstract class ApplicationHistoryProvider {
   }
 
   /**
-   * Bind to the History Server: threads should be started here; exceptions may be raised
-   * if the history provider cannot be started.
-   * @return the metric information for registration
+   * @return None
    */
   def start(): Option[Source] = {
     None

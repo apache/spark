@@ -170,9 +170,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-   * Start the provider: threads should be started here; exceptions may be raised
-   * if the history provider cannot be started.
-   * @return the metric information for registration
+   * @return the metrics for this provider.
    */
   override def start(): Option[Source] = {
     super.start()
