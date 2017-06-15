@@ -21,6 +21,7 @@ import java.util.UUID
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
@@ -326,7 +327,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       try {
         query.stop()
       } catch {
-        case e: Throwable =>
+        case NonFatal(e) =>
           logError(s"Exception while stopping query ${query.id}", e)
       }
     }
