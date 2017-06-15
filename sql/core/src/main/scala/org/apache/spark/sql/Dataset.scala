@@ -2212,7 +2212,40 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def describe(cols: String*): DataFrame = withPlan {
+  def describe(cols: String*): DataFrame = describe(Array(0.25, 0.5, 0.75), cols: _*)
+
+  /**
+   * Computes statistics for numeric and string columns, including count, mean, stddev, min,
+   * approximate quartiles, and max. If no columns are given, this function computes
+   * statistics for all numerical or string columns.
+   *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting Dataset. If you want to
+   * programmatically compute summary statistics, use the `agg` function instead.
+   *
+   * {{{
+   *   ds.describe("age", "height").show()
+   *
+   *   // output:
+   *   // summary age   height
+   *   // count   10.0  10.0
+   *   // mean    53.3  178.05
+   *   // stddev  11.6  15.7
+   *   // min     18.0  163.0
+   *   // 25%     24.0  176.0
+   *   // 50%     24.0  176.0
+   *   // 75%     32.0  180.0
+   *   // max     92.0  192.0
+   * }}}
+   *
+   * @group action
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def describe(percentiles: Array[Double], cols: String*): DataFrame = withPlan {
+
+    val hasPercentiles = percentiles.length > 0
+    require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
 
     // The list of summary statistics to compute, in the form of expressions.
     val statistics = List[(String, Expression => Expression)](
@@ -2220,27 +2253,52 @@ class Dataset[T] private[sql](
       "mean" -> ((child: Expression) => Average(child).toAggregateExpression()),
       "stddev" -> ((child: Expression) => StddevSamp(child).toAggregateExpression()),
       "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
-      "25%" -> ((child: Expression) =>
-        new ApproximatePercentile(child, Literal(0.25)).toAggregateExpression()),
-      "50%" -> ((child: Expression) =>
-        new ApproximatePercentile(child, Literal(0.5)).toAggregateExpression()),
-      "75%" -> ((child: Expression) =>
-        new ApproximatePercentile(child, Literal(0.75)).toAggregateExpression()),
       "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
+
+    def percentileAgg(child: Expression): Expression =
+        new ApproximatePercentile(child, CreateArray(percentiles.map(Literal(_))))
+          .toAggregateExpression()
+
+    val percentileNames = percentiles.map(p => s"${(p * 100.0).round}%")
 
     val outputCols =
       (if (cols.isEmpty) aggregatableColumns.map(usePrettyExpression(_).sql) else cols).toList
 
     val ret: Seq[Row] = if (outputCols.nonEmpty) {
-      val aggExprs = statistics.flatMap { case (_, colToAgg) =>
+      var aggExprs = statistics.flatMap { case (_, colToAgg) =>
         outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
+      }
+      if (hasPercentiles) {
+        aggExprs = outputCols.map(c => Column(percentileAgg(Column(c).expr)).as(c)) ++ aggExprs
       }
 
       val row = groupBy().agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
 
       // Pivot the data so each summary is one row
-      row.grouped(outputCols.size).toSeq.zip(statistics).map { case (aggregation, (statistic, _)) =>
+      val grouped: Seq[Seq[Any]] = row.grouped(outputCols.size).toSeq
+
+      val basicStats = if (hasPercentiles) grouped.tail else grouped
+
+      val rows = basicStats.zip(statistics).map { case (aggregation, (statistic, _)) =>
         Row(statistic :: aggregation.toList: _*)
+      }
+
+      if (hasPercentiles) {
+        def nullSafeString(x: Any) = if (x == null) null else x.toString
+        val percentileRows = grouped.head
+          .map {
+            case a: Seq[Any] => a
+            case _ => Seq.fill(percentiles.length)(null: Any)
+          }
+          .transpose
+          .zip(percentileNames)
+          .map { case (values: Seq[Any], name) =>
+              Row(name :: values.map(nullSafeString).toList: _*)
+          }
+        val max :: rest = rows.reverse.toList
+        rest.reverse ++ percentileRows :+ max
+      } else {
+        rows
       }
     } else {
       // If there are no output columns, just output a single column that contains the stats.
