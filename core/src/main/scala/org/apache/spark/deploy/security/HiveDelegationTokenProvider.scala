@@ -15,97 +15,89 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import java.lang.reflect.UndeclaredThrowableException
 import java.security.PrivilegedExceptionAction
 
-import scala.reflect.runtime.universe
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
 
-import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[security] class HiveCredentialProvider extends ServiceCredentialProvider with Logging {
+private[security] class HiveDelegationTokenProvider
+    extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "hive"
 
+  private val classNotFoundErrorStr = s"You are attempting to use the " +
+    s"${getClass.getCanonicalName}, but your Spark distribution is not built with Hive libraries."
+
   private def hiveConf(hadoopConf: Configuration): Configuration = {
     try {
-      val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
-      // the hive configuration class is a subclass of Hadoop Configuration, so can be cast down
-      // to a Configuration and used without reflection
-      val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
-      // using the (Configuration, Class) constructor allows the current configuration to be
-      // included in the hive config.
-      val ctor = hiveConfClass.getDeclaredConstructor(classOf[Configuration],
-        classOf[Object].getClass)
-      ctor.newInstance(hadoopConf, hiveConfClass).asInstanceOf[Configuration]
+      new HiveConf(hadoopConf, classOf[HiveConf])
     } catch {
       case NonFatal(e) =>
         logDebug("Fail to create Hive Configuration", e)
         hadoopConf
+      case e: NoClassDefFoundError =>
+        logWarning(classNotFoundErrorStr)
+        hadoopConf
     }
   }
 
-  override def credentialsRequired(hadoopConf: Configuration): Boolean = {
+  override def delegationTokensRequired(hadoopConf: Configuration): Boolean = {
     UserGroupInformation.isSecurityEnabled &&
       hiveConf(hadoopConf).getTrimmed("hive.metastore.uris", "").nonEmpty
   }
 
-  override def obtainCredentials(
+  override def obtainDelegationTokens(
       hadoopConf: Configuration,
-      sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
-    val conf = hiveConf(hadoopConf)
-
-    val principalKey = "hive.metastore.kerberos.principal"
-    val principal = conf.getTrimmed(principalKey, "")
-    require(principal.nonEmpty, s"Hive principal $principalKey undefined")
-    val metastoreUri = conf.getTrimmed("hive.metastore.uris", "")
-    require(metastoreUri.nonEmpty, "Hive metastore uri undefined")
-
-    val currentUser = UserGroupInformation.getCurrentUser()
-    logDebug(s"Getting Hive delegation token for ${currentUser.getUserName()} against " +
-      s"$principal at $metastoreUri")
-
-    val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
-    val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
-    val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
-    val closeCurrent = hiveClass.getMethod("closeCurrent")
-
     try {
-      // get all the instance methods before invoking any
-      val getDelegationToken = hiveClass.getMethod("getDelegationToken",
-        classOf[String], classOf[String])
-      val getHive = hiveClass.getMethod("get", hiveConfClass)
+      val conf = hiveConf(hadoopConf)
+
+      val principalKey = "hive.metastore.kerberos.principal"
+      val principal = conf.getTrimmed(principalKey, "")
+      require(principal.nonEmpty, s"Hive principal $principalKey undefined")
+      val metastoreUri = conf.getTrimmed("hive.metastore.uris", "")
+      require(metastoreUri.nonEmpty, "Hive metastore uri undefined")
+
+      val currentUser = UserGroupInformation.getCurrentUser()
+      logDebug(s"Getting Hive delegation token for ${currentUser.getUserName()} against " +
+        s"$principal at $metastoreUri")
 
       doAsRealUser {
-        val hive = getHive.invoke(null, conf)
-        val tokenStr = getDelegationToken.invoke(hive, currentUser.getUserName(), principal)
-          .asInstanceOf[String]
+        val hive = Hive.get(conf, classOf[HiveConf])
+        val tokenStr = hive.getDelegationToken(currentUser.getUserName(), principal)
+
         val hive2Token = new Token[DelegationTokenIdentifier]()
         hive2Token.decodeFromUrlString(tokenStr)
         logInfo(s"Get Token from hive metastore: ${hive2Token.toString}")
         creds.addToken(new Text("hive.server2.delegation.token"), hive2Token)
       }
+
+      None
     } catch {
       case NonFatal(e) =>
-        logDebug(s"Fail to get token from service $serviceName", e)
+        logDebug(s"Failed to get token from service $serviceName", e)
+        None
+      case e: NoClassDefFoundError =>
+        logWarning(classNotFoundErrorStr)
+        None
     } finally {
       Utils.tryLogNonFatalError {
-        closeCurrent.invoke(null)
+        Hive.closeCurrent()
       }
     }
-
-    None
   }
 
   /**
