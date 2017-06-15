@@ -473,6 +473,8 @@ case class DataSource(
     providingClass.newInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data)
+      case dataSource: ConsoleSinkProvider =>
+        data.show(data.count().toInt, false)
       case format: FileFormat =>
         writeInFileFormat(format, mode, data)
       case _ =>
