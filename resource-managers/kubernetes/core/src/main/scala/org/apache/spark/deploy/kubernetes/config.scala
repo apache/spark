@@ -113,6 +113,11 @@ package object config extends Logging {
       .bytesConf(ByteUnit.MiB)
       .createOptional
 
+  private[spark] val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
+  private[spark] val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
+  private[spark] val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
+  private[spark] val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
+
   private[spark] val KUBERNETES_DRIVER_LABELS =
     ConfigBuilder("spark.kubernetes.driver.labels")
       .doc("Custom labels that will be added to the driver pod. This should be a comma-separated" +

@@ -527,9 +527,51 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.label.[labelKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds a label to the driver pod, with key <code>labelKey</code> and the value as the configuration's value. For
+    example, setting <code>spark.kubernetes.driver.label.identifier</code> to <code>myIdentifier</code> will result in
+    the driver pod having a label with key <code>identifier</code> and value <code>myIdentifier</code>. Multiple labels
+    can be added by setting multiple configurations with this prefix.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.annotation.[annotationKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds an annotation to the driver pod, with key <code>annotationKey</code> and the value as the configuration's
+    value. For example, setting <code>spark.kubernetes.driver.annotation.identifier</code> to <code>myIdentifier</code>
+    will result in the driver pod having an annotation with key <code>identifier</code> and value
+    <code>myIdentifier</code>. Multiple annotations can be added by setting multiple configurations with this prefix.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.label.[labelKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds a label to all executor pods, with key <code>labelKey</code> and the value as the configuration's value. For
+    example, setting <code>spark.kubernetes.executor.label.identifier</code> to <code>myIdentifier</code> will result in
+    the executor pods having a label with key <code>identifier</code> and value <code>myIdentifier</code>. Multiple
+    labels can be added by setting multiple configurations with this prefix.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.annotation.[annotationKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds an annotation to the executor pods, with key <code>annotationKey</code> and the value as the configuration's
+    value. For example, setting <code>spark.kubernetes.executor.annotation.identifier</code> to <code>myIdentifier</code>
+    will result in the executor pods having an annotation with key <code>identifier</code> and value
+    <code>myIdentifier</code>. Multiple annotations can be added by setting multiple configurations with this prefix.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.labels</code></td>
   <td>(none)</td>
   <td>
+    <i>Deprecated.</i> Use <code>spark.kubernetes.driver.label.<labelKey></code> instead which supports <code>=</code>
+    and <code>,</code> characters in label values.
     Custom labels that will be added to the driver pod. This should be a comma-separated list of label key-value pairs,
     where each label is in the format <code>key=value</code>. Note that Spark also adds its own labels to the driver pod
     for bookkeeping purposes.
@@ -539,6 +581,8 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td><code>spark.kubernetes.driver.annotations</code></td>
   <td>(none)</td>
   <td>
+    <i>Deprecated.</i> Use <code>spark.kubernetes.driver.annotation.<annotationKey></code> instead which supports
+    <code>=</code> and <code>,</code> characters in annotation values.
     Custom annotations that will be added to the driver pod. This should be a comma-separated list of label key-value
     pairs, where each annotation is in the format <code>key=value</code>.
   </td>
@@ -547,6 +591,8 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td><code>spark.kubernetes.executor.labels</code></td>
   <td>(none)</td>
   <td>
+    <i>Deprecated.</i> Use <code>spark.kubernetes.executor.label.<labelKey></code> instead which supports
+    <code>=</code> and <code>,</code> characters in label values.
     Custom labels that will be added to the executor pods. This should be a comma-separated list of label key-value
     pairs, where each label is in the format <code>key=value</code>. Note that Spark also adds its own labels to the
     executor pods for bookkeeping purposes.
@@ -556,6 +602,8 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td><code>spark.kubernetes.executor.annotations</code></td>
   <td>(none)</td>
   <td>
+    <i>Deprecated.</i> Use <code>spark.kubernetes.executor.annotation.<annotationKey></code> instead which supports
+    <code>=</code> and <code>,</code> characters in annotation values.
     Custom annotations that will be added to the executor pods. This should be a comma-separated list of annotation
     key-value pairs, where each annotation is in the format <code>key=value</code>.
   </td>
