@@ -145,7 +145,7 @@
     <chill.version>0.8.0</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
-    <codahale.metrics.version>3.1.2</codahale.metrics.version>
+    <codahale.metrics.version>3.2.2</codahale.metrics.version>
     <spark-influx-sink.version>0.3.12</spark-influx-sink.version>
     <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
