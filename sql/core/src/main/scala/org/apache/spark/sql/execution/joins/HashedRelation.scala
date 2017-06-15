@@ -353,7 +353,7 @@ private[joins] object UnsafeHashedRelation {
  *  determined by `key1 - minKey`.
  *
  * The map is created as sparse mode, then key-value could be appended into it. Once finish
- * appending, caller could all optimize() to try to turn the map into dense mode, which is faster
+ * appending, caller could call optimize() to try to turn the map into dense mode, which is faster
  * to probe.
  *
  * see http://java-performance.info/implementing-world-fastest-java-int-to-int-hash-map/
@@ -482,6 +482,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    */
   def getValue(key: Long, resultRow: UnsafeRow): UnsafeRow = {
     if (isDense) {
+      numKeyLookups += 1
+      numProbes += 1
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
         if (value > 0) {
@@ -490,11 +492,14 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       }
     } else {
       var pos = firstSlot(key)
+      numKeyLookups += 1
+      numProbes += 1
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
           return getRow(array(pos + 1), resultRow)
         }
         pos = nextSlot(pos)
+        numProbes += 1
       }
     }
     null
@@ -522,6 +527,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    */
   def get(key: Long, resultRow: UnsafeRow): Iterator[UnsafeRow] = {
     if (isDense) {
+      numKeyLookups += 1
+      numProbes += 1
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
         if (value > 0) {
@@ -530,11 +537,14 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       }
     } else {
       var pos = firstSlot(key)
+      numKeyLookups += 1
+      numProbes += 1
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
           return valueIter(array(pos + 1), resultRow)
         }
         pos = nextSlot(pos)
+        numProbes += 1
       }
     }
     null

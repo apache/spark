@@ -57,6 +57,8 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   override def add(v: Long): Unit = _value += v
 
+  def set(v: Long): Unit = _value = v
+
   def +=(v: Long): Unit = _value += v
 
   override def value: Long = _value

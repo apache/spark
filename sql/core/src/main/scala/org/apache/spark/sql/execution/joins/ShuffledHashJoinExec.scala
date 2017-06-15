@@ -43,7 +43,7 @@ case class ShuffledHashJoinExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "buildDataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size of build side"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"),
-    "avgHashmapProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hashmap probe"))
+    "avgHashProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hash probe"))
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
@@ -63,12 +63,10 @@ case class ShuffledHashJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val avgHashmapProbe = longMetric("avgHashmapProbe")
+    val avgHashProbe = longMetric("avgHashProbe")
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
       val hashed = buildHashedRelation(buildIter)
-      // `SQLMetric` stores only long value. Record the ceil of the average.
-      avgHashmapProbe.add(hashed.getAverageProbesPerLookup().ceil.toLong)
-      join(streamIter, hashed, numOutputRows)
+      join(streamIter, hashed, numOutputRows, avgHashProbe)
     }
   }
 }

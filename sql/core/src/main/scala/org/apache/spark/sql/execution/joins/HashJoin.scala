@@ -193,7 +193,8 @@ trait HashJoin {
   protected def join(
       streamedIter: Iterator[InternalRow],
       hashed: HashedRelation,
-      numOutputRows: SQLMetric): Iterator[InternalRow] = {
+      numOutputRows: SQLMetric,
+      avgHashProbe: SQLMetric): Iterator[InternalRow] = {
 
     val joinedIter = joinType match {
       case _: InnerLike =>
@@ -214,6 +215,8 @@ trait HashJoin {
     val resultProj = createResultProjection
     joinedIter.map { r =>
       numOutputRows += 1
+      // `SQLMetric` stores only long value. Record the ceil of the average.
+      avgHashProbe.set(hashed.getAverageProbesPerLookup().ceil.toLong)
       resultProj(r)
     }
   }
