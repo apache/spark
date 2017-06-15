@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.net.URI
+
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -81,6 +83,19 @@ case class AnalyzeTableCommand(
 object AnalyzeTableCommand extends Logging {
 
   def calculateTotalSize(sessionState: SessionState, catalogTable: CatalogTable): Long = {
+    if (catalogTable.partitionColumnNames.isEmpty) {
+      calculateTotalSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
+    } else {
+      // Table = Sum(partitions)
+      val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
+      partitions.map(p =>
+        calculateTotalSize(sessionState, catalogTable.identifier, p.storage.locationUri)
+      ).sum
+    }
+  }
+
+  private def calculateTotalSize(sessionState: SessionState, tableId: TableIdentifier,
+                                 locationUri: Option[URI]): Long = {
     // This method is mainly based on
     // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
     // in Hive 0.13 (except that we do not use fs.getContentSummary).
@@ -109,7 +124,7 @@ object AnalyzeTableCommand extends Logging {
       size
     }
 
-    catalogTable.storage.locationUri.map { p =>
+    locationUri.map { p =>
       val path = new Path(p)
       try {
         val fs = path.getFileSystem(sessionState.newHadoopConf())
@@ -117,8 +132,8 @@ object AnalyzeTableCommand extends Logging {
       } catch {
         case NonFatal(e) =>
           logWarning(
-            s"Failed to get the size of table ${catalogTable.identifier.table} in the " +
-              s"database ${catalogTable.identifier.database} because of ${e.toString}", e)
+            s"Failed to get the size of table ${tableId.table} in the " +
+              s"database ${tableId.database} because of ${e.toString}", e)
           0L
       }
     }.getOrElse(0L)
