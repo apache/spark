@@ -2186,7 +2186,7 @@ class Dataset[T] private[sql](
 
   /**
    * Computes statistics for numeric and string columns, including count, mean, stddev, min,
-   * 25th, 50th and 75th percentiles and max. If no columns are given, this function computes
+   * approximate quartiles, and max. If no columns are given, this function computes
    * statistics for all numerical or string columns.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
