@@ -161,7 +161,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val toZero: PartialFunction[Expression, Expression] = { case Literal(_, _) => Literal(0) }
     val expect = SeqTupleExpression(Seq((Literal(0), Literal(0))), nonChildren)
 
-    val actual = before mapChildren  toZero
+    val actual = before mapChildren toZero
     assert(actual === expect)
   }
 
