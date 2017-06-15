@@ -1804,7 +1804,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       assert(new File(path).listFiles().exists(_.getName.endsWith(".gz")))
 
-      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      val jsonDF = spark.read.option("multiLine", true).json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
       jsonDF.coalesce(1).write
         .option("compression", "gZiP")
@@ -1826,7 +1826,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .write
         .text(path)
 
-      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      val jsonDF = spark.read.option("multiLine", true).json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
       jsonDF.coalesce(1).write.json(jsonDir)
 
@@ -1855,7 +1855,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .write
         .text(path)
 
-      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      val jsonDF = spark.read.option("multiLine", true).json(path)
       // no corrupt record column should be created
       assert(jsonDF.schema === StructType(Seq()))
       // only the first object should be read
@@ -1876,7 +1876,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .write
         .text(path)
 
-      val jsonDF = spark.read.option("wholeFile", true).option("mode", "PERMISSIVE").json(path)
+      val jsonDF = spark.read.option("multiLine", true).option("mode", "PERMISSIVE").json(path)
       assert(jsonDF.count() === corruptRecordCount)
       assert(jsonDF.schema === new StructType()
         .add("_corrupt_record", StringType)
@@ -1907,7 +1907,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .write
         .text(path)
 
-      val jsonDF = spark.read.option("wholeFile", true).option("mode", "DROPMALFORMED").json(path)
+      val jsonDF = spark.read.option("multiLine", true).option("mode", "DROPMALFORMED").json(path)
       checkAnswer(jsonDF, Seq(Row("test")))
     }
   }
@@ -1930,7 +1930,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       // `FAILFAST` mode should throw an exception for corrupt records.
       val exceptionOne = intercept[SparkException] {
         spark.read
-          .option("wholeFile", true)
+          .option("multiLine", true)
           .option("mode", "FAILFAST")
           .json(path)
       }
@@ -1938,7 +1938,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       val exceptionTwo = intercept[SparkException] {
         spark.read
-          .option("wholeFile", true)
+          .option("multiLine", true)
           .option("mode", "FAILFAST")
           .schema(schema)
           .json(path)
