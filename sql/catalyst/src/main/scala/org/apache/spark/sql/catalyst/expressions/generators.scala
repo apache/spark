@@ -200,7 +200,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Rows - we write these into an array.
     val rowData = ctx.freshName("rows")
-    ctx.addMutableState("InternalRow[]", rowData, s"this.$rowData = new InternalRow[$numRows];")
+    ctx.addMutableState("InternalRow[]", rowData, s"$rowData = new InternalRow[$numRows];")
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
     val code = ctx.splitExpressions(ctx.INPUT_ROW, Seq.tabulate(numRows) { row =>
@@ -209,7 +209,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
         if (index < values.length) values(index) else Literal(null, dataTypes(col))
       }
       val eval = CreateStruct(fields).genCode(ctx)
-      s"${eval.code}\nthis.$rowData[$row] = ${eval.value};"
+      s"${eval.code}\n$rowData[$row] = ${eval.value};"
     })
 
     // Create the collection.
@@ -217,7 +217,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
     ctx.addMutableState(
       s"$wrapperClass<InternalRow>",
       ev.value,
-      s"this.${ev.value} = $wrapperClass$$.MODULE$$.make(this.$rowData);")
+      s"${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);")
     ev.copy(code = code, isNull = "false")
   }
 }
