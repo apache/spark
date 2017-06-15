@@ -250,21 +250,15 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS.map(6 / _)
     var query: StreamingQuery = null
-    try {
-      query = mapped.toDF.writeStream
-        .format("memory")
-        .queryName(s"queryInNewSession")
-        .outputMode("append")
-        .start()
-      assert(query.isActive)
-      spark.stop()
-      assert(spark.sparkContext.isStopped)
-      assert(query.isActive == false, "Query is still running")
-    } catch {
-      case NonFatal(e) =>
-        if (query != null) query.stop()
-        throw e
-    }
+    query = mapped.toDF.writeStream
+      .format("memory")
+      .queryName(s"queryInNewSession")
+      .outputMode("append")
+      .start()
+    assert(query.isActive)
+    spark.stop()
+    assert(spark.sparkContext.isStopped)
+    assert(query.isActive == false, "Query is still running")
     // set spark session back up
     super.afterAll()
     super.beforeAll()
