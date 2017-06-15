@@ -355,7 +355,7 @@ case class HashAggregateExec(
     metrics.incPeakExecutionMemory(maxMemory)
 
     // Update average hashmap probe
-    avgHashProbe.setWithDouble(hashMap.getAverageProbesPerLookup())
+    avgHashProbe.set(hashMap.getAverageProbesPerLookup())
 
     if (sorter == null) {
       // not spilled

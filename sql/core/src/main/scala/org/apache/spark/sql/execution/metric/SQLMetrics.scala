@@ -57,10 +57,11 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   override def add(v: Long): Unit = _value += v
 
-  // Because `SQLMetric` only stores long value, in order to store double average metrics, we
-  // multiply the given double with a base integer. When showing the metrics, it will be
-  // divided by the base integer to restore back a double.
-  def setWithDouble(v: Double): Unit = _value = (v * SQLMetrics.baseForAvgMetric).toLong
+  // We can set a double value to `SQLMetric` which stores only long value by using a simple trick.
+  // It only works for average metrics.
+  def set(v: Double): Unit = SQLMetrics.setDoubleForAverageMetrics(this, v)
+
+  def set(v: Long): Unit = _value = v
 
   def +=(v: Long): Unit = _value += v
 
@@ -79,7 +80,18 @@ object SQLMetrics {
   private val TIMING_METRIC = "timing"
   private val AVERAGE_METRIC = "average"
 
-  val baseForAvgMetric: Int = 10
+  private val baseForAvgMetric: Int = 10
+
+  /**
+   * Converts a double value to long value by multiplying a base integer, so we can store it in
+   * `SQLMetrics`. It only works for average metrics. When showing the metrics on UI, we restore
+   * it back to a double value up to the decimal places bound by the base integer.
+   */
+  private[sql] def setDoubleForAverageMetrics(metric: SQLMetric, v: Double): Unit = {
+    assert(metric.metricType == AVERAGE_METRIC,
+      s"Can't set a double to a metric of metrics type: ${metric.metricType}")
+    metric.set((v * baseForAvgMetric).toLong)
+  }
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
     val acc = new SQLMetric(SUM_METRIC)
@@ -112,8 +124,8 @@ object SQLMetrics {
   /**
    * Create a metric to report the average information (including min, med, max) like
    * avg hash probe. As average metrics are double values, this kind of metrics should be
-   * set by `SQLMetric.setWithDouble` method. The initial values (zeros) of this metrics
-   * will be excluded after.
+   * only set with `SQLMetric.set` method instead of other methods like `SQLMetric.add`.
+   * The initial values (zeros) of this metrics will be excluded after.
    */
   def createAverageMetric(sc: SparkContext, name: String): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:

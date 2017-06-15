@@ -89,7 +89,7 @@ class TungstenAggregationIterator(
     numOutputRows: SQLMetric,
     peakMemory: SQLMetric,
     spillSize: SQLMetric,
-    avgHashmapProbe: SQLMetric)
+    avgHashProbe: SQLMetric)
   extends AggregationIterator(
     groupingExpressions,
     originalInputAttributes,
@@ -422,7 +422,7 @@ class TungstenAggregationIterator(
         metrics.incPeakExecutionMemory(maxMemory)
 
         // Update average hashmap probe if this is the last record.
-        avgHashmapProbe.setWithDouble(hashMap.getAverageProbesPerLookup())
+        avgHashProbe.set(hashMap.getAverageProbesPerLookup())
       }
       numOutputRows += 1
       res

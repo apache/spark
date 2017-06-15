@@ -215,8 +215,7 @@ trait HashJoin {
     val resultProj = createResultProjection
     joinedIter.map { r =>
       numOutputRows += 1
-      // `SQLMetric` stores only long value. Record the ceil of the average.
-      avgHashProbe.setWithDouble(hashed.getAverageProbesPerLookup())
+      avgHashProbe.set(hashed.getAverageProbesPerLookup())
       resultProj(r)
     }
   }
