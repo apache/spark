@@ -1028,7 +1028,7 @@ def to_timestamp(col, format=None):
 
 
 @since(1.5)
-def trunc(date, format):
+def trunc(data, format):
     """
     Returns date truncated to the unit specified by the format or
     number truncated by specified decimal places.
@@ -1045,11 +1045,11 @@ def trunc(date, format):
     [Row(positive=1234567891.1234)]
     >>> df.select(trunc(df.d, -4).alias('negative')).collect()
     [Row(negative=1234560000.0)]
-    >>> df.select(trunc(df.d).alias('zero')).collect()
+    >>> df.select(trunc(df.d, 0).alias('zero')).collect()
     [Row(zero=1234567891.0)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.trunc(_to_java_column(date), format))
+    return Column(sc._jvm.functions.trunc(_to_java_column(data), format))
 
 
 @since(1.5)

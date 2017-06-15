@@ -142,7 +142,7 @@ case class Uuid() extends LeafExpression {
 @ExpressionDescription(
   usage = """
       _FUNC_(data[, fmt]) - Returns `data` truncated by the format model `fmt`.
-        If `data` is DateType/StringType, returns `data` with the time portion of the day truncated to the unit specified by the format model `fmt`.
+        If `data` is DateType, returns `data` with the time portion of the day truncated to the unit specified by the format model `fmt`.
         If `data` is DecimalType/DoubleType, returns `data` truncated to `fmt` decimal places.
   """,
   extended = """
@@ -151,8 +151,8 @@ case class Uuid() extends LeafExpression {
        2009-02-01.
       > SELECT _FUNC_('2015-10-27', 'YEAR');
        2015-01-01
-      > SELECT _FUNC_('2015-10-27');
-       2015-10-01
+      > SELECT _FUNC_('1989-03-13');
+       1989-03-01
       > SELECT _FUNC_(1234567891.1234567891, 4);
        1234567891.1234
       > SELECT _FUNC_(1234567891.1234567891, -4);
@@ -165,12 +165,7 @@ case class Trunc(data: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   def this(data: Expression) = {
-    this(data, Literal(
-      if (data.dataType.isInstanceOf[DecimalType] || data.dataType.isInstanceOf[DoubleType]) {
-        0
-      } else {
-        "MM"
-      }))
+    this(data, Literal(if (data.dataType.isInstanceOf[DateType]) "MM" else 0))
   }
 
   override def left: Expression = data
@@ -181,7 +176,7 @@ case class Trunc(data: Expression, format: Expression)
   override def dataType: DataType = data.dataType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DateType, StringType, DoubleType, DecimalType),
+    Seq(TypeCollection(DateType, DoubleType, DecimalType),
       TypeCollection(StringType, IntegerType))
 
   override def nullable: Boolean = true

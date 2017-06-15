@@ -39,10 +39,9 @@ select trunc('2015-07-22', 'yyyy'), trunc('2015-07-22', 'YYYY'),
   trunc('2015-07-22', 'year'), trunc('2015-07-22', 'YEAR'),
   trunc(to_date('2015-07-22'), 'yy'), trunc('2015-07-22', 'YY')
 -- !query 4 schema
-struct<>
+struct<trunc(CAST(2015-07-22 AS DATE), yyyy):date,trunc(CAST(2015-07-22 AS DATE), YYYY):date,trunc(CAST(2015-07-22 AS DATE), year):date,trunc(CAST(2015-07-22 AS DATE), YEAR):date,trunc(to_date('2015-07-22'), yy):date,trunc(CAST(2015-07-22 AS DATE), YY):date>
 -- !query 4 output
-java.lang.ClassCastException
-org.apache.spark.unsafe.types.UTF8String cannot be cast to java.lang.Integer
+2015-01-01	2015-01-01	2015-01-01	2015-01-01	2015-01-01	2015-01-01
 
 
 -- !query 5
@@ -50,15 +49,14 @@ select trunc('2015-07-22', 'month'), trunc('2015-07-22', 'MONTH'),
   trunc('2015-07-22', 'mon'), trunc('2015-07-22', 'MON'),
   trunc(to_date('2015-07-22'), 'mm'), trunc(to_date('2015-07-22'), 'MM')
 -- !query 5 schema
-struct<>
+struct<trunc(CAST(2015-07-22 AS DATE), month):date,trunc(CAST(2015-07-22 AS DATE), MONTH):date,trunc(CAST(2015-07-22 AS DATE), mon):date,trunc(CAST(2015-07-22 AS DATE), MON):date,trunc(to_date('2015-07-22'), mm):date,trunc(to_date('2015-07-22'), MM):date>
 -- !query 5 output
-java.lang.ClassCastException
-org.apache.spark.unsafe.types.UTF8String cannot be cast to java.lang.Integer
+2015-07-01	2015-07-01	2015-07-01	2015-07-01	2015-07-01	2015-07-01
 
 
 -- !query 6
 select trunc('2015-07-22', 'DD'), trunc('2015-07-22', null), trunc(null, 'MON'), trunc(null, null)
 -- !query 6 schema
-struct<trunc(2015-07-22, DD):string,trunc(2015-07-22, CAST(NULL AS STRING)):string,trunc(CAST(NULL AS DATE), MON):date,trunc(CAST(NULL AS DATE), CAST(NULL AS STRING)):date>
+struct<trunc(CAST(2015-07-22 AS DATE), DD):date,trunc(CAST(2015-07-22 AS DATE), CAST(NULL AS STRING)):date,trunc(CAST(NULL AS DATE), MON):date,trunc(CAST(NULL AS DATE), CAST(NULL AS STRING)):date>
 -- !query 6 output
 NULL	NULL	NULL	NULL

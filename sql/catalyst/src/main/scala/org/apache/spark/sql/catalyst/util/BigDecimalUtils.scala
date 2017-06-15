@@ -35,7 +35,8 @@ object BigDecimalUtils {
    * Returns BigDecimal type input truncated to scale decimal places.
    */
   def trunc(input: JBigDecimal, scale: Int): JBigDecimal = {
-
+    // Copy from (https://github.com/apache/hive/blob/release-2.3.0-rc0
+    // /ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDFTrunc.java#L471-L487)
     val pow = if (scale >= 0) {
       JBigDecimal.valueOf(Math.pow(10, scale))
     } else {
