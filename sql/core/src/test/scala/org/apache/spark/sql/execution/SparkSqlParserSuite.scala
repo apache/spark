@@ -305,5 +305,6 @@ class SparkSqlParserSuite extends PlanTest {
   test("reset") {
     assertEqual("reset", ResetCommand(None))
     assertEqual("reset spark.test.property", ResetCommand(Some("spark.test.property")))
+    assertEqual("reset #$a!", ResetCommand(Some("#$a!")))
   }
 }
