@@ -2485,11 +2485,13 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats)[3, "age"], "7.7781745930520225")
   stats <- describe(df)
   expect_equal(collect(stats)[4, "summary"], "min")
-  expect_equal(collect(stats)[5, "age"], "30")
+  expect_equal(collect(stats)[5, "summary"], "25%")
+  expect_equal(collect(stats)[5, "age"], "30.0")
+  expect_equal(collect(stats)[8, "age"], "30")
 
   stats2 <- summary(df)
   expect_equal(collect(stats2)[4, "summary"], "min")
-  expect_equal(collect(stats2)[5, "age"], "30")
+  expect_equal(collect(stats2)[8, "age"], "30")
 
   # SPARK-16425: SparkR summary() fails on column of type logical
   df <- withColumn(df, "boolean", df$age == 30)
