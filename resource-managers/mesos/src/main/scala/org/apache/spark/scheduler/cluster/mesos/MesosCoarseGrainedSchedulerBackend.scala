@@ -689,6 +689,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     // since at coarse grain it depends on the amount of slaves available.
     logInfo("Capping the total amount of executors to " + requestedTotal)
     executorLimitOption = Some(requestedTotal)
+    // Update the locality wait start time to continue trying for locality
+    localityWaitStartTime = System.currentTimeMillis()
     true
   }
 
