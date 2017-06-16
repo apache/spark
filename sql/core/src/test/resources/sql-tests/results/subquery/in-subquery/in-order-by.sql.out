@@ -118,7 +118,7 @@ WHERE  t1b IN (SELECT t2b
                WHERE  t1a = t2a)
 ORDER  BY Count(DISTINCT( t1a ))
 -- !query 6 schema
-struct<count(DISTINCT t1a):bigint>
+struct<count(DISTINCT t1.t1a):bigint>
 -- !query 6 output
 1
 
@@ -263,7 +263,7 @@ GROUP  BY t1a,
           t1h
 ORDER BY t1a
 -- !query 14 schema
-struct<t1a:string,count(DISTINCT t1b):bigint>
+struct<t1a:string,count(DISTINCT t1.t1b):bigint>
 -- !query 14 output
 val1b	1
 
@@ -297,7 +297,7 @@ WHERE  t1b NOT IN (SELECT Min(t2b)
                    ORDER  BY t2c DESC nulls last)
 GROUP  BY t1a
 -- !query 16 schema
-struct<t1a:string,sum(DISTINCT t1b):bigint>
+struct<t1a:string,sum(DISTINCT t1.t1b):bigint>
 -- !query 16 output
 val1a	22
 val1c	8
@@ -318,7 +318,7 @@ GROUP  BY t1a,
           t1b
 ORDER  BY t1b DESC nulls last
 -- !query 17 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint>
 -- !query 17 output
 1	16
 1	10

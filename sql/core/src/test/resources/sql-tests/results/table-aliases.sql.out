@@ -30,7 +30,7 @@ struct<col1:int,col2:int>
 -- !query 3
 SELECT col1 AS k, SUM(col2) FROM testData AS t(col1, col2) GROUP BY k
 -- !query 3 schema
-struct<k:int,sum(col2):bigint>
+struct<k:int,sum(t.col2):bigint>
 -- !query 3 output
 1	3
 2	1

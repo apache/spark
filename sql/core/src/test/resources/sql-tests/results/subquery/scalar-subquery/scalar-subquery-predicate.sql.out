@@ -301,7 +301,7 @@ WHERE  t1a < (SELECT   max(t2a)
               WHERE    t2c = t1c
               GROUP BY t2c)
 -- !query 19 schema
-struct<count(t1a):bigint>
+struct<count(t1.t1a):bigint>
 -- !query 19 output
 7
 

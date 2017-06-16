@@ -116,7 +116,7 @@ GROUP  BY t2a,
           t2i
 ORDER  BY t2d DESC
 -- !query 4 schema
-struct<t2a:string,t2b:smallint,t2d:bigint,count(DISTINCT t2h):bigint,t2i:date>
+struct<t2a:string,t2b:smallint,t2d:bigint,count(DISTINCT t3.t2h):bigint,t2i:date>
 -- !query 4 output
 val1b	8	119	1	2015-05-04
 val1b	8	19	1	2014-07-04
@@ -164,7 +164,7 @@ WHERE  t1a IN (SELECT t3a
                WHERE  t3d = t1d)
 GROUP BY t1a, t1b, t1c
 -- !query 5 schema
-struct<t2a:string,t2b:smallint,t2c:int,min(t2d):bigint>
+struct<t2a:string,t2b:smallint,t2c:int,min(t2.t2d):bigint>
 -- !query 5 output
 val1b	10	12	19
 val1b	8	16	119
@@ -210,7 +210,7 @@ GROUP  BY t2a,
           t2i
 HAVING t2b IS NOT NULL
 -- !query 6 schema
-struct<t2a:string,t2b:smallint,count(t2c):bigint,t2d:bigint,t2h:timestamp,t2i:date>
+struct<t2a:string,t2b:smallint,count(t2.t2c):bigint,t2d:bigint,t2h:timestamp,t2i:date>
 -- !query 6 output
 val1b	8	1	119	2015-05-04 01:01:00	2015-05-04
 val1b	8	1	19	2014-07-04 01:01:00	2014-07-04
@@ -266,7 +266,7 @@ WHERE  t2d IN (SELECT min(t1d)
                FROM   t1
                WHERE  t2c = t1c)
 -- !query 7 schema
-struct<t2a:string,t2b:smallint,count(t2c):bigint,t2d:bigint,t2h:timestamp,t2i:date>
+struct<t2a:string,t2b:smallint,count(t2.t2c):bigint,t2d:bigint,t2h:timestamp,t2i:date>
 -- !query 7 output
 val1b	8	1	119	2015-05-04 01:01:00	2015-05-04
 val1b	8	1	19	2014-07-04 01:01:00	2014-07-04
@@ -582,7 +582,7 @@ HAVING   t1b NOT IN
                 FROM   t3)
 ORDER BY t1c DESC NULLS LAST, t1i
 -- !query 15 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint,t1c:int,t1i:date>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint,t1c:int,t1i:date>
 -- !query 15 output
 1	8	16	2014-05-04
 1	8	16	2014-05-05

@@ -104,7 +104,7 @@ GROUP BY  t1a,
           t3c
 ORDER BY  t1a DESC, t3b DESC
 -- !query 4 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint,t3a:string,t3b:smallint,t3c:int>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint,t3a:string,t3b:smallint,t3c:int>
 -- !query 4 output
 1	10	val3b	8	NULL
 1	10	val1b	8	16
@@ -130,7 +130,7 @@ AND        t1a = t3a
 GROUP BY   t1a
 ORDER BY   t1a
 -- !query 5 schema
-struct<count(DISTINCT t1a):bigint>
+struct<count(DISTINCT t1.t1a):bigint>
 -- !query 5 output
 1
 
@@ -182,7 +182,7 @@ GROUP BY   t1a,
 HAVING     t1b > 8
 ORDER BY   t1a
 -- !query 7 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint>
 -- !query 7 output
 1	10
 
@@ -200,7 +200,7 @@ WHERE    t1a IN
 GROUP BY t1a
 ORDER BY t1a
 -- !query 8 schema
-struct<count(DISTINCT t1a):bigint>
+struct<count(DISTINCT t1.t1a):bigint>
 -- !query 8 output
 1
 1
@@ -225,7 +225,7 @@ OR       t1a IN
 GROUP BY t1b
 HAVING   t1b > 6
 -- !query 9 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint>
 -- !query 9 output
 1	10
 1	8
@@ -250,7 +250,7 @@ AND      t1h IN
 GROUP BY t1b
 HAVING t1b > 8
 -- !query 10 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint>
 -- !query 10 output
 1	10
 
@@ -281,7 +281,7 @@ AND       t1b IN
 GROUP BY t1b
 HAVING   t1b > 8
 -- !query 11 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint>
 -- !query 11 output
 1	10
 
@@ -315,7 +315,7 @@ AND        t1a = t2a
 GROUP BY   t1b
 ORDER BY   t1b DESC
 -- !query 12 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint>
 -- !query 12 output
 1	8
 
@@ -346,7 +346,7 @@ Group By t1a, t1b, t1c, t2a, t2b, t2c
 HAVING t2c IS NOT NULL
 ORDER By t2b DESC nulls last
 -- !query 13 schema
-struct<t1a:string,t1b:smallint,t1c:int,count(DISTINCT t2a):bigint,t2b:smallint,t2c:int>
+struct<t1a:string,t1b:smallint,t1c:int,count(DISTINCT t2.t2a):bigint,t2b:smallint,t2c:int>
 -- !query 13 output
 val1b	8	16	1	10	12
 val1b	8	16	1	8	16

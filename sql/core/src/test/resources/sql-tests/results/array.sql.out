@@ -25,7 +25,7 @@ two	[21,22,23]	[[211,212,213],[221,222,223]]
 -- !query 2
 select a, b[0], b[0] + b[1] from data
 -- !query 2 schema
-struct<a:string,b[0]:int,(b[0] + b[1]):int>
+struct<a:string,data.b[0]:int,(data.b[0] + data.b[1]):int>
 -- !query 2 output
 one	11	23
 two	21	43
@@ -34,7 +34,7 @@ two	21	43
 -- !query 3
 select a, c[0][0] + c[0][0 + 1] from data
 -- !query 3 schema
-struct<a:string,(c[0][0] + c[0][(0 + 1)]):int>
+struct<a:string,(data.c[0][0] + data.c[0][(0 + 1)]):int>
 -- !query 3 output
 one	223
 two	423
@@ -92,7 +92,7 @@ select
   array_contains(timestamp_array, timestamp '2016-11-15 20:54:00.000'), array_contains(timestamp_array, timestamp '2016-01-01 20:54:00.000')
 from primitive_arrays
 -- !query 6 schema
-struct<array_contains(boolean_array, true):boolean,array_contains(boolean_array, false):boolean,array_contains(tinyint_array, 2):boolean,array_contains(tinyint_array, 0):boolean,array_contains(smallint_array, 2):boolean,array_contains(smallint_array, 0):boolean,array_contains(int_array, 2):boolean,array_contains(int_array, 0):boolean,array_contains(bigint_array, 2):boolean,array_contains(bigint_array, 0):boolean,array_contains(decimal_array, 9223372036854775809):boolean,array_contains(decimal_array, CAST(1 AS DECIMAL(19,0))):boolean,array_contains(double_array, 2.0):boolean,array_contains(double_array, 0.0):boolean,array_contains(float_array, CAST(2.0 AS FLOAT)):boolean,array_contains(float_array, CAST(0.0 AS FLOAT)):boolean,array_contains(date_array, DATE '2016-03-14'):boolean,array_contains(date_array, DATE '2016-01-01'):boolean,array_contains(timestamp_array, TIMESTAMP('2016-11-15 20:54:00.0')):boolean,array_contains(timestamp_array, TIMESTAMP('2016-01-01 20:54:00.0')):boolean>
+struct<array_contains(primitive_arrays.boolean_array, true):boolean,array_contains(primitive_arrays.boolean_array, false):boolean,array_contains(primitive_arrays.tinyint_array, 2):boolean,array_contains(primitive_arrays.tinyint_array, 0):boolean,array_contains(primitive_arrays.smallint_array, 2):boolean,array_contains(primitive_arrays.smallint_array, 0):boolean,array_contains(primitive_arrays.int_array, 2):boolean,array_contains(primitive_arrays.int_array, 0):boolean,array_contains(primitive_arrays.bigint_array, 2):boolean,array_contains(primitive_arrays.bigint_array, 0):boolean,array_contains(primitive_arrays.decimal_array, 9223372036854775809):boolean,array_contains(primitive_arrays.decimal_array, CAST(1 AS DECIMAL(19,0))):boolean,array_contains(primitive_arrays.double_array, 2.0):boolean,array_contains(primitive_arrays.double_array, 0.0):boolean,array_contains(primitive_arrays.float_array, CAST(2.0 AS FLOAT)):boolean,array_contains(primitive_arrays.float_array, CAST(0.0 AS FLOAT)):boolean,array_contains(primitive_arrays.date_array, DATE '2016-03-14'):boolean,array_contains(primitive_arrays.date_array, DATE '2016-01-01'):boolean,array_contains(primitive_arrays.timestamp_array, TIMESTAMP('2016-11-15 20:54:00.0')):boolean,array_contains(primitive_arrays.timestamp_array, TIMESTAMP('2016-01-01 20:54:00.0')):boolean>
 -- !query 6 output
 true	false	true	false	true	false	true	false	true	false	true	false	true	false	true	false	true	false	true	false
 
@@ -100,7 +100,7 @@ true	false	true	false	true	false	true	false	true	false	true	false	true	false	tru
 -- !query 7
 select array_contains(b, 11), array_contains(c, array(111, 112, 113)) from data
 -- !query 7 schema
-struct<array_contains(b, 11):boolean,array_contains(c, array(111, 112, 113)):boolean>
+struct<array_contains(data.b, 11):boolean,array_contains(data.c, array(111, 112, 113)):boolean>
 -- !query 7 output
 false	false
 true	true
@@ -120,7 +120,7 @@ select
   sort_array(timestamp_array)
 from primitive_arrays
 -- !query 8 schema
-struct<sort_array(boolean_array, true):array<boolean>,sort_array(tinyint_array, true):array<tinyint>,sort_array(smallint_array, true):array<smallint>,sort_array(int_array, true):array<int>,sort_array(bigint_array, true):array<bigint>,sort_array(decimal_array, true):array<decimal(19,0)>,sort_array(double_array, true):array<double>,sort_array(float_array, true):array<float>,sort_array(date_array, true):array<date>,sort_array(timestamp_array, true):array<timestamp>>
+struct<sort_array(primitive_arrays.boolean_array, true):array<boolean>,sort_array(primitive_arrays.tinyint_array, true):array<tinyint>,sort_array(primitive_arrays.smallint_array, true):array<smallint>,sort_array(primitive_arrays.int_array, true):array<int>,sort_array(primitive_arrays.bigint_array, true):array<bigint>,sort_array(primitive_arrays.decimal_array, true):array<decimal(19,0)>,sort_array(primitive_arrays.double_array, true):array<double>,sort_array(primitive_arrays.float_array, true):array<float>,sort_array(primitive_arrays.date_array, true):array<date>,sort_array(primitive_arrays.timestamp_array, true):array<timestamp>>
 -- !query 8 output
 [true]	[1,2]	[1,2]	[1,2]	[1,2]	[9223372036854775808,9223372036854775809]	[1.0,2.0]	[1.0,2.0]	[2016-03-13,2016-03-14]	[2016-11-12 20:54:00.0,2016-11-15 20:54:00.0]
 
@@ -157,6 +157,6 @@ select
   size(timestamp_array)
 from primitive_arrays
 -- !query 11 schema
-struct<size(boolean_array):int,size(tinyint_array):int,size(smallint_array):int,size(int_array):int,size(bigint_array):int,size(decimal_array):int,size(double_array):int,size(float_array):int,size(date_array):int,size(timestamp_array):int>
+struct<size(primitive_arrays.boolean_array):int,size(primitive_arrays.tinyint_array):int,size(primitive_arrays.smallint_array):int,size(primitive_arrays.int_array):int,size(primitive_arrays.bigint_array):int,size(primitive_arrays.decimal_array):int,size(primitive_arrays.double_array):int,size(primitive_arrays.float_array):int,size(primitive_arrays.date_array):int,size(primitive_arrays.timestamp_array):int>
 -- !query 11 output
 1	2	2	2	2	2	2	2	2	2

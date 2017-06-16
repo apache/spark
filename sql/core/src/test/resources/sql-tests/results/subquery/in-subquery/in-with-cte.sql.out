@@ -119,7 +119,7 @@ WHERE  t1b IN
 GROUP BY t1a, t1b, t1c
 HAVING t1c IS NOT NULL
 -- !query 4 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint,t1c:int>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint,t1c:int>
 -- !query 4 output
 1	16	12
 1	6	8
@@ -218,7 +218,7 @@ WHERE    t1b IN
                 FROM   t1)
 GROUP BY t1b
 -- !query 7 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT s.t1a):bigint,t1b:smallint>
 -- !query 7 output
 2	8
 
@@ -267,7 +267,7 @@ FROM   (SELECT cte1.t1a,
                              ON cte1.t1a = cte2.t1a) s
 GROUP  BY s.t1b
 -- !query 9 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT s.t1a):bigint,t1b:smallint>
 -- !query 9 output
 2	8
 

@@ -62,7 +62,7 @@ WHERE  EXISTS (SELECT state
                WHERE  dept.dept_id = emp.dept_id) 
 GROUP  BY dept_id
 -- !query 3 schema
-struct<dept_id:int,avg(salary):double,sum(salary):double>
+struct<dept_id:int,avg(emp.salary):double,sum(emp.salary):double>
 -- !query 3 output
 10	133.33333333333334	400.0
 20	300.0	300.0
@@ -132,7 +132,7 @@ WHERE  NOT EXISTS (SELECT state
                    WHERE  dept.dept_id = emp.dept_id) 
 GROUP  BY dept_id
 -- !query 7 schema
-struct<dept_id:int,avg(salary):double,sum(salary):double>
+struct<dept_id:int,avg(emp.salary):double,sum(emp.salary):double>
 -- !query 7 output
 100	400.0	800.0
 NULL	400.0	400.0

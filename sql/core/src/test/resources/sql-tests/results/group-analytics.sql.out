@@ -15,7 +15,7 @@ struct<>
 -- !query 1
 SELECT a + b, b, SUM(a - b) FROM testData GROUP BY a + b, b WITH CUBE
 -- !query 1 schema
-struct<(a + b):int,b:int,sum((a - b)):bigint>
+struct<(testdata.a + testdata.b):int,b:int,sum((testdata.a - testdata.b)):bigint>
 -- !query 1 output
 2	1	0
 2	NULL	0
@@ -35,7 +35,7 @@ NULL	NULL	3
 -- !query 2
 SELECT a, b, SUM(b) FROM testData GROUP BY a, b WITH CUBE
 -- !query 2 schema
-struct<a:int,b:int,sum(b):bigint>
+struct<a:int,b:int,sum(testdata.b):bigint>
 -- !query 2 output
 1	1	1
 1	2	2
@@ -54,7 +54,7 @@ NULL	NULL	9
 -- !query 3
 SELECT a + b, b, SUM(a - b) FROM testData GROUP BY a + b, b WITH ROLLUP
 -- !query 3 schema
-struct<(a + b):int,b:int,sum((a - b)):bigint>
+struct<(testdata.a + testdata.b):int,b:int,sum((testdata.a - testdata.b)):bigint>
 -- !query 3 output
 2	1	0
 2	NULL	0
@@ -72,7 +72,7 @@ NULL	NULL	3
 -- !query 4
 SELECT a, b, SUM(b) FROM testData GROUP BY a, b WITH ROLLUP
 -- !query 4 schema
-struct<a:int,b:int,sum(b):bigint>
+struct<a:int,b:int,sum(testdata.b):bigint>
 -- !query 4 output
 1	1	1
 1	2	2
@@ -99,7 +99,7 @@ struct<>
 -- !query 6
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year) ORDER BY course, year
 -- !query 6 schema
-struct<course:string,year:int,sum(earnings):bigint>
+struct<course:string,year:int,sum(coursesales.earnings):bigint>
 -- !query 6 output
 NULL	NULL	113000
 Java	NULL	50000
@@ -113,7 +113,7 @@ dotNET	2013	48000
 -- !query 7
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year) ORDER BY course, year
 -- !query 7 schema
-struct<course:string,year:int,sum(earnings):bigint>
+struct<course:string,year:int,sum(coursesales.earnings):bigint>
 -- !query 7 output
 NULL	NULL	113000
 NULL	2012	35000
@@ -129,7 +129,7 @@ dotNET	2013	48000
 -- !query 8
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course, year)
 -- !query 8 schema
-struct<course:string,year:int,sum(earnings):bigint>
+struct<course:string,year:int,sum(coursesales.earnings):bigint>
 -- !query 8 output
 Java	NULL	50000
 NULL	2012	35000
@@ -140,7 +140,7 @@ dotNET	NULL	63000
 -- !query 9
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course)
 -- !query 9 schema
-struct<course:string,year:int,sum(earnings):bigint>
+struct<course:string,year:int,sum(coursesales.earnings):bigint>
 -- !query 9 output
 Java	NULL	50000
 dotNET	NULL	63000
@@ -149,7 +149,7 @@ dotNET	NULL	63000
 -- !query 10
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(year)
 -- !query 10 schema
-struct<course:string,year:int,sum(earnings):bigint>
+struct<course:string,year:int,sum(coursesales.earnings):bigint>
 -- !query 10 output
 NULL	2012	35000
 NULL	2013	78000
@@ -175,7 +175,7 @@ dotNET	63000
 SELECT course, SUM(earnings) AS sum, GROUPING_ID(course, earnings) FROM courseSales
 GROUP BY course, earnings GROUPING SETS((), (course), (course, earnings)) ORDER BY course, sum
 -- !query 12 schema
-struct<course:string,sum:bigint,grouping_id(course, earnings):int>
+struct<course:string,sum:bigint,grouping_id(coursesales.course, coursesales.earnings):int>
 -- !query 12 output
 NULL	113000	3
 Java	20000	0
@@ -191,7 +191,7 @@ dotNET	63000	1
 SELECT course, year, GROUPING(course), GROUPING(year), GROUPING_ID(course, year) FROM courseSales
 GROUP BY CUBE(course, year)
 -- !query 13 schema
-struct<course:string,year:int,grouping(course):tinyint,grouping(year):tinyint,grouping_id(course, year):int>
+struct<course:string,year:int,grouping(coursesales.course):tinyint,grouping(coursesales.year):tinyint,grouping_id(coursesales.course, coursesales.year):int>
 -- !query 13 output
 Java	2012	0	0	0
 Java	2013	0	0	0
@@ -273,7 +273,7 @@ grouping__id is deprecated; use grouping_id() instead;
 SELECT course, year, GROUPING(course), GROUPING(year) FROM courseSales GROUP BY CUBE(course, year)
 ORDER BY GROUPING(course), GROUPING(year), course, year
 -- !query 21 schema
-struct<course:string,year:int,grouping(course):tinyint,grouping(year):tinyint>
+struct<course:string,year:int,grouping(coursesales.course):tinyint,grouping(coursesales.year):tinyint>
 -- !query 21 output
 Java	2012	0	0
 Java	2013	0	0
@@ -290,7 +290,7 @@ NULL	NULL	1	1
 SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY CUBE(course, year)
 ORDER BY GROUPING(course), GROUPING(year), course, year
 -- !query 22 schema
-struct<course:string,year:int,grouping_id(course, year):int>
+struct<course:string,year:int,grouping_id(coursesales.course, coursesales.year):int>
 -- !query 22 output
 Java	2012	0
 Java	2013	0
@@ -333,7 +333,7 @@ grouping__id is deprecated; use grouping_id() instead;
 -- !query 26
 SELECT a + b AS k1, b AS k2, SUM(a - b) FROM testData GROUP BY CUBE(k1, k2)
 -- !query 26 schema
-struct<k1:int,k2:int,sum((a - b)):bigint>
+struct<k1:int,k2:int,sum((testdata.a - testdata.b)):bigint>
 -- !query 26 output
 2	1	0
 2	NULL	0
@@ -353,7 +353,7 @@ NULL	NULL	3
 -- !query 27
 SELECT a + b AS k, b, SUM(a - b) FROM testData GROUP BY ROLLUP(k, b)
 -- !query 27 schema
-struct<k:int,b:int,sum((a - b)):bigint>
+struct<k:int,b:int,sum((testdata.a - testdata.b)):bigint>
 -- !query 27 output
 2	1	0
 2	NULL	0
@@ -371,7 +371,7 @@ NULL	NULL	3
 -- !query 28
 SELECT a + b, b AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k)
 -- !query 28 schema
-struct<(a + b):int,k:int,sum((a - b)):bigint>
+struct<(testdata.a + testdata.b):int,k:int,sum((testdata.a - testdata.b)):bigint>
 -- !query 28 output
 NULL	1	3
 NULL	2	0
