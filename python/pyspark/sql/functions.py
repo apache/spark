@@ -134,14 +134,14 @@ _functions_1_4 = {
 _collect_list_doc = """
     Aggregate function: returns a list of objects with duplicates.
 
-    >>> df2 = spark.createDataFrame([(u'Alice', 2), (u'Bob', 5), (u'Alice', 99)], ('name', 'age'))
+    >>> df2 = spark.createDataFrame([('Alice', 2), ('Bob', 5), ('Alice', 99)], ('name', 'age'))
     >>> df2.agg(collect_list('name')).collect()
     [Row(collect_list(name)=[u'Alice', u'Bob', u'Alice'])]
     """
 _collect_set_doc = """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
 
-    >>> df2 = spark.createDataFrame([(u'Alice', 2), (u'Bob', 5), (u'Alice', 99)], ('name', 'age'))
+    >>> df2 = spark.createDataFrame([('Alice', 2), ('Bob', 5), ('Alice', 99)], ('name', 'age'))
     >>> df2.agg(collect_set('name')).collect()
     [Row(collect_set(name)=[u'Bob', u'Alice'])]
     """
