@@ -407,7 +407,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         val withWindow = withDistinct.optionalMap(windows)(withWindows)
 
         // Hint
-        withWindow.optionalMap(hint)(withHints)
+        hints.asScala.foldRight(withWindow)(withHints)
     }
   }
 
@@ -533,13 +533,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Add a [[UnresolvedHint]] to a logical plan.
+   * Add [[UnresolvedHint]]s to a logical plan.
    */
   private def withHints(
       ctx: HintContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val stmt = ctx.hintStatement
-    UnresolvedHint(stmt.hintName.getText, stmt.parameters.asScala.map(_.getText), query)
+    var plan = query
+    ctx.hintStatements.asScala.reverse.foreach { case stmt =>
+      plan = UnresolvedHint(stmt.hintName.getText, stmt.parameters.asScala.map(expression), plan)
+    }
+    plan
   }
 
   /**
@@ -1071,6 +1074,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitLast(ctx: LastContext): Expression = withOrigin(ctx) {
     val ignoreNullsExpr = ctx.IGNORE != null
     Last(expression(ctx.expression), Literal(ignoreNullsExpr)).toAggregateExpression()
+  }
+
+  /**
+   * Create a Position expression.
+   */
+  override def visitPosition(ctx: PositionContext): Expression = withOrigin(ctx) {
+    new StringLocate(expression(ctx.substr), expression(ctx.str))
   }
 
   /**

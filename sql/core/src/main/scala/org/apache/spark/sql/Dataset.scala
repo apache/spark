@@ -131,7 +131,7 @@ private[sql] object Dataset {
  *
  *   people.filter("age > 30")
  *     .join(department, people("deptId") === department("id"))
- *     .groupBy(department("name"), "gender")
+ *     .groupBy(department("name"), people("gender"))
  *     .agg(avg(people("salary")), max(people("age")))
  * }}}
  *
@@ -141,9 +141,9 @@ private[sql] object Dataset {
  *   Dataset<Row> people = spark.read().parquet("...");
  *   Dataset<Row> department = spark.read().parquet("...");
  *
- *   people.filter("age".gt(30))
- *     .join(department, people.col("deptId").equalTo(department("id")))
- *     .groupBy(department.col("name"), "gender")
+ *   people.filter(people.col("age").gt(30))
+ *     .join(department, people.col("deptId").equalTo(department.col("id")))
+ *     .groupBy(department.col("name"), people.col("gender"))
  *     .agg(avg(people.col("salary")), max(people.col("age")));
  * }}}
  *
@@ -1190,7 +1190,7 @@ class Dataset[T] private[sql](
    * @since 2.2.0
    */
   @scala.annotation.varargs
-  def hint(name: String, parameters: String*): Dataset[T] = withTypedPlan {
+  def hint(name: String, parameters: Any*): Dataset[T] = withTypedPlan {
     UnresolvedHint(name, parameters, logicalPlan)
   }
 
@@ -1734,10 +1734,11 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
-   * This is equivalent to `UNION ALL` in SQL.
    *
-   * To do a SQL-style set union (that does deduplication of elements), use this function followed
-   * by a [[distinct]].
+   * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
+   * deduplication of elements), use this function followed by a [[distinct]].
+   *
+   * Also as standard in SQL, this function resolves columns by position (not by name).
    *
    * @group typedrel
    * @since 2.0.0
@@ -1747,10 +1748,11 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
-   * This is equivalent to `UNION ALL` in SQL.
    *
-   * To do a SQL-style set union (that does deduplication of elements), use this function followed
-   * by a [[distinct]].
+   * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
+   * deduplication of elements), use this function followed by a [[distinct]].
+   *
+   * Also as standard in SQL, this function resolves columns by position (not by name).
    *
    * @group typedrel
    * @since 2.0.0
@@ -2786,6 +2788,7 @@ class Dataset[T] private[sql](
    * view, e.g. `SELECT * FROM _global_temp.view1`.
    *
    * @group basic
+   * @since 2.2.0
    */
   def createOrReplaceGlobalTempView(viewName: String): Unit = withPlan {
     createTempViewCommand(viewName, replace = true, global = true)

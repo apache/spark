@@ -383,22 +383,27 @@ object LikeSimplification extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case Like(input, Literal(pattern, StringType)) =>
-      pattern.toString match {
-        case startsWith(prefix) if !prefix.endsWith("\\") =>
-          StartsWith(input, Literal(prefix))
-        case endsWith(postfix) =>
-          EndsWith(input, Literal(postfix))
-        // 'a%a' pattern is basically same with 'a%' && '%a'.
-        // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
-        case startsAndEndsWith(prefix, postfix) if !prefix.endsWith("\\") =>
-          And(GreaterThanOrEqual(Length(input), Literal(prefix.size + postfix.size)),
-            And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
-        case contains(infix) if !infix.endsWith("\\") =>
-          Contains(input, Literal(infix))
-        case equalTo(str) =>
-          EqualTo(input, Literal(str))
-        case _ =>
-          Like(input, Literal.create(pattern, StringType))
+      if (pattern == null) {
+        // If pattern is null, return null value directly, since "col like null" == null.
+        Literal(null, BooleanType)
+      } else {
+        pattern.toString match {
+          case startsWith(prefix) if !prefix.endsWith("\\") =>
+            StartsWith(input, Literal(prefix))
+          case endsWith(postfix) =>
+            EndsWith(input, Literal(postfix))
+          // 'a%a' pattern is basically same with 'a%' && '%a'.
+          // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
+          case startsAndEndsWith(prefix, postfix) if !prefix.endsWith("\\") =>
+            And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
+              And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
+          case contains(infix) if !infix.endsWith("\\") =>
+            Contains(input, Literal(infix))
+          case equalTo(str) =>
+            EqualTo(input, Literal(str))
+          case _ =>
+            Like(input, Literal.create(pattern, StringType))
+        }
       }
   }
 }

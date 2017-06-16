@@ -341,6 +341,8 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     Examples:
       > SELECT 2 _FUNC_ 1.8;
        0.2
+      > SELECT MOD(2, 1.8);
+       0.2
   """)
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
 
