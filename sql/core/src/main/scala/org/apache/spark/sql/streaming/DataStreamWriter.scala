@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
+import java.net.URI
 import java.util.Locale
 
+import org.apache.hadoop.fs.FileSystem
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.InterfaceStability
@@ -235,6 +237,21 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         "write files of Hive data source directly.")
     }
 
+    val hadoopConf = df.sparkSession.sessionState.newHadoopConf()
+    val defaultFS = FileSystem.getDefaultUri(hadoopConf).getScheme
+    val tmpFS = new URI(System.getProperty("java.io.tmpdir")).getScheme
+
+    val isTempCheckpointLocationAvailable = tmpFS match {
+      case null | "file" =>
+        if (defaultFS == null || defaultFS.equals("file")) {
+          true
+        } else {
+          false
+        }
+      case defaultFS => true
+      case _ => false
+     }
+
     if (source == "memory") {
       assertNotPartitioned("memory")
       if (extraOptions.get("queryName").isEmpty) {
@@ -250,7 +267,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         df,
         sink,
         outputMode,
-        useTempCheckpointLocation = true,
+        useTempCheckpointLocation = isTempCheckpointLocationAvailable,
         recoverFromCheckpointLocation = recoverFromChkpoint,
         trigger = trigger)
       resultDf.createOrReplaceTempView(query.name)
@@ -264,12 +281,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         df,
         sink,
         outputMode,
-        useTempCheckpointLocation = true,
+        useTempCheckpointLocation = isTempCheckpointLocationAvailable,
         trigger = trigger)
     } else {
       val (useTempCheckpointLocation, recoverFromCheckpointLocation) =
         if (source == "console") {
-          (true, false)
+          (isTempCheckpointLocationAvailable, false)
         } else {
           (false, true)
         }

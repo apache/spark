@@ -25,6 +25,7 @@ import scala.util.control.ControlThrowable
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -549,6 +550,32 @@ class StreamSuite extends StreamTest {
         if (streamingQuery ne null) {
           streamingQuery.stop()
         }
+      }
+    }
+  }
+
+  test("SPARK-19909: if the checkpoint location is not set and the default filesystem " +
+    "is different from the java.io.tmp one an AnalysisException should be thrown") {
+
+    val defaultFS = spark.conf.getOption(FileSystem.FS_DEFAULT_NAME_KEY)
+    spark.conf.set(FileSystem.FS_DEFAULT_NAME_KEY, "hdfs:///")
+
+    val input = MemoryStream[Int]
+    var streamingQuery: StreamingQuery = null
+    input.addData(1)
+    try {
+      intercept[AnalysisException](
+        streamingQuery = input.toDF().writeStream.format("console").start()
+      )
+    } finally {
+      if (streamingQuery ne null) {
+        streamingQuery.stop()
+      }
+      // Restore previous state
+      if (defaultFS.isEmpty) {
+        spark.conf.unset(FileSystem.FS_DEFAULT_NAME_KEY)
+      } else {
+        spark.conf.set(FileSystem.FS_DEFAULT_NAME_KEY, defaultFS.get)
       }
     }
   }
