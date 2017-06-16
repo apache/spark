@@ -71,8 +71,8 @@ _lit_doc = """
     Creates a :class:`Column` of literal value.
 
     >>> df.withColumn('height', lit(5)).withColumn('spark_user', lit(True)).collect()
-    [Row(age=2, name=u'Alice', height=5, spark_user=True),
-     Row(age=5, name=u'Bob', height=5, spark_user=True)]
+    [Row(age=2, name='Alice', height=5, spark_user=True),
+     Row(age=5, name='Bob', height=5, spark_user=True)]
     """
 _functions = {
     'lit': _lit_doc,
@@ -209,7 +209,7 @@ _window_functions = {
 }
 
 for _name, _doc in _functions.items():
-    globals()[_name] = since(1.3)(ignore_unicode_prefix(_create_function(_name, _doc)))
+    globals()[_name] = since(1.3)(_create_function(_name, _doc))
 for _name, _doc in _functions_1_4.items():
     globals()[_name] = since(1.4)(_create_function(_name, _doc))
 for _name, _doc in _binary_mathfunctions.items():
@@ -217,7 +217,7 @@ for _name, _doc in _binary_mathfunctions.items():
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
 for _name, _doc in _functions_1_6.items():
-    globals()[_name] = since(1.6)(ignore_unicode_prefix(_create_function(_name, _doc)))
+    globals()[_name] = since(1.6)(_create_function(_name, _doc))
 for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
 del _name, _doc
@@ -236,7 +236,7 @@ def approx_count_distinct(col, rsd=0.05):
     """Aggregate function. Returns a new :class:`Column` for approximate distinct count of column `col`.
 
     :param rsd: maximum estimation error allowed (default = 0.05). For rsd < 0.01, it is more
-    efficient to use :func:`countDistinct`
+        efficient to use :func:`countDistinct`
 
     >>> df.agg(approx_count_distinct(df.age).alias('distinct_ages')).collect()
     [Row(distinct_ages=2)]
@@ -1022,13 +1022,13 @@ def to_date(col, format=None):
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted (equivalent to ``col.cast("date")``).
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
-    >>> df.select(to_date(df.ts).alias('dt')).collect()
-    [Row(dt=datetime.date(1997, 2, 28))]
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
+    >>> df.select(to_date(df.t).alias('date')).collect()
+    [Row(date=datetime.date(1997, 2, 28))]
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
-    >>> df.select(to_date(df.ts, 'yyyy-MM-dd HH:mm:ss').alias('dt')).collect()
-    [Row(dt=datetime.date(1997, 2, 28))]
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
+    >>> df.select(to_date(df.t, 'yyyy-MM-dd HH:mm:ss').alias('date')).collect()
+    [Row(date=datetime.date(1997, 2, 28))]
     """
     sc = SparkContext._active_spark_context
     if format is None:
@@ -1047,13 +1047,13 @@ def to_timestamp(col, format=None):
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted (equivalent to ``col.cast("timestamp")``).
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['dt'])
-    >>> df.select(to_timestamp(df.dt).alias('ts')).collect()
-    [Row(ts=datetime.datetime(1997, 2, 28, 10, 30))]
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
+    >>> df.select(to_timestamp(df.t).alias('dt')).collect()
+    [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['dt'])
-    >>> df.select(to_timestamp(df.dt, 'yyyy-MM-dd HH:mm:ss').alias('ts')).collect()
-    [Row(ts=datetime.datetime(1997, 2, 28, 10, 30))]
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
+    >>> df.select(to_timestamp(df.ts, 'yyyy-MM-dd HH:mm:ss').alias('dt')).collect()
+    [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
     """
     sc = SparkContext._active_spark_context
     if format is None:
@@ -1088,8 +1088,8 @@ def next_day(date, dayOfWeek):
     Day of the week parameter is case insensitive, and accepts:
         "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
 
-    >>> df = spark.createDataFrame([('2015-07-27',)], ['dt'])
-    >>> df.select(next_day(df.dt, 'Sun').alias('date')).collect()
+    >>> df = spark.createDataFrame([('2015-07-27',)], ['d'])
+    >>> df.select(next_day(df.d, 'Sun').alias('date')).collect()
     [Row(date=datetime.date(2015, 8, 2))]
     """
     sc = SparkContext._active_spark_context
@@ -1101,8 +1101,8 @@ def last_day(date):
     """
     Returns the last day of the month which the given date belongs to.
 
-    >>> df = spark.createDataFrame([('1997-02-10',)], ['dt'])
-    >>> df.select(last_day(df.dt).alias('date')).collect()
+    >>> df = spark.createDataFrame([('1997-02-10',)], ['d'])
+    >>> df.select(last_day(df.d).alias('date')).collect()
     [Row(date=datetime.date(1997, 2, 28))]
     """
     sc = SparkContext._active_spark_context
@@ -1295,33 +1295,15 @@ def hash(*cols):
 
 # ---------------------- String/Binary functions ------------------------------
 
-_lower_doc = """
-    Converts a string column to lower case.
-
-    >>> df.select(lower(df.name)).collect()
-    [Row(lower(name)=u'alice'), Row(lower(name)=u'bob')]
-    """
-_upper_doc = """
-    Converts a string column to upper case.
-
-    >>> df.select(upper(df.name)).collect()
-    [Row(upper(name)=u'ALICE'), Row(upper(name)=u'BOB')]
-    """
-_reverse_doc = """
-    Reverses the string column and returns it as a new string column.
-
-    >>> df.select(reverse(df.name)).collect()
-    [Row(reverse(name)=u'ecilA'), Row(reverse(name)=u'boB')]
-    """
 _string_functions = {
     'ascii': 'Computes the numeric value of the first character of the string column.',
     'base64': 'Computes the BASE64 encoding of a binary column and returns it as a string column.',
     'unbase64': 'Decodes a BASE64 encoded string column and returns it as a binary column.',
     'initcap': 'Returns a new string column by converting the first letter of each word to ' +
                'uppercase. Words are delimited by whitespace.',
-    'lower': _lower_doc,
-    'upper': _upper_doc,
-    'reverse': _reverse_doc,
+    'lower': 'Converts a string column to lower case.',
+    'upper': 'Converts a string column to upper case.',
+    'reverse': 'Reverses a column and returns it as a new string column.',
     'ltrim': 'Trim the spaces from left end for the specified string value.',
     'rtrim': 'Trim the spaces from right end for the specified string value.',
     'trim': 'Trim the spaces from both ends for the specified string column.',
@@ -1329,7 +1311,7 @@ _string_functions = {
 
 
 for _name, _doc in _string_functions.items():
-    globals()[_name] = since(1.5)(ignore_unicode_prefix(_create_function(_name, _doc)))
+    globals()[_name] = since(1.5)(_create_function(_name, _doc))
 del _name, _doc
 
 
