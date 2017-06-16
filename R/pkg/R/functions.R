@@ -187,12 +187,13 @@ setMethod("atan",
 
 #' avg
 #'
-#' Returns the average of the values in a group.
+#' Aggregate function: returns the average of the values in a group.
 #'
 #' @rdname avg
-#' @export
-#' @aliases avg avg,Column-method
+#' @name avg
 #' @family aggregate functions
+#' @export
+#' @aliases avg,Column-method
 #' @examples \dontrun{avg(df$c)}
 #' @note avg since 1.4.0
 setMethod("avg",
