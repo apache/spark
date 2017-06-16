@@ -921,6 +921,7 @@ setGeneric("array_contains", function(x, value) { standardGeneric("array_contain
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
 
 #' @param x Column to compute on or a GroupedData object.
+#' @param ... additional argument(s) when \code{x} is a GroupedData object.
 #' @rdname avg
 #' @export
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
