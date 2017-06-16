@@ -214,10 +214,10 @@ public class ExternalShuffleIntegrationSuite {
   @Test
   public void testFetchWrongExecutor() throws Exception {
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-0",
-      new String[] { "shuffle_0_0_0" /* right */, "shuffle_1_0_0" /* wrong */ });
-    assertEquals(Sets.newHashSet("shuffle_0_0_0"), execFetch.successBlocks);
-    assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch.failedBlocks);
+    FetchResult execFetch0 = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" /* right */});
+    FetchResult execFetch1 = fetchBlocks("exec-0", new String[] { "shuffle_1_0_0" /* wrong */ });
+    assertEquals(Sets.newHashSet("shuffle_0_0_0"), execFetch0.successBlocks);
+    assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch1.failedBlocks);
   }
 
   @Test
