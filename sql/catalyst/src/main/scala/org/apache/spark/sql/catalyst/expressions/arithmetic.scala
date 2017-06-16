@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
@@ -34,17 +34,15 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TypeCollection.NumericAndInterval, StringType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
-  override def dataType: DataType =
-    if (child.dataType.isInstanceOf[StringType]) DoubleType else child.dataType
+  override def dataType: DataType = child.dataType
 
   override def toString: String = s"-$child"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case dt: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
     case dt: NumericType => nullSafeCodeGen(ctx, ev, eval => {
       val originValue = ctx.freshName("origin")
@@ -55,21 +53,14 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
         ${ev.value} = (${ctx.javaType(dt)})(-($originValue));
       """})
     case dt: CalendarIntervalType => defineCodeGen(ctx, ev, c => s"$c.negate()")
-    case dt: StringType => nullSafeCodeGen(ctx, ev, eval => {
-      val originValue = ctx.freshName("origin")
-      s"""
-        double $originValue = Double.valueOf(($eval).toString());
-        ${ev.value} = (-($originValue));
-      """})
   }
 
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case CalendarIntervalType =>
+  protected override def nullSafeEval(input: Any): Any = {
+    if (dataType.isInstanceOf[CalendarIntervalType]) {
       input.asInstanceOf[CalendarInterval].negate()
-    case StringType =>
-      numeric.negate(input.asInstanceOf[UTF8String].toString.toDouble)
-    case _: NumericType =>
+    } else {
       numeric.negate(input)
+    }
   }
 
   override def sql: String = s"(- ${child.sql})"
@@ -79,28 +70,16 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
   usage = "_FUNC_(expr) - Returns the value of `expr`.")
 case class UnaryPositive(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
-
   override def prettyName: String = "positive"
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TypeCollection.NumericAndInterval, StringType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
-  override def dataType: DataType =
-    if (child.dataType.isInstanceOf[StringType]) DoubleType else child.dataType
+  override def dataType: DataType = child.dataType
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
-    case dt: StringType =>
-      nullSafeCodeGen(ctx, ev, eval => {s"${ev.value} = Double.valueOf(($eval).toString());"})
-    case _ =>
-      defineCodeGen(ctx, ev, c => c)
-  }
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    defineCodeGen(ctx, ev, c => c)
 
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case dt: StringType =>
-      input.asInstanceOf[UTF8String].toString.toDouble
-    case _ =>
-      input
-  }
+  protected override def nullSafeEval(input: Any): Any = input
 
   override def sql: String = s"(+ ${child.sql})"
 }

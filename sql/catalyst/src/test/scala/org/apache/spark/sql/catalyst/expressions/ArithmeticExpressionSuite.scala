@@ -83,39 +83,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     DataTypeTestUtils.numericAndInterval.foreach { tpe =>
       checkConsistencyBetweenInterpretedAndCodegen(UnaryMinus, tpe)
     }
-
-    // string type support
-    checkEvaluation(UnaryMinus(Literal("-1")), 1.0)
-    checkEvaluation(UnaryMinus(Literal("-1.11")), 1.11)
-    checkEvaluation(UnaryMinus(Literal("2")), -2.0)
-  }
-
-  test("+ (UnaryPositive)") {
-    testNumericDataTypes { convert =>
-      val input = Literal(convert(1))
-      val dataType = input.dataType
-      checkEvaluation(UnaryPositive(input), convert(1))
-      checkEvaluation(UnaryPositive(Literal.create(null, dataType)), null)
-    }
-    checkEvaluation(UnaryPositive(Literal(Long.MinValue)), Long.MinValue)
-    checkEvaluation(UnaryPositive(Literal(Int.MinValue)), Int.MinValue)
-    checkEvaluation(UnaryPositive(Literal(Short.MinValue)), Short.MinValue)
-    checkEvaluation(UnaryPositive(Literal(Byte.MinValue)), Byte.MinValue)
-    checkEvaluation(UnaryPositive(positiveShortLit), positiveShort.toShort)
-    checkEvaluation(UnaryPositive(negativeShortLit), negativeShort.toShort)
-    checkEvaluation(UnaryPositive(positiveIntLit), positiveInt)
-    checkEvaluation(UnaryPositive(negativeIntLit), negativeInt)
-    checkEvaluation(UnaryPositive(positiveLongLit), positiveLong)
-    checkEvaluation(UnaryPositive(negativeLongLit), negativeLong)
-
-    DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(UnaryPositive, tpe)
-    }
-
-    // string type support
-    checkEvaluation(UnaryPositive(Literal("-1")), -1.0)
-    checkEvaluation(UnaryPositive(Literal("-1.11")), -1.11)
-    checkEvaluation(UnaryPositive(Literal("2")), 2.0)
   }
 
   test("- (Minus)") {
