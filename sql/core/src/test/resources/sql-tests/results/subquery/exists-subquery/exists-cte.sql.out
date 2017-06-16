@@ -160,7 +160,7 @@ WHERE  EXISTS (SELECT dept_id,
                HAVING count(*) > 1) 
 GROUP  BY emp_name
 -- !query 6 schema
-struct<emp_name:string,sum(bonus_amt):double>
+struct<emp_name:string,sum(bonus.bonus_amt):double>
 -- !query 6 output
 emp 1	30.0
 emp 2	400.0
@@ -190,7 +190,7 @@ WHERE  NOT EXISTS (SELECT dept_id,
                    HAVING count(*) < 1) 
 GROUP  BY emp_name
 -- !query 7 schema
-struct<emp_name:string,sum(bonus_amt):double>
+struct<emp_name:string,sum(bonus.bonus_amt):double>
 -- !query 7 output
 emp 1	30.0
 emp 2	400.0

@@ -20,7 +20,7 @@ struct<>
 -- !query 1
 select a, sum(b) from data group by 1
 -- !query 1 schema
-struct<a:int,sum(b):bigint>
+struct<a:int,sum(data.b):bigint>
 -- !query 1 output
 1	3
 2	3
@@ -30,7 +30,7 @@ struct<a:int,sum(b):bigint>
 -- !query 2
 select 1, 2, sum(b) from data group by 1, 2
 -- !query 2 schema
-struct<1:int,2:int,sum(b):bigint>
+struct<1:int,2:int,sum(data.b):bigint>
 -- !query 2 output
 1	2	9
 
@@ -38,7 +38,7 @@ struct<1:int,2:int,sum(b):bigint>
 -- !query 3
 select a, 1, sum(b) from data group by a, 1
 -- !query 3 schema
-struct<a:int,1:int,sum(b):bigint>
+struct<a:int,1:int,sum(data.b):bigint>
 -- !query 3 output
 1	1	3
 2	1	3
@@ -48,7 +48,7 @@ struct<a:int,1:int,sum(b):bigint>
 -- !query 4
 select a, 1, sum(b) from data group by 1, 2
 -- !query 4 schema
-struct<a:int,1:int,sum(b):bigint>
+struct<a:int,1:int,sum(data.b):bigint>
 -- !query 4 output
 1	1	3
 2	1	3
@@ -58,7 +58,7 @@ struct<a:int,1:int,sum(b):bigint>
 -- !query 5
 select a, b + 2, count(2) from data group by a, 2
 -- !query 5 schema
-struct<a:int,(b + 2):int,count(2):bigint>
+struct<a:int,(data.b + 2):int,count(2):bigint>
 -- !query 5 output
 1	3	1
 1	4	1
@@ -84,7 +84,7 @@ struct<aa:int,bb:int,count(2):bigint>
 -- !query 7
 select sum(b) from data group by 1 + 0
 -- !query 7 schema
-struct<sum(b):bigint>
+struct<sum(data.b):bigint>
 -- !query 7 output
 9
 
@@ -137,7 +137,7 @@ aggregate functions are not allowed in GROUP BY, but found (sum(CAST(data.`b` AS
 -- !query 13
 select a, rand(0), sum(b) from data group by a, 2
 -- !query 13 schema
-struct<a:int,rand(0):double,sum(b):bigint>
+struct<a:int,rand(0):double,sum(data.b):bigint>
 -- !query 13 output
 1	0.4048454303385226	2
 1	0.8446490682263027	1
@@ -159,7 +159,7 @@ Star (*) is not allowed in select list when GROUP BY ordinal position is used;
 -- !query 15
 select a, count(a) from (select 1 as a) tmp group by 1 order by 1
 -- !query 15 schema
-struct<a:int,count(a):bigint>
+struct<a:int,count(tmp.a):bigint>
 -- !query 15 output
 1	1
 
@@ -167,7 +167,7 @@ struct<a:int,count(a):bigint>
 -- !query 16
 select count(a), a from (select 1 as a) tmp group by 2 having a > 0
 -- !query 16 schema
-struct<count(a):bigint,a:int>
+struct<count(tmp.a):bigint,a:int>
 -- !query 16 output
 1	1
 
@@ -175,7 +175,7 @@ struct<count(a):bigint,a:int>
 -- !query 17
 select a, a AS k, count(b) from data group by k, 1
 -- !query 17 schema
-struct<a:int,k:int,count(b):bigint>
+struct<a:int,k:int,count(data.b):bigint>
 -- !query 17 output
 1	1	2
 2	2	2
@@ -193,6 +193,6 @@ spark.sql.groupByOrdinal	false
 -- !query 19
 select sum(b) from data group by -1
 -- !query 19 schema
-struct<sum(b):bigint>
+struct<sum(data.b):bigint>
 -- !query 19 output
 9

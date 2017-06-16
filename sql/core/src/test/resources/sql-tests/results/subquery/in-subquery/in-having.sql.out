@@ -141,7 +141,7 @@ WHERE  t1c IN (SELECT t2c
 GROUP  BY t1b
 HAVING t1b >= 8
 -- !query 7 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint>
 -- !query 7 output
 2	8
 
@@ -159,7 +159,7 @@ HAVING t1a IN (SELECT t2a
                               WHERE  t2c = t3c)
                )
 -- !query 8 schema
-struct<t1a:string,max(t1b):smallint>
+struct<t1a:string,max(t1.t1b):smallint>
 -- !query 8 output
 val1b	8
 
@@ -176,7 +176,7 @@ WHERE  t1a NOT IN (SELECT t2a
 GROUP BY t1a, t1c
 HAVING Min(t1d) > t1c
 -- !query 9 schema
-struct<t1a:string,t1c:int,min(t1d):bigint>
+struct<t1a:string,t1c:int,min(t1.t1d):bigint>
 -- !query 9 output
 val1a	8	10
 val1b	16	19
@@ -211,7 +211,7 @@ HAVING t1a NOT IN (SELECT t2a
                    FROM   t2
                    WHERE  t2b > 3)
 -- !query 11 schema
-struct<t1a:string,max(t1b):smallint>
+struct<t1a:string,max(t1.t1b):smallint>
 -- !query 11 output
 val1a	16
 val1d	10

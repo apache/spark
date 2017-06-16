@@ -114,7 +114,7 @@ GROUP BY        t1a, t1b, t1c, t3a, t3b, t3c
 HAVING          count(distinct(t3a)) >= 1
 ORDER BY        t1a, t3b
 -- !query 4 schema
-struct<t1a:string,t1b:smallint,t1c:int,count(DISTINCT t3a):bigint,t3b:smallint,t3c:int>
+struct<t1a:string,t1b:smallint,t1c:int,count(DISTINCT t3.t3a):bigint,t3b:smallint,t3c:int>
 -- !query 4 output
 val1c	8	16	1	6	12
 val1c	8	16	1	10	12
@@ -171,7 +171,7 @@ HAVING t1d NOT IN (SELECT t2d
                    WHERE  t1d = t2d)
 ORDER BY t1b DESC
 -- !query 6 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint,t1c:int,t1d:bigint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint,t1c:int,t1d:bigint>
 -- !query 6 output
 1	16	12	10
 1	16	12	21
@@ -196,7 +196,7 @@ GROUP BY t1b,
          t1d
 HAVING   t1b < sum(t1c)
 -- !query 7 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint,t1c:int,t1d:bigint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint,t1c:int,t1d:bigint>
 -- !query 7 output
 1	6	8	10
 
@@ -224,6 +224,6 @@ GROUP BY t1b,
          t1d
 HAVING   t1b < sum(t1c)
 -- !query 8 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint,t1c:int,t1d:bigint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint,t1c:int,t1d:bigint>
 -- !query 8 output
 1	6	8	10

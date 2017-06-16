@@ -109,7 +109,7 @@ GROUP  BY t1b
 ORDER  BY t1b DESC NULLS FIRST
 LIMIT  1
 -- !query 5 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint>
 -- !query 5 output
 1	NULL
 
@@ -142,6 +142,6 @@ GROUP  BY t1b
 ORDER BY t1b NULLS last
 LIMIT  1
 -- !query 7 schema
-struct<count(DISTINCT t1a):bigint,t1b:smallint>
+struct<count(DISTINCT t1.t1a):bigint,t1b:smallint>
 -- !query 7 output
 1	6

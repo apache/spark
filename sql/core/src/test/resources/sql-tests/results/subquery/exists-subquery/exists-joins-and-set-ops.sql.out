@@ -200,7 +200,7 @@ WHERE  EXISTS (SELECT emp_name,
                  ORDER  BY emp_name)
 GROUP  BY emp_name
 -- !query 10 schema
-struct<emp_name:string,sum(bonus_amt):double>
+struct<emp_name:string,sum(bonus.bonus_amt):double>
 -- !query 10 output
 emp 1	30.0
 
@@ -220,7 +220,7 @@ WHERE  NOT EXISTS (SELECT emp_name,
                    ORDER  BY emp_name) 
 GROUP  BY emp_name
 -- !query 11 schema
-struct<emp_name:string,sum(bonus_amt):double>
+struct<emp_name:string,sum(bonus.bonus_amt):double>
 -- !query 11 output
 emp 2	400.0
 emp 3	300.0
