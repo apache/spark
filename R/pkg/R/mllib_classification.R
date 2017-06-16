@@ -211,10 +211,10 @@ function(object, path, overwrite = FALSE) {
 #'                                  regression, or (number of classes, number of features) for multinomial regression.
 #'                                  It is a R matrix.
 #' @param lowerBoundsOnIntercepts The lower bounds on intercepts if fitting under bound constrained optimization.
-#'                                The bounds vector size must be equal with 1 for binomial regression, or the number
+#'                                The bounds vector size must be equal to 1 for binomial regression, or the number
 #'                                of classes for multinomial regression.
 #' @param upperBoundsOnIntercepts The upper bounds on intercepts if fitting under bound constrained optimization.
-#'                                The bound vector size must be equal with 1 for binomial regression, or the number
+#'                                The bound vector size must be equal to 1 for binomial regression, or the number
 #'                                of classes for multinomial regression.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.logit} returns a fitted logistic regression model.
@@ -288,8 +288,8 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                 stop("upperBoundsOnCoefficients must be a matrix.")
               }
 
-              if (!is.null(lowerBoundsOnCoefficients) & (row != nrow(upperBoundsOnCoefficients)
-                | col != ncol(upperBoundsOnCoefficients))) {
+              if (!is.null(lowerBoundsOnCoefficients) && (row != nrow(upperBoundsOnCoefficients)
+                || col != ncol(upperBoundsOnCoefficients))) {
                 stop(paste0("dimension of upperBoundsOnCoefficients ",
                            "is not the same as lowerBoundsOnCoefficients", sep = ""))
               }
