@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * This suite is used to test [[LogicalPlan]]'s `transformUp` plus analysis barrier and make sure
- * it can correctly skip sub-trees that have already been marked as analyzed.
+ * This suite is used to test [[LogicalPlan]]'s `resolveOperators` and make sure it can correctly
+ * skips sub-trees that have already been marked as analyzed.
  */
 class LogicalPlanSuite extends SparkFunSuite {
   private var invocationCount = 0
@@ -36,35 +36,37 @@ class LogicalPlanSuite extends SparkFunSuite {
 
   private val testRelation = LocalRelation()
 
-  test("transformUp runs on operators") {
+  test("resolveOperator runs on operators") {
     invocationCount = 0
     val plan = Project(Nil, testRelation)
-    plan transformUp function
+    plan resolveOperators function
 
     assert(invocationCount === 1)
   }
 
-  test("transformUp runs on operators recursively") {
+  test("resolveOperator runs on operators recursively") {
     invocationCount = 0
     val plan = Project(Nil, Project(Nil, testRelation))
-    plan transformUp function
+    plan resolveOperators function
 
     assert(invocationCount === 2)
   }
 
-  test("transformUp skips all ready resolved plans wrapped in analysis barrier") {
+  test("resolveOperator skips all ready resolved plans") {
     invocationCount = 0
-    val plan = AnalysisBarrier(Project(Nil, Project(Nil, testRelation)))
-    plan transformUp function
+    val plan = Project(Nil, Project(Nil, testRelation))
+    plan.foreach(_.setAnalyzed())
+    plan resolveOperators function
 
     assert(invocationCount === 0)
   }
 
-  test("transformUp skips partially resolved plans wrapped in analysis barrier") {
+  test("resolveOperator skips partially resolved plans") {
     invocationCount = 0
-    val plan1 = AnalysisBarrier(Project(Nil, testRelation))
+    val plan1 = Project(Nil, testRelation)
     val plan2 = Project(Nil, plan1)
-    plan2 transformUp function
+    plan1.foreach(_.setAnalyzed())
+    plan2 resolveOperators function
 
     assert(invocationCount === 1)
   }

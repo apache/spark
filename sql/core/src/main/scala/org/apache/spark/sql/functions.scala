@@ -1020,7 +1020,7 @@ object functions {
    */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
     Dataset[T](df.sparkSession,
-      ResolvedHint(df.logicalPlan, HintInfo(isBroadcastable = Option(true))))(df.exprEnc)
+      ResolvedHint(df.logicalPlan, HintInfo(broadcast = true)))(df.exprEnc)
   }
 
   /**
@@ -1210,7 +1210,7 @@ object functions {
   /**
    * Creates a new struct column.
    * If the input column is a column in a `DataFrame`, or a derived column expression
-   * that is named (i.e. aliased), its name would be remained as the StructField's name,
+   * that is named (i.e. aliased), its name would be retained as the StructField's name,
    * otherwise, the newly generated StructField's name would be auto generated as
    * `col` with a suffix `index + 1`, i.e. col1, col2, col3, ...
    *
@@ -1266,7 +1266,7 @@ object functions {
 
   /**
    * Parses the expression string into the column that it represents, similar to
-   * DataFrame.selectExpr
+   * [[Dataset#selectExpr]].
    * {{{
    *   // get the number of words of each length
    *   df.groupBy(expr("length(word)")).count()
@@ -2386,7 +2386,7 @@ object functions {
   def rtrim(e: Column): Column = withExpr { StringTrimRight(e.expr) }
 
   /**
-   * * Return the soundex code for the specified expression.
+   * Returns the soundex code for the specified expression.
    *
    * @group string_funcs
    * @since 1.5.0

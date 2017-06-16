@@ -283,7 +283,7 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
       > SELECT _FUNC_('100', 2, 10);
        4
       > SELECT _FUNC_(-10, 16, -10);
-       16
+       -16
   """)
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
