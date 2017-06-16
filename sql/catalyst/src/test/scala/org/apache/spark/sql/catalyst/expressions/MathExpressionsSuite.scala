@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts.implicitCast
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -643,5 +644,37 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BRound(-3.5, 0), -4.0)
     checkEvaluation(BRound(-0.35, 1), -0.4)
     checkEvaluation(BRound(-35, -1), -40)
+  }
+
+  test("width_bucket") {
+    def test(
+      expr: Double,
+      minValue: Double,
+      maxValue: Double,
+      numBucket: Long,
+      expected: Long): Unit = {
+      checkEvaluation(WidthBucket(Literal.create(expr, DoubleType),
+        Literal.create(minValue, DoubleType),
+        Literal.create(maxValue, DoubleType),
+        Literal.create(numBucket, LongType)),
+        expected)
+    }
+
+    test(5.35, 0.024, 10.06, 5, 3)
+
+    test(3.14, 0, 4, 3, 3)
+    test(2, 0, 4, 3, 2)
+    test(-1, 0, 3.2, 4, 0)
+
+    test(3.14, 4, 0, 3, 1)
+    test(2, 4, 0, 3, 2)
+    test(-1, 3.2, 0, 4, 5)
+
+    intercept[AnalysisException]{
+      WidthBucket(Literal.create(1.0, DoubleType),
+        Literal.create(1.0, DoubleType),
+        Literal.create(2.0, DoubleType),
+        Literal.create(-1L, LongType)).eval()
+    }
   }
 }

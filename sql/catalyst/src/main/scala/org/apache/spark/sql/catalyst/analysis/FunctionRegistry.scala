@@ -262,6 +262,7 @@ object FunctionRegistry {
     expression[Tan]("tan"),
     expression[Cot]("cot"),
     expression[Tanh]("tanh"),
+    expression[WidthBucket]("width_bucket"),
 
     expression[Add]("+"),
     expression[Subtract]("-"),

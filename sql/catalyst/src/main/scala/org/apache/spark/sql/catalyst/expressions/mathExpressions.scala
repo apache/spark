@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1185,4 +1185,52 @@ case class BRound(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
+}
+
+/**
+ *  The bucket number into which
+ *  the value of this expression would fall after being evaluated.
+ *
+ * @param expr id the expression for which the histogram is being created
+ * @param minValue is an expression that resolves
+ *                 to the minimum end point of the acceptable range for expr
+ * @param maxValue is an expression that resolves
+ *                 to the maximum end point of the acceptable range for expr
+ * @param numBucket is an An expression that resolves to
+ *                  a constant indicating the number of buckets
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr, min_value, max_value, num_bucket) - Returns an long between 0 and `num_buckets`+1 by mapping the `expr` into buckets defined by the range [`min_value`, `max_value`].",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(5.35, 0.024, 10.06, 5);
+       3
+  """)
+// scalastyle:on line.size.limit
+case class WidthBucket(
+  expr: Expression,
+  minValue: Expression,
+  maxValue: Expression,
+  numBucket: Expression) extends QuaternaryExpression with ImplicitCastInputTypes {
+
+  override def children: Seq[Expression] = Seq(expr, minValue, maxValue, numBucket)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
+  override def dataType: DataType = LongType
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(ex: Any, min: Any, max: Any, num: Any): Any = {
+    MathUtils.widthBucket(
+      ex.asInstanceOf[Double],
+      min.asInstanceOf[Double],
+      max.asInstanceOf[Double],
+      num.asInstanceOf[Long])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val mathUtils = MathUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, (ex, min, max, num) =>
+      s"${ev.value} = $mathUtils.widthBucket($ex, $min, $max, $num);"
+    )
+  }
 }
