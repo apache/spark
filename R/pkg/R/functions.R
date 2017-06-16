@@ -193,6 +193,7 @@ setMethod("atan",
 #' @export
 #' @aliases avg avg,Column-method
 #' @family aggregate functions
+#' @examples \dontrun{avg(df$c)}
 #' @note avg since 1.4.0
 setMethod("avg",
           signature(x = "Column"),
