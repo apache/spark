@@ -134,14 +134,14 @@ _functions_1_4 = {
 _collect_list_doc = """
     Aggregate function: returns a list of objects with duplicates.
 
-    >>> df2 = spark.createDataFrame([('Alice', 2), ('Bob', 5), ('Alice', 99)], ('name', 'age'))
+    >>> df2 = spark.createDataFrame([(u'Alice', 2), (u'Bob', 5), (u'Alice', 99)], ('name', 'age'))
     >>> df2.agg(collect_list('name')).collect()
     [Row(collect_list(name)=[u'Alice', u'Bob', u'Alice'])]
     """
 _collect_set_doc = """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
 
-    >>> df2 = spark.createDataFrame([('Alice', 2), ('Bob', 5), ('Alice', 99)], ('name', 'age'))
+    >>> df2 = spark.createDataFrame([(u'Alice', 2), (u'Bob', 5), (u'Alice', 99)], ('name', 'age'))
     >>> df2.agg(collect_set('name')).collect()
     [Row(collect_set(name)=[u'Bob', u'Alice'])]
     """
@@ -209,7 +209,7 @@ _window_functions = {
 }
 
 for _name, _doc in _functions.items():
-    globals()[_name] = since(1.3)(_create_function(_name, _doc))
+    globals()[_name] = since(1.3)(ignore_unicode_prefix(_create_function(_name, _doc)))
 for _name, _doc in _functions_1_4.items():
     globals()[_name] = since(1.4)(_create_function(_name, _doc))
 for _name, _doc in _binary_mathfunctions.items():
@@ -217,7 +217,7 @@ for _name, _doc in _binary_mathfunctions.items():
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
 for _name, _doc in _functions_1_6.items():
-    globals()[_name] = since(1.6)(_create_function(_name, _doc))
+    globals()[_name] = since(1.6)(ignore_unicode_prefix(_create_function(_name, _doc)))
 for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
 del _name, _doc
