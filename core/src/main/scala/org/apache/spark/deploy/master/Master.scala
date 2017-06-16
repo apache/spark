@@ -658,7 +658,7 @@ private[deploy] class Master(
   private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
-    for (app <- waitingApps ) {
+    for (app <- waitingApps) {
       val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
       // If the cores left is less than the coresPerExecutor,the cores left will not be allocated
       if (app.coresLeft >= coresPerExecutor.getOrElse(1)) {
