@@ -36,6 +36,9 @@ from pyspark import shuffle
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
 
+if sys.version >= '3':
+    unicode = str
+
 
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
@@ -177,8 +180,11 @@ def main(infile, outfile):
             process()
     except Exception:
         try:
+            exc_info = traceback.format_exc()
+            if isinstance(exc_info, unicode):
+                exc_info = exc_info.encode('utf-8')
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(traceback.format_exc().encode("utf-8"), outfile)
+            write_with_length(exc_info, outfile)
         except IOError:
             # JVM close the socket
             pass

@@ -1,3 +1,4 @@
+# coding=utf-8
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -1858,6 +1859,31 @@ class WorkerTests(ReusedPySparkTestCase):
                 self.assertRaises(Py4JJavaError, lambda: rdd.count())
         finally:
             self.sc.pythonVer = version
+
+    def test_exception_blocking(self):
+        """
+        SPARK-21045
+        Test whether program is blocked when occur exception in worker sending
+        exception to PythonRDD
+
+        """
+        import threading
+
+        def run():
+            try:
+
+                def f():
+                    raise Exception("中")
+
+                self.sc.parallelize([1]).map(lambda x: f()).count()
+            except Exception:
+                pass
+
+        t = threading.Thread(target=run)
+        t.daemon = True
+        t.start()
+        t.join(10)
+        self.assertFalse(t.isAlive(), 'Spark executor is blocked.')
 
 
 class SparkSubmitTests(unittest.TestCase):
