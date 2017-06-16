@@ -306,6 +306,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         offers.asScala.map(_.getId).foreach(d.declineOffer)
         launchingExecutors = false
         return
+      } else {
+        if (!launchingExecutors) {
+          launchingExecutors = true
+          localityWaitStartTime = System.currentTimeMillis()
+        }
       }
 
       logDebug(s"Received ${offers.size} resource offers.")
@@ -522,20 +527,18 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   private def satisfiesLocality(offerHostname: String): Boolean = {
-    if (hostToLocalTaskCount.nonEmpty) {
-      // Locality information is available
-      if (!launchingExecutors) {
-        launchingExecutors = true
-        localityWaitStartTime = System.currentTimeMillis()
-      }
-      val currentHosts = slaves.values.filter(_.taskIDs.nonEmpty).map(_.hostname).toSet
-      val allDesiredHosts = hostToLocalTaskCount.keys.toSet
-      val remainingHosts = allDesiredHosts -- currentHosts
-      if (!(remainingHosts contains offerHostname) &&
-        (System.currentTimeMillis() - localityWaitStartTime <= localityWait)) {
-        logDebug("Skipping host and waiting for locality. host: " + offerHostname)
-        return false
-      }
+    if (!Utils.isDynamicAllocationEnabled(conf) || hostToLocalTaskCount.isEmpty) {
+      return true
+    }
+
+    // Check the locality information
+    val currentHosts = slaves.values.filter(_.taskIDs.nonEmpty).map(_.hostname).toSet
+    val allDesiredHosts = hostToLocalTaskCount.keys.toSet
+    val remainingHosts = allDesiredHosts -- currentHosts
+    if (!(remainingHosts contains offerHostname) &&
+      (System.currentTimeMillis() - localityWaitStartTime <= localityWait)) {
+      logDebug("Skipping host and waiting for locality. host: " + offerHostname)
+      return false
     }
     true
   }
