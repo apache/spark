@@ -28,8 +28,8 @@ import scala.concurrent.Future
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
-import org.apache.spark.internal.config
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
+import org.apache.spark.internal.config
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcEndpointAddress
