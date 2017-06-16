@@ -920,9 +920,9 @@ setGeneric("array_contains", function(x, value) { standardGeneric("array_contain
 #' @export
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
 
-#' @rdname column_aggregate_functions
+#' @param x Column to compute on or a GroupedData object.
+#' @rdname avg
 #' @export
-#' @name NULL
 setGeneric("avg", function(x, ...) { standardGeneric("avg") })
 
 #' @rdname base64

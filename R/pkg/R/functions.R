@@ -185,24 +185,14 @@ setMethod("atan",
             column(jc)
           })
 
-#' @details
-#' \code{avg}: Returns the average of the values in a group.
+#' avg
 #'
-#' @rdname column_aggregate_functions
+#' Returns the average of the values in a group.
+#'
+#' @rdname avg
 #' @export
 #' @aliases avg avg,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' head(select(df, avg(df$mpg), mean(df$mpg), sum(df$mpg), min(df$wt), max(df$qsec)))
-#'
-#' # metrics by num of cylinders
-#' tmp <- agg(groupBy(df, "cyl"), avg(df$mpg), avg(df$hp), avg(df$wt), avg(df$qsec))
-#' head(orderBy(tmp, "cyl"))
-#'
-#' # car with the max mpg
-#' mpg_max <- as.numeric(collect(agg(df, max(df$mpg))))
-#' head(where(df, df$mpg == mpg_max))}
+#' @family aggregate functions
 #' @note avg since 1.4.0
 setMethod("avg",
           signature(x = "Column"),
@@ -1105,6 +1095,18 @@ setMethod("md5",
 #' @rdname column_aggregate_functions
 #' @aliases mean mean,Column-method
 #' @export
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, avg(df$mpg), mean(df$mpg), sum(df$mpg), min(df$wt), max(df$qsec)))
+#'
+#' # metrics by num of cylinders
+#' tmp <- agg(groupBy(df, "cyl"), avg(df$mpg), avg(df$hp), avg(df$wt), avg(df$qsec))
+#' head(orderBy(tmp, "cyl"))
+#'
+#' # car with the max mpg
+#' mpg_max <- as.numeric(collect(agg(df, max(df$mpg))))
+#' head(where(df, df$mpg == mpg_max))}
 #' @note mean since 1.5.0
 setMethod("mean",
           signature(x = "Column"),
