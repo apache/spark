@@ -74,7 +74,7 @@ private[deploy] class Master(
   private val completedApps = new ArrayBuffer[ApplicationInfo]
   private var nextAppNumber = 0
 
-  private val drivers = new HashSet[DriverInfo]
+  val drivers = new HashSet[DriverInfo]
   private val completedDrivers = new ArrayBuffer[DriverInfo]
   // Drivers currently spooled for scheduling
   private val waitingDrivers = new ArrayBuffer[DriverInfo]
