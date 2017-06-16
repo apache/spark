@@ -294,8 +294,7 @@ object PartitioningUtils {
       partitionSpec: Map[String, T],
       partColNames: Seq[String],
       tblName: String,
-      resolver: Resolver,
-      caseSensitiveAnalysis: Boolean): Map[String, T] = {
+      resolver: Resolver): Map[String, T] = {
     val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
       val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
         throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
@@ -304,7 +303,7 @@ object PartitioningUtils {
     }
 
     SchemaUtils.checkColumnNameDuplication(
-      normalizedPartSpec.map(_._1), "partition specification", caseSensitiveAnalysis)
+      normalizedPartSpec.map(_._1), "partition specification", resolver)
 
     normalizedPartSpec.toMap
   }

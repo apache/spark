@@ -19,6 +19,7 @@ package org.apache.spark.sql.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.types.StructType
 
 class SchemaUtilsSuite extends SparkFunSuite {
@@ -33,7 +34,7 @@ class SchemaUtilsSuite extends SparkFunSuite {
     assert(msg1.contains("""Found duplicate column(s) in SchemaUtilsSuite: "a";"""))
     val msg2 = intercept[AnalysisException] {
       SchemaUtils.checkColumnNameDuplication(
-        "a" :: "b" :: "a" :: Nil, "SchemaUtilsSuite", caseSensitiveAnalysis = true)
+        "a" :: "b" :: "a" :: Nil, "SchemaUtilsSuite", caseSensitiveResolution)
     }.getMessage
     assert(msg2.contains("""Found duplicate column(s) in SchemaUtilsSuite: "a";"""))
 
@@ -41,11 +42,11 @@ class SchemaUtilsSuite extends SparkFunSuite {
     SchemaUtils.checkSchemaColumnNameDuplication(
       StructType.fromDDL("a INT, b INT, c INT"), "SchemaUtilsSuite", caseSensitiveAnalysis = true)
     SchemaUtils.checkColumnNameDuplication(
-      "a" :: "b" :: "c" :: Nil, "SchemaUtilsSuite", caseSensitiveAnalysis = true)
+      "a" :: "b" :: "c" :: Nil, "SchemaUtilsSuite", caseSensitiveResolution)
     SchemaUtils.checkSchemaColumnNameDuplication(
       StructType.fromDDL("Aa INT, b INT, aA INT"), "SchemaUtilsSuite", caseSensitiveAnalysis = true)
     SchemaUtils.checkColumnNameDuplication(
-      "Aa" :: "b" :: "aA" :: Nil, "SchemaUtilsSuite", caseSensitiveAnalysis = true)
+      "Aa" :: "b" :: "aA" :: Nil, "SchemaUtilsSuite", caseSensitiveResolution)
 
     // Case-insensitive case
     val msg3 = intercept[AnalysisException] {
@@ -53,29 +54,29 @@ class SchemaUtilsSuite extends SparkFunSuite {
         StructType.fromDDL("Aa INT, b INT, Aa INT"), "SchemaUtilsSuite",
         caseSensitiveAnalysis = false)
     }.getMessage
-    assert(msg3.contains("""Found duplicate column(s) in SchemaUtilsSuite: "aa";"""))
+    assert(msg3.contains("""Found duplicate column(s) in SchemaUtilsSuite: "Aa";"""))
     val msg4 = intercept[AnalysisException] {
       SchemaUtils.checkColumnNameDuplication(
-        "Aa" :: "b" :: "Aa" :: Nil, "SchemaUtilsSuite", caseSensitiveAnalysis = false)
+        "Aa" :: "b" :: "Aa" :: Nil, "SchemaUtilsSuite", caseInsensitiveResolution)
     }.getMessage
-    assert(msg4.contains("""Found duplicate column(s) in SchemaUtilsSuite: "aa";"""))
+    assert(msg4.contains("""Found duplicate column(s) in SchemaUtilsSuite: "Aa";"""))
 
     val msg5 = intercept[AnalysisException] {
       SchemaUtils.checkSchemaColumnNameDuplication(
         StructType.fromDDL("a INT, bB INT, Bb INT"), "SchemaUtilsSuite",
         caseSensitiveAnalysis = false)
     }.getMessage
-    assert(msg5.contains("""Found duplicate column(s) in SchemaUtilsSuite: "bb";"""))
+    assert(msg5.contains("""Found duplicate column(s) in SchemaUtilsSuite: "bB";"""))
     val msg6 = intercept[AnalysisException] {
       SchemaUtils.checkColumnNameDuplication(
-        "a" :: "bB" :: "Bb" :: Nil, "SchemaUtilsSuite", caseSensitiveAnalysis = false)
+        "a" :: "bB" :: "Bb" :: Nil, "SchemaUtilsSuite", caseInsensitiveResolution)
     }.getMessage
-    assert(msg6.contains("""Found duplicate column(s) in SchemaUtilsSuite: "bb";"""))
+    assert(msg6.contains("""Found duplicate column(s) in SchemaUtilsSuite: "bB";"""))
 
     // Check no exception thrown
     SchemaUtils.checkSchemaColumnNameDuplication(
       StructType.fromDDL("a INT, b INT, c INT"), "SchemaUtilsSuite", caseSensitiveAnalysis = false)
     SchemaUtils.checkColumnNameDuplication(
-      "a" :: "b" :: "c" :: Nil, "SchemaUtilsSuite", caseSensitiveAnalysis = false)
+      "a" :: "b" :: "c" :: Nil, "SchemaUtilsSuite", caseInsensitiveResolution)
   }
 }

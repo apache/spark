@@ -255,7 +255,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     SchemaUtils.checkColumnNameDuplication(
       normalizedPartitionCols,
       "partition",
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      sparkSession.sessionState.conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
       if (DDLUtils.isHiveTable(table)) {
@@ -286,15 +286,14 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
           bucketSpec = bucketSpec,
           resolver = sparkSession.sessionState.conf.resolver)
 
-        val caseSensitiveAnalysis = sparkSession.sessionState.conf.caseSensitiveAnalysis
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.bucketColumnNames,
           "bucket",
-          caseSensitiveAnalysis)
+          sparkSession.sessionState.conf.resolver)
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.sortColumnNames,
           "sort",
-          caseSensitiveAnalysis)
+          sparkSession.sessionState.conf.resolver)
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
@@ -323,7 +322,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
       partColNames: Seq[String]): InsertIntoTable = {
 
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
-      insert.partition, partColNames, tblName, conf.resolver, conf.caseSensitiveAnalysis)
+      insert.partition, partColNames, tblName, conf.resolver)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))

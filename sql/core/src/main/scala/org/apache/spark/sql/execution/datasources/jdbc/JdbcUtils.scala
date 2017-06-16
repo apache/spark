@@ -750,7 +750,8 @@ object JdbcUtils extends Logging {
     val nameEquality = df.sparkSession.sessionState.conf.resolver
 
     // checks duplicate columns in the user specified column types.
-    SchemaUtils.checkSchemaColumnNameDuplication(userSchema, "createTableColumnTypes option value")
+    SchemaUtils.checkColumnNameDuplication(
+      userSchema.map(_.name), "createTableColumnTypes option value", nameEquality)
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>

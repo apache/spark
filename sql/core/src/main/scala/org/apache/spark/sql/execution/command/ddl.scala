@@ -430,8 +430,7 @@ case class AlterTableAddPartitionCommand(
         spec,
         table.partitionColumnNames,
         table.identifier.quotedString,
-        sparkSession.sessionState.conf.resolver,
-        sparkSession.sessionState.conf.caseSensitiveAnalysis)
+        sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(normalizedSpec, table.storage.copy(
         locationUri = location.map(CatalogUtils.stringToURI)))
@@ -481,15 +480,13 @@ case class AlterTableRenamePartitionCommand(
       oldPartition,
       table.partitionColumnNames,
       table.identifier.quotedString,
-      sparkSession.sessionState.conf.resolver,
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      sparkSession.sessionState.conf.resolver)
 
     val normalizedNewPartition = PartitioningUtils.normalizePartitionSpec(
       newPartition,
       table.partitionColumnNames,
       table.identifier.quotedString,
-      sparkSession.sessionState.conf.resolver,
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      sparkSession.sessionState.conf.resolver)
 
     catalog.renamePartitions(
       tableName, Seq(normalizedOldPartition), Seq(normalizedNewPartition))
@@ -531,8 +528,7 @@ case class AlterTableDropPartitionCommand(
         spec,
         table.partitionColumnNames,
         table.identifier.quotedString,
-        sparkSession.sessionState.conf.resolver,
-        sparkSession.sessionState.conf.caseSensitiveAnalysis)
+        sparkSession.sessionState.conf.resolver)
     }
 
     catalog.dropPartitions(

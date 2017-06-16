@@ -449,8 +449,7 @@ case class TruncateTableCommand(
             spec,
             partCols,
             table.identifier.quotedString,
-            spark.sessionState.conf.resolver,
-            spark.sessionState.conf.caseSensitiveAnalysis)
+            spark.sessionState.conf.resolver)
         }
         val partLocations =
           catalog.listPartitions(table.identifier, normalizedSpec).map(_.storage.locationUri)
