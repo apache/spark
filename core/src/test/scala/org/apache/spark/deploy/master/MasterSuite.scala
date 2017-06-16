@@ -169,7 +169,7 @@ class MasterSuite extends SparkFunSuite
       master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
       // Wait until Master recover from checkpoint data.
       eventually(timeout(5 seconds), interval(100 milliseconds)) {
-        master.idToApp.size should be(1)
+        master.workers.size should be(1)
       }
 
       master.idToApp.keySet should be(Set(fakeAppInfo.id))
