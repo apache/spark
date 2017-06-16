@@ -631,7 +631,7 @@ def struct(*cols):
 def greatest(*cols):
     """
     Returns the greatest value of the list of column names, skipping null values.
-    This function takes at least 2 parameters. It will return null if all parameters are null.
+    This function takes at least 2 parameters. It will return null iff all parameters are null.
 
     >>> df = spark.createDataFrame([(1, 4, 3)], ['a', 'b', 'c'])
     >>> df.select(greatest(df.a, df.b, df.c).alias("greatest")).collect()
@@ -647,7 +647,7 @@ def greatest(*cols):
 def least(*cols):
     """
     Returns the least value of the list of column names, skipping null values.
-    This function takes at least 2 parameters. It will return null if all parameters are null.
+    This function takes at least 2 parameters. It will return null iff all parameters are null.
 
     >>> df = spark.createDataFrame([(1, 4, 3)], ['a', 'b', 'c'])
     >>> df.select(least(df.a, df.b, df.c).alias("least")).collect()
@@ -1052,7 +1052,7 @@ def to_timestamp(col, format=None):
     [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(to_timestamp(df.ts, 'yyyy-MM-dd HH:mm:ss').alias('dt')).collect()
+    >>> df.select(to_timestamp(df.t, 'yyyy-MM-dd HH:mm:ss').alias('dt')).collect()
     [Row(dt=datetime.datetime(1997, 2, 28, 10, 30))]
     """
     sc = SparkContext._active_spark_context
@@ -1303,7 +1303,7 @@ _string_functions = {
                'uppercase. Words are delimited by whitespace.',
     'lower': 'Converts a string column to lower case.',
     'upper': 'Converts a string column to upper case.',
-    'reverse': 'Reverses a column and returns it as a new string column.',
+    'reverse': 'Reverses a string column and returns it as a new string column.',
     'ltrim': 'Trim the spaces from left end for the specified string value.',
     'rtrim': 'Trim the spaces from right end for the specified string value.',
     'trim': 'Trim the spaces from both ends for the specified string column.',
