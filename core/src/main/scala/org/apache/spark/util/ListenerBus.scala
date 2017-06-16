@@ -25,25 +25,29 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 
-private [spark] trait MultipleListenerBus[L <: AnyRef, E]{
+private [spark] trait WithListenerBus[L <: AnyRef, E]{
 
   def addListener(listener: L): Unit
 
   def removeListener(listener: L): Unit
-
-  private[spark] def addIsolatedListener(listener: L,
-    eventFilter: Option[E => Boolean]): Unit
 
   private[spark] def findListenersByClass[T <: L : ClassTag]: Seq[T]
 
   private[spark] def listeners: Seq[L]
 }
 
+private [spark] trait WithMultipleListenerBus[L <: AnyRef, E]
+  extends WithListenerBus[L, E]{
+
+  private[spark] def addIsolatedListener(listener: L,
+                                         eventFilter: Option[E => Boolean]): Unit
+}
+
 
 /**
  * An event bus which posts events to its listeners.
  */
-private[spark] trait ListenerBus[L <: AnyRef, E] extends MultipleListenerBus[L, E] with Logging {
+private[spark] trait ListenerBus[L <: AnyRef, E] extends WithListenerBus[L, E] with Logging {
 
   // Marked `private[spark]` for access in tests.
   private[spark] val internalListeners = new CopyOnWriteArrayList[L]
@@ -54,12 +58,6 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends MultipleListenerBus[L, 
   final override def addListener(listener: L): Unit = {
     internalListeners.add(listener)
   }
-
-   /**
-    * For the synchronous implementation, this method is equivalent to the simple addListener
-    */
-  final override def addIsolatedListener(listener: L, eventFilter: Option[(E) => Boolean]): Unit =
-    internalListeners.add(listener)
 
   /**
    * Remove a listener and it won't receive any events. This method is thread-safe and can be called

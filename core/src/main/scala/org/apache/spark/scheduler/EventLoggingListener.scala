@@ -142,6 +142,7 @@ private[spark] class EventLoggingListener(
     // scalastyle:on println
     if (testing) {
       loggedEvents += eventJson
+      flush()
     }
   }
 
@@ -155,7 +156,12 @@ private[spark] class EventLoggingListener(
 
   def log(event: SparkListenerEvent): Unit = {
     if (event.logEvent) {
-      logEvent(event)
+      val toLog = event match {
+        case update: SparkListenerEnvironmentUpdate =>
+          redactEvent(update)
+        case _ => event
+      }
+      logEvent(toLog)
       nbMessageProcessed = nbMessageProcessed + 1
       if (nbMessageProcessed == FLUSH_FREQUENCY) {
         flush()

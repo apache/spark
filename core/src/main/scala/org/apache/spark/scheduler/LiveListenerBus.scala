@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.bus._
-import org.apache.spark.util.MultipleListenerBus
+import org.apache.spark.util.{WithListenerBus, WithMultipleListenerBus}
 
 /**
  * Asynchronously passes SparkListenerEvents to registered SparkListeners.
@@ -40,7 +40,7 @@ import org.apache.spark.util.MultipleListenerBus
  * is stopped when `stop()` is called, and it will drop further events after stopping.
  */
 private[spark] class LiveListenerBus(conf: SparkConf)
-  extends MultipleListenerBus[SparkListenerInterface, SparkListenerEvent] with Logging{
+  extends WithMultipleListenerBus[SparkListenerInterface, SparkListenerEvent] with Logging{
 
   import LiveListenerBus._
 
@@ -131,7 +131,7 @@ private[spark] class LiveListenerBus(conf: SparkConf)
     startStopAddRemoveLock.unlock()
   }
 
-  final def post(event: SparkListenerEvent): Unit = {
+  def post(event: SparkListenerEvent): Unit = {
     if (stopped.get) {
       // Drop further events to make `listenerThread` exit ASAP
       logDebug(s"$name has already stopped! Dropping event $event")
@@ -139,7 +139,7 @@ private[spark] class LiveListenerBus(conf: SparkConf)
     }
     postLock.lock()
     defaultListenerQueue.post(event)
-    otherListenerQueues.foreach(_.post(event))
+    otherListenerQueues.foreach(q => q.post(event))
     postLock.unlock()
   }
 
@@ -184,6 +184,7 @@ private[spark] class LiveListenerBus(conf: SparkConf)
         "bus that has not yet started!")
     }
     if (!stopped.get) {
+      stopped.set(true)
       defaultListenerQueue.askStop()
       otherListenerQueues.foreach(_.askStop())
       defaultListenerQueue.waitForStop()

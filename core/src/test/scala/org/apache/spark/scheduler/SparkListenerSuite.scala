@@ -64,13 +64,9 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.addListener(counter)
 
     val metrics = bus.metricsFromMainQueue._1
-    val oListenerTimer = bus.metricsFromMainQueue._2.get(counter).flatten
-    assert(oListenerTimer.isDefined)
-    val listenerTimer = oListenerTimer.get
     assert(metrics.numEventsPosted.getCount === 0)
     assert(metrics.numDroppedEvents.getCount === 0)
     assert(metrics.queueSize.getValue === 0)
-    assert(listenerTimer.getCount === 0)
 
     // Post five events:
     (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
@@ -87,7 +83,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(counter.count === 5)
     assert(metrics.queueSize.getValue === 0)
-    assert(listenerTimer.getCount === 5)
+    assert(bus.metricsFromMainQueue._2.get(counter).flatten.get.getCount === 5)
 
     // After listener bus has stopped, posting events should not increment counter
     bus.stop()
@@ -181,6 +177,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Post a message to the listener bus and wait for processing to begin:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
     listenerStarted.acquire()
+    listenerWait.release()
+    bus.waitUntilEmpty(200)
     assert(metrics.queueSize.getValue === 0)
     assert(metrics.numDroppedEvents.getCount === 0)
 
@@ -518,7 +516,9 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
  */
 private class BasicJobCounter extends SparkListener {
   var count = 0
-  override def onJobEnd(job: SparkListenerJobEnd): Unit = count += 1
+  override def onJobEnd(job: SparkListenerJobEnd): Unit = {
+    count += 1
+  }
 }
 
 /**

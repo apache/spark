@@ -80,6 +80,7 @@ private[scheduler] class SingleListenerBusQueue(
   override protected def initAdditionalMetrics(queueMetrics: QueueMetrics): Unit = {
     listener match {
       case group: FixGroupOfListener => group.initTimers(queueMetrics)
+      case _ =>
     }
   }
 }

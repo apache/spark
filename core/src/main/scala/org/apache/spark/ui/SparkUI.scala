@@ -33,7 +33,7 @@ import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
 import org.apache.spark.ui.jobs.{JobProgressListener, JobsTab, StagesTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
 import org.apache.spark.ui.storage.{StorageListener, StorageTab}
-import org.apache.spark.util.{MultipleListenerBus, Utils}
+import org.apache.spark.util.{Utils, WithMultipleListenerBus}
 
 /**
  * Top level user interface for a Spark application.
@@ -161,7 +161,7 @@ private[spark] object SparkUI {
   def createLiveUI(
                     sc: SparkContext,
                     conf: SparkConf,
-                    listenerBus: MultipleListenerBus[SparkListenerInterface, SparkListenerEvent],
+        listenerBus: WithMultipleListenerBus[SparkListenerInterface, SparkListenerEvent],
                     jobProgressListener: JobProgressListener,
                     securityManager: SecurityManager,
                     appName: String,
@@ -172,7 +172,7 @@ private[spark] object SparkUI {
 
   def createHistoryUI(
                        conf: SparkConf,
-                       listenerBus: MultipleListenerBus[SparkListenerInterface, SparkListenerEvent],
+       listenerBus: WithMultipleListenerBus[SparkListenerInterface, SparkListenerEvent],
                        securityManager: SecurityManager,
                        appName: String,
                        basePath: String,
@@ -199,7 +199,7 @@ private[spark] object SparkUI {
   private def create(
                       sc: Option[SparkContext],
                       conf: SparkConf,
-                      listenerBus: MultipleListenerBus[SparkListenerInterface, SparkListenerEvent],
+         listenerBus: WithMultipleListenerBus[SparkListenerInterface, SparkListenerEvent],
                       securityManager: SecurityManager,
                       appName: String,
                       basePath: String = "",

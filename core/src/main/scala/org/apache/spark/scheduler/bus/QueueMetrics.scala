@@ -17,15 +17,16 @@
 
 package org.apache.spark.scheduler.bus
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry, Timer}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.scheduler.SparkListenerEvent
 
 private[spark] class QueueMetrics(
   busName: String,
-  queue: Array[SparkListenerEvent],
+  private val nbElements: AtomicInteger,
   withEventProcessingTime: Boolean) extends Source with Logging {
 
   override val sourceName: String = s"${busName}Bus"
@@ -49,7 +50,7 @@ private[spark] class QueueMetrics(
     */
   val queueSize: Gauge[Int] = {
     metricRegistry.register(MetricRegistry.name("queueSize"), new Gauge[Int]{
-      override def getValue: Int = queue.length
+      override def getValue: Int = nbElements.get()
     })
   }
 

@@ -55,7 +55,7 @@ private[spark] abstract class ListenerBusQueue (
   private val stopped = new AtomicBoolean(false)
 
   private[scheduler] val metrics =
-    new QueueMetrics(busName, circularBuffer, withEventProcessingTime)
+    new QueueMetrics(busName, numberOfEvents, withEventProcessingTime)
 
   private val consumerThread = new Thread(s"$busName bus consumer") {
     setDaemon(true)
@@ -72,10 +72,11 @@ private[spark] abstract class ListenerBusQueue (
                 logError(s"Listener bus $busName threw an exception", e)
             }
             timerContext.foreach(_.stop())
+            circularBuffer(readIndex) = null // clean reference
             numberOfEvents.decrementAndGet()
             readIndex = (readIndex + 1) % bufferSize
           } else {
-            Thread.sleep(20) // give more chance for producer thread to be scheduled
+             Thread.sleep(1) // give more chance for producer thread to be scheduled
           }
         }
       }
@@ -117,7 +118,7 @@ private[spark] abstract class ListenerBusQueue (
   private[scheduler] def isAlive: Boolean = consumerThread.isAlive
 
   // For test only
-  private[scheduler] def isQueueEmpty: Boolean = circularBuffer.isEmpty
+  private[scheduler] def isQueueEmpty: Boolean = numberOfEvents.get() == 0
 
 
   private def onDropEvent(): Unit = {
@@ -151,7 +152,7 @@ private[spark] object ListenerBusQueue {
   private val DROP_MESSAGE_LOG_FREQUENCY = 50
   private[scheduler] val ALL_MESSAGES: SparkListenerEvent => Boolean = _ => true
 
-  private[bus] abstract class GroupSparkListener() extends SparkListenerInterface {
+  private[bus] abstract class GroupSparkListener() extends SparkListenerInterface with Logging {
 
     private[bus] def listeners: Seq[(SparkListenerInterface, Option[Timer])]
 
@@ -245,7 +246,12 @@ private[spark] object ListenerBusQueue {
       while (i < currentCollection.length) {
         val listenerAndTimer = currentCollection(i)
         val timer = listenerAndTimer._2.map(_.time())
-        func(listenerAndTimer._1)(ev)
+        try {
+          func(listenerAndTimer._1)(ev)
+        } catch {
+          case NonFatal(e) =>
+            logError(s"a listener ${listenerAndTimer._1.getClass.getName} threw an exception", e)
+        }
         timer.foreach(_.stop())
         i = i + 1
       }
