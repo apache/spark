@@ -278,6 +278,15 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (pyFiles != null && !isPython) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
     }
+    if (totalExecutorCores != null && executorCores != null) {
+      val totalCores = Try(totalExecutorCores.toInt).getOrElse(-1)
+      val coresPerExecutor = Try(executorCores.toInt).getOrElse(-1)
+      if (totalCores % coresPerExecutor != 0) {
+        SparkSubmit.printWarning(s"Total executor cores: ${totalExecutorCores} is not " +
+          s"divisible by cores per executor: ${executorCores}, " +
+          s"the left cores: ${totalCores % coresPerExecutor} will not be allocated")
+      }
+    }
 
     if (master.startsWith("yarn")) {
       val hasHadoopEnv = env.contains("HADOOP_CONF_DIR") || env.contains("YARN_CONF_DIR")
