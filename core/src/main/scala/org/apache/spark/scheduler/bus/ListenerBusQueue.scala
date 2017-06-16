@@ -146,7 +146,7 @@ private[spark] abstract class ListenerBusQueue (
   protected def initAdditionalMetrics(queueMetrics: QueueMetrics): Unit = {}
 }
 
-private[scheduler] object ListenerBusQueue {
+private[spark] object ListenerBusQueue {
 
   private val DROP_MESSAGE_LOG_FREQUENCY = 50
   private[scheduler] val ALL_MESSAGES: SparkListenerEvent => Boolean = _ => true
@@ -252,7 +252,7 @@ private[scheduler] object ListenerBusQueue {
     }
   }
 
-  private[scheduler] class FixGroupOfListener(
+  private[spark] class FixGroupOfListener(
     listenerSeq: Seq[SparkListenerInterface],
     override val busName: String)
     extends GroupSparkListener {

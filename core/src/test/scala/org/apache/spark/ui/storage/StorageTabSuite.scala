@@ -18,9 +18,9 @@
 package org.apache.spark.ui.storage
 
 import org.scalatest.BeforeAndAfter
-
 import org.apache.spark._
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.bus.ListenerBusQueue.FixGroupOfListener
 import org.apache.spark.storage._
 import org.apache.spark.util.MultipleListenerBus
 
@@ -47,8 +47,10 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     bus = new LiveListenerBus(conf)
     storageStatusListener = new StorageStatusListener(conf)
     storageListener = new StorageListener(storageStatusListener)
-    bus.addListener(storageStatusListener)
-    bus.addListener(storageListener)
+    bus.addIsolatedListener(
+      new FixGroupOfListener(
+        Seq(storageStatusListener, storageListener),
+        "storageTest"), None)
   }
 
   test("stage submitted / completed") {
