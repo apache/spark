@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
@@ -97,30 +97,20 @@ case class UnaryPositive(child: Expression)
 case class Abs(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, StringType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
-  override def dataType: DataType = child.dataType match {
-    case dt: NumericType => dt
-    case dt: StringType => DoubleType
-  }
+  override def dataType: DataType = child.dataType
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case dt: DecimalType =>
       defineCodeGen(ctx, ev, c => s"$c.abs()")
     case dt: NumericType =>
       defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dt)})(java.lang.Math.abs($c))")
-    case dt: StringType =>
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.abs(Double.valueOf($c.toString()))")
   }
 
-  protected override def nullSafeEval(input: Any): Any = child.dataType match {
-    case StringType =>
-      numeric.abs(input.asInstanceOf[UTF8String].toString.toDouble)
-    case _: NumericType =>
-      numeric.abs(input)
-  }
+  protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
