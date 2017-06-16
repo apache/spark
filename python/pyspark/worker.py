@@ -39,6 +39,7 @@ utf8_deserializer = UTF8Deserializer()
 if sys.version >= '3':
     unicode = str
 
+
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
     write_long(int(1000 * boot), outfile)
