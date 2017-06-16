@@ -479,7 +479,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       }.getMessage()
       assert(msg.contains(
-        """Found duplicate column(s) in createTableColumnTypes option value: "name";"""))
+        """Found duplicate column(s) in createTableColumnTypes option value: `name`;"""))
     }
   }
 

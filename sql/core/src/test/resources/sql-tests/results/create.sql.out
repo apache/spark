@@ -16,7 +16,7 @@ CREATE TABLE t (c0 STRING, c1 INT, c1 DOUBLE, c0 INT) USING parquet
 struct<>
 -- !query 1 output
 org.apache.spark.sql.AnalysisException
-Found duplicate column(s) in table definition of `t`: "c0", "c1";
+Found duplicate column(s) in table definition of `t`: `c0`, `c1`;
 
 
 -- !query 2
@@ -33,7 +33,7 @@ CREATE TABLE t (c0 STRING, c1 INT, c1 DOUBLE, c0 INT) USING parquet
 struct<>
 -- !query 3 output
 org.apache.spark.sql.AnalysisException
-Found duplicate column(s) in table definition of `t`: "c0", "c1";
+Found duplicate column(s) in table definition of `t`: `c0`, `c1`;
 
 
 -- !query 4
@@ -42,4 +42,4 @@ CREATE TABLE t (ab STRING, cd INT, ef DOUBLE, Ab INT) USING parquet
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-Found duplicate column(s) in table definition of `t`: "ab";
+Found duplicate column(s) in table definition of `t`: `ab`;

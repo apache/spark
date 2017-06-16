@@ -31,6 +31,14 @@ import org.apache.spark.sql.types.StructType
  */
 private[spark] object SchemaUtils {
 
+  /**
+   * Checks if an input schema has duplicate column names. This throws an exception if the
+   * duplication exists.
+   *
+   * @param schema schema to check
+   * @param colType column type name, used in an exception message
+   * @param caseSensitiveAnalysis whether duplication checks should be case sensitive or not
+   */
   def checkSchemaColumnNameDuplication(
       schema: StructType, colType: String, caseSensitiveAnalysis: Boolean = false): Unit = {
     val resolver = if (caseSensitiveAnalysis) {
@@ -41,18 +49,26 @@ private[spark] object SchemaUtils {
     checkColumnNameDuplication(schema.map(_.name), colType, resolver)
   }
 
+  /**
+   * Checks if input column names have duplicate identifiers. This throws an exception if
+   * the duplication exists.
+   *
+   * @param colNames column names to check
+   * @param colType column type name, used in an exception message
+   * @param resolver resolver used to determine if two identifiers are equal
+   */
   def checkColumnNameDuplication(
-      names: Seq[String], colType: String, resolver: Resolver): Unit = {
+      colNames: Seq[String], colType: String, resolver: Resolver): Unit = {
     val duplicateColumns = mutable.ArrayBuffer[String]()
-    names.foreach { name =>
-      val sameColNames = names.filter(resolver(_, name))
+    colNames.foreach { name =>
+      val sameColNames = colNames.filter(resolver(_, name))
       if (sameColNames.size > 1 && !duplicateColumns.exists(resolver(_, name))) {
         duplicateColumns.append(name)
       }
     }
     if (duplicateColumns.size > 0) {
       throw new AnalysisException(s"Found duplicate column(s) in $colType: " +
-        duplicateColumns.map(colName => s""""$colName"""").mkString(", "))
+        duplicateColumns.map(colName => s"`$colName`").mkString(", "))
     }
   }
 }
