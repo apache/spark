@@ -6,3 +6,4 @@
 ^README\.Rmd$
 ^src-native$
 ^html$
+^tests/fulltests/*
