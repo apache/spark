@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
-import java.net.URI
 
 import scala.collection.mutable
 import scala.io.Source
