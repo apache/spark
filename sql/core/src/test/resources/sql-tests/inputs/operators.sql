@@ -81,6 +81,11 @@ select 1 > 0.00001;
 -- mod
 select mod(7, 2), mod(7, 0), mod(0, 2), mod(7, null), mod(null, 2), mod(null, null);
 
+-- length
+select BIT_LENGTH('abc');
+select CHAR_LENGTH('abc');
+select OCTET_LENGTH('abc');
+
 -- width_bucket
 select width_bucket(5.35, 0.024, 10.06, 5);
 select width_bucket(5.35, 0.024, 10.06, -5);

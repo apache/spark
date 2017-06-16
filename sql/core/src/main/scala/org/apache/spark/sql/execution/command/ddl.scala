@@ -235,7 +235,7 @@ case class AlterTableSetPropertiesCommand(
     // direct property.
     val newTable = table.copy(
       properties = table.properties ++ properties,
-      comment = properties.get("comment"))
+      comment = properties.get("comment").orElse(table.comment))
     catalog.alterTable(newTable)
     Seq.empty[Row]
   }

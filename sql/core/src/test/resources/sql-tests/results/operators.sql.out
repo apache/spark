@@ -423,25 +423,24 @@ struct<(7 % 2):int,(7 % 0):int,(0 % 2):int,(7 % CAST(NULL AS INT)):int,(CAST(NUL
 
 
 -- !query 51
-select width_bucket(5.35, 0.024, 10.06, 5)
+select BIT_LENGTH('abc')
 -- !query 51 schema
-struct<widthbucket(CAST(5.35 AS DOUBLE), CAST(0.024 AS DOUBLE), CAST(10.06 AS DOUBLE), CAST(5 AS BIGINT)):bigint>
+struct<bitlength(abc):int>
 -- !query 51 output
-3
+24
 
 
 -- !query 52
-select width_bucket(5.35, 0.024, 10.06, -5)
+select CHAR_LENGTH('abc')
 -- !query 52 schema
-struct<>
+struct<length(abc):int>
 -- !query 52 output
-org.apache.spark.sql.AnalysisException
-The num of bucket must be greater than 0, but got -5;
+3
 
 
 -- !query 53
-select width_bucket(null, 0.024, 10.06, 5)
+select OCTET_LENGTH('abc')
 -- !query 53 schema
-struct<widthbucket(CAST(NULL AS DOUBLE), CAST(0.024 AS DOUBLE), CAST(10.06 AS DOUBLE), CAST(5 AS BIGINT)):bigint>
+struct<octetlength(abc):int>
 -- !query 53 output
-NULL
+3
