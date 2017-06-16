@@ -86,6 +86,9 @@ select BIT_LENGTH('abc');
 select CHAR_LENGTH('abc');
 select OCTET_LENGTH('abc');
 
+-- abs
+select abs(-3.13), abs('-2.19');
+
 -- width_bucket
 select width_bucket(5.35, 0.024, 10.06, 5);
 select width_bucket(5.35, 0.024, 10.06, -5);
