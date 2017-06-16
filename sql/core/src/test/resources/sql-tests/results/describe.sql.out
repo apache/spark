@@ -127,6 +127,7 @@ Provider            	parquet
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
+Comment             	table_comment       	                    
 Table Properties    	[e=3]               	                    
 Location [not included in comparison]sql/core/spark-warehouse/t	                    
 Storage Properties  	[a=1, b=2]          	                    
@@ -157,6 +158,7 @@ Provider            	parquet
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
+Comment             	table_comment       	                    
 Table Properties    	[e=3]               	                    
 Location [not included in comparison]sql/core/spark-warehouse/t	                    
 Storage Properties  	[a=1, b=2]          	                    
