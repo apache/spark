@@ -71,8 +71,8 @@ _lit_doc = """
     Creates a :class:`Column` of literal value.
 
     >>> df.withColumn('height', lit(5)).withColumn('spark_user', lit(True)).collect()
-    [Row(age=2, name='Alice', height=5, spark_user=True),
-     Row(age=5, name='Bob', height=5, spark_user=True)]
+    [Row(age=2, name=u'Alice', height=5, spark_user=True),
+     Row(age=5, name=u'Bob', height=5, spark_user=True)]
     """
 _functions = {
     'lit': _lit_doc,
