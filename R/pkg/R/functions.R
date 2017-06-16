@@ -23,7 +23,8 @@ NULL
 #' Aggregate functions defined for \code{Column}.
 #'
 #' @param x Column to compute on.
-#' @param ... additional argument(s).
+#' @param y,na.rm,use currently not used.
+#' @param ... additional argument(s). For example, it could be used to pass additional Columns.
 #' @name column_aggregate_functions
 #' @rdname column_aggregate_functions
 #' @family aggregate functions
@@ -100,7 +101,7 @@ setMethod("acos",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{approxCountDistinct}: Returns the approximate number of distinct items in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -111,7 +112,7 @@ setMethod("acos",
 #' \dontrun{
 #' head(select(df, approxCountDistinct(df$gear)))
 #' head(select(df, approxCountDistinct(df$gear, 0.02)))
-#' head(select(df, countDistinct(df$gear)))
+#' head(select(df, countDistinct(df$gear, df$cyl)))
 #' head(select(df, n_distinct(df$gear)))
 #' head(distinct(select(df, "gear")))}
 #' @note approxCountDistinct(Column) since 1.4.0
@@ -184,7 +185,7 @@ setMethod("atan",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{avg}: Returns the average of the values in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -849,7 +850,7 @@ setMethod("isnan",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{kurtosis}: Returns the kurtosis of the values in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1064,7 +1065,7 @@ setMethod("ltrim",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{max}: Returns the maximum value of the expression in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1098,7 +1099,7 @@ setMethod("md5",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{mean}: Returns the average of the values in a group. Alias for \code{avg}.
 #'
 #' @rdname column_aggregate_functions
@@ -1112,7 +1113,7 @@ setMethod("mean",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{min}: Returns the minimum value of the expression in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1343,7 +1344,7 @@ setMethod("rtrim",
           })
 
 
-#' @section Details:
+#' @details
 #' \code{sd}: Alias for \code{stddev_samp}.
 #'
 #' @rdname column_aggregate_functions
@@ -1462,7 +1463,7 @@ setMethod("sinh",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{skewness}: Returns the skewness of the values in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1518,7 +1519,7 @@ setMethod("spark_partition_id",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{stddev}: Alias for \code{std_dev}.
 #'
 #' @rdname column_aggregate_functions
@@ -1531,7 +1532,7 @@ setMethod("stddev",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{stddev_pop}: Returns the population standard deviation of the expression in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1545,7 +1546,7 @@ setMethod("stddev_pop",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{stddev_samp}: Returns the unbiased sample standard deviation of the expression in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1609,7 +1610,7 @@ setMethod("sqrt",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{sum}: Returns the sum of all values in the expression.
 #'
 #' @rdname column_aggregate_functions
@@ -1623,7 +1624,7 @@ setMethod("sum",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{sumDistinct}: Returns the sum of distinct values in the expression.
 #'
 #' @rdname column_aggregate_functions
@@ -1924,7 +1925,7 @@ setMethod("upper",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{var}: Alias for \code{var_samp}.
 #'
 #' @rdname column_aggregate_functions
@@ -1953,7 +1954,7 @@ setMethod("variance",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{var_pop}: Returns the population variance of the values in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -1967,7 +1968,7 @@ setMethod("var_pop",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{var_samp}: Returns the unbiased variance of the values in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -2198,7 +2199,7 @@ setMethod("approxCountDistinct",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{countDistinct}: Returns the number of distinct items in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -2322,7 +2323,7 @@ setMethod("sign", signature(x = "Column"),
             signum(x)
           })
 
-#' @section Details:
+#' @details
 #' \code{n_distinct}: Returns the number of distinct items in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -3652,7 +3653,7 @@ setMethod("create_map",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{collect_list}: Creates a list of objects with duplicates.
 #'
 #' @rdname column_aggregate_functions
@@ -3672,7 +3673,7 @@ setMethod("collect_list",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{collect_set}: Creates a list of objects with duplicate elements eliminated.
 #'
 #' @rdname column_aggregate_functions
@@ -3837,7 +3838,7 @@ setMethod("not",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{grouping_bit}: Indicates whether a specified column in a GROUP BY list is aggregated or not,
 #' returns 1 for aggregated or 0 for not aggregated in the result set. Same as \code{GROUPING} in SQL
 #' and \code{grouping} function in Scala.
@@ -3869,7 +3870,7 @@ setMethod("grouping_bit",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{grouping_id}: Returns the level of grouping.
 #' Equals to \code{
 #' grouping_bit(c1) * 2^(n - 1) + grouping_bit(c2) * 2^(n - 2)  + ... + grouping_bit(cn)

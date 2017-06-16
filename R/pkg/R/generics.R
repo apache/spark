@@ -1417,7 +1417,6 @@ setGeneric("unix_timestamp", function(x, format) { standardGeneric("unix_timesta
 setGeneric("upper", function(x) { standardGeneric("upper") })
 
 #' @rdname column_aggregate_functions
-#' @param y,na.rm,use currently not used.
 #' @export
 #' @name NULL
 setGeneric("var", function(x, y = NULL, na.rm = FALSE, use) { standardGeneric("var") })
