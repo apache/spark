@@ -54,8 +54,16 @@ case class ComplexPlan(exprs: Seq[Seq[Expression]])
   override def output: Seq[Attribute] = Nil
 }
 
-case class ExpressionInMap(map: Map[String, Expression]) extends Expression with Unevaluable {
+case class ExpressionInMap(map: Map[String, Expression]) extends Unevaluable {
   override def children: Seq[Expression] = map.values.toSeq
+  override def nullable: Boolean = true
+  override def dataType: NullType = NullType
+  override lazy val resolved = true
+}
+
+case class SeqTupleExpression(sons: Seq[(Expression, Expression)],
+    nonSons: Seq[(Expression, Expression)]) extends Unevaluable {
+  override def children: Seq[Expression] = sons.flatMap(t => Iterator(t._1, t._2))
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
   override lazy val resolved = true
@@ -144,6 +152,17 @@ class TreeNodeSuite extends SparkFunSuite {
 
     actual = dummy2 transform toZero
     assert(actual === Dummy(None))
+  }
+
+  test("mapChildren should only works on children") {
+    val children = Seq((Literal(1), Literal(2)))
+    val nonChildren = Seq((Literal(3), Literal(4)))
+    val before = SeqTupleExpression(children, nonChildren)
+    val toZero: PartialFunction[Expression, Expression] = { case Literal(_, _) => Literal(0) }
+    val expect = SeqTupleExpression(Seq((Literal(0), Literal(0))), nonChildren)
+
+    val actual = before mapChildren toZero
+    assert(actual === expect)
   }
 
   test("preserves origin") {
