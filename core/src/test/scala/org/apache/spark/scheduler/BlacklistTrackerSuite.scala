@@ -86,7 +86,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     sc = new SparkContext(conf)
     val scheduler = mock[TaskSchedulerImpl]
     when(scheduler.sc).thenReturn(sc)
-    when(scheduler.mapOutputTracker).thenReturn(SparkEnv.get.mapOutputTracker)
+    when(scheduler.mapOutputTracker).thenReturn(
+      SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster])
     scheduler
   }
 
