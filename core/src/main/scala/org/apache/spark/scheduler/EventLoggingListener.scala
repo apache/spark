@@ -55,8 +55,7 @@ private[spark] class EventLoggingListener(
     appAttemptId : Option[String],
     logBaseDir: URI,
     sparkConf: SparkConf,
-    hadoopConf: Configuration)
-  extends SparkListener with Logging {
+    hadoopConf: Configuration) extends Logging {
 
   import EventLoggingListener._
 
@@ -89,6 +88,8 @@ private[spark] class EventLoggingListener(
 
   // Visible for tests only.
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
+
+  private var nbMessageProcessed = 0
 
   /**
    * Creates the log file in the configured log directory.
@@ -134,97 +135,32 @@ private[spark] class EventLoggingListener(
   }
 
   /** Log the event as JSON. */
-  private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
+  private def logEvent(event: SparkListenerEvent) {
     val eventJson = JsonProtocol.sparkEventToJson(event)
     // scalastyle:off println
     writer.foreach(_.println(compact(render(eventJson))))
     // scalastyle:on println
-    if (flushLogger) {
-      writer.foreach(_.flush())
-      hadoopDataStream.foreach(ds => ds.getWrappedStream match {
-        case wrapped: DFSOutputStream => wrapped.hsync(EnumSet.of(SyncFlag.UPDATE_LENGTH))
-        case _ => ds.hflush()
-      })
-    }
     if (testing) {
       loggedEvents += eventJson
     }
   }
 
-  // Events that do not trigger a flush
-  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = logEvent(event)
-
-  override def onTaskStart(event: SparkListenerTaskStart): Unit = logEvent(event)
-
-  override def onTaskGettingResult(event: SparkListenerTaskGettingResult): Unit = logEvent(event)
-
-  override def onTaskEnd(event: SparkListenerTaskEnd): Unit = logEvent(event)
-
-  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
-    logEvent(redactEvent(event))
+  private def flush(): Unit = {
+    writer.foreach(_.flush())
+    hadoopDataStream.foreach(ds => ds.getWrappedStream match {
+      case wrapped: DFSOutputStream => wrapped.hsync(EnumSet.of(SyncFlag.UPDATE_LENGTH))
+      case _ => ds.hflush()
+    })
   }
 
-  // Events that trigger a flush
-  override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onJobStart(event: SparkListenerJobStart): Unit = logEvent(event, flushLogger = true)
-
-  override def onJobEnd(event: SparkListenerJobEnd): Unit = logEvent(event, flushLogger = true)
-
-  override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onUnpersistRDD(event: SparkListenerUnpersistRDD): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-  override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onExecutorBlacklisted(event: SparkListenerExecutorBlacklisted): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onNodeBlacklisted(event: SparkListenerNodeBlacklisted): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  override def onNodeUnblacklisted(event: SparkListenerNodeUnblacklisted): Unit = {
-    logEvent(event, flushLogger = true)
-  }
-
-  // No-op because logging every update would be overkill
-  override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {}
-
-  // No-op because logging every update would be overkill
-  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
-
-  override def onOtherEvent(event: SparkListenerEvent): Unit = {
+  def log(event: SparkListenerEvent): Unit = {
     if (event.logEvent) {
-      logEvent(event, flushLogger = true)
+      logEvent(event)
+      nbMessageProcessed = nbMessageProcessed + 1
+      if (nbMessageProcessed == FLUSH_FREQUENCY) {
+        flush()
+        nbMessageProcessed = 0
+      }
     }
   }
 
@@ -233,6 +169,7 @@ private[spark] class EventLoggingListener(
    * ".inprogress" suffix.
    */
   def stop(): Unit = {
+    flush()
     writer.foreach(_.close())
 
     val target = new Path(logPath)
@@ -277,6 +214,12 @@ private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
+
+  private val FLUSH_FREQUENCY = 200
+
+  val EVENT_FILTER: SparkListenerEvent => Boolean =
+    ev => !(ev.isInstanceOf[SparkListenerBlockUpdated] ||
+      ev.isInstanceOf[SparkListenerExecutorMetricsUpdate])
 
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 

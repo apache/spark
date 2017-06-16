@@ -136,7 +136,10 @@ case class SparkListenerNodeUnblacklisted(time: Long, hostId: String)
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
+case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo)
+  extends SparkListenerEvent {
+  override protected[spark] val logEvent = false
+}
 
 /**
  * Periodic updates from executors.
@@ -147,7 +150,9 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
     accumUpdates: Seq[(Long, Int, Int, Seq[AccumulableInfo])])
-  extends SparkListenerEvent
+  extends SparkListenerEvent {
+  override protected[spark] val logEvent = false
+}
 
 @DeveloperApi
 case class SparkListenerApplicationStart(

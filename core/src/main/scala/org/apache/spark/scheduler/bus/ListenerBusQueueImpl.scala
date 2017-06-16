@@ -28,7 +28,7 @@ private[scheduler] class ProcessorListenerBusQueue(
   busName: String,
   bufferSize: Int,
   process: SparkListenerEvent => Unit,
-  eventFilter: SparkListenerEvent => Boolean = ListenerBusQueue.ALL_MESSAGES
+  eventFilter: SparkListenerEvent => Boolean
 ) extends ListenerBusQueue(busName, bufferSize, withEventProcessingTime = true, eventFilter) {
 
   override protected def consumeEvent(ev: SparkListenerEvent): Unit = {

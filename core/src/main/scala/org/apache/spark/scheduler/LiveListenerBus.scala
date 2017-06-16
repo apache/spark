@@ -29,9 +29,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.scheduler.bus.{GroupOfListenersBusQueue, ListenerBusQueue, QueueMetrics, SingleListenerBusQueue}
+import org.apache.spark.scheduler.bus._
 import org.apache.spark.util.MultipleListenerBus
-
 
 /**
  * Asynchronously passes SparkListenerEvents to registered SparkListeners.
@@ -78,11 +77,28 @@ private[spark] class LiveListenerBus(conf: SparkConf)
     */
   final override def addIsolatedListener(listener: SparkListenerInterface,
                           eventFilter: Option[SparkListenerEvent => Boolean]): Unit = {
-    startStopAddRemoveLock.lock()
-    val queue = new SingleListenerBusQueue(
+    addQueue(new SingleListenerBusQueue(
       conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY),
       listener,
+      eventFilter.getOrElse(ListenerBusQueue.ALL_MESSAGES)))
+  }
+
+   /**
+    * Add a generic listener to an isolated pool.
+    */
+  def addProcessor(processor: SparkListenerEvent => Unit,
+                   busName: String,
+                   eventFilter: Option[SparkListenerEvent => Boolean] = None): Unit = {
+    addQueue(new ProcessorListenerBusQueue(
+      busName,
+      conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY),
+      processor,
       eventFilter.getOrElse(ListenerBusQueue.ALL_MESSAGES))
+    )
+  }
+
+  private def addQueue(queue : ListenerBusQueue): Unit = {
+    startStopAddRemoveLock.lock()
     if (started) {
       queue.start(sparkContext, metricsSystem)
     }

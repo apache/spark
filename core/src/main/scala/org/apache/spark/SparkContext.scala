@@ -522,7 +522,10 @@ class SparkContext(config: SparkConf) extends Logging {
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
             _conf, _hadoopConfiguration)
         logger.start()
-        listenerBus.addListener(logger)
+        listenerBus.addProcessor(
+          ev => logger.log(ev),
+          "eventLoggerListener",
+          Some(EventLoggingListener.EVENT_FILTER))
         Some(logger)
       } else {
         None
