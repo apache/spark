@@ -108,13 +108,13 @@ object AnalyzeTableCommand extends Logging {
     // countFileSize to count the table size.
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
-    def calculateTableSize(fs: FileSystem, path: Path): Long = {
+    def calculateLocationSize(fs: FileSystem, path: Path): Long = {
       val fileStatus = fs.getFileStatus(path)
       val size = if (fileStatus.isDirectory) {
         fs.listStatus(path)
           .map { status =>
             if (!status.getPath.getName.startsWith(stagingDir)) {
-              calculateTableSize(fs, status.getPath)
+              calculateLocationSize(fs, status.getPath)
             } else {
               0L
             }
@@ -130,7 +130,7 @@ object AnalyzeTableCommand extends Logging {
       val path = new Path(p)
       try {
         val fs = path.getFileSystem(sessionState.newHadoopConf())
-        calculateTableSize(fs, path)
+        calculateLocationSize(fs, path)
       } catch {
         case NonFatal(e) =>
           logWarning(

@@ -126,6 +126,35 @@ private[sql] trait SQLTestUtils
   }
 
   /**
+   * Generates the requested number of temporary paths without creating the
+   * actual files/directories and passes these to the provided function 'f'.
+   * Deletes any files/directories left at these paths after 'f' returns.
+   *
+   * @param numPaths Number of paths to create
+   * @param f Function to invoke with the created paths
+   */
+  protected def withTempPaths(numPaths: Int)(f: List[File] => Unit) {
+    def addPaths(numPaths: Int, paths: List[File]): List[File] = {
+
+      if (numPaths <= 0) {
+        paths
+      } else {
+        val path = Utils.createTempDir()
+        path.delete()
+        addPaths(numPaths - 1, path :: paths)
+      }
+    }
+
+    val paths = addPaths(numPaths, List.empty)
+
+    try {
+      f(paths)
+    } finally {
+      paths.foreach(path => Utils.deleteRecursively(path))
+    }
+  }
+
+  /**
    * Copy file in jar's resource to a temp file, then pass it to `f`.
    * This function is used to make `f` can use the path of temp file(e.g. file:/), instead of
    * path of jar's resource which starts with 'jar:file:/'

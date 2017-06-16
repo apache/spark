@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
@@ -132,34 +133,42 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     def queryTotalSize(tableName: String): BigInt =
       spark.table(tableName).queryExecution.analyzed.stats(conf).sizeInBytes
 
-    sql(
-      """
-        |CREATE TABLE analyzeTable_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
-      """.stripMargin).collect()
-    sql(
-      """
-        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-01')
-        |SELECT * FROM src
-      """.stripMargin).collect()
-    sql(
-      """
-        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-02')
-        |SELECT * FROM src
-      """.stripMargin).collect()
-    sql(
-      """
-        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-03')
-        |SELECT * FROM src
-      """.stripMargin).collect()
+    withTempPaths(4) { (paths) => paths match {
+      case tablePath :: partitionPaths =>
+        sql(
+          s"""
+            |CREATE TABLE analyzeTable_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
+            |LOCATION '${tablePath}'
+          """.stripMargin).collect()
 
-    // Modify table location to not match location of individual partitions
-    sql("ALTER TABLE analyzeTable_part SET LOCATION 'file:/do/not/use'").collect()
+        val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
+        partitionDates.zip(partitionPaths).foreach(p => {
+          val ds = p._1
+          val path = p._2
+          sql(
+            s"""
+              |ALTER TABLE analyzeTable_part ADD PARTITION (ds='${ds}')
+              |LOCATION '${path.toString}'
+            """.stripMargin).collect()
+          sql(
+            s"""
+              |INSERT INTO TABLE analyzeTable_part PARTITION (ds='${ds}')
+              |SELECT * FROM src
+            """.
+              stripMargin).collect()
+          }
+        )
 
-    sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
+        // Modify table location to not match location of individual partitions
+        sql("ALTER TABLE analyzeTable_part SET LOCATION 'file:/do/not/use'").collect()
 
-    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
+        sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
-    sql("DROP TABLE analyzeTable_part").collect()
+        assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
+
+        sql("DROP TABLE analyzeTable_part").collect()
+      }
+    }
   }
 
   test("analyzing views is not supported") {
