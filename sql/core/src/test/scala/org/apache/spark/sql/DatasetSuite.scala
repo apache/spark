@@ -22,10 +22,12 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.hadoop.mapred.FileSplit
 
-import org.apache.spark.rdd.{CoalescedRDDPartition, HadoopPartition, SizeBasedCoalescer}
+import org.apache.spark.Partition
+import org.apache.spark.rdd._
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
+import org.apache.spark.sql.execution.datasources.{FilePartition, FileScanRDD}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
@@ -128,31 +130,36 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // write out to disk, to ensure that our splits are in fact [[FileSplit]] instances.
     withTempPath { path =>
       val data = (1 to 1000).map(i => ClassData(i.toString, i))
-      data.toDS().repartition(10).write.format("csv").save(path.toString)
+      data.toDS().repartition(50).write.format("csv").save(path.toString)
 
       val schema = StructType(Seq($"a".string, $"b".int))
-      val ds = spark.read.format("csv")
-        .schema(schema)
-        .load(path.toString)
-        .as[ClassData]
 
-      val coalescedDataSet =
-        ds.coalesce(2, partitionCoalescer = Option(new SizeBasedCoalescer(maxSplitSize)))
+      withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "200",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
 
-      assert(coalescedDataSet.rdd.partitions.length <= 10)
+        val ds = spark.read.format("csv")
+          .schema(schema)
+          .load(path.toString)
+          .as[ClassData]
 
-      var totalPartitionCount = 0L
-      coalescedDataSet.rdd.partitions.foreach(partition => {
-        var splitSizeSum = 0L
-        partition.asInstanceOf[CoalescedRDDPartition].parents.foreach(partition => {
-          val split =
-            partition.asInstanceOf[HadoopPartition].inputSplit.value.asInstanceOf[FileSplit]
-          splitSizeSum += split.getLength
-          totalPartitionCount += 1
+        val coalescedDataSet =
+          ds.coalesce(4,
+            partitionCoalescer = Option(new DataSetSizeBasedPartitionCoalescer(maxSplitSize)))
+
+        assert(coalescedDataSet.rdd.partitions.length <= 50)
+
+        var totalPartitionCount = 0L
+        coalescedDataSet.rdd.partitions.foreach(partition => {
+          var splitSizeSum = 0L
+          partition.asInstanceOf[CoalescedRDDPartition].parents.foreach(partition => {
+            splitSizeSum +=
+              partition.asInstanceOf[FilePartition].files.map(_.length).sum
+            totalPartitionCount += 1
+          })
+          assert(splitSizeSum <= maxSplitSize)
         })
-        assert(splitSizeSum <= maxSplitSize)
-      })
-      assert(totalPartitionCount == 10)
+      }
     }
   }
 
@@ -1304,3 +1311,18 @@ case class CircularReferenceClassB(cls: CircularReferenceClassA)
 case class CircularReferenceClassC(ar: Array[CircularReferenceClassC])
 case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
+
+
+class DataSetSizeBasedPartitionCoalescer(maxSize: Int) extends
+  SizeBasedCoalescer(maxSize) {
+
+  override def getPartitions(parent: RDD[_]): Array[Partition] = {
+    parent.firstParent.asInstanceOf[FileScanRDD].partitions
+  }
+
+  override def getPartitionSize(partition: Partition): Long = {
+    val res = partition.asInstanceOf[FilePartition].files.map(
+      x => x.length - x.start).sum
+    res
+  }
+}
