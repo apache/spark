@@ -361,10 +361,13 @@ setMethod("column",
 #'
 #' @rdname corr
 #' @name corr
-#' @family math functions
+#' @family aggregate functions
 #' @export
 #' @aliases corr,Column-method
-#' @examples \dontrun{corr(df$c, df$d)}
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' head(select(df, corr(df$mpg, df$hp)))}
 #' @note corr since 1.6.0
 setMethod("corr", signature(x = "Column"),
           function(x, col2) {
@@ -375,20 +378,22 @@ setMethod("corr", signature(x = "Column"),
 
 #' cov
 #'
-#' Compute the sample covariance between two expressions.
+#' Compute the covariance between two expressions.
+#'
+#' @details
+#' \code{cov}: Compute the sample covariance between two expressions.
 #'
 #' @rdname cov
 #' @name cov
-#' @family math functions
+#' @family aggregate functions
 #' @export
 #' @aliases cov,characterOrColumn-method
 #' @examples
 #' \dontrun{
-#' cov(df$c, df$d)
-#' cov("c", "d")
-#' covar_samp(df$c, df$d)
-#' covar_samp("c", "d")
-#' }
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' head(select(df, cov(df$mpg, df$hp), cov("mpg", "hp"),
+#'                 covar_samp(df$mpg, df$hp), covar_samp("mpg", "hp"),
+#'                 covar_pop(df$mpg, df$hp), covar_pop("mpg", "hp")))}
 #' @note cov since 1.6.0
 setMethod("cov", signature(x = "characterOrColumn"),
           function(x, col2) {
@@ -396,6 +401,9 @@ setMethod("cov", signature(x = "characterOrColumn"),
             covar_samp(x, col2)
           })
 
+#' @details
+#' \code{covar_sample}: Alias for \code{cov}.
+#'
 #' @rdname cov
 #'
 #' @param col1 the first Column.
@@ -414,23 +422,13 @@ setMethod("covar_samp", signature(col1 = "characterOrColumn", col2 = "characterO
             column(jc)
           })
 
-#' covar_pop
+#' @details
+#' \code{covar_pop}: Computes the population covariance between two expressions.
 #'
-#' Compute the population covariance between two expressions.
-#'
-#' @param col1 First column to compute cov_pop.
-#' @param col2 Second column to compute cov_pop.
-#'
-#' @rdname covar_pop
+#' @rdname cov
 #' @name covar_pop
-#' @family math functions
 #' @export
 #' @aliases covar_pop,characterOrColumn,characterOrColumn-method
-#' @examples
-#' \dontrun{
-#' covar_pop(df$c, df$d)
-#' covar_pop("c", "d")
-#' }
 #' @note covar_pop since 2.0.0
 setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOrColumn"),
           function(col1, col2) {
