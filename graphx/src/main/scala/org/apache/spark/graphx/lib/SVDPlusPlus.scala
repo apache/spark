@@ -71,12 +71,12 @@ object SVDPlusPlus extends Logging{
       (v1, v2, 0.0, 0.0)
     }
 
-    // calculate global rating mean
+    // Calculate global rating mean
     edges.cache()
     val (rs, rc) = edges.map(e => (e.attr, 1L)).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
     val u = rs / rc
 
-    // construct graph
+    // Construct graph
     var g = Graph.fromEdges(edges, defaultF(conf.rank)).cache()
     materialize(g)
     edges.unpersist()
@@ -136,7 +136,7 @@ object SVDPlusPlus extends Logging{
          msg: Option[(Array[Double], Long)]) =>
           if (msg.isDefined) {
             val out = vd._1.clone()
-            // mean sum(y)
+            // Use mean of sum(y)
             blas.dscal(out.length, 1.0 / msg.get._2, msg.get._1, 1)
             blas.daxpy(out.length, vd._4, msg.get._1, 1, out, 1)
             (vd._1, out, vd._3, vd._4)
@@ -178,7 +178,7 @@ object SVDPlusPlus extends Logging{
       calculateIterationRMSE(g)
     }
 
-    // calculate the RMSE of each Iteration
+    // Calculate the RMSE of each iteration
     def calculateIterationRMSE(g: Graph[(Array[Double], Array[Double], Double, Double), Double]) {
       val rmse = math.sqrt(g.triplets.map{ctx =>
         val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
@@ -192,7 +192,7 @@ object SVDPlusPlus extends Logging{
       logInfo(s"this iteration's RMSE : $rmse")
     }
 
-    // calculate error on training set
+    // Calculate error on training set
     def sendMsgTestF(conf: Conf, u: Double)
         (ctx: EdgeContext[(Array[Double], Array[Double], Double, Double), Double, Double]) {
       val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
@@ -214,7 +214,6 @@ object SVDPlusPlus extends Logging{
     g.unpersist()
     g = gJoinT3
 
-    // Convert DoubleMatrix to Array[Double]:
     val newVertices = g.vertices.mapValues(v => (v._1, v._2, v._3, v._4))
     (Graph(newVertices, g.edges), u)
   }
