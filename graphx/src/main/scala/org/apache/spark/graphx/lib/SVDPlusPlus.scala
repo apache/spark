@@ -22,10 +22,11 @@ import scala.util.Random
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.graphx._
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd._
 
 /** Implementation of SVD++ algorithm. */
-object SVDPlusPlus {
+object SVDPlusPlus extends Logging{
 
   /** Configuration parameters for SVDPlusPlus. */
   class Conf(
@@ -98,13 +99,11 @@ object SVDPlusPlus {
         (ctx: EdgeContext[
           (Array[Double], Array[Double], Double, Double),
           Double,
-          (Array[Double], Array[Double], Double)]) {
+          (Array[Double], Array[Double], Double, Long)]) {
       val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
       val (p, q) = (usr._1, itm._1)
       val rank = p.length
       var pred = u + usr._3 + itm._3 + blas.ddot(rank, q, 1, usr._2, 1)
-      pred = math.max(pred, conf.minVal)
-      pred = math.min(pred, conf.maxVal)
       val err = ctx.attr - pred
       // updateP = (err * q - conf.gamma7 * p) * conf.gamma2
       val updateP = q.clone()
@@ -118,26 +117,28 @@ object SVDPlusPlus {
       val updateY = q.clone()
       blas.dscal(rank, err * usr._4 * conf.gamma2, updateY, 1)
       blas.daxpy(rank, -conf.gamma7 * conf.gamma2, itm._2, 1, updateY, 1)
-      ctx.sendToSrc((updateP, updateY, (err - conf.gamma6 * usr._3) * conf.gamma1))
-      ctx.sendToDst((updateQ, updateY, (err - conf.gamma6 * itm._3) * conf.gamma1))
+      ctx.sendToSrc((updateP, updateY, (err - conf.gamma6 * usr._3) * conf.gamma1, 1))
+      ctx.sendToDst((updateQ, updateY, (err - conf.gamma6 * itm._3) * conf.gamma1, 1))
     }
 
     for (i <- 0 until conf.maxIters) {
       // Phase 1, calculate pu + |N(u)|^(-0.5)*sum(y) for user nodes
       g.cache()
-      val t1 = g.aggregateMessages[Array[Double]](
-        ctx => ctx.sendToSrc(ctx.dstAttr._2),
+      val t1 = g.aggregateMessages[(Array[Double], Long)](
+        ctx => ctx.sendToSrc((ctx.dstAttr._2, 1)),
         (g1, g2) => {
-          val out = g1.clone()
-          blas.daxpy(out.length, 1.0, g2, 1, out, 1)
-          out
+          val out = g1._1.clone()
+          blas.daxpy(out.length, 1.0, g2._1, 1, out, 1)
+          (out, g1._2 + g2._2)
         })
       val gJoinT1 = g.outerJoinVertices(t1) {
         (vid: VertexId, vd: (Array[Double], Array[Double], Double, Double),
-         msg: Option[Array[Double]]) =>
+         msg: Option[(Array[Double], Long)]) =>
           if (msg.isDefined) {
             val out = vd._1.clone()
-            blas.daxpy(out.length, vd._4, msg.get, 1, out, 1)
+            // mean sum(y)
+            blas.dscal(out.length, 1.0 / msg.get._2, msg.get._1, 1)
+            blas.daxpy(out.length, vd._4, msg.get._1, 1, out, 1)
             (vd._1, out, vd._3, vd._4)
           } else {
             vd
@@ -150,29 +151,45 @@ object SVDPlusPlus {
       // Phase 2, update p for user nodes and q, y for item nodes
       g.cache()
       val t2 = g.aggregateMessages(
-        sendMsgTrainF(conf, u),
-        (g1: (Array[Double], Array[Double], Double), g2: (Array[Double], Array[Double], Double)) =>
-        {
+        sendMsgTrainF(conf, u), (g1: (Array[Double], Array[Double], Double, Long),
+         g2: (Array[Double], Array[Double], Double, Long)) => {
           val out1 = g1._1.clone()
           blas.daxpy(out1.length, 1.0, g2._1, 1, out1, 1)
           val out2 = g2._2.clone()
           blas.daxpy(out2.length, 1.0, g2._2, 1, out2, 1)
-          (out1, out2, g1._3 + g2._3)
+          (out1, out2, g1._3 + g2._3, g1._4 + g2._4)
         })
       val gJoinT2 = g.outerJoinVertices(t2) {
         (vid: VertexId,
          vd: (Array[Double], Array[Double], Double, Double),
-         msg: Option[(Array[Double], Array[Double], Double)]) => {
+         msg: Option[(Array[Double], Array[Double], Double, Long)]) => {
+          // use the mean of batch gradient
           val out1 = vd._1.clone()
-          blas.daxpy(out1.length, 1.0, msg.get._1, 1, out1, 1)
+          blas.daxpy(out1.length, 1.0 / msg.get._4, msg.get._1, 1, out1, 1)
           val out2 = vd._2.clone()
-          blas.daxpy(out2.length, 1.0, msg.get._2, 1, out2, 1)
-          (out1, out2, vd._3 + msg.get._3, vd._4)
+          blas.daxpy(out2.length, 1.0 / msg.get._4, msg.get._2, 1, out2, 1)
+          (out1, out2, vd._3 + msg.get._3 / msg.get._4, vd._4)
         }
       }.cache()
       materialize(gJoinT2)
       g.unpersist()
       g = gJoinT2
+
+      calculateIterationRMSE(g)
+    }
+
+    // calculate the RMSE of each Iteration
+    def calculateIterationRMSE(g: Graph[(Array[Double], Array[Double], Double, Double), Double]) {
+      val rmse = math.sqrt(g.triplets.map{ctx =>
+        val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
+        val (p, q) = (usr._1, itm._1)
+        var pred = u + usr._3 + itm._3 + blas.ddot(q.length, q, 1, usr._2, 1)
+        pred = math.max(pred, conf.minVal)
+        pred = math.min(pred, conf.maxVal)
+        (ctx.attr - pred) * (ctx.attr - pred)
+      }.reduce(_ + _) / g.edges.count())
+
+      logInfo(s"this iteration's RMSE : $rmse")
     }
 
     // calculate error on training set
@@ -198,7 +215,7 @@ object SVDPlusPlus {
     g = gJoinT3
 
     // Convert DoubleMatrix to Array[Double]:
-    val newVertices = g.vertices.mapValues(v => (v._1.toArray, v._2.toArray, v._3, v._4))
+    val newVertices = g.vertices.mapValues(v => (v._1, v._2, v._3, v._4))
     (Graph(newVertices, g.edges), u)
   }
 
