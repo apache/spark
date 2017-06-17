@@ -22,6 +22,7 @@ import java.net.URI
 import java.nio.file.Files
 import java.util.{Locale, UUID}
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.util.control.NonFatal
@@ -126,31 +127,23 @@ private[sql] trait SQLTestUtils
   }
 
   /**
-   * Generates the requested number of temporary paths without creating the
-   * actual files/directories and passes these to the provided function 'f'.
-   * Deletes any files/directories left at these paths after 'f' returns.
+   * Creates the requested number of temporary path (without creating the actual file/directory),
+   * which are then passed to f and will be deleted after f returns.
    *
-   * @param numPaths Number of paths to create
+   * @param num Number of directories to create
    * @param f Function to invoke with the created paths
    */
-  protected def withTempPaths(numPaths: Int)(f: List[File] => Unit) {
-    def addPaths(numPaths: Int, paths: List[File]): List[File] = {
-
-      if (numPaths <= 0) {
-        paths
-      } else {
-        val path = Utils.createTempDir()
-        path.delete()
-        addPaths(numPaths - 1, path :: paths)
-      }
+  protected def withTempPaths(num: Int)(f: List[File] => Unit) {
+    val paths = mutable.ListBuffer[File]()
+    for (i <- 0 until num) {
+      val path = Utils.createTempDir().getCanonicalFile
+      path.delete()
+      paths += path
     }
-
-    val paths = addPaths(numPaths, List.empty)
-
     try {
-      f(paths)
+      f(paths.toList)
     } finally {
-      paths.foreach(path => Utils.deleteRecursively(path))
+      paths.foreach(Utils.deleteRecursively)
     }
   }
 

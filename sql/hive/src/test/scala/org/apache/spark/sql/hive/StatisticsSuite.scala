@@ -133,40 +133,37 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     def queryTotalSize(tableName: String): BigInt =
       spark.table(tableName).queryExecution.analyzed.stats(conf).sizeInBytes
 
-    withTempPaths(4) { (paths) => paths match {
-      case tablePath :: partitionPaths =>
-        sql(
-          s"""
-            |CREATE TABLE analyzeTable_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
-            |LOCATION '${tablePath}'
-          """.stripMargin).collect()
-
-        val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
-        partitionDates.zip(partitionPaths).foreach(p => {
-          val ds = p._1
-          val path = p._2
+    val tableName = "analyzeTable_part"
+    withTable(tableName) {
+      withTempPaths(4) {
+        case tablePath :: partitionPaths =>
           sql(
             s"""
-              |ALTER TABLE analyzeTable_part ADD PARTITION (ds='${ds}')
-              |LOCATION '${path.toString}'
-            """.stripMargin).collect()
-          sql(
-            s"""
-              |INSERT INTO TABLE analyzeTable_part PARTITION (ds='${ds}')
-              |SELECT * FROM src
-            """.
+               |CREATE TABLE ${tableName} (key STRING, value STRING) PARTITIONED BY (ds STRING)
+               |LOCATION '${tablePath}'
+             """.
               stripMargin).collect()
+
+          val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
+          partitionDates.zip(partitionPaths).foreach {
+            case (ds, path) =>
+              sql(
+                s"""
+                   |ALTER TABLE ${tableName} ADD PARTITION (ds='${ds}')
+                   |LOCATION '${path.toString}'
+                """.
+                  stripMargin).collect()
+              sql(
+                s"""
+                   |INSERT INTO TABLE ${tableName} PARTITION (ds='${ds}')
+                   |SELECT * FROM src
+                """.
+                  stripMargin).collect()
           }
-        )
 
-        // Modify table location to not match location of individual partitions
-        sql("ALTER TABLE analyzeTable_part SET LOCATION 'file:/do/not/use'").collect()
+          sql(s"ANALYZE TABLE ${tableName} COMPUTE STATISTICS noscan")
 
-        sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
-
-        assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
-
-        sql("DROP TABLE analyzeTable_part").collect()
+          assert(queryTotalSize(tableName) === BigInt(17436))
       }
     }
   }
