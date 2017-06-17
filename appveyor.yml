@@ -26,6 +26,7 @@ branches:
 
 only_commits:
   files:
+    - appveyor.yml
     - R/
     - sql/core/src/main/scala/org/apache/spark/sql/api/r/
     - core/src/main/scala/org/apache/spark/api/r/
