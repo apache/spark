@@ -86,3 +86,6 @@ select BIT_LENGTH('abc');
 select CHAR_LENGTH('abc');
 select CHARACTER_LENGTH('abc');
 select OCTET_LENGTH('abc');
+
+-- abs
+select abs(-3.13), abs('-2.19');
