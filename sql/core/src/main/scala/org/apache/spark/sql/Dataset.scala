@@ -24,7 +24,9 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
+
 import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -2613,14 +2615,14 @@ class Dataset[T] private[sql](
     }
 
   /**
-    * Returns a new Dataset that has exactly `numPartitions` partitions.
-    * Similar to coalesce defined on an `RDD`, this operation results in a narrow dependency, e.g.
-    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
-    * the 100 new partitions will claim 10 of the current partitions.
-    *
-    * @group typedrel
-    * @since 1.6.0
-    */
+   * Returns a new Dataset that has exactly `numPartitions` partitions.
+   * Similar to coalesce defined on an `RDD`, this operation results in a narrow dependency, e.g.
+   * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+   * the 100 new partitions will claim 10 of the current partitions.
+   *
+   * @group typedrel
+   * @since 1.6.0
+   */
   def coalesce(numPartitions: Int): Dataset[T] = coalesce(numPartitions, None)
 
   /**

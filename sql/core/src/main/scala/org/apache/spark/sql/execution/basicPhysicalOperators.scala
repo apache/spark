@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+
 import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionCoalescer, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
