@@ -659,20 +659,20 @@ private[deploy] class Master(
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
     for (app <- waitingApps) {
-      val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
+      val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
       // If the cores left is less than the coresPerExecutor,the cores left will not be allocated
-      if (app.coresLeft >= coresPerExecutor.getOrElse(1)) {
+      if (app.coresLeft >= coresPerExecutor) {
         // Filter out workers that don't have enough resources to launch an executor
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-            worker.coresFree >= coresPerExecutor.getOrElse(1))
+            worker.coresFree >= coresPerExecutor)
           .sortBy(_.coresFree).reverse
         val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
         // Now that we've decided how many cores to allocate on each worker, let's allocate them
         for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
           allocateWorkerResourceToExecutors(
-            app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
+            app, assignedCores(pos), app.desc.coresPerExecutor, usableWorkers(pos))
         }
       }
     }

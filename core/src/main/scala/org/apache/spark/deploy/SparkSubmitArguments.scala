@@ -278,11 +278,13 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (pyFiles != null && !isPython) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
     }
-    if (totalExecutorCores != null && executorCores != null
-        && (totalExecutorCores.toInt % executorCores.toInt) != 0) {
-      SparkSubmit.printWarning(s"Total executor cores: ${totalExecutorCores} is not " +
-        s"divisible by cores per executor: ${executorCores}, " +
-        s"the left cores: ${totalExecutorCores.toInt % executorCores.toInt} will not be allocated")
+    if (totalExecutorCores != null && executorCores != null) {
+      val leftCores = totalExecutorCores.toInt % executorCores.toInt
+      if (leftCores != 0) {
+        SparkSubmit.printWarning(s"Total executor cores: ${totalExecutorCores} is not " +
+          s"divisible by cores per executor: ${executorCores}, " +
+          s"the left cores: ${leftCores} will not be allocated")
+      }
     }
 
     if (master.startsWith("yarn")) {
