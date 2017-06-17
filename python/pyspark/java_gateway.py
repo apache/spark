@@ -37,15 +37,19 @@ from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
 from pyspark.util import _exception_message
 
 
-def launch_gateway(conf=None):
+def launch_gateway(conf=None, popen_kwargs=None):
     """
     launch jvm gateway
     :param conf: spark configuration passed to spark-submit
+    :param popen_kwargs: Dictionary of kwargs to pass to Popen when spawning
+        the py4j JVM.
     :return:
     """
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
         gateway_secret = os.environ["PYSPARK_GATEWAY_SECRET"]
+        # Process already exists
+        proc = None
     else:
         SPARK_HOME = _find_spark_home()
         # Launch the Py4j gateway using Spark's run command so that we pick up the
@@ -119,6 +123,8 @@ def launch_gateway(conf=None):
     gateway = JavaGateway(
         gateway_parameters=GatewayParameters(port=gateway_port, auth_token=gateway_secret,
                                              auto_convert=True))
+    # Store a reference to the Popen object for use by the caller (e.g., in reading stdout/stderr)
+    gateway.proc = proc
 
     # Import the classes used by PySpark
     java_import(gateway.jvm, "org.apache.spark.SparkConf")
