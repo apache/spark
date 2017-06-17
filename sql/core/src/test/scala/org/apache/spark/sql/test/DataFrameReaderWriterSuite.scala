@@ -698,7 +698,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           val e = intercept[AnalysisException] {
             spark.read.format("csv").schema(schema).load(src.toString)
           }
-          assert(e.getMessage.contains("Found duplicate column(s) in datasource: "))
+          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
         }
       }
 
@@ -715,12 +715,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           val e1 = intercept[AnalysisException] {
             spark.read.format("json").schema(s"$c0 INT, $c1 INT").load(src.toString)
           }
-          assert(e1.getMessage.contains("Found duplicate column(s) in datasource: "))
+          assert(e1.getMessage.contains("Found duplicate column(s) in the datasource: "))
 
           val e2 = intercept[AnalysisException] {
             spark.read.format("json").option("inferSchema", true).load(src.toString)
           }
-          assert(e2.getMessage.contains("Found duplicate column(s) in datasource: "))
+          assert(e2.getMessage.contains("Found duplicate column(s) in the datasource: "))
         }
       }
 
@@ -731,7 +731,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           val e = intercept[AnalysisException] {
             spark.read.format("parquet").schema(schema).load(src.toString)
           }
-          assert(e.getMessage.contains("Found duplicate column(s) in datasource: "))
+          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
         }
       }
     }

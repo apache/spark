@@ -251,7 +251,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           }
 
           SchemaUtils.checkSchemaColumnNameDuplication(
-            schema, "hive serde table", sparkSession.sessionState.conf.caseSensitiveAnalysis)
+            schema, "the hive serde table", sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
           (schema, relation.tableMeta.copy(schema = schema))
         case None =>

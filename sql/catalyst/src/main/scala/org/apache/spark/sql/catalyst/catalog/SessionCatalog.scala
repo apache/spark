@@ -343,7 +343,8 @@ class SessionCatalog(
     requireTableExists(tableIdentifier)
 
     SchemaUtils.checkSchemaColumnNameDuplication(
-      newSchema, "table definition of " + tableIdentifier.identifier, conf.caseSensitiveAnalysis)
+      newSchema, "the table definition of " + tableIdentifier.identifier,
+      conf.caseSensitiveAnalysis)
 
     val catalogTable = externalCatalog.getTable(db, table)
     val oldSchema = catalogTable.schema

@@ -225,7 +225,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
     SchemaUtils.checkSchemaColumnNameDuplication(
       schema,
-      "table definition of " + table.identifier,
+      "the table definition of " + table.identifier,
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val normalizedPartCols = normalizePartitionColumns(schema, table)
@@ -254,7 +254,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
     SchemaUtils.checkColumnNameDuplication(
       normalizedPartitionCols,
-      "partition",
+      "the partition",
       sparkSession.sessionState.conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
@@ -288,11 +288,11 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.bucketColumnNames,
-          "bucket",
+          "the bucket",
           sparkSession.sessionState.conf.resolver)
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.sortColumnNames,
-          "sort",
+          "the sort",
           sparkSession.sessionState.conf.resolver)
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {

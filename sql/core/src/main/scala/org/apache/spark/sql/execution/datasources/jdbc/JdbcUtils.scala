@@ -751,7 +751,7 @@ object JdbcUtils extends Logging {
 
     // checks duplicate columns in the user specified column types.
     SchemaUtils.checkColumnNameDuplication(
-      userSchema.map(_.name), "createTableColumnTypes option value", nameEquality)
+      userSchema.map(_.name), "the createTableColumnTypes option value", nameEquality)
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>

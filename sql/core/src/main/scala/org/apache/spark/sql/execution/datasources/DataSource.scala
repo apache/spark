@@ -189,7 +189,7 @@ case class DataSource(
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     SchemaUtils.checkSchemaColumnNameDuplication(
-      dataSchema, "datasource", sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      dataSchema, "the datasource", sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     (dataSchema, partitionSchema)
   }
@@ -338,7 +338,7 @@ case class DataSource(
         }
 
         SchemaUtils.checkSchemaColumnNameDuplication(
-          dataSchema, "datasource", sparkSession.sessionState.conf.caseSensitiveAnalysis)
+          dataSchema, "the datasource", sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
         HadoopFsRelation(
           fileCatalog,
