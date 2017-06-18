@@ -25,7 +25,7 @@ import org.apache.spark.scheduler.bus.ListenerBusQueue.{FixGroupOfListener, Modi
 
 // For generic message processor (like event logging)
 private[scheduler] class ProcessorListenerBusQueue(
-  busName: String,
+  private[scheduler] val busName: String,
   bufferSize: Int,
   process: SparkListenerEvent => Unit,
   eventFilter: SparkListenerEvent => Boolean

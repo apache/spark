@@ -27,7 +27,7 @@ import org.apache.spark.util.ListenerBus
  * unwrap them as StreamingListenerEvent and dispatch them to StreamingListeners.
  */
 private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
-  extends SparkListener with ListenerBus[StreamingListener, StreamingListenerEvent] {
+  extends ListenerBus[StreamingListener, StreamingListenerEvent] {
 
   /**
    * Post a StreamingListenerEvent to the Spark listener bus asynchronously. This event will be
@@ -35,14 +35,6 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
    */
   def post(event: StreamingListenerEvent) {
     sparkListenerBus.post(new WrappedStreamingListenerEvent(event))
-  }
-
-  override def onOtherEvent(event: SparkListenerEvent): Unit = {
-    event match {
-      case WrappedStreamingListenerEvent(e) =>
-        postToAll(e)
-      case _ =>
-    }
   }
 
   protected override def doPostEvent(
@@ -76,7 +68,11 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
    * forward them to StreamingListeners.
    */
   def start(): Unit = {
-    sparkListenerBus.addListener(this) // for getting callbacks on spark events
+    sparkListenerBus.addProcessor(
+      ev => postToAll(ev.asInstanceOf[WrappedStreamingListenerEvent].streamingListenerEvent),
+      "streaming",
+      Some(ev => ev.isInstanceOf[WrappedStreamingListenerEvent])
+    )
   }
 
   /**
@@ -84,7 +80,7 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
    * events after that.
    */
   def stop(): Unit = {
-    sparkListenerBus.removeListener(this)
+    sparkListenerBus.removeProcessor("streaming")
   }
 
   /**

@@ -97,6 +97,20 @@ private[spark] class LiveListenerBus(conf: SparkConf)
     )
   }
 
+  def removeProcessor(processorBusName: String): Unit = {
+    startStopAddRemoveLock.lock()
+    val queue = otherListenerQueues
+      .filter(q => q.isInstanceOf[ProcessorListenerBusQueue])
+      .map(_.asInstanceOf[ProcessorListenerBusQueue])
+      .find(_.busName == processorBusName)
+    queue.foreach { q =>
+      otherListenerQueues = otherListenerQueues.filter(_ != q)
+      q.askStop()
+      q.waitForStop()
+    }
+    startStopAddRemoveLock.unlock()
+  }
+
   private def addQueue(queue : ListenerBusQueue): Unit = {
     startStopAddRemoveLock.lock()
     if (started) {
