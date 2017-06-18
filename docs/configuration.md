@@ -1766,14 +1766,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.core.connection.auth.wait.timeout</code></td>
-  <td>30s</td>
-  <td>
-    How long for the connection to wait for authentication to occur before timing
-    out and giving up.
-  </td>
-</tr>
-<tr>
   <td><code>spark.modify.acls</code></td>
   <td>Empty</td>
   <td>
