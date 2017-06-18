@@ -30,10 +30,10 @@ if (.Platform$OS.type == "windows") {
 install.spark()
 
 sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
-sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
 invisible(lapply(sparkRWhitelistSQLDirs,
                  function(x) { unlink(file.path(sparkRDir, x), recursive = TRUE, force = TRUE)}))
+sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 
 sparkRTestMaster <- "local[1]"
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
