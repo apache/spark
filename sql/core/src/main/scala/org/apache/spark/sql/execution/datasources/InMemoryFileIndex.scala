@@ -188,7 +188,7 @@ object InMemoryFileIndex extends Logging {
       .parallelize(serializedPaths, numParallelism)
       .mapPartitions { pathStrings =>
         val hadoopConf = serializableConfiguration.value
-        val paths = pathStrings.map(new Path(_)).toSeq
+        val paths = pathStrings.map(new Path(_)).toIndexedSeq
         listLeafFiles(paths, hadoopConf, filter, None).iterator
       }.map { case (path, statuses) =>
       val serializableStatuses = statuses.map { status =>
