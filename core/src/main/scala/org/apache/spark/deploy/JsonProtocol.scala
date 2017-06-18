@@ -21,26 +21,62 @@ import org.json4s.JsonAST.JObject
 import org.json4s.JsonDSL._
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
-import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
+import org.apache.spark.deploy.master._
+import org.apache.spark.deploy.master.RecoveryState.MasterState
 import org.apache.spark.deploy.worker.ExecutorRunner
 
 private[deploy] object JsonProtocol {
- def writeWorkerInfo(obj: WorkerInfo): JObject = {
-   ("id" -> obj.id) ~
-   ("host" -> obj.host) ~
-   ("port" -> obj.port) ~
-   ("address" -> obj.hostPort) ~
-   ("webuiaddress" -> obj.webUiAddress) ~
-   ("cores" -> obj.cores) ~
-   ("coresused" -> obj.coresUsed) ~
-   ("coresfree" -> obj.coresFree) ~
-   ("memory" -> obj.memory) ~
-   ("memoryused" -> obj.memoryUsed) ~
-   ("memoryfree" -> obj.memoryFree) ~
-   ("state" -> obj.state.toString) ~
-   ("lastheartbeat" -> obj.lastHeartbeat)
- }
+  /**
+   * Export the [[WorkerInfo]] to a Json object, a [[WorkerInfo]] consists of the information of a
+   * worker.
+   *
+   * @return a Json object containing the following fields:
+   *         `id` a string identifier of the worker
+   *         `host` the host that the worker is running on
+   *         `port` the port that the worker is bound to
+   *         `address` ${host}:${port}
+   *         `webuiaddress` the address used in web UI
+   *         `cores` total cores of the worker
+   *         `coresused` allocated cores of the worker
+   *         `coresfree` free cores of the worker
+   *         `memory` total memory of the worker
+   *         `memoryused` allocated memory of the worker
+   *         `memoryfree` free memory of the worker
+   *         `state` state of the worker, see [[WorkerState]]
+   *         `lastheartbeat` time in milliseconds that the latest heart beat message from the
+   *         worker is received.
+   */
+  def writeWorkerInfo(obj: WorkerInfo): JObject = {
+    ("id" -> obj.id) ~
+    ("host" -> obj.host) ~
+    ("port" -> obj.port) ~
+    ("address" -> obj.hostPort) ~
+    ("webuiaddress" -> obj.webUiAddress) ~
+    ("cores" -> obj.cores) ~
+    ("coresused" -> obj.coresUsed) ~
+    ("coresfree" -> obj.coresFree) ~
+    ("memory" -> obj.memory) ~
+    ("memoryused" -> obj.memoryUsed) ~
+    ("memoryfree" -> obj.memoryFree) ~
+    ("state" -> obj.state.toString) ~
+    ("lastheartbeat" -> obj.lastHeartbeat)
+  }
 
+  /**
+   * Export the [[ApplicationInfo]] to a Json object, an [[ApplicationInfo]] consists of the
+   * information of an application.
+   *
+   * @return a Json object containing the following fields:
+   *         `id` a string identifier of the application
+   *         `starttime` time in milliseconds that the application starts
+   *         `name` a name describes the application
+   *         `cores` total cores granted to the application
+   *         `user` name of the user who submitted the application
+   *         `memoryperslave` minimal memory in MB required to each executor
+   *         `submitdate` time in Date that the application is submitted
+   *         `state` state of the application, see [[ApplicationState]]
+   *         `duration` time in milliseconds that the application has been running
+   */
   def writeApplicationInfo(obj: ApplicationInfo): JObject = {
     ("starttime" -> obj.startTime) ~
     ("id" -> obj.id) ~
@@ -53,6 +89,17 @@ private[deploy] object JsonProtocol {
     ("duration" -> obj.duration)
   }
 
+  /**
+   * Export the [[ApplicationDescription]] to a Json object, an [[ApplicationDescription]] consists
+   * of the description of an application.
+   *
+   * @return a Json object containing the following fields:
+   *         `name` a name describes the application
+   *         `cores` max cores can be allocated to the application, 0 means unlimited
+   *         `memoryperslave` minimal memory in MB required to each executor
+   *         `user` name of the user who submitted the application
+   *         `command` the command string that submitted the application
+   */
   def writeApplicationDescription(obj: ApplicationDescription): JObject = {
     ("name" -> obj.name) ~
     ("cores" -> obj.maxCores.getOrElse(0)) ~
@@ -61,6 +108,17 @@ private[deploy] object JsonProtocol {
     ("command" -> obj.command.toString)
   }
 
+  /**
+   * Export the [[ExecutorRunner]] to a Json object, an [[ExecutorRunner]] consists of the
+   * information of an executor.
+   *
+   * @return a Json object containing the following fields:
+   *         `id` a integer identifier of the executor
+   *         `memory` memory in MB allocated to the executor
+   *         `appid` a string identifier of the application that the executor is working for
+   *         `appdesc` a Json object of the [[ApplicationDescription]] of the application that the
+   *         executor is working for
+   */
   def writeExecutorRunner(obj: ExecutorRunner): JObject = {
     ("id" -> obj.execId) ~
     ("memory" -> obj.memory) ~
@@ -68,6 +126,20 @@ private[deploy] object JsonProtocol {
     ("appdesc" -> writeApplicationDescription(obj.appDesc))
   }
 
+  /**
+   * Export the [[DriverInfo]] to a Json object, a [[DriverInfo]] consists of the information of a
+   * driver.
+   *
+   * @return a Json object containing the following fields:
+   *         `id` a string identifier of the driver
+   *         `starttime` time in milliseconds that the driver starts
+   *         `state` state of the driver, see [[DriverState]]
+   *         `cores` cores allocated to the driver
+   *         `memory` memory in MB allocated to the driver
+   *         `submitdate` time in Date that the driver is created
+   *         `worker` identifier of the worker that the driver is running on
+   *         `mainclass` main class of the command string that started the driver
+   */
   def writeDriverInfo(obj: DriverInfo): JObject = {
     ("id" -> obj.id) ~
     ("starttime" -> obj.startTime.toString) ~
@@ -79,6 +151,29 @@ private[deploy] object JsonProtocol {
     ("mainclass" -> obj.desc.command.arguments(2))
   }
 
+  /**
+   * Export the [[MasterStateResponse]] to a Json object, a [[MasterStateResponse]] consists the
+   * information of a master node.
+   *
+   * @return a Json object containing the following fields:
+   *         `url` the url of the master node
+   *         `workers` a list of Json objects of [[WorkerInfo]] of the workers allocated to the
+   *         master
+   *         `aliveworkers` size of alive workers allocated to the master
+   *         `cores` total cores available of the master
+   *         `coresused` cores used by the master
+   *         `memory` total memory available of the master
+   *         `memoryused` memory used by the master
+   *         `activeapps` a list of Json objects of [[ApplicationInfo]] of the active applications
+   *         running on the master
+   *         `completedapps` a list of Json objects of [[ApplicationInfo]] of the completed
+   *         applications from the master
+   *         `activedrivers` a list of Json objects of [[DriverInfo]] of the active drivers of the
+   *         master
+   *         `completeddrivers` a list of Json objects of [[DriverInfo]] of the completed drivers
+   *         of the master
+   *         `status` status of the master, see [[MasterState]]
+   */
   def writeMasterState(obj: MasterStateResponse): JObject = {
     val aliveWorkers = obj.workers.filter(_.isAlive())
     ("url" -> obj.uri) ~
@@ -95,6 +190,23 @@ private[deploy] object JsonProtocol {
     ("status" -> obj.status.toString)
   }
 
+  /**
+   * Export the [[WorkerStateResponse]] to a Json object, a [[WorkerStateResponse]] consists the
+   * information of a worker node.
+   *
+   * @return a Json object containing the following fields:
+   *         `id` a string identifier of the worker node
+   *         `masterurl` url of the master node of the worker
+   *         `masterwebuiurl` the address used in web UI of the master node of the worker
+   *         `cores` total cores of the worker
+   *         `coreused` used cores of the worker
+   *         `memory` total memory of the worker
+   *         `memoryused` used memory of the worker
+   *         `executors` a list of Json objects of [[ExecutorRunner]] of the executors running on
+   *         the worker
+   *         `finishedexecutors` a list of Json objects of [[ExecutorRunner]] of the finished
+   *         executors of the worker
+   */
   def writeWorkerState(obj: WorkerStateResponse): JObject = {
     ("id" -> obj.workerId) ~
     ("masterurl" -> obj.masterUrl) ~
