@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from __future__ import absolute_import
-from random import random
 from datetime import datetime, timedelta
 import dateutil
 import time

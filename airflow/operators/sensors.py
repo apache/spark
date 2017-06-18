@@ -405,6 +405,7 @@ class HdfsSensor(BaseSensorOperator):
     def filter_for_filesize(result, size=None):
         """
         Will test the filepath result and test if its size is at least self.filesize
+
         :param result: a list of dicts returned by Snakebite ls
         :param size: the file size in MB a file should be at least to trigger True
         :return: (bool) depending on the matching criteria
@@ -420,10 +421,11 @@ class HdfsSensor(BaseSensorOperator):
     def filter_for_ignored_ext(result, ignored_ext, ignore_copying):
         """
         Will filter if instructed to do so the result to remove matching criteria
+
         :param result: (list) of dicts returned by Snakebite ls
         :param ignored_ext: (list) of ignored extentions
         :param ignore_copying: (bool) shall we ignore ?
-        :return:
+        :return: (list) of dicts which were not removed
         """
         if ignore_copying:
             regex_builder = "^.*\.(%s$)$" % '$|'.join(ignored_ext)
