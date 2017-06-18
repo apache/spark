@@ -20,10 +20,13 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Rand
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, Expression, Literal, Rand, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class CollapseProjectSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -119,4 +122,35 @@ class CollapseProjectSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("do not collapse codegen-only expressions with upper CodegenFallback") {
+    val query1 = testRelation
+      .select(MapObjects(e => e, CreateArray(Seq(Literal(1), Literal(2))), IntegerType).as('m))
+      .select(TestCodegenFallback('m))
+
+    val optimized1 = Optimize.execute(query1.analyze)
+    val correctAnswer1 = query1.analyze
+    comparePlans(optimized1, correctAnswer1)
+
+    val query2 = testRelation
+      .select(
+        CreateArray(Seq(
+          MapObjects(e => e, CreateArray(Seq(Literal(1), Literal(2))), IntegerType),
+          CreateArray(Seq(Literal(3), Literal(4))))).as('m))
+      .select(TestCodegenFallback('m))
+    val optimized2 = Optimize.execute(query2.analyze)
+    val correctAnswer2 = query2.analyze
+    comparePlans(optimized2, correctAnswer2)
+  }
+}
+
+private[sql] case class TestCodegenFallback(input: Expression)
+    extends UnaryExpression with CodegenFallback {
+
+  override def child: Expression = input
+  override def dataType: DataType = input.dataType
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+
+  override def nullSafeEval(input: Any): Any = input
 }

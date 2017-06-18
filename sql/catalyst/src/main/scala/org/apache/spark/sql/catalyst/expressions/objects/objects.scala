@@ -124,15 +124,12 @@ case class StaticInvoke(
     dataType: DataType,
     functionName: String,
     arguments: Seq[Expression] = Nil,
-    propagateNull: Boolean = true) extends InvokeLike {
+    propagateNull: Boolean = true) extends InvokeLike with CodegenOnlyExpression {
 
   val objectName = staticObject.getName.stripSuffix("$")
 
   override def nullable: Boolean = true
   override def children: Seq[Expression] = arguments
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
@@ -182,13 +179,10 @@ case class Invoke(
     dataType: DataType,
     arguments: Seq[Expression] = Nil,
     propagateNull: Boolean = true,
-    returnNullable : Boolean = true) extends InvokeLike {
+    returnNullable : Boolean = true) extends InvokeLike with CodegenOnlyExpression {
 
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
@@ -294,7 +288,7 @@ case class NewInstance(
     arguments: Seq[Expression],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[() => AnyRef]) extends InvokeLike {
+    outerPointer: Option[() => AnyRef]) extends InvokeLike with CodegenOnlyExpression {
   private val className = cls.getName
 
   override def nullable: Boolean = needNullCheck
@@ -310,9 +304,6 @@ case class NewInstance(
       outerPointer.isEmpty && cls.isMemberClass && !Modifier.isStatic(cls.getModifiers)
     childrenResolved && !needOuterPointer
   }
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
@@ -349,14 +340,12 @@ case class NewInstance(
  */
 case class UnwrapOption(
     dataType: DataType,
-    child: Expression) extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
+    child: Expression) extends UnaryExpression with NonSQLExpression with ExpectsInputTypes
+    with CodegenOnlyExpression {
 
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
@@ -381,16 +370,13 @@ case class UnwrapOption(
  * @param optType The type of this option.
  */
 case class WrapOption(child: Expression, optType: DataType)
-  extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
+  extends UnaryExpression with NonSQLExpression with ExpectsInputTypes with CodegenOnlyExpression {
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
 
   override def nullable: Boolean = false
 
   override def inputTypes: Seq[AbstractDataType] = optType :: Nil
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputObject = child.genCode(ctx)
@@ -502,14 +488,12 @@ case class MapObjects private(
     loopVarDataType: DataType,
     lambdaFunction: Expression,
     inputData: Expression,
-    customCollectionCls: Option[Class[_]]) extends Expression with NonSQLExpression {
+    customCollectionCls: Option[Class[_]]) extends Expression with NonSQLExpression
+    with CodegenOnlyExpression {
 
   override def nullable: Boolean = inputData.nullable
 
   override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def dataType: DataType =
     customCollectionCls.map(ObjectType.apply).getOrElse(
@@ -723,15 +707,12 @@ case class CollectObjectsToMap private(
     valueLoopIsNull: String,
     valueLambdaFunction: Expression,
     inputData: Expression,
-    collClass: Class[_]) extends Expression with NonSQLExpression {
+    collClass: Class[_]) extends Expression with NonSQLExpression with CodegenOnlyExpression {
 
   override def nullable: Boolean = inputData.nullable
 
   override def children: Seq[Expression] =
     keyLambdaFunction :: valueLambdaFunction :: inputData :: Nil
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def dataType: DataType = ObjectType(collClass)
 
@@ -890,15 +871,12 @@ case class ExternalMapToCatalyst private(
     valueType: DataType,
     valueConverter: Expression,
     child: Expression)
-  extends UnaryExpression with NonSQLExpression {
+  extends UnaryExpression with NonSQLExpression with CodegenOnlyExpression {
 
   override def foldable: Boolean = false
 
   override def dataType: MapType = MapType(
     keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputMap = child.genCode(ctx)
@@ -999,14 +977,11 @@ case class ExternalMapToCatalyst private(
  * @param children A list of expression to use as content of the external row.
  */
 case class CreateExternalRow(children: Seq[Expression], schema: StructType)
-  extends Expression with NonSQLExpression {
+  extends Expression with NonSQLExpression with CodegenOnlyExpression {
 
   override def dataType: DataType = ObjectType(classOf[Row])
 
   override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericRowWithSchema].getName
@@ -1042,10 +1017,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
  * @param kryo if true, use Kryo. Otherwise, use Java.
  */
 case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
-  extends UnaryExpression with NonSQLExpression {
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  extends UnaryExpression with NonSQLExpression with CodegenOnlyExpression {
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
@@ -1091,7 +1063,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
  * @param kryo if true, use Kryo. Otherwise, use Java.
  */
 case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
-  extends UnaryExpression with NonSQLExpression {
+  extends UnaryExpression with NonSQLExpression with CodegenOnlyExpression {
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
@@ -1135,14 +1107,11 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
  * Initialize a Java Bean instance by setting its field values via setters.
  */
 case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Expression])
-  extends Expression with NonSQLExpression {
+  extends Expression with NonSQLExpression with CodegenOnlyExpression {
 
   override def nullable: Boolean = beanInstance.nullable
   override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
   override def dataType: DataType = beanInstance.dataType
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val instanceGen = beanInstance.genCode(ctx)
@@ -1231,14 +1200,11 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
 case class GetExternalRowField(
     child: Expression,
     index: Int,
-    fieldName: String) extends UnaryExpression with NonSQLExpression {
+    fieldName: String) extends UnaryExpression with NonSQLExpression with CodegenOnlyExpression {
 
   override def nullable: Boolean = false
 
   override def dataType: DataType = ObjectType(classOf[Object])
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   private val errMsg = s"The ${index}th field '$fieldName' of input row cannot be null."
 
@@ -1269,16 +1235,13 @@ case class GetExternalRowField(
  * expectation, throw an exception.
  */
 case class ValidateExternalType(child: Expression, expected: DataType)
-  extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
+  extends UnaryExpression with NonSQLExpression with ExpectsInputTypes with CodegenOnlyExpression {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ObjectType(classOf[Object]))
 
   override def nullable: Boolean = child.nullable
 
   override def dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
 

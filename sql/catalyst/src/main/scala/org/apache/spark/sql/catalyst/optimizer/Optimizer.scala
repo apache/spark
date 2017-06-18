@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -522,13 +523,13 @@ object CollapseProject extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, p2: Project) =>
-      if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
+      if (haveCommonNonCollapseOutput(p1.projectList, p2.projectList)) {
         p1
       } else {
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
       }
     case p @ Project(_, agg: Aggregate) =>
-      if (haveCommonNonDeterministicOutput(p.projectList, agg.aggregateExpressions)) {
+      if (haveCommonNonCollapseOutput(p.projectList, agg.aggregateExpressions)) {
         p
       } else {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
@@ -542,7 +543,7 @@ object CollapseProject extends Rule[LogicalPlan] {
     })
   }
 
-  private def haveCommonNonDeterministicOutput(
+  private def haveCommonNonCollapseOutput(
       upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
     // Create a map of Aliases to their values from the lower projection.
     // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
@@ -550,9 +551,24 @@ object CollapseProject extends Rule[LogicalPlan] {
 
     // Collapse upper and lower Projects if and only if their overlapped expressions are all
     // deterministic.
-    upper.exists(_.collect {
-      case a: Attribute if aliases.contains(a) => aliases(a).child
-    }.exists(!_.deterministic))
+    upper.exists { upperExpr =>
+      val haveCommonNonDeterministicOutput = upperExpr.collect {
+        case a: Attribute if aliases.contains(a) => aliases(a).child
+      }.exists(!_.deterministic)
+
+      // A `CodegenFallback` expression will evaluate children expressions by non-codegen path.
+      // If any expression among them doesn't support non-codegen evaluation, the query will fail
+      // in runtime.
+      val codegenOnlyExprInCodegenFallback = upperExpr.collect {
+        case c: CodegenFallback => c
+      }.exists { cf =>
+        cf.collect {
+          case a: Attribute if aliases.contains(a) => aliases(a).child
+        }.exists(_.find(_.isInstanceOf[CodegenOnlyExpression]).isDefined)
+      }
+
+      haveCommonNonDeterministicOutput || codegenOnlyExprInCodegenFallback
+    }
   }
 
   private def buildCleanedProjectList(

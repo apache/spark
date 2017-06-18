@@ -631,3 +631,11 @@ abstract class TernaryExpression extends Expression {
     }
   }
 }
+
+/**
+ * A expression extending this trait can only be evaluated under codegen.
+ */
+trait CodegenOnlyExpression extends Expression {
+  final override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+}
