@@ -130,12 +130,13 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case s @ ScalarSubquery(query, conditions, _) =>
+            checkAnalysis(query)
+
             // If no correlation, the output must be exactly one column
             if (conditions.isEmpty && query.output.size != 1) {
               failAnalysis(
                 s"Scalar subquery must return only one column, but got ${query.output.size}")
-            }
-            else if (conditions.nonEmpty) {
+            } else if (conditions.nonEmpty) {
               def checkAggregate(agg: Aggregate): Unit = {
                 // Make sure correlated scalar subqueries contain one row for every outer row by
                 // enforcing that they are aggregates containing exactly one aggregate expression.
@@ -179,7 +180,6 @@ trait CheckAnalysis extends PredicateHelper {
                 case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
               }
             }
-            checkAnalysis(query)
             s
 
           case s: SubqueryExpression =>
@@ -399,7 +399,7 @@ trait CheckAnalysis extends PredicateHelper {
                  |in operator ${operator.simpleString}
                """.stripMargin)
 
-          case _: Hint =>
+          case _: UnresolvedHint =>
             throw new IllegalStateException(
               "Internal error: logical hint operator should have been removed during analysis")
 

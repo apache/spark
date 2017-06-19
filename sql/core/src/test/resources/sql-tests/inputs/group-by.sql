@@ -34,7 +34,7 @@ SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a), AVG(a), VARIANCE(a), STDDEV(a),
 FROM testData;
 
 -- Aggregate with foldable input and multiple distinct groups.
-SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS c) GROUP BY a;
+SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t GROUP BY a;
 
 -- Aliases in SELECT could be used in GROUP BY
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
@@ -53,3 +53,10 @@ set spark.sql.groupByAliases=false;
 
 -- Check analysis exceptions
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
+
+-- Aggregate with empty input and non-empty GroupBy expressions.
+SELECT a, COUNT(1) FROM testData WHERE false GROUP BY a;
+
+-- Aggregate with empty input and empty GroupBy expressions.
+SELECT COUNT(1) FROM testData WHERE false;
+SELECT 1 FROM (SELECT COUNT(1) FROM testData WHERE false) t;

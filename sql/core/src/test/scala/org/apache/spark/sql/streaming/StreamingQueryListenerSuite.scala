@@ -21,6 +21,7 @@ import java.util.UUID
 
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.language.reflectiveCalls
 
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.AsyncAssertions.Waiter

@@ -39,9 +39,9 @@ object PCAOnRowMatrixExample {
       Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
       Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0))
 
-    val dataRDD = sc.parallelize(data, 2)
+    val rows = sc.parallelize(data)
 
-    val mat: RowMatrix = new RowMatrix(dataRDD)
+    val mat: RowMatrix = new RowMatrix(rows)
 
     // Compute the top 4 principal components.
     // Principal components are stored in a local dense matrix.

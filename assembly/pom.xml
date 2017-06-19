@@ -226,5 +226,19 @@
         <parquet.deps.scope>provided</parquet.deps.scope>
       </properties>
     </profile>
+
+    <!--
+     Pull in spark-hadoop-cloud and its associated JARs,
+    -->
+    <profile>
+      <id>hadoop-cloud</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-hadoop-cloud_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
   </profiles>
 </project>

@@ -519,8 +519,8 @@ case class FileSourceScanExec(
       relation,
       output.map(QueryPlan.normalizeExprId(_, output)),
       requiredSchema,
-      partitionFilters.map(QueryPlan.normalizeExprId(_, output)),
-      dataFilters.map(QueryPlan.normalizeExprId(_, output)),
+      QueryPlan.normalizePredicates(partitionFilters, output),
+      QueryPlan.normalizePredicates(dataFilters, output),
       None)
   }
 }
