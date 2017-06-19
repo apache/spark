@@ -398,7 +398,6 @@ private[serializer] object KryoSerializer {
     classOf[Array[String]],
     classOf[Array[Array[String]]],
     classOf[BoundedPriorityQueue[_]],
-    classOf[scala.collection.mutable.HashMap[_, _]],
     classOf[SparkConf]
   )
 
