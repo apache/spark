@@ -2544,6 +2544,13 @@ class ArrowTests(ReusedPySparkTestCase):
         pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
 
+    def test_filtered_frame(self):
+        df = self.spark.range(3).toDF("i")
+        pdf = df.filter("i < 0").toPandas()
+        self.assertEqual(len(pdf.columns), 1)
+        self.assertEqual(pdf.columns[0], "i")
+        self.assertTrue(pdf.empty)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *

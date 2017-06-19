@@ -992,6 +992,10 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   test("empty frame collect") {
     val arrowPayload = spark.emptyDataFrame.toArrowPayload.collect()
     assert(arrowPayload.isEmpty)
+
+    val filteredDF = List[Int](1, 2, 3, 4, 5, 6).toDF("i")
+    val filteredArrowPayload = filteredDF.filter("i < 0").toArrowPayload.collect()
+    assert(filteredArrowPayload.isEmpty)
   }
 
   test("empty partition collect") {

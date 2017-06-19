@@ -1650,18 +1650,21 @@ class DataFrame(object):
         0    2  Alice
         1    5    Bob
         """
+        import pandas as pd
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enable", "false").lower() == "true":
             try:
                 import pyarrow
                 tables = self._collectAsArrow()
-                table = pyarrow.concat_tables(tables)
-                return table.to_pandas()
+                if tables:
+                    table = pyarrow.concat_tables(tables)
+                    return table.to_pandas()
+                else:
+                    return pd.DataFrame.from_records([], columns=self.columns)
             except ImportError as e:
                 msg = "note: pyarrow must be installed and available on calling Python process " \
                       "if using spark.sql.execution.arrow.enable=true"
                 raise ImportError("%s\n%s" % (e.message, msg))
         else:
-            import pandas as pd
             return pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
     def _collectAsArrow(self):
