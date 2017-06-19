@@ -110,7 +110,9 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     """
 
     threshold = Param(Params._dummy(), "threshold",
-                      "threshold in binary classification prediction applied to rawPrediction",
+                      "The threshold in binary classification applied to the linear model"
+                      " prediction.  This threshold can be any real number, where Inf will make"
+                      " all predictions 0.0 and -Inf will make all predictions 1.0.",
                       typeConverter=TypeConverters.toFloat)
 
     @keyword_only
