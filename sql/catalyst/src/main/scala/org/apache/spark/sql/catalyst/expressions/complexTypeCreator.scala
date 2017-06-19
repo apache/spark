@@ -58,10 +58,10 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+    ctx.addMutableState("Object[]", values, s"$values = null;")
 
     ev.copy(code = s"""
-      this.$values = new Object[${children.size}];""" +
+      $values = new Object[${children.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
         children.zipWithIndex.map { case (e, i) =>
@@ -76,7 +76,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
         }) +
       s"""
         final ArrayData ${ev.value} = new $arrayClass($values);
-        this.$values = null;
+        $values = null;
       """, isNull = "false")
   }
 
@@ -137,8 +137,8 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val mapClass = classOf[ArrayBasedMapData].getName
     val keyArray = ctx.freshName("keyArray")
     val valueArray = ctx.freshName("valueArray")
-    ctx.addMutableState("Object[]", keyArray, s"this.$keyArray = null;")
-    ctx.addMutableState("Object[]", valueArray, s"this.$valueArray = null;")
+    ctx.addMutableState("Object[]", keyArray, s"$keyArray = null;")
+    ctx.addMutableState("Object[]", valueArray, s"$valueArray = null;")
 
     val keyData = s"new $arrayClass($keyArray)"
     val valueData = s"new $arrayClass($valueArray)"
@@ -173,8 +173,8 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
         }) +
       s"""
         final MapData ${ev.value} = new $mapClass($keyData, $valueData);
-        this.$keyArray = null;
-        this.$valueArray = null;
+        $keyArray = null;
+        $valueArray = null;
       """, isNull = "false")
   }
 
@@ -296,7 +296,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+    ctx.addMutableState("Object[]", values, s"$values = null;")
 
     ev.copy(code = s"""
       $values = new Object[${valExprs.size}];""" +
@@ -313,7 +313,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
         }) +
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
+        $values = null;
       """, isNull = "false")
   }
 
