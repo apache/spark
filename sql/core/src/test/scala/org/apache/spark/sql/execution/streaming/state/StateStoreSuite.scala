@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.{File, IOException}
 import java.net.URI
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -143,7 +144,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     provider.getStore(0).commit()
 
     // Verify we don't leak temp files
-    val tempFiles = FileUtils.listFiles(new File(provider.id.checkpointLocation),
+    val tempFiles = FileUtils.listFiles(new File(provider.id.checkpointRootLocation),
       null, true).asScala.filter(_.getName.startsWith("temp-"))
     assert(tempFiles.isEmpty)
   }
@@ -183,7 +184,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   test("StateStore.get") {
     quietly {
       val dir = newDir()
-      val storeId = StateStoreId(dir, 0, 0)
+      val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
       val storeConf = StateStoreConf.empty
       val hadoopConf = new Configuration()
 
@@ -243,18 +244,18 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       .set("spark.rpc.numRetries", "1")
     val opId = 0
     val dir = newDir()
-    val storeId = StateStoreId(dir, opId, 0)
+    val storeProviderId = StateStoreProviderId(StateStoreId(dir, opId, 0), UUID.randomUUID)
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
     val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
-    val provider = newStoreProvider(storeId)
+    val provider = newStoreProvider(storeProviderId.storeId)
 
     var latestStoreVersion = 0
 
     def generateStoreVersions() {
       for (i <- 1 to 20) {
-        val store = StateStore.get(storeId, keySchema, valueSchema, None,
+        val store = StateStore.get(storeProviderId, keySchema, valueSchema, None,
           latestStoreVersion, storeConf, hadoopConf)
         put(store, "a", i)
         store.commit()
@@ -274,7 +275,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
           eventually(timeout(timeoutDuration)) {
             // Store should have been reported to the coordinator
-            assert(coordinatorRef.getLocation(storeId).nonEmpty, "active instance was not reported")
+            assert(coordinatorRef.getLocation(storeProviderId).nonEmpty,
+              "active instance was not reported")
 
             // Background maintenance should clean up and generate snapshots
             assert(StateStore.isMaintenanceRunning, "Maintenance task is not running")
@@ -295,35 +297,35 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
             assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
           }
 
-          // If driver decides to deactivate all instances of the store, then this instance
-          // should be unloaded
-          coordinatorRef.deactivateInstances(dir)
+          // If driver decides to deactivate all stores related to a query run,
+          // then this instance should be unloaded
+          coordinatorRef.deactivateInstances(storeProviderId.queryRunId)
           eventually(timeout(timeoutDuration)) {
-            assert(!StateStore.isLoaded(storeId))
+            assert(!StateStore.isLoaded(storeProviderId))
           }
 
           // Reload the store and verify
-          StateStore.get(storeId, keySchema, valueSchema, indexOrdinal = None,
+          StateStore.get(storeProviderId, keySchema, valueSchema, indexOrdinal = None,
             latestStoreVersion, storeConf, hadoopConf)
-          assert(StateStore.isLoaded(storeId))
+          assert(StateStore.isLoaded(storeProviderId))
 
           // If some other executor loads the store, then this instance should be unloaded
-          coordinatorRef.reportActiveInstance(storeId, "other-host", "other-exec")
+          coordinatorRef.reportActiveInstance(storeProviderId, "other-host", "other-exec")
           eventually(timeout(timeoutDuration)) {
-            assert(!StateStore.isLoaded(storeId))
+            assert(!StateStore.isLoaded(storeProviderId))
           }
 
           // Reload the store and verify
-          StateStore.get(storeId, keySchema, valueSchema, indexOrdinal = None,
+          StateStore.get(storeProviderId, keySchema, valueSchema, indexOrdinal = None,
             latestStoreVersion, storeConf, hadoopConf)
-          assert(StateStore.isLoaded(storeId))
+          assert(StateStore.isLoaded(storeProviderId))
         }
       }
 
       // Verify if instance is unloaded if SparkContext is stopped
       eventually(timeout(timeoutDuration)) {
         require(SparkEnv.get === null)
-        assert(!StateStore.isLoaded(storeId))
+        assert(!StateStore.isLoaded(storeProviderId))
         assert(!StateStore.isMaintenanceRunning)
       }
     }
@@ -344,7 +346,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
   test("SPARK-18416: do not create temp delta file until the store is updated") {
     val dir = newDir()
-    val storeId = StateStoreId(dir, 0, 0)
+    val storeId = StateStoreProviderId(StateStoreId(dir, 0, 0), UUID.randomUUID)
     val storeConf = StateStoreConf.empty
     val hadoopConf = new Configuration()
     val deltaFileDir = new File(s"$dir/0/0/")
@@ -413,7 +415,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 
   override def newStoreProvider(storeId: StateStoreId): HDFSBackedStateStoreProvider = {
-    newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointLocation)
+    newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointRootLocation)
   }
 
   override def getLatestData(storeProvider: HDFSBackedStateStoreProvider): Set[(String, Int)] = {

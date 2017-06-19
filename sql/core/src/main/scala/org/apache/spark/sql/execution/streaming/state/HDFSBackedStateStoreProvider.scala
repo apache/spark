@@ -243,8 +243,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   @volatile private var hadoopConf: Configuration = _
 
   private lazy val loadedMaps = new mutable.HashMap[Long, MapType]
-  private lazy val baseDir =
-    new Path(id.checkpointLocation, s"${id.operatorId}/${id.partitionId.toString}")
+  private lazy val baseDir = stateStoreId.storeCheckpointLocation()
   private lazy val fs = baseDir.getFileSystem(hadoopConf)
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
