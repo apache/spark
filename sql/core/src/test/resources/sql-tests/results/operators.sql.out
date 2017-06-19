@@ -460,3 +460,11 @@ select abs(-3.13), abs('-2.19')
 struct<abs(-3.13):decimal(3,2),abs(CAST(-2.19 AS DOUBLE)):double>
 -- !query 55 output
 3.13	2.19
+
+
+-- !query 55
+select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11)
+-- !query 55 schema
+struct<(+ CAST(-1.11 AS DOUBLE)):double,(+ -1.11):decimal(3,2),(- CAST(-1.11 AS DOUBLE)):double,(- -1.11):decimal(3,2)>
+-- !query 55 output
+-1.11	-1.11	1.11	1.11

@@ -89,3 +89,6 @@ select OCTET_LENGTH('abc');
 
 -- abs
 select abs(-3.13), abs('-2.19');
+
+-- positive/negative
+select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11);
