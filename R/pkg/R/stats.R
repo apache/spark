@@ -54,6 +54,7 @@ setMethod("crosstab",
 
 #' @param colName1 the name of the first column
 #' @param colName2 the name of the second column
+#' @return The covariance of the two columns.
 #'
 #' @rdname cov
 #' @aliases cov,SparkDataFrame-method
