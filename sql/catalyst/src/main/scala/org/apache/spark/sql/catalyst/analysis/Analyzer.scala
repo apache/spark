@@ -1206,11 +1206,21 @@ class Analyzer(
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
-                case wf: AggregateWindowFunction => wf
+                case wf: AggregateWindowFunction =>
+                  if (isDistinct) {
+                    failAnalysis(s"${wf.prettyName} does not support the modifier DISTINCT")
+                  } else {
+                    wf
+                  }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
-                case other => other
+                case other =>
+                  if (isDistinct) {
+                    failAnalysis(s"${other.prettyName} does not support the modifier DISTINCT")
+                  } else {
+                    other
+                  }
               }
             }
         }
