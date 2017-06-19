@@ -301,7 +301,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       }
 
       if (numExecutors >= executorLimit) {
-        logDebug("Executor limit reached. numExecutors: " + numExecutors() +
+        logDebug("Executor limit reached. numExecutors: " + numExecutors +
           " executorLimit: " + executorLimit)
         offers.asScala.map(_.getId).foreach(d.declineOffer)
         launchingExecutors = false
@@ -534,13 +534,15 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     // Check the locality information
     val currentHosts = slaves.values.filter(_.taskIDs.nonEmpty).map(_.hostname).toSet
     val allDesiredHosts = hostToLocalTaskCount.keys.toSet
+    // Try to match locality for hosts which do not have executors yet, to potentially
+    // increase coverage.
     val remainingHosts = allDesiredHosts -- currentHosts
-    if (!(remainingHosts contains offerHostname) &&
+    if (!remainingHosts.contains(offerHostname) &&
       (System.currentTimeMillis() - localityWaitStartTime <= localityWait)) {
       logDebug("Skipping host and waiting for locality. host: " + offerHostname)
       return false
     }
-    true
+    return true
   }
 
   override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
