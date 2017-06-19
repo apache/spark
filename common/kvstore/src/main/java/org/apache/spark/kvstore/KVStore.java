@@ -18,9 +18,6 @@
 package org.apache.spark.kvstore;
 
 import java.io.Closeable;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NoSuchElementException;
 
 /**
  * Abstraction for a local key/value store for storing app data.
@@ -84,7 +81,7 @@ public interface KVStore extends Closeable {
    *
    * @param naturalKey The object's "natural key", which uniquely identifies it. Null keys
    *                   are not allowed.
-   * @throws NoSuchElementException If an element with the given key does not exist.
+   * @throws java.util.NoSuchElementException If an element with the given key does not exist.
    */
   <T> T read(Class<T> klass, Object naturalKey) throws Exception;
 
@@ -107,7 +104,7 @@ public interface KVStore extends Closeable {
    * @param type The object's type.
    * @param naturalKey The object's "natural key", which uniquely identifies it. Null keys
    *                   are not allowed.
-   * @throws NoSuchElementException If an element with the given key does not exist.
+   * @throws java.util.NoSuchElementException If an element with the given key does not exist.
    */
   void delete(Class<?> type, Object naturalKey) throws Exception;
 

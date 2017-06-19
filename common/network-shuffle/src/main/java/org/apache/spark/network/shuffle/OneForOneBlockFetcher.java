@@ -157,7 +157,7 @@ public class OneForOneBlockFetcher {
     private File targetFile = null;
     private int chunkIndex;
 
-    public DownloadCallback(File targetFile, int chunkIndex) throws IOException {
+    DownloadCallback(File targetFile, int chunkIndex) throws IOException {
       this.targetFile = targetFile;
       this.channel = Channels.newChannel(new FileOutputStream(targetFile));
       this.chunkIndex = chunkIndex;
