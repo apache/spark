@@ -52,6 +52,10 @@ setMethod("crosstab",
             collect(dataFrame(sct))
           })
 
+#' @details
+#' \code{cov}: When applied to SparkDataFrame, this calculates the sample covariance of two numerical
+#' columns of \emph{one} SparkDataFrame.
+#'
 #' @param colName1 the name of the first column
 #' @param colName2 the name of the second column
 #' @return The covariance of the two columns.
@@ -63,7 +67,8 @@ setMethod("crosstab",
 #' @examples
 #'
 #' \dontrun{
-#' cov(df, "mpg", "hp")}
+#' cov(df, "mpg", "hp")
+#' cov(df, df$mpg, df$hp)}
 #' @note cov since 1.6.0
 setMethod("cov",
           signature(x = "SparkDataFrame"),
