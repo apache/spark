@@ -244,7 +244,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     val df2 = table.where("(p1 + c2) = 2 AND c1 = 1")
     // Filter on data only are advisory so we have to reevaluate.
     assert(getPhysicalFilters(df2) contains resolve(df2, "c1 = 1"))
-    // Need to evalaute filters that are not pushed down.
+    // Need to evaluate filters that are not pushed down.
     assert(getPhysicalFilters(df2) contains resolve(df2, "(p1 + c2) = 2"))
   }
 
