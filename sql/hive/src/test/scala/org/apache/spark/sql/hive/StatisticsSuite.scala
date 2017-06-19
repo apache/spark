@@ -135,14 +135,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
     val tableName = "analyzeTable_part"
     withTable(tableName) {
-      withTempPaths(4) {
+      // Create 4 paths: one to use as table location and one for each of the 3 partitions
+      withTempPaths(numPaths = 4) {
         case tablePath :: partitionPaths =>
           sql(
             s"""
                |CREATE TABLE ${tableName} (key STRING, value STRING) PARTITIONED BY (ds STRING)
                |LOCATION '${tablePath}'
-             """.
-              stripMargin).collect()
+             """.stripMargin).collect()
 
           val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
           partitionDates.zip(partitionPaths).foreach {
@@ -151,14 +151,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
                 s"""
                    |ALTER TABLE ${tableName} ADD PARTITION (ds='${ds}')
                    |LOCATION '${path.toString}'
-                """.
-                  stripMargin).collect()
+                """.stripMargin).collect()
               sql(
                 s"""
                    |INSERT INTO TABLE ${tableName} PARTITION (ds='${ds}')
                    |SELECT * FROM src
-                """.
-                  stripMargin).collect()
+                """.stripMargin).collect()
           }
 
           sql(s"ANALYZE TABLE ${tableName} COMPUTE STATISTICS noscan")

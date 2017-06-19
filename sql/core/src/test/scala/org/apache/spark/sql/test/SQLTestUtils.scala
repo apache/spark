@@ -130,12 +130,12 @@ private[sql] trait SQLTestUtils
    * Creates the requested number of temporary path (without creating the actual file/directory),
    * which are then passed to f and will be deleted after f returns.
    *
-   * @param num Number of directories to create
+   * @param numPaths Number of paths to create
    * @param f Function to invoke with the created paths
    */
-  protected def withTempPaths(num: Int)(f: List[File] => Unit) {
+  protected def withTempPaths(numPaths: Int)(f: List[File] => Unit) {
     val paths = mutable.ListBuffer[File]()
-    for (i <- 0 until num) {
+    for (i <- 0 until numPaths) {
       val path = Utils.createTempDir().getCanonicalFile
       path.delete()
       paths += path

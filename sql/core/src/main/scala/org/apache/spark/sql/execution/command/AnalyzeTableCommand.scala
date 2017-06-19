@@ -86,7 +86,7 @@ object AnalyzeTableCommand extends Logging {
     if (catalogTable.partitionColumnNames.isEmpty) {
       calculateLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
     } else {
-      // Calculate table size as a sum of its partitions. See SPARK-21079
+      // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       partitions.map(p =>
         calculateLocationSize(sessionState, catalogTable.identifier, p.storage.locationUri)
