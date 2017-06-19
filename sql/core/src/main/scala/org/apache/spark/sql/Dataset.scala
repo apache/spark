@@ -28,7 +28,6 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
-import org.apache.spark.internal.Logging
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
@@ -56,6 +55,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
+import org.apache.spark.internal.Logging
 
 private[sql] object Dataset {
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
@@ -534,7 +534,8 @@ class Dataset[T] private[sql](
    * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to truncate
    * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
    * plan may grow exponentially. It will be saved to files inside the checkpoint
-   * directory set with `SparkContext#setCheckpointDir`.
+   * directory set with `SparkContext#setCheckpointDir`. 
+   * This is no-op in queries with streaming sources.
    *
    * @group basic
    * @since 2.1.0
@@ -547,7 +548,8 @@ class Dataset[T] private[sql](
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
    * logical plan of this Dataset, which is especially useful in iterative algorithms where the
    * plan may grow exponentially. It will be saved to files inside the checkpoint
-   * directory set with `SparkContext#setCheckpointDir`.
+   * directory set with `SparkContext#setCheckpointDir`. 
+   * This is no-op in queries with streaming sources.
    *
    * @group basic
    * @since 2.1.0
@@ -568,9 +570,9 @@ class Dataset[T] private[sql](
 
       val physicalPlan = queryExecution.executedPlan
 
-      // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
-      // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
-      // joins.
+      // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. 
+      // Otherwise the size of `PartitioningCollection` may grow exponentially for queries 
+      // involving deep inner joins.
       def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
         partitioning match {
           case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
@@ -2630,6 +2632,7 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
+   * This is no-op in queries with streaming sources.
    *
    * @group basic
    * @since 1.6.0
@@ -2645,6 +2648,7 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
+   * This is no-op in queries with streaming sources.
    *
    * @group basic
    * @since 1.6.0
@@ -2653,6 +2657,8 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the given storage level.
+   * This is no-op in queries with streaming sources.
+   *
    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
    *                 `MEMORY_AND_DISK_2`, etc.
@@ -2683,6 +2689,7 @@ class Dataset[T] private[sql](
 
   /**
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
+   * This is no-op in queries with streaming sources.
    *
    * @param blocking Whether to block until all blocks are deleted.
    *
@@ -2700,6 +2707,7 @@ class Dataset[T] private[sql](
 
   /**
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
+   * This is no-op in queries with streaming sources.
    *
    * @group basic
    * @since 1.6.0
