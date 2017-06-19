@@ -569,6 +569,12 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }
   }
 
+  override def workerRemoved(workerId: String, host: String, message: String): Unit = {
+    logInfo(s"Handle removed worker $workerId: $message")
+    dagScheduler.workerRemoved(workerId, host, message)
+    backend.reviveOffers()
+  }
+
   private def logExecutorLoss(
       executorId: String,
       hostPort: String,
