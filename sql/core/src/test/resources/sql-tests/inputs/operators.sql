@@ -84,10 +84,14 @@ select mod(7, 2), mod(7, 0), mod(0, 2), mod(7, null), mod(null, 2), mod(null, nu
 -- length
 select BIT_LENGTH('abc');
 select CHAR_LENGTH('abc');
+select CHARACTER_LENGTH('abc');
 select OCTET_LENGTH('abc');
 
 -- abs
 select abs(-3.13), abs('-2.19');
+
+-- positive/negative
+select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11);
 
 -- width_bucket
 select width_bucket(5.35, 0.024, 10.06, 5);

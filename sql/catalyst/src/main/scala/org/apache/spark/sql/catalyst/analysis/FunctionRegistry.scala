@@ -308,6 +308,7 @@ object FunctionRegistry {
     expression[Base64]("base64"),
     expression[BitLength]("bit_length"),
     expression[Length]("char_length"),
+    expression[Length]("character_length"),
     expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
