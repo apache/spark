@@ -38,16 +38,9 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Store Arrow data in a form that can be serialized by Spark.
+ * Store Arrow data in a form that can be serialized by Spark and served to a Python process.
  */
-private[sql] class ArrowPayload(payload: Array[Byte]) extends Serializable {
-
-  /**
-   * Create an ArrowPayload from an ArrowRecordBatch and Spark schema.
-   */
-  def this(batch: ArrowRecordBatch, schema: StructType, allocator: BufferAllocator) = {
-    this(ArrowConverters.batchToByteArray(batch, schema, allocator))
-  }
+private[sql] class ArrowPayload private[arrow] (payload: Array[Byte]) extends Serializable {
 
   /**
    * Convert the ArrowPayload to an ArrowRecordBatch.
@@ -57,9 +50,22 @@ private[sql] class ArrowPayload(payload: Array[Byte]) extends Serializable {
   }
 
   /**
-   * Get the ArrowPayload as an Array[Byte].
+   * Get the ArrowPayload as a type that can be served to Python.
    */
-  def toByteArray: Array[Byte] = payload
+  def asPythonSerializable: Array[Byte] = payload
+}
+
+private[sql] object ArrowPayload {
+
+  /**
+   * Create an ArrowPayload from an ArrowRecordBatch and Spark schema.
+   */
+  def apply(
+      batch: ArrowRecordBatch,
+      schema: StructType,
+      allocator: BufferAllocator): ArrowPayload = {
+    new ArrowPayload(ArrowConverters.batchToByteArray(batch, schema, allocator))
+  }
 }
 
 private[sql] object ArrowConverters {
@@ -121,7 +127,7 @@ private[sql] object ArrowConverters {
 
       private def convert(): ArrowPayload = {
         val batch = internalRowIterToArrowBatch(rowIter, schema, _allocator, maxRecordsPerBatch)
-        new ArrowPayload(batch, schema, _allocator)
+        ArrowPayload(batch, schema, _allocator)
       }
     }
   }
