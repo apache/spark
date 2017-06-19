@@ -62,12 +62,12 @@ datanucleus-api-jdo-3.2.6.jar
 datanucleus-core-3.2.10.jar
 datanucleus-rdbms-3.2.9.jar
 derby-10.12.1.1.jar
-dropwizard-jackson-1.0.0.jar
-dropwizard-lifecycle-1.0.0.jar
-dropwizard-metrics-1.0.0.jar
+dropwizard-jackson-0.9.2.jar
+dropwizard-lifecycle-0.9.2.jar
+dropwizard-metrics-0.9.2.jar
 dropwizard-metrics-influxdb-1.1.8.jar
-dropwizard-util-1.0.0.jar
-dropwizard-validation-1.0.0.jar
+dropwizard-util-0.9.2.jar
+dropwizard-validation-0.9.2.jar
 eigenbase-properties-1.1.5.jar
 fastutil-7.0.13.jar
 generex-1.0.1.jar
@@ -92,7 +92,7 @@ hadoop-yarn-client-2.8.0-palantir5.jar
 hadoop-yarn-common-2.8.0-palantir5.jar
 hadoop-yarn-server-common-2.8.0-palantir5.jar
 hadoop-yarn-server-web-proxy-2.8.0-palantir5.jar
-hibernate-validator-5.2.4.Final.jar
+hibernate-validator-5.2.2.Final.jar
 hk2-api-2.5.0-b32.jar
 hk2-locator-2.5.0-b32.jar
 hk2-utils-2.5.0-b32.jar
@@ -108,9 +108,8 @@ jackson-databind-2.6.5.jar
 jackson-dataformat-cbor-2.6.5.jar
 jackson-dataformat-yaml-2.6.5.jar
 jackson-datatype-guava-2.6.5.jar
-jackson-datatype-jdk8-2.6.5.jar
+jackson-datatype-jdk7-2.6.5.jar
 jackson-datatype-joda-2.6.5.jar
-jackson-datatype-jsr310-2.6.5.jar
 jackson-jaxrs-1.9.13.jar
 jackson-jaxrs-base-2.6.5.jar
 jackson-jaxrs-json-provider-2.6.5.jar
