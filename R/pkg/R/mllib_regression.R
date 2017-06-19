@@ -164,7 +164,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
                                 "fit", formula, data@sdf, tolower(family$family), family$link,
                                 tol, as.integer(maxIter), weightCol, regParam,
                                 as.double(var.power), as.double(link.power),
-                                as.character(stringIndexerOrderType))
+                                stringIndexerOrderType)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
@@ -210,7 +210,6 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
                    var.power = 0.0, link.power = 1.0 - var.power,
                    stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
                                               "alphabetDesc", "alphabetAsc")) {
-            stringIndexerOrderType <- match.arg(stringIndexerOrderType)
             spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol,
                       var.power = var.power, link.power = link.power,
                       stringIndexerOrderType = stringIndexerOrderType)
@@ -485,7 +484,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
                                 "fit", formula, data@sdf, as.integer(aggregationDepth),
-                                as.character(stringIndexerOrderType))
+                                stringIndexerOrderType)
             new("AFTSurvivalRegressionModel", jobj = jobj)
           })
 

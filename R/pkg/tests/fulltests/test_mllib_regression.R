@@ -368,8 +368,6 @@ test_that("glm save/load", {
 })
 
 test_that("spark.glm and glm with string encoding", {
-  skip_on_cran()
-
   t <- as.data.frame(Titanic, stringsAsFactors = FALSE)
   df <- createDataFrame(t)
 
