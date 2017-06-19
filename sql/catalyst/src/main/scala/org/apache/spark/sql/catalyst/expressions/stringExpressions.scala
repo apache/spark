@@ -1209,6 +1209,10 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     Examples:
       > SELECT _FUNC_('Spark SQL');
        9
+      > SELECT CHAR_LENGTH('Spark SQL');
+       9
+      > SELECT CHARACTER_LENGTH('Spark SQL');
+       9
   """)
 // scalastyle:on line.size.limit
 case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
