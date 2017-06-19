@@ -61,8 +61,8 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
       boolean authEnabled,
-      long registrationTimeoutMilli) {
-    super(conf, secretKeyHolder, authEnabled, registrationTimeoutMilli);
+      long registrationTimeoutMillis) {
+    super(conf, secretKeyHolder, authEnabled, registrationTimeoutMillis);
   }
 
   public void registerDriverWithShuffleService(
