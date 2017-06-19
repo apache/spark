@@ -22,6 +22,8 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.io.{Input, Output}
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.SparkEnv
@@ -141,8 +143,8 @@ private[spark] class HighlyCompressedMapStatus private (
     private[this] var numNonEmptyBlocks: Int,
     private[this] var emptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long,
-    private[this] var hugeBlockSizes: Map[Int, Byte])
-  extends MapStatus with Externalizable {
+    @transient private[this] var hugeBlockSizes: Map[Int, Byte])
+  extends MapStatus with Externalizable with KryoSerializable {
 
   // loc could be null when the default constructor is called during deserialization
   require(loc == null || avgSize > 0 || hugeBlockSizes.size > 0 || numNonEmptyBlocks == 0,
@@ -188,6 +190,14 @@ private[spark] class HighlyCompressedMapStatus private (
       hugeBlockSizesArray += Tuple2(block, size)
     }
     hugeBlockSizes = hugeBlockSizesArray.toMap
+  }
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    kryo.writeClassAndObject(output, hugeBlockSizes)
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    hugeBlockSizes = kryo.readClassAndObject(input).asInstanceOf[Map[Int, Byte]]
   }
 }
 
