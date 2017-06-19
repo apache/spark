@@ -1293,9 +1293,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val attempts = new mutable.HashMap[String, Int]()
       val handler = new NoOpRpcHandler {
         override def receive(
-                     client: TransportClient,
-                     message: ByteBuffer,
-                     callback: RpcResponseCallback): Unit = {
+            client: TransportClient,
+            message: ByteBuffer,
+            callback: RpcResponseCallback): Unit = {
           val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
           msgObj match {
             case exec: RegisterExecutor =>
