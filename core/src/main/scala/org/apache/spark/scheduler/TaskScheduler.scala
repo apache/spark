@@ -92,7 +92,7 @@ private[spark] trait TaskScheduler {
   /**
    * Process a removed worker
    */
-  def workerRemoved(workerId: String, message: String): Unit
+  def workerRemoved(workerId: String, host: String, message: String): Unit
 
   /**
    * Get an application's attempt ID associated with the job.
