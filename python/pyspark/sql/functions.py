@@ -1855,6 +1855,46 @@ def sort_array(col, asc=True):
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
 
 
+@since(2.3)
+def map_keys(col):
+    """
+    Collection function: Returns an unordered array containing the keys of the map.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_keys
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_keys("data").alias("keys")).show()
+    +------+
+    |  keys|
+    +------+
+    |[1, 2]|
+    +------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_keys(_to_java_column(col)))
+
+
+@since(2.3)
+def map_values(col):
+    """
+    Collection function: Returns an unordered array containing the values of the map.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_values
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_values("data").alias("values")).show()
+    +------+
+    |values|
+    +------+
+    |[a, b]|
+    +------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_values(_to_java_column(col)))
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 def _wrap_function(sc, func, returnType):
