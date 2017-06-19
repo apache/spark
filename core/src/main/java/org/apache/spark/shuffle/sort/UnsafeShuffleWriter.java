@@ -353,8 +353,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         final long initialFileLength = mergedFileOutputStream.getByteCount();
-        // Shield the underlying output stream from close() calls, so that we can close the higher
-        // level streams to make sure all data is really flushed and internal state is cleaned.
+        // Shield the underlying output stream from close() calls, so that we can close
+        // the higher level streams to make sure all data is really flushed and internal state is
+        // cleaned.
         OutputStream partitionOutput = new CloseShieldOutputStream(
           new TimeTrackingOutputStream(writeMetrics, mergedFileOutputStream));
         partitionOutput = blockManager.serializerManager().wrapForEncryption(partitionOutput);
