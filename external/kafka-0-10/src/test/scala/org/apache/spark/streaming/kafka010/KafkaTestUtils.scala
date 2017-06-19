@@ -38,6 +38,7 @@ import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Time
+import org.apache.spark.util.Utils
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
