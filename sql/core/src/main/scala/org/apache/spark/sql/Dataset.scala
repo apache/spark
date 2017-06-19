@@ -535,7 +535,7 @@ class Dataset[T] private[sql](
    * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
    * plan may grow exponentially. It will be saved to files inside the checkpoint
    * directory set with `SparkContext#setCheckpointDir`. 
-   * This is no-op in queries with streaming sources.
+   * This is a no-op in queries with streaming sources.
    *
    * @group basic
    * @since 2.1.0
@@ -549,7 +549,7 @@ class Dataset[T] private[sql](
    * logical plan of this Dataset, which is especially useful in iterative algorithms where the
    * plan may grow exponentially. It will be saved to files inside the checkpoint
    * directory set with `SparkContext#setCheckpointDir`. 
-   * This is no-op in queries with streaming sources.
+   * This is a no-op in queries with streaming sources.
    *
    * @group basic
    * @since 2.1.0
@@ -2632,7 +2632,7 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
-   * This is no-op in queries with streaming sources.
+   * This is a no-op in queries with streaming sources.
    *
    * @group basic
    * @since 1.6.0
@@ -2648,7 +2648,7 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
-   * This is no-op in queries with streaming sources.
+   * This is a no-op in queries with streaming sources.
    *
    * @group basic
    * @since 1.6.0
@@ -2657,7 +2657,7 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the given storage level.
-   * This is no-op in queries with streaming sources.
+   * This is a no-op in queries with streaming sources.
    *
    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
@@ -2689,7 +2689,7 @@ class Dataset[T] private[sql](
 
   /**
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
-   * This is no-op in queries with streaming sources.
+   * This is a no-op in queries with streaming sources.
    *
    * @param blocking Whether to block until all blocks are deleted.
    *
@@ -2707,7 +2707,7 @@ class Dataset[T] private[sql](
 
   /**
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
-   * This is no-op in queries with streaming sources.
+   * This is a no-op in queries with streaming sources.
    *
    * @group basic
    * @since 1.6.0
