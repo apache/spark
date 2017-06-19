@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Strategy
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, ReturnAnswer, Union}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -25,11 +27,11 @@ import org.apache.spark.sql.test.SharedSQLContext
 class SparkPlannerSuite extends SharedSQLContext {
   import testImplicits._
 
-  test("Ensure to go down only the first branch, not any other possible branches") {
+  case object NeverPlanned extends LeafNode {
+    override def output: Seq[Attribute] = Nil
+  }
 
-    case object NeverPlanned extends LeafNode {
-      override def output: Seq[Attribute] = Nil
-    }
+  test("Ensure to go down only the first branch, not any other possible branches") {
 
     var planned = 0
     object TestStrategy extends Strategy {
@@ -49,6 +51,7 @@ class SparkPlannerSuite extends SharedSQLContext {
       }
     }
 
+    val original = spark.experimental.extraStrategies
     try {
       spark.experimental.extraStrategies = TestStrategy :: Nil
 
@@ -57,7 +60,58 @@ class SparkPlannerSuite extends SharedSQLContext {
       assert(ds.collect().toSeq === Seq("a", "b", "c", "d", "e", "f"))
       assert(planned === 4)
     } finally {
-      spark.experimental.extraStrategies = Nil
+      spark.experimental.extraStrategies = original
+    }
+  }
+
+  test("prune plan") {
+
+    case object NeverExecuted extends LeafExecNode {
+      override def output: Seq[Attribute] = Nil
+      protected def doExecute(): RDD[InternalRow] = {
+        fail("This plan will never be executed.")
+      }
+    }
+
+    var planned = 0
+    object TestStrategy extends Strategy {
+
+      def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+        case ReturnAnswer(child) =>
+          planned += 1
+          NeverExecuted :: planLater(child) :: planLater(NeverPlanned) :: Nil
+        case Union(children) =>
+          planned += 1
+          NeverExecuted :: UnionExec(children.map(planLater)) :: planLater(NeverPlanned) :: Nil
+        case LocalRelation(output, data) =>
+          planned += 1
+          NeverExecuted :: LocalTableScanExec(output, data) :: planLater(NeverPlanned) :: Nil
+        case NeverPlanned =>
+          fail("QueryPlanner should not go down to this branch.")
+        case _ => Nil
+      }
+
+      override def prunePlans(plans: Iterator[SparkPlan]): Iterator[SparkPlan] = {
+        val buff = plans.buffered
+        assert(buff.hasNext)
+        assert(buff.head == NeverExecuted)
+        buff.next() // Drop head, which is a bad plan.
+        assert(buff.hasNext)
+        assert(buff.head != NeverExecuted)
+        buff
+      }
+    }
+
+    val original = spark.experimental.extraStrategies
+    try {
+      spark.experimental.extraStrategies = TestStrategy :: Nil
+
+      val ds = Seq("a", "b", "c").toDS().union(Seq("d", "e", "f").toDS())
+
+      assert(ds.collect().toSeq === Seq("a", "b", "c", "d", "e", "f"))
+      assert(planned === 4)
+    } finally {
+      spark.experimental.extraStrategies = original
     }
   }
 }
