@@ -221,29 +221,60 @@ class CodegenContext {
 
   private val outerClassName = "OuterClass"
 
+
+  /**
+   * Holds the class and instance names to be generated, where `OuterClass` is a placeholder
+   * standing for whichever class is generated as the outermost class and which will contain any
+   * nested sub-classes. All other classes and instance names in this list will represent private,
+   * nested sub-classes.
+   */
   private val classes: mutable.ListBuffer[(String, String)] =
     mutable.ListBuffer[(String, String)](outerClassName -> null)
 
+  // A map holding the current size in bytes of each class to be generated.
   private val classSize: mutable.Map[String, Int] =
     mutable.Map[String, Int](outerClassName -> 0)
 
+  // Nested maps holding function names and their code belonging to each class.
   private val classFunctions: mutable.Map[String, mutable.Map[String, String]] =
     mutable.Map(outerClassName -> mutable.Map.empty[String, String])
 
+  // Returns the size of the most recently added class.
   private def currClassSize(): Int = classSize(classes.head._1)
 
+  // Returns the class name and instance name for the most recently added class.
   private def currClass(): (String, String) = classes.head
 
+  // Adds a new class. Requires the class' name, and its instance name.
   private def addClass(className: String, classInstance: String): Unit = {
     classes.prepend(className -> classInstance)
     classSize += className -> 0
     classFunctions += className -> mutable.Map.empty[String, String]
   }
 
+  /**
+   * Adds a function to the generated class. If the code for the `OuterClass` grows too large, the
+   * function will be inlined into a new private, nested class, and a class-qualified name for the
+   * function will be returned. Otherwise, the function will be inined to the `OuterClass` the
+   * simple `funcName` will be returned.
+   *
+   * @param funcName the class-unqualified name of the function
+   * @param funcCode the body of the function
+   * @param inlineToOuterClass whether the given code must be inlined to the `OuterClass`. This
+   *                           can be necessary when a function is declared outside of the context
+   *                           it is eventually referenced and a returned qualified function name
+   *                           cannot otherwise be accessed.
+   * @return the name of the function, qualified by class if it will be inlined to a private,
+   *         nested sub-class
+   */
   def addNewFunction(
       funcName: String,
       funcCode: String,
       inlineToOuterClass: Boolean = false): String = {
+    // The number of named constants that can exist in the class is limited by the Constant Pool
+    // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
+    // threshold of 1600k bytes to determine when a function should be inlined to a private, nested
+    // sub-class.
     val (className, classInstance) = if (inlineToOuterClass) {
       outerClassName -> ""
     } else if (currClassSize > 1600000) {
@@ -268,17 +299,28 @@ class CodegenContext {
     }
   }
 
+  /**
+   * Instantiates all nested, private sub-classes as objects to the `OuterClass`
+   */
   private[sql] def initNestedClasses(): String = {
+    // Nested, private sub-classes have no mutable state (though they do reference the outer class'
+    // mutable state), so we declare and initialize them inline to the OuterClass.
     classes.filter(_._1 != outerClassName).map {
       case (className, classInstance) =>
         s"private $className $classInstance = new $className();"
     }.mkString("\n")
   }
 
+  /**
+   * Declares all function code that should be inlined to the `OuterClass`.
+   */
   private[sql] def declareAddedFunctions(): String = {
     classFunctions(outerClassName).values.mkString("\n")
   }
 
+  /**
+   * Declares all nested, private sub-classes and the function code that should be inlined to them.
+   */
   private[sql] def declareNestedClasses(): String = {
     classFunctions.filterKeys(_ != outerClassName).map {
       case (className, functions) =>
@@ -695,7 +737,9 @@ class CodegenContext {
 
   /**
    * Splits the generated code of expressions into multiple functions, because function has
-   * 64kb code size limit in JVM
+   * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
+   * beyond 1600kb, we declare a private, nested sub-class, and the function is inlined to it
+   * instead, because classes have a constant pool limit of 65,536 named values.
    *
    * @param expressions the codes to evaluate expressions.
    * @param funcName the split function name base.
