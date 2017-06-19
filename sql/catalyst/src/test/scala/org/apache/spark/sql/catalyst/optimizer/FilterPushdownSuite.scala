@@ -1130,6 +1130,7 @@ class FilterPushdownSuite extends PlanTest {
         condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
 
     // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
+    // TODO support nondeterministic expressions in join condition.
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
       checkAnalysis = false)
   }
