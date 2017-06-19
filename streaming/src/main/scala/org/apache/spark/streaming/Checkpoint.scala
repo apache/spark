@@ -55,6 +55,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.master",
       "spark.yarn.keytab",
       "spark.yarn.principal",
+      "spark.yarn.credentials.file",
       "spark.ui.filters")
 
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
