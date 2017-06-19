@@ -209,8 +209,6 @@ private[spark] class ApplicationMaster(
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
 
-      val fs = FileSystem.get(yarnConf)
-
       // This shutdown hook should run *after* the SparkContext is shut down.
       val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
       ShutdownHookManager.addShutdownHook(priority) { () =>
@@ -232,7 +230,7 @@ private[spark] class ApplicationMaster(
           // we only want to unregister if we don't want the RM to retry
           if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
             unregister(finalStatus, finalMsg)
-            cleanupStagingDir(fs)
+            cleanupStagingDir()
           }
         }
       }
@@ -530,7 +528,7 @@ private[spark] class ApplicationMaster(
   /**
    * Clean up the staging directory.
    */
-  private def cleanupStagingDir(fs: FileSystem) {
+  private def cleanupStagingDir(): Unit = {
     var stagingDirPath: Path = null
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
@@ -541,6 +539,7 @@ private[spark] class ApplicationMaster(
           return
         }
         logInfo("Deleting staging directory " + stagingDirPath)
+        val fs = stagingDirPath.getFileSystem(yarnConf)
         fs.delete(stagingDirPath, true)
       }
     } catch {
