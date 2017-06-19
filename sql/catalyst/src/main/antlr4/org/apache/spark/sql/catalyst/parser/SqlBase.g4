@@ -567,6 +567,7 @@ primaryExpression
     | CAST '(' expression AS dataType ')'                                                      #cast
     | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
     | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
+    | POSITION '(' substr=valueExpression IN str=valueExpression ')'                           #position
     | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
@@ -724,6 +725,7 @@ nonReserved
     | SET | RESET
     | VIEW | REPLACE
     | IF
+    | POSITION
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
@@ -854,6 +856,7 @@ MACRO: 'MACRO';
 IGNORE: 'IGNORE';
 
 IF: 'IF';
+POSITION: 'POSITION';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
