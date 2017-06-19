@@ -24,9 +24,9 @@ import scala.util.Random
 import org.mockito.Mockito._
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.internal.config
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.storage.BlockManagerId
 
 class MapStatusSuite extends SparkFunSuite {
@@ -153,5 +153,15 @@ class MapStatusSuite extends SparkFunSuite {
     (1001 to 2000).foreach {
       case part => assert(status2.getSizeForBlock(part) >= sizes(part))
     }
+  }
+
+  test("SPARK-21133 HighlyCompressedMapStatus#writeExternal throws NPE") {
+    val conf = new SparkConf()
+      .set("spark.serializer", classOf[KryoSerializer].getName)
+      .setMaster("local")
+      .setAppName("SPARK-21133")
+    val sc = new SparkContext(conf)
+    val count = sc.parallelize(0 until 3000, 10).repartition(2001).collect().length
+    assert(count === 3000)
   }
 }
