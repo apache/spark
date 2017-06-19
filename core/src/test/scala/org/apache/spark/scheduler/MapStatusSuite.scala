@@ -161,7 +161,11 @@ class MapStatusSuite extends SparkFunSuite {
       .setMaster("local")
       .setAppName("SPARK-21133")
     val sc = new SparkContext(conf)
-    val count = sc.parallelize(0 until 3000, 10).repartition(2001).collect().length
-    assert(count === 3000)
+    try {
+      val count = sc.parallelize(0 until 3000, 10).repartition(2001).collect().length
+      assert(count === 3000)
+    } finally {
+      sc.stop()
+    }
   }
 }
