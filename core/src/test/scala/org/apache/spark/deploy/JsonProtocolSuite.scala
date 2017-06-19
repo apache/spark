@@ -104,7 +104,7 @@ object JsonConstants {
   val submitDate = new Date(123456789)
   val appInfoJsonStr =
     """
-      |{"starttime":3,"id":"id","name":"name",
+      |{"id":"id","starttime":3,"name":"name",
       |"cores":0,"user":"%s",
       |"memoryperslave":1234,"submitdate":"%s",
       |"state":"WAITING","duration":%d}
@@ -114,7 +114,6 @@ object JsonConstants {
   val workerInfoJsonStr =
     """
       |{"id":"id","host":"host","port":8080,
-      |"address":"host:8080",
       |"webuiaddress":"http://publicAddress:80",
       |"cores":4,"coresused":0,"coresfree":4,
       |"memory":1234,"memoryused":0,"memoryfree":1234,
