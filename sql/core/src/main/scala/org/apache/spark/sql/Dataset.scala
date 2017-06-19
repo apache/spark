@@ -1761,16 +1761,17 @@ class Dataset[T] private[sql](
    * @since 2.3.0
    */
   def unionByName(other: Dataset[T]): Dataset[T] = withSetOperator {
-    // Creates a `Union` node and resolves it first to reorder output attributes in `other` by name
-    val unionPlan = sparkSession.sessionState.executePlan(Union(logicalPlan, other.logicalPlan))
-    unionPlan.assertAnalyzed()
-    val Seq(left, right) = unionPlan.analyzed.children
+    // Resolves children first to reorder output attributes in `other` by name
+    val leftPlan = sparkSession.sessionState.executePlan(logicalPlan)
+    val rightPlan = sparkSession.sessionState.executePlan(other.logicalPlan)
+    leftPlan.assertAnalyzed()
+    rightPlan.assertAnalyzed()
 
     // Builds a project list for `other` based on `logicalPlan` output names
     val resolver = sparkSession.sessionState.analyzer.resolver
     val rightProjectList = mutable.ArrayBuffer.empty[Attribute]
-    val rightOutputAttrs = right.output
-    for (lattr <- left.output) {
+    val rightOutputAttrs = rightPlan.analyzed.output
+    for (lattr <- leftPlan.analyzed.output) {
       // To handle duplicate names, we first compute diff between `rightOutputAttrs` and
       // already-found attrs in `rightProjectList`.
       rightOutputAttrs.diff(rightProjectList).find { rattr => resolver(lattr.name, rattr.name)}
@@ -1783,7 +1784,7 @@ class Dataset[T] private[sql](
 
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(left, Project(rightProjectList, right)))
+    CombineUnions(Union(leftPlan.analyzed, Project(rightProjectList, rightPlan.analyzed)))
   }
 
   /**

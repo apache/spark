@@ -113,12 +113,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("union by name") {
     // Simple case
-    val df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
-    val df2 = Seq(("a", "7", "bc")).toDF("c", "a", "b")
-    val df3 = Seq((3.8, 1.2, 5.6)).toDF("b", "c", "a")
+    val df1 = Seq((1, "a", 3.0)).toDF("a", "b", "c")
+    val df2 = Seq((1.2, 2, "bc")).toDF("c", "a", "b")
+    val df3 = Seq(("def", 1.2, 3)).toDF("b", "c", "a")
     val unionDf = df1.unionByName(df2.unionByName(df3))
     checkAnswer(unionDf,
-      Row("1", "2", "3") :: Row("7", "bc", "a") :: Row("5.6", "3.8", "1.2") :: Nil
+      Row(1, "a", 3.0) :: Row(2, "bc", 1.2) :: Row(3, "def", 1.2) :: Nil
     )
 
     // Check if adjacent unions are combined into a single one
