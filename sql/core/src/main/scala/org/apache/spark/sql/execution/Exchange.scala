@@ -160,7 +160,8 @@ case class Exchange(
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
    * the returned ShuffleDependency will be the input of shuffle.
    */
-  private[sql] def prepareShuffleDependency(): ShuffleDependency[Int, InternalRow, InternalRow] = {
+  private[sql] def prepareShuffleDependency(newPartitioning: Partitioning): ShuffleDependency[Int,
+    InternalRow, InternalRow] = {
     val rdd = child.execute()
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
@@ -251,7 +252,7 @@ case class Exchange(
         assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
         shuffleRDD
       case None =>
-        val shuffleDependency = prepareShuffleDependency()
+        val shuffleDependency = prepareShuffleDependency(newPartitioning)
         preparePostShuffleRDD(shuffleDependency)
     }
   }
