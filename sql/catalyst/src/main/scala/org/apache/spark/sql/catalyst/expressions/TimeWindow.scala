@@ -152,7 +152,7 @@ object TimeWindow {
 }
 
 /**
- * Expression used internally to convert the TimestampType to Long without losing
+ * Expression used internally to convert the TimestampType to Long and back without losing
  * precision, i.e. in microseconds. Used in time windowing.
  */
 case class PreciseTimestampConversion(
