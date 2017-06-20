@@ -120,6 +120,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     var coordRef: StateStoreCoordinatorRef = null
     try {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      SparkSession.setActiveSession(spark)
       import spark.implicits._
       coordRef = spark.streams.stateStoreCoordinator
       implicit val sqlContext = spark.sqlContext
@@ -147,8 +148,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
       // Stop and verify whether the stores are deactivated in the coordinator
       query.stop()
       assert(coordRef.getLocation(providerId).isEmpty)
-
     } finally {
+      SparkSession.getActiveSession.foreach(_.streams.active.foreach(_.stop()))
       if (coordRef != null) coordRef.stop()
     }
   }

@@ -100,7 +100,7 @@ trait StateStore {
   /**
    * Whether all updates have been committed
    */
-  private[streaming] def hasCommitted: Boolean
+  def hasCommitted: Boolean
 }
 
 
@@ -148,7 +148,7 @@ trait StateStoreProvider {
    * Return the id of the StateStores this provider will generate.
    * Should be the same as the one passed in init().
    */
-  def id: StateStoreId
+  def stateStoreId: StateStoreId
 
   /** Called when the provider instance is unloaded from the executor */
   def close(): Unit
