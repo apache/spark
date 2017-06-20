@@ -224,39 +224,36 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       throw new TableAlreadyExistsException(db = db, table = table)
     }
 
-    if (tableDefinition.tableType == VIEW) {
-      client.createTable(tableDefinition, ignoreIfExists)
+    // Ideally we should not create a managed table with location, but Hive serde table can
+    // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
+    // to create the table directory and write out data before we create this table, to avoid
+    // exposing a partial written table.
+    val needDefaultTableLocation = tableDefinition.tableType == MANAGED &&
+      tableDefinition.storage.locationUri.isEmpty
+
+    val tableLocation = if (needDefaultTableLocation) {
+      Some(CatalogUtils.stringToURI(defaultTablePath(tableDefinition.identifier)))
     } else {
-      // Ideally we should not create a managed table with location, but Hive serde table can
-      // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
-      // to create the table directory and write out data before we create this table, to avoid
-      // exposing a partial written table.
-      val needDefaultTableLocation = tableDefinition.tableType == MANAGED &&
-        tableDefinition.storage.locationUri.isEmpty
+      tableDefinition.storage.locationUri
+    }
 
-      val tableLocation = if (needDefaultTableLocation) {
-        Some(CatalogUtils.stringToURI(defaultTablePath(tableDefinition.identifier)))
-      } else {
-        tableDefinition.storage.locationUri
-      }
-
-      if (DDLUtils.isHiveTable(tableDefinition)) {
-        val tableWithDataSourceProps = tableDefinition.copy(
-          // We can't leave `locationUri` empty and count on Hive metastore to set a default table
-          // location, because Hive metastore uses hive.metastore.warehouse.dir to generate default
-          // table location for tables in default database, while we expect to use the location of
-          // default database.
-          storage = tableDefinition.storage.copy(locationUri = tableLocation),
-          // Here we follow data source tables and put table metadata like table schema, partition
-          // columns etc. in table properties, so that we can work around the Hive metastore issue
-          // about not case preserving and make Hive serde table support mixed-case column names.
-          properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
-        client.createTable(tableWithDataSourceProps, ignoreIfExists)
-      } else {
-        createDataSourceTable(
-          tableDefinition.withNewStorage(locationUri = tableLocation),
-          ignoreIfExists)
-      }
+    if (DDLUtils.isDatasourceTable(tableDefinition)) {
+      createDataSourceTable(
+        tableDefinition.withNewStorage(locationUri = tableLocation),
+        ignoreIfExists)
+    } else {
+      val tableWithDataSourceProps = tableDefinition.copy(
+        // We can't leave `locationUri` empty and count on Hive metastore to set a default table
+        // location, because Hive metastore uses hive.metastore.warehouse.dir to generate default
+        // table location for tables in default database, while we expect to use the location of
+        // default database.
+        storage = tableDefinition.storage.copy(locationUri = tableLocation),
+        // Here we follow data source tables and put table metadata like table schema, partition
+        // columns etc. in table properties, so that we can work around the Hive metastore issue
+        // about not case preserving and make Hive serde table and view support mixed-case column
+        // names.
+        properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
+      client.createTable(tableWithDataSourceProps, ignoreIfExists)
     }
   }
 
@@ -679,16 +676,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     var table = inputTable
 
-    if (table.tableType != VIEW) {
-      table.properties.get(DATASOURCE_PROVIDER) match {
-        // No provider in table properties, which means this is a Hive serde table.
-        case None =>
-          table = restoreHiveSerdeTable(table)
+    table.properties.get(DATASOURCE_PROVIDER) match {
+      case None if table.tableType == VIEW =>
+        // If this is a view created by Spark 2.2 or higher versions, we should restore its schema
+        // from table properties.
+        if (table.properties.contains(DATASOURCE_SCHEMA_NUMPARTS)) {
+          table = table.copy(schema = getSchemaFromTableProperties(table))
+        }
 
-        // This is a regular data source table.
-        case Some(provider) =>
-          table = restoreDataSourceTable(table, provider)
-      }
+      // No provider in table properties, which means this is a Hive serde table.
+      case None =>
+        table = restoreHiveSerdeTable(table)
+
+      // This is a regular data source table.
+      case Some(provider) =>
+        table = restoreDataSourceTable(table, provider)
     }
 
     // Restore Spark's statistics from information in Metastore.
