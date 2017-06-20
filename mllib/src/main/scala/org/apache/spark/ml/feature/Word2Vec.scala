@@ -274,13 +274,14 @@ class Word2VecModel private[ml] (
     wordVectors.findSynonyms(word, num)
   }
   
-   
-  def doc2Vector(text: String, d: Int): SDV = {
-    val bVectors = wordVectors.getVectors.collect()
-    val textArray = text.split("  ")
+  /**
+   * using model.getVectors can get the wordVectors then you must convert the DataFrame
+   * to an Array.
+   */
+  def doc2Vector(textArray: Array[String], d: Int, wordVectors: Array[Row]): SDV = {
     var sum = Vectors.zeros(d)
     textArray.foreach { word =>
-      bVectors.value.filter(_.getAs[String]("word") == word).foreach { v =>
+      wordVectors.value.filter(_.getAs[String]("word") == word).foreach { v =>
         val sv = v.getAs[SDV]("vector")
         BLAS.axpy(1.0, sv, sum)
       }
