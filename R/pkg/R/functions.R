@@ -39,8 +39,10 @@ NULL
 #' Date time functions defined for \code{Column}.
 #'
 #' @param x Column to compute on.
-#' @param format \code{to_date} and \code{to_timestamp}: string to use to parse x Column
-#'               to DateType or TimestampType.
+#' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
+#'               x Column to DateType or TimestampType. For \code{trunc}, it is the  string used
+#'               for specifying the truncation method. For example, "year", "yyyy", "yy" for
+#'               truncate by year, or "month", "mon", "mm" for truncate by month.
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
 #' @rdname column_datetime_functions
@@ -3855,9 +3857,6 @@ setMethod("input_file_name", signature("missing"),
 
 #' @section Details:
 #' \code{trunc}: Returns date truncated to the unit specified by the format.
-#'
-#' @param format \code{trunc}: string used for specify the truncation method. For example,
-#' "year", "yyyy", "yy" for truncate by year, or "month", "mon", "mm" for truncate by month.
 #'
 #' @rdname column_datetime_functions
 #' @aliases trunc trunc,Column-method
