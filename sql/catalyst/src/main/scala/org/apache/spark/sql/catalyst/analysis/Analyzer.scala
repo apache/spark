@@ -2568,6 +2568,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
           val division = (PreciseTimestampConversion(
             window.timeColumn, TimestampType, LongType) - window.startTime) / window.slideDuration
           val ceil = Ceil(division)
+          // if the division is equal to the ceiling, our record is the start of a window
           val windowId = CaseWhen(Seq((ceil === division, ceil + 1)), Some(ceil))
           val windowStart = (windowId + i - maxNumOverlapping) *
             window.slideDuration + window.startTime
