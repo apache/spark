@@ -221,7 +221,6 @@ class CodegenContext {
 
   private val outerClassName = "OuterClass"
 
-
   /**
    * Holds the class and instance names to be generated, where `OuterClass` is a placeholder
    * standing for whichever class is generated as the outermost class and which will contain any
@@ -254,8 +253,8 @@ class CodegenContext {
 
   /**
    * Adds a function to the generated class. If the code for the `OuterClass` grows too large, the
-   * function will be inlined into a new private, nested class, and a class-qualified name for the
-   * function will be returned. Otherwise, the function will be inined to the `OuterClass` the
+   * function will be inlined into a new private, nested class, and a instance-qualified name for
+   * the function will be returned. Otherwise, the function will be inlined to the `OuterClass` the
    * simple `funcName` will be returned.
    *
    * @param funcName the class-unqualified name of the function
