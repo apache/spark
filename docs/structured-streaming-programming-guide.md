@@ -449,6 +449,10 @@ Here are the details of all the sources in Spark.
     <td><b>File source</b></td>
     <td>
         <code>path</code>: path to the input directory, and common to all file formats.
+        <br/>
+        <code>maxFilesPerTrigger</code>: maximum number of new files to be considered in every trigger (default: no max)
+        <br/>
+        <code>latestFirst</code>: whether to processs the latest new files first, useful when there is a large backlog of files(default: false)
         <br/><br/>
         For file-format-specific options, see the related methods in <code>DataStreamReader</code>
         (<a href="api/scala/index.html#org.apache.spark.sql.streaming.DataStreamReader">Scala</a>/<a href="api/java/org/apache/spark/sql/streaming/DataStreamReader.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader">Python</a>).
@@ -1076,9 +1080,6 @@ Here are the details of all the sinks in Spark.
     <td>Append</td>
     <td>
         <code>path</code>: path to the output directory, must be specified.
-        <code>maxFilesPerTrigger</code>: maximum number of new files to be considered in every trigger (default: no max)
-        <br/>
-        <code>latestFirst</code>: whether to processs the latest new files first, useful when there is a large backlog of files(default: false)
         <br/><br/>
         For file-format-specific options, see the related methods in DataFrameWriter
         (<a href="api/scala/index.html#org.apache.spark.sql.DataFrameWriter">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.DataFrameWriter">Python</a>).
