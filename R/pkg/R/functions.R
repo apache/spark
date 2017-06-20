@@ -40,7 +40,7 @@ NULL
 #'
 #' @param x Column to compute on. In \code{instr}, it is the substring to check. In \code{format_number},
 #'          it is the number of decimal place to format to.
-#' @param ... additional argument(s). For example, it could be used to pass additional Columns.
+#' @param ... additional columns.
 #' @name column_string_functions
 #' @rdname column_string_functions
 #' @family string functions
@@ -601,9 +601,10 @@ setMethod("dayofyear",
 
 #' @details
 #' \code{decode}: Computes the first argument into a string from a binary using the provided
-#' character set (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+#' character set.
 #'
-#' @param charset Character set to use
+#' @param charset Character set to use (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE',
+#'                'UTF-16LE', 'UTF-16').
 #'
 #' @rdname column_string_functions
 #' @aliases decode decode,Column,character-method
@@ -618,10 +619,7 @@ setMethod("decode",
 
 #' @details
 #' \code{encode}: Computes the first argument into a binary from a string using the provided
-#' character set (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
-#'
-#' @param x Column to compute on.
-#' @param charset Character set to use
+#' character set.
 #'
 #' @rdname column_string_functions
 #' @aliases encode encode,Column,character-method
@@ -1033,6 +1031,17 @@ setMethod("lower",
 #' @rdname column_string_functions
 #' @aliases ltrim ltrim,Column-method
 #' @export
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, SexLpad = lpad(df$Sex, 6, " "), SexRpad = rpad(df$Sex, 7, " "))
+#' head(select(tmp, length(tmp$Sex), length(tmp$SexLpad), length(tmp$SexRpad)))
+#' tmp2 <- mutate(tmp, SexLtrim = ltrim(tmp$SexLpad), SexRtrim = rtrim(tmp$SexRpad),
+#'                     SexTrim = trim(tmp$SexLpad))
+#' head(select(tmp2, length(tmp2$Sex), length(tmp2$SexLtrim), length(tmp2$SexRtrim), length(tmp2$SexTrim)))
+#'
+#' tmp <- mutate(df, SexLpad = lpad(df$Sex, 6, "xx"), SexRpad = rpad(df$Sex, 7, "xx"))
+#' head(tmp)}
 #' @note ltrim since 1.5.0
 setMethod("ltrim",
           signature(x = "Column"),
@@ -2050,6 +2059,13 @@ setMethod("hypot", signature(y = "Column"),
 #' @rdname column_string_functions
 #' @aliases levenshtein levenshtein,Column-method
 #' @export
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, d1 = levenshtein(df$Class, df$Sex),
+#'                   d2 = levenshtein(df$Age, df$Sex),
+#'                   d3 = levenshtein(df$Age, df$Age))
+#' head(tmp)}
 #' @note levenshtein since 1.5.0
 setMethod("levenshtein", signature(y = "Column"),
           function(y, x) {
@@ -2166,10 +2182,19 @@ setMethod("countDistinct",
 #' @details
 #' \code{concat}: Concatenates multiple input string columns together into a single string column.
 #'
-#' @param ... other columns
 #' @rdname column_string_functions
 #' @aliases concat concat,Column-method
 #' @export
+#' @examples
+#'
+#' \dontrun{
+#' # concatenate strings
+#' tmp <- mutate(df, s1 = concat(df$Class, df$Sex),
+#'                   s2 = concat(df$Class, df$Sex, df$Age),
+#'                   s3 = concat(df$Class, df$Sex, df$Age, df$Class),
+#'                   s4 = concat_ws("_", df$Class, df$Sex),
+#'                   s5 = concat_ws("+", df$Class, df$Sex, df$Age, df$Survived))
+#' head(tmp)}
 #' @note concat since 1.5.0
 setMethod("concat",
           signature(x = "Column"),
@@ -2380,6 +2405,12 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
 #' @rdname column_string_functions
 #' @aliases instr instr,Column,character-method
 #' @export
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, s1 = instr(df$Sex, "m"), s2 = instr(df$Sex, "M"),
+#'                   s3 = locate("m", df$Sex), s4 = locate("m", df$Sex, pos = 4))
+#' head(tmp)}
 #' @note instr since 1.5.0
 setMethod("instr", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2893,6 +2924,17 @@ setMethod("randn", signature(seed = "numeric"),
 #' @rdname column_string_functions
 #' @aliases regexp_extract regexp_extract,Column,character,numeric-method
 #' @export
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, s1 = regexp_extract(df$Class, "(\\d+)\\w+", 1),
+#'                   s2 = regexp_extract(df$Sex, "^(\\w)\\w+", 1),
+#'                   s3 = regexp_replace(df$Class, "\\D+", ""),
+#'                   s4 = substring_index(df$Sex, "a", 1),
+#'                   s5 = substring_index(df$Sex, "a", -1),
+#'                   s6 = translate(df$Sex, "ale", ""),
+#'                   s7 = translate(df$Sex, "a", "-"))
+#' head(tmp)}
 #' @note regexp_extract since 1.5.0
 setMethod("regexp_extract",
           signature(x = "Column", pattern = "character", idx = "numeric"),
@@ -3570,13 +3612,10 @@ setMethod("collect_set",
 #' @examples
 #'
 #' \dontrun{
-#' df <- read.text("README.md")
-#'
-#' head(select(df, split_string(df$value, "\\s+")))
-#'
+#' head(select(df, split_string(df$Sex, "a")))
+#' head(select(df, split_string(df$Class, "\\d")))
 #' # This is equivalent to the following SQL expression
-#' head(selectExpr(df, "split(value, '\\\\s+')"))
-#' }
+#' head(selectExpr(df, "split(Class, '\\\\d')"))}
 #' @note split_string 2.3.0
 setMethod("split_string",
           signature(x = "Column", pattern = "character"),
@@ -3596,12 +3635,9 @@ setMethod("split_string",
 #' @examples
 #'
 #' \dontrun{
-#' df <- read.text("README.md")
-#'
-#' first(select(df, repeat_string(df$value, 3)))
-#'
+#' head(select(df, repeat_string(df$Class, 3)))
 #' # This is equivalent to the following SQL expression
-#' first(selectExpr(df, "repeat(value, 3)"))}
+#' head(selectExpr(df, "repeat(Class, 3)"))}
 #' @note repeat_string since 2.3.0
 setMethod("repeat_string",
           signature(x = "Column", n = "numeric"),
