@@ -2588,8 +2588,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
           }
 
           // For backwards compatibility we add a filter to filter out nulls
-          val filterExpr = IsNotNull(windowStruct.getField(WINDOW_START)) &&
-            IsNotNull(windowStruct.getField(WINDOW_END))
+          val filterExpr = IsNotNull(window.timeColumn)
 
           replacedPlan.withNewChildren(Filter(filterExpr, child) :: Nil)
         } else {
