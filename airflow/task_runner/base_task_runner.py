@@ -113,7 +113,8 @@ class BaseTaskRunner(LoggingMixin):
         proc = subprocess.Popen(
             full_cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT
+            stderr=subprocess.STDOUT,
+            universal_newlines=True
         )
 
         # Start daemon thread to read subprocess logging output
