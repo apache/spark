@@ -166,6 +166,56 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("SPARK-21079 - analyze partitioned table with only a subset of partitions visible") {
+    def queryTotalSize(tableName: String): BigInt =
+      spark.table(tableName).queryExecution.analyzed.stats(conf).sizeInBytes
+
+    val sourceTableName = "analyzeTable_part"
+    val tableName = "analyzeTable_part_vis"
+    withTable(sourceTableName, tableName) {
+      withTempPath {
+        path =>
+          // Create a table with 3 partitions all located under a single top-level directory 'path'
+          sql(
+            s"""
+               |CREATE TABLE ${sourceTableName} (key STRING, value STRING)
+               |PARTITIONED BY (ds STRING)
+               |LOCATION '${path}'
+             """.stripMargin).collect()
+
+          val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
+          partitionDates.foreach {
+            ds =>
+              sql(
+                s"""
+                   |INSERT INTO TABLE ${sourceTableName} PARTITION (ds='${ds}')
+                   |SELECT * FROM src
+                 """.stripMargin).collect()
+          }
+
+          // Create another table referring to the same location
+          sql(
+            s"""
+               |CREATE TABLE ${tableName} (key STRING, value STRING)
+               |PARTITIONED BY (ds STRING)
+               |LOCATION '${path}'
+             """.stripMargin).collect()
+
+          // Register only one of the partitions found on disk
+          val ds = partitionDates.head
+          sql(s"ALTER TABLE ${tableName} ADD PARTITION (ds='${ds}')").collect()
+
+          // Analyze original table - expect 3 partitions
+          sql(s"ANALYZE TABLE ${sourceTableName} COMPUTE STATISTICS noscan")
+          assert(queryTotalSize(sourceTableName) === BigInt(3 * 5812))
+
+          // Analyze partial-copy table - expect only 1 partition
+          sql(s"ANALYZE TABLE ${tableName} COMPUTE STATISTICS noscan")
+          assert(queryTotalSize(tableName) === BigInt(5812))
+        }
+    }
+  }
+
   test("analyzing views is not supported") {
     def assertAnalyzeUnsupported(analyzeCommand: String): Unit = {
       val err = intercept[AnalysisException] {
