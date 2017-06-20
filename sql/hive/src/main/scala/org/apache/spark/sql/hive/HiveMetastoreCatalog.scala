@@ -249,10 +249,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           if (inferenceMode == INFER_AND_SAVE) {
             updateCatalogSchema(relation.tableMeta.identifier, schema)
           }
-
-          SchemaUtils.checkSchemaColumnNameDuplication(
-            schema, "the hive serde table", sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
           (schema, relation.tableMeta.copy(schema = schema))
         case None =>
           logWarning(s"Unable to infer schema for table $tableName from file format " +
