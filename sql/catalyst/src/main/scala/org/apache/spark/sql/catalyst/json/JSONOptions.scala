@@ -81,7 +81,7 @@ private[sql] class JSONOptions(
     FastDateFormat.getInstance(
       parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), timeZone, Locale.US)
 
-  val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
+  val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {

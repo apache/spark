@@ -364,7 +364,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // Use a counting output stream to avoid having to close the underlying file and ask
     // the file system for its size after each partition is written.
     final CountingOutputStream mergedFileOutputStream = new CountingOutputStream(bos);
-    final int inputBufferSizeInBytes = (int) sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
+    final int inputBufferSizeInBytes =
+      (int) sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
 
     boolean threwException = true;
     try {
@@ -375,8 +376,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         final long initialFileLength = mergedFileOutputStream.getByteCount();
-        // Shield the underlying output stream from close() and flush() calls, so that we can close the higher
-        // level streams to make sure all data is really flushed and internal state is cleaned.
+        // Shield the underlying output stream from close() and flush() calls, so that we can close
+        // the higher level streams to make sure all data is really flushed and internal state is
+        // cleaned.
         OutputStream partitionOutput = new CloseAndFlushShieldOutputStream(
           new TimeTrackingOutputStream(writeMetrics, mergedFileOutputStream));
         partitionOutput = blockManager.serializerManager().wrapForEncryption(partitionOutput);
