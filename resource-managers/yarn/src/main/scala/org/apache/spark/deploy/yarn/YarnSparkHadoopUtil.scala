@@ -61,8 +61,22 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   // Return an appropriate (subclass) of Configuration. Creating a config initializes some Hadoop
   // subsystems. Always create a new config, don't reuse yarnConf.
-  override def newConfiguration(conf: SparkConf): Configuration =
-    new YarnConfiguration(super.newConfiguration(conf))
+  override def newConfiguration(conf: SparkConf): Configuration = {
+    val hadoopConf = new YarnConfiguration(super.newConfiguration(conf))
+
+    // These resources may be distributed by Client.scala when starting the YARN application, and
+    // include any config customizations done at the gateway; overlay them on top of the cluster's
+    // config, so that final entries are not overwritten.
+    //
+    // The list of files used by YarnConfiguration doesn't seem to be available through any API,
+    // but these are the listed files when you dump a fresh YarnConfiguration into XML.
+    val resourceDir = Client.LOCALIZED_HADOOP_CONF_DIR
+    Array("core-site.xml", "hdfs-site.xml", "yarn-site.xml", "mapred-site.xml").foreach { res =>
+      hadoopConf.addResource(s"$resourceDir/$res")
+    }
+
+    hadoopConf
+  }
 
   // Add any user credentials to the job conf which are necessary for running on a secure Hadoop
   // cluster
