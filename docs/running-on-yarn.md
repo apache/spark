@@ -318,9 +318,10 @@ To use a custom metrics.properties for the application master and executors, upd
 </tr>
 <tr>
   <td><code>spark.yarn.maxAppAttempts</code></td>
-  <td><code>yarn.resourcemanager.am.max-attempts</code> in YARN</td>
+  <td><code>1</code></td>
   <td>
-  The maximum number of attempts that will be made to submit the application.
+  The maximum number of attempts that will be made to submit the application. Default value is 1,
+  which means there's no another attempt when application fails.
   It should be no larger than the global number of max attempts in the YARN configuration.
   </td>
 </tr>
