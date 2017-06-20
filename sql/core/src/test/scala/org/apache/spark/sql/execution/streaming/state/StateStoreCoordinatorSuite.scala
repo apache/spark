@@ -151,6 +151,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     } finally {
       SparkSession.getActiveSession.foreach(_.streams.active.foreach(_.stop()))
       if (coordRef != null) coordRef.stop()
+      StateStore.stop()
     }
   }
 }

@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
@@ -379,7 +379,7 @@ object StateStore extends Logging {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
       coordinatorRef.foreach(_.reportActiveInstance(storeProviderId, host, executorId))
-      logDebug(s"Reported that the loaded instance $storeProviderId is active")
+      logInfo(s"Reported that the loaded instance $storeProviderId is active")
     }
   }
 
@@ -398,12 +398,21 @@ object StateStore extends Logging {
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      if (_coordRef == null) {
+      logInfo("Env is not null")
+      val isDriver =
+        env.executorId == SparkContext.DRIVER_IDENTIFIER ||
+          env.executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
+      // If running locally, then the coordinator reference in _coordRef may be have become inactive
+      // as SparkContext + SparkEnv may have been restarted. Hence, when running in driver,
+      // always recreate the reference.
+      if (isDriver || _coordRef == null) {
+        logInfo("Getting StateStoreCoordinatorRef")
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
-      logDebug(s"Retrieved reference to StateStoreCoordinator: ${_coordRef}")
+      logInfo(s"Retrieved reference to StateStoreCoordinator: ${_coordRef}")
       Some(_coordRef)
     } else {
+      logInfo("Env is null")
       _coordRef = null
       None
     }
