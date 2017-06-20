@@ -93,7 +93,7 @@ private [sql] object GenArrayData {
     if (!ctx.isPrimitiveType(elementType)) {
       val genericArrayClass = classOf[GenericArrayData].getName
       ctx.addMutableState("Object[]", arrayName,
-        s"this.$arrayName = new Object[${numElements}];")
+        s"$arrayName = new Object[${numElements}];")
 
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
@@ -340,7 +340,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+    ctx.addMutableState("Object[]", values, s"$values = null;")
 
     ev.copy(code = s"""
       $values = new Object[${valExprs.size}];""" +
@@ -357,7 +357,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
         }) +
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
+        $values = null;
       """, isNull = "false")
   }
 

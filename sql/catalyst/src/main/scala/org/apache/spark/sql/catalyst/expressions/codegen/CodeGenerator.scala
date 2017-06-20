@@ -113,7 +113,7 @@ class CodegenContext {
     val idx = references.length
     references += obj
     val clsName = Option(className).getOrElse(obj.getClass.getName)
-    addMutableState(clsName, term, s"this.$term = ($clsName) references[$idx];")
+    addMutableState(clsName, term, s"$term = ($clsName) references[$idx];")
     term
   }
 
@@ -557,7 +557,7 @@ class CodegenContext {
           }
         """
       addNewFunction(compareFunc, funcCode)
-      s"this.$compareFunc($c1, $c2)"
+      s"$compareFunc($c1, $c2)"
     case schema: StructType =>
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
@@ -574,7 +574,7 @@ class CodegenContext {
           }
         """
       addNewFunction(compareFunc, funcCode)
-      s"this.$compareFunc($c1, $c2)"
+      s"$compareFunc($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
