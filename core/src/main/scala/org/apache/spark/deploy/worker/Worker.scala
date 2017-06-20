@@ -38,7 +38,7 @@ import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
 
 private[deploy] class Worker(
     override val rpcEnv: RpcEnv,
@@ -737,6 +737,7 @@ private[deploy] object Worker extends Logging {
   val ENDPOINT_NAME = "Worker"
 
   def main(argStrings: Array[String]) {
+    Thread.setDefaultUncaughtExceptionHandler(SparkUncaughtExceptionHandler)
     Utils.initDaemon(log)
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
