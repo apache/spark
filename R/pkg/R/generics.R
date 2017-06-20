@@ -1090,8 +1090,9 @@ setGeneric("grouping_bit", function(x) { standardGeneric("grouping_bit") })
 #' @name NULL
 setGeneric("grouping_id", function(x, ...) { standardGeneric("grouping_id") })
 
-#' @rdname hex
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("hex", function(x) { standardGeneric("hex") })
 
 #' @rdname hour
@@ -1419,8 +1420,9 @@ setGeneric("trim", function(x) { standardGeneric("trim") })
 #' @export
 setGeneric("unbase64", function(x) { standardGeneric("unbase64") })
 
-#' @rdname unhex
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("unhex", function(x) { standardGeneric("unhex") })
 
 #' @rdname unix_timestamp

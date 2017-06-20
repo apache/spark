@@ -41,14 +41,21 @@ NULL
 #' @param x Column to compute on. In \code{shiftLeft}, \code{shiftRight} and \code{shiftRightUnsigned},
 #'          this is the number of bits to shift.
 #' @param y Column to compute on.
-#' @param ... additional argument(s). For example, it could be used to pass additional Columns.
+#' @param ... additional argument(s).
 #' @name column_math_functions
 #' @rdname column_math_functions
 #' @family math functions
 #' @examples
 #' \dontrun{
 #' # Dataframe used throughout this doc
-#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' tmp <- mutate(df, v1 = log(df$mpg), v2 = cbrt(df$disp),
+#'                   v3 = bround(df$wt, 1), v4 = bin(df$cyl),
+#'                   v5 = hex(df$wt), v6 = toDegrees(df$gear),
+#'                   v7 = atan2(df$cyl, df$am), v8 = hypot(df$cyl, df$am),
+#'                   v9 = pmod(df$hp, df$cyl), v10 = shiftLeft(df$disp, 1),
+#'                   v11 = conv(df$hp, 10, 16))
+#' head(tmp)}
 NULL
 
 #' lit
@@ -429,7 +436,6 @@ setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOr
 #' @rdname column_math_functions
 #' @aliases cos cos,Column-method
 #' @export
-#' @examples \dontrun{cos(df$c)}
 #' @note cos since 1.5.0
 setMethod("cos",
           signature(x = "Column"),
@@ -444,7 +450,6 @@ setMethod("cos",
 #' @rdname column_math_functions
 #' @aliases cosh cosh,Column-method
 #' @export
-#' @examples \dontrun{cosh(df$c)}
 #' @note cosh since 1.5.0
 setMethod("cosh",
           signature(x = "Column"),
@@ -1875,7 +1880,6 @@ setMethod("year",
 #' \code{atan2}: Returns the angle theta from the conversion of rectangular coordinates
 #' (x, y) to polar coordinates (r, theta).
 #'
-#' @param y Column to compute on.
 #' @rdname column_math_functions
 #' @aliases atan2 atan2,Column-method
 #' @export
