@@ -1454,18 +1454,8 @@ class DAGScheduler(
       workerId: String,
       host: String,
       message: String): Unit = {
-    logInfo("Shuffle files lost for worker: %s".format(workerId))
-    // TODO: This will be really slow if we keep accumulating shuffle map stages
-    for ((shuffleId, stage) <- shuffleIdToMapStage) {
-      stage.removeOutputsOnHost(host)
-      mapOutputTracker.registerMapOutputs(
-        shuffleId,
-        stage.outputLocInMapOutputTrackerFormat(),
-        changeEpoch = true)
-    }
-    if (shuffleIdToMapStage.isEmpty) {
-      mapOutputTracker.incrementEpoch()
-    }
+    logInfo("Shuffle files lost for worker %s on host %s".format(workerId, host))
+    mapOutputTracker.removeOutputsOnHost(host)
     clearCacheLocs()
   }
 
