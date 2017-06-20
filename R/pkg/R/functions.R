@@ -47,8 +47,7 @@ NULL
 #' @examples
 #' \dontrun{
 #' # Dataframe used throughout this doc
-#' t <- as.data.frame(Titanic, stringsAsFactors = FALSE)
-#' df <- createDataFrame(cbind(t, ClassRaw = sapply(substring(t[, 1], 1, 1), charToRaw)))}
+#' df <- createDataFrame(as.data.frame(Titanic, stringsAsFactors = FALSE))}
 NULL
 
 #' lit
@@ -228,7 +227,11 @@ setMethod("avg",
 #' @examples
 #'
 #' \dontrun{
-#' head(select(df, base64(df$ClassRaw), decode(df$ClassRaw, 'UTF-8')))}
+#' tmp <- mutate(df, s1 = encode(df$Class, 'UTF-8'))
+#' str(tmp)
+#' tmp2 <- mutate(tmp, s2 = base64(tmp$s1), s3 = decode(tmp$s1, 'UTF-8'))
+#' head(tmp2)
+#' head(select(tmp2, unbase64(tmp2$s2)))}
 #' @note base64 since 1.5.0
 setMethod("base64",
           signature(x = "Column"),
@@ -798,8 +801,8 @@ setMethod("hour",
 #' \dontrun{
 #' tmp <- mutate(df, SexLower = lower(df$Sex), AgeUpper = upper(df$age))
 #' head(tmp)
-#' tmp2 <- mutate(tmp, Sex2 = initcap(tmp$SexLower))
-#' head(tmp)}
+#' tmp2 <- mutate(tmp, s1 = initcap(tmp$SexLower), s2 = reverse(df$Sex))
+#' head(tmp2)}
 #' @note initcap since 1.5.0
 setMethod("initcap",
           signature(x = "Column"),
@@ -2540,6 +2543,11 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
 #' @rdname column_string_functions
 #' @aliases format_number format_number,Column,numeric-method
 #' @export
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, v1 = df$Freq/3)
+#' head(select(tmp, format_number(tmp$v1, 0), format_number(tmp$v1, 2)), 10)}
 #' @note format_number since 1.5.0
 setMethod("format_number", signature(y = "Column", x = "numeric"),
           function(y, x) {
