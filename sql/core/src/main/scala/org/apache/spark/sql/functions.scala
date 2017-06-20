@@ -2292,7 +2292,7 @@ object functions {
   }
 
   /**
-   * Left-pad the string column with
+   * Left-pad the string column with pad to a length of len.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2350,7 +2350,7 @@ object functions {
   def unbase64(e: Column): Column = withExpr { UnBase64(e.expr) }
 
   /**
-   * Right-padded with pad to a length of len.
+   * Right-pad the string column with pad to a length of len.
    *
    * @group string_funcs
    * @since 1.5.0
