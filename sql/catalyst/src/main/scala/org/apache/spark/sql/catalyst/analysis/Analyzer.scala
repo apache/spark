@@ -2565,8 +2565,10 @@ object TimeWindowing extends Rule[LogicalPlan] {
         }
 
         def getWindow(i: Int, maxNumOverlapping: Int): Expression = {
-          val windowId = Ceil((PreciseTimestampConversion(
-            window.timeColumn, TimestampType, LongType) - window.startTime) / window.slideDuration)
+          val division = (PreciseTimestampConversion(
+            window.timeColumn, TimestampType, LongType) - window.startTime) / window.slideDuration
+          val ceil = Ceil(division)
+          val windowId = CaseWhen(Seq((ceil === division, ceil + 1)), Some(ceil))
           val windowStart = (windowId + i - maxNumOverlapping) *
             window.slideDuration + window.startTime
           val windowEnd = windowStart + window.windowDuration
@@ -2579,25 +2581,28 @@ object TimeWindowing extends Rule[LogicalPlan] {
               Nil)
         }
 
+        val windowAttr = AttributeReference(
+          WINDOW_COL_NAME, window.dataType, metadata = metadata)()
+
         if (window.windowDuration == window.slideDuration) {
           val windowStruct = Alias(getWindow(0, 1), WINDOW_COL_NAME)(
-            explicitMetadata = Some(metadata))
+            exprId = windowAttr.exprId, explicitMetadata = Some(metadata))
 
           val replacedPlan = p transformExpressions {
-            case t: TimeWindow => windowStruct
+            case t: TimeWindow => windowAttr
           }
 
           // For backwards compatibility we add a filter to filter out nulls
           val filterExpr = IsNotNull(window.timeColumn)
 
-          replacedPlan.withNewChildren(Filter(filterExpr, child) :: Nil)
+          replacedPlan.withNewChildren(Filter(filterExpr,
+            Project(windowStruct +: child.output, child)) :: Nil)
         } else {
-          val windowAttr = AttributeReference(
-            WINDOW_COL_NAME, window.dataType, metadata = metadata)()
 
           val maxNumOverlapping =
             math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
-          val windows = Seq.tabulate(maxNumOverlapping + 1)(i => getWindow(i, maxNumOverlapping))
+          val windows =
+            Seq.tabulate(maxNumOverlapping)(i => getWindow(i, maxNumOverlapping))
 
           val projections = windows.map(_ +: child.output)
 
