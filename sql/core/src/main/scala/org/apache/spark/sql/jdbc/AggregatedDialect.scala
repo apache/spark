@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
 /**
@@ -30,8 +31,8 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
 
   require(dialects.nonEmpty)
 
-  override def canHandle(url : String): Boolean =
-    dialects.map(_.canHandle(url)).reduce(_ && _)
+  override def canHandle(options: JDBCOptions): Boolean =
+    dialects.map(_.canHandle(options)).reduce(_ && _)
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {

@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.jdbc
 
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
 
 
 private object MsSqlServerDialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
+  override def canHandle(options: JDBCOptions): Boolean = options.url.startsWith("jdbc:sqlserver")
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {

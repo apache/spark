@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.Connection
 
 import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
 
 /**
@@ -58,11 +59,11 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
 abstract class JdbcDialect extends Serializable {
   /**
    * Check if this dialect instance can handle a certain jdbc url.
-   * @param url the jdbc url.
+   * @param options the jdbc options.
    * @return True if the dialect can be applied on the given jdbc url.
    * @throws NullPointerException if the url is null.
    */
-  def canHandle(url : String): Boolean
+  def canHandle(options: JDBCOptions): Boolean
 
   /**
    * Get the custom datatype mapping for the given jdbc meta information.
@@ -179,8 +180,8 @@ object JdbcDialects {
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
    */
-  def get(url: String): JdbcDialect = {
-    val matchingDialects = dialects.filter(_.canHandle(url))
+  def get(options: JDBCOptions): JdbcDialect = {
+    val matchingDialects = dialects.filter(_.canHandle(options))
     matchingDialects.length match {
       case 0 => NoopDialect
       case 1 => matchingDialects.head
@@ -193,5 +194,5 @@ object JdbcDialects {
  * NOOP dialect object, always returning the neutral element.
  */
 private object NoopDialect extends JdbcDialect {
-  override def canHandle(url : String): Boolean = true
+  override def canHandle(options: JDBCOptions): Boolean = true
 }

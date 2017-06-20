@@ -52,9 +52,8 @@ object JDBCRDD extends Logging {
    * @throws SQLException if the table contains an unsupported type.
    */
   def resolveTable(options: JDBCOptions): StructType = {
-    val url = options.url
     val table = options.table
-    val dialect = JdbcDialects.get(url)
+    val dialect = JdbcDialects.get(options)
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
@@ -167,8 +166,7 @@ object JDBCRDD extends Logging {
       filters: Array[Filter],
       parts: Array[Partition],
       options: JDBCOptions): RDD[InternalRow] = {
-    val url = options.url
-    val dialect = JdbcDialects.get(url)
+    val dialect = JdbcDialects.get(options)
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
@@ -177,7 +175,7 @@ object JDBCRDD extends Logging {
       quotedColumns,
       filters,
       parts,
-      url,
+      options.url,
       options)
   }
 }
@@ -217,7 +215,7 @@ private[jdbc] class JDBCRDD(
    */
   private val filterWhereClause: String =
     filters
-      .flatMap(JDBCRDD.compileFilter(_, JdbcDialects.get(url)))
+      .flatMap(JDBCRDD.compileFilter(_, JdbcDialects.get(options)))
       .map(p => s"($p)").mkString(" AND ")
 
   /**
@@ -284,7 +282,7 @@ private[jdbc] class JDBCRDD(
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
     conn = getConnection()
-    val dialect = JdbcDialects.get(url)
+    val dialect = JdbcDialects.get(options)
     import scala.collection.JavaConverters._
     dialect.beforeFetch(conn, options.asConnectionProperties.asScala.toMap)
 

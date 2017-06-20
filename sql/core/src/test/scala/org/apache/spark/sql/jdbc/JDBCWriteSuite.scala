@@ -34,9 +34,9 @@ import org.apache.spark.util.Utils
 
 class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
-  val url = "jdbc:h2:mem:testdb2"
+  val jdbcOptions = new JDBCOptions("jdbc:h2:mem:testdb2")
   var conn: java.sql.Connection = null
-  val url1 = "jdbc:h2:mem:testdb3"
+  val jdbcOptions1 = new JDBCOptions("jdbc:h2:mem:testdb3")
   var conn1: java.sql.Connection = null
   val properties = new Properties()
   properties.setProperty("user", "testUser")
@@ -44,16 +44,16 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   properties.setProperty("rowId", "false")
 
   val testH2Dialect = new JdbcDialect {
-    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
+    override def canHandle(options: JDBCOptions) : Boolean = options.url.startsWith("jdbc:h2")
     override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
   }
 
   before {
     Utils.classForName("org.h2.Driver")
-    conn = DriverManager.getConnection(url)
+    conn = DriverManager.getConnection(jdbcOptions.url)
     conn.prepareStatement("create schema test").executeUpdate()
 
-    conn1 = DriverManager.getConnection(url1, properties)
+    conn1 = DriverManager.getConnection(jdbcOptions1.url, properties)
     conn1.prepareStatement("create schema test").executeUpdate()
     conn1.prepareStatement("drop table if exists test.people").executeUpdate()
     conn1.prepareStatement(
@@ -69,14 +69,16 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW PEOPLE
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
+        |OPTIONS (url '${jdbcOptions1.url}',
+        |dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW PEOPLE1
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE1', user 'testUser', password 'testPass')
+        |OPTIONS (url '${jdbcOptions1.url}',
+        |dbtable 'TEST.PEOPLE1', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
   }
 
@@ -104,10 +106,13 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   test("Basic CREATE") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
-    df.write.jdbc(url, "TEST.BASICCREATETEST", new Properties())
-    assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties()).count())
-    assert(
-      2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties()).collect()(0).length)
+    df.write.jdbc(jdbcOptions.url, "TEST.BASICCREATETEST", new Properties())
+    assert(2 ===
+      spark.read.jdbc(jdbcOptions.url, "TEST.BASICCREATETEST", new Properties()).count())
+    assert(2 ===
+      spark.read.jdbc(jdbcOptions.url,
+        "TEST.BASICCREATETEST",
+        new Properties()).collect()(0).length)
   }
 
   test("Basic CREATE with illegal batchsize") {
@@ -117,7 +122,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       val properties = new Properties()
       properties.setProperty(JDBCOptions.JDBC_BATCH_INSERT_SIZE, size.toString)
       val e = intercept[IllegalArgumentException] {
-        df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
+        df.write.mode(SaveMode.Overwrite).jdbc(jdbcOptions.url, "TEST.BASICCREATETEST", properties)
       }.getMessage
       assert(e.contains(s"Invalid value `$size` for parameter `batchsize`"))
     }
@@ -129,8 +134,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     (1 to 3).foreach { size =>
       val properties = new Properties()
       properties.setProperty(JDBCOptions.JDBC_BATCH_INSERT_SIZE, size.toString)
-      df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
-      assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties()).count())
+      df.write.mode(SaveMode.Overwrite).jdbc(jdbcOptions.url, "TEST.BASICCREATETEST", properties)
+      assert(2 ===
+        spark.read.jdbc(jdbcOptions.url, "TEST.BASICCREATETEST", new Properties()).count())
     }
   }
 
@@ -138,55 +144,57 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
 
-    df.write.mode(SaveMode.Ignore).jdbc(url1, "TEST.DROPTEST", properties)
-    assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count())
-    assert(3 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
+    df.write.mode(SaveMode.Ignore).jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties)
+    assert(2 === spark.read.jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties).count())
+    assert(3 === spark.read.jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties).collect()(0).length)
 
-    df2.write.mode(SaveMode.Ignore).jdbc(url1, "TEST.DROPTEST", properties)
-    assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count())
-    assert(3 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
+    df2.write.mode(SaveMode.Ignore).jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties)
+    assert(2 === spark.read.jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties).count())
+    assert(3 === spark.read.jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties).collect()(0).length)
   }
 
   test("CREATE with overwrite") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
 
-    df.write.jdbc(url1, "TEST.DROPTEST", properties)
-    assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count())
-    assert(3 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
+    df.write.jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties)
+    assert(2 === spark.read.jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties).count())
+    assert(3 === spark.read.jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties).collect()(0).length)
 
-    df2.write.mode(SaveMode.Overwrite).jdbc(url1, "TEST.DROPTEST", properties)
-    assert(1 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count())
-    assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
+    df2.write.mode(SaveMode.Overwrite).jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties)
+    assert(1 === spark.read.jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties).count())
+    assert(2 === spark.read.jdbc(jdbcOptions1.url, "TEST.DROPTEST", properties).collect()(0).length)
   }
 
   test("CREATE then INSERT to append") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
 
-    df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
-    df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
-    assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).count())
-    assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
+    df.write.jdbc(jdbcOptions.url, "TEST.APPENDTEST", new Properties())
+    df2.write.mode(SaveMode.Append).jdbc(jdbcOptions.url, "TEST.APPENDTEST", new Properties())
+    assert(3 === spark.read.jdbc(jdbcOptions.url, "TEST.APPENDTEST", new Properties()).count())
+    assert(2 ===
+      spark.read.jdbc(jdbcOptions.url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
   }
 
   test("SPARK-18123 Append with column names with different cases") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema4)
 
-    df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
+    df.write.jdbc(jdbcOptions.url, "TEST.APPENDTEST", new Properties())
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val m = intercept[AnalysisException] {
-        df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
+        df2.write.mode(SaveMode.Append).jdbc(jdbcOptions.url, "TEST.APPENDTEST", new Properties())
       }.getMessage
       assert(m.contains("Column \"NAME\" not found"))
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
-      assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).count())
-      assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
+      df2.write.mode(SaveMode.Append).jdbc(jdbcOptions.url, "TEST.APPENDTEST", new Properties())
+      assert(3 === spark.read.jdbc(jdbcOptions.url, "TEST.APPENDTEST", new Properties()).count())
+      assert(2 ===
+        spark.read.jdbc(jdbcOptions.url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
     }
   }
 
@@ -196,18 +204,19 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
     val df3 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
 
-    df.write.jdbc(url1, "TEST.TRUNCATETEST", properties)
+    df.write.jdbc(jdbcOptions1.url, "TEST.TRUNCATETEST", properties)
     df2.write.mode(SaveMode.Overwrite).option("truncate", true)
-      .jdbc(url1, "TEST.TRUNCATETEST", properties)
-    assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
-    assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
+      .jdbc(jdbcOptions1.url, "TEST.TRUNCATETEST", properties)
+    assert(1 === spark.read.jdbc(jdbcOptions1.url, "TEST.TRUNCATETEST", properties).count())
+    assert(2 ===
+      spark.read.jdbc(jdbcOptions1.url, "TEST.TRUNCATETEST", properties).collect()(0).length)
 
     val m = intercept[AnalysisException] {
       df3.write.mode(SaveMode.Overwrite).option("truncate", true)
-        .jdbc(url1, "TEST.TRUNCATETEST", properties)
+        .jdbc(jdbcOptions1.url, "TEST.TRUNCATETEST", properties)
     }.getMessage
     assert(m.contains("Column \"seq\" not found"))
-    assert(0 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
+    assert(0 === spark.read.jdbc(jdbcOptions1.url, "TEST.TRUNCATETEST", properties).count())
     JdbcDialects.unregisterDialect(testH2Dialect)
   }
 
@@ -217,7 +226,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     val m = intercept[org.h2.jdbc.JdbcSQLException] {
       df.write.option("createTableOptions", "ENGINE tableEngineName")
-      .jdbc(url1, "TEST.CREATETBLOPTS", properties)
+      .jdbc(jdbcOptions1.url, "TEST.CREATETBLOPTS", properties)
     }.getMessage
     assert(m.contains("Class \"TABLEENGINENAME\" not found"))
     JdbcDialects.unregisterDialect(testH2Dialect)
@@ -227,36 +236,37 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
 
-    df.write.jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
+    df.write.jdbc(jdbcOptions.url, "TEST.INCOMPATIBLETEST", new Properties())
     val m = intercept[AnalysisException] {
-      df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
+      df2.write.mode(SaveMode.Append)
+        .jdbc(jdbcOptions.url, "TEST.INCOMPATIBLETEST", new Properties())
     }.getMessage
     assert(m.contains("Column \"seq\" not found"))
   }
 
   test("INSERT to JDBC Datasource") {
     sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
-    assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).count())
-    assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+    assert(2 === spark.read.jdbc(jdbcOptions1.url, "TEST.PEOPLE1", properties).count())
+    assert(2 === spark.read.jdbc(jdbcOptions1.url, "TEST.PEOPLE1", properties).collect()(0).length)
   }
 
   test("INSERT to JDBC Datasource with overwrite") {
     sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
     sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
-    assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).count())
-    assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+    assert(2 === spark.read.jdbc(jdbcOptions1.url, "TEST.PEOPLE1", properties).count())
+    assert(2 === spark.read.jdbc(jdbcOptions1.url, "TEST.PEOPLE1", properties).collect()(0).length)
   }
 
   test("save works for format(\"jdbc\") if url and dbtable are set") {
     val df = sqlContext.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
     df.write.format("jdbc")
-    .options(Map("url" -> url, "dbtable" -> "TEST.SAVETEST"))
+    .options(Map("url" -> jdbcOptions.url, "dbtable" -> "TEST.SAVETEST"))
     .save()
 
-    assert(2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).count)
-    assert(
-      2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).collect()(0).length)
+    assert(2 === sqlContext.read.jdbc(jdbcOptions.url, "TEST.SAVETEST", new Properties).count)
+    assert(2 ===
+      sqlContext.read.jdbc(jdbcOptions.url, "TEST.SAVETEST", new Properties).collect()(0).length)
   }
 
   test("save API with SaveMode.Overwrite") {
@@ -264,17 +274,17 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
 
     df.write.format("jdbc")
-      .option("url", url1)
+      .option("url", jdbcOptions1.url)
       .option("dbtable", "TEST.SAVETEST")
       .options(properties.asScala)
       .save()
     df2.write.mode(SaveMode.Overwrite).format("jdbc")
-      .option("url", url1)
+      .option("url", jdbcOptions1.url)
       .option("dbtable", "TEST.SAVETEST")
       .options(properties.asScala)
       .save()
-    assert(1 === spark.read.jdbc(url1, "TEST.SAVETEST", properties).count())
-    assert(2 === spark.read.jdbc(url1, "TEST.SAVETEST", properties).collect()(0).length)
+    assert(1 === spark.read.jdbc(jdbcOptions1.url, "TEST.SAVETEST", properties).count())
+    assert(2 === spark.read.jdbc(jdbcOptions1.url, "TEST.SAVETEST", properties).collect()(0).length)
   }
 
   test("save errors if url is not specified") {
@@ -294,7 +304,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     val e = intercept[RuntimeException] {
       df.write.format("jdbc")
-        .option("url", url1)
+        .option("url", jdbcOptions1.url)
         .options(properties.asScala)
         .save()
     }.getMessage
@@ -307,7 +317,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val e = intercept[org.h2.jdbc.JdbcSQLException] {
       df.write.format("jdbc")
         .option("dbtable", "TEST.SAVETEST")
-        .option("url", url1)
+        .option("url", jdbcOptions1.url)
         .save()
     }.getMessage
     assert(e.contains("Wrong user name or password"))
@@ -319,7 +329,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val e = intercept[java.lang.IllegalArgumentException] {
       df.write.format("jdbc")
         .option("dbtable", "TEST.SAVETEST")
-        .option("url", url1)
+        .option("url", jdbcOptions1.url)
         .option("partitionColumn", "foo")
         .save()
     }.getMessage
@@ -330,7 +340,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     df.write.format("jdbc")
-      .option("Url", url1)
+      .option("Url", jdbcOptions1.url)
       .option("dbtable", "TEST.SAVETEST")
       .options(properties.asScala)
       .save()
@@ -341,7 +351,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val e = intercept[IllegalArgumentException] {
       df.write.format("jdbc")
         .option("dbtable", "TEST.SAVETEST")
-        .option("url", url1)
+        .option("url", jdbcOptions1.url)
         .option("user", "testUser")
         .option("password", "testPass")
         .option(s"${JDBCOptions.JDBC_NUM_PARTITIONS}", "0")
@@ -357,7 +367,8 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         s"""
           |CREATE TEMPORARY VIEW people_view
           |USING org.apache.spark.sql.jdbc
-          |OPTIONS (uRl '$url1', DbTaBlE 'TEST.PEOPLE1', User 'testUser', PassWord 'testPass')
+          |OPTIONS (uRl '${jdbcOptions1.url}',
+          |DbTaBlE 'TEST.PEOPLE1', User 'testUser', PassWord 'testPass')
         """.stripMargin.replaceAll("\n", " "))
       sql("INSERT OVERWRITE TABLE PEOPLE_VIEW SELECT * FROM PEOPLE")
       assert(sql("select * from people_view").count() == 2)
@@ -376,7 +387,8 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       val expectedSchemaStr =
         colTypes.map { case (col, dataType) => s""""$col" $dataType """ }.mkString(", ")
 
-      assert(JdbcUtils.schemaString(df, url1, Option(createTableColTypes)) == expectedSchemaStr)
+      assert(JdbcUtils.schemaString(df, jdbcOptions1, Option(createTableColTypes)) ==
+        expectedSchemaStr)
     }
 
     testCreateTableColDataTypes(Seq("boolean"))
@@ -396,7 +408,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       df.write
         .mode(SaveMode.Overwrite)
         .option("createTableColumnTypes", createTableColTypes)
-        .jdbc(url1, "TEST.DBCOLTYPETEST", properties)
+        .jdbc(jdbcOptions1.url, "TEST.DBCOLTYPETEST", properties)
 
       // verify the data types of the created table by reading the database catalog of H2
       val query =
@@ -404,7 +416,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
           |(SELECT column_name, type_name, character_maximum_length
           | FROM information_schema.columns WHERE table_name = 'DBCOLTYPETEST')
         """.stripMargin
-      val rows = spark.read.jdbc(url1, query, properties).collect()
+      val rows = spark.read.jdbc(jdbcOptions1.url, query, properties).collect()
 
       rows.foreach { row =>
         val typeName = row.getString(1)
@@ -454,7 +466,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val msg = intercept[ParseException] {
       df.write.mode(SaveMode.Overwrite)
         .option("createTableColumnTypes", "name CLOB(2000)")
-        .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+        .jdbc(jdbcOptions1.url, "TEST.USERDBTYPETEST", properties)
     }.getMessage()
     assert(msg.contains("DataType clob(2000) is not supported."))
   }
@@ -464,7 +476,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val msg = intercept[ParseException] {
       df.write.mode(SaveMode.Overwrite)
         .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
-        .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+        .jdbc(jdbcOptions1.url, "TEST.USERDBTYPETEST", properties)
     }.getMessage()
     assert(msg.contains("no viable alternative at input"))
   }
@@ -475,7 +487,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       val msg = intercept[AnalysisException] {
         df.write.mode(SaveMode.Overwrite)
           .option("createTableColumnTypes", "name CHAR(20), id int, NaMe VARCHAR(100)")
-          .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+          .jdbc(jdbcOptions1.url, "TEST.USERDBTYPETEST", properties)
       }.getMessage()
       assert(msg.contains(
         "Found duplicate column(s) in createTableColumnTypes option value: name, NaMe"))
@@ -490,7 +502,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       val msg = intercept[AnalysisException] {
         df.write.mode(SaveMode.Overwrite)
           .option("createTableColumnTypes", "firstName CHAR(20), id int")
-          .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+          .jdbc(jdbcOptions1.url, "TEST.USERDBTYPETEST", properties)
       }.getMessage()
       assert(msg.contains("createTableColumnTypes option column firstName not found in " +
         "schema struct<name:string,id:int>"))
@@ -500,7 +512,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       val msg = intercept[AnalysisException] {
         df.write.mode(SaveMode.Overwrite)
           .option("createTableColumnTypes", "id int, Name VARCHAR(100)")
-          .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+          .jdbc(jdbcOptions1.url, "TEST.USERDBTYPETEST", properties)
       }.getMessage()
       assert(msg.contains("createTableColumnTypes option column Name not found in " +
         "schema struct<name:string,id:int>"))
