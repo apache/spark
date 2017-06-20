@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType, TimestampType}
 import org.apache.spark.util.Utils
 
 class FileStreamSinkSuite extends StreamTest {
@@ -213,6 +213,10 @@ class FileStreamSinkSuite extends StreamTest {
           .format("parquet")
           .start(outputDir)
 
+      val userDefinedSchema = new StructType()
+        .add("start", TimestampType, nullable = true)
+        .add("end", TimestampType, nullable = true)
+        .add("count", LongType, nullable = true)
 
       def addTimestamp(timestampInSecs: Int*): Unit = {
         inputData.addData(timestampInSecs.map(_ * 1L): _*)
@@ -222,7 +226,7 @@ class FileStreamSinkSuite extends StreamTest {
       }
 
       def check(expectedResult: ((Long, Long), Long)*): Unit = {
-        val outputDf = spark.read.parquet(outputDir)
+        val outputDf = spark.read.schema(userDefinedSchema).parquet(outputDir)
           .selectExpr(
             "CAST(start as BIGINT) AS start",
             "CAST(end as BIGINT) AS end",
@@ -253,7 +257,6 @@ class FileStreamSinkSuite extends StreamTest {
 
   test("Update and Complete output mode not supported") {
     val df = MemoryStream[Int].toDF().groupBy().count()
-    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
 
     withTempDir { dir =>
 

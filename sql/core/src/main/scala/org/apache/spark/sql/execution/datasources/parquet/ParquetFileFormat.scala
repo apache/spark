@@ -144,10 +144,10 @@ class ParquetFileFormat
       // initialized.
       private val parquetLogRedirector = ParquetLogRedirector.INSTANCE
 
-        override def newInstance(
-          path: String,
-          dataSchema: StructType,
-          context: TaskAttemptContext): OutputWriter = {
+      override def newInstance(
+        path: String,
+        dataSchema: StructType,
+        context: TaskAttemptContext): OutputWriter = {
         new ParquetOutputWriter(path, context)
       }
 

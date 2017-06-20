@@ -305,7 +305,10 @@ object FileFormatWriter extends Logging {
     override def execute(iter: Iterator[InternalRow]): Set[String] = {
       var fileCounter = 0
       var recordsInFile: Long = 0L
-      newOutputWriter(fileCounter)
+      // Skip the empty partition to avoid creating a mass of 'empty' files.
+      if (iter.hasNext) {
+        newOutputWriter(fileCounter)
+      }
       while (iter.hasNext) {
         if (description.maxRecordsPerFile > 0 && recordsInFile >= description.maxRecordsPerFile) {
           fileCounter += 1
