@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
@@ -1575,6 +1576,21 @@ case class FormatNumber(x: Expression, d: Expression)
   override def dataType: DataType = StringType
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
+
+  @transient
+  private lazy val decimal = d.eval().asInstanceOf[Int]
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // Validate the inputTypes
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (decimal < 0) {
+      TypeCheckFailure(s"Argument 2 of function FORMAT_NUMBER must be >= 0, but got ${decimal}.")
+    } else {
+      TypeCheckSuccess
+    }
+  }
 
   // Associated with the pattern, for the last d value, and we will update the
   // pattern (DecimalFormat) once the new coming d value differ with the last one.

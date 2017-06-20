@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
@@ -602,13 +603,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FormatNumber(Literal(12831273.23481d), Literal(3)), "12,831,273.235")
     checkEvaluation(FormatNumber(Literal(12831273.83421d), Literal(0)), "12,831,274")
     checkEvaluation(FormatNumber(Literal(123123324123L), Literal(3)), "123,123,324,123.000")
-    checkEvaluation(FormatNumber(Literal(123123324123L), Literal(-1)), null)
     checkEvaluation(
       FormatNumber(
         Literal(Decimal(123123324123L) * Decimal(123123.21234d)), Literal(4)),
       "15,159,339,180,002,773.2778")
     checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal(3)), null)
     assert(FormatNumber(Literal.create(null, NullType), Literal(3)).resolved === false)
+
+    val decimal = -4
+    assert(FormatNumber(Literal(123123324123L), Literal(decimal)).checkInputDataTypes() ==
+      TypeCheckFailure(s"Argument 2 of function FORMAT_NUMBER must be >= 0, but got ${decimal}."))
   }
 
   test("find in set") {
