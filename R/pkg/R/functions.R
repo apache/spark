@@ -34,13 +34,13 @@ NULL
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
 NULL
 
-
 #' Date time functions for Column operations
 #'
 #' Date time functions defined for \code{Column}.
 #'
 #' @param x Column to compute on.
-#' @param format string to use to parse x Column to DateType or TimestampType.
+#' @param format \code{to_date} and \code{to_timestamp}: string to use to parse x Column
+#'               to DateType or TimestampType.
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
 #' @rdname column_datetime_functions
@@ -62,13 +62,13 @@ NULL
 #'
 #' @param y Column to compute on.
 #' @param x For class Column, it is used to perform arithmetic operations with \code{y}.
-#' For class numeric, it is the number of months or days to be added to \code{y}.
-#' For class character, then it is
-#' \itemize{
-#'  \item \code{date_format}: date format specification.
-#'  \item \code{from_utc_timestamp, to_utc_timestamp}: time zone to use.
-#'  \item \code{next_day}: day of the week string.
-#' }
+#'          For class numeric, it is the number of months or days to be added to \code{y}.
+#'          For class character, then it is
+#'          \itemize{
+#'          \item \code{date_format}: date format specification.
+#'          \item \code{from_utc_timestamp, to_utc_timestamp}: time zone to use.
+#'          \item \code{next_day}: day of the week string.
+#'          }
 #'
 #' @name column_datetime_diff_functions
 #' @rdname column_datetime_diff_functions
@@ -3853,26 +3853,20 @@ setMethod("input_file_name", signature("missing"),
             column(jc)
           })
 
-#' trunc
+#' @section Details:
+#' \code{trunc}: Returns date truncated to the unit specified by the format.
 #'
-#' Returns date truncated to the unit specified by the format.
+#' @param format \code{trunc}: string used for specify the truncation method. For example,
+#' "year", "yyyy", "yy" for truncate by year, or "month", "mon", "mm" for truncate by month.
 #'
-#' @param x Column to compute on.
-#' @param format string used for specify the truncation method. For example, "year", "yyyy",
-#' "yy" for truncate by year, or "month", "mon", "mm" for truncate by month.
-#'
-#' @rdname trunc
-#' @name trunc
-#' @family date time functions
-#' @aliases trunc,Column-method
+#' @rdname column_datetime_functions
+#' @aliases trunc trunc,Column-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' trunc(df$c, "year")
-#' trunc(df$c, "yy")
-#' trunc(df$c, "month")
-#' trunc(df$c, "mon")
-#' }
+#' head(select(df, df$time, trunc(df$time, "year"), trunc(df$time, "yy"),
+#'            trunc(df$time, "month"), trunc(df$time, "mon")))}
 #' @note trunc since 2.3.0
 setMethod("trunc",
           signature(x = "Column"),
