@@ -693,7 +693,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     withTempDir { src =>
       // Check CSV format
       Seq("1,1").toDF().coalesce(1).write.mode("overwrite").text(src.toString)
-      Seq((true, "a INT, a INT"), (false, "aA INT, Aa INT")).map { case (caseSensitive, schema) =>
+      Seq((true, "a INT, a INT"), (false, "aA INT, Aa INT"))
+          .foreach { case (caseSensitive, schema) =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
           val e = intercept[AnalysisException] {
             spark.read.format("csv").schema(schema).load(src.toString)
@@ -709,7 +710,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       checkAnswer(df, Row(1, 1))
 
       // Check JSON format
-      Seq((true, ("a", "a")), (false, ("aA", "Aa"))).map { case (caseSensitive, (c0, c1)) =>
+      Seq((true, ("a", "a")), (false, ("aA", "Aa")))
+          .foreach { case (caseSensitive, (c0, c1)) =>
         Seq(s"""{"$c0":1, "$c1":1}""").toDF().coalesce(1).write.mode("overwrite").text(src.toString)
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
           val e1 = intercept[AnalysisException] {
@@ -726,7 +728,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
       // Check Paruqet format
       Seq((1, 1)).toDF("c0", "c1").coalesce(1).write.mode("overwrite").parquet(src.toString)
-      Seq((true, "a INT, a INT"), (false, "aA INT, Aa INT")).map { case (caseSensitive, schema) =>
+      Seq((true, "a INT, a INT"), (false, "aA INT, Aa INT"))
+          .foreach { case (caseSensitive, schema) =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
           val e = intercept[AnalysisException] {
             spark.read.format("parquet").schema(schema).load(src.toString)
