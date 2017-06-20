@@ -2515,6 +2515,7 @@ object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
 object TimeWindowing extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.dsl.expressions._
 
+  private final val WINDOW_COL_NAME = "window"
   private final val WINDOW_START = "start"
   private final val WINDOW_END = "end"
 
@@ -2562,37 +2563,58 @@ object TimeWindowing extends Rule[LogicalPlan] {
           case a: Attribute => a.metadata
           case _ => Metadata.empty
         }
-        val windowAttr =
-          AttributeReference("window", window.dataType, metadata = metadata)()
 
-        val maxNumOverlapping = math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
-        val windows = Seq.tabulate(maxNumOverlapping + 1) { i =>
-          val windowId = Ceil((PreciseTimestamp(window.timeColumn) - window.startTime) /
-            window.slideDuration)
+        def getWindow(i: Int, maxNumOverlapping: Int): Expression = {
+          val windowId = Ceil((PreciseTimestampConversion(
+            window.timeColumn, TimestampType, LongType) - window.startTime) / window.slideDuration)
           val windowStart = (windowId + i - maxNumOverlapping) *
-              window.slideDuration + window.startTime
+            window.slideDuration + window.startTime
           val windowEnd = windowStart + window.windowDuration
 
           CreateNamedStruct(
-            Literal(WINDOW_START) :: windowStart ::
-            Literal(WINDOW_END) :: windowEnd :: Nil)
+            Literal(WINDOW_START) ::
+              PreciseTimestampConversion(windowStart, LongType, TimestampType) ::
+              Literal(WINDOW_END) ::
+              PreciseTimestampConversion(windowEnd, LongType, TimestampType) ::
+              Nil)
         }
 
-        val projections = windows.map(_ +: p.children.head.output)
+        if (window.windowDuration == window.slideDuration) {
+          val windowStruct = Alias(getWindow(0, 1), WINDOW_COL_NAME)(
+            explicitMetadata = Some(metadata))
 
-        val filterExpr =
-          window.timeColumn >= windowAttr.getField(WINDOW_START) &&
-          window.timeColumn < windowAttr.getField(WINDOW_END)
+          val replacedPlan = p transformExpressions {
+            case t: TimeWindow => windowStruct
+          }
 
-        val expandedPlan =
-          Filter(filterExpr,
+          // For backwards compatibility we add a filter to filter out nulls
+          val filterExpr = IsNotNull(windowStruct.getField(WINDOW_START)) &&
+            IsNotNull(windowStruct.getField(WINDOW_END))
+
+          replacedPlan.withNewChildren(Filter(filterExpr, child) :: Nil)
+        } else {
+          val windowAttr = AttributeReference(
+            WINDOW_COL_NAME, window.dataType, metadata = metadata)()
+
+          val maxNumOverlapping =
+            math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
+          val windows = Seq.tabulate(maxNumOverlapping + 1)(i => getWindow(i, maxNumOverlapping))
+
+          val projections = windows.map(_ +: child.output)
+
+          val filterExpr =
+            window.timeColumn >= windowAttr.getField(WINDOW_START) &&
+              window.timeColumn < windowAttr.getField(WINDOW_END)
+
+          val substitutedPlan = Filter(filterExpr,
             Expand(projections, windowAttr +: child.output, child))
 
-        val substitutedPlan = p transformExpressions {
-          case t: TimeWindow => windowAttr
-        }
+          val renamedPlan = p transformExpressions {
+            case t: TimeWindow => windowAttr
+          }
 
-        substitutedPlan.withNewChildren(expandedPlan :: Nil)
+          renamedPlan.withNewChildren(substitutedPlan :: Nil)
+        }
       } else if (windowExpressions.size > 1) {
         p.failAnalysis("Multiple time window expressions would result in a cartesian product " +
           "of rows, therefore they are currently not supported.")
