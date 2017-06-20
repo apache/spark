@@ -5,7 +5,7 @@ set hive.mapred.supports.subdirectories=true;
 set hive.merge.mapfiles=true;
 set hive.merge.mapredfiles=true;
 set hive.merge.smallfiles.avgsize=1;
-set mapred.input.dir.recursive=true;
+set mapreduce.input.fileinputformat.input.dir.recursive=true;
 
 -- This is to test the union->selectstar->filesink optimization
 -- Union of 3 subqueries is performed (exactly one of which requires a map-reduce job)

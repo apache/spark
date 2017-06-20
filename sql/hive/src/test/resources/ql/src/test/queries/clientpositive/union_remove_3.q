@@ -4,7 +4,7 @@ set hive.mapred.supports.subdirectories=true;
 
 set hive.merge.mapfiles=false;
 set hive.merge.mapredfiles=false;
-set mapred.input.dir.recursive=true;
+set mapreduce.input.fileinputformat.input.dir.recursive=true;
 
 -- This is to test the union->remove->filesink optimization
 -- Union of 3 subqueries is performed (all of which are map-only queries)

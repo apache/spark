@@ -7,7 +7,7 @@ set hive.optimize.union.remove=true;
 
 set hive.merge.mapfiles=false;
 set hive.merge.mapredfiles=false;
-set mapred.input.dir.recursive=true;
+set mapreduce.input.fileinputformat.input.dir.recursive=true;
 
 CREATE TABLE T1(key STRING, val STRING)
 SKEWED BY (key) ON ((2), (8)) STORED AS TEXTFILE;
