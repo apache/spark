@@ -636,6 +636,11 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
+    def test_udf_should_validate_input_args(self):
+        from pyspark.sql.functions import udf
+
+        self.assertRaises(TypeError, udf(lambda x: x), None)
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)

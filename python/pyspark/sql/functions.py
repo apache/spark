@@ -1949,6 +1949,14 @@ class UserDefinedFunction(object):
         return judf
 
     def __call__(self, *cols):
+        for c in cols:
+            if not isinstance(c, (Column, str)):
+                raise TypeError(
+                    "Invalid UDF argument, not a str or Column: "
+                    "{0} of type {1}. "
+                    "For Column literals use sql.functions "
+                    "lit, array, struct or create_map.".format(c, type(c)))
+
         judf = self._judf
         sc = SparkContext._active_spark_context
         return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
