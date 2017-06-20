@@ -1123,7 +1123,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq((1, 2, 3), (2, 3, 4), (3, 4, 5)).toDF("column1", "column2", "column1")
         .write.format("parquet").save("temp")
     }
-    assert(e.getMessage.contains("Found duplicate column(s) in the query: "))
+    assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
     assert(e.getMessage.contains("column1"))
     assert(!e.getMessage.contains("column2"))
 
@@ -1133,7 +1133,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .toDF("column1", "column2", "column3", "column1", "column3")
         .write.format("json").save("temp")
     }
-    assert(f.getMessage.contains("Found duplicate column(s) in the query: "))
+    assert(f.getMessage.contains("Found duplicate column(s) when inserting into"))
     assert(f.getMessage.contains("column1"))
     assert(f.getMessage.contains("column3"))
     assert(!f.getMessage.contains("column2"))

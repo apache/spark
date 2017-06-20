@@ -67,7 +67,7 @@ private[spark] object SchemaUtils {
       }
     }
     if (duplicateColumns.size > 0) {
-      throw new AnalysisException(s"Found duplicate column(s) in $colType: " +
+      throw new AnalysisException(s"Found duplicate column(s) $colType: " +
         duplicateColumns.map(colName => s"`$colName`").mkString(", "))
     }
   }

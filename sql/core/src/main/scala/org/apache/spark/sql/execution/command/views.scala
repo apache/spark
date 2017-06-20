@@ -356,15 +356,15 @@ object ViewHelper {
       properties: Map[String, String],
       session: SparkSession,
       analyzedPlan: LogicalPlan): Map[String, String] = {
+    val queryOutput = analyzedPlan.schema.fieldNames
+
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
-    SchemaUtils.checkSchemaColumnNameDuplication(
-      analyzedPlan.schema, "the view", session.sessionState.conf.caseSensitiveAnalysis)
+    SchemaUtils.checkColumnNameDuplication(
+      queryOutput, "the view", session.sessionState.conf.resolver)
 
     // Generate the view default database name.
     val viewDefaultDatabase = session.sessionState.catalog.getCurrentDatabase
-    val queryOutput = analyzedPlan.schema.fieldNames
-
     removeQueryColumnNames(properties) ++
       generateViewDefaultDatabase(viewDefaultDatabase) ++
       generateQueryColumnNames(queryOutput)

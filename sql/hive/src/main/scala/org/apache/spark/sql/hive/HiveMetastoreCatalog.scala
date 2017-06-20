@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Legacy catalog for interacting with the Hive metastore.

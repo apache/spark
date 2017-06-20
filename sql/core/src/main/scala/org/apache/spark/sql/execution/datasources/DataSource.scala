@@ -336,7 +336,7 @@ case class DataSource(
         }
 
         SchemaUtils.checkSchemaColumnNameDuplication(
-          dataSchema, "the datasource", sparkSession.sessionState.conf.caseSensitiveAnalysis)
+          dataSchema, "in the datasource", sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
         HadoopFsRelation(
           fileCatalog,
