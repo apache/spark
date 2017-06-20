@@ -18,6 +18,22 @@
 #' @include generics.R column.R
 NULL
 
+#' Aggregate functions for Column operations
+#'
+#' Aggregate functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param y,na.rm,use currently not used.
+#' @param ... additional argument(s). For example, it could be used to pass additional Columns.
+#' @name column_aggregate_functions
+#' @rdname column_aggregate_functions
+#' @family aggregate functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
+NULL
+
 #' lit
 #'
 #' A new \linkS4class{Column} is created to represent the literal value.
@@ -85,17 +101,20 @@ setMethod("acos",
             column(jc)
           })
 
-#' Returns the approximate number of distinct items in a group
+#' @details
+#' \code{approxCountDistinct}: Returns the approximate number of distinct items in a group.
 #'
-#' Returns the approximate number of distinct items in a group. This is a column
-#' aggregate function.
-#'
-#' @rdname approxCountDistinct
-#' @name approxCountDistinct
-#' @return the approximate number of distinct items in a group.
+#' @rdname column_aggregate_functions
 #' @export
-#' @aliases approxCountDistinct,Column-method
-#' @examples \dontrun{approxCountDistinct(df$c)}
+#' @aliases approxCountDistinct approxCountDistinct,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, approxCountDistinct(df$gear)))
+#' head(select(df, approxCountDistinct(df$gear, 0.02)))
+#' head(select(df, countDistinct(df$gear, df$cyl)))
+#' head(select(df, n_distinct(df$gear)))
+#' head(distinct(select(df, "gear")))}
 #' @note approxCountDistinct(Column) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
@@ -342,10 +361,13 @@ setMethod("column",
 #'
 #' @rdname corr
 #' @name corr
-#' @family math functions
+#' @family aggregate functions
 #' @export
 #' @aliases corr,Column-method
-#' @examples \dontrun{corr(df$c, df$d)}
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' head(select(df, corr(df$mpg, df$hp)))}
 #' @note corr since 1.6.0
 setMethod("corr", signature(x = "Column"),
           function(x, col2) {
@@ -356,20 +378,22 @@ setMethod("corr", signature(x = "Column"),
 
 #' cov
 #'
-#' Compute the sample covariance between two expressions.
+#' Compute the covariance between two expressions.
+#'
+#' @details
+#' \code{cov}: Compute the sample covariance between two expressions.
 #'
 #' @rdname cov
 #' @name cov
-#' @family math functions
+#' @family aggregate functions
 #' @export
 #' @aliases cov,characterOrColumn-method
 #' @examples
 #' \dontrun{
-#' cov(df$c, df$d)
-#' cov("c", "d")
-#' covar_samp(df$c, df$d)
-#' covar_samp("c", "d")
-#' }
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' head(select(df, cov(df$mpg, df$hp), cov("mpg", "hp"),
+#'                 covar_samp(df$mpg, df$hp), covar_samp("mpg", "hp"),
+#'                 covar_pop(df$mpg, df$hp), covar_pop("mpg", "hp")))}
 #' @note cov since 1.6.0
 setMethod("cov", signature(x = "characterOrColumn"),
           function(x, col2) {
@@ -377,6 +401,9 @@ setMethod("cov", signature(x = "characterOrColumn"),
             covar_samp(x, col2)
           })
 
+#' @details
+#' \code{covar_sample}: Alias for \code{cov}.
+#'
 #' @rdname cov
 #'
 #' @param col1 the first Column.
@@ -395,23 +422,13 @@ setMethod("covar_samp", signature(col1 = "characterOrColumn", col2 = "characterO
             column(jc)
           })
 
-#' covar_pop
+#' @details
+#' \code{covar_pop}: Computes the population covariance between two expressions.
 #'
-#' Compute the population covariance between two expressions.
-#'
-#' @param col1 First column to compute cov_pop.
-#' @param col2 Second column to compute cov_pop.
-#'
-#' @rdname covar_pop
+#' @rdname cov
 #' @name covar_pop
-#' @family math functions
 #' @export
 #' @aliases covar_pop,characterOrColumn,characterOrColumn-method
-#' @examples
-#' \dontrun{
-#' covar_pop(df$c, df$d)
-#' covar_pop("c", "d")
-#' }
 #' @note covar_pop since 2.0.0
 setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOrColumn"),
           function(col1, col2) {
@@ -823,18 +840,16 @@ setMethod("isnan",
             column(jc)
           })
 
-#' kurtosis
+#' @details
+#' \code{kurtosis}: Returns the kurtosis of the values in a group.
 #'
-#' Aggregate function: returns the kurtosis of the values in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname kurtosis
-#' @name kurtosis
-#' @aliases kurtosis,Column-method
-#' @family aggregate functions
+#' @rdname column_aggregate_functions
+#' @aliases kurtosis kurtosis,Column-method
 #' @export
-#' @examples \dontrun{kurtosis(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, mean(df$mpg), sd(df$mpg), skewness(df$mpg), kurtosis(df$mpg)))}
 #' @note kurtosis since 1.6.0
 setMethod("kurtosis",
           signature(x = "Column"),
@@ -1040,18 +1055,11 @@ setMethod("ltrim",
             column(jc)
           })
 
-#' max
+#' @details
+#' \code{max}: Returns the maximum value of the expression in a group.
 #'
-#' Aggregate function: returns the maximum value of the expression in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname max
-#' @name max
-#' @family aggregate functions
-#' @aliases max,Column-method
-#' @export
-#' @examples \dontrun{max(df$c)}
+#' @rdname column_aggregate_functions
+#' @aliases max max,Column-method
 #' @note max since 1.5.0
 setMethod("max",
           signature(x = "Column"),
@@ -1081,19 +1089,24 @@ setMethod("md5",
             column(jc)
           })
 
-#' mean
+#' @details
+#' \code{mean}: Returns the average of the values in a group. Alias for \code{avg}.
 #'
-#' Aggregate function: returns the average of the values in a group.
-#' Alias for avg.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname mean
-#' @name mean
-#' @family aggregate functions
-#' @aliases mean,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases mean mean,Column-method
 #' @export
-#' @examples \dontrun{mean(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, avg(df$mpg), mean(df$mpg), sum(df$mpg), min(df$wt), max(df$qsec)))
+#'
+#' # metrics by num of cylinders
+#' tmp <- agg(groupBy(df, "cyl"), avg(df$mpg), avg(df$hp), avg(df$wt), avg(df$qsec))
+#' head(orderBy(tmp, "cyl"))
+#'
+#' # car with the max mpg
+#' mpg_max <- as.numeric(collect(agg(df, max(df$mpg))))
+#' head(where(df, df$mpg == mpg_max))}
 #' @note mean since 1.5.0
 setMethod("mean",
           signature(x = "Column"),
@@ -1102,18 +1115,12 @@ setMethod("mean",
             column(jc)
           })
 
-#' min
+#' @details
+#' \code{min}: Returns the minimum value of the expression in a group.
 #'
-#' Aggregate function: returns the minimum value of the expression in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname min
-#' @name min
-#' @aliases min,Column-method
-#' @family aggregate functions
+#' @rdname column_aggregate_functions
+#' @aliases min min,Column-method
 #' @export
-#' @examples \dontrun{min(df$c)}
 #' @note min since 1.5.0
 setMethod("min",
           signature(x = "Column"),
@@ -1338,24 +1345,17 @@ setMethod("rtrim",
             column(jc)
           })
 
-#' sd
+
+#' @details
+#' \code{sd}: Alias for \code{stddev_samp}.
 #'
-#' Aggregate function: alias for \link{stddev_samp}
-#'
-#' @param x Column to compute on.
-#' @param na.rm currently not used.
-#' @rdname sd
-#' @name sd
-#' @family aggregate functions
-#' @aliases sd,Column-method
-#' @seealso \link{stddev_pop}, \link{stddev_samp}
+#' @rdname column_aggregate_functions
+#' @aliases sd sd,Column-method
 #' @export
 #' @examples
-#'\dontrun{
-#'stddev(df$c)
-#'select(df, stddev(df$age))
-#'agg(df, sd(df$age))
-#'}
+#'
+#' \dontrun{
+#' head(select(df, sd(df$mpg), stddev(df$mpg), stddev_pop(df$wt), stddev_samp(df$qsec)))}
 #' @note sd since 1.6.0
 setMethod("sd",
           signature(x = "Column"),
@@ -1465,18 +1465,12 @@ setMethod("sinh",
             column(jc)
           })
 
-#' skewness
+#' @details
+#' \code{skewness}: Returns the skewness of the values in a group.
 #'
-#' Aggregate function: returns the skewness of the values in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname skewness
-#' @name skewness
-#' @family aggregate functions
-#' @aliases skewness,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases skewness skewness,Column-method
 #' @export
-#' @examples \dontrun{skewness(df$c)}
 #' @note skewness since 1.6.0
 setMethod("skewness",
           signature(x = "Column"),
@@ -1527,9 +1521,11 @@ setMethod("spark_partition_id",
             column(jc)
           })
 
-#' @rdname sd
-#' @aliases stddev,Column-method
-#' @name stddev
+#' @details
+#' \code{stddev}: Alias for \code{std_dev}.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases stddev stddev,Column-method
 #' @note stddev since 1.6.0
 setMethod("stddev",
           signature(x = "Column"),
@@ -1538,19 +1534,12 @@ setMethod("stddev",
             column(jc)
           })
 
-#' stddev_pop
+#' @details
+#' \code{stddev_pop}: Returns the population standard deviation of the expression in a group.
 #'
-#' Aggregate function: returns the population standard deviation of the expression in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname stddev_pop
-#' @name stddev_pop
-#' @family aggregate functions
-#' @aliases stddev_pop,Column-method
-#' @seealso \link{sd}, \link{stddev_samp}
+#' @rdname column_aggregate_functions
+#' @aliases stddev_pop stddev_pop,Column-method
 #' @export
-#' @examples \dontrun{stddev_pop(df$c)}
 #' @note stddev_pop since 1.6.0
 setMethod("stddev_pop",
           signature(x = "Column"),
@@ -1559,19 +1548,12 @@ setMethod("stddev_pop",
             column(jc)
           })
 
-#' stddev_samp
+#' @details
+#' \code{stddev_samp}: Returns the unbiased sample standard deviation of the expression in a group.
 #'
-#' Aggregate function: returns the unbiased sample standard deviation of the expression in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname stddev_samp
-#' @name stddev_samp
-#' @family aggregate functions
-#' @aliases stddev_samp,Column-method
-#' @seealso \link{stddev_pop}, \link{sd}
+#' @rdname column_aggregate_functions
+#' @aliases stddev_samp stddev_samp,Column-method
 #' @export
-#' @examples \dontrun{stddev_samp(df$c)}
 #' @note stddev_samp since 1.6.0
 setMethod("stddev_samp",
           signature(x = "Column"),
@@ -1630,18 +1612,12 @@ setMethod("sqrt",
             column(jc)
           })
 
-#' sum
+#' @details
+#' \code{sum}: Returns the sum of all values in the expression.
 #'
-#' Aggregate function: returns the sum of all values in the expression.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sum
-#' @name sum
-#' @family aggregate functions
-#' @aliases sum,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases sum sum,Column-method
 #' @export
-#' @examples \dontrun{sum(df$c)}
 #' @note sum since 1.5.0
 setMethod("sum",
           signature(x = "Column"),
@@ -1650,18 +1626,17 @@ setMethod("sum",
             column(jc)
           })
 
-#' sumDistinct
+#' @details
+#' \code{sumDistinct}: Returns the sum of distinct values in the expression.
 #'
-#' Aggregate function: returns the sum of distinct values in the expression.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sumDistinct
-#' @name sumDistinct
-#' @family aggregate functions
-#' @aliases sumDistinct,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases sumDistinct sumDistinct,Column-method
 #' @export
-#' @examples \dontrun{sumDistinct(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, sumDistinct(df$gear)))
+#' head(distinct(select(df, "gear")))}
 #' @note sumDistinct since 1.4.0
 setMethod("sumDistinct",
           signature(x = "Column"),
@@ -1952,24 +1927,16 @@ setMethod("upper",
             column(jc)
           })
 
-#' var
+#' @details
+#' \code{var}: Alias for \code{var_samp}.
 #'
-#' Aggregate function: alias for \link{var_samp}.
-#'
-#' @param x a Column to compute on.
-#' @param y,na.rm,use currently not used.
-#' @rdname var
-#' @name var
-#' @family aggregate functions
-#' @aliases var,Column-method
-#' @seealso \link{var_pop}, \link{var_samp}
+#' @rdname column_aggregate_functions
+#' @aliases var var,Column-method
 #' @export
 #' @examples
+#'
 #'\dontrun{
-#'variance(df$c)
-#'select(df, var_pop(df$age))
-#'agg(df, var(df$age))
-#'}
+#'head(agg(df, var(df$mpg), variance(df$mpg), var_pop(df$mpg), var_samp(df$mpg)))}
 #' @note var since 1.6.0
 setMethod("var",
           signature(x = "Column"),
@@ -1978,9 +1945,9 @@ setMethod("var",
             var_samp(x)
           })
 
-#' @rdname var
-#' @aliases variance,Column-method
-#' @name variance
+#' @rdname column_aggregate_functions
+#' @aliases variance variance,Column-method
+#' @export
 #' @note variance since 1.6.0
 setMethod("variance",
           signature(x = "Column"),
@@ -1989,19 +1956,12 @@ setMethod("variance",
             column(jc)
           })
 
-#' var_pop
+#' @details
+#' \code{var_pop}: Returns the population variance of the values in a group.
 #'
-#' Aggregate function: returns the population variance of the values in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname var_pop
-#' @name var_pop
-#' @family aggregate functions
-#' @aliases var_pop,Column-method
-#' @seealso \link{var}, \link{var_samp}
+#' @rdname column_aggregate_functions
+#' @aliases var_pop var_pop,Column-method
 #' @export
-#' @examples \dontrun{var_pop(df$c)}
 #' @note var_pop since 1.5.0
 setMethod("var_pop",
           signature(x = "Column"),
@@ -2010,19 +1970,12 @@ setMethod("var_pop",
             column(jc)
           })
 
-#' var_samp
+#' @details
+#' \code{var_samp}: Returns the unbiased variance of the values in a group.
 #'
-#' Aggregate function: returns the unbiased variance of the values in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname var_samp
-#' @name var_samp
-#' @aliases var_samp,Column-method
-#' @family aggregate functions
-#' @seealso \link{var_pop}, \link{var}
+#' @rdname column_aggregate_functions
+#' @aliases var_samp var_samp,Column-method
 #' @export
-#' @examples \dontrun{var_samp(df$c)}
 #' @note var_samp since 1.6.0
 setMethod("var_samp",
           signature(x = "Column"),
@@ -2235,17 +2188,11 @@ setMethod("pmod", signature(y = "Column"),
             column(jc)
           })
 
-
-#' @rdname approxCountDistinct
-#' @name approxCountDistinct
-#'
-#' @param x Column to compute on.
 #' @param rsd maximum estimation error allowed (default = 0.05)
-#' @param ... further arguments to be passed to or from other methods.
 #'
+#' @rdname column_aggregate_functions
 #' @aliases approxCountDistinct,Column-method
 #' @export
-#' @examples \dontrun{approxCountDistinct(df$c, 0.02)}
 #' @note approxCountDistinct(Column, numeric) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
@@ -2254,18 +2201,12 @@ setMethod("approxCountDistinct",
             column(jc)
           })
 
-#' Count Distinct Values
+#' @details
+#' \code{countDistinct}: Returns the number of distinct items in a group.
 #'
-#' @param x Column to compute on
-#' @param ... other columns
-#'
-#' @family aggregate functions
-#' @rdname countDistinct
-#' @name countDistinct
-#' @aliases countDistinct,Column-method
-#' @return the number of distinct items in a group.
+#' @rdname column_aggregate_functions
+#' @aliases countDistinct countDistinct,Column-method
 #' @export
-#' @examples \dontrun{countDistinct(df$c)}
 #' @note countDistinct since 1.4.0
 setMethod("countDistinct",
           signature(x = "Column"),
@@ -2384,15 +2325,12 @@ setMethod("sign", signature(x = "Column"),
             signum(x)
           })
 
-#' n_distinct
+#' @details
+#' \code{n_distinct}: Returns the number of distinct items in a group.
 #'
-#' Aggregate function: returns the number of distinct items in a group.
-#'
-#' @rdname countDistinct
-#' @name n_distinct
-#' @aliases n_distinct,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases n_distinct n_distinct,Column-method
 #' @export
-#' @examples \dontrun{n_distinct(df$c)}
 #' @note n_distinct since 1.4.0
 setMethod("n_distinct", signature(x = "Column"),
           function(x, ...) {
@@ -3717,18 +3655,18 @@ setMethod("create_map",
             column(jc)
           })
 
-#' collect_list
+#' @details
+#' \code{collect_list}: Creates a list of objects with duplicates.
 #'
-#' Creates a list of objects with duplicates.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname collect_list
-#' @name collect_list
-#' @family aggregate functions
-#' @aliases collect_list,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases collect_list collect_list,Column-method
 #' @export
-#' @examples \dontrun{collect_list(df$x)}
+#' @examples
+#'
+#' \dontrun{
+#' df2 = df[df$mpg > 20, ]
+#' collect(select(df2, collect_list(df2$gear)))
+#' collect(select(df2, collect_set(df2$gear)))}
 #' @note collect_list since 2.3.0
 setMethod("collect_list",
           signature(x = "Column"),
@@ -3737,18 +3675,12 @@ setMethod("collect_list",
             column(jc)
           })
 
-#' collect_set
+#' @details
+#' \code{collect_set}: Creates a list of objects with duplicate elements eliminated.
 #'
-#' Creates a list of objects with duplicate elements eliminated.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname collect_set
-#' @name collect_set
-#' @family aggregate functions
-#' @aliases collect_set,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases collect_set collect_set,Column-method
 #' @export
-#' @examples \dontrun{collect_set(df$x)}
 #' @note collect_set since 2.3.0
 setMethod("collect_set",
           signature(x = "Column"),
@@ -3908,24 +3840,17 @@ setMethod("not",
             column(jc)
           })
 
-#' grouping_bit
+#' @details
+#' \code{grouping_bit}: Indicates whether a specified column in a GROUP BY list is aggregated or not,
+#' returns 1 for aggregated or 0 for not aggregated in the result set. Same as \code{GROUPING} in SQL
+#' and \code{grouping} function in Scala.
 #'
-#' Indicates whether a specified column in a GROUP BY list is aggregated or not,
-#' returns 1 for aggregated or 0 for not aggregated in the result set.
-#'
-#' Same as \code{GROUPING} in SQL and \code{grouping} function in Scala.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname grouping_bit
-#' @name grouping_bit
-#' @family aggregate functions
-#' @aliases grouping_bit,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases grouping_bit grouping_bit,Column-method
 #' @export
 #' @examples
-#' \dontrun{
-#' df <- createDataFrame(mtcars)
 #'
+#' \dontrun{
 #' # With cube
 #' agg(
 #'   cube(df, "cyl", "gear", "am"),
@@ -3938,8 +3863,7 @@ setMethod("not",
 #'   rollup(df, "cyl", "gear", "am"),
 #'   mean(df$mpg),
 #'   grouping_bit(df$cyl), grouping_bit(df$gear), grouping_bit(df$am)
-#' )
-#' }
+#' )}
 #' @note grouping_bit since 2.3.0
 setMethod("grouping_bit",
           signature(x = "Column"),
@@ -3948,26 +3872,18 @@ setMethod("grouping_bit",
             column(jc)
           })
 
-#' grouping_id
-#'
-#' Returns the level of grouping.
-#'
+#' @details
+#' \code{grouping_id}: Returns the level of grouping.
 #' Equals to \code{
 #' grouping_bit(c1) * 2^(n - 1) + grouping_bit(c2) * 2^(n - 2)  + ... + grouping_bit(cn)
 #' }
 #'
-#' @param x Column to compute on
-#' @param ... additional Column(s) (optional).
-#'
-#' @rdname grouping_id
-#' @name grouping_id
-#' @family aggregate functions
-#' @aliases grouping_id,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases grouping_id grouping_id,Column-method
 #' @export
 #' @examples
-#' \dontrun{
-#' df <- createDataFrame(mtcars)
 #'
+#' \dontrun{
 #' # With cube
 #' agg(
 #'   cube(df, "cyl", "gear", "am"),
@@ -3980,8 +3896,7 @@ setMethod("grouping_bit",
 #'   rollup(df, "cyl", "gear", "am"),
 #'   mean(df$mpg),
 #'   grouping_id(df$cyl, df$gear, df$am)
-#' )
-#' }
+#' )}
 #' @note grouping_id since 2.3.0
 setMethod("grouping_id",
           signature(x = "Column"),
