@@ -34,6 +34,23 @@ NULL
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
 NULL
 
+#' String functions for Column operations
+#'
+#' String functions defined for \code{Column}.
+#'
+#' @param x Column to compute on. In \code{instr}, it is the substring to check. In \code{format_number},
+#'          it is the number of decimal place to format to.
+#' @param ... additional argument(s). For example, it could be used to pass additional Columns.
+#' @name column_string_functions
+#' @rdname column_string_functions
+#' @family string functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' t <- as.data.frame(Titanic, stringsAsFactors = FALSE)
+#' df <- createDataFrame(cbind(t, ClassRaw = sapply(substring(t[, 1], 1, 1), charToRaw)))}
+NULL
+
 #' lit
 #'
 #' A new \linkS4class{Column} is created to represent the literal value.
@@ -123,19 +140,17 @@ setMethod("approxCountDistinct",
             column(jc)
           })
 
-#' ascii
+#' @details
+#' \code{ascii}: Computes the numeric value of the first character of the string column,
+#' and returns the result as an int column.
 #'
-#' Computes the numeric value of the first character of the string column, and returns the
-#' result as a int column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname ascii
-#' @name ascii
-#' @family string functions
+#' @rdname column_string_functions
 #' @export
-#' @aliases ascii,Column-method
-#' @examples \dontrun{\dontrun{ascii(df$c)}}
+#' @aliases ascii ascii,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, ascii(df$Class), ascii(df$Sex)))}
 #' @note ascii since 1.5.0
 setMethod("ascii",
           signature(x = "Column"),
@@ -203,19 +218,17 @@ setMethod("avg",
             column(jc)
           })
 
-#' base64
+#' @details
+#' \code{base64}: Computes the BASE64 encoding of a binary column and returns it as
+#' a string column. This is the reverse of unbase64.
 #'
-#' Computes the BASE64 encoding of a binary column and returns it as a string column.
-#' This is the reverse of unbase64.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname base64
-#' @name base64
-#' @family string functions
+#' @rdname column_string_functions
 #' @export
-#' @aliases base64,Column-method
-#' @examples \dontrun{base64(df$c)}
+#' @aliases base64 base64,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, base64(df$ClassRaw), decode(df$ClassRaw, 'UTF-8')))}
 #' @note base64 since 1.5.0
 setMethod("base64",
           signature(x = "Column"),
@@ -586,20 +599,15 @@ setMethod("dayofyear",
             column(jc)
           })
 
-#' decode
+#' @details
+#' \code{decode}: Computes the first argument into a string from a binary using the provided
+#' character set (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
 #'
-#' Computes the first argument into a string from a binary using the provided character set
-#' (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
-#'
-#' @param x Column to compute on.
 #' @param charset Character set to use
 #'
-#' @rdname decode
-#' @name decode
-#' @family string functions
-#' @aliases decode,Column,character-method
+#' @rdname column_string_functions
+#' @aliases decode decode,Column,character-method
 #' @export
-#' @examples \dontrun{decode(df$c, "UTF-8")}
 #' @note decode since 1.6.0
 setMethod("decode",
           signature(x = "Column", charset = "character"),
@@ -608,20 +616,16 @@ setMethod("decode",
             column(jc)
           })
 
-#' encode
-#'
-#' Computes the first argument into a binary from a string using the provided character set
-#' (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+#' @details
+#' \code{encode}: Computes the first argument into a binary from a string using the provided
+#' character set (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
 #'
 #' @param x Column to compute on.
 #' @param charset Character set to use
 #'
-#' @rdname encode
-#' @name encode
-#' @family string functions
-#' @aliases encode,Column,character-method
+#' @rdname column_string_functions
+#' @aliases encode encode,Column,character-method
 #' @export
-#' @examples \dontrun{encode(df$c, "UTF-8")}
 #' @note encode since 1.6.0
 setMethod("encode",
           signature(x = "Column", charset = "character"),
@@ -783,21 +787,21 @@ setMethod("hour",
             column(jc)
           })
 
-#' initcap
+#' @details
+#' \code{initcap}: Returns a new string column by converting the first letter of
+#' each word to uppercase. Words are delimited by whitespace. For example, "hello world"
+#' will become "Hello World".
 #'
-#' Returns a new string column by converting the first letter of each word to uppercase.
-#' Words are delimited by whitespace.
-#'
-#' For example, "hello world" will become "Hello World".
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname initcap
-#' @name initcap
-#' @family string functions
-#' @aliases initcap,Column-method
+#' @rdname column_string_functions
+#' @aliases initcap initcap,Column-method
 #' @export
-#' @examples \dontrun{initcap(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, SexLower = lower(df$Sex), AgeUpper = upper(df$age))
+#' head(tmp)
+#' tmp2 <- mutate(tmp, Sex2 = initcap(tmp$SexLower))
+#' head(tmp)}
 #' @note initcap since 1.5.0
 setMethod("initcap",
           signature(x = "Column"),
@@ -915,18 +919,12 @@ setMethod("last_day",
             column(jc)
           })
 
-#' length
+#' @details
+#' \code{length}: Computes the length of a given string or binary column.
 #'
-#' Computes the length of a given string or binary column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname length
-#' @name length
-#' @aliases length,Column-method
-#' @family string functions
+#' @rdname column_string_functions
+#' @aliases length length,Column-method
 #' @export
-#' @examples \dontrun{length(df$c)}
 #' @note length since 1.5.0
 setMethod("length",
           signature(x = "Column"),
@@ -1015,18 +1013,12 @@ setMethod("log2",
             column(jc)
           })
 
-#' lower
+#' @details
+#' \code{lower}: Converts a string column to lower case.
 #'
-#' Converts a string column to lower case.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname lower
-#' @name lower
-#' @family string functions
-#' @aliases lower,Column-method
+#' @rdname column_string_functions
+#' @aliases lower lower,Column-method
 #' @export
-#' @examples \dontrun{lower(df$c)}
 #' @note lower since 1.4.0
 setMethod("lower",
           signature(x = "Column"),
@@ -1035,18 +1027,12 @@ setMethod("lower",
             column(jc)
           })
 
-#' ltrim
+#' @details
+#' \code{ltrim}: Trims the spaces from left end for the specified string value.
 #'
-#' Trim the spaces from left end for the specified string value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname ltrim
-#' @name ltrim
-#' @family string functions
-#' @aliases ltrim,Column-method
+#' @rdname column_string_functions
+#' @aliases ltrim ltrim,Column-method
 #' @export
-#' @examples \dontrun{ltrim(df$c)}
 #' @note ltrim since 1.5.0
 setMethod("ltrim",
           signature(x = "Column"),
@@ -1237,18 +1223,12 @@ setMethod("quarter",
             column(jc)
           })
 
-#' reverse
+#' @details
+#' \code{reverse}: Reverses the string column and returns it as a new string column.
 #'
-#' Reverses the string column and returns it as a new string column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname reverse
-#' @name reverse
-#' @family string functions
-#' @aliases reverse,Column-method
+#' @rdname column_string_functions
+#' @aliases reverse reverse,Column-method
 #' @export
-#' @examples \dontrun{reverse(df$c)}
 #' @note reverse since 1.5.0
 setMethod("reverse",
           signature(x = "Column"),
@@ -1324,19 +1304,12 @@ setMethod("bround",
             column(jc)
           })
 
-
-#' rtrim
+#' @details
+#' \code{rtrim}: Trims the spaces from right end for the specified string value.
 #'
-#' Trim the spaces from right end for the specified string value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname rtrim
-#' @name rtrim
-#' @family string functions
-#' @aliases rtrim,Column-method
+#' @rdname column_string_functions
+#' @aliases rtrim rtrim,Column-method
 #' @export
-#' @examples \dontrun{rtrim(df$c)}
 #' @note rtrim since 1.5.0
 setMethod("rtrim",
           signature(x = "Column"),
@@ -1344,7 +1317,6 @@ setMethod("rtrim",
             jc <- callJStatic("org.apache.spark.sql.functions", "rtrim", x@jc)
             column(jc)
           })
-
 
 #' @details
 #' \code{sd}: Alias for \code{stddev_samp}.
@@ -1479,18 +1451,12 @@ setMethod("skewness",
             column(jc)
           })
 
-#' soundex
+#' @details
+#' \code{soundex}: Returns the soundex code for the specified expression.
 #'
-#' Return the soundex code for the specified expression.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname soundex
-#' @name soundex
-#' @family string functions
-#' @aliases soundex,Column-method
+#' @rdname column_string_functions
+#' @aliases soundex soundex,Column-method
 #' @export
-#' @examples \dontrun{soundex(df$c)}
 #' @note soundex since 1.5.0
 setMethod("soundex",
           signature(x = "Column"),
@@ -1845,18 +1811,12 @@ setMethod("to_timestamp",
             column(jc)
           })
 
-#' trim
+#' @details
+#' \code{trim}: Trims the spaces from both ends for the specified string column.
 #'
-#' Trim the spaces from both ends for the specified string column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname trim
-#' @name trim
-#' @family string functions
-#' @aliases trim,Column-method
+#' @rdname column_string_functions
+#' @aliases trim trim,Column-method
 #' @export
-#' @examples \dontrun{trim(df$c)}
 #' @note trim since 1.5.0
 setMethod("trim",
           signature(x = "Column"),
@@ -1865,19 +1825,13 @@ setMethod("trim",
             column(jc)
           })
 
-#' unbase64
-#'
-#' Decodes a BASE64 encoded string column and returns it as a binary column.
+#' @details
+#' \code{unbase64}: Decodes a BASE64 encoded string column and returns it as a binary column.
 #' This is the reverse of base64.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname unbase64
-#' @name unbase64
-#' @family string functions
-#' @aliases unbase64,Column-method
+#' @rdname column_string_functions
+#' @aliases unbase64 unbase64,Column-method
 #' @export
-#' @examples \dontrun{unbase64(df$c)}
 #' @note unbase64 since 1.5.0
 setMethod("unbase64",
           signature(x = "Column"),
@@ -1907,18 +1861,12 @@ setMethod("unhex",
             column(jc)
           })
 
-#' upper
+#' @details
+#' \code{upper}: Converts a string column to upper case.
 #'
-#' Converts a string column to upper case.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname upper
-#' @name upper
-#' @family string functions
-#' @aliases upper,Column-method
+#' @rdname column_string_functions
+#' @aliases upper upper,Column-method
 #' @export
-#' @examples \dontrun{upper(df$c)}
 #' @note upper since 1.4.0
 setMethod("upper",
           signature(x = "Column"),
@@ -2094,19 +2042,14 @@ setMethod("hypot", signature(y = "Column"),
             column(jc)
           })
 
-#' levenshtein
+#' @details
+#' \code{levenshtein}: Computes the Levenshtein distance of the two given string columns.
 #'
-#' Computes the Levenshtein distance of the two given string columns.
-#'
-#' @param x Column to compute on.
 #' @param y Column to compute on.
 #'
-#' @rdname levenshtein
-#' @name levenshtein
-#' @family string functions
-#' @aliases levenshtein,Column-method
+#' @rdname column_string_functions
+#' @aliases levenshtein levenshtein,Column-method
 #' @export
-#' @examples \dontrun{levenshtein(df$c, x)}
 #' @note levenshtein since 1.5.0
 setMethod("levenshtein", signature(y = "Column"),
           function(y, x) {
@@ -2220,20 +2163,13 @@ setMethod("countDistinct",
             column(jc)
           })
 
-
-#' concat
+#' @details
+#' \code{concat}: Concatenates multiple input string columns together into a single string column.
 #'
-#' Concatenates multiple input string columns together into a single string column.
-#'
-#' @param x Column to compute on
 #' @param ... other columns
-#'
-#' @family string functions
-#' @rdname concat
-#' @name concat
-#' @aliases concat,Column-method
+#' @rdname column_string_functions
+#' @aliases concat concat,Column-method
 #' @export
-#' @examples \dontrun{concat(df$strings, df$strings2)}
 #' @note concat since 1.5.0
 setMethod("concat",
           signature(x = "Column"),
@@ -2435,22 +2371,15 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' instr
-#'
-#' Locate the position of the first occurrence of substr column in the given string.
-#' Returns null if either of the arguments are null.
-#'
+#' @details
+#' \code{instr}: Locates the position of the first occurrence of substr column
+#' in the given string. Returns null if either of the arguments are null.
 #' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
-#' @param y column to check
-#' @param x substring to check
-#' @family string functions
-#' @aliases instr,Column,character-method
-#' @rdname instr
-#' @name instr
+#' @rdname column_string_functions
+#' @aliases instr instr,Column,character-method
 #' @export
-#' @examples \dontrun{instr(df$c, 'b')}
 #' @note instr since 1.5.0
 setMethod("instr", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2570,22 +2499,16 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' format_number
-#'
-#' Formats numeric column y to a format like '#,###,###.##', rounded to x decimal places
-#' with HALF_EVEN round mode, and returns the result as a string column.
-#'
+#' @details
+#' \code{format_number}: Formats numeric column y to a format like '#,###,###.##',
+#' rounded to x decimal places with HALF_EVEN round mode, and returns the result
+#' as a string column.
 #' If x is 0, the result has no decimal point or fractional part.
 #' If x < 0, the result will be null.
 #'
-#' @param y column to format
-#' @param x number of decimal place to format to
-#' @family string functions
-#' @rdname format_number
-#' @name format_number
-#' @aliases format_number,Column,numeric-method
+#' @rdname column_string_functions
+#' @aliases format_number format_number,Column,numeric-method
 #' @export
-#' @examples \dontrun{format_number(df$n, 4)}
 #' @note format_number since 1.5.0
 setMethod("format_number", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2684,21 +2607,14 @@ setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' concat_ws
+#' @details
+#' \code{concat_ws}: Concatenates multiple input string columns together into a single
+#' string column, using the given separator.
 #'
-#' Concatenates multiple input string columns together into a single string column,
-#' using the given separator.
-#'
-#' @param x column to concatenate.
 #' @param sep separator to use.
-#' @param ... other columns to concatenate.
-#'
-#' @family string functions
-#' @rdname concat_ws
-#' @name concat_ws
-#' @aliases concat_ws,character,Column-method
+#' @rdname column_string_functions
+#' @aliases concat_ws concat_ws,character,Column-method
 #' @export
-#' @examples \dontrun{concat_ws('-', df$s, df$d)}
 #' @note concat_ws since 1.5.0
 setMethod("concat_ws", signature(sep = "character", x = "Column"),
           function(sep, x, ...) {
@@ -2751,19 +2667,14 @@ setMethod("expr", signature(x = "character"),
             column(jc)
           })
 
-#' format_string
-#'
-#' Formats the arguments in printf-style and returns the result as a string column.
+#' @details
+#' \code{format_string}: Formats the arguments in printf-style and returns the result
+#' as a string column.
 #'
 #' @param format a character object of format strings.
-#' @param x a Column.
-#' @param ... additional Column(s).
-#' @family string functions
-#' @rdname format_string
-#' @name format_string
-#' @aliases format_string,character,Column-method
+#' @rdname column_string_functions
+#' @aliases format_string format_string,character,Column-method
 #' @export
-#' @examples \dontrun{format_string('%d %s', df$a, df$b)}
 #' @note format_string since 1.5.0
 setMethod("format_string", signature(format = "character", x = "Column"),
           function(format, x, ...) {
@@ -2875,23 +2786,17 @@ setMethod("window", signature(x = "Column"),
             column(jc)
           })
 
-#' locate
-#'
-#' Locate the position of the first occurrence of substr.
-#'
+#' @details
+#' \code{locate}: Locates the position of the first occurrence of substr.
 #' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
 #' @param substr a character string to be matched.
 #' @param str a Column where matches are sought for each entry.
 #' @param pos start position of search.
-#' @param ... further arguments to be passed to or from other methods.
-#' @family string functions
-#' @rdname locate
-#' @aliases locate,character,Column-method
-#' @name locate
+#' @rdname column_string_functions
+#' @aliases locate locate,character,Column-method
 #' @export
-#' @examples \dontrun{locate('b', df$c, 1)}
 #' @note locate since 1.5.0
 setMethod("locate", signature(substr = "character", str = "Column"),
           function(substr, str, pos = 1) {
@@ -2901,19 +2806,14 @@ setMethod("locate", signature(substr = "character", str = "Column"),
             column(jc)
           })
 
-#' lpad
+#' @details
+#' \code{lpad}: Left-padded with pad to a length of len.
 #'
-#' Left-pad the string column with
-#'
-#' @param x the string Column to be left-padded.
 #' @param len maximum length of each output result.
 #' @param pad a character string to be padded with.
-#' @family string functions
-#' @rdname lpad
-#' @aliases lpad,Column,numeric,character-method
-#' @name lpad
+#' @rdname column_string_functions
+#' @aliases lpad lpad,Column,numeric,character-method
 #' @export
-#' @examples \dontrun{lpad(df$c, 6, '#')}
 #' @note lpad since 1.5.0
 setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
           function(x, len, pad) {
@@ -2983,20 +2883,16 @@ setMethod("randn", signature(seed = "numeric"),
             column(jc)
           })
 
-#' regexp_extract
+#' @details
+#' \code{regexp_extract}: Extracts a specific \code{idx} group identified by a Java regex,
+#' from the specified string column. If the regex did not match, or the specified group did
+#' not match, an empty string is returned.
 #'
-#' Extract a specific \code{idx} group identified by a Java regex, from the specified string column.
-#' If the regex did not match, or the specified group did not match, an empty string is returned.
-#'
-#' @param x a string Column.
 #' @param pattern a regular expression.
 #' @param idx a group index.
-#' @family string functions
-#' @rdname regexp_extract
-#' @name regexp_extract
-#' @aliases regexp_extract,Column,character,numeric-method
+#' @rdname column_string_functions
+#' @aliases regexp_extract regexp_extract,Column,character,numeric-method
 #' @export
-#' @examples \dontrun{regexp_extract(df$c, '(\d+)-(\d+)', 1)}
 #' @note regexp_extract since 1.5.0
 setMethod("regexp_extract",
           signature(x = "Column", pattern = "character", idx = "numeric"),
@@ -3007,19 +2903,14 @@ setMethod("regexp_extract",
             column(jc)
           })
 
-#' regexp_replace
+#' @details
+#' \code{regexp_replace}: Replaces all substrings of the specified string value that
+#' match regexp with rep.
 #'
-#' Replace all substrings of the specified string value that match regexp with rep.
-#'
-#' @param x a string Column.
-#' @param pattern a regular expression.
 #' @param replacement a character string that a matched \code{pattern} is replaced with.
-#' @family string functions
-#' @rdname regexp_replace
-#' @name regexp_replace
-#' @aliases regexp_replace,Column,character,character-method
+#' @rdname column_string_functions
+#' @aliases regexp_replace regexp_replace,Column,character,character-method
 #' @export
-#' @examples \dontrun{regexp_replace(df$c, '(\\d+)', '--')}
 #' @note regexp_replace since 1.5.0
 setMethod("regexp_replace",
           signature(x = "Column", pattern = "character", replacement = "character"),
@@ -3030,19 +2921,12 @@ setMethod("regexp_replace",
             column(jc)
           })
 
-#' rpad
+#' @details
+#' \code{rpad}: Right-padded with pad to a length of len.
 #'
-#' Right-padded with pad to a length of len.
-#'
-#' @param x the string Column to be right-padded.
-#' @param len maximum length of each output result.
-#' @param pad a character string to be padded with.
-#' @family string functions
-#' @rdname rpad
-#' @name rpad
-#' @aliases rpad,Column,numeric,character-method
+#' @rdname column_string_functions
+#' @aliases rpad rpad,Column,numeric,character-method
 #' @export
-#' @examples \dontrun{rpad(df$c, 6, '#')}
 #' @note rpad since 1.5.0
 setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
           function(x, len, pad) {
@@ -3052,28 +2936,20 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
             column(jc)
           })
 
-#' substring_index
+#' @details
+#' \code{substring_index}: Returns the substring from string str before count occurrences of
+#' the delimiter delim. If count is positive, everything the left of the final delimiter
+#' (counting from left) is returned. If count is negative, every to the right of the final
+#' delimiter (counting from the right) is returned. substring_index performs a case-sensitive
+#' match when searching for delim.
 #'
-#' Returns the substring from string str before count occurrences of the delimiter delim.
-#' If count is positive, everything the left of the final delimiter (counting from left) is
-#' returned. If count is negative, every to the right of the final delimiter (counting from the
-#' right) is returned. substring_index performs a case-sensitive match when searching for delim.
-#'
-#' @param x a Column.
 #' @param delim a delimiter string.
 #' @param count number of occurrences of \code{delim} before the substring is returned.
 #'              A positive number means counting from the left, while negative means
 #'              counting from the right.
-#' @family string functions
-#' @rdname substring_index
-#' @aliases substring_index,Column,character,numeric-method
-#' @name substring_index
+#' @rdname column_string_functions
+#' @aliases substring_index substring_index,Column,character,numeric-method
 #' @export
-#' @examples
-#'\dontrun{
-#'substring_index(df$c, '.', 2)
-#'substring_index(df$c, '.', -1)
-#'}
 #' @note substring_index since 1.5.0
 setMethod("substring_index",
           signature(x = "Column", delim = "character", count = "numeric"),
@@ -3084,24 +2960,19 @@ setMethod("substring_index",
             column(jc)
           })
 
-#' translate
-#'
-#' Translate any character in the src by a character in replaceString.
+#' @details
+#' \code{translate}: Translates any character in the src by a character in replaceString.
 #' The characters in replaceString is corresponding to the characters in matchingString.
 #' The translate will happen when any character in the string matching with the character
 #' in the matchingString.
 #'
-#' @param x a string Column.
 #' @param matchingString a source string where each character will be translated.
 #' @param replaceString a target string where each \code{matchingString} character will
 #'                      be replaced by the character in \code{replaceString}
 #'                      at the same location, if any.
-#' @family string functions
-#' @rdname translate
-#' @name translate
-#' @aliases translate,Column,character,character-method
+#' @rdname column_string_functions
+#' @aliases translate translate,Column,character,character-method
 #' @export
-#' @examples \dontrun{translate(df$c, 'rnlt', '123')}
 #' @note translate since 1.5.0
 setMethod("translate",
           signature(x = "Column", matchingString = "character", replaceString = "character"),
@@ -3689,20 +3560,15 @@ setMethod("collect_set",
             column(jc)
           })
 
-#' split_string
+#' @details
+#' \code{split_string}: Splits string on regular expression.
+#' Equivalent to \code{split} SQL function.
 #'
-#' Splits string on regular expression.
-#'
-#' Equivalent to \code{split} SQL function
-#'
-#' @param x Column to compute on
-#' @param pattern Java regular expression
-#'
-#' @rdname split_string
-#' @family string functions
-#' @aliases split_string,Column-method
+#' @rdname column_string_functions
+#' @aliases split_string split_string,Column-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
 #' df <- read.text("README.md")
 #'
@@ -3719,28 +3585,23 @@ setMethod("split_string",
             column(jc)
           })
 
-#' repeat_string
+#' @details
+#' \code{repeat_string}: Repeats string n times.
+#' Equivalent to \code{repeat} SQL function.
 #'
-#' Repeats string n times.
-#'
-#' Equivalent to \code{repeat} SQL function
-#'
-#' @param x Column to compute on
 #' @param n Number of repetitions
-#'
-#' @rdname repeat_string
-#' @family string functions
-#' @aliases repeat_string,Column-method
+#' @rdname column_string_functions
+#' @aliases repeat_string repeat_string,Column-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
 #' df <- read.text("README.md")
 #'
 #' first(select(df, repeat_string(df$value, 3)))
 #'
 #' # This is equivalent to the following SQL expression
-#' first(selectExpr(df, "repeat(value, 3)"))
-#' }
+#' first(selectExpr(df, "repeat(value, 3)"))}
 #' @note repeat_string since 2.3.0
 setMethod("repeat_string",
           signature(x = "Column", n = "numeric"),
