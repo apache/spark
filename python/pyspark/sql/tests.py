@@ -2389,9 +2389,12 @@ class TypesTest(unittest.TestCase):
                 (None, FloatType()),
                 (None, StringType()),
                 (None, StructType([]))]:
-            _verify_type(obj, data_type, nullable=True)
             msg = "_verify_type(%s, %s, nullable=True)" % (obj, data_type)
-            self.assertTrue(True, msg)
+            try:
+                _verify_type(obj, data_type, nullable=True)
+            except Exception as e:
+                traceback.print_exc()
+                self.fail(msg)
 
     def test_verify_type_not_nullable(self):
         import array
@@ -2477,6 +2480,7 @@ class TypesTest(unittest.TestCase):
             # Array
             ([], ArrayType(IntegerType()), None),
             (["1", None], ArrayType(StringType(), containsNull=True), None),
+            (["1", None], ArrayType(StringType(), containsNull=False), ValueError),
             ([1, 2], ArrayType(IntegerType()), None),
             ([1, "2"], ArrayType(IntegerType()), TypeError),
             ((1, 2), ArrayType(IntegerType()), None),
@@ -2488,6 +2492,8 @@ class TypesTest(unittest.TestCase):
             ({"a": 1}, MapType(IntegerType(), IntegerType()), TypeError),
             ({"a": "1"}, MapType(StringType(), IntegerType()), TypeError),
             ({"a": None}, MapType(StringType(), IntegerType(), valueContainsNull=True), None),
+            ({"a": None}, MapType(StringType(), IntegerType(), valueContainsNull=False),
+             ValueError),
 
             # Struct
             ({"s": "a", "i": 1}, MyStructType, None),
@@ -2509,6 +2515,7 @@ class TypesTest(unittest.TestCase):
             (MyObj(s="a", i=None), MyStructType, None),
             (MyObj(s="a"), MyStructType, None),
             (MyObj(s="a", i="1"), MyStructType, TypeError),
+            (MyObj(s=None, i="1"), MyStructType, ValueError),
         ]
 
         for obj, data_type, exp in spec:
@@ -2519,7 +2526,6 @@ class TypesTest(unittest.TestCase):
                 except Exception as e:
                     traceback.print_exc()
                     self.fail(msg)
-                self.assertTrue(True, msg)
             else:
                 with self.assertRaises(exp, msg=msg):
                     _verify_type(obj, data_type, nullable=False)
