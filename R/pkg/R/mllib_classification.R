@@ -62,7 +62,9 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #'                        of models will be always returned on the original scale, so it will be transparent for
 #'                        users. Note that with/without standardization, the models should be always converged
 #'                        to the same solution when no regularization is applied.
-#' @param threshold The threshold in binary classification, in range [0, 1].
+#' @param threshold The threshold in binary classification applied to the linear model prediction.
+#'                  This threshold can be any real number, where Inf will make all predictions 0.0
+#'                  and -Inf will make all predictions 1.0.
 #' @param weightCol The weight column name.
 #' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
 #'                         or the number of partitions are large, this param could be adjusted to a larger size.
