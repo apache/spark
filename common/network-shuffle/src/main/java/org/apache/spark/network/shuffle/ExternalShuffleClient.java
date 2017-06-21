@@ -49,7 +49,7 @@ public class ExternalShuffleClient extends ShuffleClient {
   private final TransportConf conf;
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
-  private final long registrationTimeoutMillis;
+  private final long registrationTimeoutMs;
 
   protected TransportClientFactory clientFactory;
   protected String appId;
@@ -62,11 +62,11 @@ public class ExternalShuffleClient extends ShuffleClient {
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
       boolean authEnabled,
-      long registrationTimeoutMillis) {
+      long registrationTimeoutMs) {
     this.conf = conf;
     this.secretKeyHolder = secretKeyHolder;
     this.authEnabled = authEnabled;
-    this.registrationTimeoutMillis = registrationTimeoutMillis;
+    this.registrationTimeoutMs = registrationTimeoutMs;
   }
 
   protected void checkInit() {
@@ -135,7 +135,7 @@ public class ExternalShuffleClient extends ShuffleClient {
     checkInit();
     try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
       ByteBuffer registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteBuffer();
-      client.sendRpcSync(registerMessage, registrationTimeoutMillis);
+      client.sendRpcSync(registerMessage, registrationTimeoutMs);
     }
   }
 
