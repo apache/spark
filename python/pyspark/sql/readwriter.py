@@ -98,6 +98,8 @@ class DataFrameReader(OptionUtils):
 
         :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
                        (For example ``col0 INT, col1 DOUBLE``).
+
+        >>> s = spark.read.schema("col0 INT, col1 DOUBLE")
         """
         from pyspark.sql import SparkSession
         spark = SparkSession.builder.getOrCreate()
