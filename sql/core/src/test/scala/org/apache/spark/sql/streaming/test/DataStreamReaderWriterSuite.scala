@@ -667,11 +667,11 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("SPARK-20431: Specify a schema by using a DDL-formatted string") {
     spark.readStream
       .format("org.apache.spark.sql.streaming.test")
-      .schema("aa integer")
+      .schema("aa INT")
       .load()
 
     assert(LastOptions.schema.isDefined)
-    assert(LastOptions.schema === StructType(StructField("aa", IntegerType) :: Nil))
+    assert(LastOptions.schema.get === StructType(StructField("aa", IntegerType) :: Nil))
 
     LastOptions.clear()
   }
