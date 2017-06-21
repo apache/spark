@@ -49,16 +49,13 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
         val partitionDir = new Path(
           CatalogUtils.URIToString(makeQualifiedPath(file.getCanonicalPath)), s"p1=$p1/p2=$p2")
         sparkContext
-          .parallelize(for (i <- 1 to 3) yield s"$i,val_$i,$p1")
+          .parallelize(for (i <- 1 to 3) yield s"$i,val_$i")
           .saveAsTextFile(partitionDir.toString)
       }
 
-      val dataSchemaWithPartition =
-        StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
-
       checkQueries(
         spark.read.format(dataSourceName)
-          .option("dataSchema", dataSchemaWithPartition.json)
+          .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath))
     }
   }

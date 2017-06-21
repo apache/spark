@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
-case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
+case class ParquetDataWithKey(intField: Int, stringField: String)
 
 case class StructContainer(intStructField: Int, stringStructField: String)
 
@@ -46,7 +46,6 @@ case class ParquetDataWithComplexTypes(
     arrayField: Seq[Int])
 
 case class ParquetDataWithKeyAndComplexTypes(
-    p: Int,
     intField: Int,
     stringField: String,
     structField: StructContainer,
@@ -905,7 +904,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDirWithKey, s"p=$p")
       sparkContext.makeRDD(1 to 10)
-        .map(i => ParquetDataWithKey(p, i, s"part-$p"))
+        .map(i => ParquetDataWithKey(i, s"part-$p"))
         .toDF()
         .write.parquet(partDir.getCanonicalPath)
     }
@@ -915,8 +914,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     (1 to 10).foreach { p =>
       val partDir = new File(partitionedTableDirWithKeyAndComplexTypes, s"p=$p")
       sparkContext.makeRDD(1 to 10).map { i =>
-        ParquetDataWithKeyAndComplexTypes(
-          p, i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i)
+        ParquetDataWithKeyAndComplexTypes(i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i)
       }.toDF().write.parquet(partDir.getCanonicalPath)
     }
 
