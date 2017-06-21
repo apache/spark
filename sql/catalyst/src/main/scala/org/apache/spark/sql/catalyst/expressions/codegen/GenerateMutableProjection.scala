@@ -135,6 +135,9 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           $allUpdates
           return mutableRow;
         }
+
+        ${ctx.initNestedClasses()}
+        ${ctx.declareNestedClasses()}
       }
     """
 

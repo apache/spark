@@ -93,7 +93,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     }
 
     val nextBatch = ctx.freshName("nextBatch")
-    ctx.addNewFunction(nextBatch,
+    val nextBatchFuncName = ctx.addNewFunction(nextBatch,
       s"""
          |private void $nextBatch() throws java.io.IOException {
          |  long getBatchStart = System.nanoTime();
@@ -121,7 +121,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     }
     s"""
        |if ($batch == null) {
-       |  $nextBatch();
+       |  $nextBatchFuncName();
        |}
        |while ($batch != null) {
        |  int $numRows = $batch.numRows();
@@ -133,7 +133,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
        |  }
        |  $idx = $numRows;
        |  $batch = null;
-       |  $nextBatch();
+       |  $nextBatchFuncName();
        |}
        |$scanTimeMetric.add($scanTimeTotalNs / (1000 * 1000));
        |$scanTimeTotalNs = 0;
