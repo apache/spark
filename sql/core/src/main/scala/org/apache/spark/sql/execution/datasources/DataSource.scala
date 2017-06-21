@@ -86,6 +86,22 @@ case class DataSource(
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
+  private def checkColumnNameDuplication(
+      columnNames: Seq[String], colType: String, caseSensitiveAnalysis: Boolean): Unit = {
+    val names = if (caseSensitiveAnalysis) {
+      columnNames
+    } else {
+      columnNames.map(_.toLowerCase)
+    }
+    if (names.distinct.length != names.length) {
+      val duplicateColumns = names.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => s"`$x`"
+      }
+      throw new AnalysisException(
+        s"Found duplicate column(s) $colType: ${duplicateColumns.mkString(", ")}")
+    }
+  }
+
   /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
    * it. In the read path, only managed tables by Hive provide the partition columns properly when
@@ -181,6 +197,12 @@ case class DataSource(
       throw new AnalysisException(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
+
+    checkColumnNameDuplication(
+      (dataSchema ++ partitionSchema).map(_.name),
+      "in the datasource",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
     (dataSchema, partitionSchema)
   }
 

@@ -27,6 +27,7 @@ import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -676,6 +677,36 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         spark.read.schema(schema).table("t")
       }.getMessage
       assert(e.contains("User specified schema not supported with `table`"))
+    }
+  }
+
+  test("SPARK-21144 fails when data schema and partition schema have duplicate columns") {
+    // Check CSV format
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTempDir { src =>
+          Seq(1).toDF(c0).write.option("header", true).mode("overwrite").csv(s"$src/$c1=1")
+          val e = intercept[AnalysisException] {
+            spark.read.option("header", true).csv(src.toString)
+          }
+          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
+        }
+      }
+    }
+
+    // Check JSON/Parquet format
+    Seq("json", "parquet").foreach { case format =>
+      Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          withTempDir { src =>
+            Seq(1).toDF(c0).write.format(format).mode("overwrite").save(s"$src/$c1=1")
+            val e = intercept[AnalysisException] {
+              spark.read.format(format).load(src.toString)
+            }
+            assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
+          }
+        }
+      }
     }
   }
 }
