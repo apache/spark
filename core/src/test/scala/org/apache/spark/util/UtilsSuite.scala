@@ -262,6 +262,17 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.splitCommandString("\"\"") === Seq(""))
   }
 
+  test("parseHostPort") {
+    // No port
+    assert(Utils.parseHostPort("spark.apache.org") === ("spark.apache.org", 0))
+
+    // With port
+    assert(Utils.parseHostPort("spark.apache.org:8080") === ("spark.apache.org", 8080))
+
+    // Port with non digital charactors
+    assert(Utils.parseHostPort("server1:8983_solr") === ("server1", 8983))
+  }
+
   test("string formatting of time durations") {
     val second = 1000
     val minute = second * 60
