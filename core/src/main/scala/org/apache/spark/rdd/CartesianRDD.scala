@@ -22,7 +22,8 @@ import java.io.{IOException, ObjectOutputStream}
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.util.Utils
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.{CompletionIterator, Utils}
 
 private[spark]
 class CartesianPartition(
@@ -49,7 +50,8 @@ private[spark]
 class CartesianRDD[T: ClassTag, U: ClassTag](
     sc: SparkContext,
     var rdd1 : RDD[T],
-    var rdd2 : RDD[U])
+    var rdd2 : RDD[U],
+    val cacheFetchedInLocal: Boolean = false)
   extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
@@ -71,9 +73,103 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
+    val blockManager = SparkEnv.get.blockManager
     val currSplit = split.asInstanceOf[CartesianPartition]
-    for (x <- rdd1.iterator(currSplit.s1, context);
-         y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
+    val blockId2 = RDDBlockId(rdd2.id, currSplit.s2.index)
+    var cachedInLocal = false
+    var holdReadLock = false
+
+    // Try to get data from the local, otherwise it will be cached to the local if user set
+    // cacheFetchedInLocal as true.
+    def getOrElseCache(
+        rdd: RDD[U],
+        partition: Partition,
+        context: TaskContext,
+        level: StorageLevel): Iterator[U] = {
+      getLocalValues() match {
+        case Some(result) =>
+          return result
+        case None => if (holdReadLock) {
+          blockManager.releaseLock(blockId2)
+          throw new SparkException(s"get() failed for block $blockId2 even though we held a lock")
+        }
+      }
+
+      val iterator = rdd.iterator(partition, context)
+      val status = blockManager.getStatus(blockId2)
+      if (!cacheFetchedInLocal || (status.isDefined && status.get.storageLevel.isValid)) {
+        // If user don't want cache the block fetched from remotely, just return it.
+        // Or if the block is cached in local, wo shouldn't cache it again.
+        return iterator
+      }
+
+      // Keep read lock, because next we need read it. And don't tell master.
+      val putSuccess = blockManager.putIterator[U](blockId2, iterator, level, false, true)
+      if (putSuccess) {
+        cachedInLocal = true
+        // After we cached the block, we also hold the block read lock until this task finished.
+        holdReadLock = true
+        logInfo(s"Cache the block $blockId2 to local successful.")
+        val readLocalBlock = blockManager.getLocalValues(blockId2).getOrElse {
+          blockManager.releaseLock(blockId2)
+          throw new SparkException(s"get() failed for block $blockId2 even though we held a lock")
+        }
+
+        new InterruptibleIterator[U](context, readLocalBlock.data.asInstanceOf[Iterator[U]])
+      } else {
+        blockManager.releaseLock(blockId2)
+        // There shouldn't a error caused by put in memory, because we use MEMORY_AND_DISK to
+        // cache it.
+        throw new SparkException(s"Cache block $blockId2 in local failed even though it's $level")
+      }
+    }
+
+    // Get block from local, and update the metrics.
+    def getLocalValues(): Option[Iterator[U]] = {
+      blockManager.getLocalValues(blockId2) match {
+        case Some(result) =>
+          val existingMetrics = context.taskMetrics().inputMetrics
+          existingMetrics.incBytesRead(result.bytes)
+          val localIter =
+            new InterruptibleIterator[U](context, result.data.asInstanceOf[Iterator[U]]) {
+              override def next(): U = {
+                existingMetrics.incRecordsRead(1)
+                delegate.next()
+              }
+          }
+          Some(localIter)
+        case None =>
+          None
+      }
+    }
+
+    val resultIter =
+      for (x <- rdd1.iterator(currSplit.s1, context);
+           y <- getOrElseCache(rdd2, currSplit.s2, context, StorageLevel.MEMORY_AND_DISK))
+        yield (x, y)
+
+    CompletionIterator[(T, U), Iterator[(T, U)]](resultIter,
+      removeCachedBlock(blockId2, holdReadLock, cachedInLocal))
+  }
+
+  /**
+   * Remove the cached block. If we hold the read lock, we also need release it.
+   */
+  def removeCachedBlock(
+      blockId: RDDBlockId,
+      holdReadLock: Boolean,
+      cachedInLocal: Boolean): Unit = {
+    val blockManager = SparkEnv.get.blockManager
+    if (holdReadLock) {
+      // If hold the read lock, we need release it.
+      blockManager.releaseLock(blockId)
+    }
+    // Whether the block it persisted by the user.
+    val persistedInLocal =
+    blockManager.master.getLocations(blockId).contains(blockManager.blockManagerId)
+    if (!persistedInLocal && (cachedInLocal || blockManager.isRemovable(blockId))) {
+      blockManager.removeOrMarkAsRemovable(blockId, false)
+    }
   }
 
   override def getDependencies: Seq[Dependency[_]] = List(

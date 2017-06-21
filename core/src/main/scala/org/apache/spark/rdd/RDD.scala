@@ -670,9 +670,12 @@ abstract class RDD[T: ClassTag](
   /**
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
    * elements (a, b) where a is in `this` and b is in `other`.
+   *
+   * @param cacheFetchedInLocal Whether cache the remotely fetched block in local.
    */
-  def cartesian[U: ClassTag](other: RDD[U]): RDD[(T, U)] = withScope {
-    new CartesianRDD(sc, this, other)
+  def cartesian[U: ClassTag](other: RDD[U],
+      cacheFetchedInLocal: Boolean = false): RDD[(T, U)] = withScope {
+    new CartesianRDD(sc, this, other, cacheFetchedInLocal)
   }
 
   /**

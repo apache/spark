@@ -19,10 +19,11 @@ package org.apache.spark.storage
 
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.concurrent.Future
 import scala.language.implicitConversions
 import scala.language.postfixOps
 import scala.reflect.ClassTag
@@ -68,6 +69,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   val mapOutputTracker = new MapOutputTrackerMaster(new SparkConf(false), bcastManager, true)
   val shuffleManager = new SortShuffleManager(new SparkConf(false))
 
+  private implicit val ec = ExecutionContext.global
+
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   val serializer = new KryoSerializer(new SparkConf(false).set("spark.kryoserializer.buffer", "1m"))
 
@@ -100,6 +103,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     memManager.setMemoryStore(blockManager.memoryStore)
     blockManager.initialize("app-id")
     blockManager
+  }
+
+  private def withTaskId[T](taskAttemptId: Long)(block: => T): T = {
+    try {
+      TaskContext.setTaskContext(
+        new TaskContextImpl(0, 0, taskAttemptId, 0, null, new Properties, null))
+      block
+    } finally {
+      TaskContext.unset()
+    }
   }
 
   override def beforeEach(): Unit = {
@@ -1281,6 +1294,40 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations("item").isEmpty)
   }
 
+  test("remote block without blocking") {
+    store = makeBlockManager(8000, "executor1")
+    val arr = new Array[Byte](4000)
+    store.registerTask(0)
+    store.registerTask(1)
+    withTaskId(0) {
+      store.putSingle("block", arr, StorageLevel.MEMORY_AND_DISK, true)
+      // lock the block with read lock
+      store.get("block")
+    }
+    val future = Future {
+      withTaskId(1) {
+        // block is in use, mark it as removable
+        store.removeOrMarkAsRemovable("block")
+        store.isRemovable("block")
+      }
+    }
+    Thread.sleep(300)
+    assert(store.getStatus("block").isDefined, "block should not be removed")
+    assert(ThreadUtils.awaitResult(future, 1.seconds), "block should be marked as removable")
+    withTaskId(0) {
+      store.releaseLock("block")
+    }
+    val future1 = Future {
+      withTaskId(1) {
+        // remove it
+        store.removeOrMarkAsRemovable("block")
+        !store.isRemovable("block")
+      }
+    }
+    assert(ThreadUtils.awaitResult(future1, 1.seconds), "block should not be marked as removable")
+    assert(master.getLocations("block").isEmpty, "block should be removed")
+  }
+
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
     var numCalls = 0
 
@@ -1309,7 +1356,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         blockData: ManagedBuffer,
         level: StorageLevel,
         classTag: ClassTag[_]): Future[Unit] = {
-      import scala.concurrent.ExecutionContext.Implicits.global
       Future {}
     }
 
