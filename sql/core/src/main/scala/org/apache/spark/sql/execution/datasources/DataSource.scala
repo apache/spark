@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -127,11 +128,21 @@ case class DataSource(
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
+    val equality = sparkSession.sessionState.conf.resolver
     val partitionSchema = if (partitionColumns.isEmpty) {
+      // We cannot detect column name duplication in case that the duplication exists in
+      // `userSpecifiedSchema` and the data is also partitioned by the column, so we need to check
+      // the duplication in `userSpecifiedSchema` here. For example:
+      //
+      //  Seq(1).toDF("b").write.save(s"$path/a=1")
+      //  spark.read.schema("a INT, a INT").load(path).show
+      userSpecifiedSchema.foreach { schema =>
+        SchemaUtils.checkColumnNameDuplication(schema.map(_.name), "in the datasource", equality)
+      }
+
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
       val resolved = tempFileIndex.partitionSchema.map { partitionField =>
-        val equality = sparkSession.sessionState.conf.resolver
         // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
         userSpecifiedSchema.flatMap(_.find(f => equality(f.name, partitionField.name))).getOrElse(
           partitionField)
@@ -145,7 +156,6 @@ case class DataSource(
         inferredPartitions
       } else {
         val partitionFields = partitionColumns.map { partitionColumn =>
-          val equality = sparkSession.sessionState.conf.resolver
           userSpecifiedSchema.flatMap(_.find(c => equality(c.name, partitionColumn))).orElse {
             val inferredPartitions = tempFileIndex.partitionSchema
             val inferredOpt = inferredPartitions.find(p => equality(p.name, partitionColumn))
@@ -171,7 +181,6 @@ case class DataSource(
     }
 
     val dataSchema = userSpecifiedSchema.map { schema =>
-      val equality = sparkSession.sessionState.conf.resolver
       StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
     }.orElse {
       format.inferSchema(
@@ -182,6 +191,10 @@ case class DataSource(
       throw new AnalysisException(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
+
+    SchemaUtils.checkColumnNameDuplication(
+      (dataSchema ++ partitionSchema).map(_.name), "in the datasource", equality)
+
     (dataSchema, partitionSchema)
   }
 

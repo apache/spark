@@ -27,6 +27,7 @@ import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -686,5 +687,56 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     testRead(spark.read.schema(userSchemaString).text(dir), data, userSchema)
     testRead(spark.read.schema(userSchemaString).text(dir, dir), data ++ data, userSchema)
     testRead(spark.read.schema(userSchemaString).text(Seq(dir, dir): _*), data ++ data, userSchema)
+  }
+
+  test("SPARK-21144 Fails when the data schema and partition schema have the duplicate columns") {
+    // Check CSV format
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        // Data columns and partition columns are overlapped
+        withTempDir { src =>
+          Seq(2).toDF(c0).write.option("header", true).mode("overwrite").csv(s"$src/$c1=1")
+          var e = intercept[AnalysisException] {
+            spark.read.option("header", true).csv(src.toString)
+          }
+          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
+
+          e = intercept[AnalysisException] {
+            spark.read.schema(s"$c0 INT, $c1 INT").option("header", true).csv(src.toString)
+          }
+          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
+
+          // Even if there exists duplicate columns between data schema and partition schema,
+          // users still can query the CSV data by manually specifying the schema.
+          val df = spark.read.schema(s"col INT, $c1 INT").option("header", true).csv(src.toString)
+          checkAnswer(df, Row(2, 1))
+        }
+      }
+    }
+
+    // Check JSON/Parquet format
+    Seq("json", "parquet").foreach { case format =>
+      Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          withTempDir { src =>
+            Seq((2, 3)).toDF(c0, "col").write.format(format).mode("overwrite").save(s"$src/$c1=1")
+            var e = intercept[AnalysisException] {
+              spark.read.format(format).load(src.toString)
+            }
+            assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
+
+            e = intercept[AnalysisException] {
+              spark.read.format(format).schema(s"$c0 INT, $c1 INT").load(src.toString)
+            }
+            assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
+
+            // In Json/Parquet formats, users can query the data except for duplicated columns
+            // (`c0` in this test) by manually specifying the schema.
+            val df = spark.read.format(format).schema(s"col INT, $c1 INT").load(src.toString)
+            checkAnswer(df, Row(3, 1))
+          }
+        }
+      }
+    }
   }
 }
