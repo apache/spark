@@ -243,23 +243,35 @@ public final class ColumnarBatch {
     public Object get(int ordinal, DataType dataType) {
       if (dataType instanceof BooleanType) {
         return getBoolean(ordinal);
-      } else if (dataType instanceof IntegerType) {
-        return getInt(ordinal);
+      } else if (dataType instanceof ByteType) {
+        return getByte(ordinal);
       } else if (dataType instanceof ShortType) {
         return getShort(ordinal);
+      } else if (dataType instanceof IntegerType) {
+        return getInt(ordinal);
       } else if (dataType instanceof LongType) {
         return getLong(ordinal);
       } else if (dataType instanceof FloatType) {
         return getFloat(ordinal);
       } else if (dataType instanceof DoubleType) {
         return getDouble(ordinal);
+      } else if (dataType instanceof StringType) {
+        return getUTF8String(ordinal);
+      } else if (dataType instanceof BinaryType) {
+        return getBinary(ordinal);
       } else if (dataType instanceof DecimalType) {
         DecimalType t = (DecimalType) dataType;
         return getDecimal(ordinal, t.precision(), t.scale());
+      } else if (dataType instanceof DateType) {
+        return getInt(ordinal);
+      } else if (dataType instanceof TimestampType) {
+        return getLong(ordinal);
       } else if (dataType instanceof ArrayType) {
         return getArray(ordinal);
       } else if (dataType instanceof StructType) {
         return getStruct(ordinal, ((StructType)dataType).fields().length);
+      } else if (dataType instanceof MapType) {
+        return getMap(ordinal);
       } else {
         throw new UnsupportedOperationException("Datatype not supported " + dataType);
       }
