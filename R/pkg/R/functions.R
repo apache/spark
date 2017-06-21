@@ -63,9 +63,9 @@ NULL
 #' Date time arithmetic functions defined for \code{Column}.
 #'
 #' @param y Column to compute on.
-#' @param x For class Column, it is used to perform arithmetic operations with \code{y}.
-#'          For class numeric, it is the number of months or days to be added to or subtracted from \code{y}.
-#'          For class character, then it is
+#' @param x For class \code{Column}, it is the column used to perform arithmetic operations
+#'          with column \code{y}.For class \code{numeric}, it is the number of months or
+#'          days to be added to or subtracted from \code{y}. For class \code{character}, it is
 #'          \itemize{
 #'          \item \code{date_format}: date format specification.
 #'          \item \code{from_utc_timestamp, to_utc_timestamp}: time zone to use.
