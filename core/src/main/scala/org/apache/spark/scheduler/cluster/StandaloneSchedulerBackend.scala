@@ -162,6 +162,7 @@ private[spark] class StandaloneSchedulerBackend(
   }
 
   override def executorDecommissioned(fullId: String, message: String) {
+    println("Decommission executor inside of scheduler")
     logInfo("Executor %s decommissioned: %s".format(fullId, message))
     decommissionExecutor(fullId.split("/")(1))
   }
