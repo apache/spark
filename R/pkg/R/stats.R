@@ -52,22 +52,23 @@ setMethod("crosstab",
             collect(dataFrame(sct))
           })
 
-#' Calculate the sample covariance of two numerical columns of a SparkDataFrame.
+#' @details
+#' \code{cov}: When applied to SparkDataFrame, this calculates the sample covariance of two numerical
+#' columns of \emph{one} SparkDataFrame.
 #'
 #' @param colName1 the name of the first column
 #' @param colName2 the name of the second column
 #' @return The covariance of the two columns.
 #'
 #' @rdname cov
-#' @name cov
 #' @aliases cov,SparkDataFrame-method
 #' @family stat functions
 #' @export
 #' @examples
-#'\dontrun{
-#' df <- read.json("/path/to/file.json")
-#' cov <- cov(df, "title", "gender")
-#' }
+#'
+#' \dontrun{
+#' cov(df, "mpg", "hp")
+#' cov(df, df$mpg, df$hp)}
 #' @note cov since 1.6.0
 setMethod("cov",
           signature(x = "SparkDataFrame"),
@@ -93,11 +94,10 @@ setMethod("cov",
 #' @family stat functions
 #' @export
 #' @examples
-#'\dontrun{
-#' df <- read.json("/path/to/file.json")
-#' corr <- corr(df, "title", "gender")
-#' corr <- corr(df, "title", "gender", method = "pearson")
-#' }
+#'
+#' \dontrun{
+#' corr(df, "mpg", "hp")
+#' corr(df, "mpg", "hp", method = "pearson")}
 #' @note corr since 1.6.0
 setMethod("corr",
           signature(x = "SparkDataFrame"),
@@ -149,7 +149,8 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' This method implements a variation of the Greenwald-Khanna algorithm (with some speed
 #' optimizations). The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670
 #' Space-efficient Online Computation of Quantile Summaries]] by Greenwald and Khanna.
-#' Note that rows containing any NA values will be removed before calculation.
+#' Note that NA values will be ignored in numerical columns before calculation. For
+#'   columns only containing NA values, an empty list is returned.
 #'
 #' @param x A SparkDataFrame.
 #' @param cols A single column name, or a list of names for multiple columns.

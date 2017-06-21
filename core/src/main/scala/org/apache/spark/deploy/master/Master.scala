@@ -80,7 +80,7 @@ private[deploy] class Master(
   private val waitingDrivers = new ArrayBuffer[DriverInfo]
   private var nextDriverNumber = 0
 
-  Utils.checkHost(address.host, "Expected hostname")
+  Utils.checkHost(address.host)
 
   private val masterMetricsSystem = MetricsSystem.createMetricsSystem("master", conf, securityMgr)
   private val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications", conf,
@@ -231,7 +231,8 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
-    case RegisterWorker(id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) =>
+    case RegisterWorker(
+      id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl, masterAddress) =>
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -243,7 +244,7 @@ private[deploy] class Master(
           workerRef, workerWebUiUrl)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
-          workerRef.send(RegisteredWorker(self, masterWebUiUrl))
+          workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress))
           schedule()
         } else {
           val workerAddress = worker.endpoint.address
@@ -366,7 +367,7 @@ private[deploy] class Master(
             drivers.find(_.id == driverId).foreach { driver =>
               driver.worker = Some(worker)
               driver.state = DriverState.RUNNING
-              worker.drivers(driverId) = driver
+              worker.addDriver(driver)
             }
           }
         case None =>
@@ -545,6 +546,9 @@ private[deploy] class Master(
     // Kill off any workers and apps that didn't respond to us.
     workers.filter(_.state == WorkerState.UNKNOWN).foreach(removeWorker)
     apps.filter(_.state == ApplicationState.UNKNOWN).foreach(finishApplication)
+
+    // Update the state of recovered apps to RUNNING
+    apps.filter(_.state == ApplicationState.WAITING).foreach(_.state = ApplicationState.RUNNING)
 
     // Reschedule drivers which were not claimed by any workers
     drivers.filter(_.worker.isEmpty).foreach { d =>
@@ -795,9 +799,19 @@ private[deploy] class Master(
   }
 
   private def relaunchDriver(driver: DriverInfo) {
-    driver.worker = None
-    driver.state = DriverState.RELAUNCHING
-    waitingDrivers += driver
+    // We must setup a new driver with a new driver id here, because the original driver may
+    // be still running. Consider this scenario: a worker is network partitioned with master,
+    // the master then relaunches driver driverID1 with a driver id driverID2, then the worker
+    // reconnects to master. From this point on, if driverID2 is equal to driverID1, then master
+    // can not distinguish the statusUpdate of the original driver and the newly relaunched one,
+    // for example, when DriverStateChanged(driverID1, KILLED) arrives at master, master will
+    // remove driverID1, so the newly relaunched driver disappears too. See SPARK-19900 for details.
+    removeDriver(driver.id, DriverState.RELAUNCHING, None)
+    val newDriver = createDriver(driver.desc)
+    persistenceEngine.addDriver(newDriver)
+    drivers.add(newDriver)
+    waitingDrivers += newDriver
+
     schedule()
   }
 

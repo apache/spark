@@ -62,9 +62,10 @@ private[ui] case class ExecutorTaskSummary(
  * A SparkListener that prepares information to be displayed on the ExecutorsTab
  */
 @DeveloperApi
+@deprecated("This class will be removed in a future release.", "2.2.0")
 class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: SparkConf)
     extends SparkListener {
-  var executorToTaskSummary = LinkedHashMap[String, ExecutorTaskSummary]()
+  val executorToTaskSummary = LinkedHashMap[String, ExecutorTaskSummary]()
   var executorEvents = new ListBuffer[SparkListenerEvent]()
 
   private val maxTimelineExecutors = conf.getInt("spark.ui.timeline.executors.maximum", 1000)
@@ -137,7 +138,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
           // could have failed half-way through. The correct fix would be to keep track of the
           // metrics added by each attempt, but this is much more complicated.
           return
-        case e: ExceptionFailure =>
+        case _: ExceptionFailure =>
           taskSummary.tasksFailed += 1
         case _ =>
           taskSummary.tasksComplete += 1

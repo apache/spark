@@ -23,6 +23,8 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.*;
 
+import org.apache.spark.sql.streaming.GroupStateTimeout;
+import org.apache.spark.sql.streaming.OutputMode;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -117,7 +119,7 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> parMapped = ds.mapPartitions((MapPartitionsFunction<String, String>) it -> {
       List<String> ls = new LinkedList<>();
       while (it.hasNext()) {
-        ls.add(it.next().toUpperCase(Locale.ENGLISH));
+        ls.add(it.next().toUpperCase(Locale.ROOT));
       }
       return ls.iterator();
     }, Encoders.STRING());
@@ -205,8 +207,10 @@ public class JavaDatasetSuite implements Serializable {
           }
           return Collections.singletonList(sb.toString()).iterator();
         },
+      OutputMode.Append(),
       Encoders.LONG(),
-      Encoders.STRING());
+      Encoders.STRING(),
+      GroupStateTimeout.NoTimeout());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
 
@@ -1288,5 +1292,172 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<EmptyBean> df = spark.createDataset(data, Encoders.bean(EmptyBean.class));
     Assert.assertEquals(df.schema().length(), 0);
     Assert.assertEquals(df.collectAsList().size(), 1);
+  }
+
+  public class CircularReference1Bean implements Serializable {
+    private CircularReference2Bean child;
+
+    public CircularReference2Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference2Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference2Bean implements Serializable {
+    private CircularReference1Bean child;
+
+    public CircularReference1Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference1Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference3Bean implements Serializable {
+    private CircularReference3Bean[] child;
+
+    public CircularReference3Bean[] getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference3Bean[] child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference4Bean implements Serializable {
+    private Map<String, CircularReference5Bean> child;
+
+    public Map<String, CircularReference5Bean> getChild() {
+      return child;
+    }
+
+    public void setChild(Map<String, CircularReference5Bean> child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference5Bean implements Serializable {
+    private String id;
+    private List<CircularReference4Bean> child;
+
+    public String getId() {
+      return id;
+    }
+
+    public List<CircularReference4Bean> getChild() {
+      return child;
+    }
+
+    public void setId(String id) {
+      this.id = id;
+    }
+
+    public void setChild(List<CircularReference4Bean> child) {
+      this.child = child;
+    }
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean1() {
+    CircularReference1Bean bean = new CircularReference1Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class));
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean2() {
+    CircularReference3Bean bean = new CircularReference3Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference3Bean.class));
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean3() {
+    CircularReference4Bean bean = new CircularReference4Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class));
+  }
+
+  @Test(expected = RuntimeException.class)
+  public void testNullInTopLevelBean() {
+    NestedSmallBean bean = new NestedSmallBean();
+    // We cannot set null in top-level bean
+    spark.createDataset(Arrays.asList(bean, null), Encoders.bean(NestedSmallBean.class));
+  }
+
+  @Test
+  public void testSerializeNull() {
+    NestedSmallBean bean = new NestedSmallBean();
+    Encoder<NestedSmallBean> encoder = Encoders.bean(NestedSmallBean.class);
+    List<NestedSmallBean> beans = Arrays.asList(bean);
+    Dataset<NestedSmallBean> ds1 = spark.createDataset(beans, encoder);
+    Assert.assertEquals(beans, ds1.collectAsList());
+    Dataset<NestedSmallBean> ds2 =
+      ds1.map((MapFunction<NestedSmallBean, NestedSmallBean>) b -> b, encoder);
+    Assert.assertEquals(beans, ds2.collectAsList());
+  }
+
+  @Test
+  public void testSpecificLists() {
+    SpecificListsBean bean = new SpecificListsBean();
+    ArrayList<Integer> arrayList = new ArrayList<>();
+    arrayList.add(1);
+    bean.setArrayList(arrayList);
+    LinkedList<Integer> linkedList = new LinkedList<>();
+    linkedList.add(1);
+    bean.setLinkedList(linkedList);
+    bean.setList(Collections.singletonList(1));
+    List<SpecificListsBean> beans = Collections.singletonList(bean);
+    Dataset<SpecificListsBean> dataset =
+      spark.createDataset(beans, Encoders.bean(SpecificListsBean.class));
+    Assert.assertEquals(beans, dataset.collectAsList());
+  }
+
+  public static class SpecificListsBean implements Serializable {
+    private ArrayList<Integer> arrayList;
+    private LinkedList<Integer> linkedList;
+    private List<Integer> list;
+
+    public ArrayList<Integer> getArrayList() {
+      return arrayList;
+    }
+
+    public void setArrayList(ArrayList<Integer> arrayList) {
+      this.arrayList = arrayList;
+    }
+
+    public LinkedList<Integer> getLinkedList() {
+      return linkedList;
+    }
+
+    public void setLinkedList(LinkedList<Integer> linkedList) {
+      this.linkedList = linkedList;
+    }
+
+    public List<Integer> getList() {
+      return list;
+    }
+
+    public void setList(List<Integer> list) {
+      this.list = list;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      SpecificListsBean that = (SpecificListsBean) o;
+      return Objects.equal(arrayList, that.arrayList) &&
+        Objects.equal(linkedList, that.linkedList) &&
+        Objects.equal(list, that.list);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(arrayList, linkedList, list);
+    }
   }
 }

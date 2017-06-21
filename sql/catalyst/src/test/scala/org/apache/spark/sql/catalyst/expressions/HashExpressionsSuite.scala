@@ -18,18 +18,20 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
+import java.util.TimeZone
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val random = new scala.util.Random
@@ -166,6 +168,208 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHash(UTF8String.fromString("数据砖头"), StringType, -898686242L)
     checkHiveHash(UTF8String.fromString("नमस्ते"), StringType, 2006045948L)
     // scalastyle:on nonascii
+  }
+
+  test("hive-hash for date type") {
+    def checkHiveHashForDateType(dateString: String, expected: Long): Unit = {
+      checkHiveHash(
+        DateTimeUtils.stringToDate(UTF8String.fromString(dateString)).get,
+        DateType,
+        expected)
+    }
+
+    // basic case
+    checkHiveHashForDateType("2017-01-01", 17167)
+
+    // boundary cases
+    checkHiveHashForDateType("0000-01-01", -719530)
+    checkHiveHashForDateType("9999-12-31", 2932896)
+
+    // epoch
+    checkHiveHashForDateType("1970-01-01", 0)
+
+    // before epoch
+    checkHiveHashForDateType("1800-01-01", -62091)
+
+    // Invalid input: bad date string. Hive returns 0 for such cases
+    intercept[NoSuchElementException](checkHiveHashForDateType("0-0-0", 0))
+    intercept[NoSuchElementException](checkHiveHashForDateType("-1212-01-01", 0))
+    intercept[NoSuchElementException](checkHiveHashForDateType("2016-99-99", 0))
+
+    // Invalid input: Empty string. Hive returns 0 for this case
+    intercept[NoSuchElementException](checkHiveHashForDateType("", 0))
+
+    // Invalid input: February 30th for a leap year. Hive supports this but Spark doesn't
+    intercept[NoSuchElementException](checkHiveHashForDateType("2016-02-30", 16861))
+  }
+
+  test("hive-hash for timestamp type") {
+    def checkHiveHashForTimestampType(
+        timestamp: String,
+        expected: Long,
+        timeZone: TimeZone = TimeZone.getTimeZone("UTC")): Unit = {
+      checkHiveHash(
+        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), timeZone).get,
+        TimestampType,
+        expected)
+    }
+
+    // basic case
+    checkHiveHashForTimestampType("2017-02-24 10:56:29", 1445725271)
+
+    // with higher precision
+    checkHiveHashForTimestampType("2017-02-24 10:56:29.111111", 1353936655)
+
+    // with different timezone
+    checkHiveHashForTimestampType("2017-02-24 10:56:29", 1445732471,
+      TimeZone.getTimeZone("US/Pacific"))
+
+    // boundary cases
+    checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645926784)
+    checkHiveHashForTimestampType("9999-01-01 00:00:00", -1081818240)
+
+    // epoch
+    checkHiveHashForTimestampType("1970-01-01 00:00:00", 0)
+
+    // before epoch
+    checkHiveHashForTimestampType("1800-01-01 03:12:45", -267420885)
+
+    // Invalid input: bad timestamp string. Hive returns 0 for such cases
+    intercept[NoSuchElementException](checkHiveHashForTimestampType("0-0-0 0:0:0", 0))
+    intercept[NoSuchElementException](checkHiveHashForTimestampType("-99-99-99 99:99:45", 0))
+    intercept[NoSuchElementException](checkHiveHashForTimestampType("555555-55555-5555", 0))
+
+    // Invalid input: Empty string. Hive returns 0 for this case
+    intercept[NoSuchElementException](checkHiveHashForTimestampType("", 0))
+
+    // Invalid input: February 30th is a leap year. Hive supports this but Spark doesn't
+    intercept[NoSuchElementException](checkHiveHashForTimestampType("2016-02-30 00:00:00", 0))
+
+    // Invalid input: Hive accepts upto 9 decimal place precision but Spark uses upto 6
+    intercept[TestFailedException](checkHiveHashForTimestampType("2017-02-24 10:56:29.11111111", 0))
+  }
+
+  test("hive-hash for CalendarInterval type") {
+    def checkHiveHashForIntervalType(interval: String, expected: Long): Unit = {
+      checkHiveHash(CalendarInterval.fromString(interval), CalendarIntervalType, expected)
+    }
+
+    // ----- MICROSEC -----
+
+    // basic case
+    checkHiveHashForIntervalType("interval 1 microsecond", 24273)
+
+    // negative
+    checkHiveHashForIntervalType("interval -1 microsecond", 22273)
+
+    // edge / boundary cases
+    checkHiveHashForIntervalType("interval 0 microsecond", 23273)
+    checkHiveHashForIntervalType("interval 999 microsecond", 1022273)
+    checkHiveHashForIntervalType("interval -999 microsecond", -975727)
+
+    // ----- MILLISEC -----
+
+    // basic case
+    checkHiveHashForIntervalType("interval 1 millisecond", 1023273)
+
+    // negative
+    checkHiveHashForIntervalType("interval -1 millisecond", -976727)
+
+    // edge / boundary cases
+    checkHiveHashForIntervalType("interval 0 millisecond", 23273)
+    checkHiveHashForIntervalType("interval 999 millisecond", 999023273)
+    checkHiveHashForIntervalType("interval -999 millisecond", -998976727)
+
+    // ----- SECOND -----
+
+    // basic case
+    checkHiveHashForIntervalType("interval 1 second", 23310)
+
+    // negative
+    checkHiveHashForIntervalType("interval -1 second", 23273)
+
+    // edge / boundary cases
+    checkHiveHashForIntervalType("interval 0 second", 23273)
+    checkHiveHashForIntervalType("interval 2147483647 second", -2147460412)
+    checkHiveHashForIntervalType("interval -2147483648 second", -2147460412)
+
+    // Out of range for both Hive and Spark
+    // Hive throws an exception. Spark overflows and returns wrong output
+    // checkHiveHashForIntervalType("interval 9999999999 second", 0)
+
+    // ----- MINUTE -----
+
+    // basic cases
+    checkHiveHashForIntervalType("interval 1 minute", 25493)
+
+    // negative
+    checkHiveHashForIntervalType("interval -1 minute", 25456)
+
+    // edge / boundary cases
+    checkHiveHashForIntervalType("interval 0 minute", 23273)
+    checkHiveHashForIntervalType("interval 2147483647 minute", 21830)
+    checkHiveHashForIntervalType("interval -2147483648 minute", 22163)
+
+    // Out of range for both Hive and Spark
+    // Hive throws an exception. Spark overflows and returns wrong output
+    // checkHiveHashForIntervalType("interval 9999999999 minute", 0)
+
+    // ----- HOUR -----
+
+    // basic case
+    checkHiveHashForIntervalType("interval 1 hour", 156473)
+
+    // negative
+    checkHiveHashForIntervalType("interval -1 hour", 156436)
+
+    // edge / boundary cases
+    checkHiveHashForIntervalType("interval 0 hour", 23273)
+    checkHiveHashForIntervalType("interval 2147483647 hour", -62308)
+    checkHiveHashForIntervalType("interval -2147483648 hour", -43327)
+
+    // Out of range for both Hive and Spark
+    // Hive throws an exception. Spark overflows and returns wrong output
+    // checkHiveHashForIntervalType("interval 9999999999 hour", 0)
+
+    // ----- DAY -----
+
+    // basic cases
+    checkHiveHashForIntervalType("interval 1 day", 3220073)
+
+    // negative
+    checkHiveHashForIntervalType("interval -1 day", 3220036)
+
+    // edge / boundary cases
+    checkHiveHashForIntervalType("interval 0 day", 23273)
+    checkHiveHashForIntervalType("interval 106751991 day", -451506760)
+    checkHiveHashForIntervalType("interval -106751991 day", -451514123)
+
+    // Hive supports `day` for a longer range but Spark's range is smaller
+    // The check for range is done at the parser level so this does not fail in Spark
+    // checkHiveHashForIntervalType("interval -2147483648 day", -1575127)
+    // checkHiveHashForIntervalType("interval 2147483647 day", -4767228)
+
+    // Out of range for both Hive and Spark
+    // Hive throws an exception. Spark overflows and returns wrong output
+    // checkHiveHashForIntervalType("interval 9999999999 day", 0)
+
+    // ----- MIX -----
+
+    checkHiveHashForIntervalType("interval 0 day 0 hour", 23273)
+    checkHiveHashForIntervalType("interval 0 day 0 hour 0 minute", 23273)
+    checkHiveHashForIntervalType("interval 0 day 0 hour 0 minute 0 second", 23273)
+    checkHiveHashForIntervalType("interval 0 day 0 hour 0 minute 0 second 0 millisecond", 23273)
+    checkHiveHashForIntervalType(
+      "interval 0 day 0 hour 0 minute 0 second 0 millisecond 0 microsecond", 23273)
+
+    checkHiveHashForIntervalType("interval 6 day 15 hour", 21202073)
+    checkHiveHashForIntervalType("interval 5 day 4 hour 8 minute", 16557833)
+    checkHiveHashForIntervalType("interval -23 day 56 hour -1111113 minute 9898989 second",
+      -2128468593)
+    checkHiveHashForIntervalType("interval 66 day 12 hour 39 minute 23 second 987 millisecond",
+      1199697904)
+    checkHiveHashForIntervalType(
+      "interval 66 day 12 hour 39 minute 23 second 987 millisecond 123 microsecond", 1199820904)
   }
 
   test("hive-hash for array") {

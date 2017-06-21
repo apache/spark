@@ -240,6 +240,32 @@ class SparkContext(object):
         if isinstance(threading.current_thread(), threading._MainThread):
             signal.signal(signal.SIGINT, signal_handler)
 
+    def __repr__(self):
+        return "<SparkContext master={master} appName={appName}>".format(
+            master=self.master,
+            appName=self.appName,
+        )
+
+    def _repr_html_(self):
+        return """
+        <div>
+            <p><b>SparkContext</b></p>
+
+            <p><a href="{sc.uiWebUrl}">Spark UI</a></p>
+
+            <dl>
+              <dt>Version</dt>
+                <dd><code>v{sc.version}</code></dd>
+              <dt>Master</dt>
+                <dd><code>{sc.master}</code></dd>
+              <dt>AppName</dt>
+                <dd><code>{sc.appName}</code></dd>
+            </dl>
+        </div>
+        """.format(
+            sc=self
+        )
+
     def _initialize_context(self, jconf):
         """
         Initialize SparkContext in function to allow subclass specific initialization

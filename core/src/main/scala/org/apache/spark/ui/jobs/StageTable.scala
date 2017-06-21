@@ -42,15 +42,17 @@ private[ui] class StageTableBase(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
-  val allParameters = request.getParameterMap().asScala.toMap
+  // stripXSS is called to remove suspicious characters used in XSS attacks
+  val allParameters = request.getParameterMap.asScala.toMap.mapValues(_.map(UIUtils.stripXSS))
   val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
     .map(para => para._1 + "=" + para._2(0))
 
-  val parameterStagePage = request.getParameter(stageTag + ".page")
-  val parameterStageSortColumn = request.getParameter(stageTag + ".sort")
-  val parameterStageSortDesc = request.getParameter(stageTag + ".desc")
-  val parameterStagePageSize = request.getParameter(stageTag + ".pageSize")
-  val parameterStagePrevPageSize = request.getParameter(stageTag + ".prevPageSize")
+  val parameterStagePage = UIUtils.stripXSS(request.getParameter(stageTag + ".page"))
+  val parameterStageSortColumn = UIUtils.stripXSS(request.getParameter(stageTag + ".sort"))
+  val parameterStageSortDesc = UIUtils.stripXSS(request.getParameter(stageTag + ".desc"))
+  val parameterStagePageSize = UIUtils.stripXSS(request.getParameter(stageTag + ".pageSize"))
+  val parameterStagePrevPageSize =
+    UIUtils.stripXSS(request.getParameter(stageTag + ".prevPageSize"))
 
   val stagePage = Option(parameterStagePage).map(_.toInt).getOrElse(1)
   val stageSortColumn = Option(parameterStageSortColumn).map { sortColumn =>
@@ -300,7 +302,7 @@ private[ui] class StagePagedTable(
         <td class="progress-cell">
           {UIUtils.makeProgressBar(started = stageData.numActiveTasks,
           completed = stageData.completedIndices.size, failed = stageData.numFailedTasks,
-          skipped = 0, killed = stageData.numKilledTasks, total = info.numTasks)}
+          skipped = 0, reasonToNumKilled = stageData.reasonToNumKilled, total = info.numTasks)}
         </td>
         <td>{data.inputReadWithUnit}</td>
         <td>{data.outputWriteWithUnit}</td>
@@ -412,7 +414,7 @@ private[ui] class StageDataSource(
   // so that we can avoid creating duplicate contents during sorting the data
   private val data = stages.map(stageRow).sorted(ordering(sortColumn, desc))
 
-  private var _slicedStageIds: Set[Int] = null
+  private var _slicedStageIds: Set[Int] = _
 
   override def dataSize: Int = data.size
 
@@ -512,4 +514,3 @@ private[ui] class StageDataSource(
     }
   }
 }
-

@@ -199,6 +199,40 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyDeclinedOffer(driver, createOfferId("o2"), true)
   }
 
+  test("mesos declines offers with a filter when maxCores not a multiple of executor.cores") {
+    val maxCores = 4
+    val executorCores = 3
+    setBackend(Map(
+      "spark.cores.max" -> maxCores.toString,
+      "spark.executor.cores" -> executorCores.toString
+    ))
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(
+      Resources(executorMemory, maxCores + 1),
+      Resources(executorMemory, maxCores + 1)
+    ))
+    verifyTaskLaunched(driver, "o1")
+    verifyDeclinedOffer(driver, createOfferId("o2"), true)
+  }
+
+  test("mesos declines offers with a filter when reached spark.cores.max with executor.cores") {
+    val maxCores = 4
+    val executorCores = 2
+    setBackend(Map(
+      "spark.cores.max" -> maxCores.toString,
+      "spark.executor.cores" -> executorCores.toString
+    ))
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(
+      Resources(executorMemory, maxCores + 1),
+      Resources(executorMemory, maxCores + 1),
+      Resources(executorMemory, maxCores + 1)
+    ))
+    verifyTaskLaunched(driver, "o1")
+    verifyTaskLaunched(driver, "o2")
+    verifyDeclinedOffer(driver, createOfferId("o3"), true)
+  }
+
   test("mesos assigns tasks round-robin on offers") {
     val executorCores = 4
     val maxCores = executorCores * 2
@@ -464,6 +498,40 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(!uris.asScala.head.getCache)
   }
 
+  test("mesos sets task name to spark.app.name") {
+    setBackend()
+
+    val offers = List(Resources(backend.executorMemory(sc), 1))
+    offerResources(offers)
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+
+    // Add " 0" to the taskName to match the executor number that is appended
+    assert(launchedTasks.head.getName == "test-mesos-dynamic-alloc 0")
+  }
+
+  test("mesos sets configurable labels on tasks") {
+    val taskLabelsString = "mesos:test,label:test"
+    setBackend(Map(
+      "spark.mesos.task.labels" -> taskLabelsString
+    ))
+
+    // Build up the labels
+    val taskLabels = Protos.Labels.newBuilder()
+      .addLabels(Protos.Label.newBuilder()
+        .setKey("mesos").setValue("test").build())
+      .addLabels(Protos.Label.newBuilder()
+        .setKey("label").setValue("test").build())
+      .build()
+
+    val offers = List(Resources(backend.executorMemory(sc), 1))
+    offerResources(offers)
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+
+    val labels = launchedTasks.head.getLabels
+
+    assert(launchedTasks.head.getLabels.equals(taskLabels))
+  }
+
   test("mesos supports spark.mesos.network.name") {
     setBackend(Map(
       "spark.mesos.network.name" -> "test-network-name"
@@ -552,17 +620,14 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
       override protected def getShuffleClient(): MesosExternalShuffleClient = shuffleClient
 
       // override to avoid race condition with the driver thread on `mesosDriver`
-      override def startScheduler(newDriver: SchedulerDriver): Unit = {
-        mesosDriver = newDriver
-      }
+      override def startScheduler(newDriver: SchedulerDriver): Unit = {}
 
       override def stopExecutors(): Unit = {
         stopCalled = true
       }
-
-      markRegistered()
     }
     backend.start()
+    backend.registered(driver, Utils.TEST_FRAMEWORK_ID, Utils.TEST_MASTER_INFO)
     backend
   }
 

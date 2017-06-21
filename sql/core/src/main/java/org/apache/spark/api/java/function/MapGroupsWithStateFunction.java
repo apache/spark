@@ -22,7 +22,7 @@ import java.util.Iterator;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.KeyedState;
+import org.apache.spark.sql.streaming.GroupState;
 
 /**
  * ::Experimental::
@@ -34,5 +34,5 @@ import org.apache.spark.sql.KeyedState;
 @Experimental
 @InterfaceStability.Evolving
 public interface MapGroupsWithStateFunction<K, V, S, R> extends Serializable {
-  R call(K key, Iterator<V> values, KeyedState<S> state) throws Exception;
+  R call(K key, Iterator<V> values, GroupState<S> state) throws Exception;
 }

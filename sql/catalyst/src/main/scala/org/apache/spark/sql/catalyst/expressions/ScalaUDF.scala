@@ -36,16 +36,16 @@ import org.apache.spark.sql.types.DataType
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
  *                    type coercion. However, that would require more refactoring of the codebase.
  * @param udfName   The user-specified name of this UDF.
+ * @param nullable  True if the UDF can return null value.
  */
 case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
     inputTypes: Seq[DataType] = Nil,
-    udfName: Option[String] = None)
+    udfName: Option[String] = None,
+    nullable: Boolean = true)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression {
-
-  override def nullable: Boolean = true
 
   override def toString: String =
     s"${udfName.map(name => s"UDF:$name").getOrElse("UDF")}(${children.mkString(", ")})"
@@ -988,7 +988,7 @@ case class ScalaUDF(
     val converterTerm = ctx.freshName("converter")
     val expressionIdx = ctx.references.size - 1
     ctx.addMutableState(converterClassName, converterTerm,
-      s"this.$converterTerm = ($converterClassName)$typeConvertersClassName" +
+      s"$converterTerm = ($converterClassName)$typeConvertersClassName" +
         s".createToScalaConverter(((${expressionClassName})((($scalaUDFClassName)" +
           s"references[$expressionIdx]).getChildren().apply($index))).dataType());")
     converterTerm
@@ -1005,7 +1005,7 @@ case class ScalaUDF(
     // Generate codes used to convert the returned value of user-defined functions to Catalyst type
     val catalystConverterTerm = ctx.freshName("catalystConverter")
     ctx.addMutableState(converterClassName, catalystConverterTerm,
-      s"this.$catalystConverterTerm = ($converterClassName)$typeConvertersClassName" +
+      s"$catalystConverterTerm = ($converterClassName)$typeConvertersClassName" +
         s".createToCatalystConverter($scalaUDF.dataType());")
 
     val resultTerm = ctx.freshName("result")
@@ -1019,7 +1019,7 @@ case class ScalaUDF(
 
     val funcTerm = ctx.freshName("udf")
     ctx.addMutableState(funcClassName, funcTerm,
-      s"this.$funcTerm = ($funcClassName)$scalaUDF.userDefinedFunc();")
+      s"$funcTerm = ($funcClassName)$scalaUDF.userDefinedFunc();")
 
     // codegen for children expressions
     val evals = children.map(_.genCode(ctx))

@@ -36,6 +36,7 @@ __all__ = ['Binarizer',
            'ElementwiseProduct',
            'HashingTF',
            'IDF', 'IDFModel',
+           'Imputer', 'ImputerModel',
            'IndexToString',
            'MaxAbsScaler', 'MaxAbsScalerModel',
            'MinHashLSH', 'MinHashLSHModel',
@@ -868,6 +869,165 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
         Returns the IDF vector.
         """
         return self._call_java("idf")
+
+
+@inherit_doc
+class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Imputation estimator for completing missing values, either using the mean or the median
+    of the columns in which the missing values are located. The input columns should be of
+    DoubleType or FloatType. Currently Imputer does not support categorical features and
+    possibly creates incorrect values for a categorical feature.
+
+    Note that the mean/median value is computed after filtering out missing values.
+    All Null values in the input columns are treated as missing, and so are also imputed. For
+    computing median, :py:meth:`pyspark.sql.DataFrame.approxQuantile` is used with a
+    relative error of `0.001`.
+
+    >>> df = spark.createDataFrame([(1.0, float("nan")), (2.0, float("nan")), (float("nan"), 3.0),
+    ...                             (4.0, 4.0), (5.0, 5.0)], ["a", "b"])
+    >>> imputer = Imputer(inputCols=["a", "b"], outputCols=["out_a", "out_b"])
+    >>> model = imputer.fit(df)
+    >>> model.surrogateDF.show()
+    +---+---+
+    |  a|  b|
+    +---+---+
+    |3.0|4.0|
+    +---+---+
+    ...
+    >>> model.transform(df).show()
+    +---+---+-----+-----+
+    |  a|  b|out_a|out_b|
+    +---+---+-----+-----+
+    |1.0|NaN|  1.0|  4.0|
+    |2.0|NaN|  2.0|  4.0|
+    |NaN|3.0|  3.0|  3.0|
+    ...
+    >>> imputer.setStrategy("median").setMissingValue(1.0).fit(df).transform(df).show()
+    +---+---+-----+-----+
+    |  a|  b|out_a|out_b|
+    +---+---+-----+-----+
+    |1.0|NaN|  4.0|  NaN|
+    ...
+    >>> imputerPath = temp_path + "/imputer"
+    >>> imputer.save(imputerPath)
+    >>> loadedImputer = Imputer.load(imputerPath)
+    >>> loadedImputer.getStrategy() == imputer.getStrategy()
+    True
+    >>> loadedImputer.getMissingValue()
+    1.0
+    >>> modelPath = temp_path + "/imputer-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = ImputerModel.load(modelPath)
+    >>> loadedModel.transform(df).head().out_a == model.transform(df).head().out_a
+    True
+
+    .. versionadded:: 2.2.0
+    """
+
+    outputCols = Param(Params._dummy(), "outputCols",
+                       "output column names.", typeConverter=TypeConverters.toListString)
+
+    strategy = Param(Params._dummy(), "strategy",
+                     "strategy for imputation. If mean, then replace missing values using the mean "
+                     "value of the feature. If median, then replace missing values using the "
+                     "median value of the feature.",
+                     typeConverter=TypeConverters.toString)
+
+    missingValue = Param(Params._dummy(), "missingValue",
+                         "The placeholder for the missing values. All occurrences of missingValue "
+                         "will be imputed.", typeConverter=TypeConverters.toFloat)
+
+    @keyword_only
+    def __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None,
+                 outputCols=None):
+        """
+        __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
+                 outputCols=None):
+        """
+        super(Imputer, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Imputer", self.uid)
+        self._setDefault(strategy="mean", missingValue=float("nan"))
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.2.0")
+    def setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None,
+                  outputCols=None):
+        """
+        setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
+                  outputCols=None)
+        Sets params for this Imputer.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.2.0")
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("2.2.0")
+    def getOutputCols(self):
+        """
+        Gets the value of :py:attr:`outputCols` or its default value.
+        """
+        return self.getOrDefault(self.outputCols)
+
+    @since("2.2.0")
+    def setStrategy(self, value):
+        """
+        Sets the value of :py:attr:`strategy`.
+        """
+        return self._set(strategy=value)
+
+    @since("2.2.0")
+    def getStrategy(self):
+        """
+        Gets the value of :py:attr:`strategy` or its default value.
+        """
+        return self.getOrDefault(self.strategy)
+
+    @since("2.2.0")
+    def setMissingValue(self, value):
+        """
+        Sets the value of :py:attr:`missingValue`.
+        """
+        return self._set(missingValue=value)
+
+    @since("2.2.0")
+    def getMissingValue(self):
+        """
+        Gets the value of :py:attr:`missingValue` or its default value.
+        """
+        return self.getOrDefault(self.missingValue)
+
+    def _create_model(self, java_model):
+        return ImputerModel(java_model)
+
+
+class ImputerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Model fitted by :py:class:`Imputer`.
+
+    .. versionadded:: 2.2.0
+    """
+
+    @property
+    @since("2.2.0")
+    def surrogateDF(self):
+        """
+        Returns a DataFrame containing inputCols and their corresponding surrogates,
+        which are used to replace the missing values in the input DataFrame.
+        """
+        return self._call_java("surrogateDF")
 
 
 @inherit_doc
@@ -1922,10 +2082,12 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     """
     A label indexer that maps a string column of labels to an ML column of label indices.
     If the input column is numeric, we cast it to string and index the string values.
-    The indices are in [0, numLabels), ordered by label frequencies.
-    So the most frequent label gets index 0.
+    The indices are in [0, numLabels). By default, this is ordered by label frequencies
+    so the most frequent label gets index 0. The ordering behavior is controlled by
+    setting :py:attr:`stringOrderType`. Its default value is 'frequencyDesc'.
 
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid='error')
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="error",
+    ...     stringOrderType="frequencyDesc")
     >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
@@ -1951,26 +2113,45 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     >>> loadedInverter = IndexToString.load(indexToStringPath)
     >>> loadedInverter.getLabels() == inverter.getLabels()
     True
+    >>> stringIndexer.getStringOrderType()
+    'frequencyDesc'
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="error",
+    ...     stringOrderType="alphabetDesc")
+    >>> model = stringIndexer.fit(stringIndDf)
+    >>> td = model.transform(stringIndDf)
+    >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
+    ...     key=lambda x: x[0])
+    [(0, 2.0), (1, 1.0), (2, 0.0), (3, 2.0), (4, 2.0), (5, 0.0)]
 
     .. versionadded:: 1.4.0
     """
 
+    stringOrderType = Param(Params._dummy(), "stringOrderType",
+                            "How to order labels of string column. The first label after " +
+                            "ordering is assigned an index of 0. Supported options: " +
+                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
+                            typeConverter=TypeConverters.toString)
+
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error"):
+    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
+                 stringOrderType="frequencyDesc"):
         """
-        __init__(self, inputCol=None, outputCol=None, handleInvalid="error")
+        __init__(self, inputCol=None, outputCol=None, handleInvalid="error", \
+                 stringOrderType="frequencyDesc")
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
-        self._setDefault(handleInvalid="error")
+        self._setDefault(handleInvalid="error", stringOrderType="frequencyDesc")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error"):
+    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
+                  stringOrderType="frequencyDesc"):
         """
-        setParams(self, inputCol=None, outputCol=None, handleInvalid="error")
+        setParams(self, inputCol=None, outputCol=None, handleInvalid="error", \
+                  stringOrderType="frequencyDesc")
         Sets params for this StringIndexer.
         """
         kwargs = self._input_kwargs
@@ -1978,6 +2159,20 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
 
     def _create_model(self, java_model):
         return StringIndexerModel(java_model)
+
+    @since("2.3.0")
+    def setStringOrderType(self, value):
+        """
+        Sets the value of :py:attr:`stringOrderType`.
+        """
+        return self._set(stringOrderType=value)
+
+    @since("2.3.0")
+    def getStringOrderType(self):
+        """
+        Gets the value of :py:attr:`stringOrderType` or its default value 'frequencyDesc'.
+        """
+        return self.getOrDefault(self.stringOrderType)
 
 
 class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
@@ -2848,26 +3043,35 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
                             "Force to index label whether it is numeric or string",
                             typeConverter=TypeConverters.toBoolean)
 
+    stringIndexerOrderType = Param(Params._dummy(), "stringIndexerOrderType",
+                                   "How to order categories of a string feature column used by " +
+                                   "StringIndexer. The last category after ordering is dropped " +
+                                   "when encoding strings. Supported options: frequencyDesc, " +
+                                   "frequencyAsc, alphabetDesc, alphabetAsc. The default value " +
+                                   "is frequencyDesc. When the ordering is set to alphabetDesc, " +
+                                   "RFormula drops the same category as R when encoding strings.",
+                                   typeConverter=TypeConverters.toString)
+
     @keyword_only
     def __init__(self, formula=None, featuresCol="features", labelCol="label",
-                 forceIndexLabel=False):
+                 forceIndexLabel=False, stringIndexerOrderType="frequencyDesc"):
         """
         __init__(self, formula=None, featuresCol="features", labelCol="label", \
-                 forceIndexLabel=False)
+                 forceIndexLabel=False, stringIndexerOrderType="frequencyDesc")
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
-        self._setDefault(forceIndexLabel=False)
+        self._setDefault(forceIndexLabel=False, stringIndexerOrderType="frequencyDesc")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.5.0")
     def setParams(self, formula=None, featuresCol="features", labelCol="label",
-                  forceIndexLabel=False):
+                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc"):
         """
         setParams(self, formula=None, featuresCol="features", labelCol="label", \
-                  forceIndexLabel=False)
+                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc")
         Sets params for RFormula.
         """
         kwargs = self._input_kwargs
@@ -2900,6 +3104,20 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         Gets the value of :py:attr:`forceIndexLabel`.
         """
         return self.getOrDefault(self.forceIndexLabel)
+
+    @since("2.3.0")
+    def setStringIndexerOrderType(self, value):
+        """
+        Sets the value of :py:attr:`stringIndexerOrderType`.
+        """
+        return self._set(stringIndexerOrderType=value)
+
+    @since("2.3.0")
+    def getStringIndexerOrderType(self):
+        """
+        Gets the value of :py:attr:`stringIndexerOrderType` or its default value 'frequencyDesc'.
+        """
+        return self.getOrDefault(self.stringIndexerOrderType)
 
     def _create_model(self, java_model):
         return RFormulaModel(java_model)

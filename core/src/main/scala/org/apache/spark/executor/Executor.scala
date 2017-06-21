@@ -23,12 +23,14 @@ import java.lang.management.ManagementFactory
 import java.net.{URI, URL}
 import java.nio.ByteBuffer
 import java.util.Properties
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent._
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.control.NonFatal
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -69,7 +71,7 @@ private[spark] class Executor(
   private val conf = env.conf
 
   // No ip or host:port - just hostname
-  Utils.checkHost(executorHostname, "Expected executed slave to be a hostname")
+  Utils.checkHost(executorHostname)
   // must not have port specified.
   assert (0 == Utils.parseHostPort(executorHostname)._2)
 
@@ -84,7 +86,20 @@ private[spark] class Executor(
   }
 
   // Start worker thread pool
-  private val threadPool = ThreadUtils.newDaemonCachedThreadPool("Executor task launch worker")
+  private val threadPool = {
+    val threadFactory = new ThreadFactoryBuilder()
+      .setDaemon(true)
+      .setNameFormat("Executor task launch worker-%d")
+      .setThreadFactory(new ThreadFactory {
+        override def newThread(r: Runnable): Thread =
+          // Use UninterruptibleThread to run tasks so that we can allow running codes without being
+          // interrupted by `Thread.interrupt()`. Some issues, such as KAFKA-1894, HADOOP-10622,
+          // will hang forever if some methods are interrupted.
+          new UninterruptibleThread(r, "unused") // thread name will be set by ThreadFactoryBuilder
+      })
+      .build()
+    Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
+  }
   private val executorSource = new ExecutorSource(threadPool, executorId)
   // Pool used for threads that supervise task killing / cancellation
   private val taskReaperPool = ThreadUtils.newDaemonCachedThreadPool("Task reaper")
@@ -158,7 +173,7 @@ private[spark] class Executor(
     threadPool.execute(tr)
   }
 
-  def killTask(taskId: Long, interruptThread: Boolean): Unit = {
+  def killTask(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
     val taskRunner = runningTasks.get(taskId)
     if (taskRunner != null) {
       if (taskReaperEnabled) {
@@ -168,7 +183,8 @@ private[spark] class Executor(
             case Some(existingReaper) => interruptThread && !existingReaper.interruptThread
           }
           if (shouldCreateReaper) {
-            val taskReaper = new TaskReaper(taskRunner, interruptThread = interruptThread)
+            val taskReaper = new TaskReaper(
+              taskRunner, interruptThread = interruptThread, reason = reason)
             taskReaperForTask(taskId) = taskReaper
             Some(taskReaper)
           } else {
@@ -178,7 +194,7 @@ private[spark] class Executor(
         // Execute the TaskReaper from outside of the synchronized block.
         maybeNewTaskReaper.foreach(taskReaperPool.execute)
       } else {
-        taskRunner.kill(interruptThread = interruptThread)
+        taskRunner.kill(interruptThread = interruptThread, reason = reason)
       }
     }
   }
@@ -189,8 +205,9 @@ private[spark] class Executor(
    * tasks instead of taking the JVM down.
    * @param interruptThread whether to interrupt the task thread
    */
-  def killAllTasks(interruptThread: Boolean) : Unit = {
-    runningTasks.keys().asScala.foreach(t => killTask(t, interruptThread = interruptThread))
+  def killAllTasks(interruptThread: Boolean, reason: String) : Unit = {
+    runningTasks.keys().asScala.foreach(t =>
+      killTask(t, interruptThread = interruptThread, reason = reason))
   }
 
   def stop(): Unit = {
@@ -217,8 +234,8 @@ private[spark] class Executor(
     val threadName = s"Executor task launch worker for task $taskId"
     private val taskName = taskDescription.name
 
-    /** Whether this task has been killed. */
-    @volatile private var killed = false
+    /** If specified, this task has been killed and this option contains the reason. */
+    @volatile private var reasonIfKilled: Option[String] = None
 
     @volatile private var threadId: Long = -1
 
@@ -239,13 +256,13 @@ private[spark] class Executor(
      */
     @volatile var task: Task[Any] = _
 
-    def kill(interruptThread: Boolean): Unit = {
-      logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
-      killed = true
+    def kill(interruptThread: Boolean, reason: String): Unit = {
+      logInfo(s"Executor is trying to kill $taskName (TID $taskId), reason: $reason")
+      reasonIfKilled = Some(reason)
       if (task != null) {
         synchronized {
           if (!finished) {
-            task.kill(interruptThread)
+            task.kill(interruptThread, reason)
           }
         }
       }
@@ -296,16 +313,23 @@ private[spark] class Executor(
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.
-        if (killed) {
+        val killReason = reasonIfKilled
+        if (killReason.isDefined) {
           // Throw an exception rather than returning, because returning within a try{} block
           // causes a NonLocalReturnControl exception to be thrown. The NonLocalReturnControl
           // exception will be caught by the catch block, leading to an incorrect ExceptionFailure
           // for the task.
-          throw new TaskKilledException
+          throw new TaskKilledException(killReason.get)
         }
 
-        logDebug("Task " + taskId + "'s epoch is " + task.epoch)
-        env.mapOutputTracker.updateEpoch(task.epoch)
+        // The purpose of updating the epoch here is to invalidate executor map output status cache
+        // in case FetchFailures have occurred. In local mode `env.mapOutputTracker` will be
+        // MapOutputTrackerMaster and its cache invalidation is not based on epoch numbers so
+        // we don't need to make any special calls here.
+        if (!isLocal) {
+          logDebug("Task " + taskId + "'s epoch is " + task.epoch)
+          env.mapOutputTracker.asInstanceOf[MapOutputTrackerWorker].updateEpoch(task.epoch)
+        }
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
@@ -358,9 +382,7 @@ private[spark] class Executor(
         } else 0L
 
         // If the task has been killed, let's fail it.
-        if (task.killed) {
-          throw new TaskKilledException
-        }
+        task.context.killTaskIfInterrupted()
 
         val resultSer = env.serializer.newInstance()
         val beforeSerialization = System.currentTimeMillis()
@@ -409,6 +431,7 @@ private[spark] class Executor(
           }
         }
 
+        setTaskFinishedAndClearInterruptStatus()
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
       } catch {
@@ -426,15 +449,18 @@ private[spark] class Executor(
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
-        case _: TaskKilledException =>
-          logInfo(s"Executor killed $taskName (TID $taskId)")
+        case t: TaskKilledException =>
+          logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
 
-        case _: InterruptedException if task.killed =>
-          logInfo(s"Executor interrupted and killed $taskName (TID $taskId)")
+        case _: InterruptedException | NonFatal(_) if
+            task != null && task.reasonIfKilled.isDefined =>
+          val killReason = task.reasonIfKilled.getOrElse("unknown reason")
+          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+          execBackend.statusUpdate(
+            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
 
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskFailedReason
@@ -512,7 +538,8 @@ private[spark] class Executor(
    */
   private class TaskReaper(
       taskRunner: TaskRunner,
-      val interruptThread: Boolean)
+      val interruptThread: Boolean,
+      val reason: String)
     extends Runnable {
 
     private[this] val taskId: Long = taskRunner.taskId
@@ -533,7 +560,7 @@ private[spark] class Executor(
         // Only attempt to kill the task once. If interruptThread = false then a second kill
         // attempt would be a no-op and if interruptThread = true then it may not be safe or
         // effective to interrupt multiple times:
-        taskRunner.kill(interruptThread = interruptThread)
+        taskRunner.kill(interruptThread = interruptThread, reason = reason)
         // Monitor the killed task until it exits. The synchronization logic here is complicated
         // because we don't want to synchronize on the taskRunner while possibly taking a thread
         // dump, but we also need to be careful to avoid races between checking whether the task

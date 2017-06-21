@@ -609,12 +609,74 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  // TODO: Check for cyclic view references on ALTER VIEW.
-  ignore("correctly handle a cyclic view reference") {
-    withView("view1", "view2") {
+  test("correctly handle a cyclic view reference") {
+    withView("view1", "view2", "view3") {
       sql("CREATE VIEW view1 AS SELECT * FROM jt")
       sql("CREATE VIEW view2 AS SELECT * FROM view1")
-      intercept[AnalysisException](sql("ALTER VIEW view1 AS SELECT * FROM view2"))
+      sql("CREATE VIEW view3 AS SELECT * FROM view2")
+
+      // Detect cyclic view reference on ALTER VIEW.
+      val e1 = intercept[AnalysisException] {
+        sql("ALTER VIEW view1 AS SELECT * FROM view2")
+      }.getMessage
+      assert(e1.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
+        "-> `default`.`view2` -> `default`.`view1`)"))
+
+      // Detect the most left cycle when there exists multiple cyclic view references.
+      val e2 = intercept[AnalysisException] {
+        sql("ALTER VIEW view1 AS SELECT * FROM view3 JOIN view2")
+      }.getMessage
+      assert(e2.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
+        "-> `default`.`view3` -> `default`.`view2` -> `default`.`view1`)"))
+
+      // Detect cyclic view reference on CREATE OR REPLACE VIEW.
+      val e3 = intercept[AnalysisException] {
+        sql("CREATE OR REPLACE VIEW view1 AS SELECT * FROM view2")
+      }.getMessage
+      assert(e3.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
+        "-> `default`.`view2` -> `default`.`view1`)"))
+
+      // Detect cyclic view reference from subqueries.
+      val e4 = intercept[AnalysisException] {
+        sql("ALTER VIEW view1 AS SELECT * FROM jt WHERE EXISTS (SELECT 1 FROM view2)")
+      }.getMessage
+      assert(e4.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
+        "-> `default`.`view2` -> `default`.`view1`)"))
+    }
+  }
+
+  test("restrict the nested level of a view") {
+    val viewNames = Array.range(0, 11).map(idx => s"view$idx")
+    withView(viewNames: _*) {
+      sql("CREATE VIEW view0 AS SELECT * FROM jt")
+      Array.range(0, 10).foreach { idx =>
+        sql(s"CREATE VIEW view${idx + 1} AS SELECT * FROM view$idx")
+      }
+
+      withSQLConf("spark.sql.view.maxNestedViewDepth" -> "10") {
+        val e = intercept[AnalysisException] {
+          sql("SELECT * FROM view10")
+        }.getMessage
+        assert(e.contains("The depth of view `default`.`view0` exceeds the maximum view " +
+          "resolution depth (10). Analysis is aborted to avoid errors. Increase the value " +
+          "of spark.sql.view.maxNestedViewDepth to work aroud this."))
+      }
+
+      val e = intercept[IllegalArgumentException] {
+        withSQLConf("spark.sql.view.maxNestedViewDepth" -> "0") {}
+      }.getMessage
+      assert(e.contains("The maximum depth of a view reference in a nested view must be " +
+        "positive."))
+    }
+  }
+
+  test("permanent view should be case-preserving") {
+    withView("v") {
+      sql("CREATE VIEW v AS SELECT 1 as aBc")
+      assert(spark.table("v").schema.head.name == "aBc")
+
+      sql("CREATE OR REPLACE VIEW v AS SELECT 2 as cBa")
+      assert(spark.table("v").schema.head.name == "cBa")
     }
   }
 }

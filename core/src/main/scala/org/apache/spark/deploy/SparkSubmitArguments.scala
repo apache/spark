@@ -27,10 +27,13 @@ import java.util.jar.JarFile
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
+import scala.util.Try
 
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
+
 
 /**
  * Parses and encapsulates arguments from the spark-submit script.
@@ -184,12 +187,15 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
     packagesExclusions = Option(packagesExclusions)
       .orElse(sparkProperties.get("spark.jars.excludes")).orNull
+    repositories = Option(repositories)
+      .orElse(sparkProperties.get("spark.jars.repositories")).orNull
     deployMode = Option(deployMode)
       .orElse(sparkProperties.get("spark.submit.deployMode"))
       .orElse(env.get("DEPLOY_MODE"))
       .orNull
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
+    queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
 
@@ -251,6 +257,23 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     }
     if (mainClass == null && SparkSubmit.isUserJar(primaryResource)) {
       SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
+    }
+    if (driverMemory != null
+        && Try(JavaUtils.byteStringAsBytes(driverMemory)).getOrElse(-1L) <= 0) {
+      SparkSubmit.printErrorAndExit("Driver Memory must be a positive number")
+    }
+    if (executorMemory != null
+        && Try(JavaUtils.byteStringAsBytes(executorMemory)).getOrElse(-1L) <= 0) {
+      SparkSubmit.printErrorAndExit("Executor Memory cores must be a positive number")
+    }
+    if (executorCores != null && Try(executorCores.toInt).getOrElse(-1) <= 0) {
+      SparkSubmit.printErrorAndExit("Executor cores must be a positive number")
+    }
+    if (totalExecutorCores != null && Try(totalExecutorCores.toInt).getOrElse(-1) <= 0) {
+      SparkSubmit.printErrorAndExit("Total executor cores must be a positive number")
+    }
+    if (numExecutors != null && Try(numExecutors.toInt).getOrElse(-1) <= 0) {
+      SparkSubmit.printErrorAndExit("Number of executors must be a positive number")
     }
     if (pyFiles != null && !isPython) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
@@ -535,8 +558,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --verbose, -v               Print additional debug output.
         |  --version,                  Print the version of current Spark.
         |
-        | Spark standalone with cluster deploy mode only:
-        |  --driver-cores NUM          Cores for driver (Default: 1).
+        | Cluster deploy mode only:
+        |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
+        |                              (Default: 1).
         |
         | Spark standalone or Mesos with cluster deploy mode only:
         |  --supervise                 If given, restarts the driver on failure.
@@ -551,8 +575,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              or all available cores on the worker in standalone mode)
         |
         | YARN-only:
-        |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
-        |                              (Default: 1).
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |                              If dynamic allocation is enabled, the initial number of

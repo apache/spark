@@ -28,9 +28,10 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.types.StructType
 
 /**
  * An in-memory (ephemeral) implementation of the system catalog.
@@ -97,7 +98,7 @@ class InMemoryCatalog(
   // Databases
   // --------------------------------------------------------------------------
 
-  override def createDatabase(
+  override protected def doCreateDatabase(
       dbDefinition: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = synchronized {
     if (catalog.contains(dbDefinition.name)) {
@@ -118,7 +119,7 @@ class InMemoryCatalog(
     }
   }
 
-  override def dropDatabase(
+  override protected def doDropDatabase(
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = synchronized {
@@ -126,7 +127,7 @@ class InMemoryCatalog(
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
         if (catalog(db).tables.nonEmpty) {
-          throw new AnalysisException(s"Database '$db' is not empty. One or more tables exist.")
+          throw new AnalysisException(s"Database $db is not empty. One or more tables exist.")
         }
         if (catalog(db).functions.nonEmpty) {
           throw new AnalysisException(s"Database '$db' is not empty. One or more functions exist.")
@@ -179,7 +180,7 @@ class InMemoryCatalog(
   // Tables
   // --------------------------------------------------------------------------
 
-  override def createTable(
+  override protected def doCreateTable(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
     assert(tableDefinition.identifier.database.isDefined)
@@ -215,12 +216,12 @@ class InMemoryCatalog(
       } else {
         tableDefinition
       }
-
-      catalog(db).tables.put(table, new TableDesc(tableWithLocation))
+      val tableProp = tableWithLocation.properties.filter(_._1 != "comment")
+      catalog(db).tables.put(table, new TableDesc(tableWithLocation.copy(properties = tableProp)))
     }
   }
 
-  override def dropTable(
+  override protected def doDropTable(
       db: String,
       table: String,
       ignoreIfNotExists: Boolean,
@@ -263,7 +264,10 @@ class InMemoryCatalog(
     }
   }
 
-  override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
+  override protected def doRenameTable(
+      db: String,
+      oldName: String,
+      newName: String): Unit = synchronized {
     requireTableExists(db, oldName)
     requireTableNotExists(db, newName)
     val oldDesc = catalog(db).tables(oldName)
@@ -294,7 +298,27 @@ class InMemoryCatalog(
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
-    catalog(db).tables(tableDefinition.identifier.table).table = tableDefinition
+    val updatedProperties = tableDefinition.properties.filter(kv => kv._1 != "comment")
+    val newTableDefinition = tableDefinition.copy(properties = updatedProperties)
+    catalog(db).tables(tableDefinition.identifier.table).table = newTableDefinition
+  }
+
+  override def alterTableSchema(
+      db: String,
+      table: String,
+      schema: StructType): Unit = synchronized {
+    requireTableExists(db, table)
+    val origTable = catalog(db).tables(table).table
+    catalog(db).tables(table).table = origTable.copy(schema = schema)
+  }
+
+  override def alterTableStats(
+      db: String,
+      table: String,
+      stats: CatalogStatistics): Unit = synchronized {
+    requireTableExists(db, table)
+    val origTable = catalog(db).tables(table).table
+    catalog(db).tables(table).table = origTable.copy(stats = Some(stats))
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {
@@ -546,27 +570,30 @@ class InMemoryCatalog(
       table: String,
       predicates: Seq[Expression],
       defaultTimeZoneId: String): Seq[CatalogTablePartition] = {
-    // TODO: Provide an implementation
-    throw new UnsupportedOperationException(
-      "listPartitionsByFilter is not implemented for InMemoryCatalog")
+    val catalogTable = getTable(db, table)
+    val allPartitions = listPartitions(db, table)
+    prunePartitionsByFilter(catalogTable, allPartitions, predicates, defaultTimeZoneId)
   }
 
   // --------------------------------------------------------------------------
   // Functions
   // --------------------------------------------------------------------------
 
-  override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
+  override protected def doCreateFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
     requireFunctionNotExists(db, func.identifier.funcName)
     catalog(db).functions.put(func.identifier.funcName, func)
   }
 
-  override def dropFunction(db: String, funcName: String): Unit = synchronized {
+  override protected def doDropFunction(db: String, funcName: String): Unit = synchronized {
     requireFunctionExists(db, funcName)
     catalog(db).functions.remove(funcName)
   }
 
-  override def renameFunction(db: String, oldName: String, newName: String): Unit = synchronized {
+  override protected def doRenameFunction(
+      db: String,
+      oldName: String,
+      newName: String): Unit = synchronized {
     requireFunctionExists(db, oldName)
     requireFunctionNotExists(db, newName)
     val newFunc = getFunction(db, oldName).copy(identifier = FunctionIdentifier(newName, Some(db)))

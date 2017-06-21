@@ -56,6 +56,10 @@ singleTableIdentifier
     : tableIdentifier EOF
     ;
 
+singleFunctionIdentifier
+    : functionIdentifier EOF
+    ;
+
 singleDataType
     : dataType EOF
     ;
@@ -85,6 +89,8 @@ statement
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq)?                      #analyze
+    | ALTER TABLE tableIdentifier
+        ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
         RENAME TO to=tableIdentifier                                   #renameTable
     | ALTER (TABLE | VIEW) tableIdentifier
@@ -198,7 +204,6 @@ unsupportedHiveNativeCommands
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=COMPACT
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CONCATENATE
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=SET kw4=FILEFORMAT
-    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=ADD kw4=COLUMNS
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=REPLACE kw4=COLUMNS
     | kw1=START kw2=TRANSACTION
     | kw1=COMMIT
@@ -329,7 +334,7 @@ queryOrganization
       (DISTRIBUTE BY distributeBy+=expression (',' distributeBy+=expression)*)?
       (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
       windows?
-      (LIMIT limit=expression)?
+      (LIMIT (ALL | limit=expression))?
     ;
 
 multiInsertQueryBody
@@ -366,7 +371,7 @@ querySpecification
        (RECORDREADER recordReader=STRING)?
        fromClause?
        (WHERE where=booleanExpression)?)
-    | ((kind=SELECT hint? setQuantifier? namedExpressionSeq fromClause?
+    | ((kind=SELECT (hints+=hint)* setQuantifier? namedExpressionSeq fromClause?
        | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
        lateralView*
        (WHERE where=booleanExpression)?
@@ -376,12 +381,12 @@ querySpecification
     ;
 
 hint
-    : '/*+' hintStatement '*/'
+    : '/*+' hintStatements+=hintStatement (','? hintStatements+=hintStatement)* '*/'
     ;
 
 hintStatement
     : hintName=identifier
-    | hintName=identifier '(' parameters+=identifier (',' parameters+=identifier)* ')'
+    | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
     ;
 
 fromClause
@@ -467,15 +472,23 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier sample? (AS? strictIdentifier)?               #tableName
-    | '(' queryNoWith ')' sample? (AS? strictIdentifier)?           #aliasedQuery
-    | '(' relation ')' sample? (AS? strictIdentifier)?              #aliasedRelation
-    | inlineTable                                                   #inlineTableDefault2
-    | identifier '(' (expression (',' expression)*)? ')'            #tableValuedFunction
+    : tableIdentifier sample? tableAlias                   #tableName
+    | '(' queryNoWith ')' sample? (AS? strictIdentifier)?  #aliasedQuery
+    | '(' relation ')' sample? (AS? strictIdentifier)?     #aliasedRelation
+    | inlineTable                                          #inlineTableDefault2
+    | functionTable                                        #tableValuedFunction
     ;
 
 inlineTable
-    : VALUES expression (',' expression)*  (AS? identifier identifierList?)?
+    : VALUES expression (',' expression)* tableAlias
+    ;
+
+functionTable
+    : identifier '(' (expression (',' expression)*)? ')' tableAlias
+    ;
+
+tableAlias
+    : (AS? strictIdentifier identifierList?)?
     ;
 
 rowFormat
@@ -492,6 +505,10 @@ tableIdentifier
     : (db=identifier '.')? table=identifier
     ;
 
+functionIdentifier
+    : (db=identifier '.')? function=identifier
+    ;
+
 namedExpression
     : expression (AS? (identifier | identifierList))?
     ;
@@ -506,10 +523,10 @@ expression
 
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
+    | EXISTS '(' query ')'                                         #exists
     | predicated                                                   #booleanDefault
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
-    | EXISTS '(' query ')'                                         #exists
     ;
 
 // workaround for:
@@ -525,13 +542,14 @@ predicate
     | NOT? kind=IN '(' query ')'
     | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
     | IS NOT? kind=NULL
+    | IS NOT? kind=DISTINCT FROM right=valueExpression
     ;
 
 valueExpression
     : primaryExpression                                                                      #valueExpressionDefault
     | operator=(MINUS | PLUS | TILDE) valueExpression                                        #arithmeticUnary
     | left=valueExpression operator=(ASTERISK | SLASH | PERCENT | DIV) right=valueExpression #arithmeticBinary
-    | left=valueExpression operator=(PLUS | MINUS) right=valueExpression                     #arithmeticBinary
+    | left=valueExpression operator=(PLUS | MINUS | CONCAT_PIPE) right=valueExpression       #arithmeticBinary
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
     | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
@@ -543,12 +561,16 @@ primaryExpression
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
+    | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
+    | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
+    | POSITION '(' substr=valueExpression IN str=valueExpression ')'                           #position
     | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
-    | '(' expression (',' expression)+ ')'                                                     #rowConstructor
+    | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
+    | qualifiedName '(' (setQuantifier? namedExpression (',' namedExpression)*)? ')'
+       (OVER windowSpec)?                                                                      #functionCall
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -569,7 +591,7 @@ comparisonOperator
     ;
 
 arithmeticOperator
-    : PLUS | MINUS | ASTERISK | SLASH | PERCENT | DIV | TILDE | AMPERSAND | PIPE | HAT
+    : PLUS | MINUS | ASTERISK | SLASH | PERCENT | DIV | TILDE | AMPERSAND | PIPE | CONCAT_PIPE | HAT
     ;
 
 predicateOperator
@@ -690,7 +712,7 @@ nonReserved
     | ADD
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | LAST | FIRST | AFTER
     | MAP | ARRAY | STRUCT
-    | LATERAL | WINDOW | REDUCE | TRANSFORM | USING | SERDE | SERDEPROPERTIES | RECORDREADER
+    | LATERAL | WINDOW | REDUCE | TRANSFORM | SERDE | SERDEPROPERTIES | RECORDREADER
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
     | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | GLOBAL | TEMPORARY | OPTIONS
     | GROUPING | CUBE | ROLLUP
@@ -699,8 +721,9 @@ nonReserved
     | SET | RESET
     | VIEW | REPLACE
     | IF
+    | POSITION
     | NO | DATA
-    | START | TRANSACTION | COMMIT | ROLLBACK
+    | START | TRANSACTION | COMMIT | ROLLBACK | IGNORE
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE
     | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
@@ -826,8 +849,10 @@ TRANSACTION: 'TRANSACTION';
 COMMIT: 'COMMIT';
 ROLLBACK: 'ROLLBACK';
 MACRO: 'MACRO';
+IGNORE: 'IGNORE';
 
 IF: 'IF';
+POSITION: 'POSITION';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
@@ -847,6 +872,7 @@ DIV: 'DIV';
 TILDE: '~';
 AMPERSAND: '&';
 PIPE: '|';
+CONCAT_PIPE: '||';
 HAT: '^';
 
 PERCENTLIT: 'PERCENT';

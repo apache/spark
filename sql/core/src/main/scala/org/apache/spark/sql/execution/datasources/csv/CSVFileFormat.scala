@@ -51,12 +51,10 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    require(files.nonEmpty, "Cannot infer schema from an empty set of files")
-
     val parsedOptions =
       new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
 
-    CSVDataSource(parsedOptions).infer(sparkSession, files, parsedOptions)
+    CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
 
   override def prepareWrite(
@@ -113,8 +111,11 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
-      val parser = new UnivocityParser(dataSchema, requiredSchema, parsedOptions)
-      CSVDataSource(parsedOptions).readFile(conf, file, parser, parsedOptions)
+      val parser = new UnivocityParser(
+        StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
+        StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
+        parsedOptions)
+      CSVDataSource(parsedOptions).readFile(conf, file, parser, requiredSchema)
     }
   }
 

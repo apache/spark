@@ -195,10 +195,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     tempPath.delete()
     table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
     sql("DROP TABLE IF EXISTS refreshTable")
-    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
-    checkAnswer(
-      table("refreshTable"),
-      table("src").collect())
+    sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
+    checkAnswer(table("refreshTable"), table("src"))
     // Cache the table.
     sql("CACHE TABLE refreshTable")
     assertCached(table("refreshTable"))
@@ -331,7 +329,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         fileFormat = new ParquetFileFormat(),
         options = Map.empty)(sparkSession = spark)
 
-      val plan = LogicalRelation(relation, catalogTable = Some(tableMeta))
+      val plan = LogicalRelation(relation, tableMeta)
       spark.sharedState.cacheManager.cacheQuery(Dataset.ofRows(spark, plan))
 
       assert(spark.sharedState.cacheManager.lookupCachedData(plan).isDefined)
@@ -344,7 +342,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         bucketSpec = None,
         fileFormat = new ParquetFileFormat(),
         options = Map.empty)(sparkSession = spark)
-      val samePlan = LogicalRelation(sameRelation, catalogTable = Some(tableMeta))
+      val samePlan = LogicalRelation(sameRelation, tableMeta)
 
       assert(spark.sharedState.cacheManager.lookupCachedData(samePlan).isDefined)
     }

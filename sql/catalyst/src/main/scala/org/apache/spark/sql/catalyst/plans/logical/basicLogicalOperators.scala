@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.{CatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTypes}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -35,6 +35,14 @@ import org.apache.spark.util.Utils
  * at the top of the logical query plan.
  */
 case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * This node is inserted at the top of a subquery when it is optimized. This makes sure we can
+ * recognize a subquery as such, and it allows us to write subquery aware transformations.
+ */
+case class Subquery(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
@@ -56,7 +64,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
   override def validConstraints: Set[Expression] =
     child.constraints.union(getAliasedConstraints(projectList))
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     if (conf.cboEnabled) {
       ProjectEstimation.estimate(conf, this).getOrElse(super.computeStats(conf))
     } else {
@@ -75,7 +83,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
- *              given `generator` is empty. `outer` has no effect when `join` is false.
+ *              given `generator` is empty.
  * @param qualifier Qualifier for the attributes of generator(UDTF)
  * @param generatorOutput The output schema of the Generator.
  * @param child Children logical plan node
@@ -130,7 +138,7 @@ case class Filter(condition: Expression, child: LogicalPlan)
     child.constraints.union(predicates.toSet)
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     if (conf.cboEnabled) {
       FilterEstimation(this, conf).estimate.getOrElse(super.computeStats(conf))
     } else {
@@ -183,13 +191,13 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     }
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val leftSize = left.stats(conf).sizeInBytes
     val rightSize = right.stats(conf).sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    val isBroadcastable = left.stats(conf).isBroadcastable || right.stats(conf).isBroadcastable
-
-    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = isBroadcastable)
+    Statistics(
+      sizeInBytes = sizeInBytes,
+      hints = left.stats(conf).hints.resetForJoin())
   }
 }
 
@@ -200,7 +208,7 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
 
   override protected def validConstraints: Set[Expression] = leftConstraints
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     left.stats(conf).copy()
   }
 }
@@ -239,7 +247,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val sizeInBytes = children.map(_.stats(conf).sizeInBytes).sum
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -348,7 +356,7 @@ case class Join(
     case _ => resolvedExceptNatural
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     def simpleEstimation: Statistics = joinType match {
       case LeftAnti | LeftSemi =>
         // LeftSemi and LeftAnti won't ever be bigger than left
@@ -356,7 +364,8 @@ case class Join(
       case _ =>
         // Make sure we don't propagate isBroadcastable in other joins, because
         // they could explode the size.
-        super.computeStats(conf).copy(isBroadcastable = false)
+        val stats = super.computeStats(conf)
+        stats.copy(hints = stats.hints.resetForJoin())
     }
 
     if (conf.cboEnabled) {
@@ -365,26 +374,6 @@ case class Join(
       simpleEstimation
     }
   }
-}
-
-/**
- * A hint for the optimizer that we should broadcast the `child` if used in a join operator.
- */
-case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-
-  // set isBroadcastable to true so the child will be broadcasted
-  override def computeStats(conf: CatalystConf): Statistics =
-    super.computeStats(conf).copy(isBroadcastable = true)
-}
-
-/**
- * A general hint for the child. This node will be eliminated post analysis.
- * A pair of (name, parameters).
- */
-case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) extends UnaryNode {
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = child.output
 }
 
 /**
@@ -402,17 +391,20 @@ case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) exten
  *                  would have Map('a' -> Some('1'), 'b' -> None).
  * @param query the logical plan representing data to write to.
  * @param overwrite overwrite existing table or partitions.
- * @param ifNotExists If true, only write if the table or partition does not exist.
+ * @param ifPartitionNotExists If true, only write if the partition does not exist.
+ *                             Only valid for static partitions.
  */
 case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifNotExists: Boolean)
+    ifPartitionNotExists: Boolean)
   extends LogicalPlan {
-  assert(overwrite || !ifNotExists)
-  assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
+  // IF NOT EXISTS is only valid in INSERT OVERWRITE
+  assert(overwrite || !ifPartitionNotExists)
+  // IF NOT EXISTS is only valid in static partitions
+  assert(partition.values.forall(_.nonEmpty) || !ifPartitionNotExists)
 
   // We don't want `table` in children as sometimes we don't want to transform it.
   override def children: Seq[LogicalPlan] = query :: Nil
@@ -530,7 +522,7 @@ case class Range(
 
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
     Statistics( sizeInBytes = sizeInBytes )
   }
@@ -563,13 +555,13 @@ case class Aggregate(
     child.constraints.union(getAliasedConstraints(nonAgg))
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     def simpleEstimation: Statistics = {
       if (groupingExpressions.isEmpty) {
         Statistics(
           sizeInBytes = EstimationUtils.getOutputSize(output, outputRowCount = 1),
           rowCount = Some(1),
-          isBroadcastable = child.stats(conf).isBroadcastable)
+          hints = child.stats(conf).hints)
       } else {
         super.computeStats(conf)
       }
@@ -679,7 +671,7 @@ case class Expand(
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val sizeInBytes = super.computeStats(conf).sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -696,7 +688,7 @@ case class Expand(
  * We will transform GROUPING SETS into logical plan Aggregate(.., Expand) in Analyzer
  *
  * @param selectedGroupByExprs A sequence of selected GroupBy expressions, all exprs should
- *                     exists in groupByExprs.
+ *                     exist in groupByExprs.
  * @param groupByExprs The Group By expressions candidates.
  * @param child        Child operator
  * @param aggregations The Aggregation expressions, those non selected group by expressions
@@ -750,7 +742,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
       case _ => None
     }
   }
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val childStats = child.stats(conf)
     val rowCount: BigInt = childStats.rowCount.map(_.min(limit)).getOrElse(limit)
@@ -758,7 +750,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
     Statistics(
       sizeInBytes = EstimationUtils.getOutputSize(output, rowCount, childStats.attributeStats),
       rowCount = Some(rowCount),
-      isBroadcastable = childStats.isBroadcastable)
+      hints = childStats.hints)
   }
 }
 
@@ -770,7 +762,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
       case _ => None
     }
   }
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val childStats = child.stats(conf)
     if (limit == 0) {
@@ -779,7 +771,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
       Statistics(
         sizeInBytes = 1,
         rowCount = Some(0),
-        isBroadcastable = childStats.isBroadcastable)
+        hints = childStats.hints)
     } else {
       // The output row count of LocalLimit should be the sum of row counts from each partition.
       // However, since the number of partitions is not available here, we just use statistics of
@@ -790,11 +782,18 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
+/**
+ * Aliased subquery.
+ *
+ * @param alias the alias name for this subquery.
+ * @param child the logical plan of this subquery.
+ */
 case class SubqueryAlias(
     alias: String,
-    child: LogicalPlan,
-    view: Option[TableIdentifier])
+    child: LogicalPlan)
   extends UnaryNode {
+
+  override lazy val canonicalized: LogicalPlan = child.canonicalized
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
@@ -820,7 +819,7 @@ case class Sample(
 
   override def output: Seq[Attribute] = child.output
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val ratio = upperBound - lowerBound
     val childStats = child.stats(conf)
     var sizeInBytes = EstimationUtils.ceil(BigDecimal(childStats.sizeInBytes) * ratio)
@@ -829,7 +828,7 @@ case class Sample(
     }
     val sampledRowCount = childStats.rowCount.map(c => EstimationUtils.ceil(BigDecimal(c) * ratio))
     // Don't propagate column stats, because we don't know the distribution after a sample operation
-    Statistics(sizeInBytes, sampledRowCount, isBroadcastable = childStats.isBroadcastable)
+    Statistics(sizeInBytes, sampledRowCount, hints = childStats.hints)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
@@ -844,15 +843,23 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 }
 
 /**
+ * A base interface for [[RepartitionByExpression]] and [[Repartition]]
+ */
+abstract class RepartitionOperation extends UnaryNode {
+  def shuffle: Boolean
+  def numPartitions: Int
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
  * Returns a new RDD that has exactly `numPartitions` partitions. Differs from
  * [[RepartitionByExpression]] as this method is called directly by DataFrame's, because the user
  * asked for `coalesce` or `repartition`. [[RepartitionByExpression]] is used when the consumer
  * of the output requires some specific ordering or distribution of the data.
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
-  extends UnaryNode {
+  extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
-  override def output: Seq[Attribute] = child.output
 }
 
 /**
@@ -864,12 +871,12 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    numPartitions: Int) extends UnaryNode {
+    numPartitions: Int) extends RepartitionOperation {
 
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def shuffle: Boolean = true
 }
 
 /**
@@ -878,7 +885,7 @@ case class RepartitionByExpression(
 case object OneRowRelation extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
-  override def computeStats(conf: CatalystConf): Statistics = Statistics(sizeInBytes = 1)
+  override def computeStats(conf: SQLConf): Statistics = Statistics(sizeInBytes = 1)
 }
 
 /** A logical plan for `dropDuplicates`. */

@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.concurrent.Future
 
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
 import org.apache.spark.network.netty.SparkTransportConf
@@ -59,12 +60,22 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private val maxCoresOption = conf.getOption("spark.cores.max").map(_.toInt)
 
+  private val executorCoresOption = conf.getOption("spark.executor.cores").map(_.toInt)
+
+  private val minCoresPerExecutor = executorCoresOption.getOrElse(1)
+
   // Maximum number of cores to acquire
-  private val maxCores = maxCoresOption.getOrElse(Int.MaxValue)
+  private val maxCores = {
+    val cores = maxCoresOption.getOrElse(Int.MaxValue)
+    // Set maxCores to a multiple of smallest executor we can launch
+    cores - (cores % minCoresPerExecutor)
+  }
 
   private val useFetcherCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
 
   private val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
+
+  private val taskLabels = conf.get("spark.mesos.task.labels", "")
 
   private[this] val shutdownTimeoutMS =
     conf.getTimeAsMs("spark.mesos.coarse.shutdownTimeout", "10s")
@@ -119,11 +130,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   // Reject offers with mismatched constraints in seconds
   private val rejectOfferDurationForUnmetConstraints =
-    getRejectOfferDurationForUnmetConstraints(sc)
+    getRejectOfferDurationForUnmetConstraints(sc.conf)
 
   // Reject offers when we reached the maximum number of cores for this framework
   private val rejectOfferDurationForReachedMaxCores =
-    getRejectOfferDurationForReachedMaxCores(sc)
+    getRejectOfferDurationForReachedMaxCores(sc.conf)
 
   // A client for talking to the external shuffle service
   private val mesosExternalShuffleClient: Option[MesosExternalShuffleClient] = {
@@ -145,6 +156,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private var nextMesosTaskId = 0
 
   @volatile var appId: String = _
+
+  private var schedulerDriver: SchedulerDriver = _
 
   def newMesosTaskId(): String = {
     val id = nextMesosTaskId
@@ -175,7 +188,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val extraClassPath = conf.getOption("spark.executor.extraClassPath")
     extraClassPath.foreach { cp =>
       environment.addVariables(
-        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
+        Environment.Variable.newBuilder().setName("SPARK_EXECUTOR_CLASSPATH").setValue(cp).build())
     }
     val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
@@ -252,9 +265,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID) {}
 
   override def registered(
-      d: org.apache.mesos.SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
-    appId = frameworkId.getValue
-    mesosExternalShuffleClient.foreach(_.init(appId))
+      driver: org.apache.mesos.SchedulerDriver,
+      frameworkId: FrameworkID,
+      masterInfo: MasterInfo) {
+    this.appId = frameworkId.getValue
+    this.mesosExternalShuffleClient.foreach(_.init(appId))
+    this.schedulerDriver = driver
     markRegistered()
   }
 
@@ -293,34 +309,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   private def declineUnmatchedOffers(
-      d: org.apache.mesos.SchedulerDriver, offers: mutable.Buffer[Offer]): Unit = {
+      driver: org.apache.mesos.SchedulerDriver, offers: mutable.Buffer[Offer]): Unit = {
     offers.foreach { offer =>
-      declineOffer(d, offer, Some("unmet constraints"),
+      declineOffer(
+        driver,
+        offer,
+        Some("unmet constraints"),
         Some(rejectOfferDurationForUnmetConstraints))
-    }
-  }
-
-  private def declineOffer(
-      d: org.apache.mesos.SchedulerDriver,
-      offer: Offer,
-      reason: Option[String] = None,
-      refuseSeconds: Option[Long] = None): Unit = {
-
-    val id = offer.getId.getValue
-    val offerAttributes = toAttributeMap(offer.getAttributesList)
-    val mem = getResource(offer.getResourcesList, "mem")
-    val cpus = getResource(offer.getResourcesList, "cpus")
-    val ports = getRangeResource(offer.getResourcesList, "ports")
-
-    logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem" +
-      s" cpu: $cpus port: $ports for $refuseSeconds seconds" +
-      reason.map(r => s" (reason: $r)").getOrElse(""))
-
-    refuseSeconds match {
-      case Some(seconds) =>
-        val filters = Filters.newBuilder().setRefuseSeconds(seconds).build()
-        d.declineOffer(offer.getId, filters)
-      case _ => d.declineOffer(offer.getId)
     }
   }
 
@@ -328,11 +323,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
    * Launches executors on accepted offers, and declines unused offers. Executors are launched
    * round-robin on offers.
    *
-   * @param d SchedulerDriver
+   * @param driver SchedulerDriver
    * @param offers Mesos offers that match attribute constraints
    */
   private def handleMatchedOffers(
-      d: org.apache.mesos.SchedulerDriver, offers: mutable.Buffer[Offer]): Unit = {
+      driver: org.apache.mesos.SchedulerDriver, offers: mutable.Buffer[Offer]): Unit = {
     val tasks = buildMesosTasks(offers)
     for (offer <- offers) {
       val offerAttributes = toAttributeMap(offer.getAttributesList)
@@ -358,15 +353,19 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             s" ports: $ports")
         }
 
-        d.launchTasks(
+        driver.launchTasks(
           Collections.singleton(offer.getId),
           offerTasks.asJava)
       } else if (totalCoresAcquired >= maxCores) {
         // Reject an offer for a configurable amount of time to avoid starving other frameworks
-        declineOffer(d, offer, Some("reached spark.cores.max"),
+        declineOffer(driver,
+          offer,
+          Some("reached spark.cores.max"),
           Some(rejectOfferDurationForReachedMaxCores))
       } else {
-        declineOffer(d, offer)
+        declineOffer(
+          driver,
+          offer)
       }
     }
   }
@@ -419,9 +418,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
-            .setName("Task " + taskId)
-          taskBuilder.addAllResources(resourcesToUse.asJava)
-          taskBuilder.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
+            .setName(s"${sc.appName} $taskId")
+            .setLabels(MesosProtoUtils.mesosLabels(taskLabels))
+            .addAllResources(resourcesToUse.asJava)
+            .setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
 
           tasks(offer.getId) ::= taskBuilder.build()
           remainingResources(offerId) = resourcesLeft.asJava
@@ -480,8 +480,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   private def executorCores(offerCPUs: Int): Int = {
-    sc.conf.getInt("spark.executor.cores",
-      math.min(offerCPUs, maxCores - totalCoresAcquired))
+    executorCoresOption.getOrElse(
+      math.min(offerCPUs, maxCores - totalCoresAcquired)
+    )
   }
 
   override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
@@ -582,8 +583,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     // Close the mesos external shuffle client if used
     mesosExternalShuffleClient.foreach(_.close())
 
-    if (mesosDriver != null) {
-      mesosDriver.stop()
+    if (schedulerDriver != null) {
+      schedulerDriver.stop()
     }
   }
 
@@ -634,13 +635,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = Future.successful {
-    if (mesosDriver == null) {
+    if (schedulerDriver == null) {
       logWarning("Asked to kill executors before the Mesos driver was started.")
       false
     } else {
       for (executorId <- executorIds) {
         val taskId = TaskID.newBuilder().setValue(executorId).build()
-        mesosDriver.killTask(taskId)
+        schedulerDriver.killTask(taskId)
       }
       // no need to adjust `executorLimitOption` since the AllocationManager already communicated
       // the desired limit through a call to `doRequestTotalExecutors`.

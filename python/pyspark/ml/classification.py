@@ -63,13 +63,14 @@ class JavaClassificationModel(JavaPredictionModel):
 @inherit_doc
 class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                 HasRegParam, HasTol, HasRawPredictionCol, HasFitIntercept, HasStandardization,
-                HasThreshold, HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
+                HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
     `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
 
     This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
+    Only supports L2 regularization currently.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
@@ -108,6 +109,12 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     .. versionadded:: 2.2.0
     """
 
+    threshold = Param(Params._dummy(), "threshold",
+                      "The threshold in binary classification applied to the linear model"
+                      " prediction.  This threshold can be any real number, where Inf will make"
+                      " all predictions 0.0 and -Inf will make all predictions 1.0.",
+                      typeConverter=TypeConverters.toFloat)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
@@ -145,6 +152,18 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
 
     def _create_model(self, java_model):
         return LinearSVCModel(java_model)
+
+    def setThreshold(self, value):
+        """
+        Sets the value of :py:attr:`threshold`.
+        """
+        return self._set(threshold=value)
+
+    def getThreshold(self):
+        """
+        Gets the value of threshold or its default value.
+        """
+        return self.getOrDefault(self.threshold)
 
 
 class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
@@ -185,36 +204,33 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
     >>> bdf = sc.parallelize([
-    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
-    >>> blor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
+    ...     Row(label=1.0, weight=1.0, features=Vectors.dense(0.0, 5.0)),
+    ...     Row(label=0.0, weight=2.0, features=Vectors.dense(1.0, 2.0)),
+    ...     Row(label=1.0, weight=3.0, features=Vectors.dense(2.0, 1.0)),
+    ...     Row(label=0.0, weight=4.0, features=Vectors.dense(3.0, 3.0))]).toDF()
+    >>> blor = LogisticRegression(regParam=0.01, weightCol="weight")
     >>> blorModel = blor.fit(bdf)
     >>> blorModel.coefficients
-    DenseVector([5.5...])
+    DenseVector([-1.080..., -0.646...])
     >>> blorModel.intercept
-    -2.68...
-    >>> mdf = sc.parallelize([
-    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], [])),
-    ...     Row(label=2.0, weight=2.0, features=Vectors.dense(3.0))]).toDF()
-    >>> mlor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight",
-    ...     family="multinomial")
+    3.112...
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> mdf = spark.read.format("libsvm").load(data_path)
+    >>> mlor = LogisticRegression(regParam=0.1, elasticNetParam=1.0, family="multinomial")
     >>> mlorModel = mlor.fit(mdf)
-    >>> print(mlorModel.coefficientMatrix)
-    DenseMatrix([[-2.3...],
-                 [ 0.2...],
-                 [ 2.1... ]])
+    >>> mlorModel.coefficientMatrix
+    SparseMatrix(3, 4, [0, 1, 2, 3], [3, 2, 1], [1.87..., -2.75..., -0.50...], 1)
     >>> mlorModel.interceptVector
-    DenseVector([2.0..., 0.8..., -2.8...])
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
+    DenseVector([0.04..., -0.42..., 0.37...])
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 1.0))]).toDF()
     >>> result = blorModel.transform(test0).head()
     >>> result.prediction
-    0.0
+    1.0
     >>> result.probability
-    DenseVector([0.99..., 0.00...])
+    DenseVector([0.02..., 0.97...])
     >>> result.rawPrediction
-    DenseVector([8.22..., -8.22...])
-    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
+    DenseVector([-3.54..., 3.54...])
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> blorModel.transform(test1).head().prediction
     1.0
     >>> blor.setParams("vector")
@@ -224,8 +240,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> lr_path = temp_path + "/lr"
     >>> blor.save(lr_path)
     >>> lr2 = LogisticRegression.load(lr_path)
-    >>> lr2.getMaxIter()
-    5
+    >>> lr2.getRegParam()
+    0.01
     >>> model_path = temp_path + "/lr_model"
     >>> blorModel.save(model_path)
     >>> model2 = LogisticRegressionModel.load(model_path)
@@ -352,13 +368,13 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     def _checkThresholdConsistency(self):
         if self.isSet(self.threshold) and self.isSet(self.thresholds):
-            ts = self.getParam(self.thresholds)
+            ts = self.getOrDefault(self.thresholds)
             if len(ts) != 2:
                 raise ValueError("Logistic Regression getThreshold only applies to" +
                                  " binary classification, but thresholds has length != 2." +
-                                 " thresholds: " + ",".join(ts))
+                                 " thresholds: {0}".format(str(ts)))
             t = 1.0/(1.0 + ts[0]/ts[1])
-            t2 = self.getParam(self.threshold)
+            t2 = self.getOrDefault(self.threshold)
             if abs(t2 - t) >= 1E-5:
                 raise ValueError("Logistic Regression getThreshold found inconsistent values for" +
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
@@ -1482,31 +1498,33 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> df = sc.parallelize([
-    ...     Row(label=0.0, features=Vectors.dense(1.0, 0.8)),
-    ...     Row(label=1.0, features=Vectors.sparse(2, [], [])),
-    ...     Row(label=2.0, features=Vectors.dense(0.5, 0.5))]).toDF()
-    >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> df = spark.read.format("libsvm").load(data_path)
+    >>> lr = LogisticRegression(regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
-    >>> [x.coefficients for x in model.models]
-    [DenseVector([3.3925, 1.8785]), DenseVector([-4.3016, -6.3163]), DenseVector([-4.5855, 6.1785])]
+    >>> model.models[0].coefficients
+    DenseVector([0.5..., -1.0..., 3.4..., 4.2...])
+    >>> model.models[1].coefficients
+    DenseVector([-2.1..., 3.1..., -2.6..., -2.3...])
+    >>> model.models[2].coefficients
+    DenseVector([0.3..., -3.4..., 1.0..., -1.1...])
     >>> [x.intercept for x in model.models]
-    [-3.64747..., 2.55078..., -1.10165...]
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0))]).toDF()
+    [-2.7..., -2.5..., -1.3...]
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0, 1.0, 1.0))]).toDF()
     >>> model.transform(test0).head().prediction
-    1.0
-    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
-    >>> model.transform(test1).head().prediction
     0.0
-    >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4))]).toDF()
-    >>> model.transform(test2).head().prediction
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(4, [0], [1.0]))]).toDF()
+    >>> model.transform(test1).head().prediction
     2.0
+    >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4, 0.3, 0.2))]).toDF()
+    >>> model.transform(test2).head().prediction
+    0.0
     >>> model_path = temp_path + "/ovr_model"
     >>> model.save(model_path)
     >>> model2 = OneVsRestModel.load(model_path)
     >>> model2.transform(test0).head().prediction
-    1.0
+    0.0
 
     .. versionadded:: 2.0.0
     """

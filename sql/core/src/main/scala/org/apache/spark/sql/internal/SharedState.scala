@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.internal
 
+import java.net.URL
+import java.util.Locale
+
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
@@ -87,35 +90,42 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   /**
    * A catalog that interacts with external systems.
    */
-  val externalCatalog: ExternalCatalog =
-    SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
+  lazy val externalCatalog: ExternalCatalog = {
+    val externalCatalog = SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
       SharedState.externalCatalogClassName(sparkContext.conf),
       sparkContext.conf,
       sparkContext.hadoopConfiguration)
 
-  // Create the default database if it doesn't exist.
-  {
     val defaultDbDefinition = CatalogDatabase(
       SessionCatalog.DEFAULT_DATABASE,
       "default database",
       CatalogUtils.stringToURI(warehousePath),
       Map())
-    // Initialize default database if it doesn't exist
+    // Create default database if it doesn't exist
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
       // There may be another Spark application creating default database at the same time, here we
       // set `ignoreIfExists = true` to avoid `DatabaseAlreadyExists` exception.
       externalCatalog.createDatabase(defaultDbDefinition, ignoreIfExists = true)
     }
+
+    // Make sure we propagate external catalog events to the spark listener bus
+    externalCatalog.addListener(new ExternalCatalogEventListener {
+      override def onEvent(event: ExternalCatalogEvent): Unit = {
+        sparkContext.listenerBus.post(event)
+      }
+    })
+
+    externalCatalog
   }
 
   /**
    * A manager for global temporary views.
    */
-  val globalTempViewManager: GlobalTempViewManager = {
+  lazy val globalTempViewManager: GlobalTempViewManager = {
     // System preserved database should not exists in metastore. However it's hard to guarantee it
     // for every session, because case-sensitivity differs. Here we always lowercase it to make our
     // life easier.
-    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase
+    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase(Locale.ROOT)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw new SparkException(
         s"$globalTempDB is a system preserved database, please rename your existing database " +
@@ -146,7 +156,13 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   }
 }
 
-object SharedState {
+object SharedState extends Logging {
+  try {
+    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+  } catch {
+    case e: Error =>
+      logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+  }
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
 

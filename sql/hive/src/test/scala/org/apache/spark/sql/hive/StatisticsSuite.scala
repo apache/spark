@@ -19,11 +19,14 @@ package org.apache.spark.sql.hive
 
 import java.io.{File, PrintWriter}
 
+import org.apache.hadoop.hive.common.StatsSetupConst
 import scala.reflect.ClassTag
+import scala.util.matching.Regex
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
@@ -61,7 +64,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           val relation = spark.table("csv_table").queryExecution.analyzed.children.head
             .asInstanceOf[CatalogRelation]
 
-          val properties = relation.tableMeta.properties
+          val properties = relation.tableMeta.ignoredProperties
           assert(properties("totalSize").toLong <= 0, "external table totalSize must be <= 0")
           assert(properties("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
 
@@ -175,7 +178,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
       checkTableStats(
         textTable,
-        hasSizeInBytes = false,
+        hasSizeInBytes = true,
         expectedRowCounts = None)
 
       // noscan won't count the number of rows
@@ -215,6 +218,220 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  private def createNonPartitionedTable(
+      tabName: String,
+      analyzedBySpark: Boolean = true,
+      analyzedByHive: Boolean = true): Unit = {
+    sql(
+      s"""
+         |CREATE TABLE $tabName (key STRING, value STRING)
+         |STORED AS TEXTFILE
+         |TBLPROPERTIES ('prop1' = 'val1', 'prop2' = 'val2')
+       """.stripMargin)
+    sql(s"INSERT INTO TABLE $tabName SELECT * FROM src")
+    if (analyzedBySpark) sql(s"ANALYZE TABLE $tabName COMPUTE STATISTICS")
+    // This is to mimic the scenario in which Hive genrates statistics before we reading it
+    if (analyzedByHive) hiveClient.runSqlHive(s"ANALYZE TABLE $tabName COMPUTE STATISTICS")
+    val describeResult1 = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $tabName")
+
+    val tableMetadata =
+      spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName)).properties
+    // statistics info is not contained in the metadata of the original table
+    assert(Seq(StatsSetupConst.COLUMN_STATS_ACCURATE,
+      StatsSetupConst.NUM_FILES,
+      StatsSetupConst.NUM_PARTITIONS,
+      StatsSetupConst.ROW_COUNT,
+      StatsSetupConst.RAW_DATA_SIZE,
+      StatsSetupConst.TOTAL_SIZE).forall(!tableMetadata.contains(_)))
+
+    if (analyzedByHive) {
+      assert(StringUtils.filterPattern(describeResult1, "*numRows\\s+500*").nonEmpty)
+    } else {
+      assert(StringUtils.filterPattern(describeResult1, "*numRows\\s+500*").isEmpty)
+    }
+  }
+
+  private def extractStatsPropValues(
+      descOutput: Seq[String],
+      propKey: String): Option[BigInt] = {
+    val str = descOutput
+      .filterNot(_.contains(HiveExternalCatalog.STATISTICS_PREFIX))
+      .filter(_.contains(propKey))
+    if (str.isEmpty) {
+      None
+    } else {
+      assert(str.length == 1, "found more than one matches")
+      val pattern = new Regex(s"""$propKey\\s+(-?\\d+)""")
+      val pattern(value) = str.head.trim
+      Option(BigInt(value))
+    }
+  }
+
+  test("get statistics when not analyzed in Hive or Spark") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      createNonPartitionedTable(tabName, analyzedByHive = false, analyzedBySpark = false)
+      checkTableStats(
+        tabName, hasSizeInBytes = true, expectedRowCounts = None)
+
+      // ALTER TABLE SET TBLPROPERTIES invalidates some contents of Hive specific statistics
+      // This is triggered by the Hive alterTable API
+      val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $tabName")
+
+      val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
+      val numRows = extractStatsPropValues(describeResult, "numRows")
+      val totalSize = extractStatsPropValues(describeResult, "totalSize")
+      assert(rawDataSize.isEmpty, "rawDataSize should not be shown without table analysis")
+      assert(numRows.isEmpty, "numRows should not be shown without table analysis")
+      assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
+    }
+  }
+
+  test("alter table rename after analyze table") {
+    Seq(true, false).foreach { analyzedBySpark =>
+      val oldName = "tab1"
+      val newName = "tab2"
+      withTable(oldName, newName) {
+        createNonPartitionedTable(oldName, analyzedByHive = true, analyzedBySpark = analyzedBySpark)
+        val fetchedStats1 = checkTableStats(
+          oldName, hasSizeInBytes = true, expectedRowCounts = Some(500))
+        sql(s"ALTER TABLE $oldName RENAME TO $newName")
+        val fetchedStats2 = checkTableStats(
+          newName, hasSizeInBytes = true, expectedRowCounts = Some(500))
+        assert(fetchedStats1 == fetchedStats2)
+
+        // ALTER TABLE RENAME does not affect the contents of Hive specific statistics
+        val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $newName")
+
+        val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
+        val numRows = extractStatsPropValues(describeResult, "numRows")
+        val totalSize = extractStatsPropValues(describeResult, "totalSize")
+        assert(rawDataSize.isDefined && rawDataSize.get > 0, "rawDataSize is lost")
+        assert(numRows.isDefined && numRows.get == 500, "numRows is lost")
+        assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
+      }
+    }
+  }
+
+  test("alter table should not have the side effect to store statistics in Spark side") {
+    def getCatalogTable(tableName: String): CatalogTable = {
+      spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+    }
+
+    val table = "alter_table_side_effect"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (i string, j string)")
+      sql(s"INSERT INTO TABLE $table SELECT 'a', 'b'")
+      val catalogTable1 = getCatalogTable(table)
+      val hiveSize1 = BigInt(catalogTable1.ignoredProperties(StatsSetupConst.TOTAL_SIZE))
+
+      sql(s"ALTER TABLE $table SET TBLPROPERTIES ('prop1' = 'a')")
+
+      sql(s"INSERT INTO TABLE $table SELECT 'c', 'd'")
+      val catalogTable2 = getCatalogTable(table)
+      val hiveSize2 = BigInt(catalogTable2.ignoredProperties(StatsSetupConst.TOTAL_SIZE))
+      // After insertion, Hive's stats should be changed.
+      assert(hiveSize2 > hiveSize1)
+      // We haven't generate stats in Spark, so we should still use Hive's stats here.
+      assert(catalogTable2.stats.get.sizeInBytes == hiveSize2)
+    }
+  }
+
+  private def testAlterTableProperties(tabName: String, alterTablePropCmd: String): Unit = {
+    Seq(true, false).foreach { analyzedBySpark =>
+      withTable(tabName) {
+        createNonPartitionedTable(tabName, analyzedByHive = true, analyzedBySpark = analyzedBySpark)
+        checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
+
+        // Run ALTER TABLE command
+        sql(alterTablePropCmd)
+
+        val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $tabName")
+
+        val totalSize = extractStatsPropValues(describeResult, "totalSize")
+        assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
+
+        // ALTER TABLE SET/UNSET TBLPROPERTIES invalidates some Hive specific statistics, but not
+        // Spark specific statistics. This is triggered by the Hive alterTable API.
+        val numRows = extractStatsPropValues(describeResult, "numRows")
+        assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
+        val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
+        assert(rawDataSize.isDefined && rawDataSize.get == -1, "rawDataSize is lost")
+
+        if (analyzedBySpark) {
+          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
+        } else {
+          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = None)
+        }
+      }
+    }
+  }
+
+  test("alter table SET TBLPROPERTIES after analyze table") {
+    testAlterTableProperties("set_prop_table",
+      "ALTER TABLE set_prop_table SET TBLPROPERTIES ('foo' = 'a')")
+  }
+
+  test("alter table UNSET TBLPROPERTIES after analyze table") {
+    testAlterTableProperties("unset_prop_table",
+      "ALTER TABLE unset_prop_table UNSET TBLPROPERTIES ('prop1')")
+  }
+
+  test("add/drop partitions - managed table") {
+    val catalog = spark.sessionState.catalog
+    val managedTable = "partitionedTable"
+    withTable(managedTable) {
+      sql(
+        s"""
+           |CREATE TABLE $managedTable (key INT, value STRING)
+           |PARTITIONED BY (ds STRING, hr STRING)
+         """.stripMargin)
+
+      for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $managedTable
+             |partition (ds='$ds',hr='$hr')
+             |SELECT 1, 'a'
+           """.stripMargin)
+      }
+
+      checkTableStats(
+        managedTable, hasSizeInBytes = false, expectedRowCounts = None)
+
+      sql(s"ANALYZE TABLE $managedTable COMPUTE STATISTICS")
+
+      val stats1 = checkTableStats(
+        managedTable, hasSizeInBytes = true, expectedRowCounts = Some(4))
+
+      sql(
+        s"""
+           |ALTER TABLE $managedTable DROP PARTITION (ds='2008-04-08'),
+           |PARTITION (hr='12')
+        """.stripMargin)
+      assert(catalog.listPartitions(TableIdentifier(managedTable)).map(_.spec).toSet ==
+        Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
+
+      val stats2 = checkTableStats(
+        managedTable, hasSizeInBytes = true, expectedRowCounts = Some(4))
+      assert(stats1 == stats2)
+
+      sql(s"ANALYZE TABLE $managedTable COMPUTE STATISTICS")
+
+      val stats3 = checkTableStats(
+        managedTable, hasSizeInBytes = true, expectedRowCounts = Some(1))
+      assert(stats2.get.sizeInBytes > stats3.get.sizeInBytes)
+
+      sql(s"ALTER TABLE $managedTable ADD PARTITION (ds='2008-04-08', hr='12')")
+      sql(s"ANALYZE TABLE $managedTable COMPUTE STATISTICS")
+      val stats4 = checkTableStats(
+        managedTable, hasSizeInBytes = true, expectedRowCounts = Some(1))
+
+      assert(stats2.get.sizeInBytes > stats4.get.sizeInBytes)
+      assert(stats4.get.sizeInBytes == stats3.get.sizeInBytes)
+    }
+  }
+
   test("test statistics of LogicalRelation converted from Hive serde tables") {
     val parquetTable = "parquetTable"
     val orcTable = "orcTable"
@@ -232,7 +449,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         checkTableStats(parquetTable, hasSizeInBytes = true, expectedRowCounts = Some(500))
       }
       withSQLConf("spark.sql.hive.convertMetastoreOrc" -> "true") {
-        checkTableStats(orcTable, hasSizeInBytes = false, expectedRowCounts = None)
+        // We still can get tableSize from Hive before Analyze
+        checkTableStats(orcTable, hasSizeInBytes = true, expectedRowCounts = None)
         sql(s"ANALYZE TABLE $orcTable COMPUTE STATISTICS")
         checkTableStats(orcTable, hasSizeInBytes = true, expectedRowCounts = Some(500))
       }
@@ -254,7 +472,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(s"analyze table $tableName compute STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
 
       // Validate statistics
-      val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
       val table = hiveClient.getTable("default", tableName)
 
       val props = table.properties.filterKeys(_.startsWith("spark.sql.statistics.colStats"))
@@ -413,7 +630,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
       // Table lookup will make the table cached.
       spark.table(tableIndent)
-      statsBeforeUpdate = catalog.getCachedDataSourceTable(tableIndent)
+      statsBeforeUpdate = catalog.metastoreCatalog.getCachedDataSourceTable(tableIndent)
         .asInstanceOf[LogicalRelation].catalogTable.get.stats.get
 
       sql(s"INSERT INTO $tableName SELECT 2")
@@ -423,7 +640,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
       }
       spark.table(tableIndent)
-      statsAfterUpdate = catalog.getCachedDataSourceTable(tableIndent)
+      statsAfterUpdate = catalog.metastoreCatalog.getCachedDataSourceTable(tableIndent)
         .asInstanceOf[LogicalRelation].catalogTable.get.stats.get
     }
     (statsBeforeUpdate, statsAfterUpdate)

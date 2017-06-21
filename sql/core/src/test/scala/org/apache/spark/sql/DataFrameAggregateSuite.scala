@@ -507,7 +507,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(2.0) :: Row(2.0) :: Row(2.0) :: Nil)
   }
 
-  test("SQL decimal test (used for catching certain demical handling bugs in aggregates)") {
+  test("SQL decimal test (used for catching certain decimal handling bugs in aggregates)") {
     checkAnswer(
       decimalData.groupBy('a cast DecimalType(10, 2)).agg(avg('b cast DecimalType(10, 2))),
       Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.5)),
@@ -537,5 +537,12 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       df.groupBy("a").pivot("x").agg(count("y"), avg("y")).na.fill(0),
       Seq(Row(3, 0, 0.0, 1, 5.0), Row(2, 1, 4.0, 0, 0.0))
     )
+  }
+
+  test("aggregate function in GROUP BY") {
+    val e = intercept[AnalysisException] {
+      testData.groupBy(sum($"key")).count()
+    }
+    assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
   }
 }

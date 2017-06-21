@@ -28,11 +28,14 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.plans.logical.FunctionUtils
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
-import org.apache.spark.sql.execution.streaming.KeyedStateImpl
-import org.apache.spark.sql.types.{DataType, ObjectType, StructType}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
+import org.apache.spark.sql.execution.streaming.GroupStateImpl
+import org.apache.spark.sql.streaming.GroupStateTimeout
+import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -219,7 +222,7 @@ case class MapElementsExec(
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val (funcClass, methodName) = func match {
       case m: MapFunction[_, _] => classOf[MapFunction[_, _]] -> "call"
-      case _ => classOf[Any => Any] -> "apply"
+      case _ => FunctionUtils.getFunctionOneName(outputObjAttr.dataType, child.output(0).dataType)
     }
     val funcObj = Literal.create(func, ObjectType(funcClass))
     val callFunc = Invoke(funcObj, methodName, outputObjAttr.dataType, child.output)
@@ -353,14 +356,17 @@ case class MapGroupsExec(
 
 object MapGroupsExec {
   def apply(
-      func: (Any, Iterator[Any], LogicalKeyedState[Any]) => TraversableOnce[Any],
+      func: (Any, Iterator[Any], LogicalGroupState[Any]) => TraversableOnce[Any],
       keyDeserializer: Expression,
       valueDeserializer: Expression,
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       outputObjAttr: Attribute,
+      timeoutConf: GroupStateTimeout,
       child: SparkPlan): MapGroupsExec = {
-    val f = (key: Any, values: Iterator[Any]) => func(key, values, new KeyedStateImpl[Any](None))
+    val f = (key: Any, values: Iterator[Any]) => {
+      func(key, values, GroupStateImpl.createForBatch(timeoutConf))
+    }
     new MapGroupsExec(f, keyDeserializer, valueDeserializer,
       groupingAttributes, dataAttributes, outputObjAttr, child)
   }

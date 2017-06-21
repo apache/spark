@@ -114,8 +114,7 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
     val vectorIndexer = getIndexer
     val model = vectorIndexer.fit(densePoints1) // vectors of length 3
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(vectorIndexer, model)
 
     model.transform(densePoints1) // should work
     model.transform(sparsePoints1) // should work

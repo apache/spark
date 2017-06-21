@@ -32,17 +32,14 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-private[sql] class SparkSQLJsonProcessingException(msg: String) extends RuntimeException(msg)
-
 /**
  * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
  */
 class JacksonParser(
     schema: StructType,
-    options: JSONOptions) extends Logging {
+    val options: JSONOptions) extends Logging {
 
   import JacksonUtils._
-  import ParseModes._
   import com.fasterxml.jackson.core.JsonToken._
 
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
@@ -54,108 +51,6 @@ class JacksonParser(
 
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
-
-  private val emptyRow: Seq[InternalRow] = Seq(new GenericInternalRow(schema.length))
-
-  private val corruptFieldIndex = schema.getFieldIndex(options.columnNameOfCorruptRecord)
-  corruptFieldIndex.foreach { corrFieldIndex =>
-    require(schema(corrFieldIndex).dataType == StringType)
-    require(schema(corrFieldIndex).nullable)
-  }
-
-  @transient
-  private[this] var isWarningPrinted: Boolean = false
-
-  @transient
-  private def printWarningForMalformedRecord(record: () => UTF8String): Unit = {
-    def sampleRecord: String = {
-      if (options.wholeFile) {
-        ""
-      } else {
-        s"Sample record: ${record()}\n"
-      }
-    }
-
-    def footer: String = {
-      s"""Code example to print all malformed records (scala):
-         |===================================================
-         |// The corrupted record exists in column ${options.columnNameOfCorruptRecord}.
-         |val parsedJson = spark.read.json("/path/to/json/file/test.json")
-         |
-       """.stripMargin
-    }
-
-    if (options.permissive) {
-      logWarning(
-        s"""Found at least one malformed record. The JSON reader will replace
-           |all malformed records with placeholder null in current $PERMISSIVE_MODE parser mode.
-           |To find out which corrupted records have been replaced with null, please use the
-           |default inferred schema instead of providing a custom schema.
-           |
-           |${sampleRecord ++ footer}
-           |
-         """.stripMargin)
-    } else if (options.dropMalformed) {
-      logWarning(
-        s"""Found at least one malformed record. The JSON reader will drop
-           |all malformed records in current $DROP_MALFORMED_MODE parser mode. To find out which
-           |corrupted records have been dropped, please switch the parser mode to $PERMISSIVE_MODE
-           |mode and use the default inferred schema.
-           |
-           |${sampleRecord ++ footer}
-           |
-         """.stripMargin)
-    }
-  }
-
-  @transient
-  private def printWarningIfWholeFile(): Unit = {
-    if (options.wholeFile && corruptFieldIndex.isDefined) {
-      logWarning(
-        s"""Enabling wholeFile mode and defining columnNameOfCorruptRecord may result
-           |in very large allocations or OutOfMemoryExceptions being raised.
-           |
-         """.stripMargin)
-    }
-  }
-
-  /**
-   * This function deals with the cases it fails to parse. This function will be called
-   * when exceptions are caught during converting. This functions also deals with `mode` option.
-   */
-  private def failedRecord(record: () => UTF8String): Seq[InternalRow] = {
-    corruptFieldIndex match {
-      case _ if options.failFast =>
-        if (options.wholeFile) {
-          throw new SparkSQLJsonProcessingException("Malformed line in FAILFAST mode")
-        } else {
-          throw new SparkSQLJsonProcessingException(s"Malformed line in FAILFAST mode: ${record()}")
-        }
-
-      case _ if options.dropMalformed =>
-        if (!isWarningPrinted) {
-          printWarningForMalformedRecord(record)
-          isWarningPrinted = true
-        }
-        Nil
-
-      case None =>
-        if (!isWarningPrinted) {
-          printWarningForMalformedRecord(record)
-          isWarningPrinted = true
-        }
-        emptyRow
-
-      case Some(corruptIndex) =>
-        if (!isWarningPrinted) {
-          printWarningIfWholeFile()
-          isWarningPrinted = true
-        }
-        val row = new GenericInternalRow(schema.length)
-        row.update(corruptIndex, record())
-        Seq(row)
-    }
-  }
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
@@ -230,16 +125,11 @@ class JacksonParser(
 
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toFloat
-          } else {
-            throw new SparkSQLJsonProcessingException(s"Cannot parse $value as FloatType.")
+          parser.getText match {
+            case "NaN" => Float.NaN
+            case "Infinity" => Float.PositiveInfinity
+            case "-Infinity" => Float.NegativeInfinity
+            case other => throw new RuntimeException(s"Cannot parse $other as FloatType.")
           }
       }
 
@@ -250,16 +140,11 @@ class JacksonParser(
 
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toDouble
-          } else {
-            throw new SparkSQLJsonProcessingException(s"Cannot parse $value as DoubleType.")
+          parser.getText match {
+            case "NaN" => Double.NaN
+            case "Infinity" => Double.PositiveInfinity
+            case "-Infinity" => Double.NegativeInfinity
+            case other => throw new RuntimeException(s"Cannot parse $other as DoubleType.")
           }
       }
 
@@ -391,10 +276,9 @@ class JacksonParser(
 
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
-      // SparkSQLJsonProcessingException and this exception will be caught by
-      // `parse` method.
-      throw new SparkSQLJsonProcessingException(
-        s"Failed to parse a value for data type $dataType (current token: $token).")
+      // RuntimeException and this exception will be caught by `parse` method.
+      throw new RuntimeException(
+        s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
   }
 
   /**
@@ -466,14 +350,14 @@ class JacksonParser(
         parser.nextToken() match {
           case null => Nil
           case _ => rootConverter.apply(parser) match {
-            case null => throw new SparkSQLJsonProcessingException("Root converter returned null")
+            case null => throw new RuntimeException("Root converter returned null")
             case rows => rows
           }
         }
       }
     } catch {
-      case _: JsonProcessingException | _: SparkSQLJsonProcessingException =>
-        failedRecord(() => recordLiteral(record))
+      case e @ (_: RuntimeException | _: JsonProcessingException) =>
+        throw BadRecordException(() => recordLiteral(record), () => None, e)
     }
   }
 }
