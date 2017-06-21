@@ -467,11 +467,6 @@ case class DataSource(
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
         planForWritingFileFormat(format, mode, data)
-      case _: ConsoleSinkProvider =>
-        val numRowsToShow = caseInsensitiveOptions.get("numRows").map(_.toInt).getOrElse(20)
-        val isTruncated = caseInsensitiveOptions.get("truncate").map(_.toBoolean).getOrElse(true)
-        Dataset.ofRows(sparkSession, data).show(numRowsToShow, isTruncated)
-        data
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
