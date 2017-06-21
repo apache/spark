@@ -151,12 +151,26 @@ package object config {
       .createOptional
   // End blacklist confs
 
+  private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
+    ConfigBuilder("spark.files.fetchFailure.unRegisterOutputOnHost")
+      .doc("Whether to un-register all the outputs on the host in condition that we receive " +
+        " a FetchFailure. This is set default to false, which means, we only un-register the " +
+        " outputs related to the exact executor(instead of the host) on a FetchFailure.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
       .withAlternative("spark.scheduler.listenerbus.eventqueue.size")
       .intConf
       .checkValue(_ > 0, "The capacity of listener bus event queue must not be negative")
       .createWithDefault(10000)
+
+  private[spark] val LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED =
+    ConfigBuilder("spark.scheduler.listenerbus.metrics.maxListenerClassesTimed")
+      .internal()
+      .intConf
+      .createWithDefault(128)
 
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
