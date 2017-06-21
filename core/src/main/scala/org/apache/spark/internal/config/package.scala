@@ -311,7 +311,8 @@ package object config {
 
   private[spark] val SHUFFLE_REGISTRATION_MAX_ATTEMPTS =
     ConfigBuilder("spark.shuffle.registration.maxAttempts")
-      .doc("When we fail to register to the external shuffle service, we will retry for maxAttempts times.")
+      .doc("When we fail to register to the external shuffle service, we will " +
+        "retry for maxAttempts times.")
       .intConf
       .createWithDefault(3)
 
