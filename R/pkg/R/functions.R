@@ -40,7 +40,7 @@ NULL
 #'
 #' @param x Column to compute on.
 #' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
-#'               x Column to DateType or TimestampType. For \code{trunc}, it is the  string used
+#'               x Column to DateType or TimestampType. For \code{trunc}, it is the string used
 #'               for specifying the truncation method. For example, "year", "yyyy", "yy" for
 #'               truncate by year, or "month", "mon", "mm" for truncate by month.
 #' @param ... additional argument(s).
@@ -64,7 +64,7 @@ NULL
 #'
 #' @param y Column to compute on.
 #' @param x For class Column, it is used to perform arithmetic operations with \code{y}.
-#'          For class numeric, it is the number of months or days to be added to \code{y}.
+#'          For class numeric, it is the number of months or days to be added to or subtracted from \code{y}.
 #'          For class character, then it is
 #'          \itemize{
 #'          \item \code{date_format}: date format specification.
@@ -598,7 +598,7 @@ setMethod("hash",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{dayofmonth}: Extracts the day of the month as an integer from a
 #' given date/timestamp/string.
 #'
@@ -620,7 +620,7 @@ setMethod("dayofmonth",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{dayofyear}: Extracts the day of the year as an integer from a
 #' given date/timestamp/string.
 #'
@@ -812,7 +812,7 @@ setMethod("hex",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{hour}: Extracts the hours as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
@@ -943,7 +943,7 @@ setMethod("last",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{last_day}: Given a date column, returns the last day of the month which the
 #' given date belongs to. For example, input "2015-07-27" returns "2015-07-31" since
 #' July 31 is the last day of the month in July 2015.
@@ -1177,7 +1177,7 @@ setMethod("min",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{minute}: Extracts the minutes as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
@@ -1219,7 +1219,7 @@ setMethod("monotonically_increasing_id",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{month}: Extracts the month as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
@@ -1253,7 +1253,7 @@ setMethod("negate",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
@@ -1394,7 +1394,7 @@ setMethod("sd",
             stddev_samp(x)
           })
 
-#' @section Details:
+#' @details
 #' \code{second}: Extracts the seconds as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
@@ -1749,7 +1749,7 @@ setMethod("toRadians",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{to_date}: Converts the column into a DateType. You may optionally specify
 #' a format according to the rules in:
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
@@ -1766,7 +1766,10 @@ setMethod("toRadians",
 #'
 #' tmp <- createDataFrame(data.frame(time_string = dts))
 #' tmp2 <- mutate(tmp, date1 = to_date(tmp$time_string),
-#'                    date2 = to_date(tmp$time_string, "yyyy-MM-dd"))
+#'                    date2 = to_date(tmp$time_string, "yyyy-MM-dd"),
+#'                    date3 = date_format(tmp$time_string, "MM/dd/yyy"),
+#'                    time1 = to_timestamp(tmp$time_string),
+#'                    time2 = to_timestamp(tmp$time_string, "yyyy-MM-dd"))
 #' head(tmp2)}
 #' @note to_date(Column) since 1.5.0
 setMethod("to_date",
@@ -1819,7 +1822,7 @@ setMethod("to_json", signature(x = "Column"),
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{to_timestamp}: Converts the column into a TimestampType. You may optionally specify
 #' a format according to the rules in:
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
@@ -1989,7 +1992,7 @@ setMethod("var_samp",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{weekofyear}: Extracts the week number as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
@@ -2003,7 +2006,7 @@ setMethod("weekofyear",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{year}: Extracts the year as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
@@ -2041,7 +2044,7 @@ setMethod("atan2", signature(y = "Column"),
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{datediff}: Returns the number of days from \code{y} to \code{x}.
 #'
 #' @rdname column_datetime_diff_functions
@@ -2050,7 +2053,6 @@ setMethod("atan2", signature(y = "Column"),
 #' @examples
 #'
 #' \dontrun{
-#' set.seed(11)
 #' tmp <- createDataFrame(data.frame(time_string1 = as.POSIXct(dts),
 #'              time_string2 = as.POSIXct(dts[order(runif(length(dts)))])))
 #' tmp2 <- mutate(tmp, datediff = datediff(tmp$time_string1, tmp$time_string2),
@@ -2112,7 +2114,7 @@ setMethod("levenshtein", signature(y = "Column"),
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{months_between}: Returns number of months between dates \code{y} and \code{x}.
 #'
 #' @rdname column_datetime_diff_functions
@@ -2336,7 +2338,7 @@ setMethod("n", signature(x = "Column"),
             count(x)
           })
 
-#' @section Details:
+#' @details
 #' \code{date_format}: Converts a date/timestamp/string to a value of string in the format
 #' specified by the date format given by the second argument. A pattern could be for instance
 #' \code{dd.MM.yyyy} and could return a string like '18.03.1993'. All
@@ -2394,7 +2396,7 @@ setMethod("from_json", signature(x = "Column", schema = "structType"),
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{from_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day in UTC,
 #' returns another timestamp that corresponds to the same time of day in the given timezone.
 #'
@@ -2441,7 +2443,7 @@ setMethod("instr", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{next_day}: Given a date column, returns the first date which is later than the value of
 #' the date column that is on the specified day of the week. For example,
 #' \code{next_day('2015-07-27', "Sunday")} returns 2015-08-02 because that is the first Sunday
@@ -2458,7 +2460,7 @@ setMethod("next_day", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{to_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day
 #' in the given timezone, returns another timestamp that corresponds to the same time of day in UTC.
 #'
@@ -2472,8 +2474,8 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' @section Details:
-#' \code{add_months}: Returns the date that is numMonths after startDate.
+#' @details
+#' \code{add_months}: Returns the date that is numMonths (\code{x}) after startDate (\code{y}).
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases add_months add_months,Column,numeric-method
@@ -2493,7 +2495,7 @@ setMethod("add_months", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{date_add}: Returns the date that is \code{x} days after.
 #'
 #' @rdname column_datetime_diff_functions
@@ -2506,7 +2508,7 @@ setMethod("date_add", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{date_sub}: Returns the date that is \code{x} days before.
 #'
 #' @rdname column_datetime_diff_functions
@@ -2724,14 +2726,14 @@ setMethod("format_string", signature(format = "character", x = "Column"),
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a
-#' string representing the timestamp of that moment in the current system time zone in the given format.
-#' See \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#' string representing the timestamp of that moment in the current system time zone in the JVM in the
+#' given format. See \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
 #' Customizing Formats} for available options.
 #'
 #' @rdname column_datetime_functions
-#
+#'
 #' @aliases from_unixtime from_unixtime,Column-method
 #' @export
 #' @note from_unixtime since 1.5.0
@@ -3050,7 +3052,7 @@ setMethod("translate",
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{unix_timestamp}: Gets current Unix timestamp in seconds.
 #'
 #' @rdname column_datetime_functions
@@ -3855,7 +3857,7 @@ setMethod("input_file_name", signature("missing"),
             column(jc)
           })
 
-#' @section Details:
+#' @details
 #' \code{trunc}: Returns date truncated to the unit specified by the format.
 #'
 #' @rdname column_datetime_functions
