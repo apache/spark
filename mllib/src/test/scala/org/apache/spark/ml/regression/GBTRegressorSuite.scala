@@ -166,6 +166,45 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   /////////////////////////////////////////////////////////////////////////////
+  // Tests of feature subset strategy
+  /////////////////////////////////////////////////////////////////////////////
+  test("Tests of feature subset strategy") {
+    val numClasses = 2
+    val gbt = new GBTRegressor()
+      .setMaxDepth(3)
+      .setMaxIter(5)
+      .setSubsamplingRate(1.0)
+      .setStepSize(0.5)
+      .setSeed(123)
+      .setFeatureSubsetStrategy("all")
+
+    // In this data, feature 1 is very important.
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
+
+    val importances = gbt.fit(df).featureImportances
+    val mostImportantFeature = importances.argmax
+    assert(mostImportantFeature === 1)
+    assert(importances.toArray.sum === 1.0)
+    assert(importances.toArray.forall(_ >= 0.0))
+
+    val gbtWithFeatureSubset = new GBTRegressor()
+      .setMaxDepth(3)
+      .setMaxIter(5)
+      .setSubsamplingRate(1.0)
+      .setStepSize(0.5)
+      .setSeed(123)
+      .setFeatureSubsetStrategy("1")
+    val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
+    val mostIF = importanceFeatures.argmax
+    assert(!(mostImportantFeature === mostIF))
+    assert(importanceFeatures.toArray.sum === 1.0)
+    assert(importanceFeatures.toArray.forall(_ >= 0.0))
+    assert(!(importanceFeatures.toDense.values.deep === importances.toDense.values.deep))
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
@@ -201,7 +240,7 @@ private object GBTRegressorSuite extends SparkFunSuite {
       categoricalFeatures: Map[Int, Int]): Unit = {
     val numFeatures = data.first().features.size
     val oldBoostingStrategy = gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
-    val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt, "all")
+    val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = gbt.fit(newData)

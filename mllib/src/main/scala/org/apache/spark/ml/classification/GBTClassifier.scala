@@ -137,6 +137,7 @@ class GBTClassifier @Since("1.4.0") (
   override def setStepSize(value: Double): this.type = set(stepSize, value)
 
   /** @group setParam */
+  @Since("2.3.0")
   override def setFeatureSubsetStrategy(value: String): this.type =
     set(featureSubsetStrategy, value)
 
@@ -177,7 +178,7 @@ class GBTClassifier @Since("1.4.0") (
     instr.logNumClasses(numClasses)
 
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
-      $(seed), getFeatureSubsetStrategy)
+      $(seed), $(featureSubsetStrategy))
     val m = new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
     instr.logSuccess(m)
     m
@@ -197,6 +198,7 @@ object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
   @Since("2.0.0")
   override def load(path: String): GBTClassifier = super.load(path)
 
+  @Since("2.3.0")
   final val supportedFeatureSubsetStrategies: Array[String] =
     TreeEnsembleParams.supportedFeatureSubsetStrategies
 }

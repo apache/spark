@@ -290,12 +290,10 @@ private[spark] object GradientBoostedTrees extends Logging {
     logDebug("##########")
     logDebug("Building tree 0")
     logDebug("##########")
-    logDebug("Featuer Subset Strategy " + featureSubsetStrategy)
 
     // Initialize tree
     timer.start("building tree 0")
     val firstTree = new DecisionTreeRegressor().setSeed(seed)
-
     val firstTreeModel = firstTree.train(input, treeStrategy, featureSubsetStrategy)
     val firstTreeWeight = 1.0
     baseLearners(0) = firstTreeModel
@@ -329,7 +327,6 @@ private[spark] object GradientBoostedTrees extends Logging {
       logDebug("###################################################")
 
       val dt = new DecisionTreeRegressor().setSeed(seed + m)
-
       val model = dt.train(data, treeStrategy, featureSubsetStrategy)
       timer.stop(s"building tree $m")
       // Update partial model
