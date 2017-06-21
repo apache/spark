@@ -33,7 +33,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
 
   test("generated projections on wider table") {
     val N = 1000
-    val wideRow1 = new GenericInternalRow(N)
+    val wideRow1 = new GenericInternalRow((0 until N).toArray[Any])
     val schema1 = StructType((1 to N).map(i => StructField("", IntegerType)))
     val wideRow2 = new GenericInternalRow(
       (0 until N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
@@ -84,7 +84,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
 
    test("generated projections on wider table requiring class-splitting") {
     val N = 4000
-    val wideRow1 = new GenericInternalRow(N)
+    val wideRow1 = new GenericInternalRow((0 until N).toArray[Any])
     val schema1 = StructType((1 to N).map(i => StructField("", IntegerType)))
     val wideRow2 = new GenericInternalRow(
       (0 until N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
