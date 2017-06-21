@@ -17,6 +17,7 @@
 
 package org.apache.spark.metrics
 
+import java.lang.reflect.Constructor
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
@@ -25,7 +26,7 @@ import scala.collection.mutable
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
@@ -195,9 +196,38 @@ private[spark] class MetricsSystem private (
       val classPath = kv._2.getProperty("class")
       if (null != classPath) {
         try {
-          val sink = Utils.classForName(classPath)
-            .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-            .newInstance(kv._2, registry, securityMgr)
+          val sinkConstructor = Utils.classForName(classPath)
+            .getConstructors.asInstanceOf[Array[Constructor[_ <: Sink]]]
+          val constructorNotTakingSparkConf = sinkConstructor.find { c =>
+            c.getParameterTypes.sameElements(Array(classOf[Properties],
+              classOf[MetricRegistry],
+              classOf[SecurityManager]))
+          }
+          lazy val constructorTakingSparkConf = sinkConstructor.find { c =>
+            c.getParameterTypes.sameElements(Array(classOf[Properties],
+              classOf[MetricRegistry],
+              classOf[SecurityManager],
+              classOf[SparkConf]))
+          }
+
+          val sink = {
+            if (constructorNotTakingSparkConf.isDefined) {
+              constructorNotTakingSparkConf.get.newInstance(kv._2, registry, securityMgr)
+            }
+            else if (constructorTakingSparkConf.isDefined) {
+              constructorTakingSparkConf.get.newInstance(kv._2, registry, securityMgr, conf)
+            }
+            else {
+              // scalastyle:off
+              throw new SparkException(s"""The constructor for $classPath must conform
+                                           |1. (Properties, MetricRegistry, SecurityManager)
+                                           |2. (Properties, MetricRegistry, SecurityManager, SparkConf)
+                                           |Please follow constructor patterns above.
+                                        """)
+              // scalastyle:on
+            }
+          }
+
           if (kv._1 == "servlet") {
             metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
           } else {
