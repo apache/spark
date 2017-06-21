@@ -978,7 +978,7 @@ private[spark] object Utils extends Logging {
       return retval
     }
 
-    val retval = (hostPort.substring(0, indx).trim(), hostPort.substring(indx + 1).trim().toInt)
+    val retval = (hostPort.substring(0, indx).trim(), hostPort.substring(indx + 1).replaceAll("[^0-9]", "").toInt)
     hostPortParseResults.putIfAbsent(hostPort, retval)
     hostPortParseResults.get(hostPort)
   }
