@@ -46,8 +46,8 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         val partitionDir = new Path(
           CatalogUtils.URIToString(makeQualifiedPath(file.getCanonicalPath)), s"p1=$p1/p2=$p2")
         sparkContext
-          .parallelize(for (i <- 1 to 3) yield (i, s"val_$i"))
-          .toDF("a", "b")
+          .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
+          .toDF("a", "b", "p1")
           .write
           .orc(partitionDir.toString)
       }

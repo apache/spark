@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
 case class OrcParData(intField: Int, stringField: String)
 
 // The data that also includes the partitioning key
-case class OrcParDataWithKey(intField: Int, stringField: String)
+case class OrcParDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 // TODO This test suite duplicates ParquetPartitionDiscoverySuite a lot
 class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
@@ -133,7 +133,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
         ps <- Seq("foo", "bar")
       } {
         makeOrcFile(
-          (1 to 10).map(i => OrcParDataWithKey(i, i.toString)),
+          (1 to 10).map(i => OrcParDataWithKey(i, pi, i.toString, ps)),
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
@@ -146,7 +146,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, pi, ps))
+          } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
           sql("SELECT intField, pi FROM t"),
@@ -161,14 +161,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, 1, ps))
+          } yield Row(i, 1, i.toString, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, "foo"))
+          } yield Row(i, pi, i.toString, "foo"))
       }
     }
   }
@@ -224,7 +224,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
         ps <- Seq("foo", null.asInstanceOf[String])
       } {
         makeOrcFile(
-          (1 to 10).map(i => OrcParDataWithKey(i, i.toString)),
+          (1 to 10).map(i => OrcParDataWithKey(i, pi, i.toString, ps)),
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
@@ -240,14 +240,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", null.asInstanceOf[String])
-          } yield Row(i, i.toString, pi, ps))
+          } yield Row(i, pi, i.toString, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, null))
+          } yield Row(i, pi, i.toString, null))
       }
     }
   }
