@@ -694,28 +694,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       }
     }
 
-    // Check JSON format
-    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        withTempDir { src =>
-          Seq(1).toDF(c0).write.mode("overwrite").json(s"$src/$c1=1")
-          val e = intercept[AnalysisException] {
-            spark.read.json(src.toString)
+    // Check JSON/Parquet format
+    Seq("json", "parquet").foreach { case format =>
+      Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          withTempDir { src =>
+            Seq(1).toDF(c0).write.format(format).mode("overwrite").save(s"$src/$c1=1")
+            val e = intercept[AnalysisException] {
+              spark.read.format(format).load(src.toString)
+            }
+            assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
           }
-          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
-        }
-      }
-    }
-
-    // Check Parquet format
-    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        withTempDir { src =>
-          Seq(1).toDF(c0).write.mode("overwrite").parquet(s"$src/$c1=1")
-          val e = intercept[AnalysisException] {
-            spark.read.parquet(src.toString)
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
         }
       }
     }
