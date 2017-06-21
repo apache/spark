@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.bus
 
+import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import com.codahale.metrics.Timer
@@ -53,6 +54,7 @@ private[spark] abstract class ListenerBusQueue (
   @volatile private var numberOfDrop = 0
 
   private val stopped = new AtomicBoolean(false)
+  private val empty = new Semaphore(0)
 
   private[scheduler] val metrics =
     new QueueMetrics(busName, numberOfEvents, withEventProcessingTime)
@@ -62,8 +64,13 @@ private[spark] abstract class ListenerBusQueue (
     override def run(): Unit = Utils.tryOrStopSparkContext(sparkContext) {
       LiveListenerBus.withinListenerThread.withValue(true) {
         val oTimer = metrics.eventProcessingTime
-        while (!stopped.get() || numberOfEvents.get() > 0) {
-          if (numberOfEvents.get() > 0) {
+        var nbElem: Int = 0
+        do {
+          nbElem = numberOfEvents.get()
+          if (nbElem == 0) {
+            empty.acquire(1)
+            nbElem = numberOfEvents.get()
+          } else {
             val timerContext = oTimer.map(_.time())
             try {
               consumeEvent(circularBuffer(readIndex))
@@ -75,10 +82,8 @@ private[spark] abstract class ListenerBusQueue (
             circularBuffer(readIndex) = null // clean reference
             numberOfEvents.decrementAndGet()
             readIndex = (readIndex + 1) % bufferSize
-          } else {
-             Thread.sleep(1) // give more chance for producer thread to be scheduled
           }
-        }
+        } while (!stopped.get() || nbElem > 0)
       }
     }
   }
@@ -98,6 +103,7 @@ private[spark] abstract class ListenerBusQueue (
     if (!stopped.get()) {
       throw new IllegalStateException(s"$busName was not asked for stop !")
     }
+    empty.release(1) // unblock the consumer if the qeue is empty
     consumerThread.join()
   }
 
@@ -105,7 +111,10 @@ private[spark] abstract class ListenerBusQueue (
     if (eventFilter(event)) {
       if (numberOfEvents.get() < bufferSize) {
         circularBuffer(writeIndex) = event
-        numberOfEvents.incrementAndGet()
+        if (numberOfEvents.incrementAndGet() == 1) {
+          // The queue was empty
+          empty.release(1)
+        }
         writeIndex = (writeIndex + 1) % bufferSize
         metrics.numEventsPosted.inc()
       } else {
