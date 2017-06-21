@@ -1767,24 +1767,35 @@ class Dataset[T] private[sql](
     leftPlan.assertAnalyzed()
     rightPlan.assertAnalyzed()
 
-    // Builds a project list for `other` based on `logicalPlan` output names
+    // Check column name duplication
     val resolver = sparkSession.sessionState.analyzer.resolver
-    val rightProjectList = mutable.ArrayBuffer.empty[Attribute]
+    val leftOutputAttrs = leftPlan.analyzed.output
     val rightOutputAttrs = rightPlan.analyzed.output
-    for (lattr <- leftPlan.analyzed.output) {
-      // To handle duplicate names, we first compute diff between `rightOutputAttrs` and
-      // already-found attrs in `rightProjectList`.
-      rightOutputAttrs.diff(rightProjectList).find { rattr => resolver(lattr.name, rattr.name)}
-          .map(rightProjectList.append(_)).getOrElse {
+    // SchemaUtils.checkColumnNameDuplication(
+    //   leftOutputAttrs.map(_.name),
+    //   "in unionByName",
+    //   sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    // SchemaUtils.checkColumnNameDuplication(
+    //   rightOutputAttrs.map(_.name),
+    //   "in unionByName",
+    //   sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
+    // Builds a project list for `other` based on `logicalPlan` output names
+    val rightProjectList = leftOutputAttrs.map { lattr =>
+      rightOutputAttrs.find { rattr => resolver(lattr.name, rattr.name) }.getOrElse {
         throw new AnalysisException(
           s"""Cannot resolve column name "${lattr.name}" among """ +
             s"""(${rightOutputAttrs.map(_.name).mkString(", ")})""")
       }
     }
 
+    // Delegates failure checks to `CheckAnalysis`
+    val notFoundAttrs = rightOutputAttrs.diff(rightProjectList)
+    val rightChild = Project(rightProjectList ++ notFoundAttrs, rightPlan.analyzed)
+
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(leftPlan.analyzed, Project(rightProjectList, rightPlan.analyzed)))
+    CombineUnions(Union(leftPlan.analyzed, rightChild))
   }
 
   /**
