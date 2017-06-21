@@ -1566,6 +1566,8 @@ Apart from these, the following properties are also available, and may be useful
     of this setting is to act as a safety-net to prevent runaway uncancellable tasks from rendering
     an executor unusable.
   </td>
+</tr>
+<tr>
   <td><code>spark.stage.maxConsecutiveAttempts</code></td>
   <td>4</td>
   <td>
