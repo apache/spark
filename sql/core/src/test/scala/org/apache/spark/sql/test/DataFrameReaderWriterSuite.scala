@@ -694,10 +694,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         withTempDir { src =>
+          // Check write path
+          var e = intercept[AnalysisException] {
+            Seq((1, 1)).toDF(c0, c1).write.mode("overwrite").csv(src.toString)
+          }
+          assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
+
+          // Check read path
           Seq("1,1").toDF().write.mode("overwrite").text(src.toString)
 
           // data schema only
-          var e = intercept[AnalysisException] {
+          e = intercept[AnalysisException] {
             spark.read.schema(s"$c0 INT, $c1 INT").csv(src.toString)
           }
           assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
@@ -725,10 +732,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         withTempDir { src =>
+          // Check write path
+          var e = intercept[AnalysisException] {
+            Seq((1, 1)).toDF(c0, c1).write.mode("overwrite").csv(src.toString)
+          }
+          assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
+
+          // Check read path
           Seq(s"""{"$c0":1, "$c1":1}""").toDF().write.mode("overwrite").text(src.toString)
 
           // data schema only
-          var e = intercept[AnalysisException] {
+          e = intercept[AnalysisException] {
             spark.read.schema(s"$c0 INT, $c1 INT").json(src.toString)
           }
           assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
@@ -753,10 +767,17 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         withTempDir { src =>
+          // Check write path
+          var e = intercept[AnalysisException] {
+            Seq((1, 1)).toDF(c0, c1).write.mode("overwrite").csv(src.toString)
+          }
+          assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
+
+          // Check read path
           Seq((1, 1)).toDF("c0", "c1").write.mode("overwrite").parquet(src.toString)
 
           // data schema only
-          var e = intercept[AnalysisException] {
+          e = intercept[AnalysisException] {
             spark.read.schema(s"$c0 INT, $c1 INT").parquet(src.toString)
           }
           assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
