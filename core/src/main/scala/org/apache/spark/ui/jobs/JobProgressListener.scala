@@ -528,13 +528,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         new StageUIData
       })
       val taskData = stageData.taskData.get(taskId)
-      val accumsFiltered = if (conf.get(TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES)) {
-        accumUpdates
-      } else {
-        accumUpdates.filter(info => info.name.isDefined && info.update.isDefined && info.name !=
-          InternalAccumulator.UPDATED_BLOCK_STATUSES)
-      }
-      val metrics = TaskMetrics.fromAccumulatorInfos(accumsFiltered)
+      val metrics = TaskMetrics.fromAccumulatorInfos(accumUpdates)
       taskData.foreach { t =>
         if (!t.taskInfo.finished) {
           updateAggregateMetrics(stageData, executorMetricsUpdate.execId, metrics, t.metrics)
