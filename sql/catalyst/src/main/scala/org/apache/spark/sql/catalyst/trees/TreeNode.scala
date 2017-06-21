@@ -340,8 +340,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
               arg
             }
           case tuple@(arg1: TreeNode[_], arg2: TreeNode[_]) =>
-            val newChild1 = f(arg1.asInstanceOf[BaseType])
-            val newChild2 = f(arg2.asInstanceOf[BaseType])
+            val newChild1 = if (containsChild(arg1)) {
+              f(arg1.asInstanceOf[BaseType])
+            } else {
+              arg1.asInstanceOf[BaseType]
+            }
+
+            val newChild2 = if (containsChild(arg2)) {
+              f(arg2.asInstanceOf[BaseType])
+            } else {
+              arg2.asInstanceOf[BaseType]
+            }
+
             if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
               changed = true
               (newChild1, newChild2)
@@ -519,7 +529,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   protected def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
   /**
-   * Appends the string represent of this node and its children to the given StringBuilder.
+   * Appends the string representation of this node and its children to the given StringBuilder.
    *
    * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
    * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and

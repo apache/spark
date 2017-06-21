@@ -80,7 +80,7 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode wi
       protected boolean stopEarly() {
         return $stopEarly;
       }
-    """)
+    """, inlineToOuterClass = true)
     val countTerm = ctx.freshName("count")
     ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
     s"""

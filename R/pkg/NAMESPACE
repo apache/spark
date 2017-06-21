@@ -63,6 +63,7 @@ exportMethods("glm",
               "spark.als",
               "spark.kstest",
               "spark.logit",
+              "spark.decisionTree",
               "spark.randomForest",
               "spark.gbt",
               "spark.bisectingKmeans",
@@ -356,6 +357,7 @@ exportMethods("%<=>%",
               "to_utc_timestamp",
               "translate",
               "trim",
+              "trunc",
               "unbase64",
               "unhex",
               "unix_timestamp",
@@ -414,6 +416,8 @@ export("as.DataFrame",
        "print.summary.GeneralizedLinearRegressionModel",
        "read.ml",
        "print.summary.KSTest",
+       "print.summary.DecisionTreeRegressionModel",
+       "print.summary.DecisionTreeClassificationModel",
        "print.summary.RandomForestRegressionModel",
        "print.summary.RandomForestClassificationModel",
        "print.summary.GBTRegressionModel",
@@ -452,6 +456,8 @@ S3method(print, structField)
 S3method(print, structType)
 S3method(print, summary.GeneralizedLinearRegressionModel)
 S3method(print, summary.KSTest)
+S3method(print, summary.DecisionTreeRegressionModel)
+S3method(print, summary.DecisionTreeClassificationModel)
 S3method(print, summary.RandomForestRegressionModel)
 S3method(print, summary.RandomForestClassificationModel)
 S3method(print, summary.GBTRegressionModel)

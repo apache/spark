@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
-abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
+abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstraints with Logging {
 
   private var _analyzed: Boolean = false
 
@@ -347,7 +347,7 @@ abstract class UnaryNode extends LogicalPlan {
     }
 
     // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = child.stats(conf).isBroadcastable)
+    Statistics(sizeInBytes = sizeInBytes, hints = child.stats(conf).hints)
   }
 }
 

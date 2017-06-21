@@ -457,15 +457,15 @@ class SQLTests(ReusedPySparkTestCase):
             df.select(add_three("id").alias("plus_three")).collect()
         )
 
-    def test_wholefile_json(self):
+    def test_multiLine_json(self):
         people1 = self.spark.read.json("python/test_support/sql/people.json")
         people_array = self.spark.read.json("python/test_support/sql/people_array.json",
-                                            wholeFile=True)
+                                            multiLine=True)
         self.assertEqual(people1.collect(), people_array.collect())
 
-    def test_wholefile_csv(self):
+    def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
-            "python/test_support/sql/ages_newlines.csv", wholeFile=True)
+            "python/test_support/sql/ages_newlines.csv", multiLine=True)
         expected = [Row(_c0=u'Joe', _c1=u'20', _c2=u'Hi,\nI am Jeo'),
                     Row(_c0=u'Tom', _c1=u'30', _c2=u'My name is Tom'),
                     Row(_c0=u'Hyukjin', _c1=u'25', _c2=u'I am Hyukjin\n\nI love Spark!')]
@@ -1697,40 +1697,58 @@ class SQLTests(ReusedPySparkTestCase):
         schema = StructType([
             StructField("name", StringType(), True),
             StructField("age", IntegerType(), True),
-            StructField("height", DoubleType(), True)])
+            StructField("height", DoubleType(), True),
+            StructField("spy", BooleanType(), True)])
 
         # fillna shouldn't change non-null values
-        row = self.spark.createDataFrame([(u'Alice', 10, 80.1)], schema).fillna(50).first()
+        row = self.spark.createDataFrame([(u'Alice', 10, 80.1, True)], schema).fillna(50).first()
         self.assertEqual(row.age, 10)
 
         # fillna with int
-        row = self.spark.createDataFrame([(u'Alice', None, None)], schema).fillna(50).first()
+        row = self.spark.createDataFrame([(u'Alice', None, None, None)], schema).fillna(50).first()
         self.assertEqual(row.age, 50)
         self.assertEqual(row.height, 50.0)
 
         # fillna with double
-        row = self.spark.createDataFrame([(u'Alice', None, None)], schema).fillna(50.1).first()
+        row = self.spark.createDataFrame(
+            [(u'Alice', None, None, None)], schema).fillna(50.1).first()
         self.assertEqual(row.age, 50)
         self.assertEqual(row.height, 50.1)
 
+        # fillna with bool
+        row = self.spark.createDataFrame(
+            [(u'Alice', None, None, None)], schema).fillna(True).first()
+        self.assertEqual(row.age, None)
+        self.assertEqual(row.spy, True)
+
         # fillna with string
-        row = self.spark.createDataFrame([(None, None, None)], schema).fillna("hello").first()
+        row = self.spark.createDataFrame([(None, None, None, None)], schema).fillna("hello").first()
         self.assertEqual(row.name, u"hello")
         self.assertEqual(row.age, None)
 
         # fillna with subset specified for numeric cols
         row = self.spark.createDataFrame(
-            [(None, None, None)], schema).fillna(50, subset=['name', 'age']).first()
+            [(None, None, None, None)], schema).fillna(50, subset=['name', 'age']).first()
         self.assertEqual(row.name, None)
         self.assertEqual(row.age, 50)
         self.assertEqual(row.height, None)
+        self.assertEqual(row.spy, None)
 
-        # fillna with subset specified for numeric cols
+        # fillna with subset specified for string cols
         row = self.spark.createDataFrame(
-            [(None, None, None)], schema).fillna("haha", subset=['name', 'age']).first()
+            [(None, None, None, None)], schema).fillna("haha", subset=['name', 'age']).first()
         self.assertEqual(row.name, "haha")
         self.assertEqual(row.age, None)
         self.assertEqual(row.height, None)
+        self.assertEqual(row.spy, None)
+
+        # fillna with subset specified for bool cols
+        row = self.spark.createDataFrame(
+            [(None, None, None, None)], schema).fillna(True, subset=['name', 'spy']).first()
+        self.assertEqual(row.name, None)
+        self.assertEqual(row.age, None)
+        self.assertEqual(row.height, None)
+        self.assertEqual(row.spy, True)
 
         # fillna with dictionary for boolean types
         row = self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna({"a": True}).first()

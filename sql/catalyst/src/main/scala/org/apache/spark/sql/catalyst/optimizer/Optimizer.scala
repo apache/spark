@@ -77,12 +77,12 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       // Operator push down
       PushProjectionThroughUnion,
       ReorderJoin(conf),
-      EliminateOuterJoin(conf),
+      EliminateOuterJoin,
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown(conf),
       ColumnPruning,
-      InferFiltersFromConstraints(conf),
+      InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -92,6 +92,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       CombineUnions,
       // Constant folding and strength reduction
       NullPropagation(conf),
+      ConstantPropagation,
       FoldablePropagation,
       OptimizeIn(conf),
       ConstantFolding,
@@ -101,7 +102,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       SimplifyConditionals,
       RemoveDispensableExpressions,
       SimplifyBinaryComparison,
-      PruneFilters(conf),
+      PruneFilters,
       EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
@@ -618,14 +619,15 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * Note: While this optimization is applicable to all types of join, it primarily benefits Inner and
  * LeftSemi joins.
  */
-case class InferFiltersFromConstraints(conf: SQLConf)
-    extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = if (conf.constraintPropagationEnabled) {
-    inferFilters(plan)
-  } else {
-    plan
-  }
+object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
 
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.constraintPropagationEnabled) {
+      inferFilters(plan)
+    } else {
+      plan
+    }
+  }
 
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
@@ -716,7 +718,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * 2) by substituting a dummy empty relation when the filter will always evaluate to `false`.
  * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
-case class PruneFilters(conf: SQLConf) extends Rule[LogicalPlan] with PredicateHelper {
+object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // If the filter condition always evaluate to true, remove the filter.
     case Filter(Literal(true, BooleanType), child) => child
@@ -729,7 +731,7 @@ case class PruneFilters(conf: SQLConf) extends Rule[LogicalPlan] with PredicateH
     case f @ Filter(fc, p: LogicalPlan) =>
       val (prunedPredicates, remainingPredicates) =
         splitConjunctivePredicates(fc).partition { cond =>
-          cond.deterministic && p.getConstraints(conf.constraintPropagationEnabled).contains(cond)
+          cond.deterministic && p.constraints.contains(cond)
         }
       if (prunedPredicates.isEmpty) {
         f
@@ -862,7 +864,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // Note that some operators (e.g. project, aggregate, union) are being handled separately
     // (earlier in this rule).
     case _: AppendColumns => true
-    case _: BroadcastHint => true
+    case _: ResolvedHint => true
     case _: Distinct => true
     case _: Generate => true
     case _: Pivot => true

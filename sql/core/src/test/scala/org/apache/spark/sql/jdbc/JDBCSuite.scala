@@ -713,6 +713,15 @@ class JDBCSuite extends SparkFunSuite
     val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
     assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
     assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+    assert(db2Dialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get == "SMALLINT")
+    assert(db2Dialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
+    // test db2 dialect mappings on read
+    assert(db2Dialect.getCatalystType(java.sql.Types.REAL, "REAL", 1, null) == Option(FloatType))
+    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "DECFLOAT", 1, null) ==
+      Option(DecimalType(38, 18)))
+    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "XML", 1, null) == Option(StringType))
+    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, null) ==
+      Option(TimestampType))
   }
 
   test("PostgresDialect type mapping") {
@@ -920,6 +929,18 @@ class JDBCSuite extends SparkFunSuite
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
     }.getMessage
     assert(e2.contains("User specified schema not supported with `jdbc`"))
+  }
+
+  test("SPARK-15648: teradataDialect StringType data mapping") {
+    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+    assert(teradataDialect.getJDBCType(StringType).
+      map(_.databaseTypeDefinition).get == "VARCHAR(255)")
+  }
+
+  test("SPARK-15648: teradataDialect BooleanType data mapping") {
+    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+    assert(teradataDialect.getJDBCType(BooleanType).
+      map(_.databaseTypeDefinition).get == "CHAR(1)")
   }
 
   test("Checking metrics correctness with JDBC") {
