@@ -135,33 +135,19 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
     val tableName = "analyzeTable_part"
     withTable(tableName) {
-      // Create 4 paths: one to use as table location and one for each of the 3 partitions
-      withTempPaths(numPaths = 4) {
-        case tablePath :: partitionPaths =>
-          sql(
-            s"""
-               |CREATE TABLE ${tableName} (key STRING, value STRING) PARTITIONED BY (ds STRING)
-               |LOCATION '${tablePath}'
-             """.stripMargin).collect()
+      withTempPath { path =>
+        sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
 
-          val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
-          partitionDates.zip(partitionPaths).foreach {
-            case (ds, path) =>
-              sql(
-                s"""
-                   |ALTER TABLE ${tableName} ADD PARTITION (ds='${ds}')
-                   |LOCATION '${path.toString}'
-                """.stripMargin).collect()
-              sql(
-                s"""
-                   |INSERT INTO TABLE ${tableName} PARTITION (ds='${ds}')
-                   |SELECT * FROM src
-                """.stripMargin).collect()
-          }
+        val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
+        partitionDates.foreach { ds =>
+          sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds') SELECT * FROM src")
+        }
 
-          sql(s"ANALYZE TABLE ${tableName} COMPUTE STATISTICS noscan")
+        sql(s"ALTER TABLE $tableName SET LOCATION '$path'")
 
-          assert(queryTotalSize(tableName) === BigInt(17436))
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
+
+        assert(queryTotalSize(tableName) === BigInt(17436))
       }
     }
   }
@@ -173,44 +159,42 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val sourceTableName = "analyzeTable_part"
     val tableName = "analyzeTable_part_vis"
     withTable(sourceTableName, tableName) {
-      withTempPath {
-        path =>
+      withTempPath { path =>
           // Create a table with 3 partitions all located under a single top-level directory 'path'
           sql(
             s"""
-               |CREATE TABLE ${sourceTableName} (key STRING, value STRING)
+               |CREATE TABLE $sourceTableName (key STRING, value STRING)
                |PARTITIONED BY (ds STRING)
-               |LOCATION '${path}'
-             """.stripMargin).collect()
+               |LOCATION '$path'
+             """.stripMargin)
 
           val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
-          partitionDates.foreach {
-            ds =>
+          partitionDates.foreach { ds =>
               sql(
                 s"""
-                   |INSERT INTO TABLE ${sourceTableName} PARTITION (ds='${ds}')
+                   |INSERT INTO TABLE $sourceTableName PARTITION (ds='$ds')
                    |SELECT * FROM src
-                 """.stripMargin).collect()
+                 """.stripMargin)
           }
 
           // Create another table referring to the same location
           sql(
             s"""
-               |CREATE TABLE ${tableName} (key STRING, value STRING)
+               |CREATE TABLE $tableName (key STRING, value STRING)
                |PARTITIONED BY (ds STRING)
-               |LOCATION '${path}'
-             """.stripMargin).collect()
+               |LOCATION '$path'
+             """.stripMargin)
 
           // Register only one of the partitions found on disk
           val ds = partitionDates.head
-          sql(s"ALTER TABLE ${tableName} ADD PARTITION (ds='${ds}')").collect()
+          sql(s"ALTER TABLE $tableName ADD PARTITION (ds='$ds')").collect()
 
           // Analyze original table - expect 3 partitions
-          sql(s"ANALYZE TABLE ${sourceTableName} COMPUTE STATISTICS noscan")
+          sql(s"ANALYZE TABLE $sourceTableName COMPUTE STATISTICS noscan")
           assert(queryTotalSize(sourceTableName) === BigInt(3 * 5812))
 
           // Analyze partial-copy table - expect only 1 partition
-          sql(s"ANALYZE TABLE ${tableName} COMPUTE STATISTICS noscan")
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
           assert(queryTotalSize(tableName) === BigInt(5812))
         }
     }
