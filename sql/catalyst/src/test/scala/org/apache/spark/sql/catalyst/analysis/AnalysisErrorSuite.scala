@@ -563,7 +563,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan5 = Filter(
       Exists(
         Sample(0.0, 0.5, false, 1L,
-          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))().select('b)
+          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b))).select('b)
       ),
       LocalRelation(a))
     assertAnalysisError(plan5,
