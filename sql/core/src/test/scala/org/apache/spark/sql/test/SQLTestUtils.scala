@@ -22,7 +22,6 @@ import java.net.URI
 import java.nio.file.Files
 import java.util.{Locale, UUID}
 
-import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.util.control.NonFatal
