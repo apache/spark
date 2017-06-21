@@ -46,6 +46,14 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+_have_pandas = False
+try:
+    import pandas
+    _have_pandas = True
+except:
+    # No Pandas, but that's okay, we'll skip those tests
+    pass
+
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
@@ -2273,6 +2281,22 @@ class SQLTests(ReusedPySparkTestCase):
             .sortBy("y", "z")
             .mode("overwrite").saveAsTable("pyspark_bucket"))
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+    @unittest.skipIf(not _have_pandas, "Pandas not installed")
+    def test_to_pandas(self):
+        import numpy as np
+        schema = StructType().add("a", IntegerType()).add("b", StringType())\
+                             .add("c", BooleanType()).add("d", FloatType())
+        data = [
+            (1, "foo", True, 3.0), (2, "foo", True, 5.0),
+            (3, "bar", False, -1.0), (4, "bar", False, 6.0),
+        ]
+        df = self.spark.createDataFrame(data, schema)
+        types = df.toPandas().dtypes
+        self.assertEquals(types[0], np.int32)
+        self.assertEquals(types[1], np.object)
+        self.assertEquals(types[2], np.bool)
+        self.assertEquals(types[3], np.float32)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
