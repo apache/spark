@@ -451,7 +451,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // Both providers should have the same StateStoreId, but the should be different objects
       assert(loadedProvidersAfterRun2(0).stateStoreId === loadedProvidersAfterRun2(1).stateStoreId)
-      assert(loadedProvidersAfterRun2(0).hashCode !== loadedProvidersAfterRun2(1).hashCode)
+      assert(loadedProvidersAfterRun2(0) ne loadedProvidersAfterRun2(1))
 
     } finally {
       SparkSession.getActiveSession.foreach { spark =>
