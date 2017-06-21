@@ -1773,11 +1773,11 @@ class Dataset[T] private[sql](
     val rightOutputAttrs = rightPlan.analyzed.output
     // SchemaUtils.checkColumnNameDuplication(
     //   leftOutputAttrs.map(_.name),
-    //   "in unionByName",
+    //   "in the left attributes",
     //   sparkSession.sessionState.conf.caseSensitiveAnalysis)
     // SchemaUtils.checkColumnNameDuplication(
     //   rightOutputAttrs.map(_.name),
-    //   "in unionByName",
+    //   "in the right attributes",
     //   sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     // Builds a project list for `other` based on `logicalPlan` output names
