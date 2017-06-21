@@ -232,7 +232,9 @@ private[deploy] class Master(
       System.exit(0)
 
     case WorkerDecommission(id, workerRef) =>
-      logInfo("Recording worker %d decommissioning".format(id))
+      println("pandas!!")
+      logInfo("Recording worker %s decommissioning".format(id))
+      println("Decommisioning worker :) " + id)
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else {
@@ -335,6 +337,7 @@ private[deploy] class Master(
       }
 
     case Heartbeat(workerId, worker) =>
+      println("Heartbeat received " + workerId)
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
@@ -752,6 +755,7 @@ private[deploy] class Master(
   }
 
   private def registerWorker(worker: WorkerInfo): Boolean = {
+    println("Registering worker..." + worker)
     // There may be one or more refs to dead workers on this same node (w/ different ID's),
     // remove them.
     workers.filter { w =>
@@ -783,22 +787,27 @@ private[deploy] class Master(
   }
 
   private def decommissionWorker(worker: WorkerInfo) {
+    println("Found worker info for decomissioning worker " + worker)
     if (worker.state != WorkerState.DECOMMISSIONED) {
-      logInfo("Decommissioning worker %d on %s:%d".format(worker.id, worker.host, worker.port))
+      logInfo("Decommissioning worker %s on %s:%d".format(worker.id, worker.host, worker.port))
       worker.setState(WorkerState.DECOMMISSIONED)
+      println("Worker executors are " + worker.executors.values.toList)
       for (exec <- worker.executors.values) {
         logInfo("Telling app of decomission executors")
+        println("Telling the drivers")
         exec.application.driver.send(ExecutorUpdated(
           exec.id, ExecutorState.DECOMMISSIONED,
           Some("worker decommissioned"), None, workerLost = false))
         exec.state = ExecutorState.DECOMMISSIONED
         exec.application.removeExecutor(exec)
       }
+      // On recovery do not add a decommissioned executor
       persistenceEngine.removeWorker(worker)
     } else {
-      logWarning("Skipping decommissioning worker %d on %s:%d as worker is already decommissioned".
+      logWarning("Skipping decommissioning worker %s on %s:%d as worker is already decommissioned".
         format(worker.id, worker.host, worker.port))
     }
+    println("Finished decommissioning worker from master")
   }
 
   private def removeWorker(worker: WorkerInfo) {

@@ -35,7 +35,7 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -641,7 +641,9 @@ private[deploy] class Worker(
    */
   private def sendToMaster(message: Any): Unit = {
     master match {
-      case Some(masterRef) => masterRef.send(message)
+      case Some(masterRef) =>
+        println("Sending message to master " + message)
+        masterRef.send(message)
       case None =>
         logWarning(
           s"Dropping $message because the connection to master has not yet been established")
@@ -685,11 +687,19 @@ private[deploy] class Worker(
     }
   }
 
-  private def decommissionSelf(): Unit = {
-    decommissioned = true
-    // TODO: Send decommission notification to executors & shuffle service.
-    // Also send message to master program.
-    sendToMaster(WorkerDecommission(workerId, self))
+  private[deploy] def decommissionSelf(): Unit = {
+    println("decommission self called")
+    if (conf.get(config.WORKER_DECOMMISSION_ENABLED)) {
+      println("propegating")
+      logDebug("Decommissioning self")
+      decommissioned = true
+      // TODO: Send decommission notification to executors & shuffle service.
+      // Also send message to master program.
+      sendToMaster(WorkerDecommission(workerId, self))
+    } else {
+      println("skipping")
+      logWarning("Asked to decommission self, but decommissioning not enabled")
+    }
   }
 
   private[worker] def handleDriverStateChanged(driverStateChanged: DriverStateChanged): Unit = {
