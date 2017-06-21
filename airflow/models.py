@@ -910,7 +910,7 @@ class TaskInstance(Base):
         :param local: Whether to run the task locally
         :type local: bool
         :param pickle_id: If the DAG was serialized to the DB, the ID
-        associated with the pickled DAG
+            associated with the pickled DAG
         :type pickle_id: unicode
         :param file_path: path to the file containing the DAG definition
         :param raw: raw mode (needs more details)
@@ -1239,6 +1239,7 @@ class TaskInstance(Base):
     def get_dagrun(self, session):
         """
         Returns the DagRun for this TaskInstance
+
         :param session:
         :return: DagRun
         """
@@ -2684,7 +2685,7 @@ class DAG(BaseDag, LoggingMixin):
     :param orientation: Specify DAG orientation in graph view (LR, TB, RL, BT)
     :type orientation: string
     :param catchup: Perform scheduler catchup (or only run latest)? Defaults to True
-    "type catchup: bool"
+    :type catchup: bool
     """
 
     def __init__(
@@ -2989,6 +2990,7 @@ class DAG(BaseDag, LoggingMixin):
         """
         Returns the dag run for a given execution date if it exists, otherwise
         none.
+
         :param execution_date: The execution date of the DagRun to find.
         :param session:
         :return: The DagRun if found, otherwise None.
@@ -3093,6 +3095,7 @@ class DAG(BaseDag, LoggingMixin):
 
         Heavily inspired by:
         http://blog.jupo.org/2012/04/06/topological-sorting-acyclic-directed-graphs/
+
         :return: list of tasks in topological order
         """
 
@@ -3479,7 +3482,6 @@ class DAG(BaseDag, LoggingMixin):
 
         :param dag: the DAG object to save to the DB
         :type dag: DAG
-        :own
         :param sync_time: The time that the DAG should be marked as sync'ed
         :type sync_time: datetime
         :return: None
@@ -3528,7 +3530,7 @@ class DAG(BaseDag, LoggingMixin):
         the expiration date. These DAGs were likely deleted.
 
         :param expiration_date: set inactive DAGs that were touched before this
-        time
+            time
         :type expiration_date: datetime
         :return: None
         """
