@@ -50,10 +50,10 @@ class OptimizeCodegenSuite extends PlanTest {
   test("Nested CaseWhen Codegen.") {
     assertEquivalent(
       CaseWhen(
-        Seq((CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)), Literal(3))),
+        Seq((CaseWhen(Seq((TrueLiteral, TrueLiteral)), FalseLiteral), Literal(3))),
         CaseWhen(Seq((TrueLiteral, Literal(4))), Literal(5))),
       CaseWhen(
-        Seq((CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen(), Literal(3))),
+        Seq((CaseWhen(Seq((TrueLiteral, TrueLiteral)), FalseLiteral).toCodegen(), Literal(3))),
         CaseWhen(Seq((TrueLiteral, Literal(4))), Literal(5)).toCodegen()).toCodegen())
   }
 

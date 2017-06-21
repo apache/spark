@@ -59,6 +59,14 @@ trait AnalysisTest extends PlanTest {
     comparePlans(actualPlan, expectedPlan)
   }
 
+  protected override def comparePlans(
+      plan1: LogicalPlan,
+      plan2: LogicalPlan,
+      checkAnalysis: Boolean = false): Unit = {
+    // Analysis tests may have not been fully resolved, so skip checkAnalysis.
+    super.comparePlans(plan1, plan2, checkAnalysis)
+  }
+
   protected def assertAnalysisSuccess(
       inputPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {

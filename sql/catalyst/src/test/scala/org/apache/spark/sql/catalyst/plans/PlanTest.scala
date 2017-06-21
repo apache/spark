@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -90,7 +91,16 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
   }
 
   /** Fails the test if the two plans do not match */
-  protected def comparePlans(plan1: LogicalPlan, plan2: LogicalPlan) {
+  protected def comparePlans(
+      plan1: LogicalPlan,
+      plan2: LogicalPlan,
+      checkAnalysis: Boolean = true): Unit = {
+    if (checkAnalysis) {
+      // Make sure both plan pass checkAnalysis.
+      SimpleAnalyzer.checkAnalysis(plan1)
+      SimpleAnalyzer.checkAnalysis(plan2)
+    }
+
     val normalized1 = normalizePlan(normalizeExprIds(plan1))
     val normalized2 = normalizePlan(normalizeExprIds(plan2))
     if (normalized1 != normalized2) {
@@ -104,7 +114,7 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
 
   /** Fails the test if the two expressions do not match */
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
-    comparePlans(Filter(e1, OneRowRelation), Filter(e2, OneRowRelation))
+    comparePlans(Filter(e1, OneRowRelation), Filter(e2, OneRowRelation), checkAnalysis = false)
   }
 
   /** Fails the test if the join order in the two plans do not match */
