@@ -1473,7 +1473,7 @@ private[spark] class BlockManager(
   }
 
   private def addUpdatedBlockStatusToTaskMetrics(blockId: BlockId, status: BlockStatus): Unit = {
-    if (conf.get(TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES)) {
+    if (conf.get(config.TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES)) {
       Option(TaskContext.get()).foreach { c =>
         c.taskMetrics().incUpdatedBlockStatuses(blockId -> status)
       }
