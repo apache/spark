@@ -1041,7 +1041,8 @@ setMethod("lower",
 #' head(select(tmp, length(tmp$Sex), length(tmp$SexLpad), length(tmp$SexRpad)))
 #' tmp2 <- mutate(tmp, SexLtrim = ltrim(tmp$SexLpad), SexRtrim = rtrim(tmp$SexRpad),
 #'                     SexTrim = trim(tmp$SexLpad))
-#' head(select(tmp2, length(tmp2$Sex), length(tmp2$SexLtrim), length(tmp2$SexRtrim), length(tmp2$SexTrim)))
+#' head(select(tmp2, length(tmp2$Sex), length(tmp2$SexLtrim),
+#'                   length(tmp2$SexRtrim), length(tmp2$SexTrim)))
 #'
 #' tmp <- mutate(df, SexLpad = lpad(df$Sex, 6, "xx"), SexRpad = rpad(df$Sex, 7, "xx"))
 #' head(tmp)}
