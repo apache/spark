@@ -543,20 +543,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains("spark.cores.max")) {
-      val totalCores = getInt("spark.cores.max", -1)
-      if (totalCores <= 0) {
-        throw new IllegalArgumentException(s"spark.cores.max (was ${get("spark.cores.max")})" +
-          s" can only be a positive number")
-      }
-    }
-    if (contains("spark.executor.cores")) {
-      val executorCores = getInt("spark.executor.cores", -1)
-      if (executorCores <= 0) {
-        throw new IllegalArgumentException(s"spark.executor.cores " +
-          s"(was ${get("spark.executor.cores")}) can only be a positive number")
-      }
-    }
     if (contains("spark.cores.max") && contains("spark.executor.cores")) {
       val totalCores = getInt("spark.cores.max", 1)
       val executorCores = getInt("spark.executor.cores", 1)
@@ -567,6 +553,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
           s"the left cores: ${leftCores} will not be allocated")
       }
     }
+
     val encryptionEnabled = get(NETWORK_ENCRYPTION_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
     require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
