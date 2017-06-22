@@ -1731,7 +1731,7 @@ class DataFrame(object):
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
         for f, t in dtype.items():
-            pdf[f] = pdf[f].astype(t)
+            pdf[f] = pdf[f].astype(t, copy=False)
         return pdf
 
     ##########################################################################################
