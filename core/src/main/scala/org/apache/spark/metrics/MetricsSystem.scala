@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import com.codahale.metrics.{Metric, MetricRegistry}
+import com.codahale.metrics._
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -70,14 +70,15 @@ import org.apache.spark.util.Utils
 private[spark] class MetricsSystem private (
     val instance: String,
     conf: SparkConf,
-    securityMgr: SecurityManager)
+    securityMgr: SecurityManager,
+    registry: MetricRegistry)
   extends Logging {
 
   private[this] val metricsConfig = new MetricsConfig(conf)
 
   private val sinks = new mutable.ArrayBuffer[Sink]
-  private val sources = new mutable.ArrayBuffer[Source]
-  private val registry = new MetricRegistry()
+  private val sourceToListeners = new mutable.HashMap[Source, MetricRegistryListener]
+  private val defaultListener = new MetricsSystemListener("")
 
   private var running: Boolean = false
 
@@ -103,6 +104,7 @@ private[spark] class MetricsSystem private (
       StaticSources.allSources.foreach(registerSource)
       registerSources()
     }
+    SharedMetricRegistries.getDefault.addListener(defaultListener)
     registerSinks()
     sinks.foreach(_.start)
   }
@@ -111,6 +113,8 @@ private[spark] class MetricsSystem private (
     if (running) {
       sinks.foreach(_.stop)
       registry.removeMatching((_: String, _: Metric) => true)
+      sourceToListeners.keySet.foreach(removeSource)
+      SharedMetricRegistries.getDefault.removeListener(defaultListener)
     } else {
       logWarning("Stopping a MetricsSystem that is not running")
     }
@@ -156,22 +160,23 @@ private[spark] class MetricsSystem private (
   }
 
   def getSourcesByName(sourceName: String): Seq[Source] =
-    sources.filter(_.sourceName == sourceName)
+    sourceToListeners.keySet.filter(_.sourceName == sourceName).toSeq
 
   def registerSource(source: Source): Unit = {
-    sources += source
     try {
-      val regName = buildRegistryName(source)
-      registry.register(regName, source.metricRegistry)
+      val listener = new MetricsSystemListener(buildRegistryName(source))
+      source.metricRegistry.addListener(listener)
+      sourceToListeners += source -> listener
     } catch {
       case e: IllegalArgumentException => logInfo("Metrics already registered", e)
     }
   }
 
   def removeSource(source: Source): Unit = {
-    sources -= source
     val regName = buildRegistryName(source)
     registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
+    sourceToListeners.get(source).foreach(source.metricRegistry.removeListener)
+    sourceToListeners.remove(source)
   }
 
   private def registerSources(): Unit = {
@@ -225,6 +230,41 @@ private[spark] class MetricsSystem private (
       }
     }
   }
+
+  private[spark] class MetricsSystemListener(prefix: String)
+      extends MetricRegistryListener {
+    def metricName(name: String): String = MetricRegistry.name(prefix, name)
+
+    override def onHistogramAdded(name: String, histogram: Histogram): Unit =
+      registry.register(metricName(name), histogram)
+
+    override def onCounterAdded(name: String, counter: Counter): Unit =
+      registry.register(metricName(name), counter)
+
+    override def onHistogramRemoved(name: String): Unit =
+      registry.remove(metricName(name))
+
+    override def onGaugeRemoved(name: String): Unit =
+      registry.remove(metricName(name))
+
+    override def onMeterRemoved(name: String): Unit =
+      registry.remove(metricName(name))
+
+    override def onTimerAdded(name: String, timer: Timer): Unit =
+      registry.register(metricName(name), timer)
+
+    override def onCounterRemoved(name: String): Unit =
+      registry.remove(metricName(name))
+
+    override def onGaugeAdded(name: String, gauge: Gauge[_]): Unit =
+      registry.register(metricName(name), gauge)
+
+    override def onTimerRemoved(name: String): Unit =
+      registry.remove(metricName(name))
+
+    override def onMeterAdded(name: String, meter: Meter): Unit =
+      registry.register(metricName(name), meter)
+  }
 }
 
 private[spark] object MetricsSystem {
@@ -233,6 +273,10 @@ private[spark] object MetricsSystem {
 
   private[this] val MINIMAL_POLL_UNIT = TimeUnit.SECONDS
   private[this] val MINIMAL_POLL_PERIOD = 1
+
+  scala.util.control.Exception.ignoring(classOf[IllegalStateException]) {
+    SharedMetricRegistries.setDefault("spark", new MetricRegistry())
+  }
 
   def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int): Unit = {
     val period = MINIMAL_POLL_UNIT.convert(pollPeriod, pollUnit)
@@ -244,7 +288,15 @@ private[spark] object MetricsSystem {
 
   def createMetricsSystem(
       instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {
-    new MetricsSystem(instance, conf, securityMgr)
+    new MetricsSystem(instance, conf, securityMgr, new MetricRegistry())
+  }
+
+  def createMetricsSystem(
+     instance: String,
+     conf: SparkConf,
+     securityMgr: SecurityManager,
+     registry: MetricRegistry): MetricsSystem = {
+    new MetricsSystem(instance, conf, securityMgr, registry)
   }
 }
 
