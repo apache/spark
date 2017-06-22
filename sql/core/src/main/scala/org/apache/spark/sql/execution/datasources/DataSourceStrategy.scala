@@ -188,15 +188,13 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
           "Cannot overwrite a path that is also being read from.")
       }
 
-      val partitionSchema = actualQuery.resolve(
-        t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
       val staticPartitions = parts.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
 
       InsertIntoHadoopFsRelationCommand(
         outputPath,
         staticPartitions,
         i.ifPartitionNotExists,
-        partitionSchema,
+        partitionColumns = t.partitionSchema.map(_.name),
         t.bucketSpec,
         t.fileFormat,
         t.options,
