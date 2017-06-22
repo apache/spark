@@ -204,6 +204,20 @@ function(object, path, overwrite = FALSE) {
 #' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
 #'                         or the number of partitions are large, this param could be adjusted to a larger size.
 #'                         This is an expert parameter. Default value should be good for most cases.
+#' @param lowerBoundsOnCoefficients The lower bounds on coefficients if fitting under bound constrained optimization.
+#'                                  The bound matrix must be compatible with the shape (1, number of features) for binomial
+#'                                  regression, or (number of classes, number of features) for multinomial regression.
+#'                                  It is a R matrix.
+#' @param upperBoundsOnCoefficients The upper bounds on coefficients if fitting under bound constrained optimization.
+#'                                  The bound matrix must be compatible with the shape (1, number of features) for binomial
+#'                                  regression, or (number of classes, number of features) for multinomial regression.
+#'                                  It is a R matrix.
+#' @param lowerBoundsOnIntercepts The lower bounds on intercepts if fitting under bound constrained optimization.
+#'                                The bounds vector size must be equal to 1 for binomial regression, or the number
+#'                                of classes for multinomial regression.
+#' @param upperBoundsOnIntercepts The upper bounds on intercepts if fitting under bound constrained optimization.
+#'                                The bound vector size must be equal to 1 for binomial regression, or the number
+#'                                of classes for multinomial regression.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.logit} returns a fitted logistic regression model.
 #' @rdname spark.logit
@@ -241,8 +255,12 @@ function(object, path, overwrite = FALSE) {
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
                    tol = 1E-6, family = "auto", standardization = TRUE,
-                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2) {
+                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
+                   lowerBoundsOnCoefficients = NULL, upperBoundsOnCoefficients = NULL,
+                   lowerBoundsOnIntercepts = NULL, upperBoundsOnIntercepts = NULL) {
             formula <- paste(deparse(formula), collapse = "")
+            row <- 0
+            col <- 0
 
             if (!is.null(weightCol) && weightCol == "") {
               weightCol <- NULL
@@ -250,12 +268,51 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
               weightCol <- as.character(weightCol)
             }
 
+            if (!is.null(lowerBoundsOnIntercepts)) {
+                lowerBoundsOnIntercepts <- as.array(lowerBoundsOnIntercepts)
+            }
+
+            if (!is.null(upperBoundsOnIntercepts)) {
+                upperBoundsOnIntercepts <- as.array(upperBoundsOnIntercepts)
+            }
+
+            if (!is.null(lowerBoundsOnCoefficients)) {
+              if (class(lowerBoundsOnCoefficients) != "matrix") {
+                stop("lowerBoundsOnCoefficients must be a matrix.")
+              }
+              row <- nrow(lowerBoundsOnCoefficients)
+              col <- ncol(lowerBoundsOnCoefficients)
+              lowerBoundsOnCoefficients <- as.array(as.vector(lowerBoundsOnCoefficients))
+            }
+
+            if (!is.null(upperBoundsOnCoefficients)) {
+              if (class(upperBoundsOnCoefficients) != "matrix") {
+                stop("upperBoundsOnCoefficients must be a matrix.")
+              }
+
+              if (!is.null(lowerBoundsOnCoefficients) && (row != nrow(upperBoundsOnCoefficients)
+                || col != ncol(upperBoundsOnCoefficients))) {
+                stop(paste0("dimension of upperBoundsOnCoefficients ",
+                           "is not the same as lowerBoundsOnCoefficients", sep = ""))
+              }
+
+              if (is.null(lowerBoundsOnCoefficients)) {
+                row <- nrow(upperBoundsOnCoefficients)
+                col <- ncol(upperBoundsOnCoefficients)
+              }
+
+              upperBoundsOnCoefficients <- as.array(as.vector(upperBoundsOnCoefficients))
+            }
+
             jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam),
                                 as.numeric(elasticNetParam), as.integer(maxIter),
                                 as.numeric(tol), as.character(family),
                                 as.logical(standardization), as.array(thresholds),
-                                weightCol, as.integer(aggregationDepth))
+                                weightCol, as.integer(aggregationDepth),
+                                as.integer(row), as.integer(col),
+                                lowerBoundsOnCoefficients, upperBoundsOnCoefficients,
+                                lowerBoundsOnIntercepts, upperBoundsOnIntercepts)
             new("LogisticRegressionModel", jobj = jobj)
           })
 
