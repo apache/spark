@@ -353,11 +353,10 @@ class MiniBatchKMeans @Since("2.3.0") (
 
     // Execute iterations of Sculley's algorithm until converged
     while (iteration < $(maxIter) && !converged) {
-      val iterStartTime = (System.nanoTime() - initStartTime) / 1e9
+      val singleIterationStartTime = (System.nanoTime() - initStartTime) / 1e9
 
       val costAccum = sc.doubleAccumulator
       val bcCenters = sc.broadcast(centers)
-      val bcCounts = sc.broadcast(counts)
 
       val sampled = if ($(fraction) == 1.0) {
         data
@@ -402,14 +401,12 @@ class MiniBatchKMeans @Since("2.3.0") (
         centers(j) = newCenter
         counts(j) = newCount
       }
-
       bcCenters.destroy(blocking = false)
-      bcCounts.destroy(blocking = false)
 
       val cost = costAccum.value
 
-      val iterTimeInSeconds = (System.nanoTime() - iterStartTime) / 1e9
-      logInfo(f"Iteration $iteration took $iterTimeInSeconds%.3f seconds, " +
+      val singleIterationTimeInSeconds = (System.nanoTime() - singleIterationStartTime) / 1e9
+      logInfo(f"Iteration $iteration took $singleIterationTimeInSeconds%.3f seconds, " +
         f"cost on $batchSize instances: $cost")
       iteration += 1
     }
