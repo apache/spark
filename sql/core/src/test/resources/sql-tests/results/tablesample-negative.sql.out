@@ -33,11 +33,11 @@ struct<>
 -- !query 3 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'FROM' expecting {<EOF>, 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'LIMIT', 'LATERAL', 'WINDOW', 'UNION', 'EXCEPT', 'MINUS', 'INTERSECT', 'SORT', 'CLUSTER', 'DISTRIBUTE'}(line 1, pos 16)
+Sampling fraction (-0.01) must be on interval [0, 1](line 1, pos 24)
 
 == SQL ==
 SELECT mydb1.t1 FROM t1 TABLESAMPLE (-1 PERCENT)
-----------------^^^
+------------------------^^^
 
 
 -- !query 4
