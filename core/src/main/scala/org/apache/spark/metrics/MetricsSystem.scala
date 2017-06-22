@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import com.codahale.metrics.{Metric, MetricRegistry}
+import com.codahale.metrics._
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.SparkConf
@@ -68,13 +68,15 @@ import org.apache.spark.util.Utils
  * [options] represent the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (
-    val instance: String, conf: SparkConf) extends Logging {
+    val instance: String,
+    conf: SparkConf,
+    registry: MetricRegistry)
+  extends Logging {
 
   private[this] val metricsConfig = new MetricsConfig(conf)
 
   private val sinks = new mutable.ArrayBuffer[Sink]
-  private val sources = new mutable.ArrayBuffer[Source]
-  private val registry = new MetricRegistry()
+  private val sourceToListeners = new mutable.HashMap[Source, MetricRegistryListener]
 
   private var running: Boolean = false
 
@@ -108,6 +110,7 @@ private[spark] class MetricsSystem private (
     if (running) {
       sinks.foreach(_.stop)
       registry.removeMatching((_: String, _: Metric) => true)
+      sourceToListeners.keySet.foreach(removeSource)
     } else {
       logWarning("Stopping a MetricsSystem that is not running")
     }
@@ -152,6 +155,7 @@ private[spark] class MetricsSystem private (
     } else { defaultName }
   }
 
+<<<<<<< HEAD
   def getSourcesByName(sourceName: String): Seq[Source] = sources.synchronized {
     sources.filter(_.sourceName == sourceName).toSeq
   }
@@ -160,20 +164,32 @@ private[spark] class MetricsSystem private (
     sources.synchronized {
       sources += source
     }
+=======
+  def getSourcesByName(sourceName: String): Seq[Source] =
+    sourceToListeners.keySet.filter(_.sourceName == sourceName).toSeq
+
+  def registerSource(source: Source): Unit = {
+>>>>>>> 60eaae6792 (Merge existing registry with default one or configure default metric registry)
     try {
-      val regName = buildRegistryName(source)
-      registry.register(regName, source.metricRegistry)
+      val listener = new MetricsSystemListener(buildRegistryName(source))
+      source.metricRegistry.addListener(listener)
+      sourceToListeners += source -> listener
     } catch {
       case e: IllegalArgumentException => logInfo("Metrics already registered", e)
     }
   }
 
   def removeSource(source: Source): Unit = {
+<<<<<<< HEAD
     sources.synchronized {
       sources -= source
     }
+=======
+>>>>>>> 60eaae6792 (Merge existing registry with default one or configure default metric registry)
     val regName = buildRegistryName(source)
     registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
+    sourceToListeners.get(source).foreach(source.metricRegistry.removeListener)
+    sourceToListeners.remove(source)
   }
 
   private def registerSources(): Unit = {
@@ -224,6 +240,41 @@ private[spark] class MetricsSystem private (
       }
     }
   }
+
+  private[spark] class MetricsSystemListener(prefix: String)
+      extends MetricRegistryListener {
+    def metricName(name: String): String = MetricRegistry.name(prefix, name)
+
+    override def onHistogramAdded(name: String, histogram: Histogram): Unit =
+      registry.register(metricName(name), histogram)
+
+    override def onCounterAdded(name: String, counter: Counter): Unit =
+      registry.register(metricName(name), counter)
+
+    override def onHistogramRemoved(name: String): Unit =
+      registry.remove(metricName(name))
+
+    override def onGaugeRemoved(name: String): Unit =
+      registry.remove(metricName(name))
+
+    override def onMeterRemoved(name: String): Unit =
+      registry.remove(metricName(name))
+
+    override def onTimerAdded(name: String, timer: Timer): Unit =
+      registry.register(metricName(name), timer)
+
+    override def onCounterRemoved(name: String): Unit =
+      registry.remove(metricName(name))
+
+    override def onGaugeAdded(name: String, gauge: Gauge[_]): Unit =
+      registry.register(metricName(name), gauge)
+
+    override def onTimerRemoved(name: String): Unit =
+      registry.remove(metricName(name))
+
+    override def onMeterAdded(name: String, meter: Meter): Unit =
+      registry.register(metricName(name), meter)
+  }
 }
 
 private[spark] object MetricsSystem {
@@ -243,6 +294,12 @@ private[spark] object MetricsSystem {
 
   def createMetricsSystem(instance: String, conf: SparkConf): MetricsSystem = {
     new MetricsSystem(instance, conf)
+
+  def createMetricsSystem(
+     instance: String,
+     conf: SparkConf,
+     registry: MetricRegistry): MetricsSystem = {
+    new MetricsSystem(instance, conf, registry)
   }
 }
 
