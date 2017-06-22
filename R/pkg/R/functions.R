@@ -54,7 +54,8 @@ NULL
 #'                   v5 = hex(df$wt), v6 = toDegrees(df$gear),
 #'                   v7 = atan2(df$cyl, df$am), v8 = hypot(df$cyl, df$am),
 #'                   v9 = pmod(df$hp, df$cyl), v10 = shiftLeft(df$disp, 1),
-#'                   v11 = conv(df$hp, 10, 16))
+#'                   v11 = conv(df$hp, 10, 16), v12 = sign(df$vs - 0.5),
+#'                   v13 = sqrt(df$disp), v14 = ceil(df$wt))
 #' head(tmp)}
 NULL
 
@@ -291,6 +292,19 @@ setMethod("ceil",
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "ceil", x@jc)
             column(jc)
+          })
+
+#' @details
+#' \code{ceiling}: Alias for \code{ceil}.
+#'
+#' @rdname column_math_functions
+#' @aliases ceiling ceiling,Column-method
+#' @export
+#' @note ceiling since 1.5.0
+setMethod("ceiling",
+          signature(x = "Column"),
+          function(x) {
+            ceil(x)
           })
 
 #' Returns the first column that is not NA
@@ -1324,6 +1338,18 @@ setMethod("signum",
           })
 
 #' @details
+#' \code{sign}: Alias for \code{signum}.
+#'
+#' @rdname column_math_functions
+#' @aliases sign sign,Column-method
+#' @export
+#' @note sign since 1.5.0
+setMethod("sign", signature(x = "Column"),
+          function(x) {
+            signum(x)
+          })
+
+#' @details
 #' \code{sin}: Computes the sine of the given value.
 #'
 #' @rdname column_math_functions
@@ -2129,31 +2155,6 @@ setMethod("least",
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "least", jcols)
             column(jc)
-          })
-
-#' @details
-#' \code{ceiling}: Computes the ceiling of the given value.
-#'
-#' @rdname column_math_functions
-#' @aliases ceiling ceiling,Column-method
-#' @export
-#' @note ceiling since 1.5.0
-setMethod("ceiling",
-          signature(x = "Column"),
-          function(x) {
-            ceil(x)
-          })
-
-#' @details
-#' \code{sign}: Computes the signum of the given value.
-#'
-#' @rdname column_math_functions
-#' @aliases sign sign,Column-method
-#' @export
-#' @note sign since 1.5.0
-setMethod("sign", signature(x = "Column"),
-          function(x) {
-            signum(x)
           })
 
 #' @details
