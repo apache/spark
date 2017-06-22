@@ -178,6 +178,10 @@ object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
 
   @Since("2.0.0")
   override def load(path: String): GBTRegressor = super.load(path)
+ 
+  @Since("2.3.0")
+  final val supportedFeatureSubsetStrategies: Array[String] =
+    TreeEnsembleParams.supportedFeatureSubsetStrategies
 }
 
 /**
