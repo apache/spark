@@ -109,6 +109,7 @@ NULL
 #'                   v11 = conv(df$hp, 10, 16), v12 = sign(df$vs - 0.5),
 #'                   v13 = sqrt(df$disp), v14 = ceil(df$wt))
 #' head(tmp)}
+NULL
 
 #' lit
 #'
