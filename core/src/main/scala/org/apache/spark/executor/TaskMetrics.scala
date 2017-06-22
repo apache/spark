@@ -215,6 +215,7 @@ class TaskMetrics private[spark] () extends Serializable {
     shuffleRead.REMOTE_BLOCKS_FETCHED -> shuffleReadMetrics._remoteBlocksFetched,
     shuffleRead.LOCAL_BLOCKS_FETCHED -> shuffleReadMetrics._localBlocksFetched,
     shuffleRead.REMOTE_BYTES_READ -> shuffleReadMetrics._remoteBytesRead,
+    shuffleRead.REMOTE_BYTES_READ_TO_DISK -> shuffleReadMetrics._remoteBytesReadToDisk,
     shuffleRead.LOCAL_BYTES_READ -> shuffleReadMetrics._localBytesRead,
     shuffleRead.FETCH_WAIT_TIME -> shuffleReadMetrics._fetchWaitTime,
     shuffleRead.RECORDS_READ -> shuffleReadMetrics._recordsRead,
