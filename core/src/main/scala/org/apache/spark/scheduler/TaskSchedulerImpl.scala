@@ -536,7 +536,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   }
 
   override def executorDecommission(executorId: String): Unit = {
-    println("Decommissioning " + executorId)
     rootPool.executorDecommission(executorId)
     backend.reviveOffers()
   }
@@ -545,7 +544,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     var failedExecutor: Option[String] = None
 
     synchronized {
-      println("Recording executor loss " + executorId)
       if (executorIdToRunningTaskIds.contains(executorId)) {
         val hostPort = executorIdToHost(executorId)
         logExecutorLoss(executorId, hostPort, reason)

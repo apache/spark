@@ -344,15 +344,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
      *
      */
     private def decommissionExecutor(executorId: String): Boolean = {
-      println("sched backend received exec decom req for " + executorId)
       val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
         // Only bother decommissioning executors which are alive.
         if (executorIsAlive(executorId)) {
-          println("Adding exec to pending decom list")
           executorsPendingDecommission += executorId
           true
         } else {
-          println("Exec already decommed")
           false
         }
       }
@@ -361,7 +358,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         logInfo(s"Decommissioning executor $executorId.")
         scheduler.executorDecommission(executorId)
       }
-      println("Coarse grained scheduler decomissioning executor " + shouldDisable)
       shouldDisable
   }
 
@@ -492,10 +488,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Called by subclasses when notified of a decommissioning worker.
    */
   private[spark] def decommissionExecutor(executorId: String): Unit = {
-    println("scheduler asked to decom exec " + executorId)
     // Only log the failure since we don't care about the result.
     driverEndpoint.ask[Boolean](DecomissionExecutor(executorId)).onFailure { case t =>
-      println("Decommissioning executor failed? idk w/e")
       logError(t.getMessage, t)
     }(ThreadUtils.sameThread)
   }

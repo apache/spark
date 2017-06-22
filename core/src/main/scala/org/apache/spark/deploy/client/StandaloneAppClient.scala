@@ -171,7 +171,6 @@ private[spark] class StandaloneAppClient(
 
       case ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) =>
         val fullId = appId + "/" + id
-        println("Executor added on worker " + workerId)
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, hostPort,
           cores))
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
@@ -180,15 +179,10 @@ private[spark] class StandaloneAppClient(
         val fullId = appId + "/" + id
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
-        println("Executor updated, also yay! state is " + state)
         if (ExecutorState.isFinished(state)) {
-          println("executor is finished. good bye!")
           listener.executorRemoved(fullId, message.getOrElse(""), exitStatus, workerLost)
         } else if (state == ExecutorState.DECOMMISSIONED) {
-          println("Propegating decommission to my listener")
           listener.executorDecommissioned(fullId, message.getOrElse(""))
-        } else {
-          println("not doing anything about that eh :p")
         }
 
       case MasterChanged(masterRef, masterWebUiUrl) =>

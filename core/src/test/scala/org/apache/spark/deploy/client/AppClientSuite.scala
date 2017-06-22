@@ -119,7 +119,6 @@ class AppClientSuite
 
     // Send a decommission self to all the workers
     // Note: normally the worker would send this on their own.
-    println("Workers are " + workers)
     workers.foreach(worker => worker.decommissionSelf())
 
     // Decommissioning is async.
@@ -243,7 +242,6 @@ class AppClientSuite
     }
 
     def executorDecommissioned(id: String, message: String): Unit = {
-      println("Decommission executor " + id)
       execDecommissionedList.add(id)
     }
   }

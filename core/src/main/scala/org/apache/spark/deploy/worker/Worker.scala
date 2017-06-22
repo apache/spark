@@ -642,7 +642,6 @@ private[deploy] class Worker(
   private def sendToMaster(message: Any): Unit = {
     master match {
       case Some(masterRef) =>
-        println("Sending message to master " + message)
         masterRef.send(message)
       case None =>
         logWarning(
@@ -688,16 +687,13 @@ private[deploy] class Worker(
   }
 
   private[deploy] def decommissionSelf(): Unit = {
-    println("decommission self called")
     if (conf.get(config.WORKER_DECOMMISSION_ENABLED)) {
-      println("propegating")
       logDebug("Decommissioning self")
       decommissioned = true
       // TODO: Send decommission notification to executors & shuffle service.
       // Also send message to master program.
       sendToMaster(WorkerDecommission(workerId, self))
     } else {
-      println("skipping")
       logWarning("Asked to decommission self, but decommissioning not enabled")
     }
   }
