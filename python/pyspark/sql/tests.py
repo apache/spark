@@ -2669,12 +2669,10 @@ class ArrowTests(ReusedPySparkTestCase):
 
     def test_toPandas_arrow_toggle(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
-        # NOTE - toPandas() without pyarrow will infer standard python data types
-        df_sel = df.select("1_str_t", "3_long_t", "5_double_t")
         self.spark.conf.set("spark.sql.execution.arrow.enable", "false")
-        pdf = df_sel.toPandas()
+        pdf = df.toPandas()
         self.spark.conf.set("spark.sql.execution.arrow.enable", "true")
-        pdf_arrow = df_sel.toPandas()
+        pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_pandas_round_trip(self):
