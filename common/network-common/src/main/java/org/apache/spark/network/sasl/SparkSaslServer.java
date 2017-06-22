@@ -206,8 +206,12 @@ public class SparkSaslServer implements SaslEncryptionBackend {
       return encodedByteBuf.toString(StandardCharsets.UTF_8);
     } finally {
       // The release is called to suppress the memory leak error messages raised by netty.
-      byteBuf.release();
-      encodedByteBuf.release();
+      if (byteBuf != null) {
+        byteBuf.release();
+        if (encodedByteBuf != null) {
+          encodedByteBuf.release();
+        }
+      }
     }
   }
 }
