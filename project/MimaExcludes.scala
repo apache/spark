@@ -37,7 +37,11 @@ object MimaExcludes {
   // Exclude rules for 2.3.x
   lazy val v23excludes = v22excludes ++ Seq(
     // [SPARK-20495][SQL] Add StorageLevel to cacheTable API
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.cacheTable")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.cacheTable"),
+
+    // [SPARK-19937] Add remote bytes read to disk.
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetricDistributions.this")
   )
 
   // Exclude rules for 2.2.x

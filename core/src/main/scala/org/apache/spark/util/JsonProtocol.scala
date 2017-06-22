@@ -339,6 +339,7 @@ private[spark] object JsonProtocol {
         ("Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.localBlocksFetched) ~
         ("Fetch Wait Time" -> taskMetrics.shuffleReadMetrics.fetchWaitTime) ~
         ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
+        ("Remote Bytes Read To Disk" -> taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk) ~
         ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
         ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
     val shuffleWriteMetrics: JValue =
@@ -804,6 +805,8 @@ private[spark] object JsonProtocol {
       readMetrics.incRemoteBlocksFetched((readJson \ "Remote Blocks Fetched").extract[Int])
       readMetrics.incLocalBlocksFetched((readJson \ "Local Blocks Fetched").extract[Int])
       readMetrics.incRemoteBytesRead((readJson \ "Remote Bytes Read").extract[Long])
+      Utils.jsonOption(readJson \ "Remote Bytes Read To Disk")
+        .foreach { v => readMetrics.incRemoteBytesReadToDisk(v.extract[Long])}
       readMetrics.incLocalBytesRead(
         Utils.jsonOption(readJson \ "Local Bytes Read").map(_.extract[Long]).getOrElse(0L))
       readMetrics.incFetchWaitTime((readJson \ "Fetch Wait Time").extract[Long])
