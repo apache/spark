@@ -903,8 +903,9 @@ setGeneric("windowOrderBy", function(col, ...) { standardGeneric("windowOrderBy"
 
 ###################### Expression Function Methods ##########################
 
-#' @rdname add_months
+#' @rdname column_datetime_diff_functions
 #' @export
+#' @name NULL
 setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
 
 #' @rdname column_aggregate_functions
@@ -1007,28 +1008,34 @@ setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 #' @export
 setGeneric("cume_dist", function(x = "missing") { standardGeneric("cume_dist") })
 
-#' @rdname datediff
+#' @rdname column_datetime_diff_functions
 #' @export
+#' @name NULL
 setGeneric("datediff", function(y, x) { standardGeneric("datediff") })
 
-#' @rdname date_add
+#' @rdname column_datetime_diff_functions
 #' @export
+#' @name NULL
 setGeneric("date_add", function(y, x) { standardGeneric("date_add") })
 
-#' @rdname date_format
+#' @rdname column_datetime_diff_functions
 #' @export
+#' @name NULL
 setGeneric("date_format", function(y, x) { standardGeneric("date_format") })
 
-#' @rdname date_sub
+#' @rdname column_datetime_diff_functions
 #' @export
+#' @name NULL
 setGeneric("date_sub", function(y, x) { standardGeneric("date_sub") })
 
-#' @rdname dayofmonth
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 
-#' @rdname dayofyear
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
 #' @rdname decode
@@ -1056,8 +1063,9 @@ setGeneric("explode_outer", function(x) { standardGeneric("explode_outer") })
 #' @export
 setGeneric("expr", function(x) { standardGeneric("expr") })
 
-#' @rdname from_utc_timestamp
+#' @rdname column_datetime_diff_functions
 #' @export
+#' @name NULL
 setGeneric("from_utc_timestamp", function(y, x) { standardGeneric("from_utc_timestamp") })
 
 #' @rdname format_number
@@ -1072,8 +1080,9 @@ setGeneric("format_string", function(format, x, ...) { standardGeneric("format_s
 #' @export
 setGeneric("from_json", function(x, schema, ...) { standardGeneric("from_json") })
 
-#' @rdname from_unixtime
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
 
 #' @rdname greatest
@@ -1095,8 +1104,9 @@ setGeneric("grouping_id", function(x, ...) { standardGeneric("grouping_id") })
 #' @name NULL
 setGeneric("hex", function(x) { standardGeneric("hex") })
 
-#' @rdname hour
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("hour", function(x) { standardGeneric("hour") })
 
 #' @rdname column_math_functions
@@ -1135,8 +1145,9 @@ setGeneric("lag", function(x, ...) { standardGeneric("lag") })
 #' @export
 setGeneric("last", function(x, ...) { standardGeneric("last") })
 
-#' @rdname last_day
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("last_day", function(x) { standardGeneric("last_day") })
 
 #' @rdname lead
@@ -1175,8 +1186,9 @@ setGeneric("ltrim", function(x) { standardGeneric("ltrim") })
 #' @export
 setGeneric("md5", function(x) { standardGeneric("md5") })
 
-#' @rdname minute
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("minute", function(x) { standardGeneric("minute") })
 
 #' @param x empty. Should be used with no argument.
@@ -1185,12 +1197,14 @@ setGeneric("minute", function(x) { standardGeneric("minute") })
 setGeneric("monotonically_increasing_id",
            function(x = "missing") { standardGeneric("monotonically_increasing_id") })
 
-#' @rdname month
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("month", function(x) { standardGeneric("month") })
 
-#' @rdname months_between
+#' @rdname column_datetime_diff_functions
 #' @export
+#' @name NULL
 setGeneric("months_between", function(y, x) { standardGeneric("months_between") })
 
 #' @rdname count
@@ -1209,8 +1223,9 @@ setGeneric("negate", function(x) { standardGeneric("negate") })
 #' @export
 setGeneric("not", function(x) { standardGeneric("not") })
 
-#' @rdname next_day
+#' @rdname column_datetime_diff_functions
 #' @export
+#' @name NULL
 setGeneric("next_day", function(y, x) { standardGeneric("next_day") })
 
 #' @rdname ntile
@@ -1240,8 +1255,9 @@ setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
 #' @export
 setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer") })
 
-#' @rdname quarter
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("quarter", function(x) { standardGeneric("quarter") })
 
 #' @rdname rand
@@ -1296,8 +1312,9 @@ setGeneric("rtrim", function(x) { standardGeneric("rtrim") })
 #' @name NULL
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
 
-#' @rdname second
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("second", function(x) { standardGeneric("second") })
 
 #' @rdname sha1
@@ -1392,20 +1409,23 @@ setGeneric("toDegrees", function(x) { standardGeneric("toDegrees") })
 #' @name NULL
 setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 
-#' @rdname to_date
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("to_date", function(x, format) { standardGeneric("to_date") })
 
 #' @rdname to_json
 #' @export
 setGeneric("to_json", function(x, ...) { standardGeneric("to_json") })
 
-#' @rdname to_timestamp
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("to_timestamp", function(x, format) { standardGeneric("to_timestamp") })
 
-#' @rdname to_utc_timestamp
+#' @rdname column_datetime_diff_functions
 #' @export
+#' @name NULL
 setGeneric("to_utc_timestamp", function(y, x) { standardGeneric("to_utc_timestamp") })
 
 #' @rdname translate
@@ -1425,8 +1445,9 @@ setGeneric("unbase64", function(x) { standardGeneric("unbase64") })
 #' @name NULL
 setGeneric("unhex", function(x) { standardGeneric("unhex") })
 
-#' @rdname unix_timestamp
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("unix_timestamp", function(x, format) { standardGeneric("unix_timestamp") })
 
 #' @rdname upper
@@ -1453,16 +1474,18 @@ setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
 #' @name NULL
 setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
 
-#' @rdname weekofyear
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 
 #' @rdname window
 #' @export
 setGeneric("window", function(x, ...) { standardGeneric("window") })
 
-#' @rdname year
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("year", function(x) { standardGeneric("year") })
 
 
