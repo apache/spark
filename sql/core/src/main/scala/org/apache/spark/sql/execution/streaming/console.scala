@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.types.StructType
 
 class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
   // Number of rows to display, by default 20 rows
@@ -51,13 +53,35 @@ class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
   }
 }
 
-class ConsoleSinkProvider extends StreamSinkProvider with DataSourceRegister {
+case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
+  extends BaseRelation {
+  override def schema: StructType = data.schema
+}
+
+class ConsoleSinkProvider extends StreamSinkProvider
+  with DataSourceRegister
+  with CreatableRelationProvider {
   def createSink(
       sqlContext: SQLContext,
       parameters: Map[String, String],
       partitionColumns: Seq[String],
       outputMode: OutputMode): Sink = {
     new ConsoleSink(parameters)
+  }
+
+  def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    // Number of rows to display, by default 20 rows
+    val numRowsToShow = parameters.get("numRows").map(_.toInt).getOrElse(20)
+
+    // Truncate the displayed data if it is too long, by default it is true
+    val isTruncated = parameters.get("truncate").map(_.toBoolean).getOrElse(true)
+    data.showInternal(numRowsToShow, isTruncated)
+
+    ConsoleRelation(sqlContext, data)
   }
 
   def shortName(): String = "console"
