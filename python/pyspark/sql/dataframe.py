@@ -1728,7 +1728,8 @@ class DataFrame(object):
             if (pandas_type):
                 dtype[field.name] = pandas_type
 
-        return pd.DataFrame.from_records(self.collect(), columns=self.columns).astype(dtype)
+        df = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+        return df.astype(dtype, copy=False)
 
     ##########################################################################################
     # Pandas compatibility
