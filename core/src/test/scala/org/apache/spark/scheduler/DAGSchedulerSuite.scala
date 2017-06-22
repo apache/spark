@@ -131,6 +131,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
+    override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
     override def applicationAttemptId(): Option[String] = None
   }
 
@@ -632,6 +633,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
           accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
           blockManagerId: BlockManagerId): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
+      override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
       override def applicationAttemptId(): Option[String] = None
     }
     val noKillScheduler = new DAGScheduler(
