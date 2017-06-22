@@ -18,7 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
@@ -39,17 +39,33 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def this() = this(Identifiable.randomUID("mcEval"))
 
   /**
+   * param for specific label value for metric to be used in evaluation (supports
+   *  Double values for metric `"f1"`, `"precision"`, `"recall"`, `"tpr"`, `"fpr"`)
+   * @group param
+   */
+  val labelValue: Param[Double] = {
+    new DoubleParam(this, "labelValue", "specific labelValue for metric to be used in evaluation")
+  }
+
+  /**
    * param for metric name in evaluation (supports `"f1"` (default), `"weightedPrecision"`,
-   * `"weightedRecall"`, `"accuracy"`)
+   * `"weightedRecall"`, `"accuracy"` and with labelValue `"f1"`, `"precision"`, `"recall"`,
+   * `"tpr"`, `"fpr"`)
    * @group param
    */
   @Since("1.5.0")
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("f1", "weightedPrecision",
-      "weightedRecall", "accuracy"))
+    val allowedParams = ParamValidators.inArray(Array("f1", "weightedPrecision", "weightedRecall",
+      "accuracy","precision","recall","tpr","fpr"))
     new Param(this, "metricName", "metric name in evaluation " +
-      "(f1|weightedPrecision|weightedRecall|accuracy)", allowedParams)
+      "(f1|weightedPrecision|weightedRecall|accuracy) and with label (f1|precision|recall|tpr|fpr)", allowedParams)
   }
+
+  /** @group getParam */
+  def getLabelValue:Double = $(labelValue)
+
+  /** @group setParam */
+  def setLabelValue(labelClass:Double): this.type = set(labelValue,labelClass)
 
   /** @group getParam */
   @Since("1.5.0")
@@ -68,6 +84,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   setDefault(metricName -> "f1")
+  setDefault(labelValue -> -1.0)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
@@ -80,11 +97,22 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
         case Row(prediction: Double, label: Double) => (prediction, label)
       }
     val metrics = new MulticlassMetrics(predictionAndLabels)
-    val metric = $(metricName) match {
-      case "f1" => metrics.weightedFMeasure
-      case "weightedPrecision" => metrics.weightedPrecision
-      case "weightedRecall" => metrics.weightedRecall
-      case "accuracy" => metrics.accuracy
+    val labelVal = getLabelValue
+    val metric = if (labelVal>=0) {
+      $(metricName) match {
+        case "f1" => metrics.fMeasure(labelVal)
+        case "precision" => metrics.precision(labelVal)
+        case "recall" => metrics.recall(labelVal)
+        case "tpr" => metrics.truePositiveRate(labelVal)
+        case "fpr" => metrics.falsePositiveRate(labelVal)
+      }
+    } else {
+      $(metricName) match {
+        case "f1" => metrics.weightedFMeasure
+        case "weightedPrecision" => metrics.weightedPrecision
+        case "weightedRecall" => metrics.weightedRecall
+        case "accuracy" => metrics.accuracy
+      }
     }
     metric
   }

@@ -37,6 +37,15 @@ class MulticlassClassificationEvaluatorSuite
     testDefaultReadWrite(evaluator)
   }
 
+  test("read/write with label Value") {
+    val evaluator = new MulticlassClassificationEvaluator()
+        .setPredictionCol("myPrediction")
+        .setLabelCol("myLabel")
+        .setLabelValue(1)
+        .setMetricName("tpr")
+    testDefaultReadWrite(evaluator)
+  }
+
   test("should support all NumericType labels and not support other types") {
     MLTestingUtils.checkNumericTypes(new MulticlassClassificationEvaluator, spark)
   }
