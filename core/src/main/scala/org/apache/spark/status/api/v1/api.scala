@@ -38,7 +38,8 @@ class ApplicationAttemptInfo private[spark](
     val lastUpdated: Date,
     val duration: Long,
     val sparkUser: String,
-    val completed: Boolean = false) {
+    val completed: Boolean = false,
+    val appSparkVersion: String) {
     def getStartTimeEpoch: Long = startTime.getTime
     def getEndTimeEpoch: Long = endTime.getTime
     def getLastUpdatedEpoch: Long = lastUpdated.getTime
@@ -76,10 +77,13 @@ class ExecutorSummary private[spark](
     val isBlacklisted: Boolean,
     val maxMemory: Long,
     val executorLogs: Map[String, String],
-    val onHeapMemoryUsed: Option[Long],
-    val offHeapMemoryUsed: Option[Long],
-    val maxOnHeapMemory: Option[Long],
-    val maxOffHeapMemory: Option[Long])
+    val memoryMetrics: Option[MemoryMetrics])
+
+class MemoryMetrics private[spark](
+    val usedOnHeapStorageMemory: Long,
+    val usedOffHeapStorageMemory: Long,
+    val totalOnHeapStorageMemory: Long,
+    val totalOffHeapStorageMemory: Long)
 
 class JobData private[spark](
     val jobId: Int,

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -57,11 +58,11 @@ object ResolveHints {
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
           case u: UnresolvedRelation if toBroadcast.exists(resolver(_, u.tableIdentifier.table)) =>
-            BroadcastHint(plan)
+            ResolvedHint(plan, HintInfo(broadcast = true))
           case r: SubqueryAlias if toBroadcast.exists(resolver(_, r.alias)) =>
-            BroadcastHint(plan)
+            ResolvedHint(plan, HintInfo(broadcast = true))
 
-          case _: BroadcastHint | _: View | _: With | _: SubqueryAlias =>
+          case _: ResolvedHint | _: View | _: With | _: SubqueryAlias =>
             // Don't traverse down these nodes.
             // For an existing broadcast hint, there is no point going down (if we do, we either
             // won't change the structure, or will introduce another broadcast hint that is useless.
@@ -85,8 +86,19 @@ object ResolveHints {
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case h: Hint if BROADCAST_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
-        applyBroadcastHint(h.child, h.parameters.toSet)
+      case h: UnresolvedHint if BROADCAST_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+        if (h.parameters.isEmpty) {
+          // If there is no table alias specified, turn the entire subtree into a BroadcastHint.
+          ResolvedHint(h.child, HintInfo(broadcast = true))
+        } else {
+          // Otherwise, find within the subtree query plans that should be broadcasted.
+          applyBroadcastHint(h.child, h.parameters.map {
+            case tableName: String => tableName
+            case tableId: UnresolvedAttribute => tableId.name
+            case unsupported => throw new AnalysisException("Broadcast hint parameter should be " +
+              s"an identifier or string but was $unsupported (${unsupported.getClass}")
+          }.toSet)
+        }
     }
   }
 
@@ -96,7 +108,7 @@ object ResolveHints {
    */
   object RemoveAllHints extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case h: Hint => h.child
+      case h: UnresolvedHint => h.child
     }
   }
 

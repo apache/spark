@@ -764,6 +764,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.showString(10, truncate = 20) === expectedAnswerForTrue)
   }
 
+  test("showString: truncate = [0, 20], vertical = true") {
+    val longString = Array.fill(21)("1").mkString
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = "-RECORD 0----------------------\n" +
+                                 " value | 1                     \n" +
+                                 "-RECORD 1----------------------\n" +
+                                 " value | 111111111111111111111 \n"
+    assert(df.showString(10, truncate = 0, vertical = true) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = "-RECORD 0---------------------\n" +
+                                " value | 1                    \n" +
+                                "-RECORD 1---------------------\n" +
+                                " value | 11111111111111111... \n"
+    assert(df.showString(10, truncate = 20, vertical = true) === expectedAnswerForTrue)
+  }
+
   test("showString: truncate = [3, 17]") {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
@@ -785,6 +800,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.showString(10, truncate = 17) === expectedAnswerForTrue)
   }
 
+  test("showString: truncate = [3, 17], vertical = true") {
+    val longString = Array.fill(21)("1").mkString
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = "-RECORD 0----\n" +
+                                 " value | 1   \n" +
+                                 "-RECORD 1----\n" +
+                                 " value | 111 \n"
+    assert(df.showString(10, truncate = 3, vertical = true) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = "-RECORD 0------------------\n" +
+                                " value | 1                 \n" +
+                                "-RECORD 1------------------\n" +
+                                " value | 11111111111111... \n"
+    assert(df.showString(10, truncate = 17, vertical = true) === expectedAnswerForTrue)
+  }
+
   test("showString(negative)") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
@@ -795,6 +825,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(testData.select($"*").showString(-1) === expectedAnswer)
   }
 
+  test("showString(negative), vertical = true") {
+    val expectedAnswer = "(0 rows)\n"
+    assert(testData.select($"*").showString(-1, vertical = true) === expectedAnswer)
+  }
+
   test("showString(0)") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
@@ -803,6 +838,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                            |only showing top 0 rows
                            |""".stripMargin
     assert(testData.select($"*").showString(0) === expectedAnswer)
+  }
+
+  test("showString(0), vertical = true") {
+    val expectedAnswer = "(0 rows)\n"
+    assert(testData.select($"*").showString(0, vertical = true) === expectedAnswer)
   }
 
   test("showString: array") {
@@ -820,6 +860,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.showString(10) === expectedAnswer)
   }
 
+  test("showString: array, vertical = true") {
+    val df = Seq(
+      (Array(1, 2, 3), Array(1, 2, 3)),
+      (Array(2, 3, 4), Array(2, 3, 4))
+    ).toDF()
+    val expectedAnswer = "-RECORD 0--------\n" +
+                         " _1  | [1, 2, 3] \n" +
+                         " _2  | [1, 2, 3] \n" +
+                         "-RECORD 1--------\n" +
+                         " _1  | [2, 3, 4] \n" +
+                         " _2  | [2, 3, 4] \n"
+    assert(df.showString(10, vertical = true) === expectedAnswer)
+  }
+
   test("showString: binary") {
     val df = Seq(
       ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
@@ -833,6 +887,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                            |+-------+----------------+
                            |""".stripMargin
     assert(df.showString(10) === expectedAnswer)
+  }
+
+  test("showString: binary, vertical = true") {
+    val df = Seq(
+      ("12".getBytes(StandardCharsets.UTF_8), "ABC.".getBytes(StandardCharsets.UTF_8)),
+      ("34".getBytes(StandardCharsets.UTF_8), "12346".getBytes(StandardCharsets.UTF_8))
+    ).toDF()
+    val expectedAnswer = "-RECORD 0---------------\n" +
+                         " _1  | [31 32]          \n" +
+                         " _2  | [41 42 43 2E]    \n" +
+                         "-RECORD 1---------------\n" +
+                         " _1  | [33 34]          \n" +
+                         " _2  | [31 32 33 34 36] \n"
+    assert(df.showString(10, vertical = true) === expectedAnswer)
   }
 
   test("showString: minimum column width") {
@@ -850,6 +918,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.showString(10) === expectedAnswer)
   }
 
+  test("showString: minimum column width, vertical = true") {
+    val df = Seq(
+      (1, 1),
+      (2, 2)
+    ).toDF()
+    val expectedAnswer = "-RECORD 0--\n" +
+                         " _1  | 1   \n" +
+                         " _2  | 1   \n" +
+                         "-RECORD 1--\n" +
+                         " _1  | 2   \n" +
+                         " _2  | 2   \n"
+    assert(df.showString(10, vertical = true) === expectedAnswer)
+  }
+
   test("SPARK-7319 showString") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
@@ -861,6 +943,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(testData.select($"*").showString(1) === expectedAnswer)
   }
 
+  test("SPARK-7319 showString, vertical = true") {
+    val expectedAnswer = "-RECORD 0----\n" +
+                         " key   | 1   \n" +
+                         " value | 1   \n" +
+                         "only showing top 1 row\n"
+    assert(testData.select($"*").showString(1, vertical = true) === expectedAnswer)
+  }
+
   test("SPARK-7327 show with empty dataFrame") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
@@ -868,6 +958,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                            |+---+-----+
                            |""".stripMargin
     assert(testData.select($"*").filter($"key" < 0).showString(1) === expectedAnswer)
+  }
+
+  test("SPARK-7327 show with empty dataFrame, vertical = true") {
+    assert(testData.select($"*").filter($"key" < 0).showString(1, vertical = true) === "(0 rows)\n")
   }
 
   test("SPARK-18350 show with session local timezone") {
@@ -891,6 +985,24 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                              |+----------+-------------------+
                              |""".stripMargin
       assert(df.showString(1, truncate = 0) === expectedAnswer)
+    }
+  }
+
+  test("SPARK-18350 show with session local timezone, vertical = true") {
+    val d = Date.valueOf("2016-12-01")
+    val ts = Timestamp.valueOf("2016-12-01 00:00:00")
+    val df = Seq((d, ts)).toDF("d", "ts")
+    val expectedAnswer = "-RECORD 0------------------\n" +
+                         " d   | 2016-12-01          \n" +
+                         " ts  | 2016-12-01 00:00:00 \n"
+    assert(df.showString(1, truncate = 0, vertical = true) === expectedAnswer)
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+
+      val expectedAnswer = "-RECORD 0------------------\n" +
+                           " d   | 2016-12-01          \n" +
+                           " ts  | 2016-12-01 08:00:00 \n"
+      assert(df.showString(1, truncate = 0, vertical = true) === expectedAnswer)
     }
   }
 
@@ -1731,5 +1843,26 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .join(df2, df1("x") === df2("x1"), "left_outer")
       .filter($"x1".isNotNull || !$"y".isin("a!"))
       .count
+  }
+
+  testQuietly("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
+    val N = 400
+    val rows = Seq(Row.fromSeq(Seq.fill(N)("string")))
+    val schema = StructType(Seq.tabulate(N)(i => StructField(s"_c$i", StringType)))
+    val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
+
+    val filter = (0 until N)
+      .foldLeft(lit(false))((e, index) => e.or(df.col(df.columns(index)) =!= "string"))
+    df.filter(filter).count
+  }
+
+  test("SPARK-20897: cached self-join should not fail") {
+    // force to plan sort merge join
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      val df = Seq(1 -> "a").toDF("i", "j")
+      val df1 = df.as("t1")
+      val df2 = df.as("t2")
+      assert(df1.join(df2, $"t1.i" === $"t2.i").cache().count() == 1)
+    }
   }
 }

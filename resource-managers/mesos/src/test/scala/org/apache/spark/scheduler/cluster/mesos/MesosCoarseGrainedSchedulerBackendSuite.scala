@@ -199,6 +199,40 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyDeclinedOffer(driver, createOfferId("o2"), true)
   }
 
+  test("mesos declines offers with a filter when maxCores not a multiple of executor.cores") {
+    val maxCores = 4
+    val executorCores = 3
+    setBackend(Map(
+      "spark.cores.max" -> maxCores.toString,
+      "spark.executor.cores" -> executorCores.toString
+    ))
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(
+      Resources(executorMemory, maxCores + 1),
+      Resources(executorMemory, maxCores + 1)
+    ))
+    verifyTaskLaunched(driver, "o1")
+    verifyDeclinedOffer(driver, createOfferId("o2"), true)
+  }
+
+  test("mesos declines offers with a filter when reached spark.cores.max with executor.cores") {
+    val maxCores = 4
+    val executorCores = 2
+    setBackend(Map(
+      "spark.cores.max" -> maxCores.toString,
+      "spark.executor.cores" -> executorCores.toString
+    ))
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(
+      Resources(executorMemory, maxCores + 1),
+      Resources(executorMemory, maxCores + 1),
+      Resources(executorMemory, maxCores + 1)
+    ))
+    verifyTaskLaunched(driver, "o1")
+    verifyTaskLaunched(driver, "o2")
+    verifyDeclinedOffer(driver, createOfferId("o3"), true)
+  }
+
   test("mesos assigns tasks round-robin on offers") {
     val executorCores = 4
     val maxCores = executorCores * 2
@@ -477,29 +511,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos sets configurable labels on tasks") {
     val taskLabelsString = "mesos:test,label:test"
-    setBackend(Map(
-      "spark.mesos.task.labels" -> taskLabelsString
-    ))
-
-    // Build up the labels
-    val taskLabels = Protos.Labels.newBuilder()
-      .addLabels(Protos.Label.newBuilder()
-        .setKey("mesos").setValue("test").build())
-      .addLabels(Protos.Label.newBuilder()
-        .setKey("label").setValue("test").build())
-      .build()
-
-    val offers = List(Resources(backend.executorMemory(sc), 1))
-    offerResources(offers)
-    val launchedTasks = verifyTaskLaunched(driver, "o1")
-
-    val labels = launchedTasks.head.getLabels
-
-    assert(launchedTasks.head.getLabels.equals(taskLabels))
-  }
-
-  test("mesos ignored invalid labels and sets configurable labels on tasks") {
-    val taskLabelsString = "mesos:test,label:test,incorrect:label:here"
     setBackend(Map(
       "spark.mesos.task.labels" -> taskLabelsString
     ))

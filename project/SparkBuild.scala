@@ -50,16 +50,16 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
-    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, _*
+    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch"
+    "tags", "sketch", "kvstore"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(mesos, yarn, sparkGangliaLgpl,
-    streamingKinesisAsl, dockerIntegrationTests) =
+    streamingKinesisAsl, dockerIntegrationTests, hadoopCloud) =
     Seq("mesos", "yarn", "ganglia-lgpl", "streaming-kinesis-asl",
-      "docker-integration-tests").map(ProjectRef(buildLocation, _))
+      "docker-integration-tests", "hadoop-cloud").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
     Seq("network-yarn", "streaming-flume-assembly", "streaming-kafka-0-8-assembly", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
@@ -310,7 +310,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, sqlKafka010
+      unsafe, tags, sqlKafka010, kvstore
     ).contains(x)
   }
 

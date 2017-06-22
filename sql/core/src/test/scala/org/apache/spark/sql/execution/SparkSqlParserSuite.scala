@@ -19,11 +19,10 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.CreateTable
@@ -36,7 +35,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
  * See [[org.apache.spark.sql.catalyst.parser.PlanParserSuite]] for rules
  * defined in the Catalyst module.
  */
-class SparkSqlParserSuite extends PlanTest {
+class SparkSqlParserSuite extends AnalysisTest {
 
   val newConf = new SQLConf
   private lazy val parser = new SparkSqlParser(newConf)
@@ -289,5 +288,16 @@ class SparkSqlParserSuite extends PlanTest {
         RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
           basePlan,
           numPartitions = newConf.numShufflePartitions)))
+  }
+
+  test("pipeline concatenation") {
+    val concat = Concat(
+      Concat(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil) ::
+      UnresolvedAttribute("c") ::
+      Nil
+    )
+    assertEqual(
+      "SELECT a || b || c FROM t",
+      Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))
   }
 }

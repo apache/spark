@@ -629,14 +629,14 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = {
       testRelationWithArrayType
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6) && ('c > 6))
+        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6) && ('col > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where('b >= 5)
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where('a + Rand(10).as("rnd") > 6 && 'c > 6)
+        .where('a + Rand(10).as("rnd") > 6 && 'col > 6)
         .analyze
     }
 
@@ -676,7 +676,7 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = {
       testRelationWithArrayType
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where(('c > 6) || ('b > 5)).analyze
+        .where(('col > 6) || ('b > 5)).analyze
     }
     val optimized = Optimize.execute(originalQuery)
 
@@ -798,12 +798,12 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("broadcast hint") {
-    val originalQuery = BroadcastHint(testRelation)
+    val originalQuery = ResolvedHint(testRelation)
       .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
-    val correctAnswer = BroadcastHint(testRelation.where('a === 2L))
+    val correctAnswer = ResolvedHint(testRelation.where('a === 2L))
       .where('b + Rand(10).as("rnd") === 3)
       .analyze
 
@@ -1129,6 +1129,9 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
         condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
+    // TODO support nondeterministic expressions in join condition.
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
+      checkAnalysis = false)
   }
 }

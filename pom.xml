@@ -58,10 +58,6 @@
     <url>https://issues.apache.org/jira/browse/SPARK</url>
   </issueManagement>
 
-  <prerequisites>
-    <maven>${maven.version}</maven>
-  </prerequisites>
-
   <mailingLists>
     <mailingList>
       <name>Dev Mailing List</name>
@@ -87,6 +83,7 @@
 
   <modules>
     <module>common/sketch</module>
+    <module>common/kvstore</module>
     <module>common/network-common</module>
     <module>common/network-shuffle</module>
     <module>common/unsafe</module>
@@ -136,7 +133,7 @@
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.8.2</parquet.version>
     <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jetty.version>9.2.16.v20160414</jetty.version>
+    <jetty.version>9.3.11.v20160721</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.0</chill.version>
     <ivy.version>2.4.0</ivy.version>
@@ -447,6 +444,11 @@
         <version>${commons.httpcore.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.fusesource.leveldbjni</groupId>
+        <artifactId>leveldbjni-all</artifactId>
+        <version>1.8</version>
+      </dependency>
+      <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
         <artifactId>selenium-java</artifactId>
         <version>${selenium.version}</version>
@@ -592,6 +594,11 @@
         <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-graphite</artifactId>
         <version>${codahale.metrics.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-core</artifactId>
+        <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
@@ -2545,6 +2552,7 @@
       <id>hadoop-2.7</id>
       <properties>
         <hadoop.version>2.7.3</hadoop.version>
+        <curator.version>2.7.1</curator.version>
       </properties>
     </profile>
 
@@ -2567,6 +2575,13 @@
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>hadoop-cloud</id>
+      <modules>
+        <module>hadoop-cloud</module>
       </modules>
     </profile>
 

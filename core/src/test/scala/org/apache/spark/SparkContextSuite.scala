@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
-import scala.concurrent.Await
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -35,7 +34,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.Matchers._
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
@@ -301,13 +300,13 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     sc.addJar(tmpJar.getAbsolutePath)
 
-    // Invaid jar path will only print the error log, will not add to file server.
+    // Invalid jar path will only print the error log, will not add to file server.
     sc.addJar("dummy.jar")
     sc.addJar("")
     sc.addJar(tmpDir.getAbsolutePath)
 
-    sc.listJars().size should be (1)
-    sc.listJars().head should include (tmpJar.getName)
+    assert(sc.listJars().size == 1)
+    assert(sc.listJars().head.contains(tmpJar.getName))
   }
 
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
@@ -315,7 +314,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       val future = sc.parallelize(Seq(0)).foreachAsync(_ => {Thread.sleep(1000L)})
       sc.cancelJobGroup("nonExistGroupId")
-      Await.ready(future, Duration(2, TimeUnit.SECONDS))
+      ThreadUtils.awaitReady(future, Duration(2, TimeUnit.SECONDS))
 
       // In SPARK-6414, sc.cancelJobGroup will cause NullPointerException and cause
       // SparkContext to shutdown, so the following assertion will fail.

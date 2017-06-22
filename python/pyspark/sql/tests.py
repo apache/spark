@@ -46,6 +46,14 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+_have_pandas = False
+try:
+    import pandas
+    _have_pandas = True
+except:
+    # No Pandas, but that's okay, we'll skip those tests
+    pass
+
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
@@ -220,6 +228,12 @@ class SQLTests(ReusedPySparkTestCase):
         sqlContext2 = SQLContext(self.sc)
         self.assertTrue(sqlContext1.sparkSession is sqlContext2.sparkSession)
 
+    def tearDown(self):
+        super(SQLTests, self).tearDown()
+
+        # tear down test_bucketed_write state
+        self.spark.sql("DROP TABLE IF EXISTS pyspark_bucket")
+
     def test_row_should_be_read_only(self):
         row = Row(a=1, b=2)
         self.assertEqual(1, row.a)
@@ -261,8 +275,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(columns[1], str))
 
     def test_explode(self):
-        from pyspark.sql.functions import explode
-        d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]
+        from pyspark.sql.functions import explode, explode_outer, posexplode_outer
+        d = [
+            Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"}),
+            Row(a=1, intlist=[], mapfield={}),
+            Row(a=1, intlist=None, mapfield=None),
+        ]
         rdd = self.sc.parallelize(d)
         data = self.spark.createDataFrame(rdd)
 
@@ -274,6 +292,18 @@ class SQLTests(ReusedPySparkTestCase):
         result = data.select(explode(data.mapfield).alias("a", "b")).select("a", "b").collect()
         self.assertEqual(result[0][0], "a")
         self.assertEqual(result[0][1], "b")
+
+        result = [tuple(x) for x in data.select(posexplode_outer("intlist")).collect()]
+        self.assertEqual(result, [(0, 1), (1, 2), (2, 3), (None, None), (None, None)])
+
+        result = [tuple(x) for x in data.select(posexplode_outer("mapfield")).collect()]
+        self.assertEqual(result, [(0, 'a', 'b'), (None, None, None), (None, None, None)])
+
+        result = [x[0] for x in data.select(explode_outer("intlist")).collect()]
+        self.assertEqual(result, [1, 2, 3, None, None])
+
+        result = [tuple(x) for x in data.select(explode_outer("mapfield")).collect()]
+        self.assertEqual(result, [('a', 'b'), (None, None), (None, None)])
 
     def test_and_in_expression(self):
         self.assertEqual(4, self.df.filter((self.df.key <= 10) & (self.df.value <= "2")).count())
@@ -332,6 +362,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(row[0], 4)
         [row] = self.spark.sql("SELECT double(double(1) + 1)").collect()
         self.assertEqual(row[0], 6)
+
+    def test_single_udf_with_repeated_argument(self):
+        # regression test for SPARK-20685
+        self.spark.catalog.registerFunction("add", lambda x, y: x + y, IntegerType())
+        row = self.spark.sql("SELECT add(1, 1)").first()
+        self.assertEqual(tuple(row), (2, ))
 
     def test_multiple_udfs(self):
         self.spark.catalog.registerFunction("double", lambda x: x * 2, IntegerType())
@@ -445,15 +481,24 @@ class SQLTests(ReusedPySparkTestCase):
         res.explain(True)
         self.assertEqual(res.collect(), [Row(id=0, copy=0)])
 
-    def test_wholefile_json(self):
+    def test_udf_registration_returns_udf(self):
+        df = self.spark.range(10)
+        add_three = self.spark.udf.register("add_three", lambda x: x + 3, IntegerType())
+
+        self.assertListEqual(
+            df.selectExpr("add_three(id) AS plus_three").collect(),
+            df.select(add_three("id").alias("plus_three")).collect()
+        )
+
+    def test_multiLine_json(self):
         people1 = self.spark.read.json("python/test_support/sql/people.json")
         people_array = self.spark.read.json("python/test_support/sql/people_array.json",
-                                            wholeFile=True)
+                                            multiLine=True)
         self.assertEqual(people1.collect(), people_array.collect())
 
-    def test_wholefile_csv(self):
+    def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
-            "python/test_support/sql/ages_newlines.csv", wholeFile=True)
+            "python/test_support/sql/ages_newlines.csv", multiLine=True)
         expected = [Row(_c0=u'Joe', _c1=u'20', _c2=u'Hi,\nI am Jeo'),
                     Row(_c0=u'Tom', _c1=u'30', _c2=u'My name is Tom'),
                     Row(_c0=u'Hyukjin', _c1=u'25', _c2=u'I am Hyukjin\n\nI love Spark!')]
@@ -991,7 +1036,7 @@ class SQLTests(ReusedPySparkTestCase):
         cbool = (ci & ci), (ci | ci), (~ci)
         self.assertTrue(all(isinstance(c, Column) for c in cbool))
         css = cs.contains('a'), cs.like('a'), cs.rlike('a'), cs.asc(), cs.desc(),\
-            cs.startswith('a'), cs.endswith('a')
+            cs.startswith('a'), cs.endswith('a'), ci.eqNullSafe(cs)
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
         self.assertRaisesRegexp(ValueError,
@@ -1685,40 +1730,62 @@ class SQLTests(ReusedPySparkTestCase):
         schema = StructType([
             StructField("name", StringType(), True),
             StructField("age", IntegerType(), True),
-            StructField("height", DoubleType(), True)])
+            StructField("height", DoubleType(), True),
+            StructField("spy", BooleanType(), True)])
 
         # fillna shouldn't change non-null values
-        row = self.spark.createDataFrame([(u'Alice', 10, 80.1)], schema).fillna(50).first()
+        row = self.spark.createDataFrame([(u'Alice', 10, 80.1, True)], schema).fillna(50).first()
         self.assertEqual(row.age, 10)
 
         # fillna with int
-        row = self.spark.createDataFrame([(u'Alice', None, None)], schema).fillna(50).first()
+        row = self.spark.createDataFrame([(u'Alice', None, None, None)], schema).fillna(50).first()
         self.assertEqual(row.age, 50)
         self.assertEqual(row.height, 50.0)
 
         # fillna with double
-        row = self.spark.createDataFrame([(u'Alice', None, None)], schema).fillna(50.1).first()
+        row = self.spark.createDataFrame(
+            [(u'Alice', None, None, None)], schema).fillna(50.1).first()
         self.assertEqual(row.age, 50)
         self.assertEqual(row.height, 50.1)
 
+        # fillna with bool
+        row = self.spark.createDataFrame(
+            [(u'Alice', None, None, None)], schema).fillna(True).first()
+        self.assertEqual(row.age, None)
+        self.assertEqual(row.spy, True)
+
         # fillna with string
-        row = self.spark.createDataFrame([(None, None, None)], schema).fillna("hello").first()
+        row = self.spark.createDataFrame([(None, None, None, None)], schema).fillna("hello").first()
         self.assertEqual(row.name, u"hello")
         self.assertEqual(row.age, None)
 
         # fillna with subset specified for numeric cols
         row = self.spark.createDataFrame(
-            [(None, None, None)], schema).fillna(50, subset=['name', 'age']).first()
+            [(None, None, None, None)], schema).fillna(50, subset=['name', 'age']).first()
         self.assertEqual(row.name, None)
         self.assertEqual(row.age, 50)
         self.assertEqual(row.height, None)
+        self.assertEqual(row.spy, None)
 
-        # fillna with subset specified for numeric cols
+        # fillna with subset specified for string cols
         row = self.spark.createDataFrame(
-            [(None, None, None)], schema).fillna("haha", subset=['name', 'age']).first()
+            [(None, None, None, None)], schema).fillna("haha", subset=['name', 'age']).first()
         self.assertEqual(row.name, "haha")
         self.assertEqual(row.age, None)
         self.assertEqual(row.height, None)
+        self.assertEqual(row.spy, None)
+
+        # fillna with subset specified for bool cols
+        row = self.spark.createDataFrame(
+            [(None, None, None, None)], schema).fillna(True, subset=['name', 'spy']).first()
+        self.assertEqual(row.name, None)
+        self.assertEqual(row.age, None)
+        self.assertEqual(row.height, None)
+        self.assertEqual(row.spy, True)
+
+        # fillna with dictionary for boolean types
+        row = self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna({"a": True}).first()
+        self.assertEqual(row.a, True)
 
     def test_bitwise_operations(self):
         from pyspark.sql import functions
@@ -1910,6 +1977,22 @@ class SQLTests(ReusedPySparkTestCase):
 
         # planner should not crash without a join
         broadcast(df1)._jdf.queryExecution().executedPlan()
+
+    def test_generic_hints(self):
+        from pyspark.sql import DataFrame
+
+        df1 = self.spark.range(10e10).toDF("id")
+        df2 = self.spark.range(10e10).toDF("id")
+
+        self.assertIsInstance(df1.hint("broadcast"), DataFrame)
+        self.assertIsInstance(df1.hint("broadcast", []), DataFrame)
+
+        # Dummy rules
+        self.assertIsInstance(df1.hint("broadcast", "foo", "bar"), DataFrame)
+        self.assertIsInstance(df1.hint("broadcast", ["foo", "bar"]), DataFrame)
+
+        plan = df1.join(df2.hint("broadcast"), "id")._jdf.queryExecution().executedPlan()
+        self.assertEqual(1, plan.toString().count("BroadcastHashJoin"))
 
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
@@ -2175,6 +2258,70 @@ class SQLTests(ReusedPySparkTestCase):
                 [bytearray(b'and here is some more')]]
         df = self.spark.createDataFrame(data, schema=schema)
         df.collect()
+
+    def test_bucketed_write(self):
+        data = [
+            (1, "foo", 3.0), (2, "foo", 5.0),
+            (3, "bar", -1.0), (4, "bar", 6.0),
+        ]
+        df = self.spark.createDataFrame(data, ["x", "y", "z"])
+
+        def count_bucketed_cols(names, table="pyspark_bucket"):
+            """Given a sequence of column names and a table name
+            query the catalog and return number o columns which are
+            used for bucketing
+            """
+            cols = self.spark.catalog.listColumns(table)
+            num = len([c for c in cols if c.name in names and c.isBucket])
+            return num
+
+        # Test write with one bucketing column
+        df.write.bucketBy(3, "x").mode("overwrite").saveAsTable("pyspark_bucket")
+        self.assertEqual(count_bucketed_cols(["x"]), 1)
+        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+        # Test write two bucketing columns
+        df.write.bucketBy(3, "x", "y").mode("overwrite").saveAsTable("pyspark_bucket")
+        self.assertEqual(count_bucketed_cols(["x", "y"]), 2)
+        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+        # Test write with bucket and sort
+        df.write.bucketBy(2, "x").sortBy("z").mode("overwrite").saveAsTable("pyspark_bucket")
+        self.assertEqual(count_bucketed_cols(["x"]), 1)
+        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+        # Test write with a list of columns
+        df.write.bucketBy(3, ["x", "y"]).mode("overwrite").saveAsTable("pyspark_bucket")
+        self.assertEqual(count_bucketed_cols(["x", "y"]), 2)
+        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+        # Test write with bucket and sort with a list of columns
+        (df.write.bucketBy(2, "x")
+            .sortBy(["y", "z"])
+            .mode("overwrite").saveAsTable("pyspark_bucket"))
+        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+        # Test write with bucket and sort with multiple columns
+        (df.write.bucketBy(2, "x")
+            .sortBy("y", "z")
+            .mode("overwrite").saveAsTable("pyspark_bucket"))
+        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+    @unittest.skipIf(not _have_pandas, "Pandas not installed")
+    def test_to_pandas(self):
+        import numpy as np
+        schema = StructType().add("a", IntegerType()).add("b", StringType())\
+                             .add("c", BooleanType()).add("d", FloatType())
+        data = [
+            (1, "foo", True, 3.0), (2, "foo", True, 5.0),
+            (3, "bar", False, -1.0), (4, "bar", False, 6.0),
+        ]
+        df = self.spark.createDataFrame(data, schema)
+        types = df.toPandas().dtypes
+        self.assertEquals(types[0], np.int32)
+        self.assertEquals(types[1], np.object)
+        self.assertEquals(types[2], np.bool)
+        self.assertEquals(types[3], np.float32)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
@@ -2444,7 +2591,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         from datetime import date, datetime
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
-        self.assertEquals(date(2017, 1, 22), parse_result['to_date(dateCol)'])
+        self.assertEquals(date(2017, 1, 22), parse_result['to_date(`dateCol`)'])
 
     @unittest.skipIf(sys.version_info < (3, 3), "Unittest < 3.3 doesn't support mocking")
     def test_unbounded_frames(self):

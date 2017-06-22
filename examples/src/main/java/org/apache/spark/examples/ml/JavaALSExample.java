@@ -113,7 +113,15 @@ public class JavaALSExample {
       .setPredictionCol("prediction");
     Double rmse = evaluator.evaluate(predictions);
     System.out.println("Root-mean-square error = " + rmse);
+
+    // Generate top 10 movie recommendations for each user
+    Dataset<Row> userRecs = model.recommendForAllUsers(10);
+    // Generate top 10 user recommendations for each movie
+    Dataset<Row> movieRecs = model.recommendForAllItems(10);
     // $example off$
+    userRecs.show();
+    movieRecs.show();
+
     spark.stop();
   }
 }

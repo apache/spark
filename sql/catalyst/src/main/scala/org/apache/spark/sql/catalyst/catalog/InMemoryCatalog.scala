@@ -216,8 +216,8 @@ class InMemoryCatalog(
       } else {
         tableDefinition
       }
-
-      catalog(db).tables.put(table, new TableDesc(tableWithLocation))
+      val tableProp = tableWithLocation.properties.filter(_._1 != "comment")
+      catalog(db).tables.put(table, new TableDesc(tableWithLocation.copy(properties = tableProp)))
     }
   }
 
@@ -298,7 +298,9 @@ class InMemoryCatalog(
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
-    catalog(db).tables(tableDefinition.identifier.table).table = tableDefinition
+    val updatedProperties = tableDefinition.properties.filter(kv => kv._1 != "comment")
+    val newTableDefinition = tableDefinition.copy(properties = updatedProperties)
+    catalog(db).tables(tableDefinition.identifier.table).table = newTableDefinition
   }
 
   override def alterTableSchema(
@@ -308,6 +310,15 @@ class InMemoryCatalog(
     requireTableExists(db, table)
     val origTable = catalog(db).tables(table).table
     catalog(db).tables(table).table = origTable.copy(schema = schema)
+  }
+
+  override def alterTableStats(
+      db: String,
+      table: String,
+      stats: CatalogStatistics): Unit = synchronized {
+    requireTableExists(db, table)
+    val origTable = catalog(db).tables(table).table
+    catalog(db).tables(table).table = origTable.copy(stats = Some(stats))
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {

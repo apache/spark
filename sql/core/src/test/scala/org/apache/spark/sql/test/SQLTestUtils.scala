@@ -237,7 +237,7 @@ private[sql] trait SQLTestUtils
 
     try f(dbName) finally {
       if (spark.catalog.currentDatabase == dbName) {
-        spark.sql(s"USE ${DEFAULT_DATABASE}")
+        spark.sql(s"USE $DEFAULT_DATABASE")
       }
       spark.sql(s"DROP DATABASE $dbName CASCADE")
     }
@@ -251,6 +251,7 @@ private[sql] trait SQLTestUtils
       dbNames.foreach { name =>
         spark.sql(s"DROP DATABASE IF EXISTS $name")
       }
+      spark.sql(s"USE $DEFAULT_DATABASE")
     }
   }
 

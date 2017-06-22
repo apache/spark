@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -88,8 +88,10 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-   * Given a type `T` this function constructs and ObjectType that holds a class of type
-   * Array[T].  Special handling is performed for primitive types to map them back to their raw
+   * Given a type `T` this function constructs `ObjectType` that holds a class of type
+   * `Array[T]`.
+   *
+   * Special handling is performed for primitive types to map them back to their raw
    * JVM form instead of the Scala Array that handles auto boxing.
    */
   private def arrayClassFor(tpe: `Type`): ObjectType = ScalaReflectionLock.synchronized {
@@ -333,31 +335,12 @@ object ScalaReflection extends ScalaReflection {
         // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
-        val keyData =
-          Invoke(
-            MapObjects(
-              p => deserializerFor(keyType, Some(p), walkedTypePath),
-              Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType),
-                returnNullable = false),
-              schemaFor(keyType).dataType),
-            "array",
-            ObjectType(classOf[Array[Any]]), returnNullable = false)
-
-        val valueData =
-          Invoke(
-            MapObjects(
-              p => deserializerFor(valueType, Some(p), walkedTypePath),
-              Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType),
-                returnNullable = false),
-              schemaFor(valueType).dataType),
-            "array",
-            ObjectType(classOf[Array[Any]]), returnNullable = false)
-
-        StaticInvoke(
-          ArrayBasedMapData.getClass,
-          ObjectType(classOf[scala.collection.immutable.Map[_, _]]),
-          "toScalaMap",
-          keyData :: valueData :: Nil)
+        CollectObjectsToMap(
+          p => deserializerFor(keyType, Some(p), walkedTypePath),
+          p => deserializerFor(valueType, Some(p), walkedTypePath),
+          getPath,
+          mirror.runtimeClass(t.typeSymbol.asClass)
+        )
 
       case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
@@ -836,8 +819,16 @@ trait ScalaReflection {
   def getConstructorParameters(tpe: Type): Seq[(String, Type)] = {
     val formalTypeArgs = tpe.typeSymbol.asClass.typeParams
     val TypeRef(_, _, actualTypeArgs) = tpe
-    constructParams(tpe).map { p =>
-      p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+    val params = constructParams(tpe)
+    // if there are type variables to fill in, do the substitution (SomeClass[T] -> SomeClass[Int])
+    if (actualTypeArgs.nonEmpty) {
+      params.map { p =>
+        p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+      }
+    } else {
+      params.map { p =>
+        p.name.toString -> p.typeSignature
+      }
     }
   }
 
