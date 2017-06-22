@@ -19,7 +19,6 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.Partitioner
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
