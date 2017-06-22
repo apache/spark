@@ -329,5 +329,5 @@ package object config {
         "preserve backwards compatibility. It uses a lot of memory so should be turned off if " +
         "not needed.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 }
