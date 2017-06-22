@@ -457,6 +457,29 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       3, 17, 27, 58, 62)
   }
 
+  test("sample fraction should not be negative with replacement") {
+    val data = sparkContext.parallelize(1 to 2, 1).toDS()
+    val errMsg = intercept[IllegalArgumentException] {
+      data.sample(withReplacement = true, -0.1, 0)
+    }
+    assert(errMsg.getMessage.startsWith("requirement failed: "))
+    checkDataset(
+      data.sample(withReplacement = true, 1.05, seed = 13),
+      1, 2)
+  }
+
+  test("sample fraction should be on interval [0, 1] without replacement") {
+    val data = sparkContext.parallelize(1 to 2, 1).toDS()
+    val errMsg1 = intercept[IllegalArgumentException] {
+      data.sample(withReplacement = false, -0.1, 0)
+    }
+    val errMsg2 = intercept[IllegalArgumentException] {
+      data.sample(withReplacement = false, 1.1, 0)
+    }
+    assert(errMsg1.getMessage.startsWith("requirement failed: "))
+    assert(errMsg2.getMessage.startsWith("requirement failed: "))
+  }
+
   test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
     val simpleUdf = udf((n: Int) => {
       require(n != 1, "simpleUdf shouldn't see id=1!")
