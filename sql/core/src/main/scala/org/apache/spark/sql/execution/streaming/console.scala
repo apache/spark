@@ -79,7 +79,6 @@ class ConsoleSinkProvider extends StreamSinkProvider
 
     // Truncate the displayed data if it is too long, by default it is true
     val isTruncated = parameters.get("truncate").map(_.toBoolean).getOrElse(true)
-
     data.showInternal(numRowsToShow, isTruncated)
 
     ConsoleRelation(sqlContext, data)
