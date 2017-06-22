@@ -21,13 +21,11 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
-import scala.util.Try
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -545,31 +543,19 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains("spark.driver.memory")) {
-      val driverMemory = get("spark.driver.memory")
-      if (Try(JavaUtils.byteStringAsBytes(driverMemory)).getOrElse(-1L) <= 0) {
-        throw new IllegalArgumentException(s"spark.driver.memory " +
-          s"(was ${driverMemory}) can only be a positive number")
-      }
-    }
-    if (contains("spark.executor.memory")) {
-      val executorMemory = get("spark.executor.memory")
-      if (Try(JavaUtils.byteStringAsBytes(executorMemory)).getOrElse(-1L) <= 0) {
-        throw new IllegalArgumentException(s"spark.executor.memory " +
-          s"(was ${executorMemory}) can only be a positive number")
-      }
-    }
-    if (contains("spark.executor.instances") && getInt("spark.executor.instances", -1) <= 0) {
-      throw new IllegalArgumentException(s"spark.executor.instances " +
-        s"(was ${get("spark.executor.instances")}) can only be a positive number")
-    }
-    if (contains("spark.cores.max") && getInt("spark.cores.max", -1) <= 0) {
+    if (contains("spark.cores.max")) {
+      val totalCores = getInt("spark.cores.max", -1)
+      if (totalCores <= 0) {
         throw new IllegalArgumentException(s"spark.cores.max (was ${get("spark.cores.max")})" +
           s" can only be a positive number")
+      }
     }
-    if (contains("spark.executor.cores") && getInt("spark.executor.cores", -1) <= 0) {
+    if (contains("spark.executor.cores")) {
+      val executorCores = getInt("spark.executor.cores", -1)
+      if (executorCores <= 0) {
         throw new IllegalArgumentException(s"spark.executor.cores " +
           s"(was ${get("spark.executor.cores")}) can only be a positive number")
+      }
     }
     if (contains("spark.cores.max") && contains("spark.executor.cores")) {
       val totalCores = getInt("spark.cores.max", 1)

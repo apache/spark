@@ -27,9 +27,11 @@ import java.util.jar.JarFile
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
+import scala.util.Try
 
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
 
@@ -256,7 +258,23 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (mainClass == null && SparkSubmit.isUserJar(primaryResource)) {
       SparkSubmit.printErrorAndExit("No main class set in JAR; please specify one with --class")
     }
-
+    if (driverMemory != null
+        && Try(JavaUtils.byteStringAsBytes(driverMemory)).getOrElse(-1L) <= 0) {
+      SparkSubmit.printErrorAndExit("Driver Memory must be a positive number")
+    }
+    if (executorMemory != null
+        && Try(JavaUtils.byteStringAsBytes(executorMemory)).getOrElse(-1L) <= 0) {
+      SparkSubmit.printErrorAndExit("Executor Memory cores must be a positive number")
+    }
+    if (executorCores != null && Try(executorCores.toInt).getOrElse(-1) <= 0) {
+      SparkSubmit.printErrorAndExit("Executor cores must be a positive number")
+    }
+    if (totalExecutorCores != null && Try(totalExecutorCores.toInt).getOrElse(-1) <= 0) {
+      SparkSubmit.printErrorAndExit("Total executor cores must be a positive number")
+    }
+    if (numExecutors != null && Try(numExecutors.toInt).getOrElse(-1) <= 0) {
+      SparkSubmit.printErrorAndExit("Number of executors must be a positive number")
+    }
     if (pyFiles != null && !isPython) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
     }
