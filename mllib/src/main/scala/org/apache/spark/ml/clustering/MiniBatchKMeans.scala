@@ -420,7 +420,13 @@ class MiniBatchKMeans @Since("2.3.0") (
       logInfo(s"MiniBatchKMeans converged in $iteration iterations.")
     }
 
-    new MiniBatchKMeansModel(uid, centers.map(_.vector.asML))
+    val model = copyValues(new MiniBatchKMeansModel(uid, centers.map(_.vector.asML))
+      .setParent(this))
+    val summary = new MiniBatchKMeansSummary(
+      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+    model.setSummary(Some(summary))
+    instr.logSuccess(model)
+    model
   }
 
   private def initCenters(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {

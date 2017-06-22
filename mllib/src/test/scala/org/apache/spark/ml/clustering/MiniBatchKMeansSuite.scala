@@ -100,7 +100,7 @@ class MiniBatchKMeansSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("fit, transform and summary") {
-    val predictionColName = "minibatchkmeans_prediction"
+    val predictionColName = "minibatch_kmeans_prediction"
     val mbkm = new MiniBatchKMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
     val model = mbkm.fit(dataset)
     assert(model.clusterCenters.length === k)
@@ -138,8 +138,8 @@ class MiniBatchKMeansSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("KMeansModel transform with non-default feature and prediction cols") {
-    val featuresColName = "minibatchkmeans_model_features"
-    val predictionColName = "minibatchkmeans_model_prediction"
+    val featuresColName = "minibatch_kmeans_model_features"
+    val predictionColName = "minibatch_kmeans_model_prediction"
 
     val model = new MiniBatchKMeans().setK(k).setSeed(1).fit(dataset)
     model.setFeaturesCol(featuresColName).setPredictionCol(predictionColName)
@@ -156,8 +156,8 @@ class MiniBatchKMeansSuite extends SparkFunSuite with MLlibTestSparkContext
     def checkModelData(model: MiniBatchKMeansModel, model2: MiniBatchKMeansModel): Unit = {
       assert(model.clusterCenters === model2.clusterCenters)
     }
-    val kmeans = new MiniBatchKMeans()
-    testEstimatorAndModelReadWrite(kmeans, dataset, MiniBatchKMeansSuite.allParamSettings,
+    val mbkm = new MiniBatchKMeans()
+    testEstimatorAndModelReadWrite(mbkm, dataset, MiniBatchKMeansSuite.allParamSettings,
       MiniBatchKMeansSuite.allParamSettings, checkModelData)
   }
 }
