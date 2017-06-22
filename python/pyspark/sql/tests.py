@@ -46,6 +46,14 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+_have_pandas = False
+try:
+    import pandas
+    _have_pandas = True
+except:
+    # No Pandas, but that's okay, we'll skip those tests
+    pass
+
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
@@ -258,8 +266,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(columns[1], str))
 
     def test_explode(self):
-        from pyspark.sql.functions import explode
-        d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]
+        from pyspark.sql.functions import explode, explode_outer, posexplode_outer
+        d = [
+            Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"}),
+            Row(a=1, intlist=[], mapfield={}),
+            Row(a=1, intlist=None, mapfield=None),
+        ]
         rdd = self.sc.parallelize(d)
         data = self.spark.createDataFrame(rdd)
 
@@ -271,6 +283,18 @@ class SQLTests(ReusedPySparkTestCase):
         result = data.select(explode(data.mapfield).alias("a", "b")).select("a", "b").collect()
         self.assertEqual(result[0][0], "a")
         self.assertEqual(result[0][1], "b")
+
+        result = [tuple(x) for x in data.select(posexplode_outer("intlist")).collect()]
+        self.assertEqual(result, [(0, 1), (1, 2), (2, 3), (None, None), (None, None)])
+
+        result = [tuple(x) for x in data.select(posexplode_outer("mapfield")).collect()]
+        self.assertEqual(result, [(0, 'a', 'b'), (None, None, None), (None, None, None)])
+
+        result = [x[0] for x in data.select(explode_outer("intlist")).collect()]
+        self.assertEqual(result, [1, 2, 3, None, None])
+
+        result = [tuple(x) for x in data.select(explode_outer("mapfield")).collect()]
+        self.assertEqual(result, [('a', 'b'), (None, None), (None, None)])
 
     def test_and_in_expression(self):
         self.assertEqual(4, self.df.filter((self.df.key <= 10) & (self.df.value <= "2")).count())
@@ -2273,6 +2297,22 @@ class SQLTests(ReusedPySparkTestCase):
             .sortBy("y", "z")
             .mode("overwrite").saveAsTable("pyspark_bucket"))
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+    @unittest.skipIf(not _have_pandas, "Pandas not installed")
+    def test_to_pandas(self):
+        import numpy as np
+        schema = StructType().add("a", IntegerType()).add("b", StringType())\
+                             .add("c", BooleanType()).add("d", FloatType())
+        data = [
+            (1, "foo", True, 3.0), (2, "foo", True, 5.0),
+            (3, "bar", False, -1.0), (4, "bar", False, 6.0),
+        ]
+        df = self.spark.createDataFrame(data, schema)
+        types = df.toPandas().dtypes
+        self.assertEquals(types[0], np.int32)
+        self.assertEquals(types[1], np.object)
+        self.assertEquals(types[2], np.bool)
+        self.assertEquals(types[3], np.float32)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):

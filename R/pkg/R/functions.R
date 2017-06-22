@@ -34,6 +34,58 @@ NULL
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
 NULL
 
+#' Date time functions for Column operations
+#'
+#' Date time functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
+#'               x Column to DateType or TimestampType. For \code{trunc}, it is the string used
+#'               for specifying the truncation method. For example, "year", "yyyy", "yy" for
+#'               truncate by year, or "month", "mon", "mm" for truncate by month.
+#' @param ... additional argument(s).
+#' @name column_datetime_functions
+#' @rdname column_datetime_functions
+#' @family data time functions
+#' @examples
+#' \dontrun{
+#' dts <- c("2005-01-02 18:47:22",
+#'         "2005-12-24 16:30:58",
+#'         "2005-10-28 07:30:05",
+#'         "2005-12-28 07:01:05",
+#'         "2006-01-24 00:01:10")
+#' y <- c(2.0, 2.2, 3.4, 2.5, 1.8)
+#' df <- createDataFrame(data.frame(time = as.POSIXct(dts), y = y))}
+NULL
+
+#' Date time arithmetic functions for Column operations
+#'
+#' Date time arithmetic functions defined for \code{Column}.
+#'
+#' @param y Column to compute on.
+#' @param x For class \code{Column}, it is the column used to perform arithmetic operations
+#'          with column \code{y}. For class \code{numeric}, it is the number of months or
+#'          days to be added to or subtracted from \code{y}. For class \code{character}, it is
+#'          \itemize{
+#'          \item \code{date_format}: date format specification.
+#'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: time zone to use.
+#'          \item \code{next_day}: day of the week string.
+#'          }
+#'
+#' @name column_datetime_diff_functions
+#' @rdname column_datetime_diff_functions
+#' @family data time functions
+#' @examples
+#' \dontrun{
+#' dts <- c("2005-01-02 18:47:22",
+#'         "2005-12-24 16:30:58",
+#'         "2005-10-28 07:30:05",
+#'         "2005-12-28 07:01:05",
+#'         "2006-01-24 00:01:10")
+#' y <- c(2.0, 2.2, 3.4, 2.5, 1.8)
+#' df <- createDataFrame(data.frame(time = as.POSIXct(dts), y = y))}
+NULL
+
 #' String functions for Column operations
 #'
 #' String functions defined for \code{Column}.
@@ -562,18 +614,20 @@ setMethod("hash",
             column(jc)
           })
 
-#' dayofmonth
+#' @details
+#' \code{dayofmonth}: Extracts the day of the month as an integer from a
+#' given date/timestamp/string.
 #'
-#' Extracts the day of the month as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname dayofmonth
-#' @name dayofmonth
-#' @family date time functions
-#' @aliases dayofmonth,Column-method
+#' @rdname column_datetime_functions
+#' @aliases dayofmonth dayofmonth,Column-method
 #' @export
-#' @examples \dontrun{dayofmonth(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, df$time, year(df$time), quarter(df$time), month(df$time),
+#'            dayofmonth(df$time), dayofyear(df$time), weekofyear(df$time)))
+#' head(agg(groupBy(df, year(df$time)), count(df$y), avg(df$y)))
+#' head(agg(groupBy(df, month(df$time)), avg(df$y)))}
 #' @note dayofmonth since 1.5.0
 setMethod("dayofmonth",
           signature(x = "Column"),
@@ -582,18 +636,13 @@ setMethod("dayofmonth",
             column(jc)
           })
 
-#' dayofyear
+#' @details
+#' \code{dayofyear}: Extracts the day of the year as an integer from a
+#' given date/timestamp/string.
 #'
-#' Extracts the day of the year as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname dayofyear
-#' @name dayofyear
-#' @family date time functions
-#' @aliases dayofyear,Column-method
+#' @rdname column_datetime_functions
+#' @aliases dayofyear dayofyear,Column-method
 #' @export
-#' @examples \dontrun{dayofyear(df$c)}
 #' @note dayofyear since 1.5.0
 setMethod("dayofyear",
           signature(x = "Column"),
@@ -768,18 +817,19 @@ setMethod("hex",
             column(jc)
           })
 
-#' hour
+#' @details
+#' \code{hour}: Extracts the hours as an integer from a given date/timestamp/string.
 #'
-#' Extracts the hours as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname hour
-#' @name hour
-#' @aliases hour,Column-method
-#' @family date time functions
+#' @rdname column_datetime_functions
+#' @aliases hour hour,Column-method
 #' @export
-#' @examples \dontrun{hour(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, hour(df$time), minute(df$time), second(df$time)))
+#' head(agg(groupBy(df, dayofmonth(df$time)), avg(df$y)))
+#' head(agg(groupBy(df, hour(df$time)), avg(df$y)))
+#' head(agg(groupBy(df, minute(df$time)), avg(df$y)))}
 #' @note hour since 1.5.0
 setMethod("hour",
           signature(x = "Column"),
@@ -898,20 +948,18 @@ setMethod("last",
             column(jc)
           })
 
-#' last_day
+#' @details
+#' \code{last_day}: Given a date column, returns the last day of the month which the
+#' given date belongs to. For example, input "2015-07-27" returns "2015-07-31" since
+#' July 31 is the last day of the month in July 2015.
 #'
-#' Given a date column, returns the last day of the month which the given date belongs to.
-#' For example, input "2015-07-27" returns "2015-07-31" since July 31 is the last day of the
-#' month in July 2015.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname last_day
-#' @name last_day
-#' @aliases last_day,Column-method
-#' @family date time functions
+#' @rdname column_datetime_functions
+#' @aliases last_day last_day,Column-method
 #' @export
-#' @examples \dontrun{last_day(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, df$time, last_day(df$time), month(df$time)))}
 #' @note last_day since 1.5.0
 setMethod("last_day",
           signature(x = "Column"),
@@ -1128,18 +1176,12 @@ setMethod("min",
             column(jc)
           })
 
-#' minute
+#' @details
+#' \code{minute}: Extracts the minutes as an integer from a given date/timestamp/string.
 #'
-#' Extracts the minutes as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname minute
-#' @name minute
-#' @aliases minute,Column-method
-#' @family date time functions
+#' @rdname column_datetime_functions
+#' @aliases minute minute,Column-method
 #' @export
-#' @examples \dontrun{minute(df$c)}
 #' @note minute since 1.5.0
 setMethod("minute",
           signature(x = "Column"),
@@ -1176,18 +1218,12 @@ setMethod("monotonically_increasing_id",
             column(jc)
           })
 
-#' month
+#' @details
+#' \code{month}: Extracts the month as an integer from a given date/timestamp/string.
 #'
-#' Extracts the month as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname month
-#' @name month
-#' @aliases month,Column-method
-#' @family date time functions
+#' @rdname column_datetime_functions
+#' @aliases month month,Column-method
 #' @export
-#' @examples \dontrun{month(df$c)}
 #' @note month since 1.5.0
 setMethod("month",
           signature(x = "Column"),
@@ -1216,18 +1252,12 @@ setMethod("negate",
             column(jc)
           })
 
-#' quarter
+#' @details
+#' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
 #'
-#' Extracts the quarter as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname quarter
-#' @name quarter
-#' @family date time functions
-#' @aliases quarter,Column-method
+#' @rdname column_datetime_functions
+#' @aliases quarter quarter,Column-method
 #' @export
-#' @examples \dontrun{quarter(df$c)}
 #' @note quarter since 1.5.0
 setMethod("quarter",
           signature(x = "Column"),
@@ -1349,18 +1379,12 @@ setMethod("sd",
             stddev_samp(x)
           })
 
-#' second
+#' @details
+#' \code{second}: Extracts the seconds as an integer from a given date/timestamp/string.
 #'
-#' Extracts the seconds as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname second
-#' @name second
-#' @family date time functions
-#' @aliases second,Column-method
+#' @rdname column_datetime_functions
+#' @aliases second second,Column-method
 #' @export
-#' @examples \dontrun{second(df$c)}
 #' @note second since 1.5.0
 setMethod("second",
           signature(x = "Column"),
@@ -1704,29 +1728,28 @@ setMethod("toRadians",
             column(jc)
           })
 
-#' to_date
-#'
-#' Converts the column into a DateType. You may optionally specify a format
-#' according to the rules in:
+#' @details
+#' \code{to_date}: Converts the column into a DateType. You may optionally specify
+#' a format according to the rules in:
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a DateType if the format is omitted
 #' (equivalent to \code{cast(df$x, "date")}).
 #'
-#' @param x Column to parse.
-#' @param format string to use to parse x Column to DateType. (optional)
-#'
-#' @rdname to_date
-#' @name to_date
-#' @family date time functions
-#' @aliases to_date,Column,missing-method
+#' @rdname column_datetime_functions
+#' @aliases to_date to_date,Column,missing-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' to_date(df$c)
-#' to_date(df$c, 'yyyy-MM-dd')
-#' }
+#' tmp <- createDataFrame(data.frame(time_string = dts))
+#' tmp2 <- mutate(tmp, date1 = to_date(tmp$time_string),
+#'                    date2 = to_date(tmp$time_string, "yyyy-MM-dd"),
+#'                    date3 = date_format(tmp$time_string, "MM/dd/yyy"),
+#'                    time1 = to_timestamp(tmp$time_string),
+#'                    time2 = to_timestamp(tmp$time_string, "yyyy-MM-dd"))
+#' head(tmp2)}
 #' @note to_date(Column) since 1.5.0
 setMethod("to_date",
           signature(x = "Column", format = "missing"),
@@ -1735,9 +1758,7 @@ setMethod("to_date",
             column(jc)
           })
 
-#' @rdname to_date
-#' @name to_date
-#' @family date time functions
+#' @rdname column_datetime_functions
 #' @aliases to_date,Column,character-method
 #' @export
 #' @note to_date(Column, character) since 2.2.0
@@ -1780,29 +1801,18 @@ setMethod("to_json", signature(x = "Column"),
             column(jc)
           })
 
-#' to_timestamp
-#'
-#' Converts the column into a TimestampType. You may optionally specify a format
-#' according to the rules in:
+#' @details
+#' \code{to_timestamp}: Converts the column into a TimestampType. You may optionally specify
+#' a format according to the rules in:
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a TimestampType if the format is omitted
 #' (equivalent to \code{cast(df$x, "timestamp")}).
 #'
-#' @param x Column to parse.
-#' @param format string to use to parse x Column to TimestampType. (optional)
-#'
-#' @rdname to_timestamp
-#' @name to_timestamp
-#' @family date time functions
-#' @aliases to_timestamp,Column,missing-method
+#' @rdname column_datetime_functions
+#' @aliases to_timestamp to_timestamp,Column,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#' to_timestamp(df$c)
-#' to_timestamp(df$c, 'yyyy-MM-dd')
-#' }
 #' @note to_timestamp(Column) since 2.2.0
 setMethod("to_timestamp",
           signature(x = "Column", format = "missing"),
@@ -1811,9 +1821,7 @@ setMethod("to_timestamp",
             column(jc)
           })
 
-#' @rdname to_timestamp
-#' @name to_timestamp
-#' @family date time functions
+#' @rdname column_datetime_functions
 #' @aliases to_timestamp,Column,character-method
 #' @export
 #' @note to_timestamp(Column, character) since 2.2.0
@@ -1945,18 +1953,12 @@ setMethod("var_samp",
             column(jc)
           })
 
-#' weekofyear
+#' @details
+#' \code{weekofyear}: Extracts the week number as an integer from a given date/timestamp/string.
 #'
-#' Extracts the week number as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname weekofyear
-#' @name weekofyear
-#' @aliases weekofyear,Column-method
-#' @family date time functions
+#' @rdname column_datetime_functions
+#' @aliases weekofyear weekofyear,Column-method
 #' @export
-#' @examples \dontrun{weekofyear(df$c)}
 #' @note weekofyear since 1.5.0
 setMethod("weekofyear",
           signature(x = "Column"),
@@ -1965,18 +1967,12 @@ setMethod("weekofyear",
             column(jc)
           })
 
-#' year
+#' @details
+#' \code{year}: Extracts the year as an integer from a given date/timestamp/string.
 #'
-#' Extracts the year as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname year
-#' @name year
-#' @family date time functions
-#' @aliases year,Column-method
+#' @rdname column_datetime_functions
+#' @aliases year year,Column-method
 #' @export
-#' @examples \dontrun{year(df$c)}
 #' @note year since 1.5.0
 setMethod("year",
           signature(x = "Column"),
@@ -2009,19 +2005,20 @@ setMethod("atan2", signature(y = "Column"),
             column(jc)
           })
 
-#' datediff
+#' @details
+#' \code{datediff}: Returns the number of days from \code{y} to \code{x}.
 #'
-#' Returns the number of days from \code{start} to \code{end}.
-#'
-#' @param x start Column to use.
-#' @param y end Column to use.
-#'
-#' @rdname datediff
-#' @name datediff
-#' @aliases datediff,Column-method
-#' @family date time functions
+#' @rdname column_datetime_diff_functions
+#' @aliases datediff datediff,Column-method
 #' @export
-#' @examples \dontrun{datediff(df$c, x)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- createDataFrame(data.frame(time_string1 = as.POSIXct(dts),
+#'              time_string2 = as.POSIXct(dts[order(runif(length(dts)))])))
+#' tmp2 <- mutate(tmp, datediff = datediff(tmp$time_string1, tmp$time_string2),
+#'                monthdiff = months_between(tmp$time_string1, tmp$time_string2))
+#' head(tmp2)}
 #' @note datediff since 1.5.0
 setMethod("datediff", signature(y = "Column"),
           function(y, x) {
@@ -2080,19 +2077,12 @@ setMethod("levenshtein", signature(y = "Column"),
             column(jc)
           })
 
-#' months_between
+#' @details
+#' \code{months_between}: Returns number of months between dates \code{y} and \code{x}.
 #'
-#' Returns number of months between dates \code{date1} and \code{date2}.
-#'
-#' @param x start Column to use.
-#' @param y end Column to use.
-#'
-#' @rdname months_between
-#' @name months_between
-#' @family date time functions
-#' @aliases months_between,Column-method
+#' @rdname column_datetime_diff_functions
+#' @aliases months_between months_between,Column-method
 #' @export
-#' @examples \dontrun{months_between(df$c, x)}
 #' @note months_between since 1.5.0
 setMethod("months_between", signature(y = "Column"),
           function(y, x) {
@@ -2313,26 +2303,18 @@ setMethod("n", signature(x = "Column"),
             count(x)
           })
 
-#' date_format
-#'
-#' Converts a date/timestamp/string to a value of string in the format specified by the date
-#' format given by the second argument.
-#'
-#' A pattern could be for instance \preformatted{dd.MM.yyyy} and could return a string like '18.03.1993'. All
+#' @details
+#' \code{date_format}: Converts a date/timestamp/string to a value of string in the format
+#' specified by the date format given by the second argument. A pattern could be for instance
+#' \code{dd.MM.yyyy} and could return a string like '18.03.1993'. All
 #' pattern letters of \code{java.text.SimpleDateFormat} can be used.
-#'
 #' Note: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
-#' @param y Column to compute on.
-#' @param x date format specification.
+#' @rdname column_datetime_diff_functions
 #'
-#' @family date time functions
-#' @rdname date_format
-#' @name date_format
-#' @aliases date_format,Column,character-method
+#' @aliases date_format date_format,Column,character-method
 #' @export
-#' @examples \dontrun{date_format(df$t, 'MM/dd/yyy')}
 #' @note date_format since 1.5.0
 setMethod("date_format", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2379,20 +2361,20 @@ setMethod("from_json", signature(x = "Column", schema = "structType"),
             column(jc)
           })
 
-#' from_utc_timestamp
+#' @details
+#' \code{from_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day in UTC,
+#' returns another timestamp that corresponds to the same time of day in the given timezone.
 #'
-#' Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
-#' that corresponds to the same time of day in the given timezone.
+#' @rdname column_datetime_diff_functions
 #'
-#' @param y Column to compute on.
-#' @param x time zone to use.
-#'
-#' @family date time functions
-#' @rdname from_utc_timestamp
-#' @name from_utc_timestamp
-#' @aliases from_utc_timestamp,Column,character-method
+#' @aliases from_utc_timestamp from_utc_timestamp,Column,character-method
 #' @export
-#' @examples \dontrun{from_utc_timestamp(df$t, 'PST')}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, from_utc = from_utc_timestamp(df$time, 'PST'),
+#'                  to_utc = to_utc_timestamp(df$time, 'PST'))
+#' head(tmp)}
 #' @note from_utc_timestamp since 1.5.0
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2422,30 +2404,16 @@ setMethod("instr", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' next_day
+#' @details
+#' \code{next_day}: Given a date column, returns the first date which is later than the value of
+#' the date column that is on the specified day of the week. For example,
+#' \code{next_day('2015-07-27', "Sunday")} returns 2015-08-02 because that is the first Sunday
+#' after 2015-07-27. Day of the week parameter is case insensitive, and accepts first three or
+#' two characters: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
 #'
-#' Given a date column, returns the first date which is later than the value of the date column
-#' that is on the specified day of the week.
-#'
-#' For example, \code{next_day('2015-07-27', "Sunday")} returns 2015-08-02 because that is the first
-#' Sunday after 2015-07-27.
-#'
-#' Day of the week parameter is case insensitive, and accepts first three or two characters:
-#' "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
-#'
-#' @param y Column to compute on.
-#' @param x Day of the week string.
-#'
-#' @family date time functions
-#' @rdname next_day
-#' @name next_day
-#' @aliases next_day,Column,character-method
+#' @rdname column_datetime_diff_functions
+#' @aliases next_day next_day,Column,character-method
 #' @export
-#' @examples
-#'\dontrun{
-#'next_day(df$d, 'Sun')
-#'next_day(df$d, 'Sunday')
-#'}
 #' @note next_day since 1.5.0
 setMethod("next_day", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2453,20 +2421,13 @@ setMethod("next_day", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' to_utc_timestamp
+#' @details
+#' \code{to_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day
+#' in the given timezone, returns another timestamp that corresponds to the same time of day in UTC.
 #'
-#' Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
-#' another timestamp that corresponds to the same time of day in UTC.
-#'
-#' @param y Column to compute on
-#' @param x timezone to use
-#'
-#' @family date time functions
-#' @rdname to_utc_timestamp
-#' @name to_utc_timestamp
-#' @aliases to_utc_timestamp,Column,character-method
+#' @rdname column_datetime_diff_functions
+#' @aliases to_utc_timestamp to_utc_timestamp,Column,character-method
 #' @export
-#' @examples \dontrun{to_utc_timestamp(df$t, 'PST')}
 #' @note to_utc_timestamp since 1.5.0
 setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2474,19 +2435,20 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' add_months
+#' @details
+#' \code{add_months}: Returns the date that is numMonths (\code{x}) after startDate (\code{y}).
 #'
-#' Returns the date that is numMonths after startDate.
-#'
-#' @param y Column to compute on
-#' @param x Number of months to add
-#'
-#' @name add_months
-#' @family date time functions
-#' @rdname add_months
-#' @aliases add_months,Column,numeric-method
+#' @rdname column_datetime_diff_functions
+#' @aliases add_months add_months,Column,numeric-method
 #' @export
-#' @examples \dontrun{add_months(df$d, 1)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, t1 = add_months(df$time, 1),
+#'                   t2 = date_add(df$time, 2),
+#'                   t3 = date_sub(df$time, 3),
+#'                   t4 = next_day(df$time, 'Sun'))
+#' head(tmp)}
 #' @note add_months since 1.5.0
 setMethod("add_months", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2494,19 +2456,12 @@ setMethod("add_months", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' date_add
+#' @details
+#' \code{date_add}: Returns the date that is \code{x} days after.
 #'
-#' Returns the date that is \code{x} days after
-#'
-#' @param y Column to compute on
-#' @param x Number of days to add
-#'
-#' @family date time functions
-#' @rdname date_add
-#' @name date_add
-#' @aliases date_add,Column,numeric-method
+#' @rdname column_datetime_diff_functions
+#' @aliases date_add date_add,Column,numeric-method
 #' @export
-#' @examples \dontrun{date_add(df$d, 1)}
 #' @note date_add since 1.5.0
 setMethod("date_add", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2514,19 +2469,13 @@ setMethod("date_add", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' date_sub
+#' @details
+#' \code{date_sub}: Returns the date that is \code{x} days before.
 #'
-#' Returns the date that is \code{x} days before
+#' @rdname column_datetime_diff_functions
 #'
-#' @param y Column to compute on
-#' @param x Number of days to substract
-#'
-#' @family date time functions
-#' @rdname date_sub
-#' @name date_sub
-#' @aliases date_sub,Column,numeric-method
+#' @aliases date_sub date_sub,Column,numeric-method
 #' @export
-#' @examples \dontrun{date_sub(df$d, 1)}
 #' @note date_sub since 1.5.0
 setMethod("date_sub", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2725,27 +2674,24 @@ setMethod("format_string", signature(format = "character", x = "Column"),
             column(jc)
           })
 
-#' from_unixtime
+#' @details
+#' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a
+#' string representing the timestamp of that moment in the current system time zone in the JVM in the
+#' given format. See \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#' Customizing Formats} for available options.
 #'
-#' Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
-#' representing the timestamp of that moment in the current system time zone in the given
-#' format.
+#' @rdname column_datetime_functions
 #'
-#' @param x a Column of unix timestamp.
-#' @param format the target format. See
-#'               \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
-#'               Customizing Formats} for available options.
-#' @param ... further arguments to be passed to or from other methods.
-#' @family date time functions
-#' @rdname from_unixtime
-#' @name from_unixtime
-#' @aliases from_unixtime,Column-method
+#' @aliases from_unixtime from_unixtime,Column-method
 #' @export
 #' @examples
-#'\dontrun{
-#'from_unixtime(df$t)
-#'from_unixtime(df$t, 'yyyy/MM/dd HH')
-#'}
+#'
+#' \dontrun{
+#' tmp <- mutate(df, to_unix = unix_timestamp(df$time),
+#'                   to_unix2 = unix_timestamp(df$time, 'yyyy-MM-dd HH'),
+#'                   from_unix = from_unixtime(unix_timestamp(df$time)),
+#'                   from_unix2 = from_unixtime(unix_timestamp(df$time), 'yyyy-MM-dd HH:mm'))
+#' head(tmp)}
 #' @note from_unixtime since 1.5.0
 setMethod("from_unixtime", signature(x = "Column"),
           function(x, format = "yyyy-MM-dd HH:mm:ss") {
@@ -3033,21 +2979,12 @@ setMethod("translate",
             column(jc)
           })
 
-#' unix_timestamp
+#' @details
+#' \code{unix_timestamp}: Gets current Unix timestamp in seconds.
 #'
-#' Gets current Unix timestamp in seconds.
-#'
-#' @family date time functions
-#' @rdname unix_timestamp
-#' @name unix_timestamp
-#' @aliases unix_timestamp,missing,missing-method
+#' @rdname column_datetime_functions
+#' @aliases unix_timestamp unix_timestamp,missing,missing-method
 #' @export
-#' @examples
-#'\dontrun{
-#'unix_timestamp()
-#'unix_timestamp(df$t)
-#'unix_timestamp(df$t, 'yyyy-MM-dd HH')
-#'}
 #' @note unix_timestamp since 1.5.0
 setMethod("unix_timestamp", signature(x = "missing", format = "missing"),
           function(x, format) {
@@ -3055,8 +2992,7 @@ setMethod("unix_timestamp", signature(x = "missing", format = "missing"),
             column(jc)
           })
 
-#' @rdname unix_timestamp
-#' @name unix_timestamp
+#' @rdname column_datetime_functions
 #' @aliases unix_timestamp,Column,missing-method
 #' @export
 #' @note unix_timestamp(Column) since 1.5.0
@@ -3066,12 +3002,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "missing"),
             column(jc)
           })
 
-#' @param x a Column of date, in string, date or timestamp type.
-#' @param format the target format. See
-#'               \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
-#'               Customizing Formats} for available options.
-#' @rdname unix_timestamp
-#' @name unix_timestamp
+#' @rdname column_datetime_functions
 #' @aliases unix_timestamp,Column,character-method
 #' @export
 #' @note unix_timestamp(Column, character) since 1.5.0
@@ -3837,26 +3768,17 @@ setMethod("input_file_name", signature("missing"),
             column(jc)
           })
 
-#' trunc
+#' @details
+#' \code{trunc}: Returns date truncated to the unit specified by the format.
 #'
-#' Returns date truncated to the unit specified by the format.
-#'
-#' @param x Column to compute on.
-#' @param format string used for specify the truncation method. For example, "year", "yyyy",
-#' "yy" for truncate by year, or "month", "mon", "mm" for truncate by month.
-#'
-#' @rdname trunc
-#' @name trunc
-#' @family date time functions
-#' @aliases trunc,Column-method
+#' @rdname column_datetime_functions
+#' @aliases trunc trunc,Column-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' trunc(df$c, "year")
-#' trunc(df$c, "yy")
-#' trunc(df$c, "month")
-#' trunc(df$c, "mon")
-#' }
+#' head(select(df, df$time, trunc(df$time, "year"), trunc(df$time, "yy"),
+#'            trunc(df$time, "month"), trunc(df$time, "mon")))}
 #' @note trunc since 2.3.0
 setMethod("trunc",
           signature(x = "Column"),
