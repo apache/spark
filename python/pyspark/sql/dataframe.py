@@ -1764,7 +1764,7 @@ def _to_scala_map(sc, jm):
 def _to_corrected_pandas_type(dt):
     """
     When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
-    This method gets the correted data type for Pandas if that type may be inferred uncorrectly.
+    This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
     """
     import numpy as np
     if type(dt) == ByteType:
