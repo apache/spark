@@ -50,7 +50,7 @@ package object config {
   private[spark] val MAX_APP_ATTEMPTS = ConfigBuilder("spark.yarn.maxAppAttempts")
     .doc("Maximum number of AM attempts before failing the app.")
     .intConf
-    .createOptional
+    .createWithDefault(1)
 
   private[spark] val USER_CLASS_PATH_FIRST = ConfigBuilder("spark.yarn.user.classpath.first")
     .doc("Whether to place user jars in front of Spark's classpath.")

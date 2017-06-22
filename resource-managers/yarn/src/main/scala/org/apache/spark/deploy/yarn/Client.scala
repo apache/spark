@@ -221,11 +221,7 @@ private[spark] class Client(
     sparkConf.get(APPLICATION_TAGS).foreach { tags =>
       appContext.setApplicationTags(new java.util.HashSet[String](tags.asJava))
     }
-    sparkConf.get(MAX_APP_ATTEMPTS) match {
-      case Some(v) => appContext.setMaxAppAttempts(v)
-      case None => logDebug(s"${MAX_APP_ATTEMPTS.key} is not set. " +
-          "Cluster's default value will be used.")
-    }
+    appContext.setMaxAppAttempts(sparkConf.get(MAX_APP_ATTEMPTS))
 
     sparkConf.get(AM_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS).foreach { interval =>
       appContext.setAttemptFailuresValidityInterval(interval)
