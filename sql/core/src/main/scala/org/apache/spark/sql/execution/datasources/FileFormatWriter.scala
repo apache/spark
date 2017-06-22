@@ -115,8 +115,7 @@ object FileFormatWriter extends Logging {
     // Get the actual partition columns as attributes after matching them by name with
     // the given columns names.
     val partitionColumns = partitionColumnNames.map { col =>
-      val nameEquality = sparkSession.sessionState.conf.resolver
-      allColumns.find(f => nameEquality(f.name, col)).getOrElse {
+      allColumns.find(f => f.name.equalsIgnoreCase(col)).getOrElse {
         throw new RuntimeException(
           s"Partition column $col not found in schema ${queryExecution.executedPlan.schema}")
       }
