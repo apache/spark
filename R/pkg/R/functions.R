@@ -64,11 +64,11 @@ NULL
 #'
 #' @param y Column to compute on.
 #' @param x For class \code{Column}, it is the column used to perform arithmetic operations
-#'          with column \code{y}.For class \code{numeric}, it is the number of months or
+#'          with column \code{y}. For class \code{numeric}, it is the number of months or
 #'          days to be added to or subtracted from \code{y}. For class \code{character}, it is
 #'          \itemize{
 #'          \item \code{date_format}: date format specification.
-#'          \item \code{from_utc_timestamp, to_utc_timestamp}: time zone to use.
+#'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: time zone to use.
 #'          \item \code{next_day}: day of the week string.
 #'          }
 #'
@@ -1762,8 +1762,8 @@ setMethod("toRadians",
 #' @aliases to_date to_date,Column,missing-method
 #' @export
 #' @examples
-#' \dontrun{
 #'
+#' \dontrun{
 #' tmp <- createDataFrame(data.frame(time_string = dts))
 #' tmp2 <- mutate(tmp, date1 = to_date(tmp$time_string),
 #'                    date2 = to_date(tmp$time_string, "yyyy-MM-dd"),
@@ -2408,10 +2408,7 @@ setMethod("from_json", signature(x = "Column", schema = "structType"),
 #'
 #' \dontrun{
 #' tmp <- mutate(df, from_utc = from_utc_timestamp(df$time, 'PST'),
-#'                  to_utc = to_utc_timestamp(df$time, 'PST'),
-#'                  to_unix = unix_timestamp(df$time),
-#'                  to_unix2 = unix_timestamp(df$time, 'yyyy-MM-dd HH'),
-#'                  from_unix = from_unixtime(unix_timestamp(df$time)))
+#'                  to_utc = to_utc_timestamp(df$time, 'PST'))
 #' head(tmp)}
 #' @note from_utc_timestamp since 1.5.0
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
@@ -2736,6 +2733,14 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #'
 #' @aliases from_unixtime from_unixtime,Column-method
 #' @export
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, to_unix = unix_timestamp(df$time),
+#'                   to_unix2 = unix_timestamp(df$time, 'yyyy-MM-dd HH'),
+#'                   from_unix = from_unixtime(unix_timestamp(df$time)),
+#'                   from_unix2 = from_unixtime(unix_timestamp(df$time), 'yyyy-MM-dd HH:mm'))
+#' head(tmp)}
 #' @note from_unixtime since 1.5.0
 setMethod("from_unixtime", signature(x = "Column"),
           function(x, format = "yyyy-MM-dd HH:mm:ss") {
