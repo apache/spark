@@ -1764,8 +1764,6 @@ class Dataset[T] private[sql](
     // Resolves children first to reorder output attributes in `other` by name
     val leftPlan = sparkSession.sessionState.executePlan(logicalPlan)
     val rightPlan = sparkSession.sessionState.executePlan(other.logicalPlan)
-    leftPlan.assertAnalyzed()
-    rightPlan.assertAnalyzed()
 
     // Check column name duplication
     val resolver = sparkSession.sessionState.analyzer.resolver
