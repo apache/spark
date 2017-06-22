@@ -793,7 +793,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.getArray(1).getArray(0).toIntArray() === Array(1, 2))
       assert(column.getArray(1).getArray(1).toIntArray() === Array())
       assert(column.getArray(2).getArray(0).toIntArray() === Array())
-      assert(column.getArray(2).getArray(1)isNullAt(0))
+      assert(column.getArray(2).getArray(1).isNullAt(0))
       assert(Array(column.getArray(2).getArray(1).getInt(1),
         column.getArray(2).getArray(1).getInt(2)) === Array(4, 5))
       assert(column.isNullAt(3))
