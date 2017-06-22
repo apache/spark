@@ -44,7 +44,7 @@ class InMemorySessionCatalogSuite extends SessionCatalogSuite {
  * signatures but do not extend a common parent. This is largely by design but
  * unfortunately leads to very similar test code in two places.
  */
-abstract class SessionCatalogSuite extends PlanTest {
+abstract class SessionCatalogSuite extends AnalysisTest {
   protected val utils: CatalogTestUtils
 
   protected val isHiveExternalCatalog = false
@@ -445,6 +445,18 @@ abstract class SessionCatalogSuite extends PlanTest {
       intercept[NoSuchTableException] {
         catalog.alterTable(newTable("unknown_table", "db2"))
       }
+    }
+  }
+
+  test("alter table stats") {
+    withBasicCatalog { catalog =>
+      val tableId = TableIdentifier("tbl1", Some("db2"))
+      val oldTableStats = catalog.getTableMetadata(tableId).stats
+      assert(oldTableStats.isEmpty)
+      val newStats = CatalogStatistics(sizeInBytes = 1)
+      catalog.alterTableStats(tableId, newStats)
+      val newTableStats = catalog.getTableMetadata(tableId).stats
+      assert(newTableStats.get == newStats)
     }
   }
 

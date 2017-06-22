@@ -151,6 +151,14 @@ package object config {
       .createOptional
   // End blacklist confs
 
+  private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
+    ConfigBuilder("spark.files.fetchFailure.unRegisterOutputOnHost")
+      .doc("Whether to un-register all the outputs on the host in condition that we receive " +
+        " a FetchFailure. This is set default to false, which means, we only un-register the " +
+        " outputs related to the exact executor(instead of the host) on a FetchFailure.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
       .withAlternative("spark.scheduler.listenerbus.eventqueue.size")
@@ -294,6 +302,19 @@ package object config {
         "avoiding underestimating shuffle block size when fetch shuffle blocks.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(100 * 1024 * 1024)
+
+  private[spark] val SHUFFLE_REGISTRATION_TIMEOUT =
+    ConfigBuilder("spark.shuffle.registration.timeout")
+      .doc("Timeout in milliseconds for registration to the external shuffle service.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(5000)
+
+  private[spark] val SHUFFLE_REGISTRATION_MAX_ATTEMPTS =
+    ConfigBuilder("spark.shuffle.registration.maxAttempts")
+      .doc("When we fail to register to the external shuffle service, we will " +
+        "retry for maxAttempts times.")
+      .intConf
+      .createWithDefault(3)
 
   private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
     ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")

@@ -639,6 +639,20 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.registration.timeout</code></td>
+  <td>5000</td>
+  <td>
+    Timeout in milliseconds for registration to the external shuffle service.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.registration.maxAttempts</code></td>
+  <td>3</td>
+  <td>
+    When we fail to register to the external shuffle service, we will retry for maxAttempts times.
+  </td>
+</tr>
+<tr>
   <td><code>spark.io.encryption.enabled</code></td>
   <td>false</td>
   <td>
@@ -1552,6 +1566,8 @@ Apart from these, the following properties are also available, and may be useful
     of this setting is to act as a safety-net to prevent runaway uncancellable tasks from rendering
     an executor unusable.
   </td>
+</tr>
+<tr>
   <td><code>spark.stage.maxConsecutiveAttempts</code></td>
   <td>4</td>
   <td>
@@ -1772,14 +1788,6 @@ Apart from these, the following properties are also available, and may be useful
     How long for the connection to wait for ack to occur before timing
     out and giving up. To avoid unwilling timeout caused by long pause like GC,
     you can set larger value.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.core.connection.auth.wait.timeout</code></td>
-  <td>30s</td>
-  <td>
-    How long for the connection to wait for authentication to occur before timing
-    out and giving up.
   </td>
 </tr>
 <tr>

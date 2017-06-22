@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class TypeCoercionSuite extends PlanTest {
+class TypeCoercionSuite extends AnalysisTest {
 
   // scalastyle:off line.size.limit
   // The following table shows all implicit data type conversions that are not visible to the user.
@@ -766,6 +766,63 @@ class TypeCoercionSuite extends PlanTest {
       CaseWhen(Seq((Literal(true), Cast(Literal(100L), DecimalType(22, 2)))),
         Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2)))
     )
+  }
+
+  test("type coercion for Stack") {
+    val rule = TypeCoercion.StackCoercion
+
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(1), Literal(2), Literal(null))),
+      Stack(Seq(Literal(3), Literal(1), Literal(2), Literal.create(null, IntegerType))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(1.0), Literal(null), Literal(3.0))),
+      Stack(Seq(Literal(3), Literal(1.0), Literal.create(null, DoubleType), Literal(3.0))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(null), Literal("2"), Literal("3"))),
+      Stack(Seq(Literal(3), Literal.create(null, StringType), Literal("2"), Literal("3"))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(null), Literal(null), Literal(null))),
+      Stack(Seq(Literal(3), Literal(null), Literal(null), Literal(null))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(1), Literal("2"),
+        Literal(null), Literal(null))),
+      Stack(Seq(Literal(2),
+        Literal(1), Literal("2"),
+        Literal.create(null, IntegerType), Literal.create(null, StringType))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(1), Literal(null),
+        Literal(null), Literal("2"))),
+      Stack(Seq(Literal(2),
+        Literal(1), Literal.create(null, StringType),
+        Literal.create(null, IntegerType), Literal("2"))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(null), Literal(1),
+        Literal("2"), Literal(null))),
+      Stack(Seq(Literal(2),
+        Literal.create(null, StringType), Literal(1),
+        Literal("2"), Literal.create(null, IntegerType))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(null), Literal(null),
+        Literal(1), Literal("2"))),
+      Stack(Seq(Literal(2),
+        Literal.create(null, IntegerType), Literal.create(null, StringType),
+        Literal(1), Literal("2"))))
+
+    ruleTest(rule,
+      Stack(Seq(Subtract(Literal(3), Literal(1)),
+        Literal(1), Literal("2"),
+        Literal(null), Literal(null))),
+      Stack(Seq(Subtract(Literal(3), Literal(1)),
+        Literal(1), Literal("2"),
+        Literal.create(null, IntegerType), Literal.create(null, StringType))))
   }
 
   test("BooleanEquality type cast") {
