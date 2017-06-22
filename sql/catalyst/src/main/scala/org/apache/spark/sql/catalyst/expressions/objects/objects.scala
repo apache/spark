@@ -912,7 +912,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
 
     val code = s"""
       ${instanceGen.code}
-      this.${javaBeanInstance} = ${instanceGen.value};
+      ${javaBeanInstance} = ${instanceGen.value};
       if (!${instanceGen.isNull}) {
         $initializeCode
       }
