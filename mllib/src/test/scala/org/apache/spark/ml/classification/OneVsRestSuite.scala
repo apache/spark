@@ -103,15 +103,14 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
   test("one-vs-rest: tuning parallelism does not change output") {
     val numClasses = 3
-    val ovaPar2 = new OneVsRest()
+    val ovaPar1 = new OneVsRest()
       .setClassifier(new LogisticRegression)
-      .setParallelism(2)
 
-    val ovaModelPar2 = ovaPar2.fit(dataset)
+    val ovaModelPar1 = ovaPar1.fit(dataset)
 
-    val transformedDatasetPar2 = ovaModelPar2.transform(dataset)
+    val transformedDatasetPar1 = ovaModelPar1.transform(dataset)
 
-    val ovaResultsPar2 = transformedDatasetPar2.select("prediction", "label").rdd.map {
+    val ovaResultsPar1 = transformedDatasetPar1.select("prediction", "label").rdd.map {
       row => (row.getDouble(0), row.getDouble(1))
     }
 
@@ -127,9 +126,9 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       row => (row.getDouble(0), row.getDouble(1))
     }
 
-    val metricsPar2 = new MulticlassMetrics(ovaResultsPar2)
+    val metricsPar1 = new MulticlassMetrics(ovaResultsPar1)
     val metricsPar4 = new MulticlassMetrics(ovaResultsPar4)
-    assert(metricsPar2.confusionMatrix ~== metricsPar4.confusionMatrix absTol 400)
+    assert(metricsPar1.confusionMatrix ~== metricsPar4.confusionMatrix absTol 400)
   }
 
   test("one-vs-rest: pass label metadata correctly during train") {

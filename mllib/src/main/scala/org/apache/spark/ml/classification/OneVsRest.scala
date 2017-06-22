@@ -17,20 +17,19 @@
 
 package org.apache.spark.ml.classification
 
-import java.util.{List => JList}
 import java.util.UUID
+import java.util.concurrent.ExecutorService
 
-import scala.collection.JavaConverters._
-import scala.collection.parallel.ForkJoinTaskSupport
-import scala.concurrent.forkjoin.ForkJoinPool
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.language.existentials
 
+import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject, _}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
@@ -40,7 +39,9 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.SparkContext
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ThreadUtils
 
 private[ml] trait ClassifierTypeTrait {
   // scalastyle:off structural.type
@@ -286,7 +287,7 @@ final class OneVsRest @Since("1.4.0") (
     "the number of processes to use when running parallel one vs. rest", ParamValidators.gtEq(1))
 
   setDefault(
-    parallelism -> 4
+    parallelism -> 1
   )
 
   @Since("1.4.0")
@@ -324,6 +325,14 @@ final class OneVsRest @Since("1.4.0") (
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
 
+  def getExecutorService: ExecutorService = {
+    if (getParallelism == 1) {
+      return MoreExecutors.sameThreadExecutor()
+    }
+    ThreadUtils
+      .newDaemonCachedThreadPool(s"${this.getClass.getSimpleName}-thread-pool", getParallelism)
+  }
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): OneVsRestModel = {
     transformSchema(dataset.schema)
@@ -350,25 +359,28 @@ final class OneVsRest @Since("1.4.0") (
       multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    val iters = Range(0, numClasses).par
-    iters.tasksupport = new ForkJoinTaskSupport(
-      new ForkJoinPool(Math.min(getParallelism, numClasses))
-    )
+    val executor = getExecutorService
+    val executionContext = ExecutionContext.fromExecutorService(executor)
 
     // create k columns, one for each binary classifier.
-    val models = iters.map { index =>
-      // generate new label metadata for the binary problem.
-      val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
-      val labelColName = "mc2b$" + index
-      val trainingDataset = multiclassLabeled.withColumn(
-        labelColName, when(col($(labelCol)) === index.toDouble, 1.0).otherwise(0.0), newLabelMeta)
-      val classifier = getClassifier
-      val paramMap = new ParamMap()
-      paramMap.put(classifier.labelCol -> labelColName)
-      paramMap.put(classifier.featuresCol -> getFeaturesCol)
-      paramMap.put(classifier.predictionCol -> getPredictionCol)
-      classifier.fit(trainingDataset, paramMap)
-    }.toArray[ClassificationModel[_, _]]
+    val modelFutures = Range(0, numClasses).map { index =>
+      Future[ClassificationModel[_, _]] {
+        // generate new label metadata for the binary problem.
+        val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
+        val labelColName = "mc2b$" + index
+        val trainingDataset = multiclassLabeled.withColumn(
+          labelColName, when(col($(labelCol)) === index.toDouble, 1.0).otherwise(0.0), newLabelMeta)
+        val classifier = getClassifier
+        val paramMap = new ParamMap()
+        paramMap.put(classifier.labelCol -> labelColName)
+        paramMap.put(classifier.featuresCol -> getFeaturesCol)
+        paramMap.put(classifier.predictionCol -> getPredictionCol)
+        classifier.fit(trainingDataset, paramMap)
+      }(executionContext)
+    }
+    val models = modelFutures
+      .map(ThreadUtils.awaitResult(_, Duration.Inf)).toArray[ClassificationModel[_, _]]
+
     instr.logNumFeatures(models.head.numFeatures)
 
     if (handlePersistence) {
