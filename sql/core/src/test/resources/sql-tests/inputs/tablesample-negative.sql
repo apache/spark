@@ -7,6 +7,7 @@ CREATE TABLE t1 USING parquet AS SELECT 1 AS i1;
 SELECT mydb1.t1 FROM t1 TABLESAMPLE (-1 PERCENT);
 
 -- Negative tests:  percentage over 100
+-- The TABLESAMPLE clause samples without replacement, so the value of PERCENT must not exceed 100
 SELECT mydb1.t1 FROM t1 TABLESAMPLE (101 PERCENT);
 
 -- reset
