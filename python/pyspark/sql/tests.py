@@ -2383,6 +2383,14 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
 class TypesTest(unittest.TestCase):
 
+    def test_verify_type_exception_msg(self):
+        name = "test_name"
+        try:
+            _verify_type(None, StringType(), nullable=False, name=name)
+            self.fail('Expected _verify_type() to throw so test can check exception message')
+        except Exception as e:
+            self.assertTrue(str(e).startswith(name))
+
     def test_verify_type_ok_nullable(self):
         for obj, data_type in [
                 (None, IntegerType()),
@@ -2523,7 +2531,7 @@ class TypesTest(unittest.TestCase):
             if exp is None:
                 try:
                     _verify_type(obj, data_type, nullable=False)
-                except Exception as e:
+                except Exception:
                     traceback.print_exc()
                     self.fail(msg)
             else:
