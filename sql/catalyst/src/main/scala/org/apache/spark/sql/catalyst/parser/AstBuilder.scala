@@ -635,11 +635,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Limit(expression(ctx.expression), query)
 
       case SqlBaseParser.PERCENTLIT =>
-        var fraction = ctx.percentage.getText.toDouble
-        if (ctx.negativeSign != null) {
-          fraction *= -1
-        }
-        sample(fraction / 100.0d)
+        val fraction = ctx.percentage.getText.toDouble
+        val sign = if (ctx.negativeSign == null) 1 else -1
+        sample(sign * fraction / 100.0d)
 
       case SqlBaseParser.BYTELENGTH_LITERAL =>
         throw new ParseException(
