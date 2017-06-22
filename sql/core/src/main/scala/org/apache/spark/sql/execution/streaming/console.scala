@@ -53,9 +53,8 @@ class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
   }
 }
 
-case class ConsoleRelation(Context: SQLContext, data: DataFrame) extends BaseRelation {
-  override def sqlContext: SQLContext = Context
-
+case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
+  extends BaseRelation {
   override def schema: StructType = data.schema
 }
 
@@ -81,9 +80,7 @@ class ConsoleSinkProvider extends StreamSinkProvider
     // Truncate the displayed data if it is too long, by default it is true
     val isTruncated = parameters.get("truncate").map(_.toBoolean).getOrElse(true)
 
-    data.sparkSession.createDataFrame(
-      data.sparkSession.sparkContext.parallelize(data.collectInternal()), data.schema)
-      .showInternal(numRowsToShow, isTruncated)
+    data.showInternal(numRowsToShow, isTruncated)
 
     ConsoleRelation(sqlContext, data)
   }
