@@ -60,6 +60,35 @@ class FileStreamSinkSuite extends StreamTest {
     }
   }
 
+  test("SPARK-21167: encode and decode path correctly") {
+    val inputData = MemoryStream[String]
+    val ds = inputData.toDS()
+
+    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+
+    val query = ds.map(s => (s, s.length))
+      .toDF("value", "len")
+      .writeStream
+      .partitionBy("value")
+      .option("checkpointLocation", checkpointDir)
+      .format("parquet")
+      .start(outputDir)
+
+    try {
+      // The output is partitoned by "value", so the value will appear in the file path.
+      // This is to test if we handle spaces in the path correctly.
+      inputData.addData("hello world")
+      failAfter(streamingTimeout) {
+        query.processAllAvailable()
+      }
+      val outputDf = spark.read.parquet(outputDir)
+      checkDatasetUnorderly(outputDf.as[(Int, String)], ("hello world".length, "hello world"))
+    } finally {
+      query.stop()
+    }
+  }
+
   test("partitioned writing and batch reading") {
     val inputData = MemoryStream[Int]
     val ds = inputData.toDS()
