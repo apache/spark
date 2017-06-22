@@ -520,9 +520,6 @@ class MasterSuite extends SparkFunSuite
   private val _scheduleExecutorsOnWorkers = PrivateMethod[Array[Int]]('scheduleExecutorsOnWorkers)
   private val _drivers = PrivateMethod[HashSet[DriverInfo]]('drivers)
   private val _state = PrivateMethod[RecoveryState.Value]('state)
-  private val _registerWorker = PrivateMethod[Boolean]('registerWorker)
-  private val _registerApplication = PrivateMethod[Unit]('registerApplication)
-  private val _startExecutorsOnWorkers = PrivateMethod[Unit]('startExecutorsOnWorkers)
 
   private val workerInfo = makeWorkerInfo(4096, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
@@ -706,43 +703,6 @@ class MasterSuite extends SparkFunSuite
 
   private def getState(master: Master): RecoveryState.Value = {
     master.invokePrivate(_state())
-  }
-
-  test("Total cores is not divisible by cores per executor") {
-    val master = makeMaster()
-    registerFakeWorker(master, 40960, 10)
-    registerFakeWorker(master, 40960, 10)
-    val app = registerFakeApp(master, 1024, Some(3), Some(5))
-
-    master.invokePrivate(_startExecutorsOnWorkers())
-    assert(master.workers.toList.map(_.coresUsed).sum === 3)
-    assert(app.coresLeft === 2)
-  }
-
-  test("Total cores is divisible by cores per executor") {
-    val master = makeMaster()
-    registerFakeWorker(master, 40960, 10)
-    registerFakeWorker(master, 40960, 10)
-    val app = registerFakeApp(master, 1024, Some(3), Some(6))
-
-    master.invokePrivate(_startExecutorsOnWorkers())
-    assert(master.workers.toList.map(_.coresUsed).sum === 6)
-    assert(app.coresLeft === 0)
-  }
-
-  private def registerFakeWorker(master: Master, memoryMb: Int, cores: Int): Unit = {
-    val worker = makeWorkerInfo(memoryMb,cores)
-    master.invokePrivate(_registerWorker(worker))
-  }
-
-  private def registerFakeApp(
-      master: Master,
-      memoryPerExecutorMb: Int,
-      coresPerExecutor: Option[Int] = None,
-      maxCores: Option[Int] = None): ApplicationInfo = {
-    val app = makeAppInfo(memoryPerExecutorMb, coresPerExecutor, maxCores)
-    master.invokePrivate(_registerApplication(app))
-    app
   }
 }
 
