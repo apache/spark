@@ -92,6 +92,9 @@ select abs(-3.13), abs('-2.19');
 -- positive/negative
 select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11);
 
--- trunc number
+-- trunc
 select trunc(1234567891.1234567891, 4), trunc(1234567891.1234567891, -4), trunc(1234567891.1234567891, 0), trunc(1234567891.1234567891);
 select trunc(1234567891.1234567891, null), trunc(null, 4), trunc(null, null);
+select trunc(1234567891.1234567891, 'yyyy');
+select trunc(to_date('2015-07-22'), 4);
+select trunc('2015-07-22', 4);
