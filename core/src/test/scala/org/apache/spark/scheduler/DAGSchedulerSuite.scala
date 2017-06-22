@@ -2346,6 +2346,29 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       (Success, 1)))
   }
 
+  test("task end event should have updated accumulators (SPARK-20342)") {
+    val accumIds = new HashSet[Long]()
+    val listener = new SparkListener() {
+      override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+        event.taskInfo.accumulables.foreach { acc => accumIds += acc.id }
+      }
+    }
+    sc.addSparkListener(listener)
+
+    // Try a few times in a loop to make sure. This is not guaranteed to fail when the bug exists,
+    // but it should at least make the test flaky. If the bug is fixed, this should always pass.
+    (1 to 10).foreach { _ =>
+      accumIds.clear()
+
+      val accum = sc.longAccumulator
+      sc.parallelize(1 to 10, 10).foreach { _ =>
+        accum.add(1L)
+      }
+      sc.listenerBus.waitUntilEmpty(1000)
+      assert(accumIds.nonEmpty)
+    }
+  }
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
