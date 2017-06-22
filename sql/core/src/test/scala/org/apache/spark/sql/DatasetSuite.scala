@@ -461,8 +461,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val data = sparkContext.parallelize(1 to 2, 1).toDS()
     val errMsg = intercept[IllegalArgumentException] {
       data.sample(withReplacement = true, -0.1, 0)
-    }
-    assert(errMsg.getMessage.startsWith("requirement failed: "))
+    }.getMessage
+    assert(errMsg.contains("Sampling fraction (-0.1) must be nonnegative with replacement"))
+
+    // Sampling fraction can be greater than 1 with replacement.
     checkDataset(
       data.sample(withReplacement = true, 1.05, seed = 13),
       1, 2)
@@ -472,12 +474,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val data = sparkContext.parallelize(1 to 2, 1).toDS()
     val errMsg1 = intercept[IllegalArgumentException] {
       data.sample(withReplacement = false, -0.1, 0)
-    }
+    }.getMessage()
+    assert(errMsg1.contains(
+      "Sampling fraction (-0.1) must be on interval [0, 1] without replacement"))
+
     val errMsg2 = intercept[IllegalArgumentException] {
       data.sample(withReplacement = false, 1.1, 0)
-    }
-    assert(errMsg1.getMessage.startsWith("requirement failed: "))
-    assert(errMsg2.getMessage.startsWith("requirement failed: "))
+    }.getMessage()
+    assert(errMsg2.contains(
+      "Sampling fraction (1.1) must be on interval [0, 1] without replacement"))
   }
 
   test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
