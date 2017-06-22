@@ -122,7 +122,7 @@ object FileFormatWriter extends Logging {
       }
     }
     val partitionSet = AttributeSet(partitionColumns)
-    val dataColumns = queryExecution.executedPlan.output.filterNot(partitionSet.contains)
+    val dataColumns = allColumns.filterNot(partitionSet.contains)
 
     val bucketIdExpression = bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)

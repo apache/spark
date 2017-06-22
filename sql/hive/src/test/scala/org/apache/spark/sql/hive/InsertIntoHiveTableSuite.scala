@@ -470,24 +470,22 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
   test("SPARK-21165: the query schema of INSERT is changed after optimization") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
-      withTempView("tempView") {
-        withTable("dest", "view1") {
-          Seq(("a", "b", 3)).toDF("word", "first", "length").write.saveAsTable("view1")
+      withTable("tab1", "tab2") {
+        Seq(("a", "b", 3)).toDF("word", "first", "length").write.saveAsTable("tab1")
 
-          spark.sql(
-            """
-              |CREATE TABLE dest (word string, length int)
-              |PARTITIONED BY (first string)
-            """.stripMargin)
+        spark.sql(
+          """
+            |CREATE TABLE tab2 (word string, length int)
+            |PARTITIONED BY (first string)
+          """.stripMargin)
 
-          spark.sql(
-            """
-              |INSERT INTO TABLE dest PARTITION(first)
-              |SELECT word, length, cast(first as string) as first FROM view1
-            """.stripMargin)
+        spark.sql(
+          """
+            |INSERT INTO TABLE tab2 PARTITION(first)
+            |SELECT word, length, cast(first as string) as first FROM tab1
+          """.stripMargin)
 
-          checkAnswer(spark.table("dest"), Row("a", 3, "b"))
-        }
+        checkAnswer(spark.table("tab2"), Row("a", 3, "b"))
       }
     }
   }
