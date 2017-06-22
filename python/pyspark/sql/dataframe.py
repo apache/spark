@@ -1725,11 +1725,14 @@ class DataFrame(object):
         dtype = {}
         for field in self.schema:
             pandas_type = _to_corrected_pandas_type(field.dataType)
-            if (pandas_type):
+            if pandas_type is not None:
                 dtype[field.name] = pandas_type
 
-        df = pd.DataFrame.from_records(self.collect(), columns=self.columns)
-        return df.astype(dtype, copy=False)
+        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+        for f, t in dtype.items():
+            pdf[f] = pdf[f].astype(t, copy=False)
+        return pdf
 
     ##########################################################################################
     # Pandas compatibility
