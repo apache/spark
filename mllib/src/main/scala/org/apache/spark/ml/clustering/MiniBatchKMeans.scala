@@ -343,10 +343,12 @@ class MiniBatchKMeans @Since("2.3.0") (
 
     val numFeatures = centers.head.vector.size
     instr.logNumFeatures(numFeatures)
+
     val numCenters = centers.length
     val counts = Array.ofDim[Long](numCenters)
 
     var converged = false
+    var batchSize = 0L
     var iteration = 0
 
     // Execute iterations of Sculley's algorithm until converged
@@ -363,52 +365,42 @@ class MiniBatchKMeans @Since("2.3.0") (
         data.sample(false, $(fraction), iteration + 42)
       }
 
+      // Find the sum and count of points mapping to each center
       val totalContribs = sampled.mapPartitions { points =>
         val thisCenters = bcCenters.value
-        points.map { (point: VectorWithNorm) =>
+        val dims = thisCenters.head.vector.size
+        val sums = Array.fill(thisCenters.length)(Vectors.zeros(dims))
+        val counts = Array.fill(thisCenters.length)(0L)
+
+        points.foreach { point =>
           val (bestCenter, cost) = MLlibKMeans.findClosest(thisCenters, point)
           costAccum.add(cost)
-          (bestCenter, point.vector)
+          val sum = sums(bestCenter)
+          axpy(1.0, point.vector, sum)
+          counts(bestCenter) += 1
         }
-      }.partitionBy(new KeyPartitioner(numCenters))
-        .mapPartitions { it =>
-          val center = Vectors.zeros(numFeatures)
-          var count = -1L
-          var best = -1
 
-          it.foreach {
-            case (bestCenter, point) =>
-              if (count < 0) {
-                axpy(1.0, bcCenters.value(bestCenter).vector, center)
-                count = bcCounts.value(bestCenter) + 1
-                best = bestCenter
-              } else {
-                count += 1
-              }
-              // learning rate
-              val lr = 1.0 / count
-              // center = center * (1 - lr) + point * lr
-              scal(1 - lr, center)
-              axpy(lr, point, center)
-          }
+        counts.indices.filter(counts(_) > 0).map(j => (j, (sums(j), counts(j)))).iterator
+      }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
+        axpy(1.0, sum2, sum1)
+        (sum1, count1 + count2)
+      }.collectAsMap()
 
-          if (count > 0) {
-            Iterator.single((best, (center, count)))
-          } else {
-            Iterator.empty
-          }
-        }.collectAsMap()
-
-      // Update the cluster centers and costs
+      // Update the cluster centers, costs and counts
       converged = true
-      totalContribs.foreach { case (j, (center, count)) =>
-        val newCenter = new VectorWithNorm(center)
-        if (converged
-          && MLlibKMeans.fastSquaredDistance(newCenter, centers(j)) > $(tol) * $(tol)) {
+      batchSize = 0
+      totalContribs.foreach { case (j, (sum, count)) =>
+        batchSize += count
+        val newCount = counts(j) + count
+        scal(1.0 / newCount, sum)
+        axpy(counts(j).toDouble / newCount, centers(j).vector, sum)
+        val newCenter = new VectorWithNorm(sum)
+        if (converged &&
+          MLlibKMeans.fastSquaredDistance(newCenter, centers(j)) > $(tol) * $(tol)) {
           converged = false
         }
         centers(j) = newCenter
-        counts(j) = count
+        counts(j) = newCount
       }
 
       bcCenters.destroy(blocking = false)
@@ -418,7 +410,7 @@ class MiniBatchKMeans @Since("2.3.0") (
 
       val iterTimeInSeconds = (System.nanoTime() - iterStartTime) / 1e9
       logInfo(f"Iteration $iteration took $iterTimeInSeconds%.3f seconds, " +
-        f"cost on sampled data: $cost")
+        f"cost on $batchSize instances: $cost")
       iteration += 1
     }
     data.unpersist(blocking = false)
@@ -433,14 +425,6 @@ class MiniBatchKMeans @Since("2.3.0") (
     }
 
     new MiniBatchKMeansModel(uid, centers.map(_.vector.asML))
-  }
-
-  private class KeyPartitioner(partitions: Int) extends Partitioner {
-    require(partitions >= 0, s"Number of partitions ($partitions) cannot be negative.")
-
-    override def numPartitions: Int = partitions
-
-    override def getPartition(key: Any): Int = key.asInstanceOf[Int]
   }
 
   private def initCenters(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
