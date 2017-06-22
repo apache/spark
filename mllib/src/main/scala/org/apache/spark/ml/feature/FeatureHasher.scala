@@ -23,7 +23,7 @@ import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCol}
-import org.apache.spark.ml.util.{DefaultParamsWritable, Identifiable, SchemaUtils}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -72,7 +72,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     val hashFunc: Any => Int = OldHashingTF.murmur3Hash
-    val numFeatures = $(numFeatures)
+    val n = $(numFeatures)
 
     val os = transformSchema(dataset.schema)
 
@@ -100,11 +100,11 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
           val hash = hashFunc(fieldName)
           (hash, 1.0)
         }
-        val idx = Utils.nonNegativeMod(rawIdx, numFeatures)
+        val idx = Utils.nonNegativeMod(rawIdx, n)
         map.changeValue(idx, value, v => v + value)
         (idx, value)
       }
-      Vectors.sparse(numFeatures, map.toSeq)
+      Vectors.sparse(n, map.toSeq)
     }
 
     val metadata = os($(outputCol)).metadata
@@ -113,7 +113,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
       hashFeatures(struct(featureCols: _*)).as($(outputCol), metadata))
   }
 
-  override def copy(extra: ParamMap): Transformer = defaultCopy(extra)
+  override def copy(extra: ParamMap): FeatureHasher = defaultCopy(extra)
 
   override def transformSchema(schema: StructType): StructType = {
     val fields = schema($(inputCols).toSet)
@@ -123,4 +123,11 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
     val attrGroup = new AttributeGroup($(outputCol), $(numFeatures))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
+}
+
+@Since("2.3.0")
+object FeatureHasher extends DefaultParamsReadable[FeatureHasher] {
+
+  @Since("2.3.0")
+  override def load(path: String): FeatureHasher = super.load(path)
 }

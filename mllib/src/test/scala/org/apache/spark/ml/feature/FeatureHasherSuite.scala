@@ -24,6 +24,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
 class FeatureHasherSuite extends SparkFunSuite
   with MLlibTestSparkContext
@@ -49,6 +50,7 @@ class FeatureHasherSuite extends SparkFunSuite
       (2, 2.0, 2.0f, "2", "foo"),
       (3, 3.0, 3.0f, "3", "bar")
     ).toDF("int", "double", "float", "stringNum", "string")
+
     val n = 100
     val featureHasher = new FeatureHasher()
       .setInputCols("int", "double", "float", "stringNum", "string")
@@ -57,10 +59,12 @@ class FeatureHasherSuite extends SparkFunSuite
     val output = featureHasher.transform(df)
     val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
     require(attrGroup.numAttributes === Some(n))
+
+    implicit val vectorEncoder = ExpressionEncoder[Vector]()
     val features = output.select("features").as[Vector].collect()
+
     // Assume perfect hash on field names
     def idx: Any => Int = murmur3FeatureIdx(n)
-
     // check expected indices
     val expected = Seq(
       Vectors.sparse(n, Seq((idx("int"), 2.0), (idx("double"), 2.0), (idx("float"), 2.0),
