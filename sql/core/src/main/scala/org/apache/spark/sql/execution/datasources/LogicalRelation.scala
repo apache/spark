@@ -46,7 +46,7 @@ case class LogicalRelation(
   // Only care about relation when canonicalizing.
   override def preCanonicalized: LogicalPlan = copy(catalogTable = None)
 
-  @transient override def computeStats(conf: SQLConf): Statistics = {
+  @transient override def computeStats: Statistics = {
     catalogTable.flatMap(_.stats.map(_.toPlanStats(output))).getOrElse(
       Statistics(sizeInBytes = relation.sizeInBytes))
   }

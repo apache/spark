@@ -44,8 +44,8 @@ case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
 
   override lazy val canonicalized: LogicalPlan = child.canonicalized
 
-  override def computeStats(conf: SQLConf): Statistics = {
-    val stats = child.stats(conf)
+  override def computeStats: Statistics = {
+    val stats = child.stats
     stats.copy(hints = hints)
   }
 }

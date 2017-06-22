@@ -67,7 +67,7 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     }
   }
 
-  override def computeStats(conf: SQLConf): Statistics =
+  override def computeStats: Statistics =
     Statistics(sizeInBytes =
       output.map(n => BigInt(n.dataType.defaultSize)).sum * data.length)
 

@@ -1118,7 +1118,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // instead of Int for avoiding possible overflow.
     val ds = (0 to 10000).map( i =>
       (i, Seq((i, Seq((i, "This is really not that long of a string")))))).toDS()
-    val sizeInBytes = ds.logicalPlan.stats(sqlConf).sizeInBytes
+    val sizeInBytes = ds.logicalPlan.stats.sizeInBytes
     // sizeInBytes is 2404280404, before the fix, it overflows to a negative number
     assert(sizeInBytes > 0)
   }

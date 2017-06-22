@@ -77,7 +77,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       // Keep the column stat from both sides unchanged.
       attributeStats = AttributeMap(
         Seq("key-1-5", "key-5-9", "key-1-2", "key-2-4").map(nameToColInfo)))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("disjoint inner join") {
@@ -90,7 +90,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       sizeInBytes = 1,
       rowCount = Some(0),
       attributeStats = AttributeMap(Nil))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("disjoint left outer join") {
@@ -106,7 +106,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
         // Null count for right side columns = left row count
         Seq(nameToAttr("key-1-2") -> nullColumnStat(nameToAttr("key-1-2").dataType, 5),
           nameToAttr("key-2-4") -> nullColumnStat(nameToAttr("key-2-4").dataType, 5))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("disjoint right outer join") {
@@ -122,7 +122,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
         // Null count for left side columns = right row count
         Seq(nameToAttr("key-1-5") -> nullColumnStat(nameToAttr("key-1-5").dataType, 3),
           nameToAttr("key-5-9") -> nullColumnStat(nameToAttr("key-5-9").dataType, 3))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("disjoint full outer join") {
@@ -140,7 +140,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
           nameToAttr("key-5-9") -> columnInfo(nameToAttr("key-5-9")).copy(nullCount = 3),
           nameToAttr("key-1-2") -> columnInfo(nameToAttr("key-1-2")).copy(nullCount = 5),
           nameToAttr("key-2-4") -> columnInfo(nameToAttr("key-2-4")).copy(nullCount = 5))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("inner join") {
@@ -161,7 +161,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(
         Seq(nameToAttr("key-1-5") -> joinedColStat, nameToAttr("key-1-2") -> joinedColStat,
           nameToAttr("key-5-9") -> colStatForkey59, nameToColInfo("key-2-4"))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("inner join with multiple equi-join keys") {
@@ -183,7 +183,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(
         Seq(nameToAttr("key-1-2") -> joinedColStat1, nameToAttr("key-1-2") -> joinedColStat1,
           nameToAttr("key-2-4") -> joinedColStat2, nameToAttr("key-2-3") -> joinedColStat2)))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("left outer join") {
@@ -201,7 +201,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(
         Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-3"),
           nameToColInfo("key-1-2"), nameToAttr("key-2-4") -> joinedColStat)))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("right outer join") {
@@ -219,7 +219,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(
         Seq(nameToColInfo("key-1-2"), nameToAttr("key-2-4") -> joinedColStat,
           nameToColInfo("key-1-2"), nameToColInfo("key-2-3"))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("full outer join") {
@@ -234,7 +234,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       // Keep the column stat from both sides unchanged.
       attributeStats = AttributeMap(Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-4"),
         nameToColInfo("key-1-2"), nameToColInfo("key-2-3"))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("left semi/anti join") {
@@ -248,7 +248,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
         sizeInBytes = 3 * (8 + 4 * 2),
         rowCount = Some(3),
         attributeStats = AttributeMap(Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-4"))))
-      assert(join.stats(conf) == expectedStats)
+      assert(join.stats == expectedStats)
     }
   }
 
@@ -306,7 +306,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
           sizeInBytes = 1 * (8 + 2 * getColSize(key1, columnInfo1(key1))),
           rowCount = Some(1),
           attributeStats = AttributeMap(Seq(key1 -> columnInfo1(key1), key2 -> columnInfo1(key1))))
-        assert(join.stats(conf) == expectedStats)
+        assert(join.stats == expectedStats)
       }
     }
   }
@@ -323,6 +323,6 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       sizeInBytes = 1,
       rowCount = Some(0),
       attributeStats = AttributeMap(Nil))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 }

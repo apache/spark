@@ -27,8 +27,16 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 
 trait StatsEstimationTestBase extends SparkFunSuite {
 
-  /** Enable stats estimation based on CBO. */
-  protected val conf = new SQLConf().copy(CASE_SENSITIVE -> true, CBO_ENABLED -> true)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    // Enable stats estimation based on CBO.
+    SQLConf.get.setConf(SQLConf.CBO_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    SQLConf.get.unsetConf(SQLConf.CBO_ENABLED)
+    super.afterAll()
+  }
 
   def getColSize(attribute: Attribute, colStat: ColumnStat): Long = attribute.dataType match {
     // For UTF8String: base + offset + numBytes
@@ -55,7 +63,7 @@ case class StatsTestPlan(
     attributeStats: AttributeMap[ColumnStat],
     size: Option[BigInt] = None) extends LeafNode {
   override def output: Seq[Attribute] = outputList
-  override def computeStats(conf: SQLConf): Statistics = Statistics(
+  override def computeStats: Statistics = Statistics(
     // If sizeInBytes is useless in testing, we just use a fake value
     sizeInBytes = size.getOrElse(Int.MaxValue),
     rowCount = Some(rowCount),

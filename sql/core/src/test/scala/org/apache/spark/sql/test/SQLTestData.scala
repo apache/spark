@@ -29,8 +29,6 @@ import org.apache.spark.sql.internal.SQLConf
 private[sql] trait SQLTestData { self =>
   protected def spark: SparkSession
 
-  protected def sqlConf: SQLConf = spark.sessionState.conf
-
   // Helper object to import SQL implicits without a concrete SQLContext
   private object internalImplicits extends SQLImplicits {
     protected override def _sqlContext: SQLContext = self.spark.sqlContext
