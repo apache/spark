@@ -434,7 +434,6 @@ class MiniBatchKMeans @Since("2.3.0") (
       .setK($(k))
       .setInitializationMode($(initMode))
       .setInitializationSteps($(initSteps))
-      .setMaxIterations(0)
       .setSeed($(seed))
 
     $(initMode) match {
