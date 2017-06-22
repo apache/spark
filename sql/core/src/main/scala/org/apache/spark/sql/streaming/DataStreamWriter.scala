@@ -20,8 +20,9 @@ package org.apache.spark.sql.streaming
 import java.net.URI
 import java.util.Locale
 
-import org.apache.hadoop.fs.FileSystem
 import scala.collection.JavaConverters._
+
+import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
+
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
