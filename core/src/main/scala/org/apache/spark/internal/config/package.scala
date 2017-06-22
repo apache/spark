@@ -325,9 +325,9 @@ package object config {
 
   private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
     ConfigBuilder("spark.taskMetrics.trackUpdatedBlockStatuses")
-      .doc("Enable tracking of updatedBlockStatuses in the TaskMetrics. On by default to " +
-        "preserve backwards compatibility. It uses a lot of memory so should be turned off if " +
-        "not needed.")
+      .doc("Enable tracking of updatedBlockStatuses in the TaskMetrics. Off by default since " +
+        "tracking the block statuses can use a lot of memory and its not used anywhere within " +
+        "spark.")
       .booleanConf
       .createWithDefault(false)
 }
