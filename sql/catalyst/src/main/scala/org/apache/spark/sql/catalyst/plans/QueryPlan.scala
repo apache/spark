@@ -203,7 +203,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         // normalize that for equality testing, by assigning expr id from 0 incrementally. The
         // alias name doesn't matter and should be erased.
         val normalizedChild = QueryPlan.normalizeExprId(a.child, allAttributes)
-        Alias(normalizedChild, "")(ExprId(id), a.qualifier, isGenerated = a.isGenerated)
+        Alias(normalizedChild, "")(ExprId(id), a.qualifier)
 
       case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
