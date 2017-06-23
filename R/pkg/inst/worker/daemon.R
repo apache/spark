@@ -75,7 +75,7 @@ while (TRUE) {
       }
     })
   } else if (is.null(children)) {
-    # If it is NULL, there are no such workers. Waits indefinitely for a socket connecion.
+    # If it is NULL, there are no such children. Waits indefinitely for a socket connecion.
     selectTimeout <- NULL
   }
 
