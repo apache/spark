@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.util
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.internal.Logging
 
 
 /**
@@ -27,39 +25,14 @@ import org.apache.spark.sql.types.StructType
  *
  * TODO: Merge this file with [[org.apache.spark.ml.util.SchemaUtils]].
  */
-private[spark] object SchemaUtils {
-
-  // Returns true if a given resolver is case-sensitive
-  private def isCaseSensitiveAnalysis(resolver: Resolver): Boolean = {
-    if (resolver == caseSensitiveResolution) {
-      true
-    } else if (resolver == caseInsensitiveResolution) {
-      false
-    } else {
-      sys.error("A resolver to check if two identifiers are equal must be " +
-        "`caseSensitiveResolution` or `caseInsensitiveResolution` in o.a.s.sql.catalyst.")
-    }
-  }
+private[spark] object SchemaUtils extends Logging {
 
   /**
-   * Checks if input column names have duplicate identifiers. This throws an exception if
+   * Checks if input column names have duplicate identifiers. Prints a warning message if
    * the duplication exists.
    *
    * @param columnNames column names to check
-   * @param colType column type name, used in an exception message
-   * @param resolver resolver used to determine if two identifiers are equal
-   */
-  def checkColumnNameDuplication(
-      columnNames: Seq[String], colType: String, resolver: Resolver): Unit = {
-    checkColumnNameDuplication(columnNames, colType, isCaseSensitiveAnalysis(resolver))
-  }
-
-  /**
-   * Checks if input column names have duplicate identifiers. This throws an exception if
-   * the duplication exists.
-   *
-   * @param columnNames column names to check
-   * @param colType column type name, used in an exception message
+   * @param colType column type name, used in a warning message
    * @param caseSensitiveAnalysis whether duplication checks should be case sensitive or not
    */
   def checkColumnNameDuplication(
@@ -73,8 +46,8 @@ private[spark] object SchemaUtils {
       val duplicateColumns = names.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => s"`$x`"
       }
-      throw new AnalysisException(
-        s"Found duplicate column(s) $colType: ${duplicateColumns.mkString(", ")}")
+      logWarning(s"Found duplicate column(s) $colType: ${duplicateColumns.mkString(", ")}. " +
+        "You might need to assign different column names.")
     }
   }
 }
