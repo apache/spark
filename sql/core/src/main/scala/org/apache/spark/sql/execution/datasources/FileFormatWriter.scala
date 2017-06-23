@@ -124,15 +124,6 @@ object FileFormatWriter extends Logging {
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = allColumns.filterNot(partitionSet.contains)
 
-    queryExecution.executedPlan.output.zip(queryExecution.logical.output).foreach {
-      case (fieldExecuted, fieldAnalyzed) =>
-        if (fieldAnalyzed.name != fieldExecuted.name) {
-          // scalastyle:off println
-          println(s"analyzed: ${fieldAnalyzed.name}; executed: ${fieldExecuted.name}")
-          // scalastyle:on println
-        }
-    }
-
     val bucketIdExpression = bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
       // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
