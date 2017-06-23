@@ -97,6 +97,8 @@ import org.apache.spark.util.Utils
 @InterfaceStability.Stable
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
+  require(fields.map(_.name).distinct.size == fields.size, "Struct fields have duplicate name")
+
   /** No-arg constructor for kryo. */
   def this() = this(Array.empty[StructField])
 
@@ -129,6 +131,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *}}}
    */
   def add(field: StructField): StructType = {
+    if (fieldNames.contains(field.name)) {
+      throw new IllegalArgumentException(s"${field.name} is duplicated")
+    }
     StructType(fields :+ field)
   }
 
@@ -141,7 +146,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *   .add("c", StringType)
    */
   def add(name: String, dataType: DataType): StructType = {
-    StructType(fields :+ StructField(name, dataType, nullable = true, Metadata.empty))
+    add(StructField(name, dataType, nullable = true, Metadata.empty))
   }
 
   /**
@@ -153,7 +158,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *   .add("c", StringType, true)
    */
   def add(name: String, dataType: DataType, nullable: Boolean): StructType = {
-    StructType(fields :+ StructField(name, dataType, nullable, Metadata.empty))
+    add(StructField(name, dataType, nullable, Metadata.empty))
   }
 
   /**
@@ -170,7 +175,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: DataType,
       nullable: Boolean,
       metadata: Metadata): StructType = {
-    StructType(fields :+ StructField(name, dataType, nullable, metadata))
+    add(StructField(name, dataType, nullable, metadata))
   }
 
   /**
@@ -187,7 +192,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: DataType,
       nullable: Boolean,
       comment: String): StructType = {
-    StructType(fields :+ StructField(name, dataType, nullable).withComment(comment))
+    add(StructField(name, dataType, nullable).withComment(comment))
   }
 
   /**
