@@ -1806,7 +1806,6 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = {
-    require(fraction >= 0, s"Fraction must be nonnegative, but got $fraction")
     withTypedPlan {
       Sample(0.0, fraction, withReplacement, seed, logicalPlan)
     }
