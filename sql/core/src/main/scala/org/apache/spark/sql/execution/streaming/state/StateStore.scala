@@ -172,8 +172,7 @@ object StateStoreProvider {
       indexOrdinal: Option[Int], // for sorting the data
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
-    val providerClass = storeConf.providerClass.map(Utils.classForName)
-        .getOrElse(classOf[HDFSBackedStateStoreProvider])
+    val providerClass = Utils.classForName(storeConf.providerClass)
     val provider = providerClass.newInstance().asInstanceOf[StateStoreProvider]
     provider.init(stateStoreId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
     provider
