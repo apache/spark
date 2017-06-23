@@ -27,5 +27,5 @@ make_dist() {
 }
 
 publish_artifacts
-make_dist hadoop-2.8.0-palantir5 "${PALANTIR_FLAGS[*]}" --clean
+make_dist hadoop-2.8.0-palantir6 "${PALANTIR_FLAGS[*]}" --clean
 make_dist without-hadoop "-Phadoop-provided -Pkubernetes -Phive -Pyarn -Psparkr" --clean
