@@ -274,27 +274,27 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
 @Since("1.4.0")
 final class OneVsRest @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
-  extends Estimator[OneVsRestModel] with OneVsRestParams with MLWritable {
+  extends Estimator[OneVsRestModel] with OneVsRestParams with ParallelismParam with MLWritable {
 
-  /**
-   * param for the number of processes to use when running parallel one vs. rest
-   * The implementation of parallel one vs. rest runs the classification for
-   * each class in a separate process.
-   * @group param
-   */
-  @Since("2.3.0")
-  val parallelism = new IntParam(this, "parallelism",
-    "the number of processes to use when running parallel one vs. rest", ParamValidators.gtEq(1))
-
-  setDefault(
-    parallelism -> 1
-  )
+//  /**
+//   * param for the number of processes to use when running parallel one vs. rest
+//   * The implementation of parallel one vs. rest runs the classification for
+//   * each class in a separate process.
+//   * @group param
+//   */
+//  @Since("2.3.0")
+//  val parallelism = new IntParam(this, "parallelism",
+//    "the number of processes to use when running parallel one vs. rest", ParamValidators.gtEq(1))
+//
+//  setDefault(
+//    parallelism -> 1
+//  )
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("oneVsRest"))
 
-  /** @group getParam */
-  def getParallelism: Int = $(parallelism)
+//  /** @group getParam */
+//  def getParallelism: Int = $(parallelism)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -302,11 +302,11 @@ final class OneVsRest @Since("1.4.0") (
     set(classifier, value.asInstanceOf[ClassifierType])
   }
 
-  /** @group setParam */
-  @Since("2.3.0")
-  def setParallelism(value: Int): this.type = {
-    set(parallelism, value)
-  }
+//  /** @group setParam */
+//  @Since("2.3.0")
+//  def setParallelism(value: Int): this.type = {
+//    set(parallelism, value)
+//  }
 
   /** @group setParam */
   @Since("1.5.0")
@@ -325,13 +325,13 @@ final class OneVsRest @Since("1.4.0") (
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
 
-  def getExecutorService: ExecutorService = {
-    if (getParallelism == 1) {
-      return MoreExecutors.sameThreadExecutor()
-    }
-    ThreadUtils
-      .newDaemonCachedThreadPool(s"${this.getClass.getSimpleName}-thread-pool", getParallelism)
-  }
+//  def getExecutorService: ExecutorService = {
+//    if (getParallelism == 1) {
+//      return MoreExecutors.sameThreadExecutor()
+//    }
+//    ThreadUtils
+//      .newDaemonCachedThreadPool(s"${this.getClass.getSimpleName}-thread-pool", getParallelism)
+//  }
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): OneVsRestModel = {

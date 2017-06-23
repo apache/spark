@@ -17,12 +17,47 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.ml.param.Params
+import java.util.concurrent.ExecutorService
+
+import com.google.common.util.concurrent.MoreExecutors
+
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.param.{IntParam, Params, ParamValidators}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Common parameter for estimators trained in a multithreaded environment.
  */
 private[ml] trait ParallelismParam extends Params {
 
+  /**
+   * param for the number of processes to use when running parallel one vs. rest
+   * The implementation of parallel one vs. rest runs the classification for
+   * each class in a separate process.
+   * @group param
+   */
+  @Since("2.3.0")
+  val parallelism = new IntParam(this, "parallelism",
+    "the number of processes to use when running parallel one vs. rest", ParamValidators.gtEq(1))
 
+  setDefault(
+    parallelism -> 1
+  )
+
+  /** @group getParam */
+  def getParallelism: Int = $(parallelism)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setParallelism(value: Int): this.type = {
+    set(parallelism, value)
+  }
+
+  def getExecutorService: ExecutorService = {
+    if (getParallelism == 1) {
+      return MoreExecutors.sameThreadExecutor()
+    }
+    ThreadUtils
+      .newDaemonCachedThreadPool(s"${this.getClass.getSimpleName}-thread-pool", getParallelism)
+  }
 }
