@@ -641,7 +641,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
       case SqlBaseParser.PERCENTLIT =>
         val fraction = ctx.percentage.getText.toDouble
-        sample(fraction / 100.0d)
+        val sign = if (ctx.negativeSign == null) 1 else -1
+        sample(sign * fraction / 100.0d)
 
       case SqlBaseParser.BYTELENGTH_LITERAL =>
         throw new ParseException(
