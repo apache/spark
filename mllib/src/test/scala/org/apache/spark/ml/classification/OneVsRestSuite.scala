@@ -114,21 +114,21 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       row => (row.getDouble(0), row.getDouble(1))
     }
 
-    val ovaPar4 = new OneVsRest()
+    val ovaPar2 = new OneVsRest()
       .setClassifier(new LogisticRegression)
-      .setParallelism(4)
+      .setParallelism(2)
 
-    val ovaModelPar4 = ovaPar4.fit(dataset)
+    val ovaModelPar2 = ovaPar2.fit(dataset)
 
-    val transformedDatasetPar4 = ovaModelPar4.transform(dataset)
+    val transformedDatasetPar2 = ovaModelPar2.transform(dataset)
 
-    val ovaResultsPar4 = transformedDatasetPar4.select("prediction", "label").rdd.map {
+    val ovaResultsPar2 = transformedDatasetPar2.select("prediction", "label").rdd.map {
       row => (row.getDouble(0), row.getDouble(1))
     }
 
     val metricsPar1 = new MulticlassMetrics(ovaResultsPar1)
-    val metricsPar4 = new MulticlassMetrics(ovaResultsPar4)
-    assert(metricsPar1.confusionMatrix ~== metricsPar4.confusionMatrix absTol 400)
+    val metricsPar2 = new MulticlassMetrics(ovaResultsPar2)
+    assert(metricsPar1.confusionMatrix ~== metricsPar2.confusionMatrix absTol 400)
   }
 
   test("one-vs-rest: pass label metadata correctly during train") {

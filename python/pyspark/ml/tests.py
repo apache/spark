@@ -951,7 +951,7 @@ class PersistenceTest(SparkSessionTestCase):
                                          (2.0, Vectors.dense(0.5, 0.5))] * 10,
                                         ["label", "features"])
         lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr, parallelism=8)
+        ovr = OneVsRest(classifier=lr, parallelism=1)
         model = ovr.fit(df)
         ovrPath = temp_path + "/ovr"
         ovr.save(ovrPath)
@@ -1215,7 +1215,7 @@ class OneVsRestTests(SparkSessionTestCase):
                                          (2.0, Vectors.dense(0.5, 0.5))],
                                         ["label", "features"])
         lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr, parallelism=1)
+        ovr = OneVsRest(classifier=lr)
         ovr1 = ovr.copy({lr.maxIter: 10})
         self.assertEqual(ovr.getClassifier().getMaxIter(), 5)
         self.assertEqual(ovr1.getClassifier().getMaxIter(), 10)
@@ -1239,11 +1239,11 @@ class OneVsRestTests(SparkSessionTestCase):
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))],
                                         ["label", "features"])
+        ovrPar1 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=1)
+        modelPar1 = ovrPar1.fit(df)
         ovrPar2 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=2)
         modelPar2 = ovrPar2.fit(df)
-        ovrPar4 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=4)
-        modelPar4 = ovrPar4.fit(df)
-        self.assertEqual(modelPar2.getPredictionCol(), modelPar4.getPredictionCol())
+        self.assertEqual(modelPar1.getPredictionCol(), modelPar2.getPredictionCol())
 
 
 class HashingTFTest(SparkSessionTestCase):

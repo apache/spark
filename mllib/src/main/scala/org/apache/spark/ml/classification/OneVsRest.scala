@@ -274,39 +274,16 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
 @Since("1.4.0")
 final class OneVsRest @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
-  extends Estimator[OneVsRestModel] with OneVsRestParams with ParallelismParam with MLWritable {
-
-//  /**
-//   * param for the number of processes to use when running parallel one vs. rest
-//   * The implementation of parallel one vs. rest runs the classification for
-//   * each class in a separate process.
-//   * @group param
-//   */
-//  @Since("2.3.0")
-//  val parallelism = new IntParam(this, "parallelism",
-//    "the number of processes to use when running parallel one vs. rest", ParamValidators.gtEq(1))
-//
-//  setDefault(
-//    parallelism -> 1
-//  )
+  extends Estimator[OneVsRestModel] with OneVsRestParams with HasParallelism with MLWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("oneVsRest"))
-
-//  /** @group getParam */
-//  def getParallelism: Int = $(parallelism)
 
   /** @group setParam */
   @Since("1.4.0")
   def setClassifier(value: Classifier[_, _, _]): this.type = {
     set(classifier, value.asInstanceOf[ClassifierType])
   }
-
-//  /** @group setParam */
-//  @Since("2.3.0")
-//  def setParallelism(value: Int): this.type = {
-//    set(parallelism, value)
-//  }
 
   /** @group setParam */
   @Since("1.5.0")
@@ -324,14 +301,6 @@ final class OneVsRest @Since("1.4.0") (
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
-
-//  def getExecutorService: ExecutorService = {
-//    if (getParallelism == 1) {
-//      return MoreExecutors.sameThreadExecutor()
-//    }
-//    ThreadUtils
-//      .newDaemonCachedThreadPool(s"${this.getClass.getSimpleName}-thread-pool", getParallelism)
-//  }
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): OneVsRestModel = {
@@ -359,22 +328,21 @@ final class OneVsRest @Since("1.4.0") (
       multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    val executor = getExecutorService
-    val executionContext = ExecutionContext.fromExecutorService(executor)
+    val executionContext = getExecutionContext
 
     // create k columns, one for each binary classifier.
     val modelFutures = Range(0, numClasses).map { index =>
-      Future[ClassificationModel[_, _]] {
-        // generate new label metadata for the binary problem.
-        val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
-        val labelColName = "mc2b$" + index
-        val trainingDataset = multiclassLabeled.withColumn(
-          labelColName, when(col($(labelCol)) === index.toDouble, 1.0).otherwise(0.0), newLabelMeta)
-        val classifier = getClassifier
-        val paramMap = new ParamMap()
-        paramMap.put(classifier.labelCol -> labelColName)
-        paramMap.put(classifier.featuresCol -> getFeaturesCol)
-        paramMap.put(classifier.predictionCol -> getPredictionCol)
+      // generate new label metadata for the binary problem.
+      val newLabelMeta = BinaryAttribute.defaultAttr.withName("label").toMetadata()
+      val labelColName = "mc2b$" + index
+      val trainingDataset = multiclassLabeled.withColumn(
+        labelColName, when(col($(labelCol)) === index.toDouble, 1.0).otherwise(0.0), newLabelMeta)
+      val classifier = getClassifier
+      val paramMap = new ParamMap()
+      paramMap.put(classifier.labelCol -> labelColName)
+      paramMap.put(classifier.featuresCol -> getFeaturesCol)
+      paramMap.put(classifier.predictionCol -> getPredictionCol)
+      Future {
         classifier.fit(trainingDataset, paramMap)
       }(executionContext)
     }
