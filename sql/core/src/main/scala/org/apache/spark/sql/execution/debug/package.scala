@@ -64,7 +64,7 @@ package object debug {
   }
 
   /**
-   * Find WholeStageCodegenExec subtrees in query plan and do codegen for each of them
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan
    *
    * @param plan the query plan for codegen
    * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
@@ -77,8 +77,7 @@ package object debug {
         s
       case s => s
     }
-    codegenSubtrees.toSeq.map {
-      subtree =>
+    codegenSubtrees.toSeq.map { subtree =>
         val (_, source) = subtree.doCodeGen()
         (subtree.toString, CodeFormatter.format(source))
     }

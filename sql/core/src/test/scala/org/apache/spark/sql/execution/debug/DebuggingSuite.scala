@@ -42,7 +42,7 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
   test("debugCodegenStringSeq") {
     val res = codegenStringSeq(spark.range(10).groupBy("id").count().queryExecution.executedPlan)
     assert(res.length == 2)
-    assert(res.seq.forall{case (subtree, code) =>
+    assert(res.forall{ case (subtree, code) =>
       subtree.contains("Range") && code.contains("Object[]")})
   }
 }
