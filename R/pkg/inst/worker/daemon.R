@@ -56,17 +56,18 @@ while (TRUE) {
   # any worker is running or right before launching other worker children from the following
   # new socket connection.
 
-  # Only the process IDs of exited children are returned and the termination is attempted below.
+  # Only the process IDs of children sent data to the parent are returned below. The children
+  # send a custom exit code to the parent after being exited and the parent tries
+  # to terminate them only if they sent the exit code.
   children <- parallel:::selectChildren(timeout = 0)
+
   if (is.integer(children)) {
-    # If it is PIDs, there are workers exited but not terminated. Attempts to terminate them
-    # by setting SIGUSR1.
     lapply(children, function(child) {
       # This data should be raw bytes if any data was sent from this child.
       # Otherwise, this returns the PID.
       data <- parallel:::readChild(child)
       if (is.raw(data)) {
-        # This checks if the data from this child is -1 that indecides an exited child.
+        # This checks if the data from this child is the exit code that indicates an exited child.
         if (unserialize(data) == exitCode) {
           # If so, we terminate this child.
           tools::pskill(child, tools::SIGUSR1)
