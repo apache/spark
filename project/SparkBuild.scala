@@ -186,23 +186,32 @@ object SparkBuild extends PomBuild {
     Set(file)
   }
 
-  def enableScalaStyle: Seq[sbt.Def.Setting[_]] = Seq(
-    scalaStyleOnCompile := cachedScalaStyle(Compile).value,
-    scalaStyleOnTest := cachedScalaStyle(Test).value,
-    logLevel in scalaStyleOnCompile := Level.Warn,
-    logLevel in scalaStyleOnTest := Level.Warn,
-    (compile in Compile) := {
-      scalaStyleOnCompile.value
-      (compile in Compile).value
-    },
-    (compile in Test) := {
-      scalaStyleOnTest.value
-      (compile in Test).value
-    }
-  )
+  def enableScalaStyle: Seq[sbt.Def.Setting[_]] = if(sys.env.contains("NOLINT_ON_COMPILE")) {
+    Seq.empty
+  } else {
+    Seq(
+      scalaStyleOnCompile := cachedScalaStyle(Compile).value,
+      scalaStyleOnTest := cachedScalaStyle(Test).value,
+      logLevel in scalaStyleOnCompile := Level.Warn,
+      logLevel in scalaStyleOnTest := Level.Warn,
+      (compile in Compile) := {
+        scalaStyleOnCompile.value
+          (compile in Compile).value
+      },
+      (compile in Test) := {
+        scalaStyleOnTest.value
+          (compile in Test).value
+      }
+    )
+  }
 
-  lazy val sharedSettings = sparkGenjavadocSettings ++
-      (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
+  def enableBuildingDocs: Seq[sbt.Def.Setting[_]] = sys.props.get("build.docs") match {
+    case Some("false")  => Seq(sources in (Compile,doc) := Seq.empty,
+      publishArtifact in (Compile, packageDoc) := false)
+    case _ => Seq.empty
+  }
+
+  lazy val sharedSettings = sparkGenjavadocSettings ++ enableBuildingDocs ++ enableScalaStyle ++ Seq(
     exportJars in Compile := true,
     exportJars in Test := false,
     javaHome := sys.env.get("JAVA_HOME")
