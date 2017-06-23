@@ -187,7 +187,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
 
     // verify the value is the inserted correct or not
     val values = rows(0)
-    assert(values.getDecimal(0).compareTo(BigDecimal.valueOf(booleanVal ? 1 : 0)) == 0)
+    assert(values.getDecimal(0).compareTo(BigDecimal.valueOf(1)) == 0)
     assert(values.getDecimal(1).compareTo(BigDecimal.valueOf(integerVal)) == 0)
     assert(values.getDecimal(2).compareTo(BigDecimal.valueOf(longVal)) == 0)
     assert(values.getDecimal(3).compareTo(BigDecimal.valueOf(floatVal)) == 0)
