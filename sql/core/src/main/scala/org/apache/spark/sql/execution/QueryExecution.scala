@@ -245,5 +245,10 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       println(org.apache.spark.sql.execution.debug.codegenString(executedPlan))
       // scalastyle:on println
     }
+
+    /** @return Sequence of WholeStageCodegen subtrees and corresponding codegen */
+    def codegenToSeq(): Seq[(String, String)] = {
+      org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
+    }
   }
 }

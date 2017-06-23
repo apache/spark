@@ -51,6 +51,19 @@ package object debug {
   }
 
   def codegenString(plan: SparkPlan): String = {
+    val codegenSeq = codegenStringSeq(plan)
+    var output = s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n"
+    for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
+      output += s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n"
+      output += subtree
+      output += "\nGenerated code:\n"
+      output += s"${code}\n"
+    }
+    output
+  }
+
+  /** @return Sequence of WholeStageCodegen subtrees and corresponding codegen */
+  def codegenStringSeq(plan: SparkPlan): Seq[(String, String)] = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
     plan transform {
       case s: WholeStageCodegenExec =>
@@ -58,15 +71,11 @@ package object debug {
         s
       case s => s
     }
-    var output = s"Found ${codegenSubtrees.size} WholeStageCodegen subtrees.\n"
-    for ((s, i) <- codegenSubtrees.toSeq.zipWithIndex) {
-      output += s"== Subtree ${i + 1} / ${codegenSubtrees.size} ==\n"
-      output += s
-      output += "\nGenerated code:\n"
-      val (_, source) = s.doCodeGen()
-      output += s"${CodeFormatter.format(source)}\n"
+    codegenSubtrees.toSeq.map {
+      subtree =>
+        val (_, source) = subtree.doCodeGen()
+        (subtree.toString, CodeFormatter.format(source))
     }
-    output
   }
 
   /**
