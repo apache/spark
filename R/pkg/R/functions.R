@@ -92,6 +92,7 @@ NULL
 #'
 #' @param x Column to compute on. In \code{instr}, it is the substring to check. In \code{format_number},
 #'          it is the number of decimal place to format to.
+#' @param y Column to compute on.
 #' @param ... additional columns.
 #' @name column_string_functions
 #' @rdname column_string_functions
@@ -279,9 +280,9 @@ setMethod("avg",
 #' @examples
 #'
 #' \dontrun{
-#' tmp <- mutate(df, s1 = encode(df$Class, 'UTF-8'))
+#' tmp <- mutate(df, s1 = encode(df$Class, "UTF-8"))
 #' str(tmp)
-#' tmp2 <- mutate(tmp, s2 = base64(tmp$s1), s3 = decode(tmp$s1, 'UTF-8'))
+#' tmp2 <- mutate(tmp, s2 = base64(tmp$s1), s3 = decode(tmp$s1, "UTF-8"))
 #' head(tmp2)
 #' head(select(tmp2, unbase64(tmp2$s2)))}
 #' @note base64 since 1.5.0
@@ -655,8 +656,8 @@ setMethod("dayofyear",
 #' \code{decode}: Computes the first argument into a string from a binary using the provided
 #' character set.
 #'
-#' @param charset Character set to use (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE',
-#'                'UTF-16LE', 'UTF-16').
+#' @param charset Character set to use (one of "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE",
+#'                "UTF-16LE", "UTF-16").
 #'
 #' @rdname column_string_functions
 #' @aliases decode decode,Column,character-method
@@ -849,9 +850,11 @@ setMethod("hour",
 #' @examples
 #'
 #' \dontrun{
-#' tmp <- mutate(df, SexLower = lower(df$Sex), AgeUpper = upper(df$age))
+#' tmp <- mutate(df, sex_lower = lower(df$Sex), age_upper = upper(df$age),
+#'                   sex_age = concat_ws(" ", lower(df$sex), lower(df$age)))
 #' head(tmp)
-#' tmp2 <- mutate(tmp, s1 = initcap(tmp$SexLower), s2 = reverse(df$Sex))
+#' tmp2 <- mutate(tmp, s1 = initcap(tmp$sex_lower), s2 = initcap(tmp$sex_age),
+#'                     s3 = reverse(df$Sex))
 #' head(tmp2)}
 #' @note initcap since 1.5.0
 setMethod("initcap",
@@ -2055,8 +2058,6 @@ setMethod("hypot", signature(y = "Column"),
 #' @details
 #' \code{levenshtein}: Computes the Levenshtein distance of the two given string columns.
 #'
-#' @param y Column to compute on.
-#'
 #' @rdname column_string_functions
 #' @aliases levenshtein levenshtein,Column-method
 #' @export
@@ -2497,7 +2498,8 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
 #'
 #' \dontrun{
 #' tmp <- mutate(df, v1 = df$Freq/3)
-#' head(select(tmp, format_number(tmp$v1, 0), format_number(tmp$v1, 2)), 10)}
+#' head(select(tmp, format_number(tmp$v1, 0), format_number(tmp$v1, 2),
+#'                  format_string("%4.2f %s", tmp$V1, tmp$Sex)), 10)}
 #' @note format_number since 1.5.0
 setMethod("format_number", signature(y = "Column", x = "numeric"),
           function(y, x) {
