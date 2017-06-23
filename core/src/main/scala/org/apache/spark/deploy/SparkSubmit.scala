@@ -311,6 +311,9 @@ object SparkSubmit extends CommandLineUtils {
     }
 
     val hadoopConf = new HadoopConfiguration()
+    val targetDir = Files.createTempDirectory("tmp").toFile
+    val sparkConf = new SparkConf(loadDefaults = false).setAll(args.sparkProperties)
+    val securityMgr = new SecurityManager(sparkConf)
 
     // Resolve glob path for different resources.
     args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
@@ -320,9 +323,15 @@ object SparkSubmit extends CommandLineUtils {
 
     // In client mode, download remote files.
     if (deployMode == CLIENT) {
-      args.primaryResource = Option(args.primaryResource).map(downloadFile(_, hadoopConf)).orNull
-      args.jars = Option(args.jars).map(downloadFileList(_, hadoopConf)).orNull
-      args.pyFiles = Option(args.pyFiles).map(downloadFileList(_, hadoopConf)).orNull
+      args.primaryResource = Option(args.primaryResource).map {
+        downloadFile(_, targetDir, sparkConf, securityMgr, hadoopConf)
+      }.orNull
+      args.jars = Option(args.jars).map {
+        downloadFileList(_, targetDir, sparkConf, securityMgr, hadoopConf)
+      }.orNull
+      args.pyFiles = Option(args.pyFiles).map {
+        downloadFileList(_, targetDir, sparkConf, securityMgr, hadoopConf)
+      }.orNull
     }
 
     // The following modes are not supported or applicable
@@ -831,35 +840,43 @@ object SparkSubmit extends CommandLineUtils {
    */
   private[deploy] def downloadFileList(
       fileList: String,
+      targetDir: File,
+      sparkConf: SparkConf,
+      securityManager: SecurityManager,
       hadoopConf: HadoopConfiguration): String = {
     require(fileList != null, "fileList cannot be null.")
-    fileList.split(",").map(downloadFile(_, hadoopConf)).mkString(",")
+    fileList.split(",")
+      .map(downloadFile(_, targetDir, sparkConf, securityManager, hadoopConf))
+      .mkString(",")
   }
 
   /**
    * Download a file from the remote to a local temporary directory. If the input path points to
    * a local path, returns it with no operation.
    */
-  private[deploy] def downloadFile(path: String, hadoopConf: HadoopConfiguration): String = {
+  private[deploy] def downloadFile(
+      path: String,
+      targetDir: File,
+      sparkConf: SparkConf,
+      securityManager: SecurityManager,
+      hadoopConf: HadoopConfiguration): String = {
     require(path != null, "path cannot be null.")
     val uri = Utils.resolveURI(path)
     uri.getScheme match {
       case "file" | "local" => path
-      case "https" | "http" | "ftp" => path
       case _ =>
-        val fs = FileSystem.get(uri, hadoopConf)
-        val tmpFile = new File(Files.createTempDirectory("tmp").toFile, new Path(uri).getName)
+        val fileName = new Path(uri).getName
         // scalastyle:off println
-        printStream.println(s"Downloading ${uri.toString} to ${tmpFile.getAbsolutePath}.")
+        printStream.println(s"Downloading ${uri.toString} to $targetDir/$fileName.")
         // scalastyle:on println
-        fs.copyToLocalFile(new Path(uri), new Path(tmpFile.getAbsolutePath))
-        Utils.resolveURI(tmpFile.getAbsolutePath).toString
+        Utils.doFetchFile(uri.toString, targetDir, fileName, sparkConf, securityManager, hadoopConf)
+        new Path(new Path(targetDir.toURI), fileName).toUri.toString
     }
   }
 
   private def resolveGlobPaths(paths: String, hadoopConf: HadoopConfiguration): String = {
     require(paths != null, "paths cannot be null.")
-    paths.split(",").filter(_.trim.nonEmpty).flatMap { path =>
+    paths.split(",").map(_.trim).filter(_.nonEmpty).flatMap { path =>
       val uri = Utils.resolveURI(path)
       uri.getScheme match {
         case "local" | "http" | "https" | "ftp" => Array(path)
