@@ -78,14 +78,14 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("sample estimation") {
-    val sample = Sample(0.0, 0.5, withReplacement = false, (math.random * 1000).toLong, plan)()
+    val sample = Sample(0.0, 0.5, withReplacement = false, (math.random * 1000).toLong, plan)
     checkStats(sample, Statistics(sizeInBytes = 60, rowCount = Some(5)))
 
     // Child doesn't have rowCount in stats
     val childStats = Statistics(sizeInBytes = 120)
     val childPlan = DummyLogicalPlan(childStats, childStats)
     val sample2 =
-      Sample(0.0, 0.11, withReplacement = false, (math.random * 1000).toLong, childPlan)()
+      Sample(0.0, 0.11, withReplacement = false, (math.random * 1000).toLong, childPlan)
     checkStats(sample2, Statistics(sizeInBytes = 14))
   }
 

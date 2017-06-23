@@ -874,7 +874,7 @@ class Analyzer(
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
       expressions.map {
-        case a: Alias => Alias(a.child, a.name)(isGenerated = a.isGenerated)
+        case a: Alias => Alias(a.child, a.name)()
         case other => other
       }
     }
@@ -1368,7 +1368,7 @@ class Analyzer(
           val aggregatedCondition =
             Aggregate(
               grouping,
-              Alias(havingCondition, "havingCondition")(isGenerated = true) :: Nil,
+              Alias(havingCondition, "havingCondition")() :: Nil,
               child)
           val resolvedOperator = execute(aggregatedCondition)
           def resolvedAggregateFilter =
@@ -1424,7 +1424,7 @@ class Analyzer(
         try {
           val unresolvedSortOrders = sortOrder.filter(s => !s.resolved || containsAggregate(s))
           val aliasedOrdering =
-            unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")(isGenerated = true))
+            unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =
@@ -1935,7 +1935,7 @@ class Analyzer(
         leafNondeterministic.distinct.map { e =>
           val ne = e match {
             case n: NamedExpression => n
-            case _ => Alias(e, "_nondeterministic")(isGenerated = true)
+            case _ => Alias(e, "_nondeterministic")()
           }
           e -> ne
         }
