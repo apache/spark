@@ -125,9 +125,8 @@ class StreamExecution(
   }
 
   /** Metadata associated with the offset seq of a batch in the query. */
-  protected var offsetSeqMetadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0,
-    conf = Map(SQLConf.SHUFFLE_PARTITIONS.key ->
-      sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS).toString))
+  protected var offsetSeqMetadata = OffsetSeqMetadata(
+    batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
 
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
@@ -285,9 +284,8 @@ class StreamExecution(
       val sparkSessionToRunBatches = sparkSession.cloneSession()
       // Adaptive execution can change num shuffle partitions, disallow
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
-      offsetSeqMetadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0,
-        conf = Map(SQLConf.SHUFFLE_PARTITIONS.key ->
-          sparkSessionToRunBatches.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)))
+      offsetSeqMetadata = OffsetSeqMetadata(
+        batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionToRunBatches.conf)
 
       if (state.compareAndSet(INITIALIZING, ACTIVE)) {
         // Unblock `awaitInitialization`
@@ -441,21 +439,9 @@ class StreamExecution(
 
         // update offset metadata
         nextOffsets.metadata.foreach { metadata =>
-          val shufflePartitionsSparkSession: Int =
-            sparkSessionToRunBatches.conf.get(SQLConf.SHUFFLE_PARTITIONS)
-          val shufflePartitionsToUse = metadata.conf.getOrElse(SQLConf.SHUFFLE_PARTITIONS.key, {
-            // For backward compatibility, if # partitions was not recorded in the offset log,
-            // then ensure it is not missing. The new value is picked up from the conf.
-            logWarning("Number of shuffle partitions from previous run not found in checkpoint. "
-              + s"Using the value from the conf, $shufflePartitionsSparkSession partitions.")
-            shufflePartitionsSparkSession
-          })
+          OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.conf)
           offsetSeqMetadata = OffsetSeqMetadata(
-            metadata.batchWatermarkMs, metadata.batchTimestampMs,
-            metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsToUse.toString))
-          // Update conf with correct number of shuffle partitions
-          sparkSessionToRunBatches.conf.set(
-            SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitionsToUse.toString)
+            metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
         }
 
         /* identify the current batch id: if commit log indicates we successfully processed the
