@@ -26,14 +26,17 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 
 trait StatsEstimationTestBase extends SparkFunSuite {
 
+  var originalValue: Boolean = false
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     // Enable stats estimation based on CBO.
+    originalValue = SQLConf.get.getConf(SQLConf.CBO_ENABLED)
     SQLConf.get.setConf(SQLConf.CBO_ENABLED, true)
   }
 
   override def afterAll(): Unit = {
-    SQLConf.get.unsetConf(SQLConf.CBO_ENABLED)
+    SQLConf.get.setConf(SQLConf.CBO_ENABLED, originalValue)
     super.afterAll()
   }
 

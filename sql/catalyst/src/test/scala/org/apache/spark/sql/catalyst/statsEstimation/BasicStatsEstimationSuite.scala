@@ -113,6 +113,7 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
       plan: LogicalPlan,
       expectedStatsCboOn: Statistics,
       expectedStatsCboOff: Statistics): Unit = {
+    val originalValue = SQLConf.get.getConf(SQLConf.CBO_ENABLED)
     try {
       // Invalidate statistics
       plan.invalidateStatsCache()
@@ -123,7 +124,7 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
       SQLConf.get.setConf(SQLConf.CBO_ENABLED, false)
       assert(plan.stats == expectedStatsCboOff)
     } finally {
-      SQLConf.get.unsetConf(SQLConf.CBO_ENABLED)
+      SQLConf.get.setConf(SQLConf.CBO_ENABLED, originalValue)
     }
   }
 

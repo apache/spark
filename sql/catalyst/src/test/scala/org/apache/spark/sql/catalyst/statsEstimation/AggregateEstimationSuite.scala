@@ -100,6 +100,7 @@ class AggregateEstimationSuite extends StatsEstimationTestBase {
       size = Some(4 * (8 + 4)),
       attributeStats = AttributeMap(Seq("key12").map(nameToColInfo)))
 
+    val originalValue = SQLConf.get.getConf(SQLConf.CBO_ENABLED)
     try {
       SQLConf.get.setConf(SQLConf.CBO_ENABLED, false)
       val noGroupAgg = Aggregate(groupingExpressions = Nil,
@@ -114,7 +115,7 @@ class AggregateEstimationSuite extends StatsEstimationTestBase {
         // From UnaryNode.computeStats, childSize * outputRowSize / childRowSize
         Statistics(sizeInBytes = 48 * (8 + 4 + 8) / (8 + 4)))
     } finally {
-      SQLConf.get.unsetConf(SQLConf.CBO_ENABLED)
+      SQLConf.get.setConf(SQLConf.CBO_ENABLED, originalValue)
     }
   }
 
