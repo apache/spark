@@ -266,8 +266,8 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on Window with useless aggregate functions") {
     val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
-    val winSpec = windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
-    val winExpr = windowExpr(count('b), winSpec)
+    val winSpec = windowSpec('a :: Nil, 'd.asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count('d), winSpec)
 
     val originalQuery = input.groupBy('a, 'c, 'd)('a, 'c, 'd, winExpr.as('window)).select('a, 'c)
     val correctAnswer = input.select('a, 'c, 'd).groupBy('a, 'c, 'd)('a, 'c).analyze
