@@ -313,7 +313,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     spark.table("testData").queryExecution.withCachedData.collect {
       case cached: InMemoryRelation =>
         val actualSizeInBytes = (1 to 100).map(i => 4 + i.toString.length + 4).sum
-        assert(cached.stats(sqlConf).sizeInBytes === actualSizeInBytes)
+        assert(cached.stats.sizeInBytes === actualSizeInBytes)
     }
   }
 
