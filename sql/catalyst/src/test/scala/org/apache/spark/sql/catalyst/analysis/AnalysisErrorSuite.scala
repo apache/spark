@@ -111,8 +111,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "scalar subquery with 2 columns",
      testRelation.select(
        (ScalarSubquery(testRelation.select('a, dateLit.as('b))) + Literal(1)).as('a)),
-       "The number of columns in the subquery (2)" ::
-       "does not match the required number of columns (1)":: Nil)
+       "Scalar subquery must return only one column, but got 2" :: Nil)
 
   errorTest(
     "scalar subquery with no column",
