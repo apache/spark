@@ -322,4 +322,12 @@ package object config {
         "above this threshold. This is to avoid a giant request takes too much memory.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("200m")
+
+  private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
+    ConfigBuilder("spark.taskMetrics.trackUpdatedBlockStatuses")
+      .doc("Enable tracking of updatedBlockStatuses in the TaskMetrics. Off by default since " +
+        "tracking the block statuses can use a lot of memory and its not used anywhere within " +
+        "spark.")
+      .booleanConf
+      .createWithDefault(false)
 }
