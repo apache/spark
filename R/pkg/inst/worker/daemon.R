@@ -95,7 +95,7 @@ while (TRUE) {
       Sys.setenv(SPARKR_WORKER_PORT = port)
       try(source(script))
       # Note that this mcexit does not fully terminate this child. So, this writes back
-      # a custom data, -1, so that the parent can read and terminate this child.
+      # a custom exit code so that the parent can read and terminate this child.
       parallel:::mcexit(0L, send = exitCode)
     } else {
       # Forking succeeded and we need to check if they finished their jobs every second.
