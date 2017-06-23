@@ -33,6 +33,9 @@ inputCon <- socketConnection(
 # Waits indefinitely for a socket connecion by default.
 selectTimeout <- NULL
 
+# Exit code that children send to the parent to indicate they exited.
+exitCode <- 1
+
 while (TRUE) {
   ready <- socketSelect(list(inputCon), timeout = selectTimeout)
 
@@ -64,7 +67,7 @@ while (TRUE) {
       data <- parallel:::readChild(child)
       if (is.raw(data)) {
         # This checks if the data from this child is -1 that indecides an exited child.
-        if (unserialize(data) == -1) {
+        if (unserialize(data) == exitCode) {
           # If so, we terminate this child.
           tools::pskill(child, tools::SIGUSR1)
         }
@@ -93,7 +96,7 @@ while (TRUE) {
       try(source(script))
       # Note that this mcexit does not fully terminate this child. So, this writes back
       # a custom data, -1, so that the parent can read and terminate this child.
-      parallel:::mcexit(0L, send = -1)
+      parallel:::mcexit(0L, send = exitCode)
     } else {
       # Forking succeeded and we need to check if they finished their jobs every second.
       selectTimeout <- 1
