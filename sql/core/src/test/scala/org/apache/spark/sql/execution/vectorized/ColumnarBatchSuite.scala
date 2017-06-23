@@ -739,6 +739,128 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
+  test("Nest Array in Array.") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+      val column = ColumnVector.allocate(10, new ArrayType(new ArrayType(IntegerType, true), true),
+        memMode)
+      val childColumn = column.arrayData()
+      val data = column.arrayData().arrayData()
+      (0 until 6).foreach {
+        case 3 => data.putNull(3)
+        case i => data.putInt(i, i)
+      }
+      // Arrays in child column: [0], [1, 2], [], [null, 4, 5]
+      childColumn.putArray(0, 0, 1)
+      childColumn.putArray(1, 1, 2)
+      childColumn.putArray(2, 2, 0)
+      childColumn.putArray(3, 3, 3)
+      // Arrays in column: [[0]], [[1, 2], []], [[], [null, 4, 5]], null
+      column.putArray(0, 0, 1)
+      column.putArray(1, 1, 2)
+      column.putArray(2, 2, 2)
+      column.putNull(3)
+
+      assert(column.getArray(0).getArray(0).toIntArray() === Array(0))
+      assert(column.getArray(1).getArray(0).toIntArray() === Array(1, 2))
+      assert(column.getArray(1).getArray(1).toIntArray() === Array())
+      assert(column.getArray(2).getArray(0).toIntArray() === Array())
+      assert(column.getArray(2).getArray(1).isNullAt(0))
+      assert(column.getArray(2).getArray(1).getInt(1) === 4)
+      assert(column.getArray(2).getArray(1).getInt(2) === 5)
+      assert(column.isNullAt(3))
+    }
+  }
+
+  test("Nest Struct in Array.") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+      val schema = new StructType().add("int", IntegerType).add("long", LongType)
+      val column = ColumnVector.allocate(10, new ArrayType(schema, true), memMode)
+      val data = column.arrayData()
+      val c0 = data.getChildColumn(0)
+      val c1 = data.getChildColumn(1)
+      // Structs in child column: (0, 0), (1, 10), (2, 20), (3, 30), (4, 40), (5, 50)
+      (0 until 6).foreach { i =>
+        c0.putInt(i, i)
+        c1.putLong(i, i * 10)
+      }
+      // Arrays in column: [(0, 0), (1, 10)], [(1, 10), (2, 20), (3, 30)],
+      // [(4, 40), (5, 50)]
+      column.putArray(0, 0, 2)
+      column.putArray(1, 1, 3)
+      column.putArray(2, 4, 2)
+
+      assert(column.getArray(0).getStruct(0, 2).toSeq(schema) === Seq(0, 0))
+      assert(column.getArray(0).getStruct(1, 2).toSeq(schema) === Seq(1, 10))
+      assert(column.getArray(1).getStruct(0, 2).toSeq(schema) === Seq(1, 10))
+      assert(column.getArray(1).getStruct(1, 2).toSeq(schema) === Seq(2, 20))
+      assert(column.getArray(1).getStruct(2, 2).toSeq(schema) === Seq(3, 30))
+      assert(column.getArray(2).getStruct(0, 2).toSeq(schema) === Seq(4, 40))
+      assert(column.getArray(2).getStruct(1, 2).toSeq(schema) === Seq(5, 50))
+    }
+  }
+
+  test("Nest Array in Struct.") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+      val schema = new StructType()
+        .add("int", IntegerType)
+        .add("array", new ArrayType(IntegerType, true))
+      val column = ColumnVector.allocate(10, schema, memMode)
+      val c0 = column.getChildColumn(0)
+      val c1 = column.getChildColumn(1)
+      c0.putInt(0, 0)
+      c0.putInt(1, 1)
+      c0.putInt(2, 2)
+      val c1Child = c1.arrayData()
+      (0 until 6).foreach { i =>
+        c1Child.putInt(i, i)
+      }
+      // Arrays in c1: [0, 1], [2], [3, 4, 5]
+      c1.putArray(0, 0, 2)
+      c1.putArray(1, 2, 1)
+      c1.putArray(2, 3, 3)
+
+      assert(column.getStruct(0).getInt(0) === 0)
+      assert(column.getStruct(0).getArray(1).toIntArray() === Array(0, 1))
+      assert(column.getStruct(1).getInt(0) === 1)
+      assert(column.getStruct(1).getArray(1).toIntArray() === Array(2))
+      assert(column.getStruct(2).getInt(0) === 2)
+      assert(column.getStruct(2).getArray(1).toIntArray() === Array(3, 4, 5))
+    }
+  }
+
+  test("Nest Struct in Struct.") {
+    (MemoryMode.ON_HEAP :: Nil).foreach { memMode =>
+      val subSchema = new StructType()
+        .add("int", IntegerType)
+        .add("int", IntegerType)
+      val schema = new StructType()
+        .add("int", IntegerType)
+        .add("struct", subSchema)
+      val column = ColumnVector.allocate(10, schema, memMode)
+      val c0 = column.getChildColumn(0)
+      val c1 = column.getChildColumn(1)
+      c0.putInt(0, 0)
+      c0.putInt(1, 1)
+      c0.putInt(2, 2)
+      val c1c0 = c1.getChildColumn(0)
+      val c1c1 = c1.getChildColumn(1)
+      // Structs in c1: (7, 70), (8, 80), (9, 90)
+      c1c0.putInt(0, 7)
+      c1c0.putInt(1, 8)
+      c1c0.putInt(2, 9)
+      c1c1.putInt(0, 70)
+      c1c1.putInt(1, 80)
+      c1c1.putInt(2, 90)
+
+      assert(column.getStruct(0).getInt(0) === 0)
+      assert(column.getStruct(0).getStruct(1, 2).toSeq(subSchema) === Seq(7, 70))
+      assert(column.getStruct(1).getInt(0) === 1)
+      assert(column.getStruct(1).getStruct(1, 2).toSeq(subSchema) === Seq(8, 80))
+      assert(column.getStruct(2).getInt(0) === 2)
+      assert(column.getStruct(2).getStruct(1, 2).toSeq(subSchema) === Seq(9, 90))
+    }
+  }
+
   test("ColumnarBatch basic") {
     (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
       val schema = new StructType()
