@@ -758,6 +758,35 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
+  test("Putting null should fail when null is forbidden in array.") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+      val column = ColumnVector.allocate(10, new ArrayType(IntegerType, false), memMode)
+      val data = column.arrayData();
+      data.putInt(0, 0)
+      data.putInt(1, 1)
+      assert(data.getInt(0) === 0)
+      assert(data.getInt(1) === 1)
+      val ex = intercept[RuntimeException] {
+        data.putNull(2)
+      }
+      assert(ex.getMessage.contains("Not allowed to put null in this column."))
+    }
+  }
+
+  test("Putting null should fail when null is forbidden in column.")  {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+      val column = ColumnVector.allocate(10, IntegerType, memMode, false)
+      column.putInt(0, 0)
+      column.putInt(1, 1)
+      assert(column.getInt(0) === 0)
+      assert(column.getInt(1) === 1)
+      val ex = intercept[RuntimeException] {
+        column.putNull(2)
+      }
+      assert(ex.getMessage.contains("Not allowed to put null in this column."))
+    }
+  }
+
   test("Struct Column") {
     (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
       val schema = new StructType().add("int", IntegerType).add("double", DoubleType)
