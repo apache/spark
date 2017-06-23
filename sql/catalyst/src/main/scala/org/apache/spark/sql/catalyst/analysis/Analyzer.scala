@@ -2551,12 +2551,13 @@ object TimeWindowing extends Rule[LogicalPlan] {
     case p: LogicalPlan if p.children.size == 1 =>
       val child = p.children.head
       val windowExpressions =
-        p.expressions.flatMap(_.collect { case t: TimeWindow => t }).distinct.toList // Not correct.
+        p.expressions.flatMap(_.collect { case t: TimeWindow => t }).toSet
 
       // Only support a single window expression for now
       if (windowExpressions.size == 1 &&
           windowExpressions.head.timeColumn.resolved &&
           windowExpressions.head.checkInputDataTypes().isSuccess) {
+
         val window = windowExpressions.head
 
         val metadata = window.timeColumn match {
@@ -2564,13 +2565,13 @@ object TimeWindowing extends Rule[LogicalPlan] {
           case _ => Metadata.empty
         }
 
-        def getWindow(i: Int, maxNumOverlapping: Int): Expression = {
+        def getWindow(i: Int, overlappingWindows: Int): Expression = {
           val division = (PreciseTimestampConversion(
             window.timeColumn, TimestampType, LongType) - window.startTime) / window.slideDuration
           val ceil = Ceil(division)
           // if the division is equal to the ceiling, our record is the start of a window
           val windowId = CaseWhen(Seq((ceil === division, ceil + 1)), Some(ceil))
-          val windowStart = (windowId + i - maxNumOverlapping) *
+          val windowStart = (windowId + i - overlappingWindows) *
             window.slideDuration + window.startTime
           val windowEnd = windowStart + window.windowDuration
 
@@ -2587,7 +2588,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         if (window.windowDuration == window.slideDuration) {
           val windowStruct = Alias(getWindow(0, 1), WINDOW_COL_NAME)(
-            exprId = windowAttr.exprId, explicitMetadata = Some(metadata))
+            exprId = windowAttr.exprId)
 
           val replacedPlan = p transformExpressions {
             case t: TimeWindow => windowAttr
@@ -2596,14 +2597,14 @@ object TimeWindowing extends Rule[LogicalPlan] {
           // For backwards compatibility we add a filter to filter out nulls
           val filterExpr = IsNotNull(window.timeColumn)
 
-          replacedPlan.withNewChildren(Filter(filterExpr,
-            Project(windowStruct +: child.output, child)) :: Nil)
+          replacedPlan.withNewChildren(
+            Filter(filterExpr,
+              Project(windowStruct +: child.output, child)) :: Nil)
         } else {
-
-          val maxNumOverlapping =
+          val overlappingWindows =
             math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
           val windows =
-            Seq.tabulate(maxNumOverlapping)(i => getWindow(i, maxNumOverlapping))
+            Seq.tabulate(overlappingWindows)(i => getWindow(i, overlappingWindows))
 
           val projections = windows.map(_ +: child.output)
 
