@@ -19,132 +19,124 @@ package org.apache.spark.ml.feature
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
-import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.feature.FuncTransformer.FuncTransformerWriter
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.expressions.UserDefinedFunction
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
- * :: DeveloperApi ::
- * FuncTransformer allows easily creation of a custom feature transformer for DataFrame, such like
+ * :: Experimental ::
+ * FuncTransformer helps create a custom feature transformer easily for DataFrame, such like
  * conditional conversion(if...else...), type conversion, array indexing and many string ops.
- * Note that FuncTransformer supports serialization via scala ObjectOutputStream and may not
- * guarantee save/load compatibility between different scala version.
+ * Note that FuncTransformer supports serialization via Scala ObjectOutputStream and may not
+ * guarantee save/load compatibility between different Scala version.
+ * @param func a custom [[UserDefinedFunction]] to map from inputCol to outputCol e.g.
+ *             udf { (i: Double) => if (i >= 1) 1.0 else 0.0 }. Only udf with
+ *             one input is supported for now.
  */
-@DeveloperApi
+@Experimental
 @Since("2.3.0")
-class FuncTransformer [IN: TypeTag, OUT: TypeTag] @Since("2.3.0") (
+class FuncTransformer @Since("2.3.0") (
     @Since("2.3.0") override val uid: String,
-    @Since("2.3.0") val func: IN => OUT,
-    @Since("2.3.0") val outputDataType: DataType
-  ) extends UnaryTransformer[IN, OUT, FuncTransformer[IN, OUT]] with DefaultParamsWritable {
+    @Since("2.3.0") val func: UserDefinedFunction
+  ) extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
-  /**
-   * Create a FuncTransformer with specific function and output data type.
-   * @param fx function which converts an input object to output object.
-   * @param outputDataType specific output data type
-   */
   @Since("2.3.0")
-  def this(fx: IN => OUT, outputDataType: DataType) =
-    this(Identifiable.randomUID("FuncTransformer"), fx, outputDataType)
-
-  /**
-   * Create a FuncTransformer with specific function and automatically infer the output data type.
-   * If the output data type cannot be automatically inferred, an exception will be thrown.
-   * @param fx function which converts an input object to output object.
-   */
-  @Since("2.3.0")
-  def this(fx: IN => OUT) = this(Identifiable.randomUID("FuncTransformer"), fx,
-    try {
-      ScalaReflection.schemaFor[OUT].dataType
-    } catch {
-      case _: UnsupportedOperationException => throw new UnsupportedOperationException(
-        s"FuncTransformer outputDataType cannot be automatically inferred, please try" +
-          s" the constructor with specific outputDataType")
-    }
-   )
+  def this(func: UserDefinedFunction) = this(Identifiable.randomUID("FuncTransformer"), func)
 
   setDefault(inputCol -> "input", outputCol -> "output")
 
+  /** @group setParam */
   @Since("2.3.0")
-  override def createTransformFunc: IN => OUT = func
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.3.0")
-  override def write: MLWriter = new FuncTransformerWriter(
-    this.asInstanceOf[FuncTransformer[Nothing, Nothing]])
-
-  @Since("2.3.0")
-  override def copy(extra: ParamMap): FuncTransformer[IN, OUT] = {
-    copyValues(new FuncTransformer(uid, func, outputDataType), extra)
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    dataset.withColumn($(outputCol), func(col($(inputCol))))
   }
 
-  override protected def validateInputType(inputType: DataType): Unit = {
-    try {
-      val funcINType = ScalaReflection.schemaFor[IN].dataType
-      require(inputType.equals(funcINType),
-        s"$uid only accept input type $funcINType but got $inputType.")
-    } catch {
-      case _: UnsupportedOperationException =>
-        // cannot infer the output data type, log warning but do not block transform
-        logWarning(s"FuncTransformer input Type cannot be automatically inferred," +
-          s"Type check omitted for $uid")
+  @Since("2.3.0")
+  override def transformSchema(schema: StructType): StructType = {
+    func.inputTypes match {
+      case Some(funcInputType) =>
+        require(funcInputType.length == 1, "FuncTransformer only supports udf with one input")
+        val dataType = schema($(inputCol)).dataType
+        require(dataType == funcInputType.head, s"data type mismatch: udf input type" +
+          s" ${funcInputType.head}; inputCol ${$(inputCol)} data type $dataType ")
+      case None =>
+        val dataType = schema($(inputCol)).dataType
+        require(dataType.isInstanceOf[StructType], s"When func input types is None," +
+          s" FuncTransformer only supports StructType. ${$(inputCol)} is $dataType")
     }
+    val outputFields = schema.fields :+ StructField($(outputCol), func.dataType, false)
+    StructType(outputFields)
   }
+
+  @Since("2.3.0")
+  override def copy(extra: ParamMap): FuncTransformer = {
+    val copied = new FuncTransformer(uid, func)
+    copyValues(copied, extra)
+  }
+
+  @Since("2.3.0")
+  override def write: MLWriter = new FuncTransformerWriter(this)
 }
 
 /**
- * :: DeveloperApi ::
+ * :: Experimental ::
  * Companion object for FuncTransformer with save and load function.
  */
-@DeveloperApi
+@Experimental
 @Since("2.3.0")
-object FuncTransformer extends DefaultParamsReadable[FuncTransformer[Nothing, Nothing]] {
+object FuncTransformer extends DefaultParamsReadable[FuncTransformer] {
 
   private[FuncTransformer]
-  class FuncTransformerWriter(instance: FuncTransformer[Nothing, Nothing]) extends MLWriter {
+  class FuncTransformerWriter(instance: FuncTransformer) extends MLWriter {
 
-    private case class Data(func: Array[Byte], dataType: String)
+    private case class Data(func: Array[Byte])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val bo = new ByteArrayOutputStream()
       new ObjectOutputStream(bo).writeObject(instance.func)
-      val data = Data(bo.toByteArray, instance.outputDataType.json)
+      val data = Data(bo.toByteArray)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
-  private class FuncTransformerReader extends MLReader[FuncTransformer[Nothing, Nothing]] {
+  private class FuncTransformerReader extends MLReader[FuncTransformer] {
 
-    private val className = classOf[FuncTransformer[Nothing, Nothing]].getName
+    private val className = classOf[FuncTransformer].getName
 
-    override def load(path: String): FuncTransformer[Nothing, Nothing] = {
+    override def load(path: String): FuncTransformer = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
-      val Row(funcBytes: Array[Byte], dataType: String) = data
-          .select("func", "dataType")
-          .head()
+      val Row(funcBytes: Array[Byte]) = data.select("func").head()
       val func = new ObjectInputStream(new ByteArrayInputStream(funcBytes)).readObject()
-      val model = new FuncTransformer(
-        metadata.uid, func.asInstanceOf[Function[Any, Any]], DataType.fromJson(dataType))
+      val model = new FuncTransformer(metadata.uid, func.asInstanceOf[UserDefinedFunction])
       DefaultParamsReader.getAndSetParams(model, metadata)
-      model.asInstanceOf[FuncTransformer[Nothing, Nothing]]
+      model
     }
   }
 
   @Since("2.3.0")
-  override def read: MLReader[FuncTransformer[Nothing, Nothing]] = new FuncTransformerReader
+  override def read: MLReader[FuncTransformer] = new FuncTransformerReader
 
   @Since("2.3.0")
-  override def load(path: String): FuncTransformer[Nothing, Nothing] = super.load(path)
+  override def load(path: String): FuncTransformer = super.load(path)
 }

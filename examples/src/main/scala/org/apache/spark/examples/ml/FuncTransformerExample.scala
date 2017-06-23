@@ -19,6 +19,7 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.feature.FuncTransformer
+import org.apache.spark.sql.functions.udf
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -42,10 +43,10 @@ object FuncTransformerExample {
     // $example on$
     val df = Seq(0.0, 1.0, 2.0, 3.0).toDF("input")
 
-    val labelConverter = new FuncTransformer((i: Double) => if (i >= 1) 1 else 0)
+    val labelConverter = new FuncTransformer(udf { (i: Double) => if (i >= 1) 1 else 0 })
     labelConverter.transform(df).show()
 
-    val shifter = new FuncTransformer((i: Double) => i + 1)
+    val shifter = new FuncTransformer(udf { (i: Double) => i + 1 })
     shifter.transform(df).show()
     // $example off$
 
