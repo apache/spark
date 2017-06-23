@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans
+package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
 
 
-trait QueryPlanConstraints[PlanType <: QueryPlan[PlanType]] { self: QueryPlan[PlanType] =>
+trait QueryPlanConstraints { self: LogicalPlan =>
 
   /**
    * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
@@ -99,7 +99,8 @@ trait QueryPlanConstraints[PlanType <: QueryPlan[PlanType]] { self: QueryPlan[Pl
   private lazy val aliasMap: AttributeMap[Expression] = AttributeMap(
     expressions.collect {
       case a: Alias => (a.toAttribute, a.child)
-    } ++ children.flatMap(_.asInstanceOf[QueryPlanConstraints[PlanType]].aliasMap))
+    } ++ children.flatMap(_.asInstanceOf[QueryPlanConstraints].aliasMap))
+    // Note: the explicit cast is necessary, since Scala compiler fails to infer the type.
 
   /**
    * Infers an additional set of constraints from a given set of equality constraints.

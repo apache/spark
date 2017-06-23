@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
-abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
+abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstraints with Logging {
 
   private var _analyzed: Boolean = false
 

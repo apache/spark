@@ -848,6 +848,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     } else {
       val sr = t.createTempShuffleReadMetrics()
       sr.incRemoteBytesRead(b + d)
+      sr.incRemoteBytesReadToDisk(b)
       sr.incLocalBlocksFetched(e)
       sr.incFetchWaitTime(a + d)
       sr.incRemoteBlocksFetched(f)
@@ -1128,6 +1129,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
       |      "Remote Bytes Read": 1000,
+      |      "Remote Bytes Read To Disk": 400,
       |      "Local Bytes Read": 1100,
       |      "Total Records Read": 10
       |    },
@@ -1228,6 +1230,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched" : 0,
       |      "Fetch Wait Time" : 0,
       |      "Remote Bytes Read" : 0,
+      |      "Remote Bytes Read To Disk" : 0,
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0
       |    },
@@ -1328,10 +1331,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched" : 0,
       |      "Fetch Wait Time" : 0,
       |      "Remote Bytes Read" : 0,
+      |      "Remote Bytes Read To Disk" : 0,
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0
       |    },
-      |    "Shuffle Write Metrics" : {
+      |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written" : 0,
       |      "Shuffle Write Time" : 0,
       |      "Shuffle Records Written" : 0
@@ -1915,76 +1919,83 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        },
       |        {
       |          "ID": 14,
-      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
+      |          "Name": "${shuffleRead.REMOTE_BYTES_READ_TO_DISK}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 15,
-      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
+      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 16,
-      |          "Name": "${shuffleRead.RECORDS_READ}",
+      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 17,
-      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Name": "${shuffleRead.RECORDS_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 18,
-      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
+      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 19,
-      |          "Name": "${shuffleWrite.WRITE_TIME}",
+      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 20,
+      |          "Name": "${shuffleWrite.WRITE_TIME}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 21,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 21,
+      |          "ID": 22,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 22,
+      |          "ID": 23,
       |          "Name": "${output.BYTES_WRITTEN}",
       |          "Update": 1200,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 23,
+      |          "ID": 24,
       |          "Name": "${output.RECORDS_WRITTEN}",
       |          "Update": 12,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 24,
+      |          "ID": 25,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
       |          "Internal": true,
