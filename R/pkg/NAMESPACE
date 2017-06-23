@@ -75,7 +75,8 @@ exportMethods("glm",
 # Job group lifecycle management methods
 export("setJobGroup",
        "clearJobGroup",
-       "cancelJobGroup")
+       "cancelJobGroup",
+       "setJobDescription")
 
 # Export Utility methods
 export("setLogLevel")
