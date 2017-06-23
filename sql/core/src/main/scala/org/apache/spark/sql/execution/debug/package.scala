@@ -50,7 +50,12 @@ package object debug {
     // scalastyle:on println
   }
 
-  /** Generate codegen debug info */
+  /**
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan into one String
+   *
+   * @param plan the query plan for codegen
+   * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
+   */
   def codegenString(plan: SparkPlan): String = {
     val codegenSeq = codegenStringSeq(plan)
     var output = s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n"
