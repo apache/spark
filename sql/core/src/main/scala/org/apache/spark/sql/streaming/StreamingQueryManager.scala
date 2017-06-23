@@ -332,5 +332,6 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       }
       awaitTerminationLock.notifyAll()
     }
+    stateStoreCoordinator.deactivateInstances(terminatedQuery.runId)
   }
 }

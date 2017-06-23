@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.random.RandomSampler
 
 /**
  * When planning take() or collect() operations, this special node that is inserted at the top of
@@ -814,6 +815,18 @@ case class Sample(
     withReplacement: Boolean,
     seed: Long,
     child: LogicalPlan) extends UnaryNode {
+
+  val eps = RandomSampler.roundingEpsilon
+  val fraction = upperBound - lowerBound
+  if (withReplacement) {
+    require(
+      fraction >= 0.0 - eps,
+      s"Sampling fraction ($fraction) must be nonnegative with replacement")
+  } else {
+    require(
+      fraction >= 0.0 - eps && fraction <= 1.0 + eps,
+      s"Sampling fraction ($fraction) must be on interval [0, 1] without replacement")
+  }
 
   override def output: Seq[Attribute] = child.output
 
