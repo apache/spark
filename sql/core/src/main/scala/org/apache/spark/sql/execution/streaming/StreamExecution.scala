@@ -652,6 +652,7 @@ class StreamExecution(
         triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
+        runId,
         currentBatchId,
         offsetSeqMetadata)
       lastExecution.executedPlan // Force the lazy generation of execution plan

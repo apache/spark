@@ -777,7 +777,7 @@ class TestStateStoreProvider extends StateStoreProvider {
     throw new Exception("Successfully instantiated")
   }
 
-  override def id: StateStoreId = null
+  override def stateStoreId: StateStoreId = null
 
   override def close(): Unit = { }
 
