@@ -739,36 +739,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
-  test("Nest Array(not containing null) in Array.") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
-      val column = ColumnVector.allocate(10, new ArrayType(new ArrayType(IntegerType, false), true),
-        memMode)
-      val childColumn = column.arrayData()
-      val data = column.arrayData().arrayData()
-      (0 until 6).foreach { i =>
-        data.putInt(i, i)
-      }
-      // Arrays in child column: [0], [1, 2], [], [3, 4, 5]
-      childColumn.putArray(0, 0, 1)
-      childColumn.putArray(1, 1, 2)
-      childColumn.putArray(2, 2, 0)
-      childColumn.putArray(3, 3, 3)
-      // Arrays in column: [[0]], [[1, 2], []], [[], [3, 4, 5]], null
-      column.putArray(0, 0, 1)
-      column.putArray(1, 1, 2)
-      column.putArray(2, 2, 2)
-      column.putNull(3)
-
-      assert(column.getArray(0).getArray(0).toIntArray() === Array(0))
-      assert(column.getArray(1).getArray(0).toIntArray() === Array(1, 2))
-      assert(column.getArray(1).getArray(1).toIntArray() === Array())
-      assert(column.getArray(2).getArray(0).toIntArray() === Array())
-      assert(column.getArray(2).getArray(1).toIntArray() === Array(3, 4, 5))
-      assert(column.isNullAt(3))
-    }
-  }
-
-  test("Nest Array(containing null) in Array.") {
+  test("Nest Array in Array.") {
     (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
       val column = ColumnVector.allocate(10, new ArrayType(new ArrayType(IntegerType, true), true),
         memMode)
@@ -794,8 +765,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.getArray(1).getArray(1).toIntArray() === Array())
       assert(column.getArray(2).getArray(0).toIntArray() === Array())
       assert(column.getArray(2).getArray(1).isNullAt(0))
-      assert(Array(column.getArray(2).getArray(1).getInt(1),
-        column.getArray(2).getArray(1).getInt(2)) === Array(4, 5))
+      assert(column.getArray(2).getArray(1).getInt(1) === 4)
+      assert(column.getArray(2).getArray(1).getInt(2) === 5)
       assert(column.isNullAt(3))
     }
   }
