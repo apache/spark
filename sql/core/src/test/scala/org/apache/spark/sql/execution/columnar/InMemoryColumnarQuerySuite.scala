@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.AttributeSet
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -311,12 +311,12 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-14138: Generated SpecificColumnarIterator can exceed JVM size limit for cached DF") {
     val length1 = 3999
     val columnTypes1 = List.fill(length1)(IntegerType)
-    val columnarIterator1 = GenerateColumnAccessor.generate(columnTypes1)
+    val columnarIterator1 = new GenerateColumnAccessor(false).generate(columnTypes1)
 
     // SPARK-16664: the limit of janino is 8117
     val length2 = 8117
     val columnTypes2 = List.fill(length2)(IntegerType)
-    val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
+    val columnarIterator2 = new GenerateColumnAccessor(false).generate(columnTypes2)
   }
 
   test("SPARK-17549: cached table size should be correctly calculated") {
@@ -330,6 +330,19 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
     // Check that the right size was calculated.
     assert(cached.batchStats.value === expectedAnswer.size * INT.defaultSize)
+  }
+
+  test("ColumnarBatch with many columns") {
+    val length1 = 9000
+    val schema = StructType((1 to length1).map { case i =>
+      StructField(s"col$i", IntegerType, true)
+    })
+    val cachedBatch1 = new GenerateColumnarBatch(schema, 10000, MEMORY_ONLY).
+      generate(Iterator.single(new GenericInternalRow((1 to length1).toArray[Any])))
+
+    val length2 = 9000
+    val columnTypes2 = List.fill(length2)(IntegerType)
+    val columnarIterator2 = new GenerateColumnAccessor(false).generate(columnTypes2)
   }
 
   test("access primitive-type columns in CachedBatch without whole stage codegen") {

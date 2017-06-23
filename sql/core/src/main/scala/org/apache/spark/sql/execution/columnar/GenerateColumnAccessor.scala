@@ -21,6 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, UnsafeRowWriter}
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.apache.spark.sql.types._
 
 /**
@@ -62,12 +63,16 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalR
 /**
  * Generates bytecode for a [[ColumnarIterator]] for columnar cache.
  */
-object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
+class GenerateColumnAccessor(useColumnarBatch: Boolean)
+    extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
 
   protected def canonicalize(in: Seq[DataType]): Seq[DataType] = in
   protected def bind(in: Seq[DataType], inputSchema: Seq[Attribute]): Seq[DataType] = in
 
   protected def create(columnTypes: Seq[DataType]): ColumnarIterator = {
+    if (useColumnarBatch) {
+      return createItrForCacheColumnarBatch(columnTypes)
+    }
     val ctx = newCodeGenContext()
     val numFields = columnTypes.size
     val (initializeAccessors, extractors) = columnTypes.zipWithIndex.map { case (dt, index) =>
@@ -150,6 +155,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
          extractorNames.map { extractorName => s"$extractorName();"}.mkString("\n"))
       }
 
+    val cachedBatchBytesCls = classOf[CachedBatchBytes].getName
     val codeBody = s"""
       import java.nio.ByteBuffer;
       import java.nio.ByteOrder;
@@ -203,9 +209,9 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
             return false;
           }
 
-          ${classOf[CachedBatch].getName} batch = (${classOf[CachedBatch].getName}) input.next();
+          $cachedBatchBytesCls batch = ($cachedBatchBytesCls) input.next();
           currentRow = 0;
-          numRowsInBatch = batch.numRows();
+          numRowsInBatch = batch.getNumRows();
           for (int i = 0; i < columnIndexes.length; i ++) {
             buffers[i] = batch.buffers()[columnIndexes[i]];
           }
@@ -232,5 +238,111 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
     logDebug(s"Generated ColumnarIterator:\n${CodeFormatter.format(code)}")
 
     CodeGenerator.compile(code).generate(Array.empty).asInstanceOf[ColumnarIterator]
+  }
+
+  protected def createItrForCacheColumnarBatch(columnTypes: Seq[DataType])
+  : ColumnarIterator = {
+    val ctx = newCodeGenContext()
+    val numFields = columnTypes.size
+
+    val setters = ctx.splitExpressions(
+      columnTypes.zipWithIndex.map { case (dt, index) =>
+        val setter = dt match {
+          case IntegerType | DateType => s"setInt($index, colInstances[$index].getInt(rowIdx))"
+          case DoubleType => s"setDouble($index, colInstances[$index].getDouble(rowIdx))"
+          case _ => throw new UnsupportedOperationException(s"Unsupported type $dt")
+        }
+
+        s"""
+        if (colInstances[$index].isNullAt(rowIdx)) {
+          mutableRow.setNullAt($index);
+        } else {
+          mutableRow.$setter;
+        }
+       """
+      },
+      "apply",
+      Seq.empty
+    )
+
+    val codeBody = s"""
+      import scala.collection.Iterator;
+      import org.apache.spark.sql.types.DataType;
+      import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
+      import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+      import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
+      import org.apache.spark.sql.execution.vectorized.ColumnVector;
+      import org.apache.spark.sql.execution.vectorized.OnHeapUnsafeColumnVector;
+
+      public SpecificColumnarIterator generate(Object[] references) {
+        return new SpecificColumnarIterator(references);
+      }
+
+      class SpecificColumnarIterator extends ${classOf[ColumnarIterator].getName} {
+        private ColumnVector[] colInstances;
+        private UnsafeRow unsafeRow = new UnsafeRow($numFields);
+        private BufferHolder bufferHolder = new BufferHolder(unsafeRow);
+        private UnsafeRowWriter rowWriter = new UnsafeRowWriter(bufferHolder, $numFields);
+        private MutableUnsafeRow mutableRow = null;
+
+        private int rowIdx = 0;
+        private int numRowsInBatch = 0;
+
+        private scala.collection.Iterator input = null;
+        private DataType[] columnTypes = null;
+        private int[] columnIndexes = null;
+
+        ${ctx.declareMutableStates()}
+
+        public SpecificColumnarIterator(Object[] references) {
+          ${ctx.initMutableStates()}
+          this.mutableRow = new MutableUnsafeRow(rowWriter);
+        }
+
+        public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
+          this.input = input;
+          this.columnTypes = columnTypes;
+          this.columnIndexes = columnIndexes;
+        }
+
+        ${ctx.declareAddedFunctions()}
+
+        public boolean hasNext() {
+          if (rowIdx < numRowsInBatch) {
+            return true;
+          }
+          if (!input.hasNext()) {
+            return false;
+          }
+
+          ${classOf[CachedColumnarBatch].getName} cachedBatch =
+            (${classOf[CachedColumnarBatch].getName}) input.next();
+          ${classOf[ColumnarBatch].getName} batch = cachedBatch.columnarBatch();
+          rowIdx = 0;
+          numRowsInBatch = cachedBatch.getNumRows();
+          colInstances = new ColumnVector[columnIndexes.length];
+          for (int i = 0; i < columnIndexes.length; i ++) {
+            colInstances[i] = batch.column(columnIndexes[i]);
+            ((OnHeapUnsafeColumnVector)colInstances[i]).decompress();
+          }
+
+          return hasNext();
+        }
+
+        public InternalRow next() {
+          bufferHolder.reset();
+          rowWriter.zeroOutNullBytes();
+          ${setters}
+          unsafeRow.setTotalSize(bufferHolder.totalSize());
+          rowIdx += 1;
+          return unsafeRow;
+        }
+      }"""
+
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
+    logDebug(s"Generated ColumnarIteratorForCachedColumnarBatch:\n${CodeFormatter.format(code)}")
+
+    CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[ColumnarIterator]
   }
 }
