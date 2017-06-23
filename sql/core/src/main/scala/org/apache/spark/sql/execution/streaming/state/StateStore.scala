@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.util.UUID
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
@@ -24,13 +25,13 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
-
 
 /**
  * Base trait for a versioned key-value store. Each instance of a `StateStore` represents a specific
@@ -99,7 +100,7 @@ trait StateStore {
   /**
    * Whether all updates have been committed
    */
-  private[streaming] def hasCommitted: Boolean
+  def hasCommitted: Boolean
 }
 
 
@@ -147,7 +148,7 @@ trait StateStoreProvider {
    * Return the id of the StateStores this provider will generate.
    * Should be the same as the one passed in init().
    */
-  def id: StateStoreId
+  def stateStoreId: StateStoreId
 
   /** Called when the provider instance is unloaded from the executor */
   def close(): Unit
@@ -171,21 +172,53 @@ object StateStoreProvider {
       indexOrdinal: Option[Int], // for sorting the data
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
-    val providerClass = storeConf.providerClass.map(Utils.classForName)
-        .getOrElse(classOf[HDFSBackedStateStoreProvider])
+    val providerClass = Utils.classForName(storeConf.providerClass)
     val provider = providerClass.newInstance().asInstanceOf[StateStoreProvider]
     provider.init(stateStoreId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
     provider
   }
 }
 
+/**
+ * Unique identifier for a provider, used to identify when providers can be reused.
+ * Note that `queryRunId` is used uniquely identify a provider, so that the same provider
+ * instance is not reused across query restarts.
+ */
+case class StateStoreProviderId(storeId: StateStoreId, queryRunId: UUID)
 
-/** Unique identifier for a bunch of keyed state data. */
+/**
+ * Unique identifier for a bunch of keyed state data.
+ * @param checkpointRootLocation Root directory where all the state data of a query is stored
+ * @param operatorId Unique id of a stateful operator
+ * @param partitionId Index of the partition of an operators state data
+ * @param storeName Optional, name of the store. Each partition can optionally use multiple state
+ *                  stores, but they have to be identified by distinct names.
+ */
 case class StateStoreId(
-    checkpointLocation: String,
+    checkpointRootLocation: String,
     operatorId: Long,
     partitionId: Int,
-    name: String = "")
+    storeName: String = StateStoreId.DEFAULT_STORE_NAME) {
+
+  /**
+   * Checkpoint directory to be used by a single state store, identified uniquely by the tuple
+   * (operatorId, partitionId, storeName). All implementations of [[StateStoreProvider]] should
+   * use this path for saving state data, as this ensures that distinct stores will write to
+   * different locations.
+   */
+  def storeCheckpointLocation(): Path = {
+    if (storeName == StateStoreId.DEFAULT_STORE_NAME) {
+      // For reading state store data that was generated before store names were used (Spark <= 2.2)
+      new Path(checkpointRootLocation, s"$operatorId/$partitionId")
+    } else {
+      new Path(checkpointRootLocation, s"$operatorId/$partitionId/$storeName")
+    }
+  }
+}
+
+object StateStoreId {
+  val DEFAULT_STORE_NAME = "default"
+}
 
 /** Mutable, and reusable class for representing a pair of UnsafeRows. */
 class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
@@ -211,7 +244,7 @@ object StateStore extends Logging {
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
 
   @GuardedBy("loadedProviders")
-  private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
+  private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
 
   /**
    * Runs the `task` periodically and automatically cancels it if there is an exception. `onError`
@@ -253,7 +286,7 @@ object StateStore extends Logging {
 
   /** Get or create a store associated with the id. */
   def get(
-      storeId: StateStoreId,
+      storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
       indexOrdinal: Option[Int],
@@ -264,24 +297,24 @@ object StateStore extends Logging {
     val storeProvider = loadedProviders.synchronized {
       startMaintenanceIfNeeded()
       val provider = loadedProviders.getOrElseUpdate(
-        storeId,
+        storeProviderId,
         StateStoreProvider.instantiate(
-          storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
+          storeProviderId.storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
       )
-      reportActiveStoreInstance(storeId)
+      reportActiveStoreInstance(storeProviderId)
       provider
     }
     storeProvider.getStore(version)
   }
 
   /** Unload a state store provider */
-  def unload(storeId: StateStoreId): Unit = loadedProviders.synchronized {
-    loadedProviders.remove(storeId).foreach(_.close())
+  def unload(storeProviderId: StateStoreProviderId): Unit = loadedProviders.synchronized {
+    loadedProviders.remove(storeProviderId).foreach(_.close())
   }
 
   /** Whether a state store provider is loaded or not */
-  def isLoaded(storeId: StateStoreId): Boolean = loadedProviders.synchronized {
-    loadedProviders.contains(storeId)
+  def isLoaded(storeProviderId: StateStoreProviderId): Boolean = loadedProviders.synchronized {
+    loadedProviders.contains(storeProviderId)
   }
 
   def isMaintenanceRunning: Boolean = loadedProviders.synchronized {
@@ -340,21 +373,21 @@ object StateStore extends Logging {
     }
   }
 
-  private def reportActiveStoreInstance(storeId: StateStoreId): Unit = {
+  private def reportActiveStoreInstance(storeProviderId: StateStoreProviderId): Unit = {
     if (SparkEnv.get != null) {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-      coordinatorRef.foreach(_.reportActiveInstance(storeId, host, executorId))
-      logDebug(s"Reported that the loaded instance $storeId is active")
+      coordinatorRef.foreach(_.reportActiveInstance(storeProviderId, host, executorId))
+      logInfo(s"Reported that the loaded instance $storeProviderId is active")
     }
   }
 
-  private def verifyIfStoreInstanceActive(storeId: StateStoreId): Boolean = {
+  private def verifyIfStoreInstanceActive(storeProviderId: StateStoreProviderId): Boolean = {
     if (SparkEnv.get != null) {
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
       val verified =
-        coordinatorRef.map(_.verifyIfInstanceActive(storeId, executorId)).getOrElse(false)
-      logDebug(s"Verified whether the loaded instance $storeId is active: $verified")
+        coordinatorRef.map(_.verifyIfInstanceActive(storeProviderId, executorId)).getOrElse(false)
+      logDebug(s"Verified whether the loaded instance $storeProviderId is active: $verified")
       verified
     } else {
       false
@@ -364,12 +397,21 @@ object StateStore extends Logging {
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      if (_coordRef == null) {
+      logInfo("Env is not null")
+      val isDriver =
+        env.executorId == SparkContext.DRIVER_IDENTIFIER ||
+          env.executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
+      // If running locally, then the coordinator reference in _coordRef may be have become inactive
+      // as SparkContext + SparkEnv may have been restarted. Hence, when running in driver,
+      // always recreate the reference.
+      if (isDriver || _coordRef == null) {
+        logInfo("Getting StateStoreCoordinatorRef")
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
-      logDebug(s"Retrieved reference to StateStoreCoordinator: ${_coordRef}")
+      logInfo(s"Retrieved reference to StateStoreCoordinator: ${_coordRef}")
       Some(_coordRef)
     } else {
+      logInfo("Env is null")
       _coordRef = null
       None
     }

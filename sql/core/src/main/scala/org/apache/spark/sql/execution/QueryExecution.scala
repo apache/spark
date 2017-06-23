@@ -221,7 +221,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   def stringWithStats: String = {
     // trigger to compute stats for logical plans
-    optimizedPlan.stats(sparkSession.sessionState.conf)
+    optimizedPlan.stats
 
     // only show optimized logical plan and physical plan
     s"""== Optimized Logical Plan ==

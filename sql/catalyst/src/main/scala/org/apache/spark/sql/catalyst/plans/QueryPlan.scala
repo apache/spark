@@ -22,10 +22,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
-abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
-  extends TreeNode[PlanType]
-  with QueryPlanConstraints[PlanType] {
-
+abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
   def conf: SQLConf = SQLConf.get
@@ -203,7 +200,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         // normalize that for equality testing, by assigning expr id from 0 incrementally. The
         // alias name doesn't matter and should be erased.
         val normalizedChild = QueryPlan.normalizeExprId(a.child, allAttributes)
-        Alias(normalizedChild, "")(ExprId(id), a.qualifier, isGenerated = a.isGenerated)
+        Alias(normalizedChild, "")(ExprId(id), a.qualifier)
 
       case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
