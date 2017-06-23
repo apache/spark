@@ -568,7 +568,7 @@ class StreamSuite extends StreamTest {
         streamingQuery = input.toDF().writeStream.format("console").start()
       )
     } finally {
-      if (streamingQuery ne null) {
+      if (streamingQuery != null) {
         streamingQuery.stop()
       }
       // Restore previous state

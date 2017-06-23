@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.streaming
 
-import java.net.URI
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -30,7 +29,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
-
+import org.apache.spark.util.Utils
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -241,7 +240,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
     val hadoopConf = df.sparkSession.sessionState.newHadoopConf()
     val defaultFS = FileSystem.getDefaultUri(hadoopConf).getScheme
-    val tmpFS = new URI(System.getProperty("java.io.tmpdir")).getScheme
+    val tmpFS = Utils.resolveURI(System.getProperty("java.io.tmpdir")).getScheme
 
     val isTempCheckpointLocationAvailable = tmpFS match {
       case null | "file" =>
