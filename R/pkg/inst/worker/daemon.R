@@ -58,7 +58,18 @@ while (TRUE) {
   if (is.integer(children)) {
     # If it is PIDs, there are workers exited but not terminated. Attempts to terminate them
     # by setting SIGUSR1.
-    lapply(children, function(c) { tools::pskill(c, tools::SIGUSR1) })
+    lapply(children, function(child) {
+      # This data should be raw bytes if any data was sent from this child.
+      # Otherwise, this returns the PID.
+      data <- parallel:::readChild(child)
+      if (is.raw(data)) {
+        # This checks if the data from this child is -1 that indecides an exited child.
+        if (unserialize(data) == -1) {
+          # If so, we terminate this child.
+          tools::pskill(child, tools::SIGUSR1)
+        }
+      }
+    })
   } else if (is.null(children)) {
     # If it is NULL, there are no such workers. Waits indefinitely for a socket connecion.
     selectTimeout <- NULL
@@ -80,8 +91,9 @@ while (TRUE) {
       close(inputCon)
       Sys.setenv(SPARKR_WORKER_PORT = port)
       try(source(script))
-      # Note that this mcexit does not fully terminate this child.
-      parallel:::mcexit(0L)
+      # Note that this mcexit does not fully terminate this child. So, this writes back
+      # a custom data, -1, so that the parent can read and terminate this child.
+      parallel:::mcexit(0L, send = -1)
     } else {
       # Forking succeeded and we need to check if they finished their jobs every second.
       selectTimeout <- 1
