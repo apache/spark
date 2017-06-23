@@ -80,12 +80,12 @@ object PhysicalOperation extends PredicateHelper {
     expr.transform {
       case a @ Alias(ref: AttributeReference, name) =>
         aliases.get(ref)
-          .map(Alias(_, name)(a.exprId, a.qualifier, isGenerated = a.isGenerated))
+          .map(Alias(_, name)(a.exprId, a.qualifier))
           .getOrElse(a)
 
       case a: AttributeReference =>
         aliases.get(a)
-          .map(Alias(_, a.name)(a.exprId, a.qualifier, isGenerated = a.isGenerated)).getOrElse(a)
+          .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
     }
   }
 }

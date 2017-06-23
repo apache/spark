@@ -807,15 +807,13 @@ case class SubqueryAlias(
  * @param withReplacement Whether to sample with replacement.
  * @param seed the random seed
  * @param child the LogicalPlan
- * @param isTableSample Is created from TABLESAMPLE in the parser.
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
-    child: LogicalPlan)(
-    val isTableSample: java.lang.Boolean = false) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
 
   val eps = RandomSampler.roundingEpsilon
   val fraction = upperBound - lowerBound
@@ -842,8 +840,6 @@ case class Sample(
     // Don't propagate column stats, because we don't know the distribution after a sample operation
     Statistics(sizeInBytes, sampledRowCount, hints = childStats.hints)
   }
-
-  override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
 }
 
 /**
