@@ -139,7 +139,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   require(list != null, "list should not be null")
   override def checkInputDataTypes(): TypeCheckResult = {
     list match {
-      case ListQuery(sub, _, exprId) :: Nil =>
+      case ListQuery(sub, _, _) :: Nil =>
         val valExprs = value match {
           case cns: CreateNamedStruct => cns.valExprs
           case expr => Seq(expr)
@@ -147,7 +147,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
         if (valExprs.length != sub.output.length) {
           TypeCheckResult.TypeCheckFailure(
             s"""
-               |The number of columns the left hand side of an IN subquery does not match the
+               |The number of columns in the left hand side of an IN subquery does not match the
                |number of columns in the output of subquery.
                |#columns in left hand side: ${valExprs.length}.
                |#columns in right hand side: ${sub.output.length}.
