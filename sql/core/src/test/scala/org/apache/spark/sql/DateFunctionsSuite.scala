@@ -427,11 +427,11 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       (2, Timestamp.valueOf("2014-12-31 00:00:00"))).toDF("i", "t")
 
     checkAnswer(
-      df.select(trunc(col("t"), "YY")),
+      df.select(trunc(to_date(col("t")), "YY")),
       Seq(Row(Date.valueOf("2015-01-01")), Row(Date.valueOf("2014-01-01"))))
 
     checkAnswer(
-      df.selectExpr("trunc(t, 'Month')"),
+      df.selectExpr("trunc(to_date(t), 'Month')"),
       Seq(Row(Date.valueOf("2015-07-01")), Row(Date.valueOf("2014-12-01"))))
   }
 
