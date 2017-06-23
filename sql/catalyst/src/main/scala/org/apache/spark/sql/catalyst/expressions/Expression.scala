@@ -104,6 +104,21 @@ abstract class Expression extends TreeNode[Expression] {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val ve = doGenCode(ctx, ExprCode("", isNull, value))
+
+      // if we can assure that isNull is always false from the generated code,
+      // set isNull "false" to propagate this information for further optimizations
+      // condition: "boolean isNull = false | false | false ...;" is the only one
+      // assignment to the variable ${isNull} in the generated code
+      if (s"${isNull} = ".r.findAllIn(ve.code).size == 1 &&
+          ve.code.matches(s"[\\s\\S]* boolean ${isNull} = false(?: \\|\\| false)*;[\\s\\S]*")) {
+        ve.isNull = "false"
+
+        // make ${isNull} variable final to assure that noone overwrite this later
+        if (!ve.code.contains(s"final boolean ${isNull} = ")) {
+          ve.code = ve.code.replace(s"boolean ${isNull} = ", s"final boolean ${isNull} = ")
+        }
+      }
+
       if (ve.code.nonEmpty) {
         // Add `this` in the comment.
         ve.copy(code = s"${ctx.registerComment(this.toString)}\n" + ve.code.trim)
