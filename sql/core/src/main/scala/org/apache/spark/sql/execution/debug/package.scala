@@ -83,8 +83,8 @@ package object debug {
       case s => s
     }
     codegenSubtrees.toSeq.map { subtree =>
-        val (_, source) = subtree.doCodeGen()
-        (subtree.toString, CodeFormatter.format(source))
+      val (_, source) = subtree.doCodeGen()
+      (subtree.toString, CodeFormatter.format(source))
     }
   }
 
