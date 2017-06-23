@@ -179,9 +179,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           $comparisons
           return 0;
         }
-
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
       }"""
 
     val code = CodeFormatter.stripOverlappingComments(

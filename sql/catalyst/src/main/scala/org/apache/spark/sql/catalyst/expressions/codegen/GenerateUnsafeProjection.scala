@@ -82,7 +82,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val rowWriterClass = classOf[UnsafeRowWriter].getName
     val rowWriter = ctx.freshName("rowWriter")
     ctx.addMutableState(rowWriterClass, rowWriter,
-      s"$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
+      s"this.$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
 
     val resetWriter = if (isTopLevel) {
       // For top level row writer, it always writes to the beginning of the global buffer holder,
@@ -182,7 +182,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val arrayWriterClass = classOf[UnsafeArrayWriter].getName
     val arrayWriter = ctx.freshName("arrayWriter")
     ctx.addMutableState(arrayWriterClass, arrayWriter,
-      s"$arrayWriter = new $arrayWriterClass();")
+      s"this.$arrayWriter = new $arrayWriterClass();")
     val numElements = ctx.freshName("numElements")
     val index = ctx.freshName("index")
     val element = ctx.freshName("element")
@@ -321,7 +321,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val holder = ctx.freshName("holder")
     val holderClass = classOf[BufferHolder].getName
     ctx.addMutableState(holderClass, holder,
-      s"$holder = new $holderClass($result, ${numVarLenFields * 32});")
+      s"this.$holder = new $holderClass($result, ${numVarLenFields * 32});")
 
     val resetBufferHolder = if (numVarLenFields == 0) {
       ""
@@ -402,9 +402,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           ${eval.code.trim}
           return ${eval.value};
         }
-
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
       }
       """
 

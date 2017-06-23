@@ -281,8 +281,10 @@ case class SampleExec(
       val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
       val initSampler = ctx.freshName("initSampler")
       ctx.copyResult = true
+      ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
+        s"$initSampler();")
 
-      val initSamplerFuncName = ctx.addNewFunction(initSampler,
+      ctx.addNewFunction(initSampler,
         s"""
           | private void $initSampler() {
           |   $sampler = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false);
@@ -296,8 +298,6 @@ case class SampleExec(
           |   $sampler.setSeed(randomSeed);
           | }
          """.stripMargin.trim)
-
-      ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler, s"$initSamplerFuncName();")
 
       val samplingCount = ctx.freshName("samplingCount")
       s"""
@@ -394,7 +394,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // The default size of a batch, which must be positive integer
     val batchSize = 1000
 
-    val initRangeFuncName = ctx.addNewFunction("initRange",
+    ctx.addNewFunction("initRange",
       s"""
         | private void initRange(int idx) {
         |   $BigInt index = $BigInt.valueOf(idx);
@@ -451,7 +451,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       | // initialize Range
       | if (!$initTerm) {
       |   $initTerm = true;
-      |   $initRangeFuncName(partitionIndex);
+      |   initRange(partitionIndex);
       | }
       |
       | while (true) {

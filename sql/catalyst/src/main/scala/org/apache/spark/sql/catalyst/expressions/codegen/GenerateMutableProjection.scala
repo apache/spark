@@ -63,21 +63,21 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
         if (e.nullable) {
           val isNull = s"isNull_$i"
           val value = s"value_$i"
-          ctx.addMutableState("boolean", isNull, s"$isNull = true;")
+          ctx.addMutableState("boolean", isNull, s"this.$isNull = true;")
           ctx.addMutableState(ctx.javaType(e.dataType), value,
-            s"$value = ${ctx.defaultValue(e.dataType)};")
+            s"this.$value = ${ctx.defaultValue(e.dataType)};")
           s"""
             ${ev.code}
-            $isNull = ${ev.isNull};
-            $value = ${ev.value};
+            this.$isNull = ${ev.isNull};
+            this.$value = ${ev.value};
            """
         } else {
           val value = s"value_$i"
           ctx.addMutableState(ctx.javaType(e.dataType), value,
-            s"$value = ${ctx.defaultValue(e.dataType)};")
+            s"this.$value = ${ctx.defaultValue(e.dataType)};")
           s"""
             ${ev.code}
-            $value = ${ev.value};
+            this.$value = ${ev.value};
            """
         }
     }
@@ -87,7 +87,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
 
     val updates = validExpr.zip(index).map {
       case (e, i) =>
-        val ev = ExprCode("", s"isNull_$i", s"value_$i")
+        val ev = ExprCode("", s"this.isNull_$i", s"this.value_$i")
         ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
     }
 
@@ -135,9 +135,6 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           $allUpdates
           return mutableRow;
         }
-
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
       }
     """
 
