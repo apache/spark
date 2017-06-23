@@ -50,6 +50,7 @@ package object debug {
     // scalastyle:on println
   }
 
+  /** Generate codegen debug info */
   def codegenString(plan: SparkPlan): String = {
     val codegenSeq = codegenStringSeq(plan)
     var output = s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n"
@@ -62,7 +63,12 @@ package object debug {
     output
   }
 
-  /** @return Sequence of WholeStageCodegen subtrees and corresponding codegen */
+  /**
+   * Find WholeStageCodegenExec subtrees in query plan and do codegen for each of them
+   *
+   * @param plan the query plan for codegen
+   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+   */
   def codegenStringSeq(plan: SparkPlan): Seq[(String, String)] = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
     plan transform {
