@@ -38,9 +38,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * conditional conversion(if...else...), type conversion, array indexing and many string ops.
  * Note that FuncTransformer supports serialization via Scala ObjectOutputStream and may not
  * guarantee save/load compatibility between different Scala version.
- * @param func a custom [[UserDefinedFunction]] to map from inputCol to outputCol e.g.
- *             udf { (i: Double) => if (i >= 1) 1.0 else 0.0 }. Only udf with
- *             one input is supported for now.
+ * @param func a custom UserDefinedFunction to map from inputCol to outputCol e.g.
+ *             udf { (i: Double) => i + 1 }. Only udf with one input is supported for now.
  */
 @Experimental
 @Since("2.3.0")
