@@ -54,6 +54,31 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
     assert(row.isNullAt(0))
   }
 
+  test("Create row with duplicate name") {
+    intercept[IllegalArgumentException] {
+      val dataset = Seq(
+        (0, 3, 4),
+        (1, 3, 3),
+        (2, 3, 5),
+        (2, 4, 3)
+      ).toDF("1", "1", "2")
+    }
+
+    intercept[IllegalArgumentException] {
+      val struct =
+        StructType(StructField("a", IntegerType, true) ::
+          StructField("a", LongType, false) ::
+          StructField("c", BooleanType, false) :: Nil)
+    }
+
+    intercept[IllegalArgumentException] {
+      val struct = (new StructType).
+        add(StructField("a", IntegerType, true)).
+        add(StructField("a", LongType, false)).
+        add(StructField("c", StringType, true))
+    }
+  }
+
   test("get values by field name on Row created via .toDF") {
     val row = Seq((1, Seq(1))).toDF("a", "b").first()
     assert(row.getAs[Int]("a") === 1)
