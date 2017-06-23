@@ -69,6 +69,11 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  */
 trait StreamTest extends QueryTest with SharedSQLContext with Timeouts with BeforeAndAfterAll {
 
+  override def afterAll(): Unit = {
+    super.afterAll()
+    StateStore.stop() // stop the state store maintenance thread and unload store providers
+  }
+
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
 
@@ -659,11 +664,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts with Befo
     if(!running) { actions += StartStream() }
     addCheck()
     testStream(ds)(actions: _*)
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    StateStore.stop() // stop the state store maintenance thread and unload store providers
   }
 
   object AwaitTerminationTester {
