@@ -291,7 +291,7 @@ setMethod("unpersistRDD",
 #' @rdname checkpoint-methods
 #' @aliases checkpoint,RDD-method
 #' @noRd
-setMethod("checkpoint",
+setMethod("checkpointRDD",
           signature(x = "RDD"),
           function(x) {
             jrdd <- getJRDD(x)
@@ -1028,7 +1028,7 @@ setMethod("repartitionRDD",
           signature(x = "RDD"),
           function(x, numPartitions) {
             if (!is.null(numPartitions) && is.numeric(numPartitions)) {
-              coalesce(x, numPartitions, TRUE)
+              coalesceRDD(x, numPartitions, TRUE)
             } else {
               stop("Please, specify the number of partitions")
             }
@@ -1049,7 +1049,7 @@ setMethod("repartitionRDD",
 #' @rdname coalesce
 #' @aliases coalesce,RDD
 #' @noRd
-setMethod("coalesce",
+setMethod("coalesceRDD",
            signature(x = "RDD", numPartitions = "numeric"),
            function(x, numPartitions, shuffle = FALSE) {
              numPartitions <- numToInt(numPartitions)

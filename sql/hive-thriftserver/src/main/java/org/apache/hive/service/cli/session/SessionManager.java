@@ -224,7 +224,9 @@ public class SessionManager extends CompositeService {
    * The username passed to this method is the effective username.
    * If withImpersonation is true (==doAs true) we wrap all the calls in HiveSession
    * within a UGI.doAs, where UGI corresponds to the effective user.
-   * @see org.apache.hive.service.cli.thrift.ThriftCLIService#getUserName()
+   *
+   * Please see {@code org.apache.hive.service.cli.thrift.ThriftCLIService.getUserName()} for
+   * more details.
    *
    * @param protocol
    * @param username

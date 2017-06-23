@@ -317,12 +317,7 @@ JavaSparkContext jsc = ...
 // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
 JavaDoubleRDD u = normalJavaRDD(jsc, 1000000L, 10);
 // Apply a transform to get a random double RDD following `N(1, 4)`.
-JavaDoubleRDD v = u.map(
-  new Function<Double, Double>() {
-    public Double call(Double x) {
-      return 1.0 + 2.0 * x;
-    }
-  });
+JavaDoubleRDD v = u.mapToDouble(x -> 1.0 + 2.0 * x);
 {% endhighlight %}
 </div>
 

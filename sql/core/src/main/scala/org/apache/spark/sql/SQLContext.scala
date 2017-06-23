@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.beans.BeanInfo
 import java.util.Properties
 
 import scala.collection.immutable
@@ -188,17 +187,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * }}}
    *
    * The following example registers a UDF in Java:
-   * {{{
-   *   sqlContext.udf().register("myUDF",
-   *       new UDF2<Integer, String, String>() {
-   *           @Override
-   *           public String call(Integer arg1, String arg2) {
-   *               return arg2 + arg1;
-   *           }
-   *      }, DataTypes.StringType);
-   * }}}
-   *
-   * Or, to use Java 8 lambda syntax:
    * {{{
    *   sqlContext.udf().register("myUDF",
    *       (Integer arg1, String arg2) -> arg2 + arg1,
@@ -517,7 +505,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
 
   /**
-   * :: Experimental ::
    * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
    * {{{
    *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
@@ -526,7 +513,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    *
    * @since 2.0.0
    */
-  @Experimental
   @InterfaceStability.Evolving
   def readStream: DataStreamReader = sparkSession.readStream
 
@@ -538,8 +524,9 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(tableName: String, path: String): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, path)
+    sparkSession.catalog.createTable(tableName, path)
   }
 
   /**
@@ -549,11 +536,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       path: String,
       source: String): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, path, source)
+    sparkSession.catalog.createTable(tableName, path, source)
   }
 
   /**
@@ -563,11 +551,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, source, options)
+    sparkSession.catalog.createTable(tableName, source, options)
   }
 
   /**
@@ -578,11 +567,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, source, options)
+    sparkSession.catalog.createTable(tableName, source, options)
   }
 
   /**
@@ -592,12 +582,13 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, source, schema, options)
+    sparkSession.catalog.createTable(tableName, source, schema, options)
   }
 
   /**
@@ -608,12 +599,13 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, source, schema, options)
+    sparkSession.catalog.createTable(tableName, source, schema, options)
   }
 
   /**
@@ -1100,15 +1092,15 @@ object SQLContext {
    * method for internal use.
    */
   private[sql] def beansToRows(
-        data: Iterator[_],
-        beanInfo: BeanInfo,
-        attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
+      data: Iterator[_],
+      beanClass: Class[_],
+      attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
     val extractors =
-      beanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+      JavaTypeInference.getJavaBeanReadableProperties(beanClass).map(_.getReadMethod)
     val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>
       (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
     }
-    data.map{ element =>
+    data.map { element =>
       new GenericInternalRow(
         methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }
       ): InternalRow

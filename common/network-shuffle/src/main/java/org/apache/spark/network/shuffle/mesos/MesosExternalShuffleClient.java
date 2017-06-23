@@ -60,15 +60,16 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
   public MesosExternalShuffleClient(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
-      boolean authEnabled) {
-    super(conf, secretKeyHolder, authEnabled);
+      boolean authEnabled,
+      long registrationTimeoutMs) {
+    super(conf, secretKeyHolder, authEnabled, registrationTimeoutMs);
   }
 
   public void registerDriverWithShuffleService(
       String host,
       int port,
       long heartbeatTimeoutMs,
-      long heartbeatIntervalMs) throws IOException {
+      long heartbeatIntervalMs) throws IOException, InterruptedException {
 
     checkInit();
     ByteBuffer registerDriver = new RegisterDriver(appId, heartbeatTimeoutMs).toByteBuffer();

@@ -21,9 +21,9 @@
 #' Download and Install Apache Spark to a Local Directory
 #'
 #' \code{install.spark} downloads and installs Spark to a local directory if
-#' it is not found. The Spark version we use is the same as the SparkR version.
-#' Users can specify a desired Hadoop version, the remote mirror site, and
-#' the directory where the package is installed locally.
+#' it is not found. If SPARK_HOME is set in the environment, and that directory is found, that is
+#' returned. The Spark version we use is the same as the SparkR version. Users can specify a desired
+#' Hadoop version, the remote mirror site, and the directory where the package is installed locally.
 #'
 #' The full url of remote file is inferred from \code{mirrorUrl} and \code{hadoopVersion}.
 #' \code{mirrorUrl} specifies the remote path to a Spark folder. It is followed by a subfolder
@@ -68,6 +68,16 @@
 #'          \href{http://spark.apache.org/downloads.html}{Apache Spark}
 install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
                           localDir = NULL, overwrite = FALSE) {
+  sparkHome <- Sys.getenv("SPARK_HOME")
+  if (isSparkRShell()) {
+    stopifnot(nchar(sparkHome) > 0)
+    message("Spark is already running in sparkR shell.")
+    return(invisible(sparkHome))
+  } else if (!is.na(file.info(sparkHome)$isdir)) {
+    message("Spark package found in SPARK_HOME: ", sparkHome)
+    return(invisible(sparkHome))
+  }
+
   version <- paste0("spark-", packageVersion("SparkR"))
   hadoopVersion <- tolower(hadoopVersion)
   hadoopVersionName <- hadoopVersionName(hadoopVersion)
@@ -257,7 +267,7 @@ hadoopVersionName <- function(hadoopVersion) {
 # The implementation refers to appdirs package: https://pypi.python.org/pypi/appdirs and
 # adapt to Spark context
 sparkCachePath <- function() {
-  if (.Platform$OS.type == "windows") {
+  if (is_windows()) {
     winAppPath <- Sys.getenv("LOCALAPPDATA", unset = NA)
     if (is.na(winAppPath)) {
       stop(paste("%LOCALAPPDATA% not found.",

@@ -125,6 +125,13 @@ class VectorsSuite extends SparkMLFunSuite {
 
     val vec8 = Vectors.sparse(5, Array(1, 2), Array(0.0, -1.0))
     assert(vec8.argmax === 0)
+
+    // Check for case when sparse vector is non-empty but the values are empty
+    val vec9 = Vectors.sparse(100, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
+    assert(vec9.argmax === 0)
+
+    val vec10 = Vectors.sparse(1, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
+    assert(vec10.argmax === 0)
   }
 
   test("vector equals") {
@@ -336,6 +343,11 @@ class VectorsSuite extends SparkMLFunSuite {
     val sv1 = Vectors.sparse(4, Array(0, 1, 2), Array(1.0, 2.0, 3.0))
     val sv1c = sv1.compressed.asInstanceOf[DenseVector]
     assert(sv1 === sv1c)
+
+    val sv2 = Vectors.sparse(Int.MaxValue, Array(0), Array(3.4))
+    val sv2c = sv2.compressed.asInstanceOf[SparseVector]
+    assert(sv2c === sv2)
+    assert(sv2c.numActives === 1)
   }
 
   test("SparseVector.slice") {

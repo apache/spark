@@ -173,10 +173,8 @@ class SparkContext(object):
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
                 self.environment[varName] = v
-        if sys.version >= '3.3' and 'PYTHONHASHSEED' not in os.environ:
-            # disable randomness of hash of string in worker, if this is not
-            # launched by spark-submit
-            self.environment["PYTHONHASHSEED"] = "0"
+
+        self.environment["PYTHONHASHSEED"] = os.environ.get("PYTHONHASHSEED", "0")
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
@@ -241,6 +239,32 @@ class SparkContext(object):
         # see http://stackoverflow.com/questions/23206787/
         if isinstance(threading.current_thread(), threading._MainThread):
             signal.signal(signal.SIGINT, signal_handler)
+
+    def __repr__(self):
+        return "<SparkContext master={master} appName={appName}>".format(
+            master=self.master,
+            appName=self.appName,
+        )
+
+    def _repr_html_(self):
+        return """
+        <div>
+            <p><b>SparkContext</b></p>
+
+            <p><a href="{sc.uiWebUrl}">Spark UI</a></p>
+
+            <dl>
+              <dt>Version</dt>
+                <dd><code>v{sc.version}</code></dd>
+              <dt>Master</dt>
+                <dd><code>{sc.master}</code></dd>
+              <dt>AppName</dt>
+                <dd><code>{sc.appName}</code></dd>
+            </dl>
+        </div>
+        """.format(
+            sc=self
+        )
 
     def _initialize_context(self, jconf):
         """
@@ -917,6 +941,12 @@ class SparkContext(object):
         L{setLocalProperty}
         """
         return self._jsc.getLocalProperty(key)
+
+    def setJobDescription(self, value):
+        """
+        Set a human readable description of the current job.
+        """
+        self._jsc.setJobDescription(value)
 
     def sparkUser(self):
         """

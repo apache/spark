@@ -28,7 +28,6 @@ dist: trusty
 # 2. Choose language and target JDKs for parallel builds.
 language: java
 jdk:
-  - oraclejdk7
   - oraclejdk8
 
 # 3. Setup cache directory for SBT and Maven.

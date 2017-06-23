@@ -356,12 +356,13 @@ class StandaloneDynamicAllocationSuite
   test("kill the same executor twice (SPARK-9795)") {
     sc = new SparkContext(appConf)
     val appId = sc.applicationId
+    sc.requestExecutors(2)
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
       assert(apps.size === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
-      assert(apps.head.getExecutorLimit === Int.MaxValue)
+      assert(apps.head.getExecutorLimit === 2)
     }
     // sync executors between the Master and the driver, needed because
     // the driver refuses to kill executors it does not know about
@@ -380,12 +381,13 @@ class StandaloneDynamicAllocationSuite
   test("the pending replacement executors should not be lost (SPARK-10515)") {
     sc = new SparkContext(appConf)
     val appId = sc.applicationId
+    sc.requestExecutors(2)
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
       assert(apps.size === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
-      assert(apps.head.getExecutorLimit === Int.MaxValue)
+      assert(apps.head.getExecutorLimit === 2)
     }
     // sync executors between the Master and the driver, needed because
     // the driver refuses to kill executors it does not know about
@@ -547,7 +549,7 @@ class StandaloneDynamicAllocationSuite
 
   /** Get the Master state */
   private def getMasterState: MasterStateResponse = {
-    master.self.askWithRetry[MasterStateResponse](RequestMasterState)
+    master.self.askSync[MasterStateResponse](RequestMasterState)
   }
 
   /** Get the applications that are active from Master */
@@ -620,7 +622,7 @@ class StandaloneDynamicAllocationSuite
       when(endpointRef.address).thenReturn(mockAddress)
       val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty)
       val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
-      backend.driverEndpoint.askWithRetry[Boolean](message)
+      backend.driverEndpoint.askSync[Boolean](message)
     }
   }
 

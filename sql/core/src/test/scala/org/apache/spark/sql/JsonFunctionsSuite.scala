@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.functions.{from_json, struct, to_json}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{CalendarIntervalType, IntegerType, StructType, TimestampType}
+import org.apache.spark.sql.types._
 
 class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -133,12 +133,57 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null) :: Nil)
   }
 
-  test("to_json") {
+  test("from_json invalid schema") {
+    val df = Seq("""{"a" 1}""").toDS()
+    val schema = ArrayType(StringType)
+    val message = intercept[AnalysisException] {
+      df.select(from_json($"value", schema))
+    }.getMessage
+
+    assert(message.contains(
+      "Input schema array<string> must be a struct or an array of structs."))
+  }
+
+  test("from_json array support") {
+    val df = Seq("""[{"a": 1, "b": "a"}, {"a": 2}, { }]""").toDS()
+    val schema = ArrayType(
+      StructType(
+        StructField("a", IntegerType) ::
+        StructField("b", StringType) :: Nil))
+
+    checkAnswer(
+      df.select(from_json($"value", schema)),
+      Row(Seq(Row(1, "a"), Row(2, null), Row(null, null))))
+  }
+
+  test("from_json uses DDL strings for defining a schema - java") {
+    val df = Seq("""{"a": 1, "b": "haa"}""").toDS()
+    checkAnswer(
+      df.select(from_json($"value", "a INT, b STRING", new java.util.HashMap[String, String]())),
+      Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("from_json uses DDL strings for defining a schema - scala") {
+    val df = Seq("""{"a": 1, "b": "haa"}""").toDS()
+    checkAnswer(
+      df.select(from_json($"value", "a INT, b STRING", Map[String, String]())),
+      Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("to_json - struct") {
     val df = Seq(Tuple1(Tuple1(1))).toDF("a")
 
     checkAnswer(
       df.select(to_json($"a")),
       Row("""{"_1":1}""") :: Nil)
+  }
+
+  test("to_json - array") {
+    val df = Seq(Tuple1(Tuple1(1) :: Nil)).toDF("a")
+
+    checkAnswer(
+      df.select(to_json($"a")),
+      Row("""[{"_1":1}]""") :: Nil)
   }
 
   test("to_json with option") {
@@ -161,7 +206,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       "Unable to convert column a of type calendarinterval to JSON."))
   }
 
-  test("roundtrip in to_json and from_json") {
+  test("roundtrip in to_json and from_json - struct") {
     val dfOne = Seq(Tuple1(Tuple1(1)), Tuple1(null)).toDF("struct")
     val schemaOne = dfOne.schema(0).dataType.asInstanceOf[StructType]
     val readBackOne = dfOne.select(to_json($"struct").as("json"))
@@ -173,5 +218,78 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val readBackTwo = dfTwo.select(from_json($"json", schemaTwo).as("struct"))
       .select(to_json($"struct").as("json"))
     checkAnswer(dfTwo, readBackTwo)
+  }
+
+  test("roundtrip in to_json and from_json - array") {
+    val dfOne = Seq(Tuple1(Tuple1(1) :: Nil), Tuple1(null :: Nil)).toDF("array")
+    val schemaOne = dfOne.schema(0).dataType
+    val readBackOne = dfOne.select(to_json($"array").as("json"))
+      .select(from_json($"json", schemaOne).as("array"))
+    checkAnswer(dfOne, readBackOne)
+
+    val dfTwo = Seq(Some("""[{"a":1}]"""), None).toDF("json")
+    val schemaTwo = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val readBackTwo = dfTwo.select(from_json($"json", schemaTwo).as("array"))
+      .select(to_json($"array").as("json"))
+    checkAnswer(dfTwo, readBackTwo)
+  }
+
+  test("SPARK-19637 Support to_json in SQL") {
+    val df1 = Seq(Tuple1(Tuple1(1))).toDF("a")
+    checkAnswer(
+      df1.selectExpr("to_json(a)"),
+      Row("""{"_1":1}""") :: Nil)
+
+    val df2 = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
+    checkAnswer(
+      df2.selectExpr("to_json(a, map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
+      Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
+
+    val errMsg1 = intercept[AnalysisException] {
+      df2.selectExpr("to_json(a, named_struct('a', 1))")
+    }
+    assert(errMsg1.getMessage.startsWith("Must use a map() function for options"))
+
+    val errMsg2 = intercept[AnalysisException] {
+      df2.selectExpr("to_json(a, map('a', 1))")
+    }
+    assert(errMsg2.getMessage.startsWith(
+      "A type of keys and values in map() must be string, but got"))
+  }
+
+  test("SPARK-19967 Support from_json in SQL") {
+    val df1 = Seq("""{"a": 1}""").toDS()
+    checkAnswer(
+      df1.selectExpr("from_json(value, 'a INT')"),
+      Row(Row(1)) :: Nil)
+
+    val df2 = Seq("""{"c0": "a", "c1": 1, "c2": {"c20": 3.8, "c21": 8}}""").toDS()
+    checkAnswer(
+      df2.selectExpr("from_json(value, 'c0 STRING, c1 INT, c2 STRUCT<c20: DOUBLE, c21: INT>')"),
+      Row(Row("a", 1, Row(3.8, 8))) :: Nil)
+
+    val df3 = Seq("""{"time": "26/08/2015 18:00"}""").toDS()
+    checkAnswer(
+      df3.selectExpr(
+        "from_json(value, 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
+      Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+
+    val errMsg1 = intercept[AnalysisException] {
+      df3.selectExpr("from_json(value, 1)")
+    }
+    assert(errMsg1.getMessage.startsWith("Expected a string literal instead of"))
+    val errMsg2 = intercept[AnalysisException] {
+      df3.selectExpr("""from_json(value, 'time InvalidType')""")
+    }
+    assert(errMsg2.getMessage.contains("DataType invalidtype is not supported"))
+    val errMsg3 = intercept[AnalysisException] {
+      df3.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
+    }
+    assert(errMsg3.getMessage.startsWith("Must use a map() function for options"))
+    val errMsg4 = intercept[AnalysisException] {
+      df3.selectExpr("from_json(value, 'time Timestamp', map('a', 1))")
+    }
+    assert(errMsg4.getMessage.startsWith(
+      "A type of keys and values in map() must be string, but got"))
   }
 }

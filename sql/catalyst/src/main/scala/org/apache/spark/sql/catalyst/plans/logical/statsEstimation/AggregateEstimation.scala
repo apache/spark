@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Statistics}
+import org.apache.spark.sql.internal.SQLConf
 
 
 object AggregateEstimation {
@@ -29,7 +29,7 @@ object AggregateEstimation {
    * Estimate the number of output rows based on column stats of group-by columns, and propagate
    * column stats for aggregate expressions.
    */
-  def estimate(conf: CatalystConf, agg: Aggregate): Option[Statistics] = {
+  def estimate(conf: SQLConf, agg: Aggregate): Option[Statistics] = {
     val childStats = agg.child.stats(conf)
     // Check if we have column stats for all group-by columns.
     val colStatsExist = agg.groupingExpressions.forall { e =>
@@ -56,7 +56,7 @@ object AggregateEstimation {
         sizeInBytes = getOutputSize(agg.output, outputRows, outputAttrStats),
         rowCount = Some(outputRows),
         attributeStats = outputAttrStats,
-        isBroadcastable = childStats.isBroadcastable))
+        hints = childStats.hints))
     } else {
       None
     }

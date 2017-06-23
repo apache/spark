@@ -27,7 +27,7 @@ import org.apache.spark._
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
@@ -164,7 +164,8 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
       }
       serializerManager
         .dataDeserializeStream(
-          blockId, new ChunkedByteBuffer(dataRead).toInputStream())(elementClassTag)
+          blockId,
+          new ChunkedByteBuffer(dataRead).toInputStream())(elementClassTag)
         .asInstanceOf[Iterator[T]]
     }
 

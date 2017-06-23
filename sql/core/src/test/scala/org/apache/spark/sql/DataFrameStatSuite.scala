@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -68,25 +68,38 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   }
 
   test("randomSplit on reordered partitions") {
+
+    def testNonOverlappingSplits(data: DataFrame): Unit = {
+      val splits = data.randomSplit(Array[Double](2, 3), seed = 1)
+      assert(splits.length == 2, "wrong number of splits")
+
+      // Verify that the splits span the entire dataset
+      assert(splits.flatMap(_.collect()).toSet == data.collect().toSet)
+
+      // Verify that the splits don't overlap
+      assert(splits(0).collect().toSeq.intersect(splits(1).collect().toSeq).isEmpty)
+
+      // Verify that the results are deterministic across multiple runs
+      val firstRun = splits.toSeq.map(_.collect().toSeq)
+      val secondRun = data.randomSplit(Array[Double](2, 3), seed = 1).toSeq.map(_.collect().toSeq)
+      assert(firstRun == secondRun)
+    }
+
     // This test ensures that randomSplit does not create overlapping splits even when the
     // underlying dataframe (such as the one below) doesn't guarantee a deterministic ordering of
     // rows in each partition.
-    val data =
-      sparkContext.parallelize(1 to 600, 2).mapPartitions(scala.util.Random.shuffle(_)).toDF("id")
-    val splits = data.randomSplit(Array[Double](2, 3), seed = 1)
+    val dataWithInts = sparkContext.parallelize(1 to 600, 2)
+      .mapPartitions(scala.util.Random.shuffle(_)).toDF("int")
+    val dataWithMaps = sparkContext.parallelize(1 to 600, 2)
+      .map(i => (i, Map(i -> i.toString)))
+      .mapPartitions(scala.util.Random.shuffle(_)).toDF("int", "map")
+    val dataWithArrayOfMaps = sparkContext.parallelize(1 to 600, 2)
+      .map(i => (i, Array(Map(i -> i.toString))))
+      .mapPartitions(scala.util.Random.shuffle(_)).toDF("int", "arrayOfMaps")
 
-    assert(splits.length == 2, "wrong number of splits")
-
-    // Verify that the splits span the entire dataset
-    assert(splits.flatMap(_.collect()).toSet == data.collect().toSet)
-
-    // Verify that the splits don't overlap
-    assert(splits(0).intersect(splits(1)).collect().isEmpty)
-
-    // Verify that the results are deterministic across multiple runs
-    val firstRun = splits.toSeq.map(_.collect().toSeq)
-    val secondRun = data.randomSplit(Array[Double](2, 3), seed = 1).toSeq.map(_.collect().toSeq)
-    assert(firstRun == secondRun)
+    testNonOverlappingSplits(dataWithInts)
+    testNonOverlappingSplits(dataWithMaps)
+    testNonOverlappingSplits(dataWithArrayOfMaps)
   }
 
   test("pearson correlation") {
@@ -159,16 +172,94 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       assert(math.abs(md1 - 2 * q1 * n) < error_double)
       assert(math.abs(md2 - 2 * q2 * n) < error_double)
     }
-    // test approxQuantile on NaN values
-    val dfNaN = Seq(Double.NaN, 1.0, Double.NaN, Double.NaN).toDF("input")
-    val resNaN = dfNaN.stat.approxQuantile("input", Array(q1, q2), epsilons.head)
-    assert(resNaN.count(_.isNaN) === 0)
-    // test approxQuantile on multi-column NaN values
-    val dfNaN2 = Seq((Double.NaN, 1.0), (1.0, 1.0), (-1.0, Double.NaN), (Double.NaN, Double.NaN))
-      .toDF("input1", "input2")
-    val resNaN2 = dfNaN2.stat.approxQuantile(Array("input1", "input2"),
-      Array(q1, q2), epsilons.head)
-    assert(resNaN2.flatten.count(_.isNaN) === 0)
+
+    // quantile should be in the range [0.0, 1.0]
+    val e = intercept[IllegalArgumentException] {
+      df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2, -0.1), epsilons.head)
+    }
+    assert(e.getMessage.contains("quantile should be in the range [0.0, 1.0]"))
+
+    // relativeError should be non-negative
+    val e2 = intercept[IllegalArgumentException] {
+      df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), -1.0)
+    }
+    assert(e2.getMessage.contains("Relative Error must be non-negative"))
+  }
+
+  test("approximate quantile 2: test relativeError greater than 1 return the same result as 1") {
+    val n = 1000
+    val df = Seq.tabulate(n)(i => (i, 2.0 * i)).toDF("singles", "doubles")
+
+    val q1 = 0.5
+    val q2 = 0.8
+    val epsilons = List(2.0, 5.0, 100.0)
+
+    val Array(single1_1) = df.stat.approxQuantile("singles", Array(q1), 1.0)
+    val Array(s1_1, s2_1) = df.stat.approxQuantile("singles", Array(q1, q2), 1.0)
+    val Array(Array(ms1_1, ms2_1), Array(md1_1, md2_1)) =
+      df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), 1.0)
+
+    for (epsilon <- epsilons) {
+      val Array(single1) = df.stat.approxQuantile("singles", Array(q1), epsilon)
+      val Array(s1, s2) = df.stat.approxQuantile("singles", Array(q1, q2), epsilon)
+      val Array(Array(ms1, ms2), Array(md1, md2)) =
+        df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), epsilon)
+      assert(single1_1 === single1)
+      assert(s1_1 === s1)
+      assert(s2_1 === s2)
+      assert(ms1_1 === ms1)
+      assert(ms2_1 === ms2)
+      assert(md1_1 === md1)
+      assert(md2_1 === md2)
+    }
+  }
+
+  test("approximate quantile 3: test on NaN and null values") {
+    val q1 = 0.5
+    val q2 = 0.8
+    val epsilon = 0.1
+    val rows = spark.sparkContext.parallelize(Seq(Row(Double.NaN, 1.0, Double.NaN),
+      Row(1.0, -1.0, null), Row(-1.0, Double.NaN, null), Row(Double.NaN, Double.NaN, null),
+      Row(null, null, Double.NaN), Row(null, 1.0, null), Row(-1.0, null, Double.NaN),
+      Row(Double.NaN, null, null)))
+    val schema = StructType(Seq(StructField("input1", DoubleType, nullable = true),
+      StructField("input2", DoubleType, nullable = true),
+      StructField("input3", DoubleType, nullable = true)))
+    val dfNaN = spark.createDataFrame(rows, schema)
+
+    val resNaN1 = dfNaN.stat.approxQuantile("input1", Array(q1, q2), epsilon)
+    assert(resNaN1.count(_.isNaN) === 0)
+    assert(resNaN1.count(_ == null) === 0)
+
+    val resNaN2 = dfNaN.stat.approxQuantile("input2", Array(q1, q2), epsilon)
+    assert(resNaN2.count(_.isNaN) === 0)
+    assert(resNaN2.count(_ == null) === 0)
+
+    val resNaN3 = dfNaN.stat.approxQuantile("input3", Array(q1, q2), epsilon)
+    assert(resNaN3.isEmpty)
+
+    val resNaNAll = dfNaN.stat.approxQuantile(Array("input1", "input2", "input3"),
+      Array(q1, q2), epsilon)
+    assert(resNaNAll.flatten.count(_.isNaN) === 0)
+    assert(resNaNAll.flatten.count(_ == null) === 0)
+
+    assert(resNaN1(0) === resNaNAll(0)(0))
+    assert(resNaN1(1) === resNaNAll(0)(1))
+    assert(resNaN2(0) === resNaNAll(1)(0))
+    assert(resNaN2(1) === resNaNAll(1)(1))
+
+    // return empty array for columns only containing null or NaN values
+    assert(resNaNAll(2).isEmpty)
+
+    // return empty array if the dataset is empty
+    val res1 = dfNaN.selectExpr("*").limit(0)
+      .stat.approxQuantile("input1", Array(q1, q2), epsilon)
+    assert(res1.isEmpty)
+
+    val res2 = dfNaN.selectExpr("*").limit(0)
+      .stat.approxQuantile(Array("input1", "input2"), Array(q1, q2), epsilon)
+    assert(res2(0).isEmpty)
+    assert(res2(1).isEmpty)
   }
 
   test("crosstab") {

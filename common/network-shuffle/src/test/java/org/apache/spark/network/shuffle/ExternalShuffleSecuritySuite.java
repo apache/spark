@@ -60,7 +60,7 @@ public class ExternalShuffleSecuritySuite {
   }
 
   @Test
-  public void testValid() throws IOException {
+  public void testValid() throws IOException, InterruptedException {
     validate("my-app-id", "secret", false);
   }
 
@@ -83,12 +83,13 @@ public class ExternalShuffleSecuritySuite {
   }
 
   @Test
-  public void testEncryption() throws IOException {
+  public void testEncryption() throws IOException, InterruptedException {
     validate("my-app-id", "secret", true);
   }
 
   /** Creates an ExternalShuffleClient and attempts to register with the server. */
-  private void validate(String appId, String secretKey, boolean encrypt) throws IOException {
+  private void validate(String appId, String secretKey, boolean encrypt)
+        throws IOException, InterruptedException {
     TransportConf testConf = conf;
     if (encrypt) {
       testConf = new TransportConf("shuffle", new MapConfigProvider(
@@ -96,7 +97,7 @@ public class ExternalShuffleSecuritySuite {
     }
 
     ExternalShuffleClient client =
-      new ExternalShuffleClient(testConf, new TestSecretKeyHolder(appId, secretKey), true);
+      new ExternalShuffleClient(testConf, new TestSecretKeyHolder(appId, secretKey), true, 5000);
     client.init(appId);
     // Registration either succeeds or throws an exception.
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(), "exec0",

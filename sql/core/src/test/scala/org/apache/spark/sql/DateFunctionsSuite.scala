@@ -387,7 +387,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("to_date(s)"),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
-      // Now with format
+    // now with format
     checkAnswer(
       df.select(to_date(col("t"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
@@ -398,14 +398,27 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-MM-dd")),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
-        Row(Date.valueOf("2016-07-12"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
-    //  now switch format
+    // now switch format
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-dd-MM")),
-      Seq(Row(Date.valueOf("2016-10-07")), Row(Date.valueOf("2016-07-12")),
-        Row(Date.valueOf("2014-12-31"))))
+      Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
+
+    // invalid format
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-hh-MM")),
+      Seq(Row(null), Row(null), Row(null)))
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-dd-aa")),
+      Seq(Row(null), Row(null), Row(null)))
+
+    // february
+    val x1 = "2016-02-29"
+    val x2 = "2017-02-29"
+    val df1 = Seq(x1, x2).toDF("x")
+    checkAnswer(
+      df1.select(to_date(col("x"))), Row(Date.valueOf("2016-02-29")) :: Row(null) :: Nil)
   }
 
   test("function trunc") {
@@ -477,6 +490,35 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.selectExpr(s"unix_timestamp(s, '$fmt')"), Seq(
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
 
+    val x1 = "2015-07-24 10:00:00"
+    val x2 = "2015-25-07 02:02:02"
+    val x3 = "2015-07-24 25:02:02"
+    val x4 = "2015-24-07 26:02:02"
+    val ts3 = Timestamp.valueOf("2015-07-24 02:25:02")
+    val ts4 = Timestamp.valueOf("2015-07-24 00:10:00")
+
+    val df1 = Seq(x1, x2, x3, x4).toDF("x")
+    checkAnswer(df1.select(unix_timestamp(col("x"))), Seq(
+      Row(ts1.getTime / 1000L), Row(null), Row(null), Row(null)))
+    checkAnswer(df1.selectExpr("unix_timestamp(x)"), Seq(
+      Row(ts1.getTime / 1000L), Row(null), Row(null), Row(null)))
+    checkAnswer(df1.select(unix_timestamp(col("x"), "yyyy-dd-MM HH:mm:ss")), Seq(
+      Row(null), Row(ts2.getTime / 1000L), Row(null), Row(null)))
+    checkAnswer(df1.selectExpr(s"unix_timestamp(x, 'yyyy-MM-dd mm:HH:ss')"), Seq(
+      Row(ts4.getTime / 1000L), Row(null), Row(ts3.getTime / 1000L), Row(null)))
+
+    // invalid format
+    checkAnswer(df1.selectExpr(s"unix_timestamp(x, 'yyyy-MM-dd aa:HH:ss')"), Seq(
+      Row(null), Row(null), Row(null), Row(null)))
+
+    // february
+    val y1 = "2016-02-29"
+    val y2 = "2017-02-29"
+    val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
+    val df2 = Seq(y1, y2).toDF("y")
+    checkAnswer(df2.select(unix_timestamp(col("y"), "yyyy-MM-dd")), Seq(
+      Row(ts5.getTime / 1000L), Row(null)))
+
     val now = sql("select unix_timestamp()").collect().head.getLong(0)
     checkAnswer(sql(s"select cast ($now as timestamp)"), Row(new java.util.Date(now * 1000)))
   }
@@ -500,6 +542,31 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
     checkAnswer(df.selectExpr(s"to_unix_timestamp(s, '$fmt')"), Seq(
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+
+    val x1 = "2015-07-24 10:00:00"
+    val x2 = "2015-25-07 02:02:02"
+    val x3 = "2015-07-24 25:02:02"
+    val x4 = "2015-24-07 26:02:02"
+    val ts3 = Timestamp.valueOf("2015-07-24 02:25:02")
+    val ts4 = Timestamp.valueOf("2015-07-24 00:10:00")
+
+    val df1 = Seq(x1, x2, x3, x4).toDF("x")
+    checkAnswer(df1.selectExpr("to_unix_timestamp(x)"), Seq(
+      Row(ts1.getTime / 1000L), Row(null), Row(null), Row(null)))
+    checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd mm:HH:ss')"), Seq(
+      Row(ts4.getTime / 1000L), Row(null), Row(ts3.getTime / 1000L), Row(null)))
+
+    // february
+    val y1 = "2016-02-29"
+    val y2 = "2017-02-29"
+    val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
+    val df2 = Seq(y1, y2).toDF("y")
+    checkAnswer(df2.select(unix_timestamp(col("y"), "yyyy-MM-dd")), Seq(
+      Row(ts5.getTime / 1000L), Row(null)))
+
+    // invalid format
+    checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')"), Seq(
+      Row(null), Row(null), Row(null), Row(null)))
   }
 
 

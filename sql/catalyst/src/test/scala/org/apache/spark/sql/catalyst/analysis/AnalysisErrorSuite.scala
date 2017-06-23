@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count, Max}
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
@@ -152,7 +153,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "not supported within a window function" :: Nil)
 
   errorTest(
-    "distinct window function",
+    "distinct aggregate function in window",
     testRelation2.select(
       WindowExpression(
         AggregateExpression(Count(UnresolvedAttribute("b")), Complete, isDistinct = true),
@@ -161,6 +162,16 @@ class AnalysisErrorSuite extends AnalysisTest {
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as('window)),
     "Distinct window functions are not supported" :: Nil)
+
+  errorTest(
+    "distinct function",
+    CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
+    "hex does not support the modifier DISTINCT" :: Nil)
+
+  errorTest(
+    "distinct window function",
+    CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) over () FROM TaBlE"),
+    "percent_rank does not support the modifier DISTINCT" :: Nil)
 
   errorTest(
     "nested aggregate functions",
@@ -283,14 +294,29 @@ class AnalysisErrorSuite extends AnalysisTest {
     "union" :: "the compatible column types" :: Nil)
 
   errorTest(
+    "union with a incompatible column type and compatible column types",
+    testRelation3.union(testRelation4),
+    "union"  :: "the compatible column types" :: "map" :: "decimal" :: Nil)
+
+  errorTest(
     "intersect with incompatible column types",
     testRelation.intersect(nestedRelation),
     "intersect" :: "the compatible column types" :: Nil)
 
   errorTest(
+    "intersect with a incompatible column type and compatible column types",
+    testRelation3.intersect(testRelation4),
+    "intersect" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
+
+  errorTest(
     "except with incompatible column types",
     testRelation.except(nestedRelation),
     "except" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "except with a incompatible column type and compatible column types",
+    testRelation3.except(testRelation4),
+    "except" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
 
   errorTest(
     "SPARK-9955: correct error message for aggregate",
@@ -515,7 +541,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       Exists(
         Join(
           LocalRelation(b),
-          Filter(EqualTo(OuterReference(a), c), LocalRelation(c)),
+          Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)),
           LeftOuter,
           Option(EqualTo(b, c)))),
       LocalRelation(a))
@@ -524,7 +550,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan2 = Filter(
       Exists(
         Join(
-          Filter(EqualTo(OuterReference(a), c), LocalRelation(c)),
+          Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)),
           LocalRelation(b),
           RightOuter,
           Option(EqualTo(b, c)))),
@@ -532,14 +558,15 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan3 = Filter(
-      Exists(Union(LocalRelation(b), Filter(EqualTo(OuterReference(a), c), LocalRelation(c)))),
+      Exists(Union(LocalRelation(b),
+        Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)))),
       LocalRelation(a))
     assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan4 = Filter(
       Exists(
         Limit(1,
-          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))
+          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))
       ),
       LocalRelation(a))
     assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)
@@ -547,7 +574,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan5 = Filter(
       Exists(
         Sample(0.0, 0.5, false, 1L,
-          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))().select('b)
+          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))().select('b)
       ),
       LocalRelation(a))
     assertAnalysisError(plan5,

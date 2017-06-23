@@ -8,6 +8,7 @@
     "duration" : 10671,
     "sparkUser" : "jose",
     "completed" : true,
+    "appSparkVersion" : "2.1.0-SNAPSHOT",
     "endTimeEpoch" : 1479335620587,
     "startTimeEpoch" : 1479335609916,
     "lastUpdatedEpoch" : 0
@@ -22,6 +23,7 @@
     "duration" : 101795,
     "sparkUser" : "jose",
     "completed" : true,
+    "appSparkVersion" : "2.1.0-SNAPSHOT",
     "endTimeEpoch" : 1479252138874,
     "startTimeEpoch" : 1479252037079,
     "lastUpdatedEpoch" : 0
@@ -36,6 +38,7 @@
     "duration" : 10505,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "1.4.0-SNAPSHOT",
     "endTimeEpoch" : 1430917391398,
     "startTimeEpoch" : 1430917380893,
     "lastUpdatedEpoch" : 0
@@ -51,6 +54,7 @@
     "duration" : 57,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "1.4.0-SNAPSHOT",
     "endTimeEpoch" : 1430917380950,
     "startTimeEpoch" : 1430917380893,
     "lastUpdatedEpoch" : 0
@@ -62,6 +66,7 @@
     "duration" : 10,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "1.4.0-SNAPSHOT",
     "endTimeEpoch" : 1430917380890,
     "startTimeEpoch" : 1430917380880,
     "lastUpdatedEpoch" : 0
@@ -77,6 +82,7 @@
     "duration" : 34935,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "",
     "endTimeEpoch" : 1426633945177,
     "startTimeEpoch" : 1426633910242,
     "lastUpdatedEpoch" : 0
@@ -88,6 +94,7 @@
     "duration" : 34935,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "",
     "endTimeEpoch" : 1426533945177,
     "startTimeEpoch" : 1426533910242,
     "lastUpdatedEpoch" : 0
@@ -102,6 +109,7 @@
     "duration" : 8635,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "",
     "endTimeEpoch" : 1425081766912,
     "startTimeEpoch" : 1425081758277,
     "lastUpdatedEpoch" : 0
@@ -116,6 +124,7 @@
     "duration" : 9011,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "",
     "endTimeEpoch" : 1422981788731,
     "startTimeEpoch" : 1422981779720,
     "lastUpdatedEpoch" : 0
@@ -130,6 +139,7 @@
     "duration" : 8635,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "",
     "endTimeEpoch" : 1422981766912,
     "startTimeEpoch" : 1422981758277,
     "lastUpdatedEpoch" : 0

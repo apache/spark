@@ -22,12 +22,12 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 /**
  * Options for the LibSVM data source.
  */
-private[libsvm] class LibSVMOptions(@transient private val parameters: CaseInsensitiveMap)
+private[libsvm] class LibSVMOptions(@transient private val parameters: CaseInsensitiveMap[String])
   extends Serializable {
 
   import LibSVMOptions._
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   /**
    * Number of features. If unspecified or nonpositive, the number of features will be determined
