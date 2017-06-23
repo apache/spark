@@ -217,10 +217,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
 
     // custom schema can read data
     val schema = StructType(Seq(
-      StructField("ID", DecimalType(DecimalType.MAX_PRECISION, 0), true,
-        new MetadataBuilder().putString("name", "ID").build()),
-      StructField("N1", IntegerType, true, new MetadataBuilder().putString("name", "N1").build()),
-      StructField("N2", BooleanType, true, new MetadataBuilder().putString("name", "N2").build())))
+      StructField("ID", DecimalType(DecimalType.MAX_PRECISION, 0)),
+      StructField("N1", IntegerType, true),
+      StructField("N2", BooleanType, true)))
 
     val dfRead = spark.read.schema(schema).jdbc(jdbcUrl, "custom_column_types", new Properties())
     val rows = dfRead.collect()
