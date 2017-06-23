@@ -21,7 +21,6 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext, SQLImplicits}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A collection of sample data used in SQL tests.

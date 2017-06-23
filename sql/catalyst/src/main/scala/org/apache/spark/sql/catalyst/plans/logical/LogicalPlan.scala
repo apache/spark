@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
