@@ -481,8 +481,10 @@ object ParquetFileFormat extends Logging {
     val parFiles = partFiles.par
     val pool = ThreadUtils.newForkJoinPool("readingParquetFooters", 8)
     parFiles.tasksupport = new ForkJoinTaskSupport(pool)
+    val tc = TaskContext.get()
     try {
       parFiles.flatMap { currentFile =>
+        TaskContext.setTaskContext(tc)
         try {
           // Skips row group information since we only need the schema.
           // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
