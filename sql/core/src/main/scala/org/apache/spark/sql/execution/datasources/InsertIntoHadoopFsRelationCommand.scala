@@ -44,7 +44,7 @@ case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
     staticPartitions: TablePartitionSpec,
     ifPartitionNotExists: Boolean,
-    partitionColumns: Seq[Attribute],
+    partitionColumns: Seq[String],
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
     options: Map[String, String],
@@ -150,7 +150,7 @@ case class InsertIntoHadoopFsRelationCommand(
         outputSpec = FileFormatWriter.OutputSpec(
           qualifiedOutputPath.toString, customPartitionLocations),
         hadoopConf = hadoopConf,
-        partitionColumns = partitionColumns,
+        partitionColumnNames = partitionColumns,
         bucketSpec = bucketSpec,
         refreshFunction = refreshPartitionsCallback,
         options = options)
@@ -176,10 +176,10 @@ case class InsertIntoHadoopFsRelationCommand(
       customPartitionLocations: Map[TablePartitionSpec, String],
       committer: FileCommitProtocol): Unit = {
     val staticPartitionPrefix = if (staticPartitions.nonEmpty) {
-      "/" + partitionColumns.flatMap { p =>
-        staticPartitions.get(p.name) match {
+      "/" + partitionColumns.flatMap { col =>
+        staticPartitions.get(col) match {
           case Some(value) =>
-            Some(escapePathName(p.name) + "=" + escapePathName(value))
+            Some(escapePathName(col) + "=" + escapePathName(value))
           case None =>
             None
         }
