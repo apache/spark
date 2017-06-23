@@ -114,7 +114,7 @@ def run_tests(tests_timeout):
                                          tests_timeout,
                                          os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
 
-    test_result_code = -9
+    test_result_code = -10
 
     failure_note_by_errcode = {
         1: 'executing the `dev/run-tests` script',  # error to denote run-tests script failures
