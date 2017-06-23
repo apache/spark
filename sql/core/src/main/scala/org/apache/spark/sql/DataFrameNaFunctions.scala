@@ -243,13 +243,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   import com.google.common.collect.ImmutableMap;
    *
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height".
-   *   df.replace("height", ImmutableMap.of(1.0, 2.0));
+   *   df.na.replace("height", ImmutableMap.of(1.0, 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "name".
-   *   df.replace("name", ImmutableMap.of("UNKNOWN", "unnamed"));
+   *   df.na.replace("name", ImmutableMap.of("UNKNOWN", "unnamed"));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in all string columns.
-   *   df.replace("*", ImmutableMap.of("UNKNOWN", "unnamed"));
+   *   df.na.replace("*", ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
    * @param col name of the column to apply the value replacement
@@ -270,10 +270,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   import com.google.common.collect.ImmutableMap;
    *
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
-   *   df.replace(new String[] {"height", "weight"}, ImmutableMap.of(1.0, 2.0));
+   *   df.na.replace(new String[] {"height", "weight"}, ImmutableMap.of(1.0, 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "firstname" and "lastname".
-   *   df.replace(new String[] {"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
+   *   df.na.replace(new String[] {"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
    * @param cols list of columns to apply the value replacement
@@ -294,13 +294,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * {{{
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height".
-   *   df.replace("height", Map(1.0 -> 2.0))
+   *   df.na.replace("height", Map(1.0 -> 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "name".
-   *   df.replace("name", Map("UNKNOWN" -> "unnamed")
+   *   df.na.replace("name", Map("UNKNOWN" -> "unnamed"));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in all string columns.
-   *   df.replace("*", Map("UNKNOWN" -> "unnamed")
+   *   df.na.replace("*", Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
    * @param col name of the column to apply the value replacement
@@ -323,10 +323,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * {{{
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
-   *   df.replace("height" :: "weight" :: Nil, Map(1.0 -> 2.0));
+   *   df.na.replace("height" :: "weight" :: Nil, Map(1.0 -> 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "firstname" and "lastname".
-   *   df.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed");
+   *   df.na.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
    * @param cols list of columns to apply the value replacement
