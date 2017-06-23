@@ -1188,10 +1188,10 @@ case class BRound(child: Expression, scale: Expression)
 }
 
 /**
- *  The bucket number into which
+ *  Returns the bucket number into which
  *  the value of this expression would fall after being evaluated.
  *
- * @param expr id the expression for which the histogram is being created
+ * @param expr is the expression for which the histogram is being created
  * @param minValue is an expression that resolves
  *                 to the minimum end point of the acceptable range for expr
  * @param maxValue is an expression that resolves

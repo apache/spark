@@ -33,7 +33,8 @@ object MathUtils {
    * @param numBucket is an An expression that resolves to
    *                  a constant indicating the number of buckets
    * @return Returns an long between 0 and numBucket+1 by mapping the expr into buckets defined by
-   *         the range [minValue, maxValue]
+   *         the range [minValue, maxValue]. For example:
+   *         widthBucket(0, 1, 1, 1) -> 0, widthBucket(20, 1, 1, 1) -> 2.
    */
   def widthBucket(expr: Double, minValue: Double, maxValue: Double, numBucket: Long): Long = {
 
@@ -44,15 +45,14 @@ object MathUtils {
     val lower: Double = Math.min(minValue, maxValue)
     val upper: Double = Math.max(minValue, maxValue)
 
-    val preResult: Long = if (expr < lower) {
+    val result: Long = if (expr < lower) {
       0
     } else if (expr >= upper) {
-      Math.addExact(numBucket, 1)
+      numBucket + 1L
     } else {
       (numBucket.toDouble * (expr - lower) / (upper - lower) + 1).toLong
     }
 
-    val result = if (minValue > maxValue) (numBucket - preResult) + 1 else preResult
-    result
+    if (minValue > maxValue) (numBucket - result) + 1 else result
   }
 }

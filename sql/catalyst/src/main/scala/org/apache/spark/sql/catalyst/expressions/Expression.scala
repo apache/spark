@@ -48,6 +48,7 @@ import org.apache.spark.util.Utils
  * - [[UnaryExpression]]: an expression that has one child.
  * - [[BinaryExpression]]: an expression that has two children.
  * - [[TernaryExpression]]: an expression that has three children.
+ * - [[QuaternaryExpression]]: an expression that has four children.
  * - [[BinaryOperator]]: a special case of [[BinaryExpression]] that requires two children to have
  *                       the same output data type.
  *
@@ -643,8 +644,8 @@ abstract class QuaternaryExpression extends Expression {
   override def nullable: Boolean = children.exists(_.nullable)
 
   /**
-   * Default behavior of evaluation according to the default nullability of TernaryExpression.
-   * If subclass of TernaryExpression override nullable, probably should also override this.
+   * Default behavior of evaluation according to the default nullability of QuaternaryExpression.
+   * If subclass of QuaternaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
     val exprs = children
@@ -665,26 +666,26 @@ abstract class QuaternaryExpression extends Expression {
   }
 
   /**
-   * Called by default [[eval]] implementation.  If subclass of TernaryExpression keep the default
+   * Called by default [[eval]] implementation. If subclass of QuaternaryExpression keep the default
    * nullability, they can override this method to save null-check code.  If we need full control
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any, input4: Any): Any =
-    sys.error(s"TernaryExpressions must override either eval or nullSafeEval")
+    sys.error(s"QuaternaryExpressions must override either eval or nullSafeEval")
 
   /**
    * Short hand for generating ternary evaluation code.
    * If either of the sub-expressions is null, the result of this computation
    * is assumed to be null.
    *
-   * @param f accepts three variable names and returns Java code to compute the output.
+   * @param f accepts four variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
     ctx: CodegenContext,
     ev: ExprCode,
     f: (String, String, String, String) => String): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3, eval4) => {
-      s"${ev.value} = ${f(eval1, eval2, eval3, eval3)};"
+      s"${ev.value} = ${f(eval1, eval2, eval3, eval4)};"
     })
   }
 
@@ -693,7 +694,7 @@ abstract class QuaternaryExpression extends Expression {
    * If either of the sub-expressions is null, the result of this computation
    * is assumed to be null.
    *
-   * @param f function that accepts the 3 non-null evaluation result names of children
+   * @param f function that accepts the 4 non-null evaluation result names of children
    *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
