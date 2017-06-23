@@ -82,7 +82,7 @@ case class StarSchemaDetection(conf: SQLConf) extends PredicateHelper {
       // Find if the input plans are eligible for star join detection.
       // An eligible plan is a base table access with valid statistics.
       val foundEligibleJoin = input.forall {
-        case PhysicalOperation(_, _, t: LeafNode) if t.stats(conf).rowCount.isDefined => true
+        case PhysicalOperation(_, _, t: LeafNode) if t.stats.rowCount.isDefined => true
         case _ => false
       }
 
@@ -181,7 +181,7 @@ case class StarSchemaDetection(conf: SQLConf) extends PredicateHelper {
       val leafCol = findLeafNodeCol(column, plan)
       leafCol match {
         case Some(col) if t.outputSet.contains(col) =>
-          val stats = t.stats(conf)
+          val stats = t.stats
           stats.rowCount match {
             case Some(rowCount) if rowCount >= 0 =>
               if (stats.attributeStats.nonEmpty && stats.attributeStats.contains(col)) {
@@ -237,7 +237,7 @@ case class StarSchemaDetection(conf: SQLConf) extends PredicateHelper {
       val leafCol = findLeafNodeCol(column, plan)
       leafCol match {
         case Some(col) if t.outputSet.contains(col) =>
-          val stats = t.stats(conf)
+          val stats = t.stats
           stats.attributeStats.nonEmpty && stats.attributeStats.contains(col)
         case None => false
       }
@@ -296,11 +296,11 @@ case class StarSchemaDetection(conf: SQLConf) extends PredicateHelper {
    */
   private def getTableAccessCardinality(
       input: LogicalPlan): Option[BigInt] = input match {
-    case PhysicalOperation(_, cond, t: LeafNode) if t.stats(conf).rowCount.isDefined =>
-      if (conf.cboEnabled && input.stats(conf).rowCount.isDefined) {
-        Option(input.stats(conf).rowCount.get)
+    case PhysicalOperation(_, cond, t: LeafNode) if t.stats.rowCount.isDefined =>
+      if (conf.cboEnabled && input.stats.rowCount.isDefined) {
+        Option(input.stats.rowCount.get)
       } else {
-        Option(t.stats(conf).rowCount.get)
+        Option(t.stats.rowCount.get)
       }
     case _ => None
   }

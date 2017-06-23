@@ -60,7 +60,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val df = df1.join(df2, Seq("k"), "left")
 
       val sizes = df.queryExecution.analyzed.collect { case g: Join =>
-        g.stats(conf).sizeInBytes
+        g.stats.sizeInBytes
       }
 
       assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
@@ -107,9 +107,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("SPARK-15392: DataFrame created from RDD should not be broadcasted") {
     val rdd = sparkContext.range(1, 100).map(i => Row(i, i))
     val df = spark.createDataFrame(rdd, new StructType().add("a", LongType).add("b", LongType))
-    assert(df.queryExecution.analyzed.stats(conf).sizeInBytes >
+    assert(df.queryExecution.analyzed.stats.sizeInBytes >
       spark.sessionState.conf.autoBroadcastJoinThreshold)
-    assert(df.selectExpr("a").queryExecution.analyzed.stats(conf).sizeInBytes >
+    assert(df.selectExpr("a").queryExecution.analyzed.stats.sizeInBytes >
       spark.sessionState.conf.autoBroadcastJoinThreshold)
   }
 
@@ -250,13 +250,13 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   test("SPARK-18856: non-empty partitioned table should not report zero size") {
     withTable("ds_tbl", "hive_tbl") {
       spark.range(100).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("ds_tbl")
-      val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats(conf)
+      val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats
       assert(stats.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
 
       if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
         sql("CREATE TABLE hive_tbl(i int) PARTITIONED BY (j int)")
         sql("INSERT INTO hive_tbl PARTITION(j=1) SELECT 1")
-        val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.stats(conf)
+        val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.stats
         assert(stats2.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
       }
     }
@@ -296,10 +296,10 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
 
     // Check relation statistics
-    assert(relation.stats(conf).sizeInBytes == 0)
-    assert(relation.stats(conf).rowCount == Some(0))
-    assert(relation.stats(conf).attributeStats.size == 1)
-    val (attribute, colStat) = relation.stats(conf).attributeStats.head
+    assert(relation.stats.sizeInBytes == 0)
+    assert(relation.stats.rowCount == Some(0))
+    assert(relation.stats.attributeStats.size == 1)
+    val (attribute, colStat) = relation.stats.attributeStats.head
     assert(attribute.name == "c1")
     assert(colStat == emptyColStat)
   }
