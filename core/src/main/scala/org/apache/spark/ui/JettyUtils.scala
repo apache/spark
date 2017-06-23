@@ -26,6 +26,8 @@ import scala.language.implicitConversions
 import scala.xml.Node
 
 import org.eclipse.jetty.client.api.Response
+import org.eclipse.jetty.client.HttpClient
+import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP
 import org.eclipse.jetty.proxy.ProxyServlet
 import org.eclipse.jetty.server._
 import org.eclipse.jetty.server.handler._
@@ -206,6 +208,13 @@ private[spark] object JettyUtils extends Logging {
           return null
         }
         rewrittenURI.toString()
+      }
+
+      override def newHttpClient(): HttpClient = {
+        // Use the Jetty logic to calculate the number of selector threads (#CPUs/2),
+        // but limit it to 8 max.
+        val numSelectors = math.max(1,math.min(8,Runtime.getRuntime().availableProcessors()/2))
+        return new HttpClient(new HttpClientTransportOverHTTP(numSelectors), null)
       }
 
       override def filterServerResponseHeader(
