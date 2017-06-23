@@ -115,13 +115,23 @@ object FileFormatWriter extends Logging {
     // Get the actual partition columns as attributes after matching them by name with
     // the given columns names.
     val partitionColumns = partitionColumnNames.map { col =>
-      allColumns.find(f => f.name.equalsIgnoreCase(col)).getOrElse {
+      val nameEquality = sparkSession.sessionState.conf.resolver
+      allColumns.find(f => nameEquality(f.name, col)).getOrElse {
         throw new RuntimeException(
           s"Partition column $col not found in schema ${queryExecution.executedPlan.schema}")
       }
     }
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = allColumns.filterNot(partitionSet.contains)
+
+    queryExecution.executedPlan.output.zip(queryExecution.logical.output).foreach {
+      case (fieldExecuted, fieldAnalyzed) =>
+        if (fieldAnalyzed.name != fieldExecuted.name) {
+          // scalastyle:off println
+          println(s"analyzed: ${fieldAnalyzed.name}; executed: ${fieldExecuted.name}")
+          // scalastyle:on println
+        }
+    }
 
     val bucketIdExpression = bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
