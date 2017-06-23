@@ -198,8 +198,9 @@ public class SparkSaslServer implements SaslEncryptionBackend {
   }
 
   /** Return a Base64-encoded string. */
-  private static String getBase64EncodedString (String str) {
-    ByteBuf byteBuf = null, encodedByteBuf = null;
+  private static String getBase64EncodedString(String str) {
+    ByteBuf byteBuf = null;
+    ByteBuf encodedByteBuf = null;
     try {
       byteBuf = Unpooled.wrappedBuffer(str.getBytes(StandardCharsets.UTF_8));
       encodedByteBuf = Base64.encode(byteBuf);
