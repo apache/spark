@@ -58,7 +58,13 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def start() {
     super.start()
-    launcherBackend.connect()
+
+    // SPARK-21159. The scheduler backend should only try to connect to the launcher when in client
+    // mode. In cluster mode, the code that submits the application to the Master needs to connect
+    // to the launcher instead.
+    if (sc.deployMode == "client") {
+      launcherBackend.connect()
+    }
 
     // The endpoint for executors to talk to us
     val driverUrl = RpcEndpointAddress(
