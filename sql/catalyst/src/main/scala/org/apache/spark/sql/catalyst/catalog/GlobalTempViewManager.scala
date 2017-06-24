@@ -118,4 +118,22 @@ class GlobalTempViewManager(val database: String) {
   def clear(): Unit = synchronized {
     viewDefinitions.clear()
   }
+
+  /**
+   * Check if the table or view with the specified name exists in global cache.
+   * This can either be a temporary view or a table/view.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a table/view in
+   *                  the current database.
+   * @param isCaseSensitive is sql conf
+   * @since 2.3.0
+   */
+  def containGlobalTable(tableName: String, isCaseSensitive: Boolean): Boolean = {
+    if (!isCaseSensitive) {
+      viewDefinitions.exists{ case (key, value) => key.equalsIgnoreCase(tableName)}
+    } else {
+      viewDefinitions.contains(tableName)
+    }
+  }
 }

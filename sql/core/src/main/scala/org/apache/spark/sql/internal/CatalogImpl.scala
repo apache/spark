@@ -261,6 +261,32 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Check if the table or view with the specified name exists in local cache.
+   * This can either be a temporary view or a table/view.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a table/view in
+   *                  the current database.
+   * @since 2.3.0
+   */
+  override def containTempTable(tableName: String): Boolean = {
+    sessionCatalog.containTempTable(tableName)
+  }
+
+  /**
+   * Check if the table or view with the specified name exists in global cache.
+   * This can either be a temporary view or a table/view.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a table/view in
+   *                  the current database.
+   * @since 2.3.0
+   */
+  override def containGlobalTable(tableName: String): Boolean = {
+    sessionCatalog.containGlobalTable(tableName)
+  }
+
+  /**
    * Checks if the function with the specified name exists. This can either be a temporary function
    * or a function.
    */

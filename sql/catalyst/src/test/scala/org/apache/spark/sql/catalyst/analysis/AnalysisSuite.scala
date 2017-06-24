@@ -169,7 +169,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
     checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
     checkAnalysis(
-      UnresolvedRelation(TableIdentifier("tAbLe")), testRelation, caseSensitive = false)
+      UnresolvedRelation(TableIdentifier("table")), testRelation, caseSensitive = false)
     checkAnalysis(
       UnresolvedRelation(TableIdentifier("TaBlE")), testRelation, caseSensitive = false)
   }

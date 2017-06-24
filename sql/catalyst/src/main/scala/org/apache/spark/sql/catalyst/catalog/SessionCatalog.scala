@@ -116,7 +116,9 @@ class SessionCatalog(
    * Format table name, taking into account case sensitivity.
    */
   protected[this] def formatTableName(name: String): String = {
-    if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    // if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    // fix bug SPARK-21158: table/view name should not convert to lowercase when adding to hashtable
+    name
   }
 
   /**
@@ -384,6 +386,36 @@ class SessionCatalog(
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
     externalCatalog.tableExists(db, table)
+  }
+
+  /**
+   * Check if the table or view with the specified name exists in local cache.
+   * This can either be a temporary view or a table/view.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a table/view in
+   *                  the current database.
+   * @since 2.3.0
+   */
+  def containTempTable(tableName: String): Boolean = {
+    if (!conf.caseSensitiveAnalysis) {
+      tempTables.exists{ case(key, value) => key.equalsIgnoreCase(tableName) }
+    } else {
+      tempTables.contains(tableName)
+    }
+  }
+
+  /**
+   * Check if the table or view with the specified name exists in global cache.
+   * This can either be a temporary view or a table/view.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a table/view in
+   *                  the current database.
+   * @since 2.3.0
+   */
+  def containGlobalTable(tableName: String): Boolean = {
+    globalTempViewManager.containGlobalTable(tableName, conf.caseSensitiveAnalysis)
   }
 
   /**

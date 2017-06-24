@@ -189,6 +189,28 @@ abstract class Catalog {
   def tableExists(dbName: String, tableName: String): Boolean
 
   /**
+   * Check if the table or view with the specified name exists in local cache.
+   * This can either be a temporary view or a table/view.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a table/view in
+   *                  the current database.
+   * @since 2.3.0
+   */
+  def containTempTable(tableName: String): Boolean
+
+  /**
+   * Check if the table or view with the specified name exists in global cache.
+   * This can either be a temporary view or a table/view.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a table/view in
+   *                  the current database.
+   * @since 2.3.0
+   */
+  def containGlobalTable(tableName: String): Boolean
+
+  /**
    * Check if the function with the specified name exists. This can either be a temporary function
    * or a function.
    *
