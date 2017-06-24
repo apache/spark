@@ -663,4 +663,16 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
     assert(fs.exists(checkpointDir))
   }
+
+  test("SPARK-20431: Specify a schema by using a DDL-formatted string") {
+    spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .schema("aa INT")
+      .load()
+
+    assert(LastOptions.schema.isDefined)
+    assert(LastOptions.schema.get === StructType(StructField("aa", IntegerType) :: Nil))
+
+    LastOptions.clear()
+  }
 }
