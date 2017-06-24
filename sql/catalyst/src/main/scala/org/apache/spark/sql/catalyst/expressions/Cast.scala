@@ -407,15 +407,15 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
     // TODO: Could be faster?
-    val newRow = new GenericInternalRow(from.fields.length)
     buildCast[InternalRow](_, row => {
+      val newRow = new GenericInternalRow(from.fields.length)
       var i = 0
       while (i < row.numFields) {
         newRow.update(i,
           if (row.isNullAt(i)) null else castFuncs(i)(row.get(i, from.apply(i).dataType)))
         i += 1
       }
-      newRow.copy()
+      newRow
     })
   }
 
