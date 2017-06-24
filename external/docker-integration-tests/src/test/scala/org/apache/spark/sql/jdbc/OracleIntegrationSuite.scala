@@ -199,7 +199,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(types(1).equals("class java.sql.Timestamp"))
   }
 
-  test("SPARK-18006: Make sure date or timestamp related predicate is pushed down correctly") {
+  test("SPARK-18004: Make sure date or timestamp related predicate is pushed down correctly") {
     val props = new Properties()
     props.put("oracle.jdbc.mapDateToTimestamp", "false")
 
