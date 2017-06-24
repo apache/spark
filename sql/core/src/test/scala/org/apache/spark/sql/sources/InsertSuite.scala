@@ -346,7 +346,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
-  test("create table and view with comment") {
+  test("SPARK-21203 wrong results of insertion of Array of Struct") {
     val tabName = "tab1"
     withTable(tabName) {
       spark.sql(
