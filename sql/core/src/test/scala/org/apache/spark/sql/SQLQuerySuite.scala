@@ -25,6 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, UnresolvedGenerator, withPosition}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
@@ -49,6 +51,22 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(queryCoalesce, Row("1") :: Nil)
   }
 
+  test("foo") {
+    val df = Seq((1, 1)).toDF("key", "value")
+    df.createOrReplaceTempView("src")
+    val foo=sql("select max(distinct key) from src").logicalPlan
+    val catalog = new SessionCatalog(new InMemoryCatalog,
+      EmptyFunctionRegistry,
+      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+    foo match {
+      case u @ UnresolvedGenerator(name, children) =>
+        withPosition(u) {
+          catalog.lookupFunction(name, children) match {
+            case max =>
+          }
+        }
+    }
+  }
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
       StringUtils.filterPattern(
