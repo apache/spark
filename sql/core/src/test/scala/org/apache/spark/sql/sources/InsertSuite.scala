@@ -345,4 +345,25 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       )
     }
   }
+
+  test("SPARK-21203 wrong results of insertion of Array of Struct") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      spark.sql(
+        """
+          |CREATE TABLE `tab1`
+          |(`custom_fields` ARRAY<STRUCT<`id`: BIGINT, `value`: STRING>>)
+          |USING parquet
+        """.stripMargin)
+      spark.sql(
+        """
+          |INSERT INTO `tab1`
+          |SELECT ARRAY(named_struct('id', 1, 'value', 'a'), named_struct('id', 2, 'value', 'b'))
+        """.stripMargin)
+
+      checkAnswer(
+        spark.sql("SELECT custom_fields.id, custom_fields.value FROM tab1"),
+        Row(Array(1, 2), Array("a", "b")))
+    }
+  }
 }
