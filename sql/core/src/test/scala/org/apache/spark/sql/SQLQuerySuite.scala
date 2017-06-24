@@ -70,10 +70,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       // Test complex column
       complexData.write.saveAsTable("desc_col_complexTable")
       checkDescColumn("desc_col_complexTable", "s", "struct<key:int,value:string>", None)
-
-      // Describe a nested column
-      val msg = intercept[AnalysisException](sql("DESC desc_col_complexTable s.key")).getMessage
-      assert(msg.contains("DESC TABLE COLUMN is not supported for nested column: s.key"))
     }
   }
 

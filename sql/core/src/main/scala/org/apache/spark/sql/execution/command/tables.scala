@@ -20,13 +20,11 @@ package org.apache.spark.sql.execution.command
 import java.io.File
 import java.net.URI
 import java.nio.file.FileSystems
-import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 import scala.util.Try
 
-import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -36,9 +34,8 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -678,12 +675,7 @@ case class DescribeColumnCommand(
     val attribute = {
       val field = catalogTable.schema.find(f => resolver(f.name, column))
       field.getOrElse {
-        if (column.contains(".")) {
-          throw new AnalysisException(
-            s"DESC TABLE COLUMN is not supported for nested column: $column")
-        } else {
-          throw new AnalysisException(s"Column $column does not exist.")
-        }
+        throw new AnalysisException(s"Column $column does not exist.")
       }
     }
 
@@ -700,7 +692,7 @@ case class DescribeColumnCommand(
       // Show column stats only when formatted is specified.
       Row(
         attribute.name,
-        attribute.dataType.simpleString,
+        attribute.dataType.catalogString,
         cs.flatMap(_.min.map(_.toString)).orNull,
         cs.flatMap(_.max.map(_.toString)).orNull,
         cs.map(_.nullCount.toString).orNull,
@@ -711,7 +703,7 @@ case class DescribeColumnCommand(
     } else {
       Row(
         attribute.name,
-        attribute.dataType.simpleString,
+        attribute.dataType.catalogString,
         comment.orNull)
     }
 

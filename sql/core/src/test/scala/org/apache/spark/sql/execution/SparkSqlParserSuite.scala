@@ -236,6 +236,12 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("DESCRIBE t col",
       DescribeColumnCommand(
         TableIdentifier("t"), "col", isFormatted = false))
+    assertEqual("DESCRIBE t `abc.xyz`",
+      DescribeColumnCommand(
+        TableIdentifier("t"), "abc.xyz", isFormatted = false))
+    // Do not support nested column
+    intercept("DESCRIBE t abc.xyz")
+
     assertEqual("DESCRIBE TABLE t col",
       DescribeColumnCommand(
         TableIdentifier("t"), "col", isFormatted = false))

@@ -262,7 +262,7 @@ describeFuncName
     ;
 
 describeColName
-    : identifier ('.' (identifier | STRING))*
+    : identifier
     ;
 
 ctes
