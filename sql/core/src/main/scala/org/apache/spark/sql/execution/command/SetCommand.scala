@@ -151,6 +151,7 @@ object SetCommand {
  * {{{
  *   reset;
  *   reset key;
+ *   reset key1 key2 ...;
  * }}}
  */
 case class ResetCommand(key: Option[String]) extends RunnableCommand with Logging {
