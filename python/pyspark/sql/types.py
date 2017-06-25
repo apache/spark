@@ -439,7 +439,9 @@ class StructField(DataType):
         return self.dataType.fromInternal(obj)
 
     def typeName(self):
-        raise TypeError('StructField does not have typename. You can use self.dataType.simpleString() instead.')
+        raise TypeError(
+            "StructField does not have typename. \
+            You can use self.dataType.simpleString() instead.")
 
 
 class StructType(DataType):
