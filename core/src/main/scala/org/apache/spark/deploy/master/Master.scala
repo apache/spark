@@ -563,6 +563,14 @@ private[deploy] class Master(
       }
     }
 
+    // Update application state if executors are accepted and RUNNING
+    apps.foreach(appInfo => {
+      val app = idToApp(appInfo.id)
+      if(app.executors.filter(_._2.state != ExecutorState.RUNNING).isEmpty) {
+        app.state = ApplicationState.RUNNING
+        logInfo(s"Application :: ${app.id} status updated to RUNNING state")
+      }})
+
     state = RecoveryState.ALIVE
     schedule()
     logInfo("Recovery complete - resuming operations!")
