@@ -171,6 +171,10 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 2.3.0 */
   implicit def newMapEncoder[T <: Map[_, _] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
+  // Sets
+  /** @since 2.3.0 */
+  implicit def newSetEncoder[T <: Set[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
+
   // Arrays
 
   /** @since 1.6.1 */

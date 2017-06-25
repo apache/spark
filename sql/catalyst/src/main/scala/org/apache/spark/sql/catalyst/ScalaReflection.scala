@@ -342,6 +342,15 @@ object ScalaReflection extends ScalaReflection {
           mirror.runtimeClass(t.typeSymbol.asClass)
         )
 
+      case t if t <:< localTypeOf[Set[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+
+        CollectObjectsToSet(
+          p => deserializerFor(elementType, Some(p), walkedTypePath),
+          getPath,
+          mirror.runtimeClass(t.typeSymbol.asClass)
+        )
+
       case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         val obj = NewInstance(
@@ -497,6 +506,17 @@ object ScalaReflection extends ScalaReflection {
           dataTypeFor(valueType),
           serializerFor(_, valueType, valuePath, seenTypeSet),
           valueNullable = !valueType.typeSymbol.asClass.isPrimitive)
+
+      case t if t <:< localTypeOf[Set[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val elementClsName = getClassNameFromType(elementType)
+        val elementPath = s"""- set element class: "$elementClsName"""" +: walkedTypePath
+
+        ExternalSetToCatalystArray(
+          inputObject,
+          dataTypeFor(elementType),
+          serializerFor(_, elementType, elementPath, seenTypeSet),
+          elementNullable = !elementType.typeSymbol.asClass.isPrimitive)
 
       case t if t <:< localTypeOf[String] =>
         StaticInvoke(
@@ -702,6 +722,10 @@ object ScalaReflection extends ScalaReflection {
         val Schema(valueDataType, valueNullable) = schemaFor(valueType)
         Schema(MapType(schemaFor(keyType).dataType,
           valueDataType, valueContainsNull = valueNullable), nullable = true)
+      case t if t <:< localTypeOf[Set[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType)
+        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Date] => Schema(DateType, nullable = true)
