@@ -339,9 +339,6 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         protected void processNext() throws java.io.IOException {
           ${code.trim}
         }
-
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
       }
       """.trim
 

@@ -363,7 +363,7 @@ case class FileSourceScanExec(
     }
 
     val nextBatch = ctx.freshName("nextBatch")
-    val nextBatchFuncName = ctx.addNewFunction(nextBatch,
+    ctx.addNewFunction(nextBatch,
       s"""
          |private void $nextBatch() throws java.io.IOException {
          |  long getBatchStart = System.nanoTime();
@@ -383,7 +383,7 @@ case class FileSourceScanExec(
     }
     s"""
        |if ($batch == null) {
-       |  $nextBatchFuncName();
+       |  $nextBatch();
        |}
        |while ($batch != null) {
        |  int numRows = $batch.numRows();
@@ -393,7 +393,7 @@ case class FileSourceScanExec(
        |    if (shouldStop()) return;
        |  }
        |  $batch = null;
-       |  $nextBatchFuncName();
+       |  $nextBatch();
        |}
        |$scanTimeMetric.add($scanTimeTotalNs / (1000 * 1000));
        |$scanTimeTotalNs = 0;

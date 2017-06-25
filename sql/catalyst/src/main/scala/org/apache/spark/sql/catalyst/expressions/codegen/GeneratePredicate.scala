@@ -72,9 +72,6 @@ object GeneratePredicate extends CodeGenerator[Expression, Predicate] {
           ${eval.code}
           return !${eval.isNull} && ${eval.value};
         }
-
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
       }"""
 
     val code = CodeFormatter.stripOverlappingComments(
