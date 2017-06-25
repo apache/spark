@@ -421,52 +421,101 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
 
-  protected override def nullSafeEval(left: Any, right: Any) =
-    dataType match {
-      case IntegerType => pmod(left.asInstanceOf[Int], right.asInstanceOf[Int])
-      case LongType => pmod(left.asInstanceOf[Long], right.asInstanceOf[Long])
-      case ShortType => pmod(left.asInstanceOf[Short], right.asInstanceOf[Short])
-      case ByteType => pmod(left.asInstanceOf[Byte], right.asInstanceOf[Byte])
-      case FloatType => pmod(left.asInstanceOf[Float], right.asInstanceOf[Float])
-      case DoubleType => pmod(left.asInstanceOf[Double], right.asInstanceOf[Double])
-      case _: DecimalType => pmod(left.asInstanceOf[Decimal], right.asInstanceOf[Decimal])
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any = {
+    val input2 = right.eval(input)
+    if (input2 == null || input2 == 0) {
+      null
+    } else {
+      val input1 = left.eval(input)
+      if (input1 == null) {
+        null
+      } else {
+        input1 match {
+          case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
+          case l: Long => pmod(l, input2.asInstanceOf[java.lang.Long])
+          case s: Short => pmod(s, input2.asInstanceOf[java.lang.Short])
+          case b: Byte => pmod(b, input2.asInstanceOf[java.lang.Byte])
+          case f: Float => pmod(f, input2.asInstanceOf[java.lang.Float])
+          case d: Double => pmod(d, input2.asInstanceOf[java.lang.Double])
+          case d: Decimal => pmod(d, input2.asInstanceOf[Decimal])
+        }
+      }
     }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      val remainder = ctx.freshName("remainder")
-      dataType match {
-        case dt: DecimalType =>
-          val decimalAdd = "$plus"
-          s"""
-            ${ctx.javaType(dataType)} $remainder = $eval1.remainder($eval2);
-            if ($remainder.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
-              ${ev.value} = ($remainder.$decimalAdd($eval2)).remainder($eval2);
-            } else {
-              ${ev.value} = $remainder;
-            }
-          """
-        // byte and short are casted into int when add, minus, times or divide
-        case ByteType | ShortType =>
-          s"""
-            ${ctx.javaType(dataType)} $remainder = (${ctx.javaType(dataType)})($eval1 % $eval2);
-            if ($remainder < 0) {
-              ${ev.value} = (${ctx.javaType(dataType)})(($remainder + $eval2) % $eval2);
-            } else {
-              ${ev.value} = $remainder;
-            }
-          """
-        case _ =>
-          s"""
-            ${ctx.javaType(dataType)} $remainder = $eval1 % $eval2;
-            if ($remainder < 0) {
-              ${ev.value} = ($remainder + $eval2) % $eval2;
-            } else {
-              ${ev.value} = $remainder;
-            }
-          """
-      }
-    })
+    val eval1 = left.genCode(ctx)
+    val eval2 = right.genCode(ctx)
+    val isZero = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval2.value}.isZero()"
+    } else {
+      s"${eval2.value} == 0"
+    }
+    val remainder = ctx.freshName("remainder")
+    val javaType = ctx.javaType(dataType)
+
+    val result = dataType match {
+      case DecimalType.Fixed(_, _) =>
+        val decimalAdd = "$plus"
+        s"""
+          ${ctx.javaType(dataType)} $remainder = ${eval1.value}.remainder(${eval2.value});
+          if ($remainder.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
+            ${ev.value}=($remainder.$decimalAdd(${eval2.value})).remainder(${eval2.value});
+          } else {
+            ${ev.value}=$remainder;
+          }
+        """
+      // byte and short are casted into int when add, minus, times or divide
+      case ByteType | ShortType =>
+        s"""
+          ${ctx.javaType(dataType)} $remainder =
+            (${ctx.javaType(dataType)})(${eval1.value} % ${eval2.value});
+          if ($remainder < 0) {
+            ${ev.value}=(${ctx.javaType(dataType)})(($remainder + ${eval2.value}) % ${eval2.value});
+          } else {
+            ${ev.value}=$remainder;
+          }
+        """
+      case _ =>
+        s"""
+          ${ctx.javaType(dataType)} $remainder = ${eval1.value} % ${eval2.value};
+          if ($remainder < 0) {
+            ${ev.value}=($remainder + ${eval2.value}) % ${eval2.value};
+          } else {
+            ${ev.value}=$remainder;
+          }
+        """
+    }
+
+    if (!left.nullable && !right.nullable) {
+      ev.copy(code = s"""
+        ${eval2.code}
+        boolean ${ev.isNull} = false;
+        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+        if ($isZero) {
+          ${ev.isNull} = true;
+        } else {
+          ${eval1.code}
+          $result;
+        }""")
+    } else {
+      ev.copy(code = s"""
+        ${eval2.code}
+        boolean ${ev.isNull} = false;
+        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+        if (${eval2.isNull} || $isZero) {
+          ${ev.isNull} = true;
+        } else {
+          ${eval1.code}
+          if (${eval1.isNull}) {
+            ${ev.isNull} = true;
+          } else {
+            $result;
+          }
+        }""")
+    }
   }
 
   private def pmod(a: Int, n: Int): Int = {
@@ -501,7 +550,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   private def pmod(a: Decimal, n: Decimal): Decimal = {
     val r = a % n
-    if (r.compare(Decimal.ZERO) < 0) {(r + n) % n} else r
+    if (r != null && r.compare(Decimal.ZERO) < 0) {(r + n) % n} else r
   }
 
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
