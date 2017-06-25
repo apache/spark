@@ -1339,7 +1339,7 @@ object functions {
 
   /**
    * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-   * polar coordinates (r, theta).
+   * polar coordinates (r, theta). Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1471,7 +1471,7 @@ object functions {
   }
 
   /**
-   * Computes the cosine of the given value.
+   * Computes the cosine of the given value. Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1944,7 +1944,7 @@ object functions {
   def signum(columnName: String): Column = signum(Column(columnName))
 
   /**
-   * Computes the sine of the given value.
+   * Computes the sine of the given value. Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1976,7 +1976,7 @@ object functions {
   def sinh(columnName: String): Column = sinh(Column(columnName))
 
   /**
-   * Computes the tangent of the given value.
+   * Computes the tangent of the given value. Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0

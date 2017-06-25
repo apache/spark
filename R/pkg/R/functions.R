@@ -600,8 +600,9 @@ setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOr
             column(jc)
           })
 
-#' @details
-#' \code{cos}: Computes the cosine of the given value.
+#' cos
+#'
+#' Computes the cosine of the given value. Units in radians.
 #'
 #' @rdname column_math_functions
 #' @aliases cos cos,Column-method
@@ -1396,8 +1397,9 @@ setMethod("signum",
             column(jc)
           })
 
-#' @details
-#' \code{sign}: Alias for \code{signum}.
+#' sin
+#'
+#' Computes the sine of the given value. Units in radians
 #'
 #' @rdname column_math_functions
 #' @aliases sign sign,Column-method
@@ -1603,8 +1605,14 @@ setMethod("sumDistinct",
 #' @details
 #' \code{tan}: Computes the tangent of the given value.
 #'
-#' @rdname column_math_functions
-#' @aliases tan tan,Column-method
+#' Computes the tangent of the given value. Units in radians.
+#'
+#' @param x Column to compute on.
+#'
+#' @rdname tan
+#' @name tan
+#' @family math functions
+#' @aliases tan,Column-method
 #' @export
 #' @note tan since 1.5.0
 setMethod("tan",
@@ -1902,8 +1910,16 @@ setMethod("year",
 #' \code{atan2}: Returns the angle theta from the conversion of rectangular coordinates
 #' (x, y) to polar coordinates (r, theta).
 #'
-#' @rdname column_math_functions
-#' @aliases atan2 atan2,Column-method
+#' Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+#' polar coordinates (r, theta). Units in radians.
+#
+#' @param x Column to compute on.
+#' @param y Column to compute on.
+#'
+#' @rdname atan2
+#' @name atan2
+#' @family math functions
+#' @aliases atan2,Column-method
 #' @export
 #' @note atan2 since 1.5.0
 setMethod("atan2", signature(y = "Column"),

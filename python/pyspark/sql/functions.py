@@ -70,9 +70,8 @@ def _create_window_function(name, doc=''):
 _lit_doc = """
     Creates a :class:`Column` of literal value.
 
-    >>> df.withColumn('height', lit(5)).withColumn('spark_user', lit(True)).collect()
-    [Row(age=2, name=u'Alice', height=5, spark_user=True),
-     Row(age=5, name=u'Bob', height=5, spark_user=True)]
+    >>> df.select(lit(5).alias('height')).withColumn('spark_user', lit(True)).take(1)
+    [Row(height=5, spark_user=True)]
     """
 _functions = {
     'lit': _lit_doc,
@@ -134,16 +133,16 @@ _functions_1_4 = {
 _collect_list_doc = """
     Aggregate function: returns a list of objects with duplicates.
 
-    >>> df2 = spark.createDataFrame([('Alice', 2), ('Bob', 5), ('Alice', 99)], ('name', 'age'))
-    >>> df2.agg(collect_list('name')).collect()
-    [Row(collect_list(name)=[u'Alice', u'Bob', u'Alice'])]
+    >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df2.agg(collect_list('age')).collect()
+    [Row(collect_list(age)=[2, 5, 5])]
     """
 _collect_set_doc = """
     Aggregate function: returns a set of objects with duplicate elements eliminated.
 
-    >>> df2 = spark.createDataFrame([('Alice', 2), ('Bob', 5), ('Alice', 99)], ('name', 'age'))
-    >>> df2.agg(collect_set('name')).collect()
-    [Row(collect_set(name)=[u'Bob', u'Alice'])]
+    >>> df2 = spark.createDataFrame([(2,), (5,), (5,)], ('age',))
+    >>> df2.agg(collect_set('age')).collect()
+    [Row(collect_set(age)=[5, 2])]
     """
 _functions_1_6 = {
     # unary math functions
@@ -209,7 +208,7 @@ _window_functions = {
 }
 
 for _name, _doc in _functions.items():
-    globals()[_name] = since(1.3)(ignore_unicode_prefix(_create_function(_name, _doc)))
+    globals()[_name] = since(1.3)(_create_function(_name, _doc))
 for _name, _doc in _functions_1_4.items():
     globals()[_name] = since(1.4)(_create_function(_name, _doc))
 for _name, _doc in _binary_mathfunctions.items():
@@ -217,7 +216,7 @@ for _name, _doc in _binary_mathfunctions.items():
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
 for _name, _doc in _functions_1_6.items():
-    globals()[_name] = since(1.6)(ignore_unicode_prefix(_create_function(_name, _doc)))
+    globals()[_name] = since(1.6)(_create_function(_name, _doc))
 for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
 del _name, _doc
@@ -232,7 +231,7 @@ def approxCountDistinct(col, rsd=None):
 
 
 @since(2.1)
-def approx_count_distinct(col, rsd=0.05):
+def approx_count_distinct(col, rsd=None):
     """Aggregate function. Returns a new :class:`Column` for approximate distinct count of column `col`.
 
     :param rsd: maximum estimation error allowed (default = 0.05). For rsd < 0.01, it is more
@@ -296,7 +295,7 @@ def coalesce(*cols):
 
 @since(1.6)
 def corr(col1, col2):
-    """Returns a new :class:`Column` for the Pearson Correlation Coefficient for `col1` and `col2`.
+    """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1`` and ``col2``.
 
     >>> a = range(20)
     >>> b = [2 * x for x in range(20)]
@@ -338,7 +337,7 @@ def covar_samp(col1, col2):
 
 @since(1.3)
 def countDistinct(col, *cols):
-    """Returns a new :class:`Column` for distinct count of `col` or `cols`.
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
     >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
     [Row(c=2)]
@@ -824,8 +823,8 @@ def date_format(date, format):
         specialized implementation.
 
     >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(date_format('dt', 'MM/dd/yyy').alias('dt2')).collect()
-    [Row(dt2=u'04/08/2015')]
+    >>> df.select(date_format('dt', 'MM/dd/yyy').alias('date')).collect()
+    [Row(date=u'04/08/2015')]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.date_format(_to_java_column(date), format))
@@ -1118,7 +1117,7 @@ def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     format.
 
     >>> time_df = spark.createDataFrame([(1428476400, )], ['unix_time'])
-    >>> time_df.select(from_unixtime('unix_time').alias('ts') ).collect()
+    >>> time_df.select(from_unixtime('unix_time').alias('ts')).collect()
     [Row(ts=u'2015-04-08 00:00:00')]
     """
     sc = SparkContext._active_spark_context
@@ -1150,8 +1149,8 @@ def from_utc_timestamp(timestamp, tz):
     Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
     that corresponds to the same time of day in the given timezone.
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
-    >>> df.select(from_utc_timestamp(df.ts, "PST").alias('local_time')).collect()
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
+    >>> df.select(from_utc_timestamp(df.t, "PST").alias('local_time')).collect()
     [Row(local_time=datetime.datetime(1997, 2, 28, 2, 30))]
     """
     sc = SparkContext._active_spark_context
