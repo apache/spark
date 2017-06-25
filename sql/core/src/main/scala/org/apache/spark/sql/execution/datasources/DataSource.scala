@@ -183,11 +183,21 @@ case class DataSource(
     }
 
     SchemaUtils.checkColumnNameDuplication(
-      (dataSchema ++ partitionSchema).map(_.name), "in the data schema and the partition schema",
-      equality)
-
+      dataSchema.map(_.name), "in the data schema", equality)
     SchemaUtils.checkColumnNameDuplication(
-      dataSchema.map(_.name), "the datasource", equality)
+      partitionSchema.map(_.name), "in the partition schema", equality)
+
+    // We just print a waring message if the data schema and partition schema have the duplicate
+    // columns. This is because we allow users to do so in the previous Spark releases and
+    // we have the existing tests for the cases (e.g., `ParquetHadoopFsRelationSuite`).
+    // See SPARK-18108 and SPARK-21144 for related discussions.
+    try {
+      SchemaUtils.checkColumnNameDuplication(
+        (dataSchema ++ partitionSchema).map(_.name), "in the data schema and the partition schema",
+        equality)
+    } catch {
+      case e: AnalysisException => logWarning(e.getMessage)
+    }
 
     (dataSchema, partitionSchema)
   }

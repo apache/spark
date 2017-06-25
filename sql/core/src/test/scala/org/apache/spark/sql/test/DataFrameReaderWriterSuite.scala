@@ -690,105 +690,76 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("SPARK-20460 Check name duplication in schema") {
-    // Check CSV format
-    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        withTempDir { src =>
-          // Check write path
-          var e = intercept[AnalysisException] {
-            Seq((1, 1)).toDF(c0, c1).write.mode("overwrite").csv(src.toString)
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
-
-          // Check read path
-          Seq("1,1").toDF().write.mode("overwrite").text(src.toString)
-
-          // data schema only
-          e = intercept[AnalysisException] {
-            spark.read.schema(s"$c0 INT, $c1 INT").csv(src.toString)
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
-
-          // data schema + partition schema
-          val partTestDir = Utils.createDirectory(src.toString)
-          Seq(1).toDF(c0).write.option("header", true).mode("overwrite")
-            .csv(s"${partTestDir.getAbsolutePath}/$c1=1")
-          e = intercept[AnalysisException] {
-            spark.read.option("header", true).csv(s"${partTestDir.getAbsolutePath}")
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
-        }
+    def checkWriteDataColumnDuplication(
+        format: String, colName0: String, colName1: String, tempDir: File): Unit = {
+      val e = intercept[AnalysisException] {
+        Seq((1, 1)).toDF(colName0, colName1).write.format(format).mode("overwrite")
+          .save(tempDir.getAbsolutePath)
       }
+      assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
     }
 
-    withTempDir { src =>
-      // If `inferSchema` is true, a CSV format is duplicate-safe (See SPARK-16896)
-      Seq("a,a", "1,1").toDF().coalesce(1).write.mode("overwrite").text(src.toString)
-      val df = spark.read.option("inferSchema", true).option("header", true).csv(src.toString)
-      checkAnswer(df, Row(1, 1))
-    }
-
-    // Check JSON format
-    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        withTempDir { src =>
-          // Check write path
-          var e = intercept[AnalysisException] {
-            Seq((1, 1)).toDF(c0, c1).write.mode("overwrite").csv(src.toString)
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
-
-          // Check read path
-          Seq(s"""{"$c0":1, "$c1":1}""").toDF().write.mode("overwrite").text(src.toString)
-
-          // data schema only
-          e = intercept[AnalysisException] {
-            spark.read.schema(s"$c0 INT, $c1 INT").json(src.toString)
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
-
-          e = intercept[AnalysisException] {
-            spark.read.option("inferSchema", true).json(src.toString)
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
-
-          // data schema + partition schema only
-          val partTestDir = Utils.createDirectory(src.toString)
-          Seq(1).toDF(c0).write.mode("overwrite").json(s"${partTestDir.getAbsolutePath}/$c1=1")
-          e = intercept[AnalysisException] {
-            spark.read.json(s"${partTestDir.getAbsolutePath}")
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
-        }
+    def checkReadUserSpecifiedDataColumnDuplication(
+        df: DataFrame, format: String, colName0: String, colName1: String, tempDir: File): Unit = {
+      val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
+      df.write.format(format).mode("overwrite").save(testDir.getAbsolutePath)
+      val e = intercept[AnalysisException] {
+        spark.read.format(format).schema(s"$colName0 INT, $colName1 INT")
+          .load(testDir.getAbsolutePath)
       }
+      assert(e.getMessage.contains("Found duplicate column(s) in the data schema:"))
     }
 
-    // Check Parquet format
+    def checkReadInferredDataColumnDuplication(
+        df: DataFrame, format: String, colName0: String, colName1: String, tempDir: File): Unit = {
+      val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
+      df.toDF().write.mode("overwrite").text(testDir.getAbsolutePath)
+      val e = intercept[AnalysisException] {
+        spark.read.format(format).option("inferSchema", true).load(testDir.getAbsolutePath)
+
+      }
+      assert(e.getMessage.contains("Found duplicate column(s) in the data schema:"))
+    }
+
+    def checkReadPartitionColumnDuplication(
+        format: String, colName0: String, colName1: String, tempDir: File): Unit = {
+      val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
+      Seq(1).toDF("col").write.format(format).mode("overwrite")
+        .save(s"${testDir.getAbsolutePath}/$colName0=1/$colName1=1")
+      val e = intercept[AnalysisException] {
+        spark.read.format(format).load(testDir.getAbsolutePath)
+      }
+      assert(e.getMessage.contains("Found duplicate column(s) in the partition schema:"))
+    }
+
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         withTempDir { src =>
-          // Check write path
-          var e = intercept[AnalysisException] {
-            Seq((1, 1)).toDF(c0, c1).write.mode("overwrite").csv(src.toString)
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
+          // Check CSV format
+          checkWriteDataColumnDuplication("csv", c0, c1, src)
+          checkReadUserSpecifiedDataColumnDuplication(
+            Seq((1, 1)).toDF("c0", "c1"), "csv", c0, c1, src)
+          // If `inferSchema` is true, a CSV format is duplicate-safe (See SPARK-16896)
+          val testDir = Utils.createTempDir(src.getAbsolutePath)
+          Seq("a,a", "1,1").toDF().coalesce(1).write.mode("overwrite").text(testDir.getAbsolutePath)
+          val df = spark.read.format("csv").option("inferSchema", true).option("header", true)
+            .load(testDir.getAbsolutePath)
+          checkAnswer(df, Row(1, 1))
+          checkReadPartitionColumnDuplication("csv", c0, c1, src)
 
-          // Check read path
-          Seq((1, 1)).toDF("c0", "c1").write.mode("overwrite").parquet(src.toString)
+          // Check JSON format
+          checkWriteDataColumnDuplication("json", c0, c1, src)
+          checkReadUserSpecifiedDataColumnDuplication(
+            Seq((1, 1)).toDF("c0", "c1"), "json", c0, c1, src)
+          checkReadInferredDataColumnDuplication(
+            Seq(s"""{"$c0":3, "$c1":5}""").toDF(), "json", c0, c1, src)
+          checkReadPartitionColumnDuplication("json", c0, c1, src)
 
-          // data schema only
-          e = intercept[AnalysisException] {
-            spark.read.schema(s"$c0 INT, $c1 INT").parquet(src.toString)
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
-
-          // data schema + partition schema only
-          val partTestDir = Utils.createDirectory(src.toString)
-          Seq(1).toDF(c0).write.mode("overwrite").parquet(s"${partTestDir.getAbsolutePath}/$c1=1")
-          e = intercept[AnalysisException] {
-            spark.read.parquet(s"${partTestDir.getAbsolutePath}")
-          }
-          assert(e.getMessage.contains("Found duplicate column(s) in the datasource: "))
+          // Check Parquet format
+          checkWriteDataColumnDuplication("parquet", c0, c1, src)
+          checkReadUserSpecifiedDataColumnDuplication(
+            Seq((1, 1)).toDF("c0", "c1"), "parquet", c0, c1, src)
+          checkReadPartitionColumnDuplication("parquet", c0, c1, src)
         }
       }
     }
