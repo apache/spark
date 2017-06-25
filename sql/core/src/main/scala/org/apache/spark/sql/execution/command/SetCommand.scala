@@ -161,7 +161,8 @@ case class ResetCommand(key: Option[String]) extends RunnableCommand with Loggin
         sparkSession.sessionState.conf.clear()
       // "RESET key" clear a specific property.
       case Some(key) =>
-        sparkSession.conf.unset(key)
+        key.split("\\s+")
+          .foreach(confName => if (!confName.isEmpty) sparkSession.conf.unset(confName))
     }
     Seq.empty[Row]
   }

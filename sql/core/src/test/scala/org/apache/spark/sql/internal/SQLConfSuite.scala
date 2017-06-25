@@ -166,6 +166,30 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  Seq("reset", s"reset ${testKey}1 \t ${testKey}2 \t ").foreach { resetCmd =>
+    test(s"reset - multiple conf $resetCmd") {
+      spark.sessionState.conf.clear()
+      val key1 = testKey + "1"
+      val key2 = testKey + "2"
+      try {
+        assert(spark.conf.getOption(key1).isEmpty)
+        assert(spark.conf.getOption(key2).isEmpty)
+        sql(s"set $key1=false")
+        sql(s"set $key2=true")
+        assert(spark.conf.get(key1) === "false")
+        assert(spark.conf.get(key2) === "true")
+        assert(sql(s"set").where(s"key = '$key1'").count() == 1)
+        assert(sql(s"set").where(s"key = '$key2'").count() == 1)
+        sql(resetCmd)
+        assert(spark.conf.getOption(key1).isEmpty)
+        assert(spark.conf.getOption(key2).isEmpty)
+      } finally {
+        spark.conf.unset(key1)
+        spark.conf.unset(key2)
+      }
+    }
+  }
+
   test("invalid conf value") {
     spark.sessionState.conf.clear()
     val e = intercept[IllegalArgumentException] {
