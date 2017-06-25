@@ -33,7 +33,6 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
@@ -131,7 +130,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("SPARK-21079 - analyze table with location different than that of individual partitions") {
     def queryTotalSize(tableName: String): BigInt =
-      spark.table(tableName).queryExecution.analyzed.stats(conf).sizeInBytes
+      spark.table(tableName).queryExecution.analyzed.stats.sizeInBytes
 
     val tableName = "analyzeTable_part"
     withTable(tableName) {
@@ -154,7 +153,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("SPARK-21079 - analyze partitioned table with only a subset of partitions visible") {
     def queryTotalSize(tableName: String): BigInt =
-      spark.table(tableName).queryExecution.analyzed.stats(conf).sizeInBytes
+      spark.table(tableName).queryExecution.analyzed.stats.sizeInBytes
 
     val sourceTableName = "analyzeTable_part"
     val tableName = "analyzeTable_part_vis"
