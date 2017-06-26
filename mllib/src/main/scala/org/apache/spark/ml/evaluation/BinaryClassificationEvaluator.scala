@@ -85,11 +85,15 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
     val schema = dataset.schema
     SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol), Seq(DoubleType, new VectorUDT))
     SchemaUtils.checkNumericType(schema, $(labelCol))
+    if (isDefined(weightCol)) {
+      SchemaUtils.checkNumericType(schema, $(weightCol))
+    }
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
     val scoreAndLabelsWithWeights =
       dataset.select(col($(rawPredictionCol)), col($(labelCol)).cast(DoubleType),
-        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
+        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0)
+        else col($(weightCol)).cast(DoubleType))
         .rdd.map {
         case Row(rawPrediction: Vector, label: Double, weight: Double) =>
           (rawPrediction(1), (label, weight))
