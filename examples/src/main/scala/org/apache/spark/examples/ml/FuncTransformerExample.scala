@@ -61,7 +61,7 @@ object FuncTransformerExample {
     val pipelineModel = new Pipeline().setStages(Array(toArray, arrayIndexer)).fit(df)
     pipelineModel.transform(df).show()
 
-    //FuncTransformer for struct data type
+    // FuncTransformer for struct data type
     val structDF = spark.createDataFrame(Seq(
       ("a", (Array(1.2, 2), Array(2))),
       ("b", (Array(3.1, 2), Array(2))))).toDF("name", "data")
