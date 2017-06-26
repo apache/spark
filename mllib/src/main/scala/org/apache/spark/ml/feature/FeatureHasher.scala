@@ -22,7 +22,7 @@ import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
-import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasInputCols, HasNumFeatures, HasOutputCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
@@ -34,25 +34,10 @@ import org.apache.spark.util.collection.OpenHashMap
 
 @Since("2.3.0")
 class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transformer
-  with HasInputCols with HasOutputCol with DefaultParamsWritable {
+  with HasInputCols with HasOutputCol with HasNumFeatures with DefaultParamsWritable {
 
   @Since("2.3.0")
   def this() = this(Identifiable.randomUID("featureHasher"))
-
-  /**
-   * Number of features. Should be > 0.
-   * (default = 2^18^)
-   * @group param
-   */
-  @Since("2.3.0")
-  val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
-    ParamValidators.gt(0))
-
-  setDefault(numFeatures -> (1 << 18))
-
-  /** @group getParam */
-  @Since("2.3.0")
-  def getNumFeatures: Int = $(numFeatures)
 
   /** @group setParam */
   @Since("2.3.0")

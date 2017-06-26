@@ -83,7 +83,9 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("solver", "the solver algorithm for optimization. If this is not set or " +
         "empty, default value is 'auto'", Some("\"auto\"")),
       ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
-        isValid = "ParamValidators.gtEq(2)", isExpertParam = true))
+        isValid = "ParamValidators.gtEq(2)", isExpertParam = true),
+      ParamDesc[Int]("numFeatures", "number of features (> 0)", Some("1<<18"),
+        isValid = "ParamValidators.gt(0)"))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"

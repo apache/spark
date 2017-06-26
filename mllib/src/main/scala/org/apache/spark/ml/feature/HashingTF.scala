@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasNumFeatures, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -37,8 +37,8 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * otherwise the features will not be mapped evenly to the columns.
  */
 @Since("1.2.0")
-class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
+class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Transformer
+  with HasInputCol with HasOutputCol with HasNumFeatures with DefaultParamsWritable {
 
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("hashingTF"))
@@ -52,15 +52,6 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Number of features. Should be greater than 0.
-   * (default = 2^18^)
-   * @group param
-   */
-  @Since("1.2.0")
-  val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
-    ParamValidators.gt(0))
-
-  /**
    * Binary toggle to control term frequency counts.
    * If true, all non-zero counts are set to 1.  This is useful for discrete probabilistic
    * models that model binary events rather than integer counts.
@@ -72,11 +63,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     "This is useful for discrete probabilistic models that model binary events rather " +
     "than integer counts")
 
-  setDefault(numFeatures -> (1 << 18), binary -> false)
-
-  /** @group getParam */
-  @Since("1.2.0")
-  def getNumFeatures: Int = $(numFeatures)
+  setDefault(binary -> false)
 
   /** @group setParam */
   @Since("1.2.0")
