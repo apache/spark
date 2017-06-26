@@ -361,6 +361,7 @@ private[deploy] class Master(
             val execInfo = app.addExecutor(worker, exec.cores, Some(exec.execId))
             worker.addExecutor(execInfo)
             execInfo.copyState(exec)
+            app.state = ApplicationState.RUNNING
           }
 
           for (driverId <- driverIds) {
