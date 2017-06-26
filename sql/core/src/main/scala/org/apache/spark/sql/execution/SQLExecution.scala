@@ -44,8 +44,11 @@ object SQLExecution {
   private val testing = sys.props.contains("spark.testing")
 
   private[sql] def checkSQLExecutionId(sparkSession: SparkSession): Unit = {
+    val sc = sparkSession.sparkContext
+    val isNestedExecution = sc.getLocalProperty(IGNORE_NESTED_EXECUTION_ID) != null
+    val hasExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY) != null
     // only throw an exception during tests. a missing execution ID should not fail a job.
-    if (testing && sparkSession.sparkContext.getLocalProperty(EXECUTION_ID_KEY) == null) {
+    if (testing && !isNestedExecution && !hasExecutionId) {
       // Attention testers: when a test fails with this exception, it means that the action that
       // started execution of a query didn't call withNewExecutionId. The execution ID should be
       // set by calling withNewExecutionId in the action that begins execution, like
@@ -67,7 +70,7 @@ object SQLExecution {
       val executionId = SQLExecution.nextExecutionId
       sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
       executionIdToQueryExecution.put(executionId, queryExecution)
-      val r = try {
+      try {
         // sparkContext.getCallSite() would first try to pick up any call site that was previously
         // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
         // streaming queries would give us call site like "run at <unknown>:0"
@@ -86,10 +89,15 @@ object SQLExecution {
         executionIdToQueryExecution.remove(executionId)
         sc.setLocalProperty(EXECUTION_ID_KEY, null)
       }
-      r
     } else if (sc.getLocalProperty(IGNORE_NESTED_EXECUTION_ID) != null) {
-      // If `IGNORE_NESTED_EXECUTION_ID` is set, just ignore this new execution id.
-      body
+      // If `IGNORE_NESTED_EXECUTION_ID` is set, just ignore the execution id while evaluating the
+      // `body`, so that Spark jobs issued in the `body` won't be tracked.
+      try {
+        sc.setLocalProperty(EXECUTION_ID_KEY, null)
+        body
+      } finally {
+        sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
+      }
     } else {
       // Don't support nested `withNewExecutionId`. This is an example of the nested
       // `withNewExecutionId`:
@@ -128,7 +136,8 @@ object SQLExecution {
 
   /**
    * Wrap an action which may have nested execution id. This method can be used to run an execution
-   * inside another execution, e.g., `CacheTableCommand` need to call `Dataset.collect`.
+   * inside another execution, e.g., `CacheTableCommand` need to call `Dataset.collect`. Note that,
+   * all Spark jobs issued in the body won't be tracked in UI.
    */
   def ignoreNestedExecutionId[T](sparkSession: SparkSession)(body: => T): T = {
     val sc = sparkSession.sparkContext
