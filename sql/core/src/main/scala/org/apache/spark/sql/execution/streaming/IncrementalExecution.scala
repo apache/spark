@@ -47,11 +47,14 @@ class IncrementalExecution(
       sparkSession.sparkContext,
       sparkSession.sessionState.conf,
       sparkSession.sessionState.experimentalMethods) {
-    override def extraPlanningStrategies: Seq[Strategy] = {
-      //  We shouldn't miss the parent's strategies
-      val parentPlanner = sparkSession.sessionState.planner
 
-      parentPlanner.strategies ++ parentPlanner.extraPlanningStrategies ++
+    //  We shouldn't miss the parent's strategies
+    val parentPlanner = sparkSession.sessionState.planner
+
+    override def strategies: Seq[Strategy] = parentPlanner.strategies
+
+    override def extraPlanningStrategies: Seq[Strategy] = {
+      parentPlanner.extraPlanningStrategies ++
         (StatefulAggregationStrategy ::
           FlatMapGroupsWithStateStrategy ::
           StreamingRelationStrategy ::
