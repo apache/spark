@@ -42,8 +42,6 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("bucketizer"))
 
-  import Bucketizer._
-
   /**
    * Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets.
    * A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which
@@ -92,7 +90,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    ParamValidators.inStringArray(supportedHandleInvalids))
+    ParamValidators.inStringArray(Bucketizer.supportedHandleInvalids))
 
   /** @group getParam */
   @Since("2.1.0")

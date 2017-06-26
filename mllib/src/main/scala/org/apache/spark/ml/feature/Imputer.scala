@@ -110,8 +110,6 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   @Since("2.2.0")
   def this() = this(Identifiable.randomUID("imputer"))
 
-  import Imputer._
-
   /** @group setParam */
   @Since("2.2.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)

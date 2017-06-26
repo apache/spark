@@ -39,8 +39,6 @@ import org.apache.spark.util.collection.OpenHashMap
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
 private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
-  import StringIndexer._
-
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
    * Options are 'skip' (filter out rows with invalid data),
@@ -54,9 +52,9 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     "invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
-    ParamValidators.inStringArray(supportedHandleInvalids))
+    ParamValidators.inStringArray(StringIndexer.supportedHandleInvalids))
 
-  setDefault(handleInvalid, ERROR_INVALID)
+  setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
 
   /** @group getParam */
   @Since("1.6.0")
@@ -78,8 +76,8 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
   final val stringOrderType: Param[String] = new Param[String](this, "stringOrderType",
     "How to order labels of string column. " +
     "The first label after ordering is assigned an index of 0. " +
-    s"Supported options: ${supportedStringOrderType.mkString("(", ",", ")")}.",
-    ParamValidators.inStringArray(supportedStringOrderType))
+    s"Supported options: ${StringIndexer.supportedStringOrderType.mkString("(", ",", ")")}.",
+    ParamValidators.inStringArray(StringIndexer.supportedStringOrderType))
 
   /** @group getParam */
   @Since("2.3.0")
