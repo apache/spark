@@ -867,9 +867,8 @@ setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
 #' @name NULL
 setGeneric("when", function(condition, value) { standardGeneric("when") })
 
-#' @rdname column_nonaggregate_functions
+#' @rdname otherwise
 #' @export
-#' @name NULL
 setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
 
 #' @rdname over
@@ -1224,9 +1223,8 @@ setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
 #' @name NULL
 setGeneric("negate", function(x) { standardGeneric("negate") })
 
-#' @rdname column_nonaggregate_functions
+#' @rdname not
 #' @export
-#' @name NULL
 setGeneric("not", function(x) { standardGeneric("not") })
 
 #' @rdname column_datetime_diff_functions

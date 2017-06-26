@@ -106,6 +106,7 @@ NULL
 #' @name column_nonaggregate_functions
 #' @rdname column_nonaggregate_functions
 #' @seealso coalesce,SparkDataFrame-method
+#' @family non-aggregate functions
 #' @examples
 #' \dontrun{
 #' # Dataframe used throughout this doc
@@ -405,12 +406,18 @@ col <- function(x) {
   column(callJStatic("org.apache.spark.sql.functions", "col", x))
 }
 
-#' @details
-#' \code{column}: Returns a Column based on the given column name.
+#' Returns a Column based on the given column name
 #'
-#' @rdname column_nonaggregate_functions
+#' Returns a Column based on the given column name.
+#'
+#' @param x Character column name.
+#'
+#' @rdname column
+#' @name column
+#' @family non-aggregate functions
 #' @export
-#' @aliases column column,character-method
+#' @aliases column,character-method
+#' @examples \dontrun{column("name")}
 #' @note column since 1.6.0
 setMethod("column",
           signature(x = "character"),
@@ -882,9 +889,9 @@ setMethod("is.nan",
           })
 
 #' @details
-#' \code{is.nan}: Returns true if the column is NaN.
+#' \code{isnan}: Returns true if the column is NaN.
 #' @rdname column_nonaggregate_functions
-#' @aliases isnan,Column-method
+#' @aliases isnan isnan,Column-method
 #' @note isnan since 2.0.0
 setMethod("isnan",
           signature(x = "Column"),
@@ -3670,25 +3677,31 @@ setMethod("posexplode_outer",
             column(jc)
           })
 
-#' @details
-#' \code{not}: Inversion of boolean expression. \code{not} and \code{!} cannot be applied
-#' directly to numerical column. To achieve R-like truthiness column has to be casted to \code{BooleanType}.
+#' not
 #'
-#' @rdname column_nonaggregate_functions
-#' @aliases not not,Column-method
+#' Inversion of boolean expression.
+#'
+#' \code{not} and \code{!} cannot be applied directly to numerical column.
+#' To achieve R-like truthiness column has to be casted to \code{BooleanType}.
+#'
+#' @param x Column to compute on
+#' @rdname not
+#' @name not
+#' @aliases not,Column-method
+#' @family non-aggregate functions
 #' @export
 #' @examples
-#'
 #' \dontrun{
-#' df2 <- createDataFrame(data.frame(
+#' df <- createDataFrame(data.frame(
 #'   is_true = c(TRUE, FALSE, NA),
 #'   flag = c(1, 0,  1)
 #' ))
 #'
-#' head(select(df2, not(df2$is_true)))
+#' head(select(df, not(df$is_true)))
 #'
 #' # Explicit cast is required when working with numeric column
-#' head(select(df2, not(cast(df2$flag, "boolean"))))}
+#' head(select(df, not(cast(df$flag, "boolean"))))
+#' }
 #' @note not since 2.3.0
 setMethod("not",
           signature(x = "Column"),
