@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.nio.charset.StandardCharsets
 
-import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
+import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -602,6 +601,40 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       }
     }
   }
+
+  test(" Convert IN predicate to Parquet filter predicate") {
+    val schema = StructType(Seq(
+      StructField("a", IntegerType, nullable = false)
+    ))
+
+    assertResult(Some(
+      FilterApi.eq(intColumn("a"), 10: Integer))
+    ) {
+      ParquetFilters.createFilter(
+        schema,
+        sources.In("a", Array(10)))
+    }
+
+    assertResult(Some(or(
+      FilterApi.eq(intColumn("a"), 10: Integer),
+      FilterApi.eq(intColumn("a"), 20: Integer)))
+    ) {
+      ParquetFilters.createFilter(
+        schema,
+        sources.In("a", Array(10, 20)))
+    }
+
+    assertResult(Some(or(or(
+      FilterApi.eq(intColumn("a"), 10: Integer),
+      FilterApi.eq(intColumn("a"), 20: Integer)),
+      FilterApi.eq(intColumn("a"), 30: Integer)))
+    ) {
+      ParquetFilters.createFilter(
+        schema,
+        sources.In("a", Array(10, 20, 30)))
+    }
+  }
+
 }
 
 class NumRowGroupsAcc extends AccumulatorV2[Integer, Integer] {
