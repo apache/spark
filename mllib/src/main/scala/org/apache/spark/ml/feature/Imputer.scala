@@ -35,8 +35,6 @@ import org.apache.spark.sql.types._
  * Params for [[Imputer]] and [[ImputerModel]].
  */
 private[feature] trait ImputerParams extends Params with HasInputCols {
-  import Imputer._
-
   /**
    * The imputation strategy. Currently only "mean" and "median" are supported.
    * If "mean", then replace missing values using the mean value of the feature.
@@ -46,9 +44,9 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
    * @group param
    */
   final val strategy: Param[String] = new Param(this, "strategy", s"strategy for imputation. " +
-    s"If $mean, then replace missing values using the mean value of the feature. " +
-    s"If $median, then replace missing values using the median value of the feature.",
-    ParamValidators.inStringArray(supportedStrategies))
+    s"If ${Imputer.mean}, then replace missing values using the mean value of the feature. " +
+    s"If ${Imputer.median}, then replace missing values using the median value of the feature.",
+    ParamValidators.inStringArray(Imputer.supportedStrategies))
 
   /** @group getParam */
   def getStrategy: String = $(strategy)

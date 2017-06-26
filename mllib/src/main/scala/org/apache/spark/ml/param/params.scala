@@ -246,7 +246,7 @@ object ParamValidators {
 
   /** Check for value in an allowed set of string values. */
   def inStringArray(allowed: java.util.List[String]): String => Boolean = { (value: String) =>
-    allowed.map(_.toLowerCase(Locale.ROOT)).contains(value.toLowerCase(Locale.ROOT))
+    allowed.asScala.map(_.toLowerCase(Locale.ROOT)).contains(value.toLowerCase(Locale.ROOT))
   }
 }
 
