@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SQLExecution
 
 case class CacheTableCommand(
     tableIdent: TableIdentifier,
@@ -33,16 +34,16 @@ case class CacheTableCommand(
   override def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    plan.foreach { logicalPlan =>
-      Dataset.ofRows(sparkSession, logicalPlan)
-        .createTempViewCommand(tableIdent.quotedString, replace = false, global = false)
-        .run(sparkSession)
-    }
-    sparkSession.catalog.cacheTable(tableIdent.quotedString)
+    SQLExecution.ignoreNestedExecutionId(sparkSession) {
+      plan.foreach { logicalPlan =>
+        Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableIdent.quotedString)
+      }
+      sparkSession.catalog.cacheTable(tableIdent.quotedString)
 
-    if (!isLazy) {
-      // Performs eager caching
-      sparkSession.table(tableIdent).countInternal()
+      if (!isLazy) {
+        // Performs eager caching
+        sparkSession.table(tableIdent).count()
+      }
     }
 
     Seq.empty[Row]

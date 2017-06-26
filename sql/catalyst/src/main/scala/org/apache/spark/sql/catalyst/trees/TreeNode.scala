@@ -340,8 +340,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
               arg
             }
           case tuple@(arg1: TreeNode[_], arg2: TreeNode[_]) =>
-            val newChild1 = f(arg1.asInstanceOf[BaseType])
-            val newChild2 = f(arg2.asInstanceOf[BaseType])
+            val newChild1 = if (containsChild(arg1)) {
+              f(arg1.asInstanceOf[BaseType])
+            } else {
+              arg1.asInstanceOf[BaseType]
+            }
+
+            val newChild2 = if (containsChild(arg2)) {
+              f(arg2.asInstanceOf[BaseType])
+            } else {
+              arg2.asInstanceOf[BaseType]
+            }
+
             if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
               changed = true
               (newChild1, newChild2)

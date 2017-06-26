@@ -235,7 +235,7 @@ case class AlterTableSetPropertiesCommand(
     // direct property.
     val newTable = table.copy(
       properties = table.properties ++ properties,
-      comment = properties.get("comment"))
+      comment = properties.get("comment").orElse(table.comment))
     catalog.alterTable(newTable)
     Seq.empty[Row]
   }
@@ -264,14 +264,14 @@ case class AlterTableUnsetPropertiesCommand(
     DDLUtils.verifyAlterTableType(catalog, table, isView)
     if (!ifExists) {
       propKeys.foreach { k =>
-        if (!table.properties.contains(k)) {
+        if (!table.properties.contains(k) && k != "comment") {
           throw new AnalysisException(
             s"Attempted to unset non-existent property '$k' in table '${table.identifier}'")
         }
       }
     }
     // If comment is in the table property, we reset it to None
-    val tableComment = if (propKeys.contains("comment")) None else table.properties.get("comment")
+    val tableComment = if (propKeys.contains("comment")) None else table.comment
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
     val newTable = table.copy(properties = newProperties, comment = tableComment)
     catalog.alterTable(newTable)
