@@ -90,8 +90,11 @@ NULL
 #'
 #' String functions defined for \code{Column}.
 #'
-#' @param x Column to compute on. In \code{instr}, it is the substring to check. In \code{format_number},
-#'          it is the number of decimal place to format to.
+#' @param x Column to compute on except in the following methods:
+#'      \itemize{
+#'      \item \code{instr}: class "character", the substring to check.
+#'      \item \code{format_number}: class "numeric", the number of decimal place to format to.
+#'      }
 #' @param y Column to compute on.
 #' @param ... additional columns.
 #' @name column_string_functions
@@ -282,7 +285,8 @@ setMethod("avg",
 #' \dontrun{
 #' tmp <- mutate(df, s1 = encode(df$Class, "UTF-8"))
 #' str(tmp)
-#' tmp2 <- mutate(tmp, s2 = base64(tmp$s1), s3 = decode(tmp$s1, "UTF-8"))
+#' tmp2 <- mutate(tmp, s2 = base64(tmp$s1), s3 = decode(tmp$s1, "UTF-8"),
+#'                     s4 = soundex(tmp$Sex))
 #' head(tmp2)
 #' head(select(tmp2, unbase64(tmp2$s2)))}
 #' @note base64 since 1.5.0
@@ -2384,10 +2388,10 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
           })
 
 #' @details
-#' \code{instr}: Locates the position of the first occurrence of substr column
-#' in the given string. Returns null if either of the arguments are null.
-#' Note: The position is not zero based, but 1 based index. Returns 0 if substr
-#' could not be found in str.
+#' \code{instr}: Locates the position of the first occurrence of a substring (\code{x})
+#' in the given string column (\code{y}). Returns null if either of the arguments are null.
+#' Note: The position is not zero based, but 1 based index. Returns 0 if the substring
+#' could not be found in the string column.
 #'
 #' @rdname column_string_functions
 #' @aliases instr instr,Column,character-method
@@ -2485,11 +2489,11 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{format_number}: Formats numeric column y to a format like '#,###,###.##',
-#' rounded to x decimal places with HALF_EVEN round mode, and returns the result
+#' \code{format_number}: Formats numeric column \code{y} to a format like '#,###,###.##',
+#' rounded to \code{x} decimal places with HALF_EVEN round mode, and returns the result
 #' as a string column.
-#' If x is 0, the result has no decimal point or fractional part.
-#' If x < 0, the result will be null.
+#' If \code{x} is 0, the result has no decimal point or fractional part.
+#' If \code{x} < 0, the result will be null.
 #'
 #' @rdname column_string_functions
 #' @aliases format_number format_number,Column,numeric-method
@@ -2499,7 +2503,7 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
 #' \dontrun{
 #' tmp <- mutate(df, v1 = df$Freq/3)
 #' head(select(tmp, format_number(tmp$v1, 0), format_number(tmp$v1, 2),
-#'                  format_string("%4.2f %s", tmp$V1, tmp$Sex)), 10)}
+#'                  format_string("%4.2f %s", tmp$v1, tmp$Sex)), 10)}
 #' @note format_number since 1.5.0
 setMethod("format_number", signature(y = "Column", x = "numeric"),
           function(y, x) {
