@@ -47,7 +47,6 @@ class IncrementalExecution(
       sparkSession.sparkContext,
       sparkSession.sessionState.conf,
       sparkSession.sessionState.experimentalMethods) {
-
     override def strategies: Seq[Strategy] =
       sparkSession.sessionState.planner.strategies
 
