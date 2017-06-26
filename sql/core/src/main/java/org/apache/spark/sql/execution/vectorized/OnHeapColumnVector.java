@@ -162,6 +162,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getBytes(byte[] dst, int rowId, int count) {
+    assert(dictionary == null);
+    System.arraycopy(byteData, rowId, dst, 0, count);
+  }
+
   //
   // APIs dealing with Shorts
   //
@@ -190,6 +196,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getShorts(short[] dst, int rowId, int count) {
+    assert(dictionary == null);
+    System.arraycopy(byteData, rowId, dst, 0, count);
   }
 
 
@@ -232,6 +244,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getInts(int[] dst, int rowId, int count) {
+    assert(dictionary == null);
+    System.arraycopy(intData, rowId, dst, 0, count);
   }
 
   /**
@@ -286,6 +304,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getLongs(long[] dst, int rowId, int count) {
+    assert(dictionary == null);
+    System.arraycopy(byteData, rowId, dst, 0, count);
+  }
+
   //
   // APIs dealing with floats
   //
@@ -323,6 +347,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getFloats(float[] dst, int rowId, int count) {
+    assert(dictionary == null);
+    System.arraycopy(byteData, rowId, dst, 0, count);
   }
 
   //
@@ -364,6 +394,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToDouble(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getDoubles(double[] dst, int rowId, int count) {
+    assert(dictionary == null);
+    System.arraycopy(byteData, rowId, dst, 0, count);
   }
 
   //

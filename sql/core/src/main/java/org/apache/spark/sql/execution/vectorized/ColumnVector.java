@@ -100,6 +100,54 @@ public abstract class ColumnVector implements AutoCloseable {
       throw new UnsupportedOperationException();
     }
 
+    @Override
+    public byte[] toByteArray() {
+      int size = length;
+      byte[] values = new byte[size];
+      data.getBytes(values, offset, size);
+      return values;
+    }
+
+    @Override
+    public short[] toShortArray() {
+      int size = length;
+      short[] values = new short[size];
+      data.getShorts(values, offset, size);
+      return values;
+    }
+
+    @Override
+    public int[] toIntArray() {
+      int size = length;
+      int[] values = new int[size];
+      data.getInts(values, offset, size);
+      return values;
+    }
+
+    @Override
+    public long[] toLongArray() {
+      int size = length;
+      long[] values = new long[size];
+      data.getLongs(values, offset, size);
+      return values;
+    }
+
+    @Override
+    public float[] toFloatArray() {
+      int size = length;
+      float[] values = new float[size];
+      data.getFloats(values, offset, size);
+      return values;
+    }
+
+    @Override
+    public double[] toDoubleArray() {
+      int size = length;
+      double[] values = new double[size];
+      data.getDoubles(values, offset, size);
+      return values;
+    }
+
     // TODO: this is extremely expensive.
     @Override
     public Object[] array() {
@@ -387,6 +435,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract byte getByte(int rowId);
 
   /**
+   * Gets values from [rowId, rowId + count) to [dst, dst + count)
+   */
+  public abstract void getBytes(byte[] dst, int rowId, int count);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putShort(int rowId, short value);
@@ -405,6 +458,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract short getShort(int rowId);
+
+  /**
+   * Gets values from [rowId, rowId + count) to [dst, dst + count)
+   */
+  public abstract void getShorts(short[] dst, int rowId, int count);
 
   /**
    * Sets the value at rowId to `value`.
@@ -431,6 +489,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract int getInt(int rowId);
+
+  /**
+   * Gets values from [rowId, rowId + count) to [dst, dst + count)
+   */
+  public abstract void getInts(int[] dst, int rowId, int count);
 
   /**
    * Returns the dictionary Id for rowId.
@@ -466,6 +529,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract long getLong(int rowId);
 
   /**
+   * Gets values from [rowId, rowId + count) to [dst, dst + count)
+   */
+  public abstract void getLongs(long[] dst, int rowId, int count);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putFloat(int rowId, float value);
@@ -492,6 +560,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract float getFloat(int rowId);
 
   /**
+   * Gets values from [rowId, rowId + count) to [dst, dst + count)
+   */
+  public abstract void getFloats(float[] dst, int rowId, int count);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putDouble(int rowId, double value);
@@ -516,6 +589,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract double getDouble(int rowId);
+
+  /**
+   * Gets values from [rowId, rowId + count) to [dst, dst + count)
+   */
+  public abstract void getDoubles(double[] dst, int rowId, int count);
 
   /**
    * Puts a byte array that already exists in this column.

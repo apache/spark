@@ -165,6 +165,12 @@ public final class OffHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getBytes(byte[] dst, int rowId, int count) {
+    assert(dictionary == null);
+    Platform.copyMemory(null, data + rowId, dst, Platform.BYTE_ARRAY_OFFSET, count);
+  }
+
   //
   // APIs dealing with shorts
   //
@@ -195,6 +201,12 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getShorts(short[] dst, int rowId, int count) {
+    assert(dictionary == null);
+    Platform.copyMemory(null, data + rowId * 2, dst, Platform.SHORT_ARRAY_OFFSET, count * 2);
   }
 
   //
@@ -242,6 +254,12 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getInts(int[] dst, int rowId, int count) {
+    assert(dictionary == null);
+    Platform.copyMemory(null, data + rowId * 4, dst, Platform.INT_ARRAY_OFFSET, count * 4);
   }
 
   /**
@@ -302,6 +320,12 @@ public final class OffHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getLongs(long[] dst, int rowId, int count) {
+    assert(dictionary == null);
+    Platform.copyMemory(null, data + rowId * 8, dst, Platform.LONG_ARRAY_OFFSET, count * 8);
+  }
+
   //
   // APIs dealing with floats
   //
@@ -346,6 +370,11 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getFloats(float[] dst, int rowId, int count) {
+    Platform.copyMemory(null, data + rowId * 4, dst, Platform.FLOAT_ARRAY_OFFSET, count * 4);
   }
 
 
@@ -393,6 +422,11 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToDouble(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getDoubles(double[] dst, int rowId, int count) {
+    Platform.copyMemory(null, data + rowId * 8, dst, Platform.DOUBLE_ARRAY_OFFSET, count * 8);
   }
 
   //
