@@ -57,7 +57,7 @@ class CrossValidatorSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setNumFolds(3)
-    assert(!cv.isDefined(cv.modelPath))
+    assert(!cv.isDefined(cv.modelPreservePath))
     val cvModel = cv.fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(cv, cvModel)
@@ -258,7 +258,7 @@ class CrossValidatorSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setNumFolds(3)
-      .setModelPath(path)
+      .setModelPreservePath(path)
     try {
       cv.fit(dataset)
       assert(tempDir.list().length === 3 * 2 * 2)

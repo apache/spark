@@ -70,18 +70,18 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
 
 
   /**
-   * Optional parameter. If set, all the models fitted during the cross validation will be
-   * saved in the specific path. By default the models will not be saved.
+   * Optional parameter. If set, all the models trained during the tuning grid search will be
+   * saved in the specific path. By default the models will not be preserved.
    *
    * @group expertParam
    */
-  val modelPath: Param[String] = new Param(this, "modelPath",
+  val modelPreservePath: Param[String] = new Param(this, "modelPath",
     "Optional parameter. If set, all the models fitted during the cross validation will be" +
       " saved in the path")
 
   /** @group expertGetParam */
   @Since("2.3.0")
-  def getModelPath: String = $(modelPath)
+  def getModelPreservePath: String = $(modelPreservePath)
 
   protected def transformSchemaImpl(schema: StructType): StructType = {
     require($(estimatorParamMaps).nonEmpty, s"Validator requires non-empty estimatorParamMaps")

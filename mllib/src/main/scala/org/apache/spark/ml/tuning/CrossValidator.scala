@@ -92,13 +92,13 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * If set, all the models fitted during the cross validation will be preserved
-   * under the specific directory path. By default the models will not be saved.
+   * Optional parameter. If set, all the trained models during cross validation will be
+   * saved in the specific path. By default the models will not be preserved.
    *
    * @group expertSetParam
    */
   @Since("2.3.0")
-  def setModelPath(value: String): this.type = set(modelPath, value)
+  def setModelPreservePath(value: String): this.type = set(modelPreservePath, value)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CrossValidatorModel = {
@@ -128,13 +128,15 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
         // TODO: duplicate evaluator to take extra params from input
         val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
         logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
-        if (isDefined(modelPath)) {
+        if (isDefined(modelPreservePath)) {
           models(i) match {
             case w: MLWritable =>
-              val path = new Path($(modelPath), epm(i).toSeq.map(p => p.param.name + "-" + p.value)
-                .mkString("-") + s"-split$splitIndex-${math.rint(metric * 1000) / 1000}")
-              w.save(path.toString)
+              // e.g. maxIter-5-regParam-0.001-split0-0.859
+              val fileName = epm(i).toSeq.map(p => p.param.name + "-" + p.value).sorted
+                .mkString("-") + s"-split$splitIndex-${math.rint(metric * 1000) / 1000}"
+              w.save(new Path($(modelPreservePath), fileName).toString)
             case _ =>
+              // for third-party algorithms
               logWarning(models(i).uid + " did not implement MLWritable. Serialization omitted.")
           }
         }

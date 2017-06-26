@@ -54,7 +54,7 @@ class TrainValidationSplitSuite
       .setSeed(42L)
     val tvsModel = tvs.fit(dataset)
     val parent = tvsModel.bestModel.parent.asInstanceOf[LogisticRegression]
-    assert(!tvs.isDefined(tvs.modelPath))
+    assert(!tvs.isDefined(tvs.modelPreservePath))
     assert(tvs.getTrainRatio === 0.5)
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
@@ -136,7 +136,7 @@ class TrainValidationSplitSuite
       .setEvaluator(eval)
       .setTrainRatio(0.5)
       .setSeed(42L)
-      .setModelPath(path)
+      .setModelPreservePath(path)
     try {
       tvs.fit(dataset)
       assert(tempDir.list().length === 2 * 2)
