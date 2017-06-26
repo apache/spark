@@ -17,17 +17,21 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, IOException}
+import java.io._
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
 import java.nio.file.Files
-import java.security.PrivilegedExceptionAction
+import java.security.{KeyStore, PrivilegedExceptionAction}
+import java.security.cert.X509Certificate
 import java.text.ParseException
+import javax.net.ssl._
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.Properties
 
+import com.google.common.io.ByteStreams
+import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -312,8 +316,13 @@ object SparkSubmit extends CommandLineUtils {
 
     val hadoopConf = new HadoopConfiguration()
     val targetDir = Files.createTempDirectory("tmp").toFile
-    val sparkConf = new SparkConf(loadDefaults = false).setAll(args.sparkProperties)
-    val securityMgr = new SecurityManager(sparkConf)
+    // scalastyle:off runtimeaddshutdownhook
+    Runtime.getRuntime.addShutdownHook(new Thread() {
+      override def run(): Unit = {
+        FileUtils.deleteQuietly(targetDir)
+      }
+    })
+    // scalastyle:on runtimeaddshutdownhook
 
     // Resolve glob path for different resources.
     args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
@@ -324,13 +333,13 @@ object SparkSubmit extends CommandLineUtils {
     // In client mode, download remote files.
     if (deployMode == CLIENT) {
       args.primaryResource = Option(args.primaryResource).map {
-        downloadFile(_, targetDir, sparkConf, securityMgr, hadoopConf)
+        downloadFile(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
       args.jars = Option(args.jars).map {
-        downloadFileList(_, targetDir, sparkConf, securityMgr, hadoopConf)
+        downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
       args.pyFiles = Option(args.pyFiles).map {
-        downloadFileList(_, targetDir, sparkConf, securityMgr, hadoopConf)
+        downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
     }
 
@@ -836,41 +845,115 @@ object SparkSubmit extends CommandLineUtils {
    * Download a list of remote files to temp local files. If the file is local, the original file
    * will be returned.
    * @param fileList A comma separated file list.
+   * @param targetDir A temporary directory for which downloaded files
+   * @param sparkProperties Spark properties
    * @return A comma separated local files list.
    */
   private[deploy] def downloadFileList(
       fileList: String,
       targetDir: File,
-      sparkConf: SparkConf,
-      securityManager: SecurityManager,
+      sparkProperties: Map[String, String],
       hadoopConf: HadoopConfiguration): String = {
     require(fileList != null, "fileList cannot be null.")
     fileList.split(",")
-      .map(downloadFile(_, targetDir, sparkConf, securityManager, hadoopConf))
+      .map(downloadFile(_, targetDir, sparkProperties, hadoopConf))
       .mkString(",")
   }
 
   /**
    * Download a file from the remote to a local temporary directory. If the input path points to
    * a local path, returns it with no operation.
+   * @param path A file path from where the files will be downloaded.
+   * @param targetDir A temporary directory for which downloaded files
+   * @param sparkProperties Spark properties
+   * @return A comma separated local files list.
    */
   private[deploy] def downloadFile(
       path: String,
       targetDir: File,
-      sparkConf: SparkConf,
-      securityManager: SecurityManager,
+      sparkProperties: Map[String, String],
       hadoopConf: HadoopConfiguration): String = {
     require(path != null, "path cannot be null.")
     val uri = Utils.resolveURI(path)
     uri.getScheme match {
       case "file" | "local" => path
-      case _ =>
+      case "http" | "https" | "ftp" =>
+        val uc = uri.toURL.openConnection()
+        uc match {
+          case https: HttpsURLConnection =>
+            val trustStore = sparkProperties.get("spark.ssl.fs.trustStore")
+              .orElse(sparkProperties.get("spark.ssl.trustStore"))
+            val trustStorePwd = sparkProperties.get("spark.ssl.fs.trustStorePassword")
+              .orElse(sparkProperties.get("spark.ssl.trustStorePassword"))
+              .map(_.toCharArray)
+              .orNull
+            val protocol = sparkProperties.get("spark.ssl.fs.protocol")
+              .orElse(sparkProperties.get("spark.ssl.protocol"))
+            if (protocol.isEmpty) {
+              printErrorAndExit("spark ssl protocol is required when enabling SSL connection.")
+            }
+
+            val trustStoreManagers = trustStore.map { t =>
+              var input: InputStream = null
+              try {
+                input = new FileInputStream(new File(t))
+                val ks = KeyStore.getInstance(KeyStore.getDefaultType)
+                ks.load(input, trustStorePwd)
+                val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
+                tmf.init(ks)
+                tmf.getTrustManagers
+              } finally {
+                if (input != null) {
+                  input.close()
+                  input = null
+                }
+              }
+            }.getOrElse {
+              Array({
+                new X509TrustManager {
+                  override def getAcceptedIssuers: Array[X509Certificate] = null
+                  override def checkClientTrusted(
+                      x509Certificates: Array[X509Certificate], s: String) {}
+                  override def checkServerTrusted(
+                      x509Certificates: Array[X509Certificate], s: String) {}
+                }: TrustManager
+              })
+            }
+            val sslContext = SSLContext.getInstance(protocol.get)
+            sslContext.init(null, trustStoreManagers, null)
+            https.setSSLSocketFactory(sslContext.getSocketFactory)
+            https.setHostnameVerifier(new HostnameVerifier {
+              override def verify(s: String, sslSession: SSLSession): Boolean = false
+            })
+
+          case _ =>
+        }
+
+        uc.setConnectTimeout(60 * 1000)
+        uc.setReadTimeout(60 * 1000)
+        uc.connect()
+        val in = uc.getInputStream
         val fileName = new Path(uri).getName
+        val tempFile = new File(targetDir, fileName)
+        val out = new FileOutputStream(tempFile)
         // scalastyle:off println
-        printStream.println(s"Downloading ${uri.toString} to $targetDir/$fileName.")
+        printStream.println(s"Downloading ${uri.toString} to ${tempFile.getAbsolutePath}.")
         // scalastyle:on println
-        Utils.doFetchFile(uri.toString, targetDir, fileName, sparkConf, securityManager, hadoopConf)
-        new Path(new Path(targetDir.toURI), fileName).toUri.toString
+        try {
+          ByteStreams.copy(in, out)
+        } finally {
+          in.close()
+          out.close()
+        }
+        tempFile.toURI.toString
+      case _ =>
+        val fs = FileSystem.get(uri, hadoopConf)
+        val tmpFile = new File(targetDir, new Path(uri).getName)
+        // scalastyle:off println
+        printStream.println(s"Downloading ${uri.toString} to ${tmpFile.getAbsolutePath}.")
+        // scalastyle:on println
+        fs.copyToLocalFile(new Path(uri), new Path(tmpFile.getAbsolutePath))
+        tmpFile.toURI.toString
     }
   }
 
