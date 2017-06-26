@@ -115,7 +115,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   Seq("reset", s"reset ${SQLConf.GROUP_BY_ORDINAL.key}").foreach { resetCmd =>
-    test(s"reset - public conf $resetCmd") {
+    test(s"$resetCmd - public conf") {
       spark.sessionState.conf.clear()
       val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
       try {
@@ -133,7 +133,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   Seq("reset", s"reset ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}").foreach { resetCmd =>
-    test(s"reset - internal conf $resetCmd") {
+    test(s"$resetCmd - internal conf") {
       spark.sessionState.conf.clear()
       val original = spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS)
       try {
@@ -151,7 +151,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   Seq("reset", s"reset $testKey").foreach { resetCmd =>
-    test(s"reset - user-defined conf $resetCmd") {
+    test(s"$resetCmd - user-defined conf") {
       spark.sessionState.conf.clear()
       try {
         assert(spark.conf.getOption(testKey).isEmpty)
@@ -167,7 +167,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   Seq("reset", s"reset ${testKey}1 \t ${testKey}2 \t ").foreach { resetCmd =>
-    test(s"reset - multiple conf $resetCmd") {
+    test(s"$resetCmd - multiple conf") {
       spark.sessionState.conf.clear()
       val key1 = testKey + "1"
       val key2 = testKey + "2"
