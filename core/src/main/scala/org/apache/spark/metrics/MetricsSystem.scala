@@ -195,9 +195,8 @@ private[spark] class MetricsSystem private (
     sinkConfigs.foreach { kv =>
       val classPath = kv._2.getProperty("class")
       if (null != classPath) {
-        val cls = Utils.classForName(classPath)
         try {
-          val sink = cls.getConstructor(
+          val sink = Utils.classForName(classPath).getConstructor(
             classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
               .newInstance(kv._2, registry, securityMgr)
           if (kv._1 == "servlet") {
@@ -208,7 +207,8 @@ private[spark] class MetricsSystem private (
         } catch {
           case _: NoSuchMethodException =>
             try {
-              sinks += cls.getConstructor(classOf[Properties], classOf[MetricRegistry])
+              sinks += Utils.classForName(classPath)
+                .getConstructor(classOf[Properties], classOf[MetricRegistry])
                 .newInstance(kv._2, registry)
                 .asInstanceOf[Sink]
             } catch {

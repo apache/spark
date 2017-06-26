@@ -282,8 +282,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
 
     val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
     val sinks = PrivateMethod[ArrayBuffer[Sink]]('sinks)
-    assert(metricsSystem.invokePrivate(sources()).length === 1)
-    assert(metricsSystem.invokePrivate(sources()).filter(_.sourceName == "fake").length === 1)
+    assert(metricsSystem.invokePrivate(sources()).exists(s => s.sourceName == "fake"))
     assert(metricsSystem.invokePrivate(sinks()).length === 2)
     assert(metricsSystem.invokePrivate(sinks()).map(_.getClass.getCanonicalName)
       .contains(classOf[CustomMetricsSink].getCanonicalName))

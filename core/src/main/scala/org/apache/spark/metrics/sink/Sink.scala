@@ -24,30 +24,30 @@ import com.codahale.metrics.MetricRegistry
 import org.apache.spark.annotation.DeveloperApi
 
 /**
-  * :: DeveloperApi ::
-  * The abstract class of metrics Sink, by achiving the methods and registered through metrics
-  * .properties user could register customer metrics Sink into MetricsSystem.
-  *
-  * @param properties Properties related this specific Sink, properties are read from
-  *                   configuration file, user could define their own configurations and get
-  *                   from this parameter.
-  * @param metricRegistry The [[MetricRegistry]] for you to dump the collected metrics.
-  */
+ * :: DeveloperApi ::
+ * The abstract class of metrics Sink, by achiving the methods and registered through metrics
+ * .properties user could register customer metrics Sink into MetricsSystem.
+ *
+ * @param properties Properties related this specific Sink, properties are read from
+ *                   configuration file, user could define their own configurations and get
+ *                   from this parameter.
+ * @param metricRegistry The [[MetricRegistry]] for you to dump the collected metrics.
+ */
 @DeveloperApi
 abstract class Sink(properties: Properties, metricRegistry: MetricRegistry) {
 
   /**
-    * Start this metrics Sink, this will be called by MetricsSystem
-    */
+   * Start this metrics Sink, this will be called by MetricsSystem
+   */
   def start(): Unit
 
   /**
-    * Stop this metrics Sink, this will be called by MetricsSystem
-    */
+   * Stop this metrics Sink, this will be called by MetricsSystem
+   */
   def stop(): Unit
 
   /**
-    * Report the current registered metrics.
-    */
+   * Report the current registered metrics.
+   */
   def report(): Unit
 }
