@@ -44,14 +44,22 @@ class FuncTransformerSuite
       expectDF.collect().toSet))
   }
 
+  test("FuncTransformer for input of array type ") {
+    val arrayIndexer = new FuncTransformer(udf { a: Seq[Double] => a.sum })
+    val df = Seq(Array(-1.0, 0.0), Array(1.0, 2.0)).toDF("input")
+    val expectDF = Seq(-1.0, 3.0).toDF("output")
+    assert(arrayIndexer.transform(df).select("output").collect().toSet.equals(
+      expectDF.collect().toSet))
+  }
+
   test("FuncTransformer for struct input column") {
     val df = spark.createDataFrame(Seq(
       ("a", (Array(1.2, 2), Array(2))),
       ("b", (Array(3.1, 2), Array(2))))).toDF("name", "data")
-    val labelConverter = new FuncTransformer(udf { row: Row => row.getSeq[Double](0).head })
+    val structConverter = new FuncTransformer(udf { row: Row => row.getSeq[Double](0).head })
       .setInputCol("data")
     val expectDF = Seq(1.2, 3.1).toDF("output")
-    assert(labelConverter.transform(df).select("output").collect().toSet.equals(
+    assert(structConverter.transform(df).select("output").collect().toSet.equals(
       expectDF.collect().toSet))
   }
 
