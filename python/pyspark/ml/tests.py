@@ -534,10 +534,10 @@ class FeatureTests(SparkSessionTestCase):
 
         a = model.findSynonymsTuple("a", 2)
 
-        self.assertEqual(len(len(a._1())), 2)
-        self.assertEqual(len(len(a._2())), 2)
+        self.assertEqual(len(a._1()), 2)
+        self.assertEqual(len(a._2()), 2)
         self.assertEqual(a._1()[0], "b")
-        self.assertEqual(a._1()[1], "b")
+        self.assertEqual(a._1()[1], "c")
         self.assertEqual(a._2()[0], 0.25053444504737854)
         self.assertEqual(a._2()[1], -0.6980510950088501)
 
