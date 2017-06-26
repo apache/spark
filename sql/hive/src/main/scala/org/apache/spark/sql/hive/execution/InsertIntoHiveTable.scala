@@ -32,10 +32,11 @@ import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.internal.io.FileCommitProtocol
-import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.hive._
@@ -71,16 +72,17 @@ import org.apache.spark.SparkException
  *                  }}}.
  * @param query the logical plan representing data to write to.
  * @param overwrite overwrite existing table or partitions.
- * @param ifNotExists If true, only write if the table or partition does not exist.
+ * @param ifPartitionNotExists If true, only write if the partition does not exist.
+ *                                   Only valid for static partitions.
  */
 case class InsertIntoHiveTable(
     table: CatalogTable,
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifNotExists: Boolean) extends RunnableCommand {
+    ifPartitionNotExists: Boolean) extends RunnableCommand {
 
-  override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
+  override def children: Seq[LogicalPlan] = query :: Nil
 
   var createdTempDir: Option[Path] = None
 
@@ -229,7 +231,9 @@ case class InsertIntoHiveTable(
    * `org.apache.hadoop.hive.serde2.SerDe` and the
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
    */
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
+    assert(children.length == 1)
+
     val sessionState = sparkSession.sessionState
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
@@ -307,6 +311,27 @@ case class InsertIntoHiveTable(
       }
     }
 
+    table.bucketSpec match {
+      case Some(bucketSpec) =>
+        // Writes to bucketed hive tables are allowed only if user does not care about maintaining
+        // table's bucketing ie. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
+        // set to false
+        val enforceBucketingConfig = "hive.enforce.bucketing"
+        val enforceSortingConfig = "hive.enforce.sorting"
+
+        val message = s"Output Hive table ${table.identifier} is bucketed but Spark" +
+          "currently does NOT populate bucketed output which is compatible with Hive."
+
+        if (hadoopConf.get(enforceBucketingConfig, "true").toBoolean ||
+          hadoopConf.get(enforceSortingConfig, "true").toBoolean) {
+          throw new AnalysisException(message)
+        } else {
+          logWarning(message + s" Inserting data anyways since both $enforceBucketingConfig and " +
+            s"$enforceSortingConfig are set to false.")
+        }
+      case _ => // do nothing since table has no bucketing
+    }
+
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
@@ -322,7 +347,7 @@ case class InsertIntoHiveTable(
 
     FileFormatWriter.write(
       sparkSession = sparkSession,
-      queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
+      plan = children.head,
       fileFormat = new HiveFileFormat(fileSinkConf),
       committer = committer,
       outputSpec = FileFormatWriter.OutputSpec(tmpLocation.toString, Map.empty),
@@ -354,7 +379,7 @@ case class InsertIntoHiveTable(
 
         var doHiveOverwrite = overwrite
 
-        if (oldPart.isEmpty || !ifNotExists) {
+        if (oldPart.isEmpty || !ifPartitionNotExists) {
           // SPARK-18107: Insert overwrite runs much slower than hive-client.
           // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
           // version and we may not want to catch up new Hive version every time. We delete the

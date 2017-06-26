@@ -129,20 +129,20 @@ class JoinOptimizationSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           SubqueryAlias("x", input),
-          BroadcastHint(SubqueryAlias("y", input)), Cross, None)).analyze
+          ResolvedHint(SubqueryAlias("y", input)), Cross, None)).analyze
 
     val optimized = Optimize.execute(query)
 
     val expected =
       Join(
         Project(Seq($"x.key"), SubqueryAlias("x", input)),
-        BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
+        ResolvedHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
         Cross, None).analyze
 
     comparePlans(optimized, expected)
 
     val broadcastChildren = optimized.collect {
-      case Join(_, r, _, _) if r.stats(conf).sizeInBytes == 1 => r
+      case Join(_, r, _, _) if r.stats.sizeInBytes == 1 => r
     }
     assert(broadcastChildren.size == 1)
   }

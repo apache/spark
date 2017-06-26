@@ -23,13 +23,13 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, ResolvedHint}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.internal.SQLConf
@@ -1019,7 +1019,8 @@ object functions {
    * @since 1.5.0
    */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
-    Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.exprEnc)
+    Dataset[T](df.sparkSession,
+      ResolvedHint(df.logicalPlan, HintInfo(broadcast = true)))(df.exprEnc)
   }
 
   /**
@@ -1209,7 +1210,7 @@ object functions {
   /**
    * Creates a new struct column.
    * If the input column is a column in a `DataFrame`, or a derived column expression
-   * that is named (i.e. aliased), its name would be remained as the StructField's name,
+   * that is named (i.e. aliased), its name would be retained as the StructField's name,
    * otherwise, the newly generated StructField's name would be auto generated as
    * `col` with a suffix `index + 1`, i.e. col1, col2, col3, ...
    *
@@ -1265,7 +1266,7 @@ object functions {
 
   /**
    * Parses the expression string into the column that it represents, similar to
-   * DataFrame.selectExpr
+   * [[Dataset#selectExpr]].
    * {{{
    *   // get the number of words of each length
    *   df.groupBy(expr("length(word)")).count()
@@ -2291,7 +2292,8 @@ object functions {
   }
 
   /**
-   * Left-pad the string column with
+   * Left-pad the string column with pad to a length of len. If the string column is longer
+   * than len, the return value is shortened to len characters.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2349,7 +2351,8 @@ object functions {
   def unbase64(e: Column): Column = withExpr { UnBase64(e.expr) }
 
   /**
-   * Right-padded with pad to a length of len.
+   * Right-pad the string column with pad to a length of len. If the string column is longer
+   * than len, the return value is shortened to len characters.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2385,7 +2388,7 @@ object functions {
   def rtrim(e: Column): Column = withExpr { StringTrimRight(e.expr) }
 
   /**
-   * * Return the soundex code for the specified expression.
+   * Returns the soundex code for the specified expression.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2800,8 +2803,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def window(
       timeColumn: Column,
       windowDuration: String,
@@ -2854,8 +2855,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
     window(timeColumn, windowDuration, slideDuration, "0 second")
   }
@@ -2893,8 +2892,6 @@ object functions {
    * @group datetime_funcs
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
   def window(timeColumn: Column, windowDuration: String): Column = {
     window(timeColumn, windowDuration, windowDuration, "0 second")
   }
@@ -3059,8 +3056,9 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * Parses a column containing a JSON string into a `StructType` or `ArrayType` of `StructType`s
-   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   * (Java-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
+   * string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
@@ -3071,6 +3069,23 @@ object functions {
    * @since 2.1.0
    */
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
+    from_json(e, schema, options.asScala.toMap)
+  }
+
+  /**
+   * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
+   * string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
+   *               the user-provided schema has to be in JSON format. Since Spark 2.2, the DDL
+   *               format is also supported for the schema.
+   *
+   * @group collection_funcs
+   * @since 2.3.0
+   */
+  def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
     val dataType = try {
       DataType.fromJson(schema)
     } catch {
@@ -3147,6 +3162,20 @@ object functions {
    * @since 1.5.0
    */
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
+
+  /**
+   * Returns an unordered array containing the keys of the map.
+   * @group collection_funcs
+   * @since 2.3.0
+   */
+  def map_keys(e: Column): Column = withExpr { MapKeys(e.expr) }
+
+  /**
+   * Returns an unordered array containing the values of the map.
+   * @group collection_funcs
+   * @since 2.3.0
+   */
+  def map_values(e: Column): Column = withExpr { MapValues(e.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

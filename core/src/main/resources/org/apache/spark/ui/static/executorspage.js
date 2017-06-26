@@ -26,7 +26,6 @@ function getThreadDumpEnabled() {
 }
 
 function formatStatus(status, type) {
-    if (type !== 'display') return status;
     if (status) {
         return "Active"
     } else {
@@ -417,7 +416,6 @@ $(document).ready(function () {
                         },
                         {data: 'hostPort'},
                         {data: 'isActive', render: function (data, type, row) {
-                            if (type !== 'display') return data;
                             if (row.isBlacklisted) return "Blacklisted";
                             else return formatStatus (data, type);
                             }

@@ -20,20 +20,22 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => BasePredicate}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 
 object InterpretedPredicate {
-  def create(expression: Expression, inputSchema: Seq[Attribute]): (InternalRow => Boolean) =
+  def create(expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
     create(BindReferences.bindReference(expression, inputSchema))
 
-  def create(expression: Expression): (InternalRow => Boolean) = {
-    (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean]
-  }
+  def create(expression: Expression): InterpretedPredicate = new InterpretedPredicate(expression)
 }
 
+case class InterpretedPredicate(expression: Expression) extends BasePredicate {
+  override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+}
 
 /**
  * An [[Expression]] that returns a boolean value.
@@ -142,27 +144,39 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           case cns: CreateNamedStruct => cns.valExprs
           case expr => Seq(expr)
         }
-
-        val mismatchedColumns = valExprs.zip(sub.output).flatMap {
-          case (l, r) if l.dataType != r.dataType =>
-            s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
-          case _ => None
-        }
-
-        if (mismatchedColumns.nonEmpty) {
+        if (valExprs.length != sub.output.length) {
           TypeCheckResult.TypeCheckFailure(
             s"""
-               |The data type of one or more elements in the left hand side of an IN subquery
-               |is not compatible with the data type of the output of the subquery
-               |Mismatched columns:
-               |[${mismatchedColumns.mkString(", ")}]
-               |Left side:
-               |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
-               |Right side:
-               |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
+               |The number of columns in the left hand side of an IN subquery does not match the
+               |number of columns in the output of subquery.
+               |#columns in left hand side: ${valExprs.length}.
+               |#columns in right hand side: ${sub.output.length}.
+               |Left side columns:
+               |[${valExprs.map(_.sql).mkString(", ")}].
+               |Right side columns:
+               |[${sub.output.map(_.sql).mkString(", ")}].
              """.stripMargin)
         } else {
-          TypeCheckResult.TypeCheckSuccess
+          val mismatchedColumns = valExprs.zip(sub.output).flatMap {
+            case (l, r) if l.dataType != r.dataType =>
+              s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
+            case _ => None
+          }
+          if (mismatchedColumns.nonEmpty) {
+            TypeCheckResult.TypeCheckFailure(
+              s"""
+                 |The data type of one or more elements in the left hand side of an IN subquery
+                 |is not compatible with the data type of the output of the subquery
+                 |Mismatched columns:
+                 |[${mismatchedColumns.mkString(", ")}]
+                 |Left side:
+                 |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
+                 |Right side:
+                 |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
+               """.stripMargin)
+          } else {
+            TypeCheckResult.TypeCheckSuccess
+          }
         }
       case _ =>
         if (list.exists(l => l.dataType != value.dataType)) {

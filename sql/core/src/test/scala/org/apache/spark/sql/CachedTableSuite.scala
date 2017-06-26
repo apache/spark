@@ -313,7 +313,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     spark.table("testData").queryExecution.withCachedData.collect {
       case cached: InMemoryRelation =>
         val actualSizeInBytes = (1 to 100).map(i => 4 + i.toString.length + 4).sum
-        assert(cached.stats(sqlConf).sizeInBytes === actualSizeInBytes)
+        assert(cached.stats.sizeInBytes === actualSizeInBytes)
     }
   }
 
@@ -631,13 +631,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       val ds2 =
         sql(
           """
-            |SELECT * FROM (SELECT max(c1) FROM t1 GROUP BY c1)
+            |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1) tt
             |WHERE
-            |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
+            |tt.c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
             |OR
             |EXISTS (SELECT c1 FROM t3)
             |OR
-            |c1 IN (SELECT c1 FROM t4)
+            |tt.c1 IN (SELECT c1 FROM t4)
           """.stripMargin)
       assert(getNumInMemoryRelations(ds2) == 4)
     }
@@ -647,7 +647,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     withTable("t") {
       withTempPath { path =>
         Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
-        sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
+        sql(s"CREATE TABLE t USING parquet LOCATION '${path.toURI}'")
         spark.catalog.cacheTable("t")
         spark.table("t").select($"i").cache()
         checkAnswer(spark.table("t").select($"i"), Row(1))
@@ -788,25 +788,25 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       // Scalar subquery and predicate subquery
       sql(
         """
-          |SELECT * FROM (SELECT max(c1) FROM t1 GROUP BY c1)
+          |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1) tt
           |WHERE
-          |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
+          |tt.c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
           |OR
           |EXISTS (SELECT c1 FROM t3)
           |OR
-          |c1 IN (SELECT c1 FROM t4)
+          |tt.c1 IN (SELECT c1 FROM t4)
         """.stripMargin).cache()
 
       val cachedDs2 =
         sql(
           """
-            |SELECT * FROM (SELECT max(c1) FROM t1 GROUP BY c1)
+            |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1) tt
             |WHERE
-            |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
+            |tt.c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
             |OR
             |EXISTS (SELECT c1 FROM t3)
             |OR
-            |c1 IN (SELECT c1 FROM t4)
+            |tt.c1 IN (SELECT c1 FROM t4)
           """.stripMargin)
       assert(getNumInMemoryRelations(cachedDs2) == 1)
     }

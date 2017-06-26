@@ -87,6 +87,9 @@
             <includes>
               <include>*:*</include>
             </includes>
+            <excludes>
+              <exclude>org.scala-lang:scala-library</exclude>
+            </excludes>
           </artifactSet>
           <filters>
             <filter>
@@ -98,7 +101,7 @@
               </excludes>
             </filter>
           </filters>
-          <relocations>
+          <relocations combine.children="append">
             <relocation>
               <pattern>com.fasterxml.jackson</pattern>
               <shadedPattern>${spark.shade.packageName}.com.fasterxml.jackson</shadedPattern>
