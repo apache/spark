@@ -2392,11 +2392,8 @@ class TypesTest(unittest.TestCase):
             self.assertTrue(str(e).startswith(name))
 
     def test_verify_type_ok_nullable(self):
-        for obj, data_type in [
-                (None, IntegerType()),
-                (None, FloatType()),
-                (None, StringType()),
-                (None, StructType([]))]:
+        obj = None
+        for data_type in [IntegerType(), FloatType(), StringType(), StructType([])]:
             msg = "_verify_type(%s, %s, nullable=True)" % (obj, data_type)
             try:
                 _verify_type(obj, data_type, nullable=True)
