@@ -137,18 +137,12 @@ setMethod("lit", signature("ANY"),
             column(jc)
           })
 
-#' abs
+#' @details
+#' \code{abs}: Computes the absolute value.
 #'
-#' Computes the absolute value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname abs
-#' @name abs
-#' @family non-aggregate functions
+#' @rdname column_math_functions
 #' @export
-#' @examples \dontrun{abs(df$c)}
-#' @aliases abs,Column-method
+#' @aliases abs abs,Column-method
 #' @note abs since 1.5.0
 setMethod("abs",
           signature(x = "Column"),
