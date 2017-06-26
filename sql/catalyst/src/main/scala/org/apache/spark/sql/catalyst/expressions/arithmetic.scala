@@ -498,7 +498,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
           ${ev.isNull} = true;
         } else {
           ${eval1.code}
-          $resultDeserializer
+          $result
         }""")
     } else {
       ev.copy(code = s"""
