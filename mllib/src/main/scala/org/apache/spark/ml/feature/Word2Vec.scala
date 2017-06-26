@@ -274,12 +274,25 @@ class Word2VecModel private[ml] (
     wordVectors.findSynonyms(word, num)
   }
 
+  /**
+   * Find "num" number of words whose vector representation is most similar to the supplied vector.
+   * If the supplied vector is the vector representation of a word in the model's vocabulary,
+   * that word will be in the results.
+   * @return a tuple of the words list and the cosine similarities list between the synonyms given
+   * word vector.
+   */
   @Since("2.2.0")
   def findSynonymsTuple(vec: Vector, num: Int): (Array[String], Array[Double]) = {
     val result = findSynonymsArray(vec, num)
     (result.map(e => e._1), result.map(e => e._2))
   }
 
+  /**
+   * Find "num" number of words closest in similarity to the given word, not
+   * including the word itself.
+   * @return a tuple of the words list and the cosine similarities list between the synonyms given
+   * word vector.
+   */
   @Since("2.2.0")
   def findSynonymsTuple(word: String, num: Int): (Array[String], Array[Double]) = {
     val result = findSynonymsArray(word, num)
