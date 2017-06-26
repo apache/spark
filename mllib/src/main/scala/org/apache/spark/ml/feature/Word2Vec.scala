@@ -230,7 +230,7 @@ class Word2VecModel private[ml] (
    * Find "num" number of words closest in similarity to the given word, not
    * including the word itself.
    * @return a dataframe with columns "word" and "similarity" of the word and the cosine
-   * similarities between the synonyms and the given word string.
+   * similarities between the synonyms and the given word.
    */
   @Since("1.5.0")
   def findSynonyms(word: String, num: Int): DataFrame = {
@@ -281,8 +281,7 @@ class Word2VecModel private[ml] (
    * @return a tuple of the words list and the cosine similarities list between the synonyms given
    * word vector.
    */
-  @Since("2.2.0")
-  def findSynonymsTuple(vec: Vector, num: Int): (Array[String], Array[Double]) = {
+  private[feature] def findSynonymsTuple(vec: Vector, num: Int): (Array[String], Array[Double]) = {
     val result = findSynonymsArray(vec, num)
     (result.map(e => e._1), result.map(e => e._2))
   }
@@ -293,8 +292,7 @@ class Word2VecModel private[ml] (
    * @return a tuple of the words list and the cosine similarities list between the synonyms given
    * word vector.
    */
-  @Since("2.2.0")
-  def findSynonymsTuple(word: String, num: Int): (Array[String], Array[Double]) = {
+  private[feature] def findSynonymsTuple(word: String, num: Int): (Array[String], Array[Double]) = {
     val result = findSynonymsArray(word, num)
     (result.map(e => e._1), result.map(e => e._2))
   }

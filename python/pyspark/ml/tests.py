@@ -538,19 +538,6 @@ class FeatureTests(SparkSessionTestCase):
         transformedDF2 = model2.transform(df)
         self.assertEqual(transformedDF2.head().label, 0.0)
 
-    def test_findSynonyms(self):
-        sent = ("a b " * 100 + "a c " * 10).split(" ")
-        df = self.spark.createDataFrame([(sent,), (sent,)], ["sentence"])
-        word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
-        model = word2Vec.fit(df)
-        a = model.findSynonymsArray("a", 2)
-
-        self.assertEqual(len(a), 2)
-        self.assertEqual(a[0][0], "b")
-        self.assertEqual(a[1][0], "c")
-        self.assertEqual(a[0][1], 0.25053444504737854)
-        self.assertEqual(a[1][1], -0.6980510950088501)
-
     def test_rformula_string_indexer_order_type(self):
         df = self.spark.createDataFrame([
             (1.0, 1.0, "a"),
