@@ -246,13 +246,8 @@ class Dataset[T] private[sql](
       _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0)
     val takeResult = toDF().take(numRows + 1)
-    showString(takeResult, numRows, truncate, vertical)
-  }
-
-  private def showString(
-      dataWithOneMoreRow: Array[Row], numRows: Int, truncate: Int, vertical: Boolean): String = {
-    val hasMoreData = dataWithOneMoreRow.length > numRows
-    val data = dataWithOneMoreRow.take(numRows)
+    val hasMoreData = takeResult.length > numRows
+    val data = takeResult.take(numRows)
 
     lazy val timeZone =
       DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
@@ -687,19 +682,6 @@ class Dataset[T] private[sql](
   } else {
     println(showString(numRows, truncate = 0))
   }
-
-  // An internal version of `show`, which won't set execution id and trigger listeners.
-  private[sql] def showInternal(_numRows: Int, truncate: Boolean): Unit = {
-    val numRows = _numRows.max(0)
-    val takeResult = toDF().takeInternal(numRows + 1)
-
-    if (truncate) {
-      println(showString(takeResult, numRows, truncate = 20, vertical = false))
-    } else {
-      println(showString(takeResult, numRows, truncate = 0, vertical = false))
-    }
-  }
-  // scalastyle:on println
 
   /**
    * Displays the Dataset in a tabular form. For example:
@@ -2473,11 +2455,6 @@ class Dataset[T] private[sql](
    */
   def take(n: Int): Array[T] = head(n)
 
-  // An internal version of `take`, which won't set execution id and trigger listeners.
-  private[sql] def takeInternal(n: Int): Array[T] = {
-    collectFromPlan(limit(n).queryExecution.executedPlan)
-  }
-
   /**
    * Returns the first `n` rows in the Dataset as a list.
    *
@@ -2501,11 +2478,6 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def collect(): Array[T] = withAction("collect", queryExecution)(collectFromPlan)
-
-  // An internal version of `collect`, which won't set execution id and trigger listeners.
-  private[sql] def collectInternal(): Array[T] = {
-    collectFromPlan(queryExecution.executedPlan)
-  }
 
   /**
    * Returns a Java list that contains all rows in this Dataset.
@@ -2546,11 +2518,6 @@ class Dataset[T] private[sql](
    */
   def count(): Long = withAction("count", groupBy().count().queryExecution) { plan =>
     plan.executeCollect().head.getLong(0)
-  }
-
-  // An internal version of `count`, which won't set execution id and trigger listeners.
-  private[sql] def countInternal(): Long = {
-    groupBy().count().queryExecution.executedPlan.executeCollect().head.getLong(0)
   }
 
   /**
@@ -2798,7 +2765,7 @@ class Dataset[T] private[sql](
     createTempViewCommand(viewName, replace = true, global = true)
   }
 
-  private[spark] def createTempViewCommand(
+  private def createTempViewCommand(
       viewName: String,
       replace: Boolean,
       global: Boolean): CreateViewCommand = {

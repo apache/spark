@@ -1480,6 +1480,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.blacklist.application.fetchFailure.enabled</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch 
+    failure happenes. If external shuffle service is enabled, then the whole node will be 
+    blacklisted.
+  </td>
+</tr>
+<tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>
