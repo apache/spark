@@ -126,10 +126,22 @@ private[ml] object ValidatorParams {
       extraMetadata: Option[JObject] = None): Unit = {
     import org.json4s.JsonDSL._
 
+    var numParamsNotJson = 0
     val estimatorParamMapsJson = compact(render(
       instance.getEstimatorParamMaps.map { case paramMap =>
         paramMap.toSeq.map { case ParamPair(p, v) =>
-          Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v))
+          v match {
+            case writeableObj: MLWritable =>
+              numParamsNotJson += 1
+              val paramPath = new Path(path, "param" + p.name + numParamsNotJson).toString
+              writeableObj.save(paramPath)
+              Map("parent" -> p.parent, "name" -> p.name,
+                "value" -> compact(render(JString(paramPath))),
+                "isJson" -> compact(render(JBool(false))))
+            case _ =>
+              Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v),
+                "isJson" -> compact(render(JBool(true))))
+          }
         }
       }.toSeq
     ))
@@ -183,8 +195,14 @@ private[ml] object ValidatorParams {
           val paramPairs = pMap.map { case pInfo: Map[String, String] =>
             val est = uidToParams(pInfo("parent"))
             val param = est.getParam(pInfo("name"))
-            val value = param.jsonDecode(pInfo("value"))
-            param -> value
+            if (pInfo("isJson").toBoolean.booleanValue()) {
+              val value = param.jsonDecode(pInfo("value"))
+              param -> value
+            } else {
+              val path = param.jsonDecode(pInfo("value")).toString
+              val value = DefaultParamsReader.loadParamsInstance[MLWritable](path, sc)
+              param -> value
+            }
           }
           ParamMap(paramPairs: _*)
       }.toArray
