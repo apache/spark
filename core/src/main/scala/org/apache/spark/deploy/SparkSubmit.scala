@@ -879,6 +879,15 @@ private[spark] object SparkSubmitUtils {
   // Exposed for testing
   var printStream = SparkSubmit.printStream
 
+  // Exposed for testing.
+  // These components are used to make the default exclusion rules for Spark dependencies.
+  // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
+  // other spark-streaming utility components. Underscore is there to differentiate between
+  // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
+  val IVY_DEFAULT_EXCLUDES = Seq("catalyst_", "core_", "graphx_", "launcher_", "mllib_",
+    "mllib-local_", "network-common_", "network-shuffle_", "repl_", "sketch_", "sql_", "streaming_",
+    "tags_", "unsafe_")
+
   /**
    * Represents a Maven Coordinate
    * @param groupId the groupId of the coordinate
@@ -1007,13 +1016,7 @@ private[spark] object SparkSubmitUtils {
     // Add scala exclusion rule
     md.addExcludeRule(createExclusion("*:scala-library:*", ivySettings, ivyConfName))
 
-    // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
-    // other spark-streaming utility components. Underscore is there to differentiate between
-    // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
-    val components = Seq("catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
-      "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
-
-    components.foreach { comp =>
+    IVY_DEFAULT_EXCLUDES.foreach { comp =>
       md.addExcludeRule(createExclusion(s"org.apache.spark:spark-$comp*:*", ivySettings,
         ivyConfName))
     }

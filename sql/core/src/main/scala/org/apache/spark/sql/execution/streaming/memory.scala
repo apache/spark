@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -196,11 +195,11 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
       logDebug(s"Committing batch $batchId to $this")
       outputMode match {
         case Append | Update =>
-          val rows = AddedData(batchId, data.collect())
+          val rows = AddedData(batchId, data.collectInternal())
           synchronized { batches += rows }
 
         case Complete =>
-          val rows = AddedData(batchId, data.collect())
+          val rows = AddedData(batchId, data.collectInternal())
           synchronized {
             batches.clear()
             batches += rows
@@ -230,6 +229,6 @@ case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode
 
   private val sizePerRow = sink.schema.toAttributes.map(_.dataType.defaultSize).sum
 
-  override def computeStats(conf: SQLConf): Statistics =
+  override def computeStats: Statistics =
     Statistics(sizePerRow * sink.allData.size)
 }

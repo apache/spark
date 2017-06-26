@@ -200,6 +200,7 @@ private[v1] object AllStagesResource {
           readBytes = submetricQuantiles(_.totalBytesRead),
           readRecords = submetricQuantiles(_.recordsRead),
           remoteBytesRead = submetricQuantiles(_.remoteBytesRead),
+          remoteBytesReadToDisk = submetricQuantiles(_.remoteBytesReadToDisk),
           remoteBlocksFetched = submetricQuantiles(_.remoteBlocksFetched),
           localBlocksFetched = submetricQuantiles(_.localBlocksFetched),
           totalBlocksFetched = submetricQuantiles(_.totalBlocksFetched),
@@ -281,6 +282,7 @@ private[v1] object AllStagesResource {
       localBlocksFetched = internal.localBlocksFetched,
       fetchWaitTime = internal.fetchWaitTime,
       remoteBytesRead = internal.remoteBytesRead,
+      remoteBytesReadToDisk = internal.remoteBytesReadToDisk,
       localBytesRead = internal.localBytesRead,
       recordsRead = internal.recordsRead
     )

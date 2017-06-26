@@ -35,7 +35,7 @@ class ResolveSubquerySuite extends AnalysisTest {
   test("SPARK-17251 Improve `OuterReference` to be `NamedExpression`") {
     val expr = Filter(In(a, Seq(ListQuery(Project(Seq(UnresolvedAttribute("a")), t2)))), t1)
     val m = intercept[AnalysisException] {
-      SimpleAnalyzer.ResolveSubquery(expr)
+      SimpleAnalyzer.checkAnalysis(SimpleAnalyzer.ResolveSubquery(expr))
     }.getMessage
     assert(m.contains(
       "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses"))

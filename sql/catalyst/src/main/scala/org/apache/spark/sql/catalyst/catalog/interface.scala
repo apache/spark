@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Attri
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
@@ -75,7 +74,7 @@ case class CatalogStorageFormat(
     CatalogUtils.maskCredentials(properties) match {
       case props if props.isEmpty => // No-op
       case props =>
-        map.put("Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
+        map.put("Storage Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
     }
     map
   }
@@ -316,7 +315,7 @@ case class CatalogTable(
       }
     }
 
-    if (properties.nonEmpty) map.put("Properties", tableProperties)
+    if (properties.nonEmpty) map.put("Table Properties", tableProperties)
     stats.foreach(s => map.put("Statistics", s.simpleString))
     map ++= storage.toLinkedHashMap
     if (tracksPartitionsInCatalog) map.put("Partition Provider", "Catalog")
@@ -436,7 +435,7 @@ case class CatalogRelation(
     createTime = -1
   ))
 
-  override def computeStats(conf: SQLConf): Statistics = {
+  override def computeStats: Statistics = {
     // For data source tables, we will create a `LogicalRelation` and won't call this method, for
     // hive serde tables, we will always generate a statistics.
     // TODO: unify the table stats generation.

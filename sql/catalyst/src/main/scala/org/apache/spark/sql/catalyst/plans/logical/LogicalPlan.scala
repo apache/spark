@@ -23,11 +23,10 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
-abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
+abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstraints with Logging {
 
   private var _analyzed: Boolean = false
 
@@ -46,6 +45,41 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   /** Returns true if this subtree contains any streaming data sources. */
   def isStreaming: Boolean = children.exists(_.isStreaming == true)
 
+  /**
+   * Returns a copy of this node where `rule` has been recursively applied first to all of its
+   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
+   * unchanged.  This function is similar to `transformUp`, but skips sub-trees that have already
+   * been marked as analyzed.
+   *
+   * @param rule the function use to transform this nodes children
+   */
+  def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
+    if (!analyzed) {
+      val afterRuleOnChildren = mapChildren(_.resolveOperators(rule))
+      if (this fastEquals afterRuleOnChildren) {
+        CurrentOrigin.withOrigin(origin) {
+          rule.applyOrElse(this, identity[LogicalPlan])
+        }
+      } else {
+        CurrentOrigin.withOrigin(origin) {
+          rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
+        }
+      }
+    } else {
+      this
+    }
+  }
+
+  /**
+   * Recursively transforms the expressions of a tree, skipping nodes that have already
+   * been analyzed.
+   */
+  def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
+    this resolveOperators  {
+      case p => p.transformExpressions(r)
+    }
+  }
+
   /** A cache for the estimated statistics, such that it will only be computed once. */
   private var statsCache: Option[Statistics] = None
 
@@ -55,8 +89,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * first time. If the configuration changes, the cache can be invalidated by calling
    * [[invalidateStatsCache()]].
    */
-  final def stats(conf: SQLConf): Statistics = statsCache.getOrElse {
-    statsCache = Some(computeStats(conf))
+  final def stats: Statistics = statsCache.getOrElse {
+    statsCache = Some(computeStats)
     statsCache.get
   }
 
@@ -73,11 +107,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    *
    * [[LeafNode]]s must override this.
    */
-  protected def computeStats(conf: SQLConf): Statistics = {
+  protected def computeStats: Statistics = {
     if (children.isEmpty) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
-    Statistics(sizeInBytes = children.map(_.stats(conf).sizeInBytes).product)
+    Statistics(sizeInBytes = children.map(_.stats.sizeInBytes).product)
   }
 
   override def verboseStringWithSuffix: String = {
@@ -187,7 +221,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       nameParts: Seq[String],
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
-    if (!attribute.isGenerated && resolver(attribute.name, nameParts.head)) {
+    if (resolver(attribute.name, nameParts.head)) {
       Option((attribute.withName(nameParts.head), nameParts.tail.toList))
     } else {
       None
@@ -298,13 +332,13 @@ abstract class UnaryNode extends LogicalPlan {
 
   override protected def validConstraints: Set[Expression] = child.constraints
 
-  override def computeStats(conf: SQLConf): Statistics = {
+  override def computeStats: Statistics = {
     // There should be some overhead in Row object, the size should not be zero when there is
     // no columns, this help to prevent divide-by-zero error.
     val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
     val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
     // Assume there will be the same number of rows as child has.
-    var sizeInBytes = (child.stats(conf).sizeInBytes * outputRowSize) / childRowSize
+    var sizeInBytes = (child.stats.sizeInBytes * outputRowSize) / childRowSize
     if (sizeInBytes == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
       // (product of children).
@@ -312,7 +346,7 @@ abstract class UnaryNode extends LogicalPlan {
     }
 
     // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes, hints = child.stats(conf).hints)
+    Statistics(sizeInBytes = sizeInBytes, hints = child.stats.hints)
   }
 }
 

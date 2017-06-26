@@ -113,10 +113,11 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
 
   /**
-   * Returns the result as a hive compatible sequence of strings. This is for testing only.
+   * Returns the result as a hive compatible sequence of strings. This is used in tests and
+   * `SparkSQLDriver` for CLI applications.
    */
   def hiveResultString(): Seq[String] = executedPlan match {
-    case ExecutedCommandExec(desc: DescribeTableCommand) =>
+    case ExecutedCommandExec(desc: DescribeTableCommand, _) =>
       // If it is a describe command for a Hive table, we want to have the output format
       // be similar with Hive.
       desc.run(sparkSession).map {
@@ -127,7 +128,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
             .mkString("\t")
       }
     // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
-    case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
+    case command @ ExecutedCommandExec(s: ShowTablesCommand, _) if !s.isExtended =>
       command.executeCollect().map(_.getString(1))
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
@@ -199,11 +200,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       """.stripMargin.trim
   }
 
-  override def toString: String = completeString(appendStats = false)
-
-  def toStringWithStats: String = completeString(appendStats = true)
-
-  private def completeString(appendStats: Boolean): String = {
+  override def toString: String = {
     def output = Utils.truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
     val analyzedPlan = Seq(
@@ -211,22 +208,26 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       stringOrError(analyzed.treeString(verbose = true))
     ).filter(_.nonEmpty).mkString("\n")
 
-    val optimizedPlanString = if (appendStats) {
-      // trigger to compute stats for logical plans
-      optimizedPlan.stats(sparkSession.sessionState.conf)
-      optimizedPlan.treeString(verbose = true, addSuffix = true)
-    } else {
-      optimizedPlan.treeString(verbose = true)
-    }
-
     s"""== Parsed Logical Plan ==
        |${stringOrError(logical.treeString(verbose = true))}
        |== Analyzed Logical Plan ==
        |$analyzedPlan
        |== Optimized Logical Plan ==
-       |${stringOrError(optimizedPlanString)}
+       |${stringOrError(optimizedPlan.treeString(verbose = true))}
        |== Physical Plan ==
        |${stringOrError(executedPlan.treeString(verbose = true))}
+    """.stripMargin.trim
+  }
+
+  def stringWithStats: String = {
+    // trigger to compute stats for logical plans
+    optimizedPlan.stats
+
+    // only show optimized logical plan and physical plan
+    s"""== Optimized Logical Plan ==
+        |${stringOrError(optimizedPlan.treeString(verbose = true, addSuffix = true))}
+        |== Physical Plan ==
+        |${stringOrError(executedPlan.treeString(verbose = true))}
     """.stripMargin.trim
   }
 

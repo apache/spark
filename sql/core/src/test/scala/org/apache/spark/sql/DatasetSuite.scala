@@ -522,6 +522,34 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       3, 17, 27, 58, 62)
   }
 
+  test("sample fraction should not be negative with replacement") {
+    val data = sparkContext.parallelize(1 to 2, 1).toDS()
+    val errMsg = intercept[IllegalArgumentException] {
+      data.sample(withReplacement = true, -0.1, 0)
+    }.getMessage
+    assert(errMsg.contains("Sampling fraction (-0.1) must be nonnegative with replacement"))
+
+    // Sampling fraction can be greater than 1 with replacement.
+    checkDataset(
+      data.sample(withReplacement = true, 1.05, seed = 13),
+      1, 2)
+  }
+
+  test("sample fraction should be on interval [0, 1] without replacement") {
+    val data = sparkContext.parallelize(1 to 2, 1).toDS()
+    val errMsg1 = intercept[IllegalArgumentException] {
+      data.sample(withReplacement = false, -0.1, 0)
+    }.getMessage()
+    assert(errMsg1.contains(
+      "Sampling fraction (-0.1) must be on interval [0, 1] without replacement"))
+
+    val errMsg2 = intercept[IllegalArgumentException] {
+      data.sample(withReplacement = false, 1.1, 0)
+    }.getMessage()
+    assert(errMsg2.contains(
+      "Sampling fraction (1.1) must be on interval [0, 1] without replacement"))
+  }
+
   test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
     val simpleUdf = udf((n: Int) => {
       require(n != 1, "simpleUdf shouldn't see id=1!")
@@ -1183,7 +1211,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // instead of Int for avoiding possible overflow.
     val ds = (0 to 10000).map( i =>
       (i, Seq((i, Seq((i, "This is really not that long of a string")))))).toDS()
-    val sizeInBytes = ds.logicalPlan.stats(sqlConf).sizeInBytes
+    val sizeInBytes = ds.logicalPlan.stats.sizeInBytes
     // sizeInBytes is 2404280404, before the fix, it overflows to a negative number
     assert(sizeInBytes > 0)
   }
