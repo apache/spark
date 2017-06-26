@@ -49,8 +49,8 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
    */
   @Since("1.5.0")
   val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
-    " evaluation (f1|weightedPrecision|weightedRecall|accuracy)",
-    (value: String) => supportedMetricNames.contains(value.toLowerCase(Locale.ROOT)))
+    s" evaluation ${supportedMetricNames.mkString("(", ",", ")")}",
+    ParamValidators.inStringArray(supportedMetricNames))
 
   /** @group getParam */
   @Since("1.5.0")
@@ -81,7 +81,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
         case Row(prediction: Double, label: Double) => (prediction, label)
       }
     val metrics = new MulticlassMetrics(predictionAndLabels)
-    val metric = getMetricName.toLowerCase(Locale.ROOT) match {
+    val metric = Param.findStringOption(supportedMetricNames, getMetricName) match {
       case F1 => metrics.weightedFMeasure
       case WeightedPrecision => metrics.weightedPrecision
       case WeightedRecall => metrics.weightedRecall
@@ -105,16 +105,16 @@ object MulticlassClassificationEvaluator
   override def load(path: String): MulticlassClassificationEvaluator = super.load(path)
 
   /** String name for `f1` metric name. */
-  private[spark] val F1: String = "f1".toLowerCase(Locale.ROOT)
+  private[spark] val F1: String = "f1"
 
   /** String name for `weightedPrecision` metric name. */
-  private[spark] val WeightedPrecision: String = "weightedPrecision".toLowerCase(Locale.ROOT)
+  private[spark] val WeightedPrecision: String = "weightedPrecision"
 
   /** String name for `weightedRecall` metric name. */
-  private[spark] val WeightedRecall: String = "weightedRecall".toLowerCase(Locale.ROOT)
+  private[spark] val WeightedRecall: String = "weightedRecall"
 
   /** String name for `accuracy` metric name. */
-  private[spark] val Accuracy: String = "accuracy".toLowerCase(Locale.ROOT)
+  private[spark] val Accuracy: String = "accuracy"
 
   /** Set of metric names that MulticlassClassificationEvaluator supports. */
   private[spark] val supportedMetricNames = Array(F1, WeightedPrecision, WeightedRecall, Accuracy)

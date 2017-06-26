@@ -35,6 +35,7 @@ import org.apache.spark.sql.types._
  * Params for [[Imputer]] and [[ImputerModel]].
  */
 private[feature] trait ImputerParams extends Params with HasInputCols {
+  import Imputer._
 
   /**
    * The imputation strategy. Currently only "mean" and "median" are supported.
@@ -45,9 +46,9 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
    * @group param
    */
   final val strategy: Param[String] = new Param(this, "strategy", s"strategy for imputation. " +
-    s"If ${Imputer.mean}, then replace missing values using the mean value of the feature. " +
-    s"If ${Imputer.median}, then replace missing values using the median value of the feature.",
-    (value: String) => Array(Imputer.mean, Imputer.median).contains(value.toLowerCase(Locale.ROOT)))
+    s"If $mean, then replace missing values using the mean value of the feature. " +
+    s"If $median, then replace missing values using the median value of the feature.",
+    ParamValidators.inStringArray(supportedStrategies))
 
   /** @group getParam */
   def getStrategy: String = $(strategy)
@@ -111,6 +112,8 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   @Since("2.2.0")
   def this() = this(Identifiable.randomUID("imputer"))
 
+  import Imputer._
+
   /** @group setParam */
   @Since("2.2.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
@@ -168,8 +171,9 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
 object Imputer extends DefaultParamsReadable[Imputer] {
 
   /** strategy names that Imputer currently supports. */
-  private[feature] val mean = "mean".toLowerCase(Locale.ROOT)
-  private[feature] val median = "median".toLowerCase(Locale.ROOT)
+  private[feature] val mean = "mean"
+  private[feature] val median = "median"
+  private[feature] val supportedStrategies = Array(mean, median)
 
   @Since("2.2.0")
   override def load(path: String): Imputer = super.load(path)

@@ -55,7 +55,7 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
    */
   final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
     "which is a string (case-sensitive). Supported options: multinomial (default) and bernoulli.",
-    (value: String) => NaiveBayes.supportedModelTypes.contains(value.toLowerCase(Locale.ROOT)))
+    ParamValidators.inStringArray(NaiveBayes.supportedModelTypes))
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
@@ -223,7 +223,7 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
   private[classification] val Bernoulli: String = "bernoulli"
 
   /* Set of modelTypes that NaiveBayes supports */
-  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
+  private[classification] val supportedModelTypes = Array(Multinomial, Bernoulli)
 
   private[NaiveBayes] def requireNonnegativeValues(v: Vector): Unit = {
     val values = v match {

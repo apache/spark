@@ -53,8 +53,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
    */
   @Since("1.4.0")
   val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
-    " evaluation (mse|rmse|r2|mae)",
-    (value: String) => supportedMetricNames.contains(value.toLowerCase(Locale.ROOT)))
+    s" evaluation ${supportedMetricNames.mkString("(", ",", ")")}",
+    ParamValidators.inStringArray(supportedMetricNames))
 
   /** @group getParam */
   @Since("1.4.0")
@@ -95,12 +95,13 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   }
 
   @Since("1.4.0")
-  override def isLargerBetter: Boolean = getMetricName.toLowerCase(Locale.ROOT) match {
-    case RMSE => false
-    case MSE => false
-    case R2 => true
-    case MAE => false
-  }
+  override def isLargerBetter: Boolean =
+    Param.findStringOption(supportedMetricNames, getMetricName) match {
+      case RMSE => false
+      case MSE => false
+      case R2 => true
+      case MAE => false
+    }
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): RegressionEvaluator = defaultCopy(extra)
@@ -113,16 +114,16 @@ object RegressionEvaluator extends DefaultParamsReadable[RegressionEvaluator] {
   override def load(path: String): RegressionEvaluator = super.load(path)
 
   /** String name for `rmse` metric name. */
-  private[spark] val RMSE: String = "rmse".toLowerCase(Locale.ROOT)
+  private[spark] val RMSE: String = "rmse"
 
   /** String name for `mse` metric name. */
-  private[spark] val MSE: String = "mse".toLowerCase(Locale.ROOT)
+  private[spark] val MSE: String = "mse"
 
   /** String name for `r2` metric name. */
-  private[spark] val R2: String = "r2".toLowerCase(Locale.ROOT)
+  private[spark] val R2: String = "r2"
 
   /** String name for `mae` metric name. */
-  private[spark] val MAE: String = "mae".toLowerCase(Locale.ROOT)
+  private[spark] val MAE: String = "mae"
 
   /** Set of metric names that RegressionEvaluator supports. */
   private[spark] val supportedMetricNames = Array(RMSE, MSE, R2, MAE)

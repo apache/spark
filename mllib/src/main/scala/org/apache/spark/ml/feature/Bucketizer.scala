@@ -42,6 +42,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("bucketizer"))
 
+  import Bucketizer._
+
   /**
    * Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets.
    * A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which
@@ -90,8 +92,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    (value: String) => Bucketizer.supportedHandleInvalids
-      .contains(value.toLowerCase(ju.Locale.ROOT)))
+    ParamValidators.inStringArray(supportedHandleInvalids))
 
   /** @group getParam */
   @Since("2.1.0")
@@ -106,11 +107,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
     val (filteredDataset, keepInvalid) = {
-      if (getHandleInvalid.toLowerCase(ju.Locale.ROOT) == Bucketizer.SKIP_INVALID) {
+      if (getHandleInvalid.toLowerCase(Locale.ROOT) == Bucketizer.SKIP_INVALID) {
         // "skip" NaN option is set, will filter out NaN values in the dataset
         (dataset.na.drop().toDF(), false)
       } else {
-        (dataset.toDF(), getHandleInvalid.toLowerCase(ju.Locale.ROOT) == Bucketizer.KEEP_INVALID)
+        (dataset.toDF(), getHandleInvalid.toLowerCase(Locale.ROOT) == Bucketizer.KEEP_INVALID)
       }
     }
 
@@ -145,9 +146,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 @Since("1.6.0")
 object Bucketizer extends DefaultParamsReadable[Bucketizer] {
 
-  private[feature] val SKIP_INVALID: String = "skip".toLowerCase(Locale.ROOT)
-  private[feature] val ERROR_INVALID: String = "error".toLowerCase(Locale.ROOT)
-  private[feature] val KEEP_INVALID: String = "keep".toLowerCase(Locale.ROOT)
+  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val ERROR_INVALID: String = "error"
+  private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
 

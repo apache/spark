@@ -79,8 +79,7 @@ private[feature] trait QuantileDiscretizerBase extends Params
   val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    (value: String) => Bucketizer.supportedHandleInvalids
-      .contains(value.toLowerCase(Locale.ROOT)))
+    ParamValidators.inStringArray(Bucketizer.supportedHandleInvalids))
   setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
 
   /** @group getParam */

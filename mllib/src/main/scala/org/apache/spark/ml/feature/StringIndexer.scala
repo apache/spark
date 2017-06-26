@@ -39,6 +39,7 @@ import org.apache.spark.util.collection.OpenHashMap
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
 private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
+  import StringIndexer._
 
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
@@ -53,10 +54,9 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     "invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
-    (value: String) => StringIndexer.supportedHandleInvalids
-      .contains(value.toLowerCase(Locale.ROOT)))
+    ParamValidators.inStringArray(supportedHandleInvalids))
 
-  setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
+  setDefault(handleInvalid, ERROR_INVALID)
 
   /** @group getParam */
   @Since("1.6.0")
@@ -78,9 +78,8 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
   final val stringOrderType: Param[String] = new Param[String](this, "stringOrderType",
     "How to order labels of string column. " +
     "The first label after ordering is assigned an index of 0. " +
-    s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
-    (value: String) => StringIndexer.supportedStringOrderType
-      .contains(value.toLowerCase(Locale.ROOT)))
+    s"Supported options: ${supportedStringOrderType.mkString("(", ",", ")")}.",
+    ParamValidators.inStringArray(supportedStringOrderType))
 
   /** @group getParam */
   @Since("2.3.0")
@@ -143,7 +142,8 @@ class StringIndexer @Since("1.4.0") (
     val values = dataset.na.drop(Array($(inputCol)))
       .select(col($(inputCol)).cast(StringType))
       .rdd.map(_.getString(0))
-    val labels = getStringOrderType.toLowerCase(Locale.ROOT) match {
+    val labels = Param.findStringOption(
+      StringIndexer.supportedStringOrderType, getStringOrderType) match {
       case StringIndexer.frequencyDesc => values.countByValue().toSeq.sortBy(-_._2)
         .map(_._1).toArray
       case StringIndexer.frequencyAsc => values.countByValue().toSeq.sortBy(_._2)
@@ -165,15 +165,15 @@ class StringIndexer @Since("1.4.0") (
 
 @Since("1.6.0")
 object StringIndexer extends DefaultParamsReadable[StringIndexer] {
-  private[feature] val SKIP_INVALID: String = "skip".toLowerCase(Locale.ROOT)
-  private[feature] val ERROR_INVALID: String = "error".toLowerCase(Locale.ROOT)
-  private[feature] val KEEP_INVALID: String = "keep".toLowerCase(Locale.ROOT)
+  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val ERROR_INVALID: String = "error"
+  private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
-  private[feature] val frequencyDesc: String = "frequencyDesc".toLowerCase(Locale.ROOT)
-  private[feature] val frequencyAsc: String = "frequencyAsc".toLowerCase(Locale.ROOT)
-  private[feature] val alphabetDesc: String = "alphabetDesc".toLowerCase(Locale.ROOT)
-  private[feature] val alphabetAsc: String = "alphabetAsc".toLowerCase(Locale.ROOT)
+  private[feature] val frequencyDesc: String = "frequencyDesc"
+  private[feature] val frequencyAsc: String = "frequencyAsc"
+  private[feature] val alphabetDesc: String = "alphabetDesc"
+  private[feature] val alphabetAsc: String = "alphabetAsc"
   private[feature] val supportedStringOrderType: Array[String] =
     Array(frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc)
 
@@ -196,6 +196,7 @@ class StringIndexerModel (
     @Since("1.5.0") val labels: Array[String])
   extends Model[StringIndexerModel] with StringIndexerBase with MLWritable {
 
+  import StringIndexer._
   import StringIndexerModel._
 
   @Since("1.5.0")

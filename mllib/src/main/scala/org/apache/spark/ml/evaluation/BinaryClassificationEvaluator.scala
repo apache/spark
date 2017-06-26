@@ -51,8 +51,8 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
    */
   @Since("1.2.0")
   val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
-    " evaluation (areaUnderROC|areaUnderPR)",
-    (value: String) => supportedMetricNames.contains(value.toLowerCase(Locale.ROOT)))
+    s" evaluation ${supportedMetricNames.mkString("(", ",", ")")}",
+    ParamValidators.inStringArray(supportedMetricNames))
 
   /** @group getParam */
   @Since("1.2.0")
@@ -85,7 +85,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
         case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
       }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-    val metric = getMetricName.toLowerCase(Locale.ROOT) match {
+    val metric = Param.findStringOption(supportedMetricNames, getMetricName) match {
       case AreaUnderROC => metrics.areaUnderROC()
       case AreaUnderPR => metrics.areaUnderPR()
     }
@@ -107,11 +107,11 @@ object BinaryClassificationEvaluator extends DefaultParamsReadable[BinaryClassif
   override def load(path: String): BinaryClassificationEvaluator = super.load(path)
 
   /** String name for `areaUnderROC` metric name. */
-  private[spark] val AreaUnderROC: String = "areaUnderROC".toLowerCase(Locale.ROOT)
+  private[spark] val AreaUnderROC: String = "areaUnderROC"
 
   /** String name for `areaUnderPR` metric name. */
-  private[spark] val AreaUnderPR: String = "areaUnderPR".toLowerCase(Locale.ROOT)
+  private[spark] val AreaUnderPR: String = "areaUnderPR"
 
   /** Set of metric names that BinaryClassificationEvaluator supports. */
-  private[spark] val supportedMetricNames = Set(AreaUnderROC, AreaUnderPR)
+  private[spark] val supportedMetricNames = Array(AreaUnderROC, AreaUnderPR)
 }
