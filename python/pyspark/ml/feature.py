@@ -2882,7 +2882,7 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         if not isinstance(word, basestring):
             word = _convert_to_vector(word)
         tupleOfArray = self._call_java("findSynonymsTuple", word, num)
-        arrayOfTuple = zip(tupleOfArray._1(), tupleOfArray._2())
+        arrayOfTuple = list(zip(tupleOfArray._1(), tupleOfArray._2()))
         return arrayOfTuple
 
 
