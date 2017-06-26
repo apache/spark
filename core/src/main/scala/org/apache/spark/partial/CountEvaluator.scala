@@ -17,7 +17,7 @@
 
 package org.apache.spark.partial
 
-import org.apache.commons.math3.distribution.{PascalDistribution, PoissonDistribution}
+import org.apache.commons.math3.distribution.PoissonDistribution
 
 /**
  * An ApproximateEvaluator for counts.
@@ -48,22 +48,11 @@ private[spark] class CountEvaluator(totalOutputs: Int, confidence: Double)
 private[partial] object CountEvaluator {
 
   def bound(confidence: Double, sum: Long, p: Double): BoundedDouble = {
-    // Let the total count be N. A fraction p has been counted already, with sum 'sum',
-    // as if each element from the total data set had been seen with probability p.
-    val dist =
-      if (sum <= 10000) {
-        // The remaining count, k=N-sum, may be modeled as negative binomial (aka Pascal),
-        // where there have been 'sum' successes of probability p already. (There are several
-        // conventions, but this is the one followed by Commons Math3.)
-        new PascalDistribution(sum.toInt, p)
-      } else {
-        // For large 'sum' (certainly, > Int.MaxValue!), use a Poisson approximation, which has
-        // a different interpretation. "sum" elements have been observed having scanned a fraction
-        // p of the data. This suggests data is counted at a rate of sum / p across the whole data
-        // set. The total expected count from the rest is distributed as
-        // (1-p) Poisson(sum / p) = Poisson(sum*(1-p)/p)
-        new PoissonDistribution(sum * (1 - p) / p)
-      }
+    // "sum" elements have been observed having scanned a fraction
+    // p of the data. This suggests data is counted at a rate of sum / p across the whole data
+    // set. The total expected count from the rest is distributed as
+    // (1-p) Poisson(sum / p) = Poisson(sum*(1-p)/p)
+    val dist = new PoissonDistribution(sum * (1 - p) / p)
     // Not quite symmetric; calculate interval straight from discrete distribution
     val low = dist.inverseCumulativeProbability((1 - confidence) / 2)
     val high = dist.inverseCumulativeProbability((1 + confidence) / 2)

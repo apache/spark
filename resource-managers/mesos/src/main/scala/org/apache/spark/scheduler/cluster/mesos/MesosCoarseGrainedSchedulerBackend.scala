@@ -29,6 +29,7 @@ import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
+import org.apache.spark.internal.config
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcEndpointAddress
@@ -150,7 +151,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     new MesosExternalShuffleClient(
       SparkTransportConf.fromSparkConf(conf, "shuffle"),
       securityManager,
-      securityManager.isAuthenticationEnabled())
+      securityManager.isAuthenticationEnabled(),
+      conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
   }
 
   private var nextMesosTaskId = 0
@@ -419,16 +421,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
             .setName(s"${sc.appName} $taskId")
-
-          taskBuilder.addAllResources(resourcesToUse.asJava)
-          taskBuilder.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
-
-          val labelsBuilder = taskBuilder.getLabelsBuilder
-          val labels = buildMesosLabels().asJava
-
-          labelsBuilder.addAllLabels(labels)
-
-          taskBuilder.setLabels(labelsBuilder)
+            .setLabels(MesosProtoUtils.mesosLabels(taskLabels))
+            .addAllResources(resourcesToUse.asJava)
+            .setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
 
           tasks(offer.getId) ::= taskBuilder.build()
           remainingResources(offerId) = resourcesLeft.asJava
@@ -442,21 +437,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       }
     }
     tasks.toMap
-  }
-
-  private def buildMesosLabels(): List[Label] = {
-   taskLabels.split(",").flatMap(label =>
-      label.split(":") match {
-        case Array(key, value) =>
-          Some(Label.newBuilder()
-            .setKey(key)
-            .setValue(value)
-            .build())
-        case _ =>
-          logWarning(s"Unable to parse $label into a key:value label for the task.")
-          None
-      }
-    ).toList
   }
 
   /** Extracts task needed resources from a list of available resources. */

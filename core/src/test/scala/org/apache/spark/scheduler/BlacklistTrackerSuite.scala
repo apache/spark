@@ -86,7 +86,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     sc = new SparkContext(conf)
     val scheduler = mock[TaskSchedulerImpl]
     when(scheduler.sc).thenReturn(sc)
-    when(scheduler.mapOutputTracker).thenReturn(SparkEnv.get.mapOutputTracker)
+    when(scheduler.mapOutputTracker).thenReturn(
+      SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster])
     scheduler
   }
 
@@ -528,5 +529,60 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
     verify(allocationClientMock).killExecutors(Seq("2"), true, true)
     verify(allocationClientMock).killExecutorsOnHost("hostA")
+  }
+
+  test("fetch failure blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
+    val allocationClientMock = mock[ExecutorAllocationClient]
+    when(allocationClientMock.killExecutors(any(), any(), any())).thenReturn(Seq("called"))
+    when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
+      // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
+      // is updated before we ask the executor allocation client to kill all the executors
+      // on a particular host.
+      override def answer(invocation: InvocationOnMock): Boolean = {
+        if (blacklist.nodeBlacklist.contains("hostA") == false) {
+          throw new IllegalStateException("hostA should be on the blacklist")
+        }
+        true
+      }
+    })
+
+    conf.set(config.BLACKLIST_FETCH_FAILURE_ENABLED, true)
+    blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
+
+    // Disable auto-kill. Blacklist an executor and make sure killExecutors is not called.
+    conf.set(config.BLACKLIST_KILL_ENABLED, false)
+    blacklist.updateBlacklistForFetchFailure("hostA", exec = "1")
+
+    verify(allocationClientMock, never).killExecutors(any(), any(), any())
+    verify(allocationClientMock, never).killExecutorsOnHost(any())
+
+    // Enable auto-kill. Blacklist an executor and make sure killExecutors is called.
+    conf.set(config.BLACKLIST_KILL_ENABLED, true)
+    blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
+    clock.advance(1000)
+    blacklist.updateBlacklistForFetchFailure("hostA", exec = "1")
+
+    verify(allocationClientMock).killExecutors(Seq("1"), true, true)
+    verify(allocationClientMock, never).killExecutorsOnHost(any())
+
+    assert(blacklist.executorIdToBlacklistStatus.contains("1"))
+    assert(blacklist.executorIdToBlacklistStatus("1").node === "hostA")
+    assert(blacklist.executorIdToBlacklistStatus("1").expiryTime ===
+      1000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
+    assert(blacklist.nextExpiryTime === 1000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
+    assert(blacklist.nodeIdToBlacklistExpiryTime.isEmpty)
+
+    // Enable external shuffle service to see if all the executors on this node will be killed.
+    conf.set(config.SHUFFLE_SERVICE_ENABLED, true)
+    clock.advance(1000)
+    blacklist.updateBlacklistForFetchFailure("hostA", exec = "2")
+
+    verify(allocationClientMock, never).killExecutors(Seq("2"), true, true)
+    verify(allocationClientMock).killExecutorsOnHost("hostA")
+
+    assert(blacklist.nodeIdToBlacklistExpiryTime.contains("hostA"))
+    assert(blacklist.nodeIdToBlacklistExpiryTime("hostA") ===
+      2000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
+    assert(blacklist.nextExpiryTime === 1000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
   }
 }

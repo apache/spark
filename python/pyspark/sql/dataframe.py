@@ -29,7 +29,8 @@ import warnings
 
 from pyspark import copy_func, since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
+from pyspark.serializers import ArrowSerializer, BatchedSerializer, PickleSerializer, \
+    UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
@@ -1175,18 +1176,23 @@ class DataFrame(object):
 
     @since(2.0)
     def union(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this
-        frame and another frame.
+        """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
         (that does deduplication of elements), use this function followed by a distinct.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
         """
         return DataFrame(self._jdf.union(other._jdf), self.sql_ctx)
 
     @since(1.3)
     def unionAll(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this
-        frame and another frame.
+        """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
+
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by a distinct.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
 
         .. note:: Deprecated in 2.0, use union instead.
         """
@@ -1703,7 +1709,8 @@ class DataFrame(object):
 
     @since(1.3)
     def toPandas(self):
-        """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
+        """
+        Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
         This is only available if Pandas is installed and available.
 
@@ -1716,7 +1723,42 @@ class DataFrame(object):
         1    5    Bob
         """
         import pandas as pd
-        return pd.DataFrame.from_records(self.collect(), columns=self.columns)
+        if self.sql_ctx.getConf("spark.sql.execution.arrow.enable", "false").lower() == "true":
+            try:
+                import pyarrow
+                tables = self._collectAsArrow()
+                if tables:
+                    table = pyarrow.concat_tables(tables)
+                    return table.to_pandas()
+                else:
+                    return pd.DataFrame.from_records([], columns=self.columns)
+            except ImportError as e:
+                msg = "note: pyarrow must be installed and available on calling Python process " \
+                      "if using spark.sql.execution.arrow.enable=true"
+                raise ImportError("%s\n%s" % (e.message, msg))
+        else:
+            dtype = {}
+            for field in self.schema:
+                pandas_type = _to_corrected_pandas_type(field.dataType)
+                if pandas_type is not None:
+                    dtype[field.name] = pandas_type
+
+            pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+            for f, t in dtype.items():
+                pdf[f] = pdf[f].astype(t, copy=False)
+            return pdf
+
+    def _collectAsArrow(self):
+        """
+        Returns all records as list of deserialized ArrowPayloads, pyarrow must be installed
+        and available.
+
+        .. note:: Experimental.
+        """
+        with SCCallSiteSync(self._sc) as css:
+            port = self._jdf.collectAsArrowToPython()
+        return list(_load_from_socket(port, ArrowSerializer()))
 
     ##########################################################################################
     # Pandas compatibility
@@ -1743,6 +1785,24 @@ def _to_scala_map(sc, jm):
     Convert a dict into a JVM Map.
     """
     return sc._jvm.PythonUtils.toScalaMap(jm)
+
+
+def _to_corrected_pandas_type(dt):
+    """
+    When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
+    This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
+    """
+    import numpy as np
+    if type(dt) == ByteType:
+        return np.int8
+    elif type(dt) == ShortType:
+        return np.int16
+    elif type(dt) == IntegerType:
+        return np.int32
+    elif type(dt) == FloatType:
+        return np.float32
+    else:
+        return None
 
 
 class DataFrameNaFunctions(object):
