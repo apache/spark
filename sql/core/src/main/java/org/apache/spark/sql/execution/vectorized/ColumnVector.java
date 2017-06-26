@@ -69,7 +69,7 @@ public abstract class ColumnVector implements AutoCloseable {
       int capacity,
       DataType type,
       MemoryMode mode,
-      Boolean containsNull) {
+      boolean containsNull) {
     if (mode == MemoryMode.OFF_HEAP) {
       return new OffHeapColumnVector(capacity, type, containsNull);
     } else {
@@ -1062,7 +1062,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected ColumnVector(int capacity, DataType type, MemoryMode memMode, Boolean containsNull) {
+  protected ColumnVector(int capacity, DataType type, MemoryMode memMode, boolean containsNull) {
     this.capacity = capacity;
     this.type = type;
     this.containsNull = containsNull;

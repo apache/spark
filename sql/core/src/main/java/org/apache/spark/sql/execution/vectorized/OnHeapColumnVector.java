@@ -51,7 +51,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
-  protected OnHeapColumnVector(int capacity, DataType type, Boolean containsNull) {
+  protected OnHeapColumnVector(int capacity, DataType type, boolean containsNull) {
     super(capacity, type, MemoryMode.ON_HEAP, containsNull);
     reserveInternal(capacity);
     reset();
@@ -81,7 +81,7 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public void putNull(int rowId) {
-    if(!containsNull) {
+    if (!containsNull) {
       throw new RuntimeException("Not allowed to put null in this column.");
     }
     nulls[rowId] = (byte)1;
