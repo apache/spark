@@ -716,7 +716,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       df.toDF().write.mode("overwrite").text(testDir.getAbsolutePath)
       val e = intercept[AnalysisException] {
         spark.read.format(format).option("inferSchema", true).load(testDir.getAbsolutePath)
-
       }
       assert(e.getMessage.contains("Found duplicate column(s) in the data schema:"))
     }
