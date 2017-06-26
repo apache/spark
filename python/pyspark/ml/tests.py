@@ -543,15 +543,13 @@ class FeatureTests(SparkSessionTestCase):
         df = self.spark.createDataFrame([(sent,), (sent,)], ["sentence"])
         word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
         model = word2Vec.fit(df)
+        a = model.findSynonymsArray("a", 2)
 
-        a = model.findSynonymsTuple("a", 2)
-
-        self.assertEqual(len(a._1()), 2)
-        self.assertEqual(len(a._2()), 2)
-        self.assertEqual(a._1()[0], "b")
-        self.assertEqual(a._1()[1], "c")
-        self.assertEqual(a._2()[0], 0.25053444504737854)
-        self.assertEqual(a._2()[1], -0.6980510950088501)
+        self.assertEqual(len(a), 2)
+        self.assertEqual(a[0][0], "b")
+        self.assertEqual(a[1][0], "c")
+        self.assertEqual(a[0][1], 0.25053444504737854)
+        self.assertEqual(a[1][1], -0.6980510950088501)
 
     def test_rformula_string_indexer_order_type(self):
         df = self.spark.createDataFrame([

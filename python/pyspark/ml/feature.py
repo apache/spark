@@ -2870,7 +2870,7 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("findSynonyms", word, num)
 
     @since("2.2.0")
-    def findSynonymsTuple(self, word, num):
+    def findSynonymsArray(self, word, num):
         """
         Find "num" number of words closest in similarity to "word".
         word can be a string or vector representation.
@@ -2879,7 +2879,9 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         """
         if not isinstance(word, basestring):
             word = _convert_to_vector(word)
-        return self._call_java("findSynonymsTuple", word, num)
+        tupleOfArray = self._call_java("findSynonymsTuple", word, num)
+        arrayOfTuple = zip(tupleOfArray._1(), tupleOfArray._2())
+        return arrayOfTuple
 
 
 @inherit_doc
