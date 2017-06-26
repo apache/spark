@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -342,19 +343,38 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, s"$values = null;")
 
+    // `splitExpressions` might split codes to multiple functions. The local variables of
+    // `LambdaVariable` can't be accessed in the functions. We need to add them into the parameters
+    // of the functions.
+    val (valExprCodes, valExprParams) = valExprs.map { expr =>
+      val exprCode = expr.genCode(ctx)
+      val lambdaVars = expr.collect {
+        case l: LambdaVariable => l
+      }.flatMap { lambda =>
+        val valueParam = ctx.javaType(lambda.dataType) -> lambda.value
+        if (lambda.isNull == "false") {
+          Seq(valueParam)
+        } else {
+          Seq(valueParam, "boolean" -> lambda.isNull)
+        }
+      }
+      (exprCode, lambdaVars)
+    }.unzip
+
+    val splitFuncsParams = valExprParams.flatten.distinct
+
     ev.copy(code = s"""
       $values = new Object[${valExprs.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
-        valExprs.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
+        valExprCodes.zipWithIndex.map { case (eval, i) =>
           eval.code + s"""
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
             $values[$i] = ${eval.value};
           }"""
-        }) +
+        }, splitFuncsParams) +
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
         $values = null;

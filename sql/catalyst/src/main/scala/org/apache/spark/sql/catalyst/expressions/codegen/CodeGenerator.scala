@@ -736,7 +736,27 @@ class CodegenContext {
       // Cannot split these expressions because they are not created from a row object.
       return expressions.mkString("\n")
     }
-    splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
+    splitExpressions(row, expressions, Seq.empty)
+  }
+
+  /**
+   * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM
+   *
+   * @param row the variable name of row that is used by expressions
+   * @param expressions the codes to evaluate expressions.
+   * @param arguments the additional arguments to the functions.
+   */
+  def splitExpressions(
+      row: String,
+      expressions: Seq[String],
+      arguments: Seq[(String, String)]): String = {
+    if (row == null || currentVars != null) {
+      // Cannot split these expressions because they are not created from a row object.
+      return expressions.mkString("\n")
+    }
+    val params = arguments ++ Seq(("InternalRow", row))
+    splitExpressions(expressions, "apply", params)
   }
 
   /**
