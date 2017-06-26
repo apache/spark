@@ -1188,15 +1188,25 @@ class Dataset[T] private[sql](
   def col(colName: String): Column = colName match {
     case "*" =>
       Column(ResolvedStar(queryExecution.analyzed.output))
-    case ParserUtils.escapedIdentifier(columnNameRegex)
-        if sqlContext.conf.supportQuotedRegexColumnName =>
+    case _ =>
+      if (sqlContext.conf.supportQuotedRegexColumnName) {
+        colRegex(colName)
+      } else {
+        val expr = resolve(colName)
+        Column(expr)
+      }
+  }
+
+  /**
+   * Selects column based on the column name specified as a regex and return it as [[Column]].
+   */
+  def colRegex(colName: String): Column = colName match {
+    case ParserUtils.escapedIdentifier(columnNameRegex) =>
       Column(UnresolvedRegex(columnNameRegex, None))
-    case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex)
-        if sqlContext.conf.supportQuotedRegexColumnName =>
+    case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
       Column(UnresolvedRegex(columnNameRegex, Some(nameParts)))
     case _ =>
-      val expr = resolve(colName)
-      Column(expr)
+      Column(resolve(colName))
   }
 
   /**

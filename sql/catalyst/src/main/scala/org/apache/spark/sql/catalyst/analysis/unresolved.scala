@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.parser.ParserUtils
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -123,7 +124,14 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
 
   override def toString: String = s"'$name"
 
-  override def sql: String = quoteIdentifier(name)
+  override def sql: String = {
+    name match {
+      case ParserUtils.escapedIdentifier(_) |
+           ParserUtils.qualifiedEscapedIdentifier(_, _) => name
+      case _ => quoteIdentifier(name)
+
+    }
+  }
 }
 
 object UnresolvedAttribute {
