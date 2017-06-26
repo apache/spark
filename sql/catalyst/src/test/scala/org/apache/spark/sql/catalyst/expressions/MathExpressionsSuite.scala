@@ -670,6 +670,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(2, 4, 0, 3, 2)
     test(-1, 3.2, 0, 4, 5)
 
+    // numBucket <= 0
     intercept[AnalysisException]{
       WidthBucket(Literal.create(1.0, DoubleType),
         Literal.create(1.0, DoubleType),

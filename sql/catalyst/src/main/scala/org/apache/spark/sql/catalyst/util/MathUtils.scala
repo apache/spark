@@ -25,7 +25,7 @@ object MathUtils {
    *  Returns the bucket number into which
    *  the value of this expression would fall after being evaluated.
    *
-   * @param expr id the expression for which the histogram is being created
+   * @param expr is the expression for which the histogram is being created
    * @param minValue is an expression that resolves
    *                 to the minimum end point of the acceptable range for expr
    * @param maxValue is an expression that resolves
@@ -33,8 +33,7 @@ object MathUtils {
    * @param numBucket is an An expression that resolves to
    *                  a constant indicating the number of buckets
    * @return Returns an long between 0 and numBucket+1 by mapping the expr into buckets defined by
-   *         the range [minValue, maxValue]. For example:
-   *         widthBucket(0, 1, 1, 1) -> 0, widthBucket(20, 1, 1, 1) -> 2.
+   *         the range [minValue, maxValue].
    */
   def widthBucket(expr: Double, minValue: Double, maxValue: Double, numBucket: Long): Long = {
 

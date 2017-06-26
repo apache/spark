@@ -95,5 +95,8 @@ select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11);
 
 -- width_bucket
 select width_bucket(5.35, 0.024, 10.06, 5);
+select width_bucket('5.35', '0.024', '10.06', '5');
+select width_bucket(5.35, 0.024, 10.06, 2.5);
+select width_bucket(5.35, 0.024, 10.06, 0.5);
 select width_bucket(5.35, 0.024, 10.06, -5);
 select width_bucket(null, 0.024, 10.06, 5);
