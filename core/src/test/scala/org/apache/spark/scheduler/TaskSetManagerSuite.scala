@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.Matchers.{any, anyInt, anyString}
-import org.mockito.Mockito.{mock, never, spy, verify, when, times}
+import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
@@ -1204,7 +1204,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
           val task = invocationOnMock.getArgumentAt(0, classOf[Int])
           assert(taskSetManager.taskSetBlacklistHelperOpt.get.
             isExecutorBlacklistedForTask(exec, task))
-          null
         }
       }
     )
