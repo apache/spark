@@ -342,6 +342,8 @@ object ScalaReflection extends ScalaReflection {
           mirror.runtimeClass(t.typeSymbol.asClass)
         )
 
+      // We serialize a `Set` to Catalyst array. When we deserialize a Catalyst array
+      // to a `Set`, if there are duplicated elements, the elements will be de-duplicated.
       case t if t <:< localTypeOf[Set[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
 

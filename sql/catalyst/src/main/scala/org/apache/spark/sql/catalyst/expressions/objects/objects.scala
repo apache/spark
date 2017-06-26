@@ -859,9 +859,12 @@ object CollectObjectsToSet {
 }
 
 /**
- * Expression used to convert a Catalyst Array to an external Scala Set.
+ * Expression used to convert a Catalyst Array to an external Scala `Set`.
  * The collection is constructed using the associated builder, obtained by calling `newBuilder`
  * on the collection's companion object.
+ *
+ * Notice that when we convert a Catalyst array which contains duplicated elements to an external
+ * Scala `Set`, the elements will be de-duplicated.
  *
  * @param loopValue the name of the loop variable that is used when iterating over the value
  *                       collection, and which is used as input for the `lambdaFunction`
