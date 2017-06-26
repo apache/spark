@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.Matchers.{any, anyInt, anyString}
-import org.mockito.Mockito.{mock, never, spy, verify, when}
+import org.mockito.Mockito.{mock, never, spy, verify, when, times}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
@@ -1170,6 +1170,51 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0, 0, "ignored"))
 
     assert(blacklistTracker.isNodeBlacklisted("host1"))
+  }
+
+  test("update blacklist before adding pending task to avoid race condition") {
+    // When a task fails, it should apply the blacklist policy prior to
+    // retrying the task otherwise there's a race condition where run on
+    // the same executor that it was intended to be black listed from.
+    val conf = new SparkConf().
+      set(config.BLACKLIST_ENABLED, true).
+      set(config.MAX_TASK_ATTEMPTS_PER_EXECUTOR, 1)
+
+    // Create a task with two executors.
+    sc = new SparkContext("local", "test", conf)
+    val exec = "executor1"
+    val host = "host1"
+    val exec2 = "executor2"
+    val host2 = "host2"
+    sched = new FakeTaskScheduler(sc, (exec, host), (exec2, host2))
+    val taskSet = FakeTask.createTaskSet(1)
+
+    val clock = new ManualClock
+    val mockListenerBus = mock(classOf[LiveListenerBus])
+    val blacklistTracker = new BlacklistTracker(mockListenerBus, conf, None, clock)
+    val taskSetManager = new TaskSetManager(sched, taskSet, 1, Some(blacklistTracker))
+    val taskSetManagerSpy = spy(taskSetManager)
+
+    val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)
+
+    // Assert the task has been black listed on the executor it was last executed on.
+    when(taskSetManagerSpy.addPendingTask(anyInt())).thenAnswer(
+      new Answer[Unit] {
+        override def answer(invocationOnMock: InvocationOnMock): Unit = {
+          val task = invocationOnMock.getArgumentAt(0, classOf[Int])
+          assert(taskSetManager.taskSetBlacklistHelperOpt.get.
+            isExecutorBlacklistedForTask(exec, task))
+          null
+        }
+      }
+    )
+
+    // Simulate an out of memory error
+    val e = new OutOfMemoryError
+    taskSetManagerSpy.handleFailedTask(
+      taskDesc.get.taskId, TaskState.FAILED, new ExceptionFailure(e, Seq()))
+
+    verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt())
   }
 
   private def createTaskResult(
