@@ -51,7 +51,7 @@ class IncrementalExecution(
       //  We shouldn't miss the parent's strategies
       val parentPlanner = sparkSession.sessionState.planner
 
-      parentPlanner.extraPlanningStrategies ++ parentPlanner.strategies ++
+      parentPlanner.strategies ++ parentPlanner.extraPlanningStrategies ++
         (StatefulAggregationStrategy ::
           FlatMapGroupsWithStateStrategy ::
           StreamingRelationStrategy ::
