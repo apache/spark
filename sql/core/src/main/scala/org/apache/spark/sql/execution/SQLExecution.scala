@@ -29,6 +29,8 @@ object SQLExecution {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
 
+  private val IGNORE_NESTED_EXECUTION_ID = "spark.sql.execution.ignoreNestedExecutionId"
+
   private val _nextExecutionId = new AtomicLong(0)
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
@@ -85,6 +87,9 @@ object SQLExecution {
         sc.setLocalProperty(EXECUTION_ID_KEY, null)
       }
       r
+    } else if (sc.getLocalProperty(IGNORE_NESTED_EXECUTION_ID) != null) {
+      // If `IGNORE_NESTED_EXECUTION_ID` is set, just ignore this new execution id.
+      body
     } else {
       // Don't support nested `withNewExecutionId`. This is an example of the nested
       // `withNewExecutionId`:
@@ -100,7 +105,9 @@ object SQLExecution {
       // all accumulator metrics will be 0. It will confuse people if we show them in Web UI.
       //
       // A real case is the `DataFrame.count` method.
-      throw new IllegalArgumentException(s"$EXECUTION_ID_KEY is already set")
+      throw new IllegalArgumentException(s"$EXECUTION_ID_KEY is already set, please wrap your " +
+        "action with SQLExecution.ignoreNestedExecutionId if you don't want to track the Spark " +
+        "jobs issued by the nested execution.")
     }
   }
 
@@ -116,6 +123,21 @@ object SQLExecution {
       body
     } finally {
       sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, oldExecutionId)
+    }
+  }
+
+  /**
+   * Wrap an action which may have nested execution id. This method can be used to run an execution
+   * inside another execution, e.g., `CacheTableCommand` need to call `Dataset.collect`.
+   */
+  def ignoreNestedExecutionId[T](sparkSession: SparkSession)(body: => T): T = {
+    val sc = sparkSession.sparkContext
+    val allowNestedPreviousValue = sc.getLocalProperty(IGNORE_NESTED_EXECUTION_ID)
+    try {
+      sc.setLocalProperty(IGNORE_NESTED_EXECUTION_ID, "true")
+      body
+    } finally {
+      sc.setLocalProperty(IGNORE_NESTED_EXECUTION_ID, allowNestedPreviousValue)
     }
   }
 }
