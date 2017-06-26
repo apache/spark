@@ -35,14 +35,14 @@ trait Source {
 
   /**
    * The name of this metrics Source, name should be unique and will be prepended with app id and
-   * exeuctor id to distinguish.
+   * executor id to distinguish.
    * @return name of this Source
    */
   def sourceName: String
 
   /**
-   * A [[MetricRegistry]] in which all the collected metrics are registered.
-   * @return a [[MetricRegistry]] object which will be registered in MetricsSystem for collection
+   * A MetricRegistry in which all the collected metrics are registered.
+   * @return a MetricRegistry object which will be registered in MetricsSystem for collection
    */
   def metricRegistry: MetricRegistry
 }

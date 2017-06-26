@@ -31,7 +31,7 @@ import org.apache.spark.annotation.DeveloperApi
  * @param properties Properties related this specific Sink, properties are read from
  *                   configuration file, user could define their own configurations and get
  *                   from this parameter.
- * @param metricRegistry The [[MetricRegistry]] for you to dump the collected metrics.
+ * @param metricRegistry The MetricRegistry for you to dump the collected metrics.
  */
 @DeveloperApi
 abstract class Sink(properties: Properties, metricRegistry: MetricRegistry) {
