@@ -48,7 +48,7 @@ class IncrementalExecution(
       sparkSession.sessionState.conf,
       sparkSession.sessionState.experimentalMethods) {
     override def extraPlanningStrategies: Seq[Strategy] = {
-      //  We shouldn't miss the
+      //  We shouldn't miss the parent's strategies
       val parentPlanner = sparkSession.sessionState.planner
 
       parentPlanner.extraPlanningStrategies ++ parentPlanner.strategies ++
