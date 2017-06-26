@@ -40,6 +40,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("regEval"))
 
+  import RegressionEvaluator._
+
   /**
    * Param for metric name in evaluation. Supports:
    *  - `"rmse"` (default): root mean squared error
@@ -52,9 +54,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("1.4.0")
   val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
     " evaluation (mse|rmse|r2|mae)",
-    (value: String) => Array("mse", "rmse", "r2", "mae")
-      .contains(value.toLowerCase(Locale.ROOT)))
-
+    (value: String) => supportedMetricNames.contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.4.0")
@@ -72,7 +72,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("1.4.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  setDefault(metricName -> "rmse")
+  setDefault(metricName -> RMSE)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
@@ -86,20 +86,20 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
       .map { case Row(prediction: Double, label: Double) => (prediction, label) }
     val metrics = new RegressionMetrics(predictionAndLabels)
     val metric = getMetricName.toLowerCase(Locale.ROOT) match {
-      case "rmse" => metrics.rootMeanSquaredError
-      case "mse" => metrics.meanSquaredError
-      case "r2" => metrics.r2
-      case "mae" => metrics.meanAbsoluteError
+      case RMSE => metrics.rootMeanSquaredError
+      case MSE => metrics.meanSquaredError
+      case R2 => metrics.r2
+      case MAE => metrics.meanAbsoluteError
     }
     metric
   }
 
   @Since("1.4.0")
   override def isLargerBetter: Boolean = getMetricName.toLowerCase(Locale.ROOT) match {
-    case "rmse" => false
-    case "mse" => false
-    case "r2" => true
-    case "mae" => false
+    case RMSE => false
+    case MSE => false
+    case R2 => true
+    case MAE => false
   }
 
   @Since("1.5.0")
@@ -111,4 +111,19 @@ object RegressionEvaluator extends DefaultParamsReadable[RegressionEvaluator] {
 
   @Since("1.6.0")
   override def load(path: String): RegressionEvaluator = super.load(path)
+
+  /** String name for `rmse` metric name. */
+  private[spark] val RMSE: String = "rmse".toLowerCase(Locale.ROOT)
+
+  /** String name for `mse` metric name. */
+  private[spark] val MSE: String = "mse".toLowerCase(Locale.ROOT)
+
+  /** String name for `r2` metric name. */
+  private[spark] val R2: String = "r2".toLowerCase(Locale.ROOT)
+
+  /** String name for `mae` metric name. */
+  private[spark] val MAE: String = "mae".toLowerCase(Locale.ROOT)
+
+  /** Set of metric names that RegressionEvaluator supports. */
+  private[spark] val supportedMetricNames = Array(RMSE, MSE, R2, MAE)
 }

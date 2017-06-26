@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import java.{util => ju}
+import java.util.Locale
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
@@ -144,9 +145,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 @Since("1.6.0")
 object Bucketizer extends DefaultParamsReadable[Bucketizer] {
 
-  private[feature] val SKIP_INVALID: String = "skip"
-  private[feature] val ERROR_INVALID: String = "error"
-  private[feature] val KEEP_INVALID: String = "keep"
+  private[feature] val SKIP_INVALID: String = "skip".toLowerCase(Locale.ROOT)
+  private[feature] val ERROR_INVALID: String = "error".toLowerCase(Locale.ROOT)
+  private[feature] val KEEP_INVALID: String = "keep".toLowerCase(Locale.ROOT)
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
 

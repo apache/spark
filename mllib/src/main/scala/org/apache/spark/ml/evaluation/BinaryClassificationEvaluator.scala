@@ -43,6 +43,8 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("binEval"))
 
+  import BinaryClassificationEvaluator._
+
   /**
    * param for metric name in evaluation (supports `"areaUnderROC"` (default), `"areaUnderPR"`)
    * @group param
@@ -50,8 +52,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("1.2.0")
   val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
     " evaluation (areaUnderROC|areaUnderPR)",
-    (value: String) => Array("areaunderroc", "areaunderpr").contains(
-      value.toLowerCase(Locale.ROOT)))
+    (value: String) => supportedMetricNames.contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.2.0")
@@ -69,11 +70,7 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("1.2.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  setDefault(metricName -> "areaUnderROC")
-
-  private def getFormattedMetricName =
-    Array("areaUnderROC", "areaUnderPR")
-      .find(_.toLowerCase(Locale.ROOT) == getMetricName.toLowerCase(Locale.ROOT)).get
+  setDefault(metricName -> AreaUnderROC)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
@@ -88,19 +85,16 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
         case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
       }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-    val metric = getFormattedMetricName match {
-      case "areaUnderROC" => metrics.areaUnderROC()
-      case "areaUnderPR" => metrics.areaUnderPR()
+    val metric = getMetricName.toLowerCase(Locale.ROOT) match {
+      case AreaUnderROC => metrics.areaUnderROC()
+      case AreaUnderPR => metrics.areaUnderPR()
     }
     metrics.unpersist()
     metric
   }
 
   @Since("1.5.0")
-  override def isLargerBetter: Boolean = getFormattedMetricName match {
-    case "areaUnderROC" => true
-    case "areaUnderPR" => true
-  }
+  override def isLargerBetter: Boolean = true
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopy(extra)
@@ -111,4 +105,13 @@ object BinaryClassificationEvaluator extends DefaultParamsReadable[BinaryClassif
 
   @Since("1.6.0")
   override def load(path: String): BinaryClassificationEvaluator = super.load(path)
+
+  /** String name for `areaUnderROC` metric name. */
+  private[spark] val AreaUnderROC: String = "areaUnderROC".toLowerCase(Locale.ROOT)
+
+  /** String name for `areaUnderPR` metric name. */
+  private[spark] val AreaUnderPR: String = "areaUnderPR".toLowerCase(Locale.ROOT)
+
+  /** Set of metric names that BinaryClassificationEvaluator supports. */
+  private[spark] val supportedMetricNames = Set(AreaUnderROC, AreaUnderPR)
 }

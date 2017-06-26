@@ -168,8 +168,8 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
 object Imputer extends DefaultParamsReadable[Imputer] {
 
   /** strategy names that Imputer currently supports. */
-  private[feature] val mean = "mean"
-  private[feature] val median = "median"
+  private[feature] val mean = "mean".toLowerCase(Locale.ROOT)
+  private[feature] val median = "median".toLowerCase(Locale.ROOT)
 
   @Since("2.2.0")
   override def load(path: String): Imputer = super.load(path)

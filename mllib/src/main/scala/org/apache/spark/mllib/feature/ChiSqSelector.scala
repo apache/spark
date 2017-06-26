@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.feature
 
+import java.util.Locale
+
 import scala.collection.mutable.ArrayBuilder
 
 import org.json4s._
@@ -293,20 +295,19 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
 private[spark] object ChiSqSelector {
 
   /** String name for `numTopFeatures` selector type. */
-  private[spark] val NumTopFeatures: String = "numTopFeatures"
+  private[spark] val NumTopFeatures: String = "numTopFeatures".toLowerCase(Locale.ROOT)
 
   /** String name for `percentile` selector type. */
-  private[spark] val Percentile: String = "percentile"
+  private[spark] val Percentile: String = "percentile".toLowerCase(Locale.ROOT)
 
   /** String name for `fpr` selector type. */
-  private[spark] val FPR: String = "fpr"
+  private[spark] val FPR: String = "fpr".toLowerCase(Locale.ROOT)
 
   /** String name for `fdr` selector type. */
-  private[spark] val FDR: String = "fdr"
+  private[spark] val FDR: String = "fdr".toLowerCase(Locale.ROOT)
 
   /** String name for `fwe` selector type. */
-  private[spark] val FWE: String = "fwe"
-
+  private[spark] val FWE: String = "fwe".toLowerCase(Locale.ROOT)
 
   /** Set of selector types that ChiSqSelector supports. */
   val supportedSelectorTypes: Array[String] = Array(NumTopFeatures, Percentile, FPR, FDR, FWE)

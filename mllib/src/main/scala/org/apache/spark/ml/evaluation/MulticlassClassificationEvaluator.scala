@@ -40,6 +40,8 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("mcEval"))
 
+  import MulticlassClassificationEvaluator._
+
   /**
    * param for metric name in evaluation (supports `"f1"` (default), `"weightedPrecision"`,
    * `"weightedRecall"`, `"accuracy"`)
@@ -48,8 +50,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("1.5.0")
   val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
     " evaluation (f1|weightedPrecision|weightedRecall|accuracy)",
-    (value: String) => Array("f1", "weightedprecision", "weightedrecall", "accuracy")
-      .contains(value.toLowerCase(Locale.ROOT)))
+    (value: String) => supportedMetricNames.contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.5.0")
@@ -67,11 +68,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  setDefault(metricName -> "f1")
-
-  private def getFormattedMetricName =
-    Array("f1", "weightedPrecision", "weightedRecall", "accuracy")
-      .find(_.toLowerCase(Locale.ROOT) == getMetricName.toLowerCase(Locale.ROOT)).get
+  setDefault(metricName -> F1)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
@@ -84,11 +81,11 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
         case Row(prediction: Double, label: Double) => (prediction, label)
       }
     val metrics = new MulticlassMetrics(predictionAndLabels)
-    val metric = getFormattedMetricName match {
-      case "f1" => metrics.weightedFMeasure
-      case "weightedPrecision" => metrics.weightedPrecision
-      case "weightedRecall" => metrics.weightedRecall
-      case "accuracy" => metrics.accuracy
+    val metric = getMetricName.toLowerCase(Locale.ROOT) match {
+      case F1 => metrics.weightedFMeasure
+      case WeightedPrecision => metrics.weightedPrecision
+      case WeightedRecall => metrics.weightedRecall
+      case Accuracy => metrics.accuracy
     }
     metric
   }
@@ -106,4 +103,19 @@ object MulticlassClassificationEvaluator
 
   @Since("1.6.0")
   override def load(path: String): MulticlassClassificationEvaluator = super.load(path)
+
+  /** String name for `f1` metric name. */
+  private[spark] val F1: String = "f1".toLowerCase(Locale.ROOT)
+
+  /** String name for `weightedPrecision` metric name. */
+  private[spark] val WeightedPrecision: String = "weightedPrecision".toLowerCase(Locale.ROOT)
+
+  /** String name for `weightedRecall` metric name. */
+  private[spark] val WeightedRecall: String = "weightedRecall".toLowerCase(Locale.ROOT)
+
+  /** String name for `accuracy` metric name. */
+  private[spark] val Accuracy: String = "accuracy".toLowerCase(Locale.ROOT)
+
+  /** Set of metric names that MulticlassClassificationEvaluator supports. */
+  private[spark] val supportedMetricNames = Array(F1, WeightedPrecision, WeightedRecall, Accuracy)
 }
