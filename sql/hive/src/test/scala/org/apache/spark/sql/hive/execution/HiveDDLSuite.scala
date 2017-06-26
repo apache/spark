@@ -1989,7 +1989,7 @@ class HiveDDLSuite
 
       checkAnswer(
         spark.table("t2"),
-        Seq(Row(1, "one"), Row(2, "two"))
+        Seq(Row(1, "one", 1), Row(2, "two", 2))
       )
     } finally {
       sq.stop()
