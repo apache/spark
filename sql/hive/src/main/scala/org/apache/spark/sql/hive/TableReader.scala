@@ -115,7 +115,7 @@ class HadoopTableReader(
     val broadcastedHadoopConf = _broadcastedHadoopConf
 
     val tablePath = hiveTable.getPath
-    val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
+    val inputPathStr = tablePath.toString
 
     // logDebug("Table input: %s".format(tablePath))
     val ifc = hiveTable.getInputFormatClass
@@ -196,7 +196,7 @@ class HadoopTableReader(
       .map { case (partition, partDeserializer) =>
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = partition.getDataLocation
-      val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
+      val inputPathStr = partPath.toString
       val ifc = partDesc.getInputFileFormatClass
         .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
       // Get partition field info
@@ -266,20 +266,6 @@ class HadoopTableReader(
       new EmptyRDD[InternalRow](sparkSession.sparkContext)
     } else {
       new UnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)
-    }
-  }
-
-  /**
-   * If `filterOpt` is defined, then it will be used to filter files from `path`. These files are
-   * returned in a single, comma-separated string.
-   */
-  private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): String = {
-    filterOpt match {
-      case Some(filter) =>
-        val fs = path.getFileSystem(hadoopConf)
-        val filteredFiles = fs.listStatus(path, filter).map(_.getPath.toString)
-        filteredFiles.mkString(",")
-      case None => path.toString
     }
   }
 
