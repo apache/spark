@@ -45,7 +45,7 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       sizeInBytes = 2 * (8 + 4 + 4),
       rowCount = Some(2),
       attributeStats = expectedAttrStats)
-    assert(proj.stats(conf) == expectedStats)
+    assert(proj.stats == expectedStats)
   }
 
   test("project on empty table") {
@@ -131,6 +131,6 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       sizeInBytes = expectedSize,
       rowCount = Some(expectedRowCount),
       attributeStats = projectAttrMap)
-    assert(proj.stats(conf) == expectedStats)
+    assert(proj.stats == expectedStats)
   }
 }
