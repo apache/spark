@@ -19,10 +19,9 @@ package org.apache.spark.deploy.history
 
 import java.io.{FileNotFoundException, IOException, OutputStream}
 import java.util.UUID
-import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
+import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit, ConcurrentHashMap}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.xml.Node
 
@@ -123,7 +122,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   @volatile private var applications: mutable.LinkedHashMap[String, FsApplicationHistoryInfo]
     = new mutable.LinkedHashMap()
 
-  val fileToAppInfo = new java.util.concurrent.ConcurrentHashMap[Path, FsApplicationAttemptInfo]()
+  val fileToAppInfo = new ConcurrentHashMap[Path, FsApplicationAttemptInfo]()
 
   // List of application logs to be deleted by event log cleaner.
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
@@ -322,7 +321,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // scan for modified applications, replay and merge them
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
-          val prevFileSize = fileToAppInfo.asScala.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
+          var prevFileSize = 0L
+          val fileInfo = fileToAppInfo.get(entry.getPath())
+          if (fileInfo != null) {
+            prevFileSize = fileInfo.fileSize
+          }
           !entry.isDirectory() &&
             // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
             // reading a garbage file is safe, but we would log an error which can be scary to
