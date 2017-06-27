@@ -20,4 +20,9 @@ rem
 rem This is the entry point for running a Spark class. To avoid polluting
 rem the environment, it just launches a new cmd to do the real work.
 
-cmd /V /E /C "%~dp0spark-class2.cmd" %*
+echo "%~dp0spark-class2.cmd"|findstr /C:" "
+if %ERRORLEVEL% EQU 0 (
+    cmd /V /E /C "%~dp0spark-class2.cmd" %*
+) else (
+    cmd /V /E /C %~dp0spark-class2.cmd %*
+)
