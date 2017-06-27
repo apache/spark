@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT, DenseVector => SDV}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -32,7 +32,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils, VersionUtils}
-
+import breeze.linalg.{DenseVector => BDV}
 /**
  * Params for [[Word2Vec]] and [[Word2VecModel]].
  */
@@ -272,6 +272,31 @@ class Word2VecModel private[ml] (
   @Since("2.2.0")
   def findSynonymsArray(word: String, num: Int): Array[(String, Double)] = {
     wordVectors.findSynonyms(word, num)
+  }
+  
+  /**
+   * using model.getVectors can get the wordVectors then you must convert the DataFrame
+   * to an Array.
+   */
+  def doc2Vector(textArray: Array[String], d: Int, wordVectors: Array[Row]): SDV = {
+    var sum = Vectors.zeros(d)
+    textArray.foreach { word =>
+      wordVectors.value.filter(_.getAs[String]("word") == word).foreach { v =>
+        val sv = v.getAs[SDV]("vector")
+        BLAS.axpy(1.0, sv, sum)
+      }
+    }
+    BLAS.scal(1.0 / textArray.size, sum)
+    sum.toDense
+  }
+
+  def cosineSimilarity(v1: SDV, v2: SDV): Double = {
+    val bdv1 = new BDV[Double](v1.values)
+    val bdv2 = new BDV[Double](v2.values)
+    val modeV1 = sqrt(bdv1 dot bdv1)
+    val modeV2 = sqrt(bdv2 dot bdv2)
+    val v1DOTv2 = bdv1 dot bdv2
+    v1DOTv2 / (modeV1 * modeV2)
   }
 
   /** @group setParam */
