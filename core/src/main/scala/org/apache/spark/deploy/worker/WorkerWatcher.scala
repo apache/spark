@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.worker
 
+import java.net.InetAddress
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 
@@ -43,7 +44,9 @@ private[spark] class WorkerWatcher(
 
   // Lets filter events only from the worker's rpc system
   private val expectedAddress = RpcAddress.fromURIString(workerUrl)
-  private def isWorker(address: RpcAddress) = expectedAddress == address
+  private def isWorker(address: RpcAddress) = expectedAddress == address ||
+    (expectedAddress.port == address.port &&
+      expectedAddress.host == InetAddress.getByName(address.host).getHostAddress)
 
   private def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
 
