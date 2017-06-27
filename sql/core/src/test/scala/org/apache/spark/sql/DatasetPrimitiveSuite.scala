@@ -357,7 +357,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(PackageClass(1)).toDS(), PackageClass(1))
   }
 
-  test("SPARK-19104: lambda variables should work when parent expression splits generated codes") {
+  test("SPARK-19104: Lambda variables in ExternalMapToCatalyst should be global") {
     val data = Seq.tabulate(10)(i => NestedData(1, Map("key" -> InnerData("name", i + 100))))
     val ds = spark.createDataset(data)
     checkDataset(ds, data: _*)
