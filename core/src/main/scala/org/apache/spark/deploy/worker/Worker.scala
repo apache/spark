@@ -74,11 +74,14 @@ private[deploy] class Worker(
 
   // Model retries to connect to the master, after Hadoop's model.
   // The first six attempts to reconnect are in shorter intervals (between 5 and 15 seconds)
-  // Afterwards, the next 10 attempts are between 30 and 90 seconds.
+  // Afterwards, the next prolonged retry attempts(defaults to 10) are between 30 and 90 seconds.
   // A bit of randomness is introduced so that not all of the workers attempt to reconnect at
   // the same time.
   private val INITIAL_REGISTRATION_RETRIES = 6
-  private val TOTAL_REGISTRATION_RETRIES = INITIAL_REGISTRATION_RETRIES + 10
+  private val PROLONGED_REGISTRATION_RETRIES =
+    conf.getLong("spark.worker.prolonged.registration.retries", 10)
+  private val TOTAL_REGISTRATION_RETRIES =
+    INITIAL_REGISTRATION_RETRIES + PROLONGED_REGISTRATION_RETRIES
   private val FUZZ_MULTIPLIER_INTERVAL_LOWER_BOUND = 0.500
   private val REGISTRATION_RETRY_FUZZ_MULTIPLIER = {
     val randomNumberGenerator = new Random(UUID.randomUUID.getMostSignificantBits)
