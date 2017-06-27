@@ -160,6 +160,8 @@ package object dsl {
     def last(e: Expression): Expression = new Last(e).toAggregateExpression()
     def min(e: Expression): Expression = Min(e).toAggregateExpression()
     def max(e: Expression): Expression = Max(e).toAggregateExpression()
+    def maxDistinct(e: Expression): Expression = Max(e).toAggregateExpression(isDistinct = true)
+    def minDistinct(e: Expression): Expression = Min(e).toAggregateExpression(isDistinct = true)
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)
