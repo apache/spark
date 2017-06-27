@@ -243,16 +243,16 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out(4) === Row("Amy", null, null))
     assert(out(5) === Row(null, null, null))
 
-    // Replace only the age column
-    val out1 = input.na.replace("age", Map(
-      16 -> 61,
-      60 -> 6,
-      164.3 -> 461.3  // Alice is really tall
+    // Replace only the name column
+    val out1 = input.na.replace("name", Map(
+      "Bob" -> "Bravo",
+      "Alice" -> "Jessie",
+      "David" -> null
     )).collect()
 
-    assert(out1(0) === Row("Bob", 61, 176.5))
-    assert(out1(1) === Row("Alice", null, 164.3))
-    assert(out1(2) === Row("David", 6, null))
+    assert(out1(0) === Row("Bravo", 16, 176.5))
+    assert(out1(1) === Row("Jessie", null, 164.3))
+    assert(out1(2) === Row(null, 60, null))
     assert(out1(3).get(2).asInstanceOf[Double].isNaN)
     assert(out1(4) === Row("Amy", null, null))
     assert(out1(5) === Row(null, null, null))

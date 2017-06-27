@@ -1902,6 +1902,11 @@ class SQLTests(ReusedPySparkTestCase):
                .replace(False, True).first())
         self.assertTupleEqual(row, (True, True))
 
+        # replace with None
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.0)], schema).replace((10, 80), None).first()
+        self.assertTupleEqual(row, (u'Alice', None, None))
+
         # should fail if subset is not list, tuple or None
         with self.assertRaises(ValueError):
             self.spark.createDataFrame(

@@ -343,8 +343,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * (Scala-specific) Replaces values matching keys in `replacement` map.
-   * Key and value of `replacement` map must have the same type, and
-   * can only be doubles , strings or booleans.
+   * Key and value of `replacement` map must satisfy one of:
+   *    1. keys are String, values are mix of String and null
+   *    2. keys are Boolean, values are mix of Boolean and null
+   *    3. keys are Double, values are either all Double or all null
    *
    * {{{
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
@@ -366,8 +368,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       return df
     }
 
-    // replacementMap is either Map[String, String] or Map[Double, Double] or Map[Boolean,Boolean]
+    // replacementMap is either Map[String, String], Map[Double, Double], Map[Boolean,Boolean]
+    // or value being null
     val replacementMap: Map[_, _] = replacement.head._2 match {
+      case null => replacement
       case v: String => replacement
       case v: Boolean => replacement
       case _ => replacement.map { case (k, v) => (convertToDouble(k), convertToDouble(v)) }
