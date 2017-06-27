@@ -61,7 +61,13 @@ object JDBCRDD extends Logging {
       try {
         val rs = statement.executeQuery()
         try {
-          JdbcUtils.getSchema(rs, dialect)
+          val metaStructType = JdbcUtils.getSchema(rs, dialect)
+          StructType(metaStructType.map(f =>
+            if(f.nullable)
+              f
+            else
+              StructField(f.name, f.dataType, true, f.metadata)
+          ))
         } finally {
           rs.close()
         }
