@@ -22,7 +22,7 @@ import java.math.{BigDecimal => JBigDecimal}
 /**
  * Helper functions for BigDecimal.
  */
-object BigDecimalUtils {
+object MathUtils {
 
   /**
    * Returns double type input truncated to scale decimal places.

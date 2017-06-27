@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.BigDecimalUtils._
+import org.apache.spark.sql.catalyst.util.MathUtils._
 
-class BigDecimalUtilsSuite extends SparkFunSuite {
+class MathUtilsSuite extends SparkFunSuite {
 
   test("trunc number") {
     val bg = 1234567891.1234567891D

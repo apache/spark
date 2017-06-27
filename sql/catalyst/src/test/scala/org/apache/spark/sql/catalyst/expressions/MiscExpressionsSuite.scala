@@ -46,9 +46,8 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(evaluate(Uuid()) !== evaluate(Uuid()))
   }
 
-  test("trunc") {
-    // numeric
-    def testTruncNumber(input: Double, fmt: Int, expected: Double): Unit = {
+  test("trunc numeric") {
+    def test(input: Double, fmt: Int, expected: Double): Unit = {
       checkEvaluation(Trunc(Literal.create(input, DoubleType),
         Literal.create(fmt, IntegerType)),
         expected)
@@ -57,9 +56,11 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         expected)
     }
 
-    testTruncNumber(1234567891.1234567891, 4, 1234567891.1234)
-    testTruncNumber(1234567891.1234567891, -4, 1234560000)
-    testTruncNumber(1234567891.1234567891, 0, 1234567891)
+    test(1234567891.1234567891, 4, 1234567891.1234)
+    test(1234567891.1234567891, -4, 1234560000)
+    test(1234567891.1234567891, 0, 1234567891)
+    test(0.123, -1, 0)
+    test(0.123, 0, 0)
 
     checkEvaluation(Trunc(Literal.create(1D, DoubleType),
       NonFoldableLiteral.create(null, IntegerType)),
@@ -70,9 +71,10 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Trunc(Literal.create(null, DoubleType),
       NonFoldableLiteral.create(null, IntegerType)),
       null)
+  }
 
-    // date
-    def testTruncDate(input: Date, fmt: String, expected: Date): Unit = {
+  test("trunc date") {
+    def test(input: Date, fmt: String, expected: Date): Unit = {
       checkEvaluation(Trunc(Literal.create(input, DateType), Literal.create(fmt, StringType)),
         expected)
       checkEvaluation(
@@ -81,14 +83,14 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     val date = Date.valueOf("2015-07-22")
     Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
-      testTruncDate(date, fmt, Date.valueOf("2015-01-01"))
+      test(date, fmt, Date.valueOf("2015-01-01"))
     }
     Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
-      testTruncDate(date, fmt, Date.valueOf("2015-07-01"))
+      test(date, fmt, Date.valueOf("2015-07-01"))
     }
-    testTruncDate(date, "DD", null)
-    testTruncDate(date, null, null)
-    testTruncDate(null, "MON", null)
-    testTruncDate(null, null, null)
+    test(date, "DD", null)
+    test(date, null, null)
+    test(null, "MON", null)
+    test(null, null, null)
   }
 }
