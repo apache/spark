@@ -584,7 +584,7 @@ tableToDF <- function(tableName) {
 #'
 #' @param path The path of files to load
 #' @param source The name of external data source
-#' @param schema The data schema defined in structType
+#' @param schema The data schema defined in structType or a DDL-formatted string.
 #' @param na.strings Default string value for NA when source is "csv"
 #' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
@@ -600,6 +600,8 @@ tableToDF <- function(tableName) {
 #'                      structField("info", "map<string,double>"))
 #' df2 <- read.df(mapTypeJsonPath, "json", schema, multiLine = TRUE)
 #' df3 <- loadDF("data/test_table", "parquet", mergeSchema = "true")
+#' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
+#' df4 <- read.df(mapTypeJsonPath, "json", stringSchema, multiLine = TRUE)
 #' }
 #' @name read.df
 #' @method read.df default
@@ -623,15 +625,20 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.string
   if (source == "csv" && is.null(options[["nullValue"]])) {
     options[["nullValue"]] <- na.strings
   }
+  read <- callJMethod(sparkSession, "read")
+  read <- callJMethod(read, "format", source)
   if (!is.null(schema)) {
-    stopifnot(class(schema) == "structType")
-    sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
-                              source, schema$jobj, options)
-  } else {
-    sdf <- handledCallJStatic("org.apache.spark.sql.api.r.SQLUtils", "loadDF", sparkSession,
-                              source, options)
+    if (class(schema) == "structType") {
+      read <- callJMethod(read, "schema", schema$jobj)
+    } else if (is.character(schema)) {
+      read <- callJMethod(read, "schema", schema)
+    } else {
+      stop("schema should be structType or character.")
+    }
   }
-  dataFrame(sdf)
+  read <- callJMethod(read, "options", options)
+  sdf <- handledCallJMethod(read, "load")
+  dataFrame(callJMethod(sdf, "toDF"))
 }
 
 read.df <- function(x = NULL, ...) {
@@ -717,8 +724,8 @@ read.jdbc <- function(url, tableName,
 #' "spark.sql.sources.default" will be used.
 #'
 #' @param source The name of external data source
-#' @param schema The data schema defined in structType, this is required for file-based streaming
-#'               data source
+#' @param schema The data schema defined in structType or a DDL-formatted string, this is
+#'               required for file-based streaming data source
 #' @param ... additional external data source specific named options, for instance \code{path} for
 #'        file-based streaming data source
 #' @return SparkDataFrame
@@ -733,6 +740,8 @@ read.jdbc <- function(url, tableName,
 #' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp")
 #'
 #' df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
+#' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
+#' df1 <- read.stream("json", path = jsonDir, schema = stringSchema, maxFilesPerTrigger = 1)
 #' }
 #' @name read.stream
 #' @note read.stream since 2.2.0
@@ -750,8 +759,13 @@ read.stream <- function(source = NULL, schema = NULL, ...) {
   read <- callJMethod(sparkSession, "readStream")
   read <- callJMethod(read, "format", source)
   if (!is.null(schema)) {
-    stopifnot(class(schema) == "structType")
-    read <- callJMethod(read, "schema", schema$jobj)
+    if (class(schema) == "structType") {
+      read <- callJMethod(read, "schema", schema$jobj)
+    } else if (is.character(schema)) {
+      read <- callJMethod(read, "schema", schema)
+    } else {
+      stop("schema should be structType or character.")
+    }
   }
   read <- callJMethod(read, "options", options)
   sdf <- handledCallJMethod(read, "load")
