@@ -92,7 +92,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     @volatile private var state: STATE = UPDATING
     @volatile private var finalDeltaFile: Path = null
 
-    override def id: StateStoreId = HDFSBackedStateStoreProvider.this.id
+    override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
     override def get(key: UnsafeRow): UnsafeRow = {
       mapToUpdate.get(key)
@@ -177,7 +177,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     /**
      * Whether all updates have been committed
      */
-    override private[streaming] def hasCommitted: Boolean = {
+    override def hasCommitted: Boolean = {
       state == COMMITTED
     }
 
@@ -205,7 +205,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       indexOrdinal: Option[Int], // for sorting the data
       storeConf: StateStoreConf,
       hadoopConf: Configuration): Unit = {
-    this.stateStoreId = stateStoreId
+    this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
     this.storeConf = storeConf
@@ -213,7 +213,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     fs.mkdirs(baseDir)
   }
 
-  override def id: StateStoreId = stateStoreId
+  override def stateStoreId: StateStoreId = stateStoreId_
 
   /** Do maintenance backing data files, including creating snapshots and cleaning up old files */
   override def doMaintenance(): Unit = {
@@ -231,20 +231,20 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   override def toString(): String = {
-    s"HDFSStateStoreProvider[id = (op=${id.operatorId}, part=${id.partitionId}), dir = $baseDir]"
+    s"HDFSStateStoreProvider[" +
+      s"id = (op=${stateStoreId.operatorId},part=${stateStoreId.partitionId}),dir = $baseDir]"
   }
 
   /* Internal fields and methods */
 
-  @volatile private var stateStoreId: StateStoreId = _
+  @volatile private var stateStoreId_ : StateStoreId = _
   @volatile private var keySchema: StructType = _
   @volatile private var valueSchema: StructType = _
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
 
   private lazy val loadedMaps = new mutable.HashMap[Long, MapType]
-  private lazy val baseDir =
-    new Path(id.checkpointLocation, s"${id.operatorId}/${id.partitionId.toString}")
+  private lazy val baseDir = stateStoreId.storeCheckpointLocation()
   private lazy val fs = baseDir.getFileSystem(hadoopConf)
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 

@@ -34,10 +34,15 @@ private[ui] class EnvironmentTab(parent: SparkUI) extends SparkUITab(parent, "en
 @DeveloperApi
 @deprecated("This class will be removed in a future release.", "2.2.0")
 class EnvironmentListener extends SparkListener {
+  var sparkUser: Option[String] = None
   var jvmInformation = Seq[(String, String)]()
   var sparkProperties = Seq[(String, String)]()
   var systemProperties = Seq[(String, String)]()
   var classpathEntries = Seq[(String, String)]()
+
+  override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
+    sparkUser = Some(event.sparkUser)
+  }
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
     synchronized {

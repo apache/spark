@@ -627,7 +627,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
         s"Sampling fraction ($fraction) must be on interval [0, 1]",
         ctx)
-      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)(true)
+      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)
     }
 
     ctx.sampleType.getType match {
@@ -636,7 +636,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
       case SqlBaseParser.PERCENTLIT =>
         val fraction = ctx.percentage.getText.toDouble
-        sample(fraction / 100.0d)
+        val sign = if (ctx.negativeSign == null) 1 else -1
+        sample(sign * fraction / 100.0d)
 
       case SqlBaseParser.BYTELENGTH_LITERAL =>
         throw new ParseException(
@@ -1074,6 +1075,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitLast(ctx: LastContext): Expression = withOrigin(ctx) {
     val ignoreNullsExpr = ctx.IGNORE != null
     Last(expression(ctx.expression), Literal(ignoreNullsExpr)).toAggregateExpression()
+  }
+
+  /**
+   * Create a Position expression.
+   */
+  override def visitPosition(ctx: PositionContext): Expression = withOrigin(ctx) {
+    new StringLocate(expression(ctx.substr), expression(ctx.str))
   }
 
   /**

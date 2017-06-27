@@ -195,6 +195,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _conf: SparkConf = _
   private var _eventLogDir: Option[URI] = None
   private var _eventLogCodec: Option[String] = None
+  private var _listenerBus: LiveListenerBus = _
   private var _env: SparkEnv = _
   private var _jobProgressListener: JobProgressListener = _
   private var _statusTracker: SparkStatusTracker = _
@@ -247,7 +248,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def isStopped: Boolean = stopped.get()
 
   // An asynchronous listener bus for Spark events
-  private[spark] val listenerBus = new LiveListenerBus(this)
+  private[spark] def listenerBus: LiveListenerBus = _listenerBus
 
   // This function allows components created by SparkEnv to be mocked in unit tests:
   private[spark] def createSparkEnv(
@@ -422,6 +423,8 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
+
+    _listenerBus = new LiveListenerBus(_conf)
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
@@ -2388,7 +2391,7 @@ class SparkContext(config: SparkConf) extends Logging {
         }
     }
 
-    listenerBus.start()
+    listenerBus.start(this, _env.metricsSystem)
     _listenerBusStarted = true
   }
 

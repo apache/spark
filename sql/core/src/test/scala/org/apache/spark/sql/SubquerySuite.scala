@@ -517,7 +517,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     val msg1 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
     }
-    assert(msg1.getMessage.contains("Correlated scalar subqueries must be Aggregated"))
+    assert(msg1.getMessage.contains("Correlated scalar subqueries must be aggregated"))
 
     val msg2 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")

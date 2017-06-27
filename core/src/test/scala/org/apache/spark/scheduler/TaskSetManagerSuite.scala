@@ -1140,6 +1140,38 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       .updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
   }
 
+  test("update application blacklist for shuffle-fetch") {
+    // Setup a taskset, and fail some one task for fetch failure.
+    val conf = new SparkConf()
+      .set(config.BLACKLIST_ENABLED, true)
+      .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(config.BLACKLIST_FETCH_FAILURE_ENABLED, true)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(4)
+    val blacklistTracker = new BlacklistTracker(sc, None)
+    val tsm = new TaskSetManager(sched, taskSet, 4, Some(blacklistTracker))
+
+    // make some offers to our taskset, to get tasks we will fail
+    val taskDescs = Seq(
+      "exec1" -> "host1",
+      "exec2" -> "host2"
+    ).flatMap { case (exec, host) =>
+      // offer each executor twice (simulating 2 cores per executor)
+      (0 until 2).flatMap{ _ => tsm.resourceOffer(exec, host, TaskLocality.ANY)}
+    }
+    assert(taskDescs.size === 4)
+
+    assert(!blacklistTracker.isExecutorBlacklisted(taskDescs(0).executorId))
+    assert(!blacklistTracker.isNodeBlacklisted("host1"))
+
+    // Fail the task with fetch failure
+    tsm.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
+      FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0, 0, "ignored"))
+
+    assert(blacklistTracker.isNodeBlacklisted("host1"))
+  }
+
   private def createTaskResult(
       id: Int,
       accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty): DirectTaskResult[Int] = {
