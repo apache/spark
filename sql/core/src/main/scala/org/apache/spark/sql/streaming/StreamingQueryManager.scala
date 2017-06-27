@@ -205,7 +205,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       if (useTempCheckpointLocation) {
         // Delete the temp checkpoint when a query is being stopped without errors.
         deleteCheckpointOnStop = true
-        Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
+        Utils.createTempDir(namePrefix = s"temporary").getCanonicalFile.toURI.toString
       } else {
         throw new AnalysisException(
           "checkpointLocation must be specified either " +
