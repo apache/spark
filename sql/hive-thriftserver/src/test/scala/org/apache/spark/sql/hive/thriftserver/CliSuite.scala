@@ -283,4 +283,15 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SET conf3;" -> "conftest"
     )
   }
+
+  test("delete files") {
+    val dataFilePath = Thread.currentThread().
+      getContextClassLoader.getResource("data/files/small_kv.txt")
+    runCliWithin(2.minute)(
+      s"ADD FILE $dataFilePath;" -> "",
+      s"LIST FILES;" -> "small_kv.txt",
+      s"DELETE FILE $dataFilePath;" -> "",
+      s"LIST FILES;" -> ""
+    )
+  }
 }

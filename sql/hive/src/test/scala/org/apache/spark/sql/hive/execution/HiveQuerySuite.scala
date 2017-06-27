@@ -857,6 +857,11 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     assert(sql("list file").
       filter(_.getString(0).contains("data/files/v1.txt")).count() > 0)
     assert(sql(s"list file $testFile").count() == 1)
+
+    sql(s"DELETE FILE $testFile")
+    assert(sql("list files").filter(_.getString(0).contains("data/files/v1.txt")).count() == 0)
+    assert(sql("list file").filter(_.getString(0).contains("data/files/v1.txt")).count() == 0)
+    assert(sql(s"list file $testFile").count() == 0)
   }
 
   createQueryTest("dynamic_partition",
