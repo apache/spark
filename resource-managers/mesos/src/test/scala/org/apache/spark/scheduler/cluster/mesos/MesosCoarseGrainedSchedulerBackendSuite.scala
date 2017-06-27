@@ -165,18 +165,47 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
 
-  test("mesos does not acquire more than spark.mesos.gpus.max") {
-    val maxGpus = 5
-    setBackend(Map("spark.mesos.gpus.max" -> maxGpus.toString))
+  test("mesos acquires spark.mesos.executor.gpus number of gpus per executor") {
+    setBackend(Map("spark.mesos.gpus.max" -> "5",
+                   "spark.mesos.executor.gpus" -> "2"))
 
     val executorMemory = backend.executorMemory(sc)
-    offerResources(List(Resources(executorMemory, 1, maxGpus + 1)))
+    offerResources(List(Resources(executorMemory, 1, 5)))
 
     val taskInfos = verifyTaskLaunched(driver, "o1")
     assert(taskInfos.length == 1)
 
     val gpus = backend.getResource(taskInfos.head.getResourcesList, "gpus")
-    assert(gpus == maxGpus)
+    assert(gpus == 2)
+  }
+
+
+  test("mesos declines offers that cannot satisfy spark.mesos.executor.gpus") {
+    setBackend(Map("spark.mesos.gpus.max" -> "5",
+                   "spark.mesos.executor.gpus" -> "2"))
+
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(Resources(executorMemory, 1, 1)))
+    verifyDeclinedOffer(driver, createOfferId("o1"))
+  }
+
+
+  test("mesos declines offers that exceed spark.mesos.gpus.max") {
+    setBackend(Map("spark.mesos.gpus.max" -> "5",
+                   "spark.mesos.executor.gpus" -> "2"))
+
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(Resources(executorMemory, 1, 2),
+                        Resources(executorMemory, 1, 2),
+                        Resources(executorMemory, 1, 2)))
+
+    val taskInfos1 = verifyTaskLaunched(driver, "o1")
+    assert(backend.getResource(taskInfos1.head.getResourcesList, "gpus") == 2)
+
+    val taskInfos2 = verifyTaskLaunched(driver, "o2")
+    assert(backend.getResource(taskInfos2.head.getResourcesList, "gpus") == 2)
+
+    verifyDeclinedOffer(driver, createOfferId("o3"))
   }
 
 
