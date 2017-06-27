@@ -53,9 +53,9 @@ class IncrementalExecution(
 
     override def extraPlanningStrategies: Seq[Strategy] =
       StatefulAggregationStrategy ::
-        FlatMapGroupsWithStateStrategy ::
-        StreamingRelationStrategy ::
-        StreamingDeduplicationStrategy :: Nil
+      FlatMapGroupsWithStateStrategy ::
+      StreamingRelationStrategy ::
+      StreamingDeduplicationStrategy :: Nil
   }
 
   /**
