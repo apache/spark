@@ -17,8 +17,6 @@
 
 package org.apache.spark.metrics
 
-import scala.collection.mutable.ArrayBuffer
-
 import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
@@ -42,27 +40,23 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
   test("MetricsSystem with default config") {
     val metricsSystem = MetricsSystem.createMetricsSystem("default", conf, securityMgr)
     metricsSystem.start()
-    val sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
-    val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
 
-    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
-    assert(metricsSystem.invokePrivate(sinks()).length === 0)
+    assert(metricsSystem.getSources.length === StaticSources.allSources.length)
+    assert(metricsSystem.getSinks.length === 0)
     assert(metricsSystem.getServletHandlers.nonEmpty)
   }
 
   test("MetricsSystem with sources add") {
     val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
     metricsSystem.start()
-    val sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
-    val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
 
-    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
-    assert(metricsSystem.invokePrivate(sinks()).length === 1)
+    assert(metricsSystem.getSources.length === StaticSources.allSources.length)
+    assert(metricsSystem.getSinks.length === 1)
     assert(metricsSystem.getServletHandlers.nonEmpty)
 
     val source = new MasterSource(null)
     metricsSystem.registerSource(source)
-    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
+    assert(metricsSystem.getSources.length === StaticSources.allSources.length + 1)
   }
 
   test("MetricsSystem with Driver instance") {

@@ -159,6 +159,11 @@ private[spark] class MetricsSystem private (
     } else { defaultName }
   }
 
+  def getSources: Seq[Source] =
+    sourceToListeners.keySet.to[collection.immutable.Seq]
+
+  def getSinks: Seq[Sink] = sinks.to[collection.immutable.Seq]
+
   def getSourcesByName(sourceName: String): Seq[Source] =
     sourceToListeners.keySet.filter(_.sourceName == sourceName).toSeq
 
