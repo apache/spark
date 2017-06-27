@@ -205,7 +205,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     }.toMap
 
     // Then we handle one-hot encoding and interactions between terms.
-    var hasReferenceCategory = false
+    var keepReferenceCategory = false
     val encodedTerms = resolvedFormula.terms.map {
       case Seq(term) if dataset.schema(term).dataType == StringType =>
         val encodedCol = tmpColumn("onehot")
@@ -214,9 +214,9 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           .setOutputCol(encodedCol)
         // Formula w/o intercept, one of the categories in the first category feature is
         // being used as reference category, we will not drop any category for that feature.
-        if (!hasIntercept && !hasReferenceCategory) {
+        if (!hasIntercept && !keepReferenceCategory) {
           encoder = encoder.setDropLast(false)
-          hasReferenceCategory = true
+          keepReferenceCategory = true
         }
         encoderStages += encoder
         prefixesToRewrite(encodedCol + "_") = term + "_"
