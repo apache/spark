@@ -216,6 +216,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
+  private var _stopHooks: SparkShutdownHookManager = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -561,6 +562,8 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
     _cleaner.foreach(_.start())
+
+    _stopHooks = new SparkShutdownHookManager()
 
     setupAndStartListenerBus()
     postEnvironmentUpdate()
@@ -1883,6 +1886,9 @@ class SparkContext(config: SparkConf) extends Logging {
       throw new SparkException(
         s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
     }
+    if (!stopped.get()) {
+      _stopHooks.runAll()
+    }
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.
     if (!stopped.compareAndSet(false, true)) {
@@ -1950,6 +1956,10 @@ class SparkContext(config: SparkConf) extends Logging {
     logInfo("Successfully stopped SparkContext")
   }
 
+  private[spark] def addStopHook(hook: () => Unit): Unit = {
+    // For simplicity all stop hooks have same priority for now
+    _stopHooks.add(1, hook)
+  }
 
   /**
    * Get Spark's home location from either a value set through the constructor,

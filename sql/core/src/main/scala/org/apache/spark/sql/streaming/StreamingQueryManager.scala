@@ -54,6 +54,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQuery: StreamingQuery = null
 
+  sparkSession.sparkContext.addStopHook(stopAllQueries)
+
   /**
    * Returns a list of active queries associated with this SQLContext
    *

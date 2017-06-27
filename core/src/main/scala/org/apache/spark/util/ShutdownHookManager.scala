@@ -165,7 +165,7 @@ private[spark] object ShutdownHookManager extends Logging {
 
 }
 
-private [util] class SparkShutdownHookManager {
+private [spark] class SparkShutdownHookManager {
 
   private val hooks = new PriorityQueue[SparkShutdownHook]()
   @volatile private var shuttingDown = false
