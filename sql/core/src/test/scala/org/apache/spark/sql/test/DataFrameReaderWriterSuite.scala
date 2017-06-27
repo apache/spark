@@ -710,16 +710,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       assert(e.getMessage.contains("Found duplicate column(s) in the data schema:"))
     }
 
-    def checkReadInferredDataColumnDuplication(
-        df: DataFrame, format: String, colName0: String, colName1: String, tempDir: File): Unit = {
-      val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
-      df.toDF().write.mode("overwrite").text(testDir.getAbsolutePath)
-      val e = intercept[AnalysisException] {
-        spark.read.format(format).option("inferSchema", true).load(testDir.getAbsolutePath)
-      }
-      assert(e.getMessage.contains("Found duplicate column(s) in the data schema:"))
-    }
-
     def checkReadPartitionColumnDuplication(
         format: String, colName0: String, colName1: String, tempDir: File): Unit = {
       val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
@@ -739,7 +729,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "csv", c0, c1, src)
           // If `inferSchema` is true, a CSV format is duplicate-safe (See SPARK-16896)
-          val testDir = Utils.createTempDir(src.getAbsolutePath)
+          var testDir = Utils.createTempDir(src.getAbsolutePath)
           Seq("a,a", "1,1").toDF().coalesce(1).write.mode("overwrite").text(testDir.getAbsolutePath)
           val df = spark.read.format("csv").option("inferSchema", true).option("header", true)
             .load(testDir.getAbsolutePath)
@@ -750,8 +740,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           checkWriteDataColumnDuplication("json", c0, c1, src)
           checkReadUserSpecifiedDataColumnDuplication(
             Seq((1, 1)).toDF("c0", "c1"), "json", c0, c1, src)
-          checkReadInferredDataColumnDuplication(
-            Seq(s"""{"$c0":3, "$c1":5}""").toDF(), "json", c0, c1, src)
+          // Inferred schema cases
+          testDir = Utils.createTempDir(src.getAbsolutePath)
+          Seq(s"""{"$c0":3, "$c1":5}""").toDF().write.mode("overwrite")
+            .text(testDir.getAbsolutePath)
+          val e = intercept[AnalysisException] {
+            spark.read.format("json").option("inferSchema", true).load(testDir.getAbsolutePath)
+          }
+          assert(e.getMessage.contains("Found duplicate column(s) in the data schema:"))
           checkReadPartitionColumnDuplication("json", c0, c1, src)
 
           // Check Parquet format
