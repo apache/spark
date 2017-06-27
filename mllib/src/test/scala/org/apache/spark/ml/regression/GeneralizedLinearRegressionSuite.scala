@@ -798,7 +798,7 @@ class GeneralizedLinearRegressionSuite
     }
   }
 
-  test("generalized linear regression with offset") {
+  test("generalized linear regression with weight and offset") {
     /*
       R code:
       library(statmod)
@@ -878,30 +878,6 @@ class GeneralizedLinearRegressionSuite
 
         idx += 1
       }
-    }
-  }
-
-  test("generalized linear regression: predict with no offset") {
-    val trainData = Seq(
-      OffsetInstance(2.0, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
-      OffsetInstance(8.0, 2.0, 3.0, Vectors.dense(1.0, 7.0)),
-      OffsetInstance(3.0, 3.0, 1.0, Vectors.dense(2.0, 11.0)),
-      OffsetInstance(9.0, 4.0, 4.0, Vectors.dense(3.0, 13.0))
-    ).toDF()
-    val testData = trainData.select("weight", "features")
-
-    val trainer = new GeneralizedLinearRegression()
-      .setFamily("poisson")
-      .setWeightCol("weight")
-      .setOffsetCol("offset")
-      .setLinkPredictionCol("linkPrediction")
-
-    val model = trainer.fit(trainData)
-    model.transform(testData).select("features", "linkPrediction")
-      .collect().foreach {
-      case Row(features: DenseVector, linkPrediction1: Double) =>
-        val linkPrediction2 = BLAS.dot(features, model.coefficients) + model.intercept
-        assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch")
     }
   }
 
@@ -1309,7 +1285,7 @@ class GeneralizedLinearRegressionSuite
       -0.16134949  0.20807694 -0.22544551  0.03258777
       residuals(model, type = "working")
                  1            2            3            4
-       0.135315831 -0.084390309  0.113219135 -0.008279688
+      0.135315831 -0.084390309  0.113219135 -0.008279688
       residuals(model, type = "response")
                1          2          3          4
       -0.1923918  0.2565224 -0.1496381  0.0320653

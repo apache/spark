@@ -39,11 +39,11 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
        w <- c(1, 2, 3, 4)
      */
     instances1 = sc.parallelize(Seq(
-      Instance(1.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
-      Instance(0.0, 2.0, Vectors.dense(1.0, 2.0)),
-      Instance(1.0, 3.0, Vectors.dense(2.0, 1.0)),
-      Instance(0.0, 4.0, Vectors.dense(3.0, 3.0))
-    ), 2).map(new OffsetInstance(_))
+      OffsetInstance(1.0, 1.0, 0.0, Vectors.dense(0.0, 5.0).toSparse),
+      OffsetInstance(0.0, 2.0, 0.0, Vectors.dense(1.0, 2.0)),
+      OffsetInstance(1.0, 3.0, 0.0, Vectors.dense(2.0, 1.0)),
+      OffsetInstance(0.0, 4.0, 0.0, Vectors.dense(3.0, 3.0))
+    ), 2)
     /*
        R code:
 
@@ -52,11 +52,11 @@ class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTes
        w <- c(1, 2, 3, 4)
      */
     instances2 = sc.parallelize(Seq(
-      Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
-      Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
-      Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
-      Instance(9.0, 4.0, Vectors.dense(3.0, 13.0))
-    ), 2).map(new OffsetInstance(_))
+      OffsetInstance(2.0, 1.0, 0.0, Vectors.dense(0.0, 5.0).toSparse),
+      OffsetInstance(8.0, 2.0, 0.0, Vectors.dense(1.0, 7.0)),
+      OffsetInstance(3.0, 3.0, 0.0, Vectors.dense(2.0, 11.0)),
+      OffsetInstance(9.0, 4.0, 0.0, Vectors.dense(3.0, 13.0))
+    ), 2)
   }
 
   test("IRLS against GLM with Binomial errors") {

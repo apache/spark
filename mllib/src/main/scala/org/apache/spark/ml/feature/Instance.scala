@@ -31,6 +31,7 @@ private[ml] case class Instance(label: Double, weight: Double, features: Vector)
 /**
  * Case class that represents an instance of data point with
  * label, weight, offset and features.
+ * This is mainly used in GeneralizedLinearRegression currently.
  *
  * @param label Label for this data point.
  * @param weight The weight of this instance.
