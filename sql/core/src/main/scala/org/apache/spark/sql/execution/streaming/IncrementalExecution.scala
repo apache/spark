@@ -51,11 +51,11 @@ class IncrementalExecution(
       sparkSession.sessionState.planner.strategies
 
     override def extraPlanningStrategies: Seq[Strategy] = {
-      sparkSession.sessionState.planner.extraPlanningStrategies ++
-        (StatefulAggregationStrategy ::
-          FlatMapGroupsWithStateStrategy ::
-          StreamingRelationStrategy ::
-          StreamingDeduplicationStrategy :: Nil)
+      (StatefulAggregationStrategy ::
+        FlatMapGroupsWithStateStrategy ::
+        StreamingRelationStrategy ::
+        StreamingDeduplicationStrategy :: Nil) ++
+      sparkSession.sessionState.planner.extraPlanningStrategies
     }
   }
 
