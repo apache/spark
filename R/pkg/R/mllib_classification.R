@@ -58,8 +58,8 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @param regParam The regularization parameter. Only supports L2 regularization currently.
 #' @param maxIter Maximum iteration number.
 #' @param tol Convergence tolerance of iterations.
-#' @param solver solver parameter, supported options: "owlqn" or "l-bfgs".
-#' @param loss loss function, supported options: "hinge" and "squared_hinge".
+#' @param solver solver parameter, supported options: "owlqn" or "l-bfgs". Default is "l-bfgs"
+#' @param loss loss function, supported options: "hinge" and "squared_hinge". Default is "squared_hinge"
 #' @param standardization Whether to standardize the training features before fitting the model. The coefficients
 #'                        of models will be always returned on the original scale, so it will be transparent for
 #'                        users. Note that with/without standardization, the models should be always converged
@@ -100,8 +100,11 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @note spark.svmLinear since 2.2.0
 setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, maxIter = 100, tol = 1E-6, standardization = TRUE,
-                   threshold = 0.0, weightCol = NULL, aggregationDepth = 2, solver = "l-bfgs",
-                   loss = "squared_hinge") {
+                   threshold = 0.0, weightCol = NULL, aggregationDepth = 2,
+                   solver = c("l-bfgs", "owlqn"), loss = c("squared_hinge", "hinge")) {
+
+            solver <- match.arg(solver)
+            loss <- match.arg(loss)
             formula <- paste(deparse(formula), collapse = "")
 
             if (!is.null(weightCol) && weightCol == "") {
@@ -113,8 +116,7 @@ setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formu
             jobj <- callJStatic("org.apache.spark.ml.r.LinearSVCWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam), as.integer(maxIter),
                                 as.numeric(tol), as.logical(standardization), as.numeric(threshold),
-                                weightCol, as.integer(aggregationDepth), as.character(solver),
-                                as.character(loss))
+                                weightCol, as.integer(aggregationDepth), solver, loss)
             new("LinearSVCModel", jobj = jobj)
           })
 

@@ -221,12 +221,12 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("linearSVC OWLQN hinge comparison with R e1071 and scikit-learn") {
-    val trainer1 = new LinearSVC().setSolver(LinearSVC.OWLQN)
-      .setRegParam(0.00002) // set regParam = 2.0 / datasize / c
+    val trainer = new LinearSVC().setSolver(LinearSVC.OWLQN)
+      .setRegParam(2.0 / 10 / 10000) // set regParam = 2.0 / datasize / c
       .setMaxIter(200)
       .setTol(1e-4)
       .setLoss("hinge")
-    val model1 = trainer1.fit(binaryDataset)
+    val model = trainer.fit(binaryDataset)
 
     /*
       Use the following R code to load the data and train the model using glmnet package.
@@ -249,8 +249,8 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
      */
     val coefficientsR = Vectors.dense(7.310338, 14.89741, 22.21005, 29.83508)
     val interceptR = 7.440177
-    assert(model1.intercept ~== interceptR relTol 1E-2)
-    assert(model1.coefficients ~== coefficientsR relTol 1E-2)
+    assert(model.intercept ~== interceptR relTol 1E-2)
+    assert(model.coefficients ~== coefficientsR relTol 1E-2)
 
     /*
       Use the following python code to load the data and train the model using scikit-learn package.
@@ -272,36 +272,16 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
     val coefficientsSK = Vectors.dense(7.24690165, 14.77029087, 21.99924004, 29.5575729)
     val interceptSK = 7.36947518
-    assert(model1.intercept ~== interceptSK relTol 1E-3)
-    assert(model1.coefficients ~== coefficientsSK relTol 4E-3)
+    assert(model.intercept ~== interceptSK relTol 1E-3)
+    assert(model.coefficients ~== coefficientsSK relTol 4E-3)
   }
 
-  test("linearSVC L-BFGS hinge comparison with R e1071 and scikit-learn") {
-    val trainer1 = new LinearSVC().setSolver(LinearSVC.LBFGS)
-      .setRegParam(0.00003)
-      .setMaxIter(200)
-      .setTol(1e-4)
-      .setLoss("hinge")
-    val model1 = trainer1.fit(binaryDataset)
-
-    // refer to last unit test for R and python code
-    val coefficientsR = Vectors.dense(7.310338, 14.89741, 22.21005, 29.83508)
-    val interceptR = 7.440177
-    assert(model1.intercept ~== interceptR relTol 2E-2)
-    assert(model1.coefficients ~== coefficientsR relTol 1E-2)
-
-    val coefficientsSK = Vectors.dense(7.24690165, 14.77029087, 21.99924004, 29.5575729)
-    val interceptSK = 7.36947518
-    assert(model1.intercept ~== interceptSK relTol 1E-2)
-    assert(model1.coefficients ~== coefficientsSK relTol 1E-2)
-  }
-
-  test("linearSVC OWLQN squared_hinge loss comparison with scikit-learn (liblinear)") {
+  test("linearSVC L-BFGS squared_hinge loss comparison with scikit-learn (liblinear)") {
     val linearSVC = new LinearSVC()
       .setLoss("squared_hinge")
-      .setSolver("owlqn")
-      .setRegParam(2.0 / 10 / 1000) // set regParam = 2.0 / datasize / c
-      .setMaxIter(80)
+      .setSolver("L-BFGS")
+      .setRegParam(3.0 / 10 / 1000)
+      .setMaxIter(100)
       .setTol(1e-4)
     val model = linearSVC.fit(binaryDataset.limit(1000))
 
@@ -323,24 +303,53 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
     val coefficientsSK = Vectors.dense(2.85136074, 6.25310456, 9.00668415, 12.17750981)
     val interceptSK = 2.93419973
-    assert(model.intercept ~== interceptSK relTol 2E-2)
-    assert(model.coefficients ~== coefficientsSK relTol 2E-2)
+    assert(model.intercept ~== interceptSK relTol 3E-2)
+    assert(model.coefficients ~== coefficientsSK relTol 3E-2)
   }
 
-  test("linearSVC L-BFGS squared_hinge loss comparison with scikit-learn (liblinear)") {
+  test("linearSVC L-BFGS and OWLQN get similar model for squared_hinge loss") {
+    val size = nPoints
     val linearSVC = new LinearSVC()
       .setLoss("squared_hinge")
       .setSolver("L-BFGS")
-      .setRegParam(3.0 / 10 / 1000) // set regParam = 2.0 / datasize / c
-      .setMaxIter(30)
+      .setRegParam(2.0 / 10 / size) // set regParam = 2.0 / datasize / c
+      .setMaxIter(200)
       .setTol(1e-4)
-    val model = linearSVC.fit(binaryDataset.limit(1000))
+    val model = linearSVC.fit(smallBinaryDataset)
 
-    // refer to last unit test for python code
-    val coefficientsSK = Vectors.dense(2.85136074, 6.25310456, 9.00668415, 12.17750981)
-    val interceptSK = 2.93419973
-    assert(model.intercept ~== interceptSK relTol 3E-2)
-    assert(model.coefficients ~== coefficientsSK relTol 3E-2)
+    val linearSVC2 = new LinearSVC()
+      .setLoss("squared_hinge")
+      .setSolver("OWLQN")
+      .setRegParam(2.0 / 10 / size) // set regParam = 2.0 / datasize / c
+      .setMaxIter(200)
+      .setTol(1e-4)
+    val model2 = linearSVC2.fit(smallBinaryDataset)
+
+    assert(model.coefficients ~== model2.coefficients relTol 1E-3)
+    assert(model.intercept ~== model2.intercept relTol 1E-3)
+  }
+
+  test("linearSVC L-BFGS and OWLQN get similar model for hinge loss") {
+    val linearSVC = new LinearSVC()
+      .setLoss("hinge")
+      .setSolver("L-BFGS")
+      .setRegParam(0.01)
+      .setMaxIter(200)
+      .setTol(1e-4)
+        .setFitIntercept(false)
+    val model = linearSVC.fit(smallBinaryDataset)
+
+    val linearSVC2 = new LinearSVC()
+      .setLoss("hinge")
+      .setSolver("OWLQN")
+      .setRegParam(0.01)
+      .setMaxIter(200)
+      .setTol(1e-4)
+      .setFitIntercept(false)
+    val model2 = linearSVC2.fit(smallBinaryDataset)
+    assert(model.coefficients ~== model2.coefficients relTol 2E-2)
+    assert(model.intercept === 0)
+    assert(model2.intercept === 0)
   }
 
   test("read/write: SVM") {
