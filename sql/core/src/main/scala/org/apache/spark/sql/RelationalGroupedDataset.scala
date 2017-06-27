@@ -395,6 +395,16 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
+   * Returns all grouping column names as an array.
+   *
+   * @since 2.1.0
+   */
+  def columns: Array[String] = {
+    val groupingNamedExpressions = groupingExprs.map(alias)
+    groupingNamedExpressions.map(_.name).toArray
+  }
+
+  /**
    * Applies the given serialized R function `func` to each group of data. For each unique group,
    * the function will be passed the group key and an iterator that contains all of the elements in
    * the group. The function can return an iterator containing elements of an arbitrary type which
