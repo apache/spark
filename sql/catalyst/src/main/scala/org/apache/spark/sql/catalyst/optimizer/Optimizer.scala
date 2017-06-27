@@ -40,7 +40,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
   protected val fixedPoint = FixedPoint(conf.optimizerMaxIterations)
 
   def batches: Seq[Batch] = {
-    // DISTINCT is not meaningful for a Max or a Min.
     Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
@@ -154,12 +153,13 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
 }
 
 /**
- * Remove useless DISTINCT for MAX and MIN
+ * Remove useless DISTINCT for MAX and MIN.
+ * This rule should be applied before ReplaceDeduplicateWithAggregate.
  */
 object EliminateDistinct extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
-    case AggregateExpression(af @ Max(_), _, true, _) => AggregateExpression(af, Complete, false)
-    case AggregateExpression(af @ Min(_), _, true, _) => AggregateExpression(af, Complete, false)
+    case AggregateExpression(max: Max, _, true, _) => AggregateExpression(max, Complete, false)
+    case AggregateExpression(min: Min, _, true, _) => AggregateExpression(min, Complete, false)
   }
 }
 
