@@ -206,23 +206,43 @@ private[rest] abstract class RestServlet extends HttpServlet with Logging {
  * A servlet for handling kill requests passed to the [[RestSubmissionServer]].
  */
 private[rest] abstract class KillRequestServlet extends RestServlet {
+  private val BATCH_DELETE = "batch"
+  private val SUBMISSION_IDS = "submissionIds"
 
   /**
-   * If a submission ID is specified in the URL, have the Master kill the corresponding
-   * driver and return an appropriate response to the client. Otherwise, return error.
+   * 1.If a submission ID is specified in the URL, have the Master kill the corresponding
+   *   driver and return an appropriate response to the client,
+   *   For e.g., URL:/v1/submissions/kill/${a submission ID}.
+   * 2.if batch is specified in the URL, have the Master kill the corresponding
+   *   drivers and return an appropriate response to the client.
+   *   For e.g., URL:/v1/submissions/kill/batch
+   * 3.Otherwise, return error.
    */
   protected override def doPost(
       request: HttpServletRequest,
       response: HttpServletResponse): Unit = {
     val submissionId = parseSubmissionId(request.getPathInfo)
-    val responseMessage = submissionId.map(handleKill).getOrElse {
+    val submissionIds : Option[String] = {
+      if (BATCH_DELETE == submissionId.getOrElse("")) {
+        val requestMessageJson = Source.fromInputStream(request.getInputStream).mkString
+        val value: Option[String] = parse(requestMessageJson) match {
+          case JObject(fields) =>
+            fields.collectFirst { case (SUBMISSION_IDS, v) => v }.collect { case JString(s) => s }
+          case _ => None
+        }
+        value
+      } else {
+        submissionId
+      }
+    }
+    val responseMessage = submissionIds.map(handleKill).getOrElse {
       response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
       handleError("Submission ID is missing in kill request.")
     }
     sendResponse(responseMessage, response)
   }
 
-  protected def handleKill(submissionId: String): KillSubmissionResponse
+  protected def handleKill(submissionIds: String): KillSubmissionResponse
 }
 
 /**
