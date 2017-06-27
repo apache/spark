@@ -50,11 +50,9 @@ trait LDAOptimizer {
 
   /**
    * Initializer for the optimizer. LDA passes the common parameters to the optimizer and
-   * the internal structure can be initialized properly. An initialModel can be provided
-   * (supported only by OnlineLDAOptimizer implementation
+   * the internal structure can be initialized properly
    */
-  private[clustering] def initialize(
-      initialModel: Option[LDAModel], docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer
+  private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer
 
   private[clustering] def next(): LDAOptimizer
 
@@ -120,14 +118,8 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Compute bipartite term/doc graph.
    */
   override private[clustering] def initialize(
-      initialModel: Option[LDAModel],
       docs: RDD[(Long, Vector)],
       lda: LDA): EMLDAOptimizer = {
-    if (initialModel.isDefined) {
-      throw new IllegalArgumentException(
-        "initialModel parameter is not supported by EMLDAOptimizer")
-    }
-
     // EMLDAOptimizer currently only supports symmetric document-topic priors
     val docConcentration = lda.getDocConcentration
 
@@ -418,7 +410,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   override private[clustering] def initialize(
-      initialModel: Option[LDAModel],
       docs: RDD[(Long, Vector)],
       lda: LDA): OnlineLDAOptimizer = {
     this.k = lda.getK
@@ -443,18 +434,26 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
     this.randomGenerator = new Random(lda.getSeed)
 
-    initialModel match {
+    lda.getInitialModel match {
       case Some(model: LocalLDAModel) =>
-        require(model.k == this.k, "mismatched number of topics")
-        require(model.vocabSize == docs.first()._2.size, "mismatched vocabulary size")
-        require(model.docConcentration == this.alpha, "mismatched doc concentration")
-        require(model.topicConcentration == this.eta, "mismatched topic concentration")
+        require(model.k == this.k,
+          "Mismatched number of topics with provided initial model")
+        require(model.vocabSize == docs.first()._2.size,
+          "Mismatched vocabulary size with provided initial model")
+        require(model.docConcentration.equals(this.alpha),
+          "Mismatched doc concentration with provided initial model")
+        require(model.topicConcentration == this.eta,
+          "Mismatched topic concentration with provided initial model")
+        require(model.gammaShape == this.gammaShape,
+          "Mismatched gamma shape with provided initial model")
+        // Initialize the variational distribution from the initial model
         this.lambda = model.topicsMatrix.transpose.asBreeze.toDenseMatrix
       case None =>
-        // Initialize the variational distribution q(beta|lambda)
+        // Initialize the variational distribution q(beta|lambda) randomly
         this.lambda = getGammaMatrix(k, vocabSize)
-      case other =>
-        throw new IllegalArgumentException(s"mismatched model types, got $other")
+      case Some(other) =>
+        throw new IllegalArgumentException(
+          s"Local (online) LDA model expected for initial model, got $other")
     }
 
     this.docs = docs

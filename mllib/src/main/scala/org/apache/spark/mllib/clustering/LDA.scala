@@ -52,7 +52,8 @@ class LDA private (
     private var topicConcentration: Double,
     private var seed: Long,
     private var checkpointInterval: Int,
-    private var ldaOptimizer: LDAOptimizer) extends Logging {
+    private var ldaOptimizer: LDAOptimizer,
+    private var initialModel: Option[LDAModel]) extends Logging {
 
   /**
    * Constructs a LDA instance with default parameters.
@@ -60,7 +61,7 @@ class LDA private (
   @Since("1.3.0")
   def this() = this(k = 10, maxIterations = 20, docConcentration = Vectors.dense(-1),
     topicConcentration = -1, seed = Utils.random.nextLong(), checkpointInterval = 10,
-    ldaOptimizer = new EMLDAOptimizer)
+    ldaOptimizer = new EMLDAOptimizer, initialModel = None)
 
   /**
    * Number of topics to infer, i.e., the number of soft cluster centers.
@@ -317,8 +318,12 @@ class LDA private (
     this
   }
 
-  // Initial LDAModel can be provided rather than using random initialization
-  private var initialModel: Option[LDAModel] = None
+
+  /**
+   * Returns the initial model that has been provided, if any
+   */
+  @Since("2.3.0")
+  def getInitialModel: Option[LDAModel] = this.initialModel
 
   /**
    * Set the initial starting point, bypassing the random initialization.
@@ -326,9 +331,8 @@ class LDA private (
    * This is supported only for online optimizer, and the condition model.k == this.k must be met,
    * failure results in an IllegalArgumentException.
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setInitialModel(model: LDAModel): this.type = {
-    require(model.k == k, "mismatched number of topics")
     this.ldaOptimizer match {
       case _: OnlineLDAOptimizer =>
         initialModel = Some(model)
@@ -349,7 +353,7 @@ class LDA private (
    */
   @Since("1.3.0")
   def run(documents: RDD[(Long, Vector)]): LDAModel = {
-    val state = ldaOptimizer.initialize(initialModel, documents, this)
+    val state = ldaOptimizer.initialize(documents, this)
     var iter = 0
     val iterationTimes = Array.fill[Double](maxIterations)(0)
     while (iter < maxIterations) {
