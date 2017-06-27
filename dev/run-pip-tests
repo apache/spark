@@ -83,6 +83,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     if [ -n "$USE_CONDA" ]; then
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
       source activate "$VIRTUALENV_PATH"
+      conda config --set ssl_verify false
       conda install -y -c conda-forge pyarrow=0.4.0
       TEST_PYARROW=1
     else
@@ -91,7 +92,7 @@ for python in "${PYTHON_EXECS[@]}"; do
       source "$VIRTUALENV_PATH"/bin/activate
     fi
     # Upgrade pip & friends if using virutal env
-    if [ ! -n "USE_CONDA" ]; then
+    if [ ! -n "$USE_CONDA" ]; then
       pip install --upgrade pip pypandoc wheel numpy
     fi
 
