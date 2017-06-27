@@ -180,6 +180,25 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   def getOptimizer: String = $(optimizer)
 
+
+  /**
+   * For Online optimizer only (currently): [[optimizer]] = "online".
+
+   * An initial model used as a starting point for the learning, instead of a random
+   * initialization. Can be used for incremental learning.
+   *
+   * @group param
+   */
+  @Since("2.3.0")
+  final val initialModel = new Param[LDAModel](this, "initialModel", "Set an initial starting " +
+      "point, instead of a random initilization, based on a previously built LDAModel. Only" +
+      "supported by online model", (value: LDAModel) => value.isInstanceOf[LocalLDAModel])
+
+  /** @group getParam */
+  @Since("2.3.0")
+  def getInitialModel : LDAModel = $(initialModel)
+
+
   /**
    * Output column with estimates of the topic mixture distribution for each document (often called
    * "theta" in the literature).  Returns a vector of zeros for an empty document.
@@ -344,6 +363,10 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
           require(getTopicConcentration >= 0, s"For EM optimizer, topicConcentration" +
             s" must be >= 1.  Found value: $getTopicConcentration")
       }
+    }
+    if (isSet(initialModel)) {
+      require(getOptimizer.toLowerCase(Locale.ROOT) == "online", "initialModel is currently " +
+          "supported only by Online LDA Optimizer")
     }
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
@@ -864,6 +887,10 @@ class LDA @Since("1.6.0") (
   def setOptimizer(value: String): this.type = set(optimizer, value)
 
   /** @group setParam */
+  @Since("2.3.0")
+  def setInitialModel(value: LDAModel): this.type = set(initialModel, value)
+
+  /** @group setParam */
   @Since("1.6.0")
   def setTopicDistributionCol(value: String): this.type = set(topicDistributionCol, value)
 
@@ -907,6 +934,11 @@ class LDA @Since("1.6.0") (
       .setSeed($(seed))
       .setCheckpointInterval($(checkpointInterval))
       .setOptimizer(getOldOptimizer)
+
+    if (isSet(initialModel)) {
+      oldLDA.setInitialModel($(initialModel).oldLocalModel)
+    }
+
     // TODO: persist here, or in old LDA?
     val oldData = LDA.getOldDataset(dataset, $(featuresCol))
     val oldModel = oldLDA.run(oldData)

@@ -18,14 +18,15 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
+import org.scalatest.mock.MockitoSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql._
-
 
 object LDASuite {
   def generateLDAData(
@@ -83,6 +84,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     assert(lda.getK === 10)
     assert(!lda.isSet(lda.docConcentration))
     assert(!lda.isSet(lda.topicConcentration))
+    assert(!lda.isSet(lda.initialModel))
     assert(lda.getOptimizer === "online")
     assert(lda.getLearningDecay === 0.51)
     assert(lda.getLearningOffset === 1024)
@@ -123,6 +125,10 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     assert(lda.getSubsamplingRate === 0.06)
     lda.setOptimizeDocConcentration(false)
     assert(!lda.getOptimizeDocConcentration)
+
+    val init = new LocalLDAModel("", 10, null, spark)
+    lda.setInitialModel(init)
+    assert(lda.getInitialModel === init)
   }
 
   test("parameters validation") {
@@ -169,6 +175,14 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     }
     intercept[IllegalArgumentException] {
       new LDA().setSubsamplingRate(1.1)
+    }
+    intercept[IllegalArgumentException] {
+      val init = new LocalLDAModel("", 10, null, spark)
+      new LDA().setOptimizer("em").setInitialModel(init).transformSchema(dummyDF.schema)
+    }
+    intercept[IllegalArgumentException] {
+      val init = new DistributedLDAModel("", 10, mock[OldDistributedLDAModel], spark, None)
+      new LDA().setInitialModel(init)
     }
   }
 
