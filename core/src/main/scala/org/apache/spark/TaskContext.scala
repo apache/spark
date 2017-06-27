@@ -48,8 +48,7 @@ object TaskContext {
     }
   }
 
-  private[this] val taskContext: InheritableThreadLocal[TaskContext] =
-    new InheritableThreadLocal[TaskContext]
+  private[this] val taskContext: ThreadLocal[TaskContext] = new ThreadLocal[TaskContext]
 
   // Note: protected[spark] instead of private[spark] to prevent the following two from
   // showing up in JavaDoc.
