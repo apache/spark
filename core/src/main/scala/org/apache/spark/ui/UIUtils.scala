@@ -296,7 +296,9 @@ private[spark] object UIUtils extends Logging {
       id: Option[String] = None,
       headerClasses: Seq[String] = Seq.empty,
       stripeRowsWithCss: Boolean = true,
-      sortable: Boolean = true): Seq[Node] = {
+      sortable: Boolean = true,
+      // If the tool tip is defined, Some(toolTipText, toolTipPosition), otherwise None.
+      headerToolTips: Seq[Option[(String, String)]] = Seq.empty): Seq[Node] = {
 
     val listingTableClass = {
       val _tableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
@@ -317,6 +319,14 @@ private[spark] object UIUtils extends Logging {
       }
     }
 
+    def getToolTip(index: Int): Option[(String, String)] = {
+      if (index < headerToolTips.size) {
+        headerToolTips(index)
+      } else {
+        None
+      }
+    }
+
     val newlinesInHeader = headers.exists(_.contains("\n"))
     def getHeaderContent(header: String): Seq[Node] = {
       if (newlinesInHeader) {
@@ -330,7 +340,16 @@ private[spark] object UIUtils extends Logging {
 
     val headerRow: Seq[Node] = {
       headers.view.zipWithIndex.map { x =>
-        <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        val toolTipOption = getToolTip(x._2)
+        if (toolTipOption.isEmpty) {
+          <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        } else {
+          val toolTip = toolTipOption.get
+          // scalastyle:off line.size.limit
+          <th width={colWidthAttr} class={getClass(x._2)} data-toggle="tooltip" title={toolTip._1} data-placement={toolTip._2}>{getHeaderContent(x._1)}</th>
+          // scalastyle:on line.size.limit
+        }
+
       }
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>

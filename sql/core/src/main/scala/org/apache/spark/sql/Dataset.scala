@@ -61,8 +61,26 @@ private[sql] object Dataset {
     new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
   }
 
-  def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
-    val qe = sparkSession.sessionState.executePlan(logicalPlan)
+  def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan, sqlText: Option[String] = None)
+  : DataFrame = {
+
+    // Record the original sql text in the execute plan for checking in the web UI.
+    // Truncate the text to avoid downing browsers or web UI servers by running out of memory.
+    val text = sqlText.get;
+    val maxLength = 1000
+    val suffix = " ... (truncated)"
+    val truncateLength = maxLength - suffix.length
+    val truncatedSqlText: Option[String] = sqlText match {
+      case None => None
+      case Some(text) => Some(
+        if (text.length <= maxLength) {
+          text
+        } else {
+          text.substring(0, truncateLength) + suffix
+        })
+    }
+
+    val qe = sparkSession.sessionState.executePlan(logicalPlan, truncatedSqlText)
     qe.assertAnalyzed()
     new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema))
   }

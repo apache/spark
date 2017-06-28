@@ -99,4 +99,9 @@ private[spark] object ToolTips {
        dynamic allocation is enabled. The number of granted executors may exceed the limit
        ephemerally when executors are being killed.
     """
+
+  val SQL_TEXT =
+    """Shows 140 characters by default. Click "+more" to see more. Long texts are truncated to 1000
+      |characters. Left blank when the query was not issued by SQL."""
+      .stripMargin.replaceAll("\n", " ")
 }

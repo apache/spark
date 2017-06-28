@@ -40,6 +40,7 @@ case class SparkListenerSQLExecutionStart(
     details: String,
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
+    sqlText: Option[String],
     time: Long)
   extends SparkListenerEvent
 
@@ -268,7 +269,7 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerSQLExecutionStart(executionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time) =>
+      physicalPlanDescription, sparkPlanInfo, sqlText, time) =>
       val physicalPlanGraph = SparkPlanGraph(sparkPlanInfo)
       val sqlPlanMetrics = physicalPlanGraph.allNodes.flatMap { node =>
         node.metrics.map(metric => metric.accumulatorId -> metric)
@@ -280,6 +281,7 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
         physicalPlanDescription,
         physicalPlanGraph,
         sqlPlanMetrics.toMap,
+        sqlText,
         time)
       synchronized {
         activeExecutions(executionId) = executionUIData
@@ -428,6 +430,7 @@ private[ui] class SQLExecutionUIData(
     val physicalPlanDescription: String,
     val physicalPlanGraph: SparkPlanGraph,
     val accumulatorMetrics: Map[Long, SQLPlanMetric],
+    val sqlText: Option[String],
     val submissionTime: Long) {
 
   var completionTime: Option[Long] = None

@@ -78,7 +78,8 @@ object SQLExecution {
 
         sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
           executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
-          SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
+          SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), queryExecution.sqlText,
+          System.currentTimeMillis()))
         try {
           body
         } finally {

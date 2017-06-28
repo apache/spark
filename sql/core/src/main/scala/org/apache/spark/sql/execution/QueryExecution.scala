@@ -39,7 +39,11 @@ import org.apache.spark.util.Utils
  * While this is not a public class, we should avoid changing the function names for the sake of
  * changing them, because a lot of developers use the feature for debugging.
  */
-class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
+class QueryExecution(
+    val sparkSession: SparkSession,
+    val logical: LogicalPlan,
+    // Record the original sql text in the top logical plan for checking in the web UI.
+    val sqlText: Option[String] = None) {
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
