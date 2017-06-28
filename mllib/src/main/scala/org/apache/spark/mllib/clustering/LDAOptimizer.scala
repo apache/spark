@@ -416,39 +416,25 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     this.corpusSize = docs.count()
     this.vocabSize = docs.first()._2.size
 
-    this.alpha = if (lda.getAsymmetricDocConcentration.size == 1) {
-      if (lda.getAsymmetricDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
-      else {
-        require(lda.getAsymmetricDocConcentration(0) >= 0,
-          s"all entries in alpha must be >=0, got: $alpha")
-        Vectors.dense(Array.fill(k)(lda.getAsymmetricDocConcentration(0)))
-      }
-    } else {
-      require(lda.getAsymmetricDocConcentration.size == k,
-        s"alpha must have length k, got: $alpha")
-      lda.getAsymmetricDocConcentration.foreachActive { case (_, x) =>
-        require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
-      }
-      lda.getAsymmetricDocConcentration
-    }
     this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
     this.randomGenerator = new Random(lda.getSeed)
 
     lda.getInitialModel match {
-      case Some(model: LocalLDAModel) =>
-        require(model.k == this.k,
+      case Some(initModel: LocalLDAModel) =>
+        require(initModel.k == this.k,
           "Mismatched number of topics with provided initial model")
-        require(model.vocabSize == docs.first()._2.size,
+        require(initModel.vocabSize == docs.first()._2.size,
           "Mismatched vocabulary size with provided initial model")
-        require(model.docConcentration.equals(this.alpha),
-          "Mismatched doc concentration with provided initial model")
-        require(model.topicConcentration == this.eta,
+        require(initModel.topicConcentration == this.eta,
           "Mismatched topic concentration with provided initial model")
-        require(model.gammaShape == this.gammaShape,
+        require(initModel.gammaShape == this.gammaShape,
           "Mismatched gamma shape with provided initial model")
+        // get alpha from previously trained model
+        this.alpha = initModel.docConcentration
         // Initialize the variational distribution from the initial model
-        this.lambda = model.topicsMatrix.transpose.asBreeze.toDenseMatrix
+        this.lambda = initModel.topicsMatrix.transpose.asBreeze.toDenseMatrix
       case None =>
+        this.alpha = initAlpha(lda.getAsymmetricDocConcentration)
         // Initialize the variational distribution q(beta|lambda) randomly
         this.lambda = getGammaMatrix(k, vocabSize)
       case Some(other) =>
@@ -457,9 +443,26 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     }
 
     this.docs = docs
-
     this.iteration = 0
     this
+  }
+
+  private def initAlpha(asymmetricDocConcentration: Vector) = {
+    if (asymmetricDocConcentration.size == 1) {
+      if (asymmetricDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
+      else {
+        require(asymmetricDocConcentration(0) >= 0,
+          s"all entries in alpha must be >=0, got: $alpha")
+        Vectors.dense(Array.fill(k)(asymmetricDocConcentration(0)))
+      }
+    } else {
+      require(asymmetricDocConcentration.size == k,
+        s"alpha must have length k, got: $alpha")
+      asymmetricDocConcentration.foreachActive { case (_, x) =>
+        require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
+      }
+      asymmetricDocConcentration
+    }
   }
 
   override private[clustering] def next(): OnlineLDAOptimizer = {

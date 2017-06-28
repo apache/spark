@@ -241,6 +241,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val corpus = sc.parallelize(tinyCorpus, 2)
 
+    // check incompatible K
     intercept[IllegalArgumentException]{
       val lda = new LDA()
           .setOptimizer("online")
@@ -251,16 +252,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       val op = new OnlineLDAOptimizer().initialize(corpus, lda)
     }
 
-    intercept[IllegalArgumentException] {
-      val lda = new LDA()
-          .setOptimizer("online")
-          .setK(tinyK)
-          .setDocConcentration(Vectors.dense(Array.fill(tinyK)(0.02)))
-          .setTopicConcentration(1D)
-          .setInitialModel(existingModel)
-      val op = new OnlineLDAOptimizer().initialize(corpus, lda)
-    }
-
+    // check incompatible topic concentration
     intercept[IllegalArgumentException] {
       val lda = new LDA()
           .setOptimizer("online")
@@ -271,6 +263,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       val op = new OnlineLDAOptimizer().initialize(corpus, lda)
     }
 
+    // check incompatible model type
     intercept[IllegalArgumentException] {
       val lda = new LDA()
           .setOptimizer("online")
@@ -282,6 +275,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       val op = new OnlineLDAOptimizer().initialize(corpus, lda)
     }
 
+    // check incompatible gamma shape
     intercept[IllegalArgumentException] {
       val lda = new LDA()
           .setOptimizer("online")

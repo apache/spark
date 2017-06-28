@@ -231,9 +231,56 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     }
   }
 
-  // TODO same test("fit & transform with Online LDA") with initial model
+  test("fit & transform with Online LDA with initial model") {
+    val dsInit = dataset
+    val modelInit = new LDA().setK(k).setSeed(1).setOptimizer("online").setMaxIter(2).fit(dsInit)
 
+    val lda = new LDA().setK(k).setSeed(1).setOptimizer("online").setMaxIter(2)
+    lda.setInitialModel(modelInit)
+    val model = lda.fit(dataset)
 
+    MLTestingUtils.checkCopyAndUids(lda, model)
+
+    assert(model.isInstanceOf[LocalLDAModel])
+    assert(model.vocabSize === vocabSize)
+    assert(model.estimatedDocConcentration.size === k)
+    assert(model.topicsMatrix.numRows === vocabSize)
+    assert(model.topicsMatrix.numCols === k)
+    assert(!model.isDistributed)
+    assert(model.getInitialModel === modelInit)
+
+    // transform()
+    val transformed = model.transform(dataset)
+    val expectedColumns = Array("features", lda.getTopicDistributionCol)
+    expectedColumns.foreach { column =>
+      assert(transformed.columns.contains(column))
+    }
+    transformed.select(lda.getTopicDistributionCol).collect().foreach { r =>
+      val topicDistribution = r.getAs[Vector](0)
+      assert(topicDistribution.size === k)
+      assert(topicDistribution.toArray.forall(w => w >= 0.0 && w <= 1.0))
+    }
+
+    // logLikelihood, logPerplexity
+    val ll = model.logLikelihood(dataset)
+    assert(ll <= 0.0 && ll != Double.NegativeInfinity)
+    val lp = model.logPerplexity(dataset)
+    assert(lp >= 0.0 && lp != Double.PositiveInfinity)
+
+    // describeTopics
+    val topics = model.describeTopics(3)
+    assert(topics.count() === k)
+    assert(topics.select("topic").rdd.map(_.getInt(0)).collect().toSet === Range(0, k).toSet)
+    topics.select("termIndices").collect().foreach { case r: Row =>
+      val termIndices = r.getAs[Seq[Int]](0)
+      assert(termIndices.length === 3 && termIndices.toSet.size === 3)
+    }
+    topics.select("termWeights").collect().foreach { case r: Row =>
+      val termWeights = r.getAs[Seq[Double]](0)
+      assert(termWeights.length === 3 && termWeights.forall(w => w >= 0.0 && w <= 1.0))
+    }
+  }
+  
   test("fit & transform with EM LDA") {
     val lda = new LDA().setK(k).setSeed(1).setOptimizer("em").setMaxIter(2)
     val model_ = lda.fit(dataset)
