@@ -847,24 +847,6 @@ object SQLConf {
       .intConf
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
 
-  val ARROW_EXECUTION_ENABLE =
-    buildConf("spark.sql.execution.arrow.enable")
-      .internal()
-      .doc("Make use of Apache Arrow for columnar data transfers. Currently available " +
-        "for use with pyspark.sql.DataFrame.toPandas with the following data types: " +
-        "StringType, BinaryType, BooleanType, DoubleType, FloatType, ByteType, IntegerType, " +
-        "LongType, ShortType")
-      .booleanConf
-      .createWithDefault(false)
-
-  val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
-    buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
-      .internal()
-      .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
-        "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
-      .intConf
-      .createWithDefault(10000)
-
   val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
     .doc("When true, a SELECT statement can take regex-based column specification.")
     .booleanConf
@@ -1127,10 +1109,6 @@ class SQLConf extends Serializable with Logging {
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
-
-  def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
-
-  def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
   def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
 
