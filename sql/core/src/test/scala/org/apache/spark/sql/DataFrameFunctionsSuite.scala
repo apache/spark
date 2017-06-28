@@ -209,6 +209,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(2743272264L, 2180413220L))
   }
 
+  test("misc data_type function") {
+    val df = Seq(("a", false)).toDF("a", "b")
+
+    checkAnswer(
+      df.select(data_type($"a"), data_type($"b")),
+      Row("string", "boolean"))
+
+    checkAnswer(
+      df.selectExpr("data_type(a)", "data_type(b)"),
+      Row("string", "boolean"))
+  }
+
   test("string function find_in_set") {
     val df = Seq(("abc,b,ab,c,def", "abc,b,ab,c,def")).toDF("a", "b")
 
