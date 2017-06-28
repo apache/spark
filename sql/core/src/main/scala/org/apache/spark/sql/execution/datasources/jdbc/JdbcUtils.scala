@@ -294,11 +294,12 @@ object JdbcUtils extends Logging {
             rsmd.getClass.getName == "org.apache.hive.jdbc.HiveResultSetMetaData" => true
         }
       }
-      val nullable =
+      val nullable = {
         if (alwaysNullable)
           alwaysNullable
         else
           rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+      }
       val metadata = new MetadataBuilder()
         .putString("name", columnName)
         .putLong("scale", fieldScale)
