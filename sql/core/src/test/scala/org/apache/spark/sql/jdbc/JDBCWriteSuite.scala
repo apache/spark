@@ -20,10 +20,11 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Date, DriverManager, Timestamp}
 import java.util.Properties
 
-import org.apache.spark.SparkException
-
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
+
 import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
