@@ -4,7 +4,7 @@ AS testData(key, value1, value2);
 
 CREATE OR REPLACE TEMPORARY VIEW testData2 AS SELECT * FROM VALUES
 (1, 1, 1, 2), (1, 2, 1, 2), (2, 1, 2, 3), (2, 2, 2, 3), (3, 1, 3, 4), (3, 2, 3, 4)
-AS testData2(a, b, c, d);
+AS testData2(A, B, c, d);
 
 -- AnalysisException
 SELECT `(a)?+.+` FROM testData2 WHERE a = 1;
@@ -19,9 +19,9 @@ SELECT `(a)?+.+` FROM testData2 WHERE a = 1;
 SELECT `(A)?+.+` FROM testData2 WHERE a = 1;
 SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1;
 SELECT t.`(A)?+.+` FROM testData2 t WHERE a = 1;
-SELECT `(a|b)` FROM testData2 WHERE a = 2;
+SELECT `(a|B)` FROM testData2 WHERE a = 2;
 SELECT `(A|b)` FROM testData2 WHERE a = 2;
-SELECT `(a|b)?+.+` FROM testData2 WHERE a = 2;
+SELECT `(a|B)?+.+` FROM testData2 WHERE a = 2;
 SELECT `(A|b)?+.+` FROM testData2 WHERE a = 2;
 SELECT `(e|f)` FROM testData2;
 SELECT t.`(e|f)` FROM testData2 t;

@@ -322,10 +322,10 @@ case class UnresolvedRegex(regexPattern: String, table: Option[String])
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
     table match {
       // If there is no table specified, use all input attributes that match expr
-      case None => input.output.filter(_.name.matches(regexPattern))
+      case None => input.output.filter(_.name.matches(s"(?i)$regexPattern"))
       // If there is a table, pick out attributes that are part of this table that match expr
       case Some(t) => input.output.filter(_.qualifier.exists(resolver(_, t)))
-        .filter(_.name.matches(regexPattern))
+        .filter(_.name.matches(s"(?i)$regexPattern"))
     }
   }
 
