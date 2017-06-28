@@ -901,7 +901,11 @@ case class CollectObjectsToSet private(
 
     val arrayType = inputDataType(inputData.dataType).asInstanceOf[ArrayType]
     val loopValueJavaType = ctx.javaType(arrayType.elementType)
-    ctx.addMutableState("boolean", loopIsNull, "")
+    if (arrayType.containsNull) {
+      ctx.addMutableState("boolean", loopIsNull, "")
+    } else {
+      ctx.addMutableState("boolean", loopIsNull, s"$loopIsNull = false;")
+    }
     ctx.addMutableState(loopValueJavaType, loopValue, "")
     val genFunction = lambdaFunction.genCode(ctx)
 
@@ -924,7 +928,11 @@ case class CollectObjectsToSet private(
         case _ => genFunction.value
       }
 
-    val loopNullCheck = s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
+    val loopNullCheck = if (arrayType.containsNull) {
+      s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
+    } else {
+      ""
+    }
 
     val builderClass = classOf[Builder[_, _]].getName
     val constructBuilder = s"""
@@ -932,13 +940,18 @@ case class CollectObjectsToSet private(
       $builderValue.sizeHint($dataLength);
     """
 
-    val appendToBuilder = s"""
-      if (${genFunction.isNull}) {
-        $builderValue.$$plus$$eq(null);
-      } else {
-        $builderValue.$$plus$$eq($genFunctionValue);
-      }
-     """
+    val appendToBuilder = if (lambdaFunction.nullable) {
+      s"""
+        if (${genFunction.isNull}) {
+          $builderValue.$$plus$$eq(null);
+        } else {
+          $builderValue.$$plus$$eq($genFunctionValue);
+        }
+       """
+    } else {
+      s"$builderValue.$$plus$$eq($genFunctionValue);"
+    }
+
     val getBuilderResult = s"${ev.value} = (${collClass.getName}) $builderValue.result();"
 
     val code = s"""
