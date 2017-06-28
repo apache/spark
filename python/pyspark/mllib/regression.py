@@ -199,6 +199,10 @@ class LinearRegressionModel(LinearRegressionModelBase):
         model = LinearRegressionModel(weights, intercept)
         return model
 
+    @since("2.3.0")
+    def setIntercept(self, intercept):
+        self._intercept = intercept
+
 
 # train_func should take two parameters, namely data and initial_weights, and
 # return the result of a call to the appropriate JVM stub.
@@ -794,6 +798,11 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
         self._model = None
         super(StreamingLinearRegressionWithSGD, self).__init__(
             model=self._model)
+
+    @since("2.3.0")
+    def setIntercept(self, intercept):
+        """Set if the algorithm should add an intercept"""
+        self._model.setIntercept(intercept)
 
     @since("1.5.0")
     def setInitialWeights(self, initialWeights):
