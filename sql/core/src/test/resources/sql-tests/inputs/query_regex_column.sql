@@ -16,9 +16,14 @@ set spark.sql.parser.quotedRegexColumnNames=true;
 
 -- Regex columns
 SELECT `(a)?+.+` FROM testData2 WHERE a = 1;
+SELECT `(A)?+.+` FROM testData2 WHERE a = 1;
 SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1;
+SELECT t.`(A)?+.+` FROM testData2 t WHERE a = 1;
 SELECT `(a|b)` FROM testData2 WHERE a = 2;
+SELECT `(A|b)` FROM testData2 WHERE a = 2;
 SELECT `(a|b)?+.+` FROM testData2 WHERE a = 2;
+SELECT `(A|b)?+.+` FROM testData2 WHERE a = 2;
 SELECT `(e|f)` FROM testData2;
 SELECT t.`(e|f)` FROM testData2 t;
+SELECT p.`(KEY)?+.+`, b, testdata2.`(b)?+.+` FROM testData p join testData2 ON p.key = testData2.a WHERE key < 3;
 SELECT p.`(key)?+.+`, b, testdata2.`(b)?+.+` FROM testData p join testData2 ON p.key = testData2.a WHERE key < 3;

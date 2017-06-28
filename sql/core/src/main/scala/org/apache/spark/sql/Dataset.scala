@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.CharArrayWriter
 import java.sql.{Date, Timestamp}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -1202,7 +1203,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.3.0
    */
-  def colRegex(colName: String): Column = colName match {
+  def colRegex(colName: String): Column = colName.toLowerCase(Locale.ROOT) match {
     case ParserUtils.escapedIdentifier(columnNameRegex) =>
       Column(UnresolvedRegex(columnNameRegex, None))
     case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
