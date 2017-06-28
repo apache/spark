@@ -367,6 +367,10 @@ class TungstenAggregationIterator(
     }
   }
 
+  // Updating average hashmap probe after processing input rows. So even the iterator of result
+  // rows is not consumed to the last record, we still can show the metric.
+  avgHashProbe.set(hashMap.getAverageProbesPerLookup())
+
   ///////////////////////////////////////////////////////////////////////////
   // Part 7: Iterator's public methods.
   ///////////////////////////////////////////////////////////////////////////
@@ -420,9 +424,6 @@ class TungstenAggregationIterator(
         peakMemory += maxMemory
         spillSize += metrics.memoryBytesSpilled - spillSizeBefore
         metrics.incPeakExecutionMemory(maxMemory)
-
-        // Update average hashmap probe if this is the last record.
-        avgHashProbe.set(hashMap.getAverageProbesPerLookup())
       }
       numOutputRows += 1
       res
