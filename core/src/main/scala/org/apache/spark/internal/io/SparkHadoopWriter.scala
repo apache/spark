@@ -383,6 +383,8 @@ class HadoopMapReduceWriteConfigUtil[K, V: ClassTag](conf: SerializableConfigura
   // --------------------------------------------------------------------------
 
   override def assertConf(jobContext: NewJobContext, conf: SparkConf): Unit = {
-    getOutputFormat().checkOutputSpecs(jobContext)
+    if (SparkHadoopWriterUtils.isOutputSpecValidationEnabled(conf)) {
+      getOutputFormat().checkOutputSpecs(jobContext)
+    }
   }
 }
