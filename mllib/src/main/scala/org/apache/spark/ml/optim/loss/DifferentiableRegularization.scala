@@ -34,7 +34,7 @@ private[ml] trait DifferentiableRegularization[T] extends DiffFunction[T] {
 }
 
 /**
- * A Breeze diff function for computing the L2 regularized loss and gradient of an array of
+ * A Breeze diff function for computing the L2 regularized loss and gradient of a vector of
  * coefficients.
  *
  * @param regParam The magnitude of the regularization.
@@ -72,7 +72,7 @@ private[ml] class L2Regularization(
         }
         (0.5 * sum * regParam, Vectors.dense(gradient))
       case _: SparseVector =>
-        throw new IllegalArgumentException("SparseVector is not currently supported.")
+        throw new IllegalArgumentException("Sparse coefficients are not currently supported.")
     }
   }
 }
