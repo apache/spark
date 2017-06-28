@@ -90,6 +90,7 @@ while (TRUE) {
       }
     }
     p <- parallel:::mcfork()
+
     if (inherits(p, "masterProcess")) {
       # Reach here because this is a child process.
       close(inputCon)
