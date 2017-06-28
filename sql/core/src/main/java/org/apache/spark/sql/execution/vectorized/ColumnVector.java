@@ -80,6 +80,14 @@ public abstract class ColumnVector implements AutoCloseable {
     public int length;
     public int offset;
 
+    // reused buffer to return a primitive array
+    protected byte[] reuseByteArray;
+    protected short[] reuseShortArray;
+    protected int[] reuseIntArray;
+    protected long[] reuseLongArray;
+    protected float[] reuseFloatArray;
+    protected double[] reuseDoubleArray;
+
     // Populate if binary data is required for the Array. This is stored here as an optimization
     // for string data.
     public byte[] byteArray;
@@ -102,50 +110,56 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public byte[] toByteArray() {
-      int size = length;
-      byte[] values = new byte[size];
-      data.getBytes(values, offset, size);
-      return values;
+      if (reuseByteArray == null || reuseByteArray.length != length) {
+        reuseByteArray = new byte[length];
+      }
+      data.getBytes(reuseByteArray, offset, length);
+      return reuseByteArray;
     }
 
     @Override
     public short[] toShortArray() {
-      int size = length;
-      short[] values = new short[size];
-      data.getShorts(values, offset, size);
-      return values;
+      if (reuseShortArray == null || reuseShortArray.length != length) {
+        reuseShortArray = new short[length];
+      }
+      data.getShorts(reuseShortArray, offset, length);
+      return reuseShortArray;
     }
 
     @Override
     public int[] toIntArray() {
-      int size = length;
-      int[] values = new int[size];
-      data.getInts(values, offset, size);
-      return values;
+      if (reuseIntArray == null || reuseIntArray.length != length) {
+        reuseIntArray = new int[length];
+      }
+      data.getInts(reuseIntArray, offset, length);
+      return reuseIntArray;
     }
 
     @Override
     public long[] toLongArray() {
-      int size = length;
-      long[] values = new long[size];
-      data.getLongs(values, offset, size);
-      return values;
+      if (reuseLongArray == null || reuseLongArray.length != length) {
+        reuseLongArray = new long[length];
+      }
+      data.getLongs(reuseLongArray, offset, length);
+      return reuseLongArray;
     }
 
     @Override
     public float[] toFloatArray() {
-      int size = length;
-      float[] values = new float[size];
-      data.getFloats(values, offset, size);
-      return values;
+      if (reuseFloatArray == null || reuseFloatArray.length != length) {
+        reuseFloatArray = new float[length];
+      }
+      data.getFloats(reuseFloatArray, offset, length);
+      return reuseFloatArray;
     }
 
     @Override
     public double[] toDoubleArray() {
-      int size = length;
-      double[] values = new double[size];
-      data.getDoubles(values, offset, size);
-      return values;
+      if (reuseDoubleArray == null || reuseDoubleArray.length != length) {
+        reuseDoubleArray = new double[length];
+      }
+      data.getDoubles(reuseDoubleArray, offset, length);
+      return reuseDoubleArray;
     }
 
     // TODO: this is extremely expensive.
