@@ -161,6 +161,7 @@ object EliminateDistinct extends Rule[LogicalPlan] {
     case ae: AggregateExpression if ae.isDistinct =>
       ae.aggregateFunction match {
         case _: Max | _: Min => ae.copy(isDistinct = false)
+        case _ => ae
       }
   }
 }
