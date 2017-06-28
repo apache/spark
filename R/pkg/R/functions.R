@@ -117,10 +117,10 @@ NULL
 #'
 #' @param x Column to compute on except in the following methods:
 #'      \itemize{
-#'      \item \code{instr}: \code{character}, the substring to check.
-#'      \item \code{format_number}: \code{numeric}, the number of decimal place to format to.
+#'      \item \code{instr}: \code{character}, the substring to check. See 'Details'.
+#'      \item \code{format_number}: \code{numeric}, the number of decimal place to
+#'           format to. See 'Details'.
 #'      }
-#'      See 'Details'.
 #' @param y Column to compute on.
 #' @param ... additional columns.
 #' @name column_string_functions
