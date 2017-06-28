@@ -31,15 +31,16 @@ import org.apache.hadoop.hive.ql.exec.TaskRunner
 import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.{FileWritingCommand, FileWritingCommandExec}
+import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources.{ExecutedWriteSummary, FileFormatWriter}
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.{HiveClientImpl, HiveVersion}
@@ -81,9 +82,18 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends FileWritingCommand {
+    ifPartitionNotExists: Boolean) extends RunnableCommand {
 
   override def children: Seq[LogicalPlan] = query :: Nil
+
+  override def metrics(sparkContext: SparkContext): Map[String, SQLMetric] =
+    Map(
+      "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
+      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
+      "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
+      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
+    )
 
   var createdTempDir: Option[Path] = None
 
@@ -235,7 +245,7 @@ case class InsertIntoHiveTable(
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
-      fileCommandExec: Option[FileWritingCommandExec]): Seq[Row] = {
+      metricsUpdater: (Seq[ExecutedWriteSummary] => Unit)): Seq[Row] = {
     assert(children.length == 1)
 
     val sessionState = sparkSession.sessionState
@@ -358,7 +368,7 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
-      refreshFunction = fileCommandExec.get.postDriverMetrics,
+      refreshFunction = metricsUpdater,
       options = Map.empty)
 
     if (partition.nonEmpty) {

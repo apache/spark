@@ -74,14 +74,11 @@ class SQLMetricsSuite extends SQLTestUtils with TestHiveSingleton {
       dataFormat: String,
       tableName: String): Unit = {
     withTable(tableName) {
-      // 1 file, 1 row, 0 dynamic partition.
-      verifyWriteDataMetrics(Seq(1, 0, 1)) {
-        Seq((1, 2)).toDF("i", "j")
-          .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
-      }
+      Seq((1, 2)).toDF("i", "j")
+        .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
+
       val tableLocation =
         new File(spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).location)
-      assert(Utils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 1)
 
       // 2 files, 100 rows, 0 dynamic partition.
       verifyWriteDataMetrics(Seq(2, 0, 100)) {

@@ -21,6 +21,7 @@ import java.io.IOException
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
@@ -53,15 +54,25 @@ case class InsertIntoHadoopFsRelationCommand(
     query: LogicalPlan,
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
-    fileIndex: Option[FileIndex]) extends FileWritingCommand {
+    fileIndex: Option[FileIndex])
+  extends RunnableCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
+  override def metrics(sparkContext: SparkContext): Map[String, SQLMetric] =
+    Map(
+      "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
+      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
+      "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
+      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
+    )
+
   override def run(
       sparkSession: SparkSession,
       children: Seq[SparkPlan],
-      fileCommandExec: Option[FileWritingCommandExec]): Seq[Row] = {
+      metricsUpdater: (Seq[ExecutedWriteSummary] => Unit)): Seq[Row] = {
     assert(children.length == 1)
 
     // Most formats don't do well with duplicate columns, so lets not allow that
@@ -133,7 +144,7 @@ case class InsertIntoHadoopFsRelationCommand(
           .distinct.map(PartitioningUtils.parsePathFragment)
 
         // Updating metrics.
-        fileCommandExec.get.postDriverMetrics(summary)
+        metricsUpdater(summary)
 
         // Updating metastore partition metadata.
         if (partitionsTrackedByCatalog) {

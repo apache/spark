@@ -21,13 +21,10 @@ import java.net.URI
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.sources.BaseRelation
 
 /**
@@ -123,19 +120,11 @@ case class CreateDataSourceTableAsSelectCommand(
     table: CatalogTable,
     mode: SaveMode,
     query: LogicalPlan)
-  extends FileWritingCommand {
+  extends RunnableCommand {
 
   override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
-  // This command updates parent `FileWritingCommandExec`'s metrics only if the table is
-  // `FileFormat`-based.
-  override protected[sql] val canUpdateMetrics = classOf[FileFormat].isAssignableFrom(
-    DataSource.lookupDataSource(table.provider.get))
-
-  override def run(
-      sparkSession: SparkSession,
-      children: Seq[SparkPlan],
-      fileCommandExec: Option[FileWritingCommandExec]): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
 
@@ -157,8 +146,7 @@ case class CreateDataSourceTableAsSelectCommand(
       }
 
       saveDataIntoTable(
-        sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true,
-        fileCommandExec = fileCommandExec)
+        sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true)
     } else {
       assert(table.schema.isEmpty)
 
@@ -168,8 +156,7 @@ case class CreateDataSourceTableAsSelectCommand(
         table.storage.locationUri
       }
       val result = saveDataIntoTable(
-        sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false,
-        fileCommandExec = fileCommandExec)
+        sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -196,8 +183,7 @@ case class CreateDataSourceTableAsSelectCommand(
       tableLocation: Option[URI],
       data: LogicalPlan,
       mode: SaveMode,
-      tableExists: Boolean,
-      fileCommandExec: Option[FileWritingCommandExec]): BaseRelation = {
+      tableExists: Boolean): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
     val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
@@ -209,7 +195,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, query, fileCommandExec)
+      dataSource.writeAndRead(mode, query)
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)
