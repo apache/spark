@@ -1192,9 +1192,9 @@ setGeneric("md5", function(x) { standardGeneric("md5") })
 #' @name NULL
 setGeneric("minute", function(x) { standardGeneric("minute") })
 
-#' @param x empty. Should be used with no argument.
-#' @rdname monotonically_increasing_id
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("monotonically_increasing_id",
            function(x = "missing") { standardGeneric("monotonically_increasing_id") })
 

@@ -91,6 +91,7 @@ NULL
 #' Non-aggregate functions defined for \code{Column}.
 #'
 #' @param x Column to compute on. In \code{lit}, it is a literal value or a Column.
+#'          In \code{monotonically_increasing_id}, it should be empty.
 #' @param y Column to compute on.
 #' @param ... additional argument(s). In \code{expr}, it contains an expression character
 #'            object to be parsed.
@@ -1192,27 +1193,23 @@ setMethod("minute",
             column(jc)
           })
 
-#' monotonically_increasing_id
-#'
-#' Return a column that generates monotonically increasing 64-bit integers.
-#'
-#' The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
-#' The current implementation puts the partition ID in the upper 31 bits, and the record number
-#' within each partition in the lower 33 bits. The assumption is that the SparkDataFrame has
-#' less than 1 billion partitions, and each partition has less than 8 billion records.
-#'
-#' As an example, consider a SparkDataFrame with two partitions, each with 3 records.
+#' @details
+#' \code{monotonically_increasing_id}: Returns a column that generates monotonically increasing
+#' 64-bit integers. The generated ID is guaranteed to be monotonically increasing and unique,
+#' but not consecutive. The current implementation puts the partition ID in the upper 31 bits,
+#' and the record number within each partition in the lower 33 bits. The assumption is that the
+#' SparkDataFrame has less than 1 billion partitions, and each partition has less than 8 billion
+#' records. As an example, consider a SparkDataFrame with two partitions, each with 3 records.
 #' This expression would return the following IDs:
 #' 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
-#'
 #' This is equivalent to the MONOTONICALLY_INCREASING_ID function in SQL.
 #'
-#' @rdname monotonically_increasing_id
-#' @aliases monotonically_increasing_id,missing-method
-#' @name monotonically_increasing_id
-#' @family misc functions
+#' @rdname column_nonaggregate_functions
+#' @aliases monotonically_increasing_id monotonically_increasing_id,missing-method
 #' @export
-#' @examples \dontrun{select(df, monotonically_increasing_id())}
+#' @examples
+#'
+#' \dontrun{head(select(df, monotonically_increasing_id()))}
 setMethod("monotonically_increasing_id",
           signature("missing"),
           function() {
