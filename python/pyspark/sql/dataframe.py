@@ -926,7 +926,7 @@ class DataFrame(object):
     def describe(self, *cols):
         """Computes statistics for numeric and string columns.
 
-        This include count, mean, stddev, min, approximate quartiles, and max. If no columns are
+        This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
 
         .. note:: This function is meant for exploratory data analysis, as we make no
@@ -940,9 +940,6 @@ class DataFrame(object):
         |   mean|               3.5|
         | stddev|2.1213203435596424|
         |    min|                 2|
-        |    25%|               5.0|
-        |    50%|               5.0|
-        |    75%|               5.0|
         |    max|                 5|
         +-------+------------------+
         >>> df.describe().show()

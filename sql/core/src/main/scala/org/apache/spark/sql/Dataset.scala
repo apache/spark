@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 import java.sql.{Date, Timestamp}
 
+import scala.collection.JavaConversions.asJavaCollection
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
@@ -39,13 +40,13 @@ import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
-import org.apache.spark.sql.catalyst.util.{usePrettyExpression, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, usePrettyExpression}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -2185,9 +2186,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Computes statistics for numeric and string columns, including count, mean, stddev, min,
-   * approximate quartiles, and max. If no columns are given, this function computes
-   * statistics for all numerical or string columns.
+   * Computes basic statistics for numeric and string columns, including count, mean, stddev, min,
+   * and max. If no columns are given, this function computes statistics for all numerical or
+   * string columns.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
    * backward compatibility of the schema of the resulting Dataset. If you want to
@@ -2202,17 +2203,19 @@ class Dataset[T] private[sql](
    *   // mean    53.3  178.05
    *   // stddev  11.6  15.7
    *   // min     18.0  163.0
-   *   // 25%     24.0  176.0
-   *   // 50%     24.0  176.0
-   *   // 75%     32.0  180.0
    *   // max     92.0  192.0
    * }}}
+   *
+   * See also [[describeExtended]] and [[describeAdvanced]]
+   *
+   * @param cols Columns to compute statistics on.
    *
    * @group action
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def describe(cols: String*): DataFrame = describe(Array(0.25, 0.5, 0.75), cols: _*)
+  def describe(cols: String*): DataFrame =
+    describeAdvanced(Array("count", "mean", "stddev", "min", "max"), cols: _*)
 
   /**
    * Computes statistics for numeric and string columns, including count, mean, stddev, min,
@@ -2224,7 +2227,7 @@ class Dataset[T] private[sql](
    * programmatically compute summary statistics, use the `agg` function instead.
    *
    * {{{
-   *   ds.describe("age", "height").show()
+   *   ds.describeExtended("age", "height").show()
    *
    *   // output:
    *   // summary age   height
@@ -2238,34 +2241,95 @@ class Dataset[T] private[sql](
    *   // max     92.0  192.0
    * }}}
    *
+   * To specify which statistics or percentiles are desired see [[describeAdvanced]]
+   *
+   * @param cols Columns to compute statistics on.
+   *
    * @group action
-   * @since 1.6.0
+   * @since 2.3.0
    */
   @scala.annotation.varargs
-  def describe(percentiles: Array[Double], cols: String*): DataFrame = withPlan {
+  def describeExtended(cols: String*): DataFrame =
+    describeAdvanced(Array("count", "mean", "stddev", "min", "25%", "50%", "75%", "max"), cols: _*)
 
-    val hasPercentiles = percentiles.length > 0
-    require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
+  /**
+   * Computes specified statistics for numeric and string columns. Available statistics are:
+   *
+   * - count
+   * - mean
+   * - stddev
+   * - min
+   * - max
+   * - arbitrary approximate percentiles specifid as a percentage (eg, 75%)
+   *
+   * If no columns are given, this function computes statistics for all numerical or string
+   * columns.
+   *
+   * This function is meant for exploratory data analysis, as we make no guarantee about the
+   * backward compatibility of the schema of the resulting Dataset. If you want to
+   * programmatically compute summary statistics, use the `agg` function instead.
+   *
+   * {{{
+   *   ds.describeAdvanced(Array("count", "min", "25%", "75%", "max"), "age", "height").show()
+   *
+   *   // output:
+   *   // summary age   height
+   *   // count   10.0  10.0
+   *   // min     18.0  163.0
+   *   // 25%     24.0  176.0
+   *   // 75%     32.0  180.0
+   *   // max     92.0  192.0
+   * }}}
+   *
+   * @param statistics Statistics from above list to be computed.
+   * @param cols Columns to compute statistics on.
+   *
+   * @group action
+   * @since 2.3.0
+   */
+  @scala.annotation.varargs
+  def describeAdvanced(statistics: Array[String], cols: String*): DataFrame = withPlan {
+
+    val hasPercentiles = statistics.exists(_.endsWith("%"))
+    val (percentiles, percentileNames, remainingAggregates) = if (hasPercentiles) {
+      val (pStrings, rest) = statistics.toSeq.partition(a => a.endsWith("%"))
+      val percentiles = pStrings.map { p =>
+        try {
+          p.stripSuffix("%").toDouble / 100.0
+        } catch {
+          case e: NumberFormatException =>
+            throw new IllegalArgumentException(s"Unable to parse $p as a double", e)
+        }
+      }
+      require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
+      (percentiles, pStrings, rest)
+    } else {
+      (Seq(), Seq(), statistics.toSeq)
+    }
+
 
     // The list of summary statistics to compute, in the form of expressions.
-    val statistics = List[(String, Expression => Expression)](
+    val availableStatistics = Map[String, Expression => Expression](
       "count" -> ((child: Expression) => Count(child).toAggregateExpression()),
       "mean" -> ((child: Expression) => Average(child).toAggregateExpression()),
       "stddev" -> ((child: Expression) => StddevSamp(child).toAggregateExpression()),
       "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
       "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
+    val statisticFns = remainingAggregates.map { agg =>
+      require(availableStatistics.contains(agg), s"$agg is not a recognised statistic")
+      agg -> availableStatistics(agg)
+    }
+
     def percentileAgg(child: Expression): Expression =
         new ApproximatePercentile(child, CreateArray(percentiles.map(Literal(_))))
           .toAggregateExpression()
 
-    val percentileNames = percentiles.map(p => s"${(p * 100.0).round}%")
-
     val outputCols =
       (if (cols.isEmpty) aggregatableColumns.map(usePrettyExpression(_).sql) else cols).toList
 
-    val ret: Seq[Row] = if (outputCols.nonEmpty) {
-      var aggExprs = statistics.flatMap { case (_, colToAgg) =>
+    val ret: Seq[Row] = if (outputCols.nonEmpty && statistics.nonEmpty) {
+      var aggExprs = statisticFns.toList.flatMap { case (_, colToAgg) =>
         outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
       if (hasPercentiles) {
@@ -2279,7 +2343,7 @@ class Dataset[T] private[sql](
 
       val basicStats = if (hasPercentiles) grouped.tail else grouped
 
-      val rows = basicStats.zip(statistics).map { case (aggregation, (statistic, _)) =>
+      val rows = basicStats.zip(statisticFns).map { case (aggregation, (statistic, _)) =>
         Row(statistic :: aggregation.toList: _*)
       }
 
@@ -2295,14 +2359,17 @@ class Dataset[T] private[sql](
           .map { case (values: Seq[Any], name) =>
               Row(name :: values.map(nullSafeString).toList: _*)
           }
-        val max :: rest = rows.reverse.toList
-        rest.reverse ++ percentileRows :+ max
+        (rows ++ percentileRows)
+          .sortWith((left, right) => statistics.indexOf(left(0)) < statistics.indexOf(right(0)))
       } else {
         rows
       }
-    } else {
+    } else if (outputCols.isEmpty) {
       // If there are no output columns, just output a single column that contains the stats.
-      statistics.map { case (name, _) => Row(name) }
+      statistics.map(Row(_))
+    } else {
+      // If there are no aggregates, return empty Seq
+      Seq()
     }
 
     // All columns are string type

@@ -28,8 +28,7 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Project, Union}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
@@ -664,20 +663,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("describe") {
-    val describeTestData = Seq(
-      ("Bob", 16, 176),
-      ("Alice", 32, 164),
-      ("David", 60, 192),
-      ("Amy", 24, 180)).toDF("name", "age", "height")
+    val describeTestData = person2
 
     val describeResult = Seq(
       Row("count", "4", "4", "4"),
       Row("mean", null, "33.0", "178.0"),
       Row("stddev", null, "19.148542155126762", "11.547005383792516"),
       Row("min", "Alice", "16", "164"),
-      Row("25%", null, "24.0", "176.0"),
-      Row("50%", null, "24.0", "176.0"),
-      Row("75%", null, "32.0", "180.0"),
       Row("max", "David", "60", "192"))
 
     val emptyDescribeResult = Seq(
@@ -685,9 +677,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row("mean", null, null, null),
       Row("stddev", null, null, null),
       Row("min", null, null, null),
-      Row("25%", null, null, null),
-      Row("50%", null, null, null),
-      Row("75%", null, null, null),
       Row("max", null, null, null))
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
@@ -716,6 +705,78 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val emptyDescription = describeTestData.limit(0).describe()
     assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptyDescribeResult)
+  }
+
+  test("describeExtended") {
+    val describeTestData = person2
+
+    val describeResult = Seq(
+      Row("count", "4", "4", "4"),
+      Row("mean", null, "33.0", "178.0"),
+      Row("stddev", null, "19.148542155126762", "11.547005383792516"),
+      Row("min", "Alice", "16", "164"),
+      Row("25%", null, "24.0", "176.0"),
+      Row("50%", null, "24.0", "176.0"),
+      Row("75%", null, "32.0", "180.0"),
+      Row("max", "David", "60", "192"))
+
+    val emptyDescribeResult = Seq(
+      Row("count", "0", "0", "0"),
+      Row("mean", null, null, null),
+      Row("stddev", null, null, null),
+      Row("min", null, null, null),
+      Row("25%", null, null, null),
+      Row("50%", null, null, null),
+      Row("75%", null, null, null),
+      Row("max", null, null, null))
+
+    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
+
+    val describeTwoCols = describeTestData.describeExtended("name", "age", "height")
+    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "name", "age", "height"))
+    checkAnswer(describeTwoCols, describeResult)
+    // All aggregate value should have been cast to string
+    describeTwoCols.collect().foreach { row =>
+      assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
+      assert(row.get(3).isInstanceOf[String], "expected string but found " + row.get(3).getClass)
+    }
+
+    val describeAllCols = describeTestData.describeExtended()
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
+    checkAnswer(describeAllCols, describeResult)
+
+    val describeOneCol = describeTestData.describeExtended("age")
+    assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
+    checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d)} )
+
+    val describeNoCol = describeTestData.select("name").describeExtended()
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary", "name"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, n, _, _) => Row(s, n)} )
+
+    val emptyDescription = describeTestData.limit(0).describeExtended()
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
+    checkAnswer(emptyDescription, emptyDescribeResult)
+  }
+
+  test("describeAdvanced") {
+    val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
+    val orderMatters = person2.describeAdvanced(stats)
+    assert(orderMatters.collect().map(_.getString(0)) === stats)
+
+    val onlyPercentiles = person2.describeAdvanced(Array("0.1%", "99.9%"))
+    assert(onlyPercentiles.count() === 2)
+
+    val fooE = intercept[IllegalArgumentException] {
+      person2.describeAdvanced(Array("foo"))
+    }
+    assert(fooE.getMessage === "requirement failed: foo is not a recognised statistic")
+
+    val parseE = intercept[IllegalArgumentException] {
+      person2.describeAdvanced(Array("foo%"))
+    }
+    assert(parseE.getMessage === "Unable to parse foo% as a double")
+
+    assert(person2.describeAdvanced(Array()).count() === 0)
   }
 
   test("apply on query results (SPARK-5462)") {
