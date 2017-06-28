@@ -280,7 +280,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       assert(termWeights.length === 3 && termWeights.forall(w => w >= 0.0 && w <= 1.0))
     }
   }
-  
+
   test("fit & transform with EM LDA") {
     val lda = new LDA().setK(k).setSeed(1).setOptimizer("em").setMaxIter(2)
     val model_ = lda.fit(dataset)

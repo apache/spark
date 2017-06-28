@@ -126,6 +126,9 @@ final class EMLDAOptimizer extends LDAOptimizer {
     val topicConcentration = lda.getTopicConcentration
     val k = lda.getK
 
+    require(lda.getInitialModel.isEmpty,
+      "Only online optimizer supports initialization with a previous model.")
+
     // Note: The restriction > 1.0 may be relaxed in the future (allowing sparse solutions),
     // but values in (0,1) are not yet supported.
     require(docConcentration > 1.0 || docConcentration == -1.0, s"LDA docConcentration must be" +

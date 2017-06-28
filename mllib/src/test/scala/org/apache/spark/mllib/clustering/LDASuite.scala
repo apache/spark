@@ -293,6 +293,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val alpha = Vectors.dense(Array.fill(tinyK)(0.01))
     val existingModel = new LocalLDAModel(tinyTopics, alpha, 1D, 100D)
 
+    val corpus = sc.parallelize(tinyCorpus, 2)
+
     intercept[IllegalArgumentException] {
       val lda = new LDA()
           .setOptimizer("em")
@@ -300,6 +302,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
           .setDocConcentration(alpha)
           .setTopicConcentration(1D)
           .setInitialModel(existingModel)
+      val op = new EMLDAOptimizer().initialize(corpus, lda)
     }
   }
 

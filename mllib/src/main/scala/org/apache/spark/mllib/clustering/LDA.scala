@@ -328,18 +328,13 @@ class LDA private (
   /**
    * Set the initial starting point, bypassing the random initialization.
    * This can be used for incremental learning.
-   * This is supported only for online optimizer, and the condition model.k == this.k must be met,
-   * failure results in an IllegalArgumentException.
+   * This is supported only for online optimizer. Models must have the same parameters
+   * (k, vocabulary size, topic concentration)
    */
   @Since("2.3.0")
   def setInitialModel(model: LDAModel): this.type = {
-    this.ldaOptimizer match {
-      case _: OnlineLDAOptimizer =>
-        initialModel = Some(model)
-        this
-      case _ => throw new IllegalArgumentException(
-        "Only online optimizer supports initialization with a previous model.")
-    }
+    initialModel = Some(model)
+    this
   }
 
   /**
