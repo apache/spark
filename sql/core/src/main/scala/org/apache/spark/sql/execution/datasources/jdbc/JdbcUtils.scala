@@ -264,16 +264,16 @@ object JdbcUtils extends Logging {
   }
 
   /**
-    * Takes a [[ResultSet]] and returns its Catalyst schema.
-    *
-    * @param alwaysNullable - If true, spark will propagate null
-    *                       to underlying DB engine instead of using type default value
-    * @return A [[StructType]] giving the Catalyst schema.
-    * @throws SQLException if the schema contains an unsupported type.
-    */
-  def getSchema(resultSet: ResultSet,
-                dialect: JdbcDialect,
-                alwaysNullable: Boolean = false): StructType = {
+   * Takes a [[ResultSet]] and returns its Catalyst schema.
+   *
+   * @param alwaysNullable If true, all the columns are nullable.
+   * @return A [[StructType]] giving the Catalyst schema.
+   * @throws SQLException if the schema contains an unsupported type.
+   */
+  def getSchema(
+      resultSet: ResultSet,
+      dialect: JdbcDialect,
+      alwaysNullable: Boolean = true): StructType = {
     val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
@@ -294,10 +294,11 @@ object JdbcUtils extends Logging {
             rsmd.getClass.getName == "org.apache.hive.jdbc.HiveResultSetMetaData" => true
         }
       }
-      val nullable = if (alwaysNullable)
+      val nullable = if (alwaysNullable) {
         alwaysNullable
-      else
+      } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+      }
       val metadata = new MetadataBuilder()
         .putString("name", columnName)
         .putLong("scale", fieldScale)
