@@ -50,7 +50,10 @@ private[spark] sealed trait MapStatus {
 private[spark] object MapStatus {
 
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
-    if (uncompressedSizes.length > 2000) {
+    val threshold = Option(SparkEnv.get)
+      .map(_.conf.get(config.SHUFFLE_HIGHLY_COMPRESSED_MAPSTATUS_THRESHOLD))
+      .getOrElse(config.SHUFFLE_HIGHLY_COMPRESSED_MAPSTATUS_THRESHOLD.defaultValue.get)
+    if (uncompressedSizes.length > threshold) {
       HighlyCompressedMapStatus(loc, uncompressedSizes)
     } else {
       new CompressedMapStatus(loc, uncompressedSizes)
