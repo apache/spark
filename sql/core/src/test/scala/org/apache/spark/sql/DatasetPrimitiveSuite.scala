@@ -360,6 +360,9 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(HSet(true, false)).toDS(), HSet(true, false))
     checkDataset(Seq(HSet("test1", "test2")).toDS(), HSet("test1", "test2"))
     checkDataset(Seq(HSet(Tuple1(1), Tuple1(2))).toDS(), HSet(Tuple1(1), Tuple1(2)))
+
+    checkDataset(Seq(Seq(Some(1), None), Seq(Some(2))).toDF("c").as[Set[Integer]],
+      Seq(Set[Integer](1, null), Set[Integer](2)): _*)
   }
 
   test("nested sequences") {
