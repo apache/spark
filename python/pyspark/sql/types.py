@@ -930,6 +930,10 @@ _type_mappings = {
 }
 
 # Mapping Python array types to Spark SQL DataType
+# We should be careful here. The size of these types in python depends on
+# C implementation (See: https://docs.python.org/2/library/array.html).
+# We need to make sure that this conversion does not lose any precision. And
+# this should be considered in test cases.
 _array_type_mappings = {
     'b': ByteType,
     'h': ShortType,

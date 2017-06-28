@@ -2263,6 +2263,13 @@ class SQLTests(ReusedPySparkTestCase):
 
     # test for SPARK-16542
     def test_array_types(self):
+        # This test need to make sure that the Scala type selected is at least
+        # as large as the python's types. This is necessary because python's
+        # array types depend on C implementation on the machine. Therefore there
+        # is no machine independent correspondence between python's array types
+        # and Scala types.
+        # See: https://docs.python.org/2/library/array.html
+
         int_types = set(['b', 'h', 'i', 'l'])
         float_types = set(['f', 'd'])
         unsupported_types = set(array.typecodes) - int_types - float_types
@@ -2272,9 +2279,10 @@ class SQLTests(ReusedPySparkTestCase):
             rdd = self.sc.parallelize([row])
             df = self.spark.createDataFrame(rdd)
             return df.collect()[0]["myarray"][0]
+
         # test whether pyspark can correctly handle int types
         for t in int_types:
-            # test positive numbers
+            # Start from 1 and keep doubling the number until overflow.
             a = array.array(t, [1])
             while True:
                 try:
@@ -2282,7 +2290,7 @@ class SQLTests(ReusedPySparkTestCase):
                     a[0] *= 2
                 except OverflowError:
                     break
-            # test negative numbers
+            # Start from -1 and keep doubling the number until overflow
             a = array.array(t, [-1])
             while True:
                 try:
@@ -2290,6 +2298,7 @@ class SQLTests(ReusedPySparkTestCase):
                     a[0] *= 2
                 except OverflowError:
                     break
+
         # test whether pyspark can correctly handle float types
         for t in float_types:
             # test upper bound and precision
