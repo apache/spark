@@ -117,6 +117,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
           null,
           null,
           1024,
+          32 * 1024,
           SparkEnv.get.memoryManager.pageSizeBytes,
           numSpillThreshold,
           false)
