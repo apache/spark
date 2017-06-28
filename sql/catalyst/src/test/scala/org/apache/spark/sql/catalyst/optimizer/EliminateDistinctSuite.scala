@@ -37,7 +37,7 @@ class EliminateDistinctSuite extends PlanTest {
       .select(maxDistinct('a) as('result))
       .analyze
     val answer = testRelation
-      .select(max('a) as('result))
+      .select(max('a).as('result))
       .analyze
     assert(query != answer)
     comparePlans(Optimize.execute(query), answer)
@@ -48,7 +48,7 @@ class EliminateDistinctSuite extends PlanTest {
       .select(minDistinct('a) as('result))
       .analyze
     val answer = testRelation
-      .select(min('a) as('result))
+      .select(min('a).as('result))
       .analyze
     assert(query != answer)
     comparePlans(Optimize.execute(query), answer)
