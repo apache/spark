@@ -998,7 +998,8 @@ class LDA(object):
     @classmethod
     @since('1.5.0')
     def train(cls, rdd, k=10, maxIterations=20, docConcentration=-1.0,
-              topicConcentration=-1.0, seed=None, checkpointInterval=10, optimizer="em"):
+              topicConcentration=-1.0, seed=None, checkpointInterval=10,
+              optimizer="em", initialModel=None):
         """Train a LDA model.
 
         :param rdd:
@@ -1033,10 +1034,14 @@ class LDA(object):
           LDAOptimizer used to perform the actual calculation. Currently
           "em", "online" are supported.
           (default: "em")
+        :param initalModel:
+          Initial model instead of random initilization, to perform
+          incremental learning. Only supported by "online" optimizer.
+          (default: None)
         """
         model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
                               docConcentration, topicConcentration, seed,
-                              checkpointInterval, optimizer)
+                              checkpointInterval, optimizer, initialModel)
         return LDAModel(model)
 
 

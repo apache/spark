@@ -159,6 +159,10 @@ public class JavaLDASuite extends SharedSparkSession {
     assertEquals(k, roundedTopicSummary.length);
     Tuple2<int[], double[]>[] roundedLocalTopicSummary = model.describeTopics();
     assertEquals(k, roundedLocalTopicSummary.length);
+
+    // Check: initial model setting
+    LDA lda2 = new LDA().setOptimizer("online").setInitialModel(model);
+    assertEquals(lda2.getInitialModel().get(), model);
   }
 
   @Test

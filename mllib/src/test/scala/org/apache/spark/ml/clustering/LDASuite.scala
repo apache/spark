@@ -231,6 +231,9 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     }
   }
 
+  // TODO same test("fit & transform with Online LDA") with initial model
+
+
   test("fit & transform with EM LDA") {
     val lda = new LDA().setK(k).setSeed(1).setOptimizer("em").setMaxIter(2)
     val model_ = lda.fit(dataset)

@@ -43,4 +43,6 @@ private[python] class LDAModelWrapper(model: LDAModel) {
   }
 
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
+
+  def getModel: LDAModel = model
 }
