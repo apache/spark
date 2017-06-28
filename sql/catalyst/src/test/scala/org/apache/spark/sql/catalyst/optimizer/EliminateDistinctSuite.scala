@@ -34,7 +34,7 @@ class EliminateDistinctSuite extends PlanTest {
 
   test("Eliminate Distinct in Max") {
     val query = testRelation
-      .select(maxDistinct('a) as('result))
+      .select(maxDistinct('a).as('result))
       .analyze
     val answer = testRelation
       .select(max('a).as('result))
@@ -45,7 +45,7 @@ class EliminateDistinctSuite extends PlanTest {
 
   test("Eliminate Distinct in Min") {
     val query = testRelation
-      .select(minDistinct('a) as('result))
+      .select(minDistinct('a).as('result))
       .analyze
     val answer = testRelation
       .select(min('a).as('result))
