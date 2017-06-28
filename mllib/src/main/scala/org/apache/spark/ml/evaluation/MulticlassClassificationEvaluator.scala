@@ -110,7 +110,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
         case "tpr" => metrics.truePositiveRate(getLabelValue)
         case "fpr" => metrics.falsePositiveRate(getLabelValue)
         case weightedMetric
-          if(MulticlassClassificationEvaluator.weightedOptions.contains(weightedMetric)) =>
+          if (MulticlassClassificationEvaluator.weightedOptions.contains(weightedMetric)) =>
           throw new IllegalArgumentException(
             s"metricName $weightedMetric cannot be specified when label value is set.")
         case _ => throw new IllegalArgumentException(
@@ -132,9 +132,11 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("1.5.0")
   override def isLargerBetter: Boolean = {
     // Lower False Positive Rate is better for evaluation
-    if(isSet(labelValue) && getMetricName.equals("fpr"))
+    if (isSet(labelValue) && getMetricName.equals("fpr")) {
       false
-    else true
+    } else {
+      true
+    }
   }
 
   @Since("1.5.0")
