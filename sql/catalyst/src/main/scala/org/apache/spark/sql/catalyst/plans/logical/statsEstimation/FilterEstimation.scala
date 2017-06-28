@@ -25,12 +25,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging {
+case class FilterEstimation(plan: Filter) extends Logging {
 
-  private val childStats = plan.child.stats(catalystConf)
+  private val childStats = plan.child.stats
 
   private val colStatsMap = new ColumnStatsMap(childStats.attributeStats)
 

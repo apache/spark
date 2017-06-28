@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.util.{usePrettyExpression, DateTimeUtils}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -245,13 +246,8 @@ class Dataset[T] private[sql](
       _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0)
     val takeResult = toDF().take(numRows + 1)
-    showString(takeResult, numRows, truncate, vertical)
-  }
-
-  private def showString(
-      dataWithOneMoreRow: Array[Row], numRows: Int, truncate: Int, vertical: Boolean): String = {
-    val hasMoreData = dataWithOneMoreRow.length > numRows
-    val data = dataWithOneMoreRow.take(numRows)
+    val hasMoreData = takeResult.length > numRows
+    val data = takeResult.take(numRows)
 
     lazy val timeZone =
       DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
@@ -686,19 +682,6 @@ class Dataset[T] private[sql](
   } else {
     println(showString(numRows, truncate = 0))
   }
-
-  // An internal version of `show`, which won't set execution id and trigger listeners.
-  private[sql] def showInternal(_numRows: Int, truncate: Boolean): Unit = {
-    val numRows = _numRows.max(0)
-    val takeResult = toDF().takeInternal(numRows + 1)
-
-    if (truncate) {
-      println(showString(takeResult, numRows, truncate = 20, vertical = false))
-    } else {
-      println(showString(takeResult, numRows, truncate = 0, vertical = false))
-    }
-  }
-  // scalastyle:on println
 
   /**
    * Displays the Dataset in a tabular form. For example:
@@ -1805,11 +1788,8 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = {
-    require(fraction >= 0,
-      s"Fraction must be nonnegative, but got ${fraction}")
-
     withTypedPlan {
-      Sample(0.0, fraction, withReplacement, seed, logicalPlan)()
+      Sample(0.0, fraction, withReplacement, seed, logicalPlan)
     }
   }
 
@@ -1865,7 +1845,7 @@ class Dataset[T] private[sql](
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
       new Dataset[T](
-        sparkSession, Sample(x(0), x(1), withReplacement = false, seed, plan)(), encoder)
+        sparkSession, Sample(x(0), x(1), withReplacement = false, seed, plan), encoder)
     }.toArray
   }
 
@@ -2469,11 +2449,6 @@ class Dataset[T] private[sql](
    */
   def take(n: Int): Array[T] = head(n)
 
-  // An internal version of `take`, which won't set execution id and trigger listeners.
-  private[sql] def takeInternal(n: Int): Array[T] = {
-    collectFromPlan(limit(n).queryExecution.executedPlan)
-  }
-
   /**
    * Returns the first `n` rows in the Dataset as a list.
    *
@@ -2497,11 +2472,6 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def collect(): Array[T] = withAction("collect", queryExecution)(collectFromPlan)
-
-  // An internal version of `collect`, which won't set execution id and trigger listeners.
-  private[sql] def collectInternal(): Array[T] = {
-    collectFromPlan(queryExecution.executedPlan)
-  }
 
   /**
    * Returns a Java list that contains all rows in this Dataset.
@@ -2542,11 +2512,6 @@ class Dataset[T] private[sql](
    */
   def count(): Long = withAction("count", groupBy().count().queryExecution) { plan =>
     plan.executeCollect().head.getLong(0)
-  }
-
-  // An internal version of `count`, which won't set execution id and trigger listeners.
-  private[sql] def countInternal(): Long = {
-    groupBy().count().queryExecution.executedPlan.executeCollect().head.getLong(0)
   }
 
   /**
@@ -2794,7 +2759,7 @@ class Dataset[T] private[sql](
     createTempViewCommand(viewName, replace = true, global = true)
   }
 
-  private[spark] def createTempViewCommand(
+  private def createTempViewCommand(
       viewName: String,
       replace: Boolean,
       global: Boolean): CreateViewCommand = {
@@ -2922,6 +2887,16 @@ class Dataset[T] private[sql](
     }
   }
 
+  /**
+   * Collect a Dataset as ArrowPayload byte arrays and serve to PySpark.
+   */
+  private[sql] def collectAsArrowToPython(): Int = {
+    withNewExecutionId {
+      val iter = toArrowPayload.collect().iterator.map(_.asPythonSerializable)
+      PythonRDD.serveIterator(iter, "serve-Arrow")
+    }
+  }
+
   private[sql] def toPythonIterator(): Int = {
     withNewExecutionId {
       PythonRDD.toLocalIteratorAndServe(javaToPython.rdd)
@@ -3001,6 +2976,15 @@ class Dataset[T] private[sql](
       Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
     } else {
       Dataset(sparkSession, logicalPlan)
+    }
+  }
+
+  /** Convert to an RDD of ArrowPayload byte arrays */
+  private[sql] def toArrowPayload: RDD[ArrowPayload] = {
+    val schemaCaptured = this.schema
+    val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
+    queryExecution.toRdd.mapPartitionsInternal { iter =>
+      ArrowConverters.toPayloadIterator(iter, schemaCaptured, maxRecordsPerBatch)
     }
   }
 }

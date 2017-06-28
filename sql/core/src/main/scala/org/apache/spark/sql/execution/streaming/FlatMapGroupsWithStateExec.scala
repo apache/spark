@@ -50,7 +50,7 @@ case class FlatMapGroupsWithStateExec(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    stateId: Option[OperatorStateId],
+    stateInfo: Option[StatefulOperatorStateInfo],
     stateEncoder: ExpressionEncoder[Any],
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
@@ -107,10 +107,7 @@ case class FlatMapGroupsWithStateExec(
     }
 
     child.execute().mapPartitionsWithStateStore[InternalRow](
-      getStateId.checkpointLocation,
-      getStateId.operatorId,
-      storeName = "default",
-      getStateId.batchId,
+      getStateInfo,
       groupingAttributes.toStructType,
       stateAttributes.toStructType,
       indexOrdinal = None,

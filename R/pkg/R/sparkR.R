@@ -535,6 +535,23 @@ cancelJobGroup <- function(sc, groupId) {
   }
 }
 
+#' Set a human readable description of the current job.
+#'
+#' Set a description that is shown as a job description in UI.
+#'
+#' @param value The job description of the current job.
+#' @rdname setJobDescription
+#' @name setJobDescription
+#' @examples
+#'\dontrun{
+#' setJobDescription("This is an example job.")
+#'}
+#' @note setJobDescription since 2.3.0
+setJobDescription <- function(value) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setJobDescription", value))
+}
+
 sparkConfToSubmitOps <- new.env()
 sparkConfToSubmitOps[["spark.driver.memory"]]           <- "--driver-memory"
 sparkConfToSubmitOps[["spark.driver.extraClassPath"]]   <- "--driver-class-path"
