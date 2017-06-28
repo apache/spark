@@ -158,10 +158,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
  */
 object EliminateDistinct extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
-    case AggregateExpression(max: Max, mode: AggregateMode, true, _) =>
-      AggregateExpression(max, mode, false)
-    case AggregateExpression(min: Min, mode: AggregateMode, true, _) =>
-      AggregateExpression(min, mode, false)
+    case ae: AggregateExpression if ae.isDistinct =>
+      ae.aggregateFunction match {
+        case _: Max | _: Min => ae.copy(isDistinct = false)
+      }
   }
 }
 
