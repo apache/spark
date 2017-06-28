@@ -17,15 +17,28 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{Boolean => JavaBoolean}
+import java.lang.{Byte => JavaByte}
+import java.lang.{Double => JavaDouble}
+import java.lang.{Float => JavaFloat}
+import java.lang.{Integer => JavaInteger}
+import java.lang.{Long => JavaLong}
+import java.lang.{Short => JavaShort}
+import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util
 import java.util.Objects
 import javax.xml.bind.DatatypeConverter
 
+import scala.math.{BigDecimal, BigInt}
+import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
+
 import org.json4s.JsonAST._
 
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -46,17 +59,61 @@ object Literal {
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
-    case d: java.math.BigDecimal =>
+    case d: JavaBigDecimal =>
       Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
+    case a: Array[_] =>
+      val elementType = componentTypeToDataType(a.getClass.getComponentType())
+      val dataType = ArrayType(elementType)
+      val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+      Literal(convert(a), dataType)
     case i: CalendarInterval => Literal(i, CalendarIntervalType)
     case null => Literal(null, NullType)
     case v: Literal => v
     case _ =>
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
+  }
+
+  /**
+   * Returns the Spark SQL DataType for a given class object. Since this type needs to be resolved
+   * in runtime, we use match-case idioms for class objects here. However, there are similar
+   * functions in other files (e.g., HiveInspectors), so these functions need to merged into one.
+   */
+  private[this] def componentTypeToDataType(clz: Class[_]): DataType = clz match {
+    // primitive types
+    case JavaShort.TYPE => ShortType
+    case JavaInteger.TYPE => IntegerType
+    case JavaLong.TYPE => LongType
+    case JavaDouble.TYPE => DoubleType
+    case JavaByte.TYPE => ByteType
+    case JavaFloat.TYPE => FloatType
+    case JavaBoolean.TYPE => BooleanType
+
+    // java classes
+    case _ if clz == classOf[Date] => DateType
+    case _ if clz == classOf[Timestamp] => TimestampType
+    case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[Array[Byte]] => BinaryType
+    case _ if clz == classOf[JavaShort] => ShortType
+    case _ if clz == classOf[JavaInteger] => IntegerType
+    case _ if clz == classOf[JavaLong] => LongType
+    case _ if clz == classOf[JavaDouble] => DoubleType
+    case _ if clz == classOf[JavaByte] => ByteType
+    case _ if clz == classOf[JavaFloat] => FloatType
+    case _ if clz == classOf[JavaBoolean] => BooleanType
+
+    // other scala classes
+    case _ if clz == classOf[String] => StringType
+    case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+
+    case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
+
+    case _ => throw new AnalysisException(s"Unsupported component type $clz in arrays")
   }
 
   /**
@@ -98,6 +155,14 @@ object Literal {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
 
+  def create[T : TypeTag](v: T): Literal = Try {
+    val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
+    val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+    Literal(convert(v), dataType)
+  }.getOrElse {
+    Literal(v)
+  }
+
   /**
    * Create a literal with default value for given DataType
    */
@@ -120,6 +185,7 @@ object Literal {
     case map: MapType => create(Map(), map)
     case struct: StructType =>
       create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
+    case udt: UserDefinedType[_] => default(udt.sqlType)
     case other =>
       throw new RuntimeException(s"no default for type $dataType")
   }
@@ -165,7 +231,7 @@ object DecimalLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal (value: Any, dataType: DataType) extends LeafExpression with CodegenFallback {
+case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
@@ -211,49 +277,40 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression with 
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = ctx.javaType(dataType)
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      ev.copy(s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};")
+      ev.copy(s"final $javaType ${ev.value} = ${ctx.defaultValue(dataType)};")
     } else {
+      ev.isNull = "false"
       dataType match {
-        case BooleanType =>
-          ev.isNull = "false"
-          ev.value = value.toString
-          ev.copy("")
+        case BooleanType | IntegerType | DateType =>
+          ev.copy(code = "", value = value.toString)
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            super[CodegenFallback].doGenCode(ctx, ev)
+            val boxedValue = ctx.addReferenceMinorObj(v)
+            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
+            ev.copy(code = code)
           } else {
-            ev.isNull = "false"
-            ev.value = s"${value}f"
-            ev.copy("")
+            ev.copy(code = "", value = s"${value}f")
           }
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            super[CodegenFallback].doGenCode(ctx, ev)
+            val boxedValue = ctx.addReferenceMinorObj(v)
+            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
+            ev.copy(code = code)
           } else {
-            ev.isNull = "false"
-            ev.value = s"${value}D"
-            ev.copy("")
+            ev.copy(code = "", value = s"${value}D")
           }
         case ByteType | ShortType =>
-          ev.isNull = "false"
-          ev.value = s"(${ctx.javaType(dataType)})$value"
-          ev.copy("")
-        case IntegerType | DateType =>
-          ev.isNull = "false"
-          ev.value = value.toString
-          ev.copy("")
+          ev.copy(code = "", value = s"($javaType)$value")
         case TimestampType | LongType =>
-          ev.isNull = "false"
-          ev.value = s"${value}L"
-          ev.copy("")
-        // eval() version may be faster for non-primitive types
+          ev.copy(code = "", value = s"${value}L")
         case other =>
-          super[CodegenFallback].doGenCode(ctx, ev)
+          ev.copy(code = "", value = ctx.addReferenceMinorObj(value, ctx.javaType(dataType)))
       }
     }
   }

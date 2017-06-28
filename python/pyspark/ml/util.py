@@ -17,6 +17,7 @@
 
 import sys
 import uuid
+import warnings
 
 if sys.version > '3':
     basestring = str
@@ -62,8 +63,6 @@ class Identifiable(object):
 @inherit_doc
 class MLWriter(object):
     """
-    .. note:: Experimental
-
     Utility class that can save ML instances.
 
     .. versionadded:: 2.0.0
@@ -78,7 +77,15 @@ class MLWriter(object):
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
     def context(self, sqlContext):
-        """Sets the SQL context to use for saving."""
+        """
+        Sets the SQL context to use for saving.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for saving."""
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
 
@@ -105,16 +112,24 @@ class JavaMLWriter(MLWriter):
         return self
 
     def context(self, sqlContext):
-        """Sets the SQL context to use for saving."""
+        """
+        Sets the SQL context to use for saving.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
         self._jwrite.context(sqlContext._ssql_ctx)
+        return self
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for saving."""
+        self._jwrite.session(sparkSession._jsparkSession)
         return self
 
 
 @inherit_doc
 class MLWritable(object):
     """
-    .. note:: Experimental
-
     Mixin for ML instances that provide :py:class:`MLWriter`.
 
     .. versionadded:: 2.0.0
@@ -143,8 +158,6 @@ class JavaMLWritable(MLWritable):
 @inherit_doc
 class MLReader(object):
     """
-    .. note:: Experimental
-
     Utility class that can load ML instances.
 
     .. versionadded:: 2.0.0
@@ -155,7 +168,15 @@ class MLReader(object):
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
 
     def context(self, sqlContext):
-        """Sets the SQL context to use for loading."""
+        """
+        Sets the SQL context to use for loading.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for loading."""
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
 
 
@@ -180,8 +201,18 @@ class JavaMLReader(MLReader):
         return self._clazz._from_java(java_obj)
 
     def context(self, sqlContext):
-        """Sets the SQL context to use for loading."""
+        """
+        Sets the SQL context to use for loading.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
         self._jread.context(sqlContext._ssql_ctx)
+        return self
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for loading."""
+        self._jread.session(sparkSession._jsparkSession)
         return self
 
     @classmethod
@@ -210,8 +241,6 @@ class JavaMLReader(MLReader):
 @inherit_doc
 class MLReadable(object):
     """
-    .. note:: Experimental
-
     Mixin for instances that provide :py:class:`MLReader`.
 
     .. versionadded:: 2.0.0

@@ -26,9 +26,8 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDTSuite, EnsembleTestHelper}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, QuantileStrategy,
-  Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, GiniCalculator}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, QuantileStrategy, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, GiniCalculator, Variance}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -105,6 +104,31 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(splits.distinct.length === splits.length)
     }
 
+    // SPARK-16957: Use midpoints for split values.
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(3), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+
+      // possibleSplits <= numSplits
+      {
+        val featureSamples = Array(0, 1, 0, 0, 1, 0, 1, 1).map(_.toDouble)
+        val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+        val expectedSplits = Array((0.0 + 1.0) / 2)
+        assert(splits === expectedSplits)
+      }
+
+      // possibleSplits > numSplits
+      {
+        val featureSamples = Array(0, 0, 1, 1, 2, 2, 3, 3).map(_.toDouble)
+        val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+        val expectedSplits = Array((0.0 + 1.0) / 2, (2.0 + 3.0) / 2)
+        assert(splits === expectedSplits)
+      }
+    }
+
     // find splits should not return identical splits
     // when there are not enough split candidates, reduce the number of splits in metadata
     {
@@ -113,9 +137,10 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         Array(5), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
-      val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3).map(_.toDouble)
+      val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3).map(_.toDouble)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits === Array(1.0, 2.0))
+      val expectedSplits = Array((1.0 + 2.0) / 2, (2.0 + 3.0) / 2)
+      assert(splits === expectedSplits)
       // check returned splits are distinct
       assert(splits.distinct.length === splits.length)
     }
@@ -127,9 +152,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         Array(3), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
-      val featureSamples = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 5).map(_.toDouble)
+      val featureSamples = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 5)
+        .map(_.toDouble)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits === Array(2.0, 3.0))
+      val expectedSplits = Array((2.0 + 3.0) / 2, (3.0 + 4.0) / 2)
+      assert(splits === expectedSplits)
     }
 
     // find splits when most samples close to the maximum
@@ -139,9 +166,10 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         Array(2), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
-      val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
+      val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits === Array(1.0))
+      val expectedSplits = Array((1.0 + 2.0) / 2)
+      assert(splits === expectedSplits)
     }
 
     // find splits for constant feature
@@ -154,10 +182,25 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       val featureSamples = Array(0, 0, 0).map(_.toDouble)
       val featureSamplesEmpty = Array.empty[Double]
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits === Array[Double]())
+      assert(splits === Array.empty[Double])
       val splitsEmpty =
         RandomForest.findSplitsForContinuousFeature(featureSamplesEmpty, fakeMetadata, 0)
-      assert(splitsEmpty === Array[Double]())
+      assert(splitsEmpty === Array.empty[Double])
+    }
+  }
+
+  test("train with empty arrays") {
+    val lp = LabeledPoint(1.0, Vectors.dense(Array.empty[Double]))
+    val data = Array.fill(5)(lp)
+    val rdd = sc.parallelize(data)
+
+    val strategy = new OldStrategy(OldAlgo.Regression, Gini, maxDepth = 2,
+      maxBins = 5)
+    withClue("DecisionTree requires number of features > 0," +
+      " but was given an empty features vector") {
+      intercept[IllegalArgumentException] {
+        RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
+      }
     }
   }
 
@@ -170,12 +213,23 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
           Gini,
           maxDepth = 2,
           numClasses = 2,
-          maxBins = 100,
+          maxBins = 5,
           categoricalFeaturesInfo = Map(0 -> 1, 1 -> 5))
     val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
     assert(tree.rootNode.impurity === -1.0)
     assert(tree.depth === 0)
     assert(tree.rootNode.prediction === lp.label)
+
+    // Test with no categorical features
+    val strategy2 = new OldStrategy(
+      OldAlgo.Regression,
+      Variance,
+      maxDepth = 2,
+      maxBins = 5)
+    val Array(tree2) = RandomForest.run(rdd, strategy2, 1, "all", 42L, instr = None)
+    assert(tree2.rootNode.impurity === -1.0)
+    assert(tree2.depth === 0)
+    assert(tree2.rootNode.prediction === lp.label)
   }
 
   test("Multiclass classification with unordered categorical features: split calculations") {

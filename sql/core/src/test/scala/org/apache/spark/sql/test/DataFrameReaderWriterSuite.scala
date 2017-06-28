@@ -18,13 +18,17 @@
 package org.apache.spark.sql.test
 
 import java.io.File
+import java.util.Locale
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 
@@ -40,7 +44,6 @@ object LastOptions {
     saveMode = null
   }
 }
-
 
 /** Dummy provider. */
 class DefaultSource
@@ -107,17 +110,30 @@ class DefaultSourceWithoutUserSpecifiedSchema
   }
 }
 
-class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+object MessageCapturingCommitProtocol {
+  val commitMessages = new ConcurrentLinkedQueue[TaskCommitMessage]()
+}
 
+class MessageCapturingCommitProtocol(jobId: String, path: String)
+    extends HadoopMapReduceCommitProtocol(jobId, path) {
+
+  // captures commit messages for testing
+  override def onTaskCommit(msg: TaskCommitMessage): Unit = {
+    MessageCapturingCommitProtocol.commitMessages.offer(msg)
+  }
+}
+
+
+class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+  import testImplicits._
 
   private val userSchema = new StructType().add("s", StringType)
+  private val userSchemaString = "s STRING"
   private val textSchema = new StructType().add("value", StringType)
   private val data = Seq("1", "2", "3")
   private val dir = Utils.createTempDir(namePrefix = "input").getCanonicalPath
-  private implicit var enc: Encoder[String] = _
 
   before {
-    enc = spark.implicits.newStringEncoder
     Utils.deleteRecursively(new File(dir))
   }
 
@@ -130,7 +146,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         .start()
     }
     Seq("'writeStream'", "only", "streaming Dataset/DataFrame").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -262,13 +278,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     var w = df.write.partitionBy("value")
     var e = intercept[AnalysisException](w.jdbc(null, null, null))
     Seq("jdbc", "partitioning").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
 
     w = df.write.bucketBy(2, "value")
     e = intercept[AnalysisException](w.jdbc(null, null, null))
     Seq("jdbc", "bucketing").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -291,6 +307,19 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     spark.read.format("org.apache.spark.sql.test").load(dir, dir, dir)
     spark.read.format("org.apache.spark.sql.test").load(Seq(dir, dir): _*)
     Option(dir).map(spark.read.format("org.apache.spark.sql.test").load)
+  }
+
+  test("write path implements onTaskCommit API correctly") {
+    withSQLConf(
+        "spark.sql.sources.commitProtocolClass" ->
+          classOf[MessageCapturingCommitProtocol].getCanonicalName) {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        MessageCapturingCommitProtocol.commitMessages.clear()
+        spark.range(10).repartition(10).write.mode("overwrite").parquet(path)
+        assert(MessageCapturingCommitProtocol.commitMessages.size() == 10)
+      }
+    }
   }
 
   test("read a data source that does not extend SchemaRelationProvider") {
@@ -358,7 +387,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
     // Reader, with user specified schema, should just apply user schema on the file data
     val e = intercept[AnalysisException] { spark.read.schema(userSchema).textFile() }
-    assert(e.getMessage.toLowerCase.contains("user specified schema not supported"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains(
+      "user specified schema not supported"))
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir) }
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir, dir) }
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
@@ -372,9 +402,11 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val schema = df.schema
 
     // Reader, without user specified schema
-    intercept[IllegalArgumentException] {
+    val message = intercept[AnalysisException] {
       testRead(spark.read.csv(), Seq.empty, schema)
-    }
+    }.getMessage
+    assert(message.contains("Unable to infer schema for CSV. It must be specified manually."))
+
     testRead(spark.read.csv(dir), data, schema)
     testRead(spark.read.csv(dir, dir), data ++ data, schema)
     testRead(spark.read.csv(Seq(dir, dir): _*), data ++ data, schema)
@@ -459,8 +491,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("column nullability and comment - write and then read") {
-    import testImplicits._
-
     Seq("json", "parquet", "csv").foreach { format =>
       val schema = StructType(
         StructField("cl1", IntegerType, nullable = false).withComment("test") ::
@@ -572,5 +602,89 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
           spark.sessionState.catalog.tableExists(TableIdentifier("same_name", Some("default"))))
       }
     }
+  }
+
+  test("SPARK-18510: use user specified types for partition columns in file sources") {
+    import org.apache.spark.sql.functions.udf
+    withTempDir { src =>
+      val createArray = udf { (length: Long) =>
+        for (i <- 1 to length.toInt) yield i.toString
+      }
+      spark.range(4).select(createArray('id + 1) as 'ex, 'id, 'id % 4 as 'part).coalesce(1).write
+        .partitionBy("part", "id")
+        .mode("overwrite")
+        .parquet(src.toString)
+      // Specify a random ordering of the schema, partition column in the middle, etc.
+      // Also let's say that the partition columns are Strings instead of Longs.
+      // partition columns should go to the end
+      val schema = new StructType()
+        .add("id", StringType)
+        .add("ex", ArrayType(StringType))
+      val df = spark.read
+        .schema(schema)
+        .format("parquet")
+        .load(src.toString)
+
+      assert(df.schema.toList === List(
+        StructField("ex", ArrayType(StringType)),
+        StructField("part", IntegerType), // inferred partitionColumn dataType
+        StructField("id", StringType))) // used user provided partitionColumn dataType
+
+      checkAnswer(
+        df,
+        // notice how `part` is ordered before `id`
+        Row(Array("1"), 0, "0") :: Row(Array("1", "2"), 1, "1") ::
+          Row(Array("1", "2", "3"), 2, "2") :: Row(Array("1", "2", "3", "4"), 3, "3") :: Nil
+      )
+    }
+  }
+
+  test("SPARK-18899: append to a bucketed table using DataFrameWriter with mismatched bucketing") {
+    withTable("t") {
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.bucketBy(2, "i").saveAsTable("t")
+      val e = intercept[AnalysisException] {
+        Seq(3 -> "c").toDF("i", "j").write.bucketBy(3, "i").mode("append").saveAsTable("t")
+      }
+      assert(e.message.contains("Specified bucketing does not match that of the existing table"))
+    }
+  }
+
+  test("SPARK-18912: number of columns mismatch for non-file-based data source table") {
+    withTable("t") {
+      sql("CREATE TABLE t USING org.apache.spark.sql.test.DefaultSource")
+
+      val e = intercept[AnalysisException] {
+        Seq(1 -> "a").toDF("a", "b").write
+          .format("org.apache.spark.sql.test.DefaultSource")
+          .mode("append").saveAsTable("t")
+      }
+      assert(e.message.contains("The column number of the existing table"))
+    }
+  }
+
+  test("SPARK-18913: append to a table with special column names") {
+    withTable("t") {
+      Seq(1 -> "a").toDF("x.x", "y.y").write.saveAsTable("t")
+      Seq(2 -> "b").toDF("x.x", "y.y").write.mode("append").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
+    }
+  }
+
+  test("SPARK-16848: table API throws an exception for user specified schema") {
+    withTable("t") {
+      val schema = StructType(StructField("a", StringType) :: Nil)
+      val e = intercept[AnalysisException] {
+        spark.read.schema(schema).table("t")
+      }.getMessage
+      assert(e.contains("User specified schema not supported with `table`"))
+    }
+  }
+
+  test("SPARK-20431: Specify a schema by using a DDL-formatted string") {
+    spark.createDataset(data).write.mode(SaveMode.Overwrite).text(dir)
+    testRead(spark.read.schema(userSchemaString).text(), Seq.empty, userSchema)
+    testRead(spark.read.schema(userSchemaString).text(dir), data, userSchema)
+    testRead(spark.read.schema(userSchemaString).text(dir, dir), data ++ data, userSchema)
+    testRead(spark.read.schema(userSchemaString).text(Seq(dir, dir): _*), data ++ data, userSchema)
   }
 }

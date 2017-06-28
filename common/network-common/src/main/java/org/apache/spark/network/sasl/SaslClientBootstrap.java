@@ -40,24 +40,14 @@ import org.apache.spark.network.util.TransportConf;
 public class SaslClientBootstrap implements TransportClientBootstrap {
   private static final Logger logger = LoggerFactory.getLogger(SaslClientBootstrap.class);
 
-  private final boolean encrypt;
   private final TransportConf conf;
   private final String appId;
   private final SecretKeyHolder secretKeyHolder;
 
   public SaslClientBootstrap(TransportConf conf, String appId, SecretKeyHolder secretKeyHolder) {
-    this(conf, appId, secretKeyHolder, false);
-  }
-
-  public SaslClientBootstrap(
-      TransportConf conf,
-      String appId,
-      SecretKeyHolder secretKeyHolder,
-      boolean encrypt) {
     this.conf = conf;
     this.appId = appId;
     this.secretKeyHolder = secretKeyHolder;
-    this.encrypt = encrypt;
   }
 
   /**
@@ -67,7 +57,7 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
    */
   @Override
   public void doBootstrap(TransportClient client, Channel channel) {
-    SparkSaslClient saslClient = new SparkSaslClient(appId, secretKeyHolder, encrypt);
+    SparkSaslClient saslClient = new SparkSaslClient(appId, secretKeyHolder, conf.saslEncryption());
     try {
       byte[] payload = saslClient.firstToken();
 
@@ -77,20 +67,21 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         msg.encode(buf);
         buf.writeBytes(msg.body().nioByteBuffer());
 
-        ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.saslRTTimeoutMs());
+        ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.authRTTimeoutMs());
         payload = saslClient.response(JavaUtils.bufferToArray(response));
       }
 
       client.setClientId(appId);
 
-      if (encrypt) {
+      if (conf.saslEncryption()) {
         if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslClient.getNegotiatedProperty(Sasl.QOP))) {
           throw new RuntimeException(
             new SaslException("Encryption requests by negotiated non-encrypted connection."));
         }
+
         SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
         saslClient = null;
-        logger.debug("Channel {} configured for SASL encryption.", client);
+        logger.debug("Channel {} configured for encryption.", client);
       }
     } catch (IOException ioe) {
       throw new RuntimeException(ioe);

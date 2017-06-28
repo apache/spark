@@ -56,8 +56,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   }
 
   test("check types for unary arithmetic") {
-    assertError(UnaryMinus('stringField), "(numeric or calendarinterval) type")
-    assertError(Abs('stringField), "requires numeric type")
     assertError(BitwiseNot('stringField), "requires integral type")
   }
 
@@ -111,6 +109,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
 
+    assertError(EqualTo('mapField, 'mapField), "Cannot use map type in EqualTo")
+    assertError(EqualNullSafe('mapField, 'mapField), "Cannot use map type in EqualNullSafe")
     assertError(LessThan('mapField, 'mapField),
       s"requires ${TypeCollection.Ordered.simpleString} type")
     assertError(LessThanOrEqual('mapField, 'mapField),

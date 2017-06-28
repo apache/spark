@@ -53,11 +53,13 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema: String,
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
-      writeLegacyParquetFormat: Boolean): Unit = {
+      writeLegacyParquetFormat: Boolean,
+      int64AsTimestampMillis: Boolean = false): Unit = {
     val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
-      writeLegacyParquetFormat = writeLegacyParquetFormat)
+      writeLegacyParquetFormat = writeLegacyParquetFormat,
+      writeTimestampInMillis = int64AsTimestampMillis)
 
     test(s"sql <= parquet: $testName") {
       val actual = converter.convert(MessageTypeParser.parseMessageType(parquetSchema))
@@ -77,11 +79,13 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema: String,
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
-      writeLegacyParquetFormat: Boolean): Unit = {
+      writeLegacyParquetFormat: Boolean,
+      int64AsTimestampMillis: Boolean = false): Unit = {
     val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
-      writeLegacyParquetFormat = writeLegacyParquetFormat)
+      writeLegacyParquetFormat = writeLegacyParquetFormat,
+      writeTimestampInMillis = int64AsTimestampMillis)
 
     test(s"sql => parquet: $testName") {
       val actual = converter.convert(sqlSchema)
@@ -97,7 +101,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema: String,
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
-      writeLegacyParquetFormat: Boolean): Unit = {
+      writeLegacyParquetFormat: Boolean,
+      int64AsTimestampMillis: Boolean = false): Unit = {
 
     testCatalystToParquet(
       testName,
@@ -105,7 +110,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema,
       binaryAsString,
       int96AsTimestamp,
-      writeLegacyParquetFormat)
+      writeLegacyParquetFormat,
+      int64AsTimestampMillis)
 
     testParquetToCatalyst(
       testName,
@@ -113,7 +119,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema,
       binaryAsString,
       int96AsTimestamp,
-      writeLegacyParquetFormat)
+      writeLegacyParquetFormat,
+      int64AsTimestampMillis)
   }
 }
 
@@ -366,88 +373,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       assert(a.dataType === b.dataType)
       assert(a.nullable === b.nullable)
     }
-  }
-
-  test("merge with metastore schema") {
-    // Field type conflict resolution
-    assertResult(
-      StructType(Seq(
-        StructField("lowerCase", StringType),
-        StructField("UPPERCase", DoubleType, nullable = false)))) {
-
-      ParquetFileFormat.mergeMetastoreParquetSchema(
-        StructType(Seq(
-          StructField("lowercase", StringType),
-          StructField("uppercase", DoubleType, nullable = false))),
-
-        StructType(Seq(
-          StructField("lowerCase", BinaryType),
-          StructField("UPPERCase", IntegerType, nullable = true))))
-    }
-
-    // MetaStore schema is subset of parquet schema
-    assertResult(
-      StructType(Seq(
-        StructField("UPPERCase", DoubleType, nullable = false)))) {
-
-      ParquetFileFormat.mergeMetastoreParquetSchema(
-        StructType(Seq(
-          StructField("uppercase", DoubleType, nullable = false))),
-
-        StructType(Seq(
-          StructField("lowerCase", BinaryType),
-          StructField("UPPERCase", IntegerType, nullable = true))))
-    }
-
-    // Metastore schema contains additional non-nullable fields.
-    assert(intercept[Throwable] {
-      ParquetFileFormat.mergeMetastoreParquetSchema(
-        StructType(Seq(
-          StructField("uppercase", DoubleType, nullable = false),
-          StructField("lowerCase", BinaryType, nullable = false))),
-
-        StructType(Seq(
-          StructField("UPPERCase", IntegerType, nullable = true))))
-    }.getMessage.contains("detected conflicting schemas"))
-
-    // Conflicting non-nullable field names
-    intercept[Throwable] {
-      ParquetFileFormat.mergeMetastoreParquetSchema(
-        StructType(Seq(StructField("lower", StringType, nullable = false))),
-        StructType(Seq(StructField("lowerCase", BinaryType))))
-    }
-  }
-
-  test("merge missing nullable fields from Metastore schema") {
-    // Standard case: Metastore schema contains additional nullable fields not present
-    // in the Parquet file schema.
-    assertResult(
-      StructType(Seq(
-        StructField("firstField", StringType, nullable = true),
-        StructField("secondField", StringType, nullable = true),
-        StructField("thirdfield", StringType, nullable = true)))) {
-      ParquetFileFormat.mergeMetastoreParquetSchema(
-        StructType(Seq(
-          StructField("firstfield", StringType, nullable = true),
-          StructField("secondfield", StringType, nullable = true),
-          StructField("thirdfield", StringType, nullable = true))),
-        StructType(Seq(
-          StructField("firstField", StringType, nullable = true),
-          StructField("secondField", StringType, nullable = true))))
-    }
-
-    // Merge should fail if the Metastore contains any additional fields that are not
-    // nullable.
-    assert(intercept[Throwable] {
-      ParquetFileFormat.mergeMetastoreParquetSchema(
-        StructType(Seq(
-          StructField("firstfield", StringType, nullable = true),
-          StructField("secondfield", StringType, nullable = true),
-          StructField("thirdfield", StringType, nullable = false))),
-        StructType(Seq(
-          StructField("firstField", StringType, nullable = true),
-          StructField("secondField", StringType, nullable = true))))
-    }.getMessage.contains("detected conflicting schemas"))
   }
 
   test("schema merging failure error message") {
@@ -1047,6 +972,18 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
+  testSchema(
+    "Timestamp written and read as INT64 with TIMESTAMP_MILLIS",
+    StructType(Seq(StructField("f1", TimestampType))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP_MILLIS);
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = false,
+    writeLegacyParquetFormat = true,
+    int64AsTimestampMillis = true)
+
   private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
@@ -1079,34 +1016,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       }
     }
   }
-
-  testSchemaClipping(
-    "falls back to case insensitive resolution",
-
-    parquetSchema =
-      """message root {
-        |  required group A {
-        |    optional int32 B;
-        |  }
-        |  optional int32 c;
-        |}
-      """.stripMargin,
-
-    catalystSchema = {
-      val nestedType = new StructType().add("b", IntegerType, nullable = true)
-      new StructType()
-        .add("a", nestedType, nullable = true)
-        .add("c", IntegerType, nullable = true)
-    },
-
-    expectedSchema =
-      """message root {
-        |  required group A {
-        |    optional int32 B;
-        |  }
-        |  optional int32 c;
-        |}
-      """.stripMargin)
 
   testSchemaClipping(
     "simple nested struct",

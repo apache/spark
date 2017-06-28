@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics

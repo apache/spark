@@ -51,7 +51,7 @@ class MultilayerPerceptronClassifierSuite
   test("Input Validation") {
     val mlpc = new MultilayerPerceptronClassifier()
     intercept[IllegalArgumentException] {
-      mlpc.setLayers(Array[Int]())
+      mlpc.setLayers(Array.empty[Int])
     }
     intercept[IllegalArgumentException] {
       mlpc.setLayers(Array[Int](1))
@@ -75,6 +75,7 @@ class MultilayerPerceptronClassifierSuite
       .setSolver("l-bfgs")
     val model = trainer.fit(dataset)
     val result = model.transform(dataset)
+    MLTestingUtils.checkCopyAndUids(trainer, model)
     val predictionAndLabels = result.select("prediction", "label").collect()
     predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
       assert(p == l)

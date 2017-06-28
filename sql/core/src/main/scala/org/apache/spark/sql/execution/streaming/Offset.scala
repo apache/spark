@@ -23,4 +23,38 @@ package org.apache.spark.sql.execution.streaming
  * ordering of two [[Offset]] instances.  We do assume that if two offsets are `equal` then no
  * new data has arrived.
  */
-trait Offset extends Serializable {}
+abstract class Offset {
+
+  /**
+   * Equality based on JSON string representation. We leverage the
+   * JSON representation for normalization between the Offset's
+   * in memory and on disk representations.
+   */
+  override def equals(obj: Any): Boolean = obj match {
+    case o: Offset => this.json == o.json
+    case _ => false
+  }
+
+  override def hashCode(): Int = this.json.hashCode
+
+  override def toString(): String = this.json.toString
+
+  /**
+   * A JSON-serialized representation of an Offset that is
+   * used for saving offsets to the offset log.
+   * Note: We assume that equivalent/equal offsets serialize to
+   * identical JSON strings.
+   *
+   * @return JSON string encoding
+   */
+  def json: String
+}
+
+/**
+ * Used when loading a JSON serialized offset from external storage.
+ * We are currently not responsible for converting JSON serialized
+ * data into an internal (i.e., object) representation. Sources should
+ * define a factory method in their source Offset companion objects
+ * that accepts a [[SerializedOffset]] for doing the conversion.
+ */
+case class SerializedOffset(override val json: String) extends Offset

@@ -20,14 +20,16 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -51,19 +53,30 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   protected val logicalPlan = StreamingExecutionRelation(this)
   protected val output = logicalPlan.output
 
+  /**
+   * All batches from `lastCommittedOffset + 1` to `currentOffset`, inclusive.
+   * Stored in a ListBuffer to facilitate removing committed batches.
+   */
   @GuardedBy("this")
-  protected val batches = new ArrayBuffer[Dataset[A]]
+  protected val batches = new ListBuffer[Dataset[A]]
 
   @GuardedBy("this")
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
+  /**
+   * Last offset that was discarded, or -1 if no commits have occurred. Note that the value
+   * -1 is used in calculations below and isn't just an arbitrary constant.
+   */
+  @GuardedBy("this")
+  protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
+
   def schema: StructType = encoder.schema
 
-  def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
+  def toDS(): Dataset[A] = {
     Dataset(sqlContext.sparkSession, logicalPlan)
   }
 
-  def toDF()(implicit sqlContext: SQLContext): DataFrame = {
+  def toDF(): DataFrame = {
     Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
   }
 
@@ -85,21 +98,25 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
 
   override def getOffset: Option[Offset] = synchronized {
-    if (batches.isEmpty) {
+    if (currentOffset.offset == -1) {
       None
     } else {
       Some(currentOffset)
     }
   }
 
-  /**
-   * Returns the data that is between the offsets (`start`, `end`].
-   */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+    // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
     val startOrdinal =
-      start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
-    val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
-    val newBlocks = synchronized { batches.slice(startOrdinal, endOrdinal) }
+      start.flatMap(LongOffset.convert).getOrElse(LongOffset(-1)).offset.toInt + 1
+    val endOrdinal = LongOffset.convert(end).getOrElse(LongOffset(-1)).offset.toInt + 1
+
+    // Internal buffer only holds the batches after lastCommittedOffset.
+    val newBlocks = synchronized {
+      val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
+      val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
+      batches.slice(sliceStart, sliceEnd)
+    }
 
     logDebug(
       s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
@@ -111,11 +128,31 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       }
   }
 
+  override def commit(end: Offset): Unit = synchronized {
+    def check(newOffset: LongOffset): Unit = {
+      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
+
+      if (offsetDiff < 0) {
+        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
+      }
+
+      batches.trimStart(offsetDiff)
+      lastOffsetCommitted = newOffset
+    }
+
+    LongOffset.convert(end) match {
+      case Some(lo) => check(lo)
+      case None => sys.error(s"MemoryStream.commit() received an offset ($end) " +
+        "that did not originate with an instance of this class")
+    }
+  }
+
   override def stop() {}
 
   def reset(): Unit = synchronized {
     batches.clear()
     currentOffset = new LongOffset(-1)
+    lastOffsetCommitted = new LongOffset(-1)
   }
 }
 
@@ -151,24 +188,37 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
     }.mkString("\n")
   }
 
-  override def addBatch(batchId: Long, data: DataFrame): Unit = synchronized {
-    if (latestBatchId.isEmpty || batchId > latestBatchId.get) {
+  override def addBatch(batchId: Long, data: DataFrame): Unit = {
+    val notCommitted = synchronized {
+      latestBatchId.isEmpty || batchId > latestBatchId.get
+    }
+    if (notCommitted) {
       logDebug(s"Committing batch $batchId to $this")
-      outputMode match {
-        case InternalOutputModes.Append | InternalOutputModes.Update =>
-          batches.append(AddedData(batchId, data.collect()))
+      SQLExecution.ignoreNestedExecutionId(data.sparkSession) {
+        outputMode match {
+          case Append | Update =>
+            val rows = AddedData(batchId, data.collect())
+            synchronized { batches += rows }
 
-        case InternalOutputModes.Complete =>
-          batches.clear()
-          batches += AddedData(batchId, data.collect())
+          case Complete =>
+            val rows = AddedData(batchId, data.collect())
+            synchronized {
+              batches.clear()
+              batches += rows
+            }
 
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Output mode $outputMode is not supported by MemorySink")
+          case _ =>
+            throw new IllegalArgumentException(
+              s"Output mode $outputMode is not supported by MemorySink")
+        }
       }
     } else {
       logDebug(s"Skipping already committed batch: $batchId")
     }
+  }
+
+  def clear(): Unit = synchronized {
+    batches.clear()
   }
 
   override def toString(): String = "MemorySink"
@@ -179,4 +229,9 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
  */
 case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode {
   def this(sink: MemorySink) = this(sink, sink.schema.toAttributes)
+
+  private val sizePerRow = sink.schema.toAttributes.map(_.dataType.defaultSize).sum
+
+  override def computeStats: Statistics =
+    Statistics(sizePerRow * sink.allData.size)
 }

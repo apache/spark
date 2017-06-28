@@ -25,7 +25,6 @@ import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.ShuffleWriter
@@ -42,8 +41,9 @@ import org.apache.spark.shuffle.ShuffleWriter
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
- * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
+ * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
+ *                              and sent to executor side.
  *
  * The parameters below are optional:
  * @param jobId id of the job this task belongs to
@@ -56,18 +56,18 @@ private[spark] class ShuffleMapTask(
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient private var locs: Seq[TaskLocation],
-    metrics: TaskMetrics,
     localProperties: Properties,
+    serializedTaskMetrics: Array[Byte],
     jobId: Option[Int] = None,
     appId: Option[String] = None,
     appAttemptId: Option[String] = None)
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, metrics, localProperties, jobId,
-    appId, appAttemptId)
+  extends Task[MapStatus](stageId, stageAttemptId, partition.index, localProperties,
+    serializedTaskMetrics, jobId, appId, appAttemptId)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) {
-    this(0, 0, null, new Partition { override def index: Int = 0 }, null, null, new Properties)
+    this(0, 0, null, new Partition { override def index: Int = 0 }, null, new Properties, null)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {

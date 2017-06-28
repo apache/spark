@@ -22,7 +22,6 @@ import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
 
-import scala.language.reflectiveCalls
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
@@ -52,7 +51,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
     // We will first try to share Hadoop classes. If we cannot resolve the Hadoop artifact
-    // with the given version, we will use Hadoop 2.4.0 and then will not share Hadoop classes.
+    // with the given version, we will use Hadoop 2.6 and then will not share Hadoop classes.
     var sharesHadoopClasses = true
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
@@ -63,17 +62,14 @@ private[hive] object IsolatedClientLoader extends Logging {
         } catch {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
-            // version cannot be resolved (e.g. it is a vendor specific version like
-            // 2.0.0-cdh4.1.1). If it is the case, we will try just
-            // "org.apache.hadoop:hadoop-client:2.4.0". "org.apache.hadoop:hadoop-client:2.4.0"
-            // is used just because we used to hard code it as the hadoop artifact to download.
-            logWarning(s"Failed to resolve Hadoop artifacts for the version ${hadoopVersion}. " +
-              s"We will change the hadoop version from ${hadoopVersion} to 2.4.0 and try again. " +
+            // version cannot be resolved.
+            logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. " +
+              s"We will change the hadoop version from $hadoopVersion to 2.6.0 and try again. " +
               "Hadoop classes will not be shared between Spark and Hive metastore client. " +
               "It is recommended to set jars used by Hive metastore client through " +
               "spark.sql.hive.metastore.jars in the production environment.")
             sharesHadoopClasses = false
-            (downloadVersion(resolvedVersion, "2.4.0", ivyPath), "2.4.0")
+            (downloadVersion(resolvedVersion, "2.6.5", ivyPath), "2.6.5")
         }
       resolvedVersions.put((resolvedVersion, actualHadoopVersion), downloadedFiles)
       resolvedVersions((resolvedVersion, actualHadoopVersion))
@@ -97,6 +93,8 @@ private[hive] object IsolatedClientLoader extends Logging {
     case "1.0" | "1.0.0" => hive.v1_0
     case "1.1" | "1.1.0" => hive.v1_1
     case "1.2" | "1.2.0" | "1.2.1" => hive.v1_2
+    case "2.0" | "2.0.0" | "2.0.1" => hive.v2_0
+    case "2.1" | "2.1.0" | "2.1.1" => hive.v2_1
   }
 
   private def downloadVersion(
@@ -112,8 +110,9 @@ private[hive] object IsolatedClientLoader extends Logging {
     val classpath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
-        Some("http://www.datanucleus.org/downloads/maven2"),
-        ivyPath,
+        SparkSubmitUtils.buildIvySettings(
+          Some("http://www.datanucleus.org/downloads/maven2"),
+          ivyPath),
         exclusions = version.exclusions)
     }
     val allFiles = classpath.split(",").map(new File(_)).toSet
@@ -121,6 +120,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
+    logInfo(s"Downloaded metastore jars to ${tempDir.getCanonicalPath}")
     tempDir.listFiles().map(_.toURI.toURL)
   }
 

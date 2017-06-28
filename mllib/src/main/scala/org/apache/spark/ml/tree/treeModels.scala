@@ -95,11 +95,6 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   /** Trees in this ensemble. Warning: These have null parent Estimators. */
   def trees: Array[M]
 
-  /**
-   * Number of trees in ensemble
-   */
-  val getNumTrees: Int = trees.length
-
   /** Weights for each tree, zippable with [[trees]] */
   def treeWeights: Array[Double]
 

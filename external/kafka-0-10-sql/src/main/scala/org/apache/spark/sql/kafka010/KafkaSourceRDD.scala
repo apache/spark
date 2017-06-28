@@ -21,13 +21,14 @@ import java.{util => ju}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.NextIterator
 
 
 /** Offset range that one partition of the KafkaSourceRDD has to read */
@@ -61,7 +62,9 @@ private[kafka010] class KafkaSourceRDD(
     sc: SparkContext,
     executorKafkaParams: ju.Map[String, Object],
     offsetRanges: Seq[KafkaSourceRDDOffsetRange],
-    pollTimeoutMs: Long)
+    pollTimeoutMs: Long,
+    failOnDataLoss: Boolean,
+    reuseKafkaConsumer: Boolean)
   extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
   override def persist(newLevel: StorageLevel): this.type = {
@@ -112,10 +115,26 @@ private[kafka010] class KafkaSourceRDD(
     buf.toArray
   }
 
+  override def getPreferredLocations(split: Partition): Seq[String] = {
+    val part = split.asInstanceOf[KafkaSourceRDDPartition]
+    part.offsetRange.preferredLoc.map(Seq(_)).getOrElse(Seq.empty)
+  }
+
   override def compute(
       thePart: Partition,
       context: TaskContext): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {
-    val range = thePart.asInstanceOf[KafkaSourceRDDPartition].offsetRange
+    val sourcePartition = thePart.asInstanceOf[KafkaSourceRDDPartition]
+    val topic = sourcePartition.offsetRange.topic
+    val kafkaPartition = sourcePartition.offsetRange.partition
+    val consumer =
+      if (!reuseKafkaConsumer) {
+        // If we can't reuse CachedKafkaConsumers, creating a new CachedKafkaConsumer. As here we
+        // uses `assign`, we don't need to worry about the "group.id" conflicts.
+        CachedKafkaConsumer.createUncached(topic, kafkaPartition, executorKafkaParams)
+      } else {
+        CachedKafkaConsumer.getOrCreate(topic, kafkaPartition, executorKafkaParams)
+      }
+    val range = resolveRange(consumer, sourcePartition.offsetRange)
     assert(
       range.fromOffset <= range.untilOffset,
       s"Beginning offset ${range.fromOffset} is after the ending offset ${range.untilOffset} " +
@@ -125,24 +144,68 @@ private[kafka010] class KafkaSourceRDD(
       logInfo(s"Beginning offset ${range.fromOffset} is the same as ending offset " +
         s"skipping ${range.topic} ${range.partition}")
       Iterator.empty
-
     } else {
+      val underlying = new NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
+        var requestOffset = range.fromOffset
 
-      val consumer = CachedKafkaConsumer.getOrCreate(
-        range.topic, range.partition, executorKafkaParams)
-      var requestOffset = range.fromOffset
+        override def getNext(): ConsumerRecord[Array[Byte], Array[Byte]] = {
+          if (requestOffset >= range.untilOffset) {
+            // Processed all offsets in this partition.
+            finished = true
+            null
+          } else {
+            val r = consumer.get(requestOffset, range.untilOffset, pollTimeoutMs, failOnDataLoss)
+            if (r == null) {
+              // Losing some data. Skip the rest offsets in this partition.
+              finished = true
+              null
+            } else {
+              requestOffset = r.offset + 1
+              r
+            }
+          }
+        }
 
-      logDebug(s"Creating iterator for $range")
-
-      new Iterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
-        override def hasNext(): Boolean = requestOffset < range.untilOffset
-        override def next(): ConsumerRecord[Array[Byte], Array[Byte]] = {
-          assert(hasNext(), "Can't call next() once untilOffset has been reached")
-          val r = consumer.get(requestOffset, pollTimeoutMs)
-          requestOffset += 1
-          r
+        override protected def close(): Unit = {
+          if (!reuseKafkaConsumer) {
+            // Don't forget to close non-reuse KafkaConsumers. You may take down your cluster!
+            consumer.close()
+          } else {
+            // Indicate that we're no longer using this consumer
+            CachedKafkaConsumer.releaseKafkaConsumer(topic, kafkaPartition, executorKafkaParams)
+          }
         }
       }
+      // Release consumer, either by removing it or indicating we're no longer using it
+      context.addTaskCompletionListener { _ =>
+        underlying.closeIfNeeded()
+      }
+      underlying
+    }
+  }
+
+  private def resolveRange(consumer: CachedKafkaConsumer, range: KafkaSourceRDDOffsetRange) = {
+    if (range.fromOffset < 0 || range.untilOffset < 0) {
+      // Late bind the offset range
+      val availableOffsetRange = consumer.getAvailableOffsetRange()
+      val fromOffset = if (range.fromOffset < 0) {
+        assert(range.fromOffset == KafkaOffsetRangeLimit.EARLIEST,
+          s"earliest offset ${range.fromOffset} does not equal ${KafkaOffsetRangeLimit.EARLIEST}")
+        availableOffsetRange.earliest
+      } else {
+        range.fromOffset
+      }
+      val untilOffset = if (range.untilOffset < 0) {
+        assert(range.untilOffset == KafkaOffsetRangeLimit.LATEST,
+          s"latest offset ${range.untilOffset} does not equal ${KafkaOffsetRangeLimit.LATEST}")
+        availableOffsetRange.latest
+      } else {
+        range.untilOffset
+      }
+      KafkaSourceRDDOffsetRange(range.topicPartition,
+        fromOffset, untilOffset, range.preferredLoc)
+    } else {
+      range
     }
   }
 }

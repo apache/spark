@@ -1404,7 +1404,9 @@ class Row(tuple):
     ``key in row`` will search through row keys.
 
     Row can be used to create a row object by using named arguments,
-    the fields will be sorted by names.
+    the fields will be sorted by names. It is not allowed to omit
+    a named argument to represent the value is None or missing. This should be
+    explicitly set to None in this case.
 
     >>> row = Row(name="Alice", age=11)
     >>> row

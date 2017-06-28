@@ -14,7 +14,9 @@ It also supports a rich set of higher-level tools including [Spark SQL](sql-prog
 
 Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. Spark uses Hadoop's client libraries for HDFS and YARN. Downloads are pre-packaged for a handful of popular Hadoop versions.
 Users can also download a "Hadoop free" binary and run Spark with any Hadoop version
-[by augmenting Spark's classpath](hadoop-provided.html). 
+[by augmenting Spark's classpath](hadoop-provided.html).
+Scala and Java users can include Spark in their projects using its Maven coordinates and in the future Python users can also install Spark from PyPI.
+
 
 If you'd like to build Spark from 
 source, visit [Building Spark](building-spark.html).
@@ -24,9 +26,13 @@ Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
 or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 7+, Python 2.6+/3.4+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}}
+Spark runs on Java 8+, Python 2.7+/3.4+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}}
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).
+
+Note that support for Java 7, Python 2.6 and old Hadoop versions before 2.6.5 were removed as of Spark 2.2.0.
+
+Note that support for Scala 2.10 is deprecated as of Spark 2.1.0, and may be removed in Spark 2.3.0.
 
 # Running the Examples and Shell
 
@@ -107,6 +113,7 @@ options for deployment:
   * [Mesos](running-on-mesos.html): deploy a private cluster using
       [Apache Mesos](http://mesos.apache.org)
   * [YARN](running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
+  * [Kubernetes (experimental)](https://github.com/apache-spark-on-k8s/spark): deploy Spark on top of Kubernetes
 
 **Other Documents:**
 
@@ -117,15 +124,15 @@ options for deployment:
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
 * Integration with other storage systems:
+  * [Cloud Infrastructures](cloud-integration.html)
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system
-* [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
-* [Third Party Projects](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects): related third party Spark projects
+* [Contributing to Spark](http://spark.apache.org/contributing.html)
+* [Third Party Projects](http://spark.apache.org/third-party-projects.html): related third party Spark projects
 
 **External Resources:**
 
 * [Spark Homepage](http://spark.apache.org)
-* [Spark Wiki](https://cwiki.apache.org/confluence/display/SPARK)
 * [Spark Community](http://spark.apache.org/community.html) resources, including local meetups
 * [StackOverflow tag `apache-spark`](http://stackoverflow.com/questions/tagged/apache-spark)
 * [Mailing Lists](http://spark.apache.org/mailing-lists.html): ask questions about Spark here

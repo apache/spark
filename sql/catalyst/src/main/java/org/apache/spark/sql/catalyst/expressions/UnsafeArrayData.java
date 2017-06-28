@@ -109,7 +109,8 @@ public final class UnsafeArrayData extends ArrayData {
     // Read the number of elements from the first 8 bytes.
     final long numElements = Platform.getLong(baseObject, baseOffset);
     assert numElements >= 0 : "numElements (" + numElements + ") should >= 0";
-    assert numElements <= Integer.MAX_VALUE : "numElements (" + numElements + ") should <= Integer.MAX_VALUE";
+    assert numElements <= Integer.MAX_VALUE :
+      "numElements (" + numElements + ") should <= Integer.MAX_VALUE";
 
     this.numElements = (int)numElements;
     this.baseObject = baseObject;
@@ -284,6 +285,58 @@ public final class UnsafeArrayData extends ArrayData {
     final UnsafeMapData map = new UnsafeMapData();
     map.pointTo(baseObject, baseOffset + offset, size);
     return map;
+  }
+
+  @Override
+  public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
+
+  public void setNullAt(int ordinal) {
+    assertIndexIsValid(ordinal);
+    BitSetMethods.set(baseObject, baseOffset + 8, ordinal);
+
+    /* we assume the corrresponding column was already 0 or
+       will be set to 0 later by the caller side */
+  }
+
+  public void setBoolean(int ordinal, boolean value) {
+    assertIndexIsValid(ordinal);
+    Platform.putBoolean(baseObject, getElementOffset(ordinal, 1), value);
+  }
+
+  public void setByte(int ordinal, byte value) {
+    assertIndexIsValid(ordinal);
+    Platform.putByte(baseObject, getElementOffset(ordinal, 1), value);
+  }
+
+  public void setShort(int ordinal, short value) {
+    assertIndexIsValid(ordinal);
+    Platform.putShort(baseObject, getElementOffset(ordinal, 2), value);
+  }
+
+  public void setInt(int ordinal, int value) {
+    assertIndexIsValid(ordinal);
+    Platform.putInt(baseObject, getElementOffset(ordinal, 4), value);
+  }
+
+  public void setLong(int ordinal, long value) {
+    assertIndexIsValid(ordinal);
+    Platform.putLong(baseObject, getElementOffset(ordinal, 8), value);
+  }
+
+  public void setFloat(int ordinal, float value) {
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
+    }
+    assertIndexIsValid(ordinal);
+    Platform.putFloat(baseObject, getElementOffset(ordinal, 4), value);
+  }
+
+  public void setDouble(int ordinal, double value) {
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    }
+    assertIndexIsValid(ordinal);
+    Platform.putDouble(baseObject, getElementOffset(ordinal, 8), value);
   }
 
   // This `hashCode` computation could consume much processor time for large data.

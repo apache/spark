@@ -22,6 +22,7 @@ import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.util.control.NonFatal
+import scala.xml.Node
 
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
@@ -178,6 +179,14 @@ class HistoryServer(
     provider.getListing()
   }
 
+  def getEventLogsUnderProcess(): Int = {
+    provider.getEventLogsUnderProcess()
+  }
+
+  def getLastUpdatedTime(): Long = {
+    provider.getLastUpdatedTime()
+  }
+
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     getApplicationList().map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
@@ -191,6 +200,13 @@ class HistoryServer(
       attemptId: Option[String],
       zipStream: ZipOutputStream): Unit = {
     provider.writeEventLogs(appId, attemptId, zipStream)
+  }
+
+  /**
+   * @return html text to display when the application list is empty
+   */
+  def emptyListingHtml(): Seq[Node] = {
+    provider.getEmptyListingHtml()
   }
 
   /**
@@ -253,7 +269,7 @@ object HistoryServer extends Logging {
     Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
-    val securityManager = new SecurityManager(conf)
+    val securityManager = createSecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")
       .getOrElse(classOf[FsHistoryProvider].getName())
@@ -271,6 +287,29 @@ object HistoryServer extends Logging {
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
+  }
+
+  /**
+   * Create a security manager.
+   * This turns off security in the SecurityManager, so that the History Server can start
+   * in a Spark cluster where security is enabled.
+   * @param config configuration for the SecurityManager constructor
+   * @return the security manager for use in constructing the History Server.
+   */
+  private[history] def createSecurityManager(config: SparkConf): SecurityManager = {
+    if (config.getBoolean(SecurityManager.SPARK_AUTH_CONF, false)) {
+      logDebug(s"Clearing ${SecurityManager.SPARK_AUTH_CONF}")
+      config.set(SecurityManager.SPARK_AUTH_CONF, "false")
+    }
+
+    if (config.getBoolean("spark.acls.enable", config.getBoolean("spark.ui.acls.enable", false))) {
+      logInfo("Either spark.acls.enable or spark.ui.acls.enable is configured, clearing it and " +
+        "only using spark.history.ui.acl.enable")
+      config.set("spark.acls.enable", "false")
+      config.set("spark.ui.acls.enable", "false")
+    }
+
+    new SecurityManager(config)
   }
 
   def initSecurity() {

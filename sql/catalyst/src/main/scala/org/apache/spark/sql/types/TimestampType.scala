@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 
 /**
  * The data type representing `java.sql.Timestamp` values.
- * Please use the singleton [[DataTypes.TimestampType]].
+ * Please use the singleton `DataTypes.TimestampType`.
  *
  * @since 1.3.0
  */

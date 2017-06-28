@@ -80,6 +80,10 @@ private[spark] class CoalescedRDD[T: ClassTag](
 
   require(maxPartitions > 0 || maxPartitions == prev.partitions.length,
     s"Number of partitions ($maxPartitions) must be positive.")
+  if (partitionCoalescer.isDefined) {
+    require(partitionCoalescer.get.isInstanceOf[Serializable],
+      "The partition coalescer passed in must be serializable.")
+  }
 
   override def getPartitions: Array[Partition] = {
     val pc = partitionCoalescer.getOrElse(new DefaultPartitionCoalescer())

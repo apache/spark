@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Locale
+
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.InterfaceStability
@@ -34,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  *
  * The default precision and scale is (10, 0).
  *
- * Please use [[DataTypes.createDecimalType()]] to create a specific instance.
+ * Please use `DataTypes.createDecimalType()` to create a specific instance.
  *
  * @since 1.3.0
  */
@@ -65,7 +67,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   override def toString: String = s"DecimalType($precision,$scale)"
 
-  override def sql: String = typeName.toUpperCase
+  override def sql: String = typeName.toUpperCase(Locale.ROOT)
 
   /**
    * Returns whether this DecimalType is wider than `other`. If yes, it means `other`
@@ -92,7 +94,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   }
 
   /**
-   * The default size of a value of the DecimalType is 8 bytes (precision <= 18) or 16 bytes.
+   * The default size of a value of the DecimalType is 8 bytes when precision is at most 18,
+   * and 16 bytes otherwise.
    */
   override def defaultSize: Int = if (precision <= Decimal.MAX_LONG_DIGITS) 8 else 16
 

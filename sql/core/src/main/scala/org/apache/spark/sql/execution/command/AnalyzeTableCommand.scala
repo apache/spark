@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.net.URI
+
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.internal.SessionState
 
 
@@ -42,50 +42,41 @@ case class AnalyzeTableCommand(
     val sessionState = sparkSession.sessionState
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB))
-
-    relation match {
-      case relation: CatalogRelation =>
-        updateTableStats(relation.catalogTable,
-          AnalyzeTableCommand.calculateTotalSize(sessionState, relation.catalogTable))
-
-      // data source tables have been converted into LogicalRelations
-      case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
-        updateTableStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
-
-      case otherRelation =>
-        throw new AnalysisException("ANALYZE TABLE is not supported for " +
-          s"${otherRelation.nodeName}.")
+    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    if (tableMeta.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
+    val newTotalSize = AnalyzeTableCommand.calculateTotalSize(sessionState, tableMeta)
 
-    def updateTableStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
-      val oldTotalSize = catalogTable.stats.map(_.sizeInBytes.toLong).getOrElse(0L)
-      val oldRowCount = catalogTable.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
-      var newStats: Option[Statistics] = None
-      if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-        newStats = Some(Statistics(sizeInBytes = newTotalSize))
+    val oldTotalSize = tableMeta.stats.map(_.sizeInBytes.toLong).getOrElse(0L)
+    val oldRowCount = tableMeta.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
+    var newStats: Option[CatalogStatistics] = None
+    if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+      newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
+    }
+    // We only set rowCount when noscan is false, because otherwise:
+    // 1. when total size is not changed, we don't need to alter the table;
+    // 2. when total size is changed, `oldRowCount` becomes invalid.
+    // This is to make sure that we only record the right statistics.
+    if (!noscan) {
+      val newRowCount = SQLExecution.ignoreNestedExecutionId(sparkSession) {
+        sparkSession.table(tableIdentWithDB).count()
       }
-      // We only set rowCount when noscan is false, because otherwise:
-      // 1. when total size is not changed, we don't need to alter the table;
-      // 2. when total size is changed, `oldRowCount` becomes invalid.
-      // This is to make sure that we only record the right statistics.
-      if (!noscan) {
-        val newRowCount = Dataset.ofRows(sparkSession, relation).count()
-        if (newRowCount >= 0 && newRowCount != oldRowCount) {
-          newStats = if (newStats.isDefined) {
-            newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
-          } else {
-            Some(Statistics(sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
-          }
+      if (newRowCount >= 0 && newRowCount != oldRowCount) {
+        newStats = if (newStats.isDefined) {
+          newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
+        } else {
+          Some(CatalogStatistics(
+            sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
         }
       }
-      // Update the metastore if the above statistics of the table are different from those
-      // recorded in the metastore.
-      if (newStats.isDefined) {
-        sessionState.catalog.alterTable(catalogTable.copy(stats = newStats))
-        // Refresh the cached data source table in the catalog.
-        sessionState.catalog.refreshTable(tableIdentWithDB)
-      }
+    }
+    // Update the metastore if the above statistics of the table are different from those
+    // recorded in the metastore.
+    if (newStats.isDefined) {
+      sessionState.catalog.alterTableStats(tableIdentWithDB, newStats.get)
+      // Refresh the cached data source table in the catalog.
+      sessionState.catalog.refreshTable(tableIdentWithDB)
     }
 
     Seq.empty[Row]
@@ -95,6 +86,21 @@ case class AnalyzeTableCommand(
 object AnalyzeTableCommand extends Logging {
 
   def calculateTotalSize(sessionState: SessionState, catalogTable: CatalogTable): Long = {
+    if (catalogTable.partitionColumnNames.isEmpty) {
+      calculateLocationSize(sessionState, catalogTable.identifier, catalogTable.storage.locationUri)
+    } else {
+      // Calculate table size as a sum of the visible partitions. See SPARK-21079
+      val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
+      partitions.map(p =>
+        calculateLocationSize(sessionState, catalogTable.identifier, p.storage.locationUri)
+      ).sum
+    }
+  }
+
+  private def calculateLocationSize(
+      sessionState: SessionState,
+      tableId: TableIdentifier,
+      locationUri: Option[URI]): Long = {
     // This method is mainly based on
     // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
     // in Hive 0.13 (except that we do not use fs.getContentSummary).
@@ -105,13 +111,13 @@ object AnalyzeTableCommand extends Logging {
     // countFileSize to count the table size.
     val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
-    def calculateTableSize(fs: FileSystem, path: Path): Long = {
+    def calculateLocationSize(fs: FileSystem, path: Path): Long = {
       val fileStatus = fs.getFileStatus(path)
       val size = if (fileStatus.isDirectory) {
         fs.listStatus(path)
           .map { status =>
             if (!status.getPath.getName.startsWith(stagingDir)) {
-              calculateTableSize(fs, status.getPath)
+              calculateLocationSize(fs, status.getPath)
             } else {
               0L
             }
@@ -123,16 +129,16 @@ object AnalyzeTableCommand extends Logging {
       size
     }
 
-    catalogTable.storage.locationUri.map { p =>
+    locationUri.map { p =>
       val path = new Path(p)
       try {
         val fs = path.getFileSystem(sessionState.newHadoopConf())
-        calculateTableSize(fs, path)
+        calculateLocationSize(fs, path)
       } catch {
         case NonFatal(e) =>
           logWarning(
-            s"Failed to get the size of table ${catalogTable.identifier.table} in the " +
-              s"database ${catalogTable.identifier.database} because of ${e.toString}", e)
+            s"Failed to get the size of table ${tableId.table} in the " +
+              s"database ${tableId.database} because of ${e.toString}", e)
           0L
       }
     }.getOrElse(0L)

@@ -41,25 +41,30 @@ object StatFunctions extends Logging {
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
    * optimizations).
-   * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
-   * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
+   * The algorithm was first present in <a href="http://dx.doi.org/10.1145/375663.375670">
+   * Space-efficient Online Computation of Quantile Summaries</a> by Greenwald and Khanna.
    *
    * @param df the dataframe
    * @param cols numerical columns of the dataframe
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
    *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
-   * @param relativeError The relative target precision to achieve (>= 0).
+   * @param relativeError The relative target precision to achieve (greater than or equal 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
    *
    * @return for each column, returns the requested approximations
+   *
+   * @note null and NaN values will be ignored in numerical columns before calculation. For
+   *   a column only containing null or NaN values, an empty array is returned.
    */
   def multipleApproxQuantiles(
       df: DataFrame,
       cols: Seq[String],
       probabilities: Seq[Double],
       relativeError: Double): Seq[Seq[Double]] = {
+    require(relativeError >= 0,
+      s"Relative Error must be non-negative but got $relativeError")
     val columns: Seq[Column] = cols.map { colName =>
       val field = df.schema(colName)
       require(field.dataType.isInstanceOf[NumericType],
@@ -76,7 +81,10 @@ object StatFunctions extends Logging {
     def apply(summaries: Array[QuantileSummaries], row: Row): Array[QuantileSummaries] = {
       var i = 0
       while (i < summaries.length) {
-        summaries(i) = summaries(i).insert(row.getDouble(i))
+        if (!row.isNullAt(i)) {
+          val v = row.getDouble(i)
+          if (!v.isNaN) summaries(i) = summaries(i).insert(v)
+        }
         i += 1
       }
       summaries
@@ -89,7 +97,7 @@ object StatFunctions extends Logging {
     }
     val summaries = df.select(columns: _*).rdd.aggregate(emptySummaries)(apply, merge)
 
-    summaries.map { summary => probabilities.map(summary.query) }
+    summaries.map { summary => probabilities.flatMap(summary.query) }
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */

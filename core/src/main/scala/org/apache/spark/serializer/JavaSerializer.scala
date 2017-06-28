@@ -131,7 +131,7 @@ private[spark] class JavaSerializerInstance(
  * :: DeveloperApi ::
  * A Spark serializer that uses Java's built-in serialization.
  *
- * Note that this serializer is not guaranteed to be wire-compatible across different versions of
+ * @note This serializer is not guaranteed to be wire-compatible across different versions of
  * Spark. It is intended to be used to serialize/de-serialize data within a single
  * Spark application.
  */

@@ -105,12 +105,22 @@ case class AggregateExpression(
   }
 
   // We compute the same thing regardless of our final result.
-  override lazy val canonicalized: Expression =
+  override lazy val canonicalized: Expression = {
+    val normalizedAggFunc = mode match {
+      // For PartialMerge or Final mode, the input to the `aggregateFunction` is aggregate buffers,
+      // and the actual children of `aggregateFunction` is not used, here we normalize the expr id.
+      case PartialMerge | Final => aggregateFunction.transform {
+        case a: AttributeReference => a.withExprId(ExprId(0))
+      }
+      case Partial | Complete => aggregateFunction
+    }
+
     AggregateExpression(
-      aggregateFunction.canonicalized.asInstanceOf[AggregateFunction],
+      normalizedAggFunc.canonicalized.asInstanceOf[AggregateFunction],
       mode,
       isDistinct,
       ExprId(0))
+  }
 
   override def children: Seq[Expression] = aggregateFunction :: Nil
   override def dataType: DataType = aggregateFunction.dataType
@@ -155,7 +165,7 @@ case class AggregateExpression(
  * Code which accepts [[AggregateFunction]] instances should be prepared to handle both types of
  * aggregate functions.
  */
-sealed abstract class AggregateFunction extends Expression with ImplicitCastInputTypes {
+abstract class AggregateFunction extends Expression {
 
   /** An aggregate function is not foldable. */
   final override def foldable: Boolean = false
@@ -172,12 +182,6 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
    * These attributes are created automatically by cloning the [[aggBufferAttributes]].
    */
   def inputAggBufferAttributes: Seq[AttributeReference]
-
-  /**
-   * Indicates if this function supports partial aggregation.
-   * Currently Hive UDAF is the only one that doesn't support partial aggregation.
-   */
-  def supportsPartial: Boolean = true
 
   /**
    * Result of the aggregate function when the input is empty. This is currently only used for the
@@ -458,7 +462,9 @@ abstract class DeclarativeAggregate
  * instead of hash based aggregation, as TypedImperativeAggregate use BinaryType as aggregation
  * buffer's storage format, which is not supported by hash based aggregation. Hash based
  * aggregation only support aggregation buffer of mutable types (like LongType, IntType that have
- * fixed length and can be mutated in place in UnsafeRow)
+ * fixed length and can be mutated in place in UnsafeRow).
+ * NOTE: The newly added ObjectHashAggregateExec supports TypedImperativeAggregate functions in
+ * hash based aggregation under some constraints.
  */
 abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 
@@ -471,23 +477,29 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   def createAggregationBuffer(): T
 
   /**
-   * In-place updates the aggregation buffer object with an input row. buffer = buffer + input.
+   * Updates the aggregation buffer object with an input row and returns a new buffer object. For
+   * performance, the function may do in-place update and return it instead of constructing new
+   * buffer object.
+   *
    * This is typically called when doing Partial or Complete mode aggregation.
    *
    * @param buffer The aggregation buffer object.
    * @param input an input row
    */
-  def update(buffer: T, input: InternalRow): Unit
+  def update(buffer: T, input: InternalRow): T
 
   /**
-   * Merges an input aggregation object into aggregation buffer object. buffer = buffer + input.
+   * Merges an input aggregation object into aggregation buffer object and returns a new buffer
+   * object. For performance, the function may do in-place merge and return it instead of
+   * constructing new buffer object.
+   *
    * This is typically called when doing PartialMerge or Final mode aggregation.
    *
    * @param buffer the aggregation buffer object used to store the aggregation result.
    * @param input an input aggregation object. Input aggregation object can be produced by
    *              de-serializing the partial aggregate's output from Mapper side.
    */
-  def merge(buffer: T, input: T): Unit
+  def merge(buffer: T, input: T): T
 
   /**
    * Generates the final aggregation result value for current key group with the aggregation buffer
@@ -505,19 +517,18 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   def deserialize(storageFormat: Array[Byte]): T
 
   final override def initialize(buffer: InternalRow): Unit = {
-    val bufferObject = createAggregationBuffer()
-    buffer.update(mutableAggBufferOffset, bufferObject)
+    buffer(mutableAggBufferOffset) = createAggregationBuffer()
   }
 
   final override def update(buffer: InternalRow, input: InternalRow): Unit = {
-    update(getBufferObject(buffer), input)
+    buffer(mutableAggBufferOffset) = update(getBufferObject(buffer), input)
   }
 
   final override def merge(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
     val bufferObject = getBufferObject(buffer)
     // The inputBuffer stores serialized aggregation buffer object produced by partial aggregate
     val inputObject = deserialize(inputBuffer.getBinary(inputAggBufferOffset))
-    merge(bufferObject, inputObject)
+    buffer(mutableAggBufferOffset) = merge(bufferObject, inputObject)
   }
 
   final override def eval(buffer: InternalRow): Any = {

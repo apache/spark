@@ -29,7 +29,7 @@ private[spark] object BLAS extends Serializable {
   @transient private var _nativeBLAS: NetlibBLAS = _
 
   // For level-1 routines, we use Java implementation.
-  private def f2jBLAS: NetlibBLAS = {
+  private[ml] def f2jBLAS: NetlibBLAS = {
     if (_f2jBLAS == null) {
       _f2jBLAS = new F2jBLAS
     }
@@ -241,6 +241,24 @@ private[spark] object BLAS extends Serializable {
    */
   def spr(alpha: Double, v: Vector, U: DenseVector): Unit = {
     spr(alpha, v, U.values)
+  }
+
+  /**
+   * y := alpha*A*x + beta*y
+   *
+   * @param n The order of the n by n matrix A.
+   * @param A The upper triangular part of A in a [[DenseVector]] (column major).
+   * @param x The [[DenseVector]] transformed by A.
+   * @param y The [[DenseVector]] to be modified in place.
+   */
+  def dspmv(
+      n: Int,
+      alpha: Double,
+      A: DenseVector,
+      x: DenseVector,
+      beta: Double,
+      y: DenseVector): Unit = {
+    f2jBLAS.dspmv("U", n, alpha, A.values, x.values, 1, beta, y.values, 1)
   }
 
   /**

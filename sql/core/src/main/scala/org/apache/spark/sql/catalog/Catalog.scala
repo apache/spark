@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalog
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
-
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Catalog interface for Spark. To access this, use `SparkSession.catalog`.
@@ -52,16 +54,16 @@ abstract class Catalog {
   def listDatabases(): Dataset[Database]
 
   /**
-   * Returns a list of tables in the current database.
-   * This includes all temporary tables.
+   * Returns a list of tables/views in the current database.
+   * This includes all temporary views.
    *
    * @since 2.0.0
    */
   def listTables(): Dataset[Table]
 
   /**
-   * Returns a list of tables in the specified database.
-   * This includes all temporary tables.
+   * Returns a list of tables/views in the specified database.
+   * This includes all temporary views.
    *
    * @since 2.0.0
    */
@@ -86,17 +88,21 @@ abstract class Catalog {
   def listFunctions(dbName: String): Dataset[Function]
 
   /**
-   * Returns a list of columns for the given table in the current database or
-   * the given temporary table.
+   * Returns a list of columns for the given table/view or temporary view.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a temporary view or
+   *                  a table/view in the current database.
    * @since 2.0.0
    */
   @throws[AnalysisException]("table does not exist")
   def listColumns(tableName: String): Dataset[Column]
 
   /**
-   * Returns a list of columns for the given table in the specified database.
+   * Returns a list of columns for the given table/view in the specified database.
    *
+   * @param dbName is a name that designates a database.
+   * @param tableName is an unqualified name that designates a table/view.
    * @since 2.0.0
    */
   @throws[AnalysisException]("database or table does not exist")
@@ -113,9 +119,11 @@ abstract class Catalog {
 
   /**
    * Get the table or view with the specified name. This table can be a temporary view or a
-   * table/view in the current database. This throws an AnalysisException when no Table
-   * can be found.
+   * table/view. This throws an AnalysisException when no Table can be found.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a table/view in
+   *                  the current database.
    * @since 2.1.0
    */
   @throws[AnalysisException]("table does not exist")
@@ -132,9 +140,11 @@ abstract class Catalog {
 
   /**
    * Get the function with the specified name. This function can be a temporary function or a
-   * function in the current database. This throws an AnalysisException when the function cannot
-   * be found.
+   * function. This throws an AnalysisException when the function cannot be found.
    *
+   * @param functionName is either a qualified or unqualified name that designates a function.
+   *                     If no database identifier is provided, it refers to a temporary function
+   *                     or a function in the current database.
    * @since 2.1.0
    */
   @throws[AnalysisException]("function does not exist")
@@ -144,6 +154,8 @@ abstract class Catalog {
    * Get the function with the specified name. This throws an AnalysisException when the function
    * cannot be found.
    *
+   * @param dbName is a name that designates a database.
+   * @param functionName is an unqualified name that designates a function in the specified database
    * @since 2.1.0
    */
   @throws[AnalysisException]("database or function does not exist")
@@ -158,8 +170,11 @@ abstract class Catalog {
 
   /**
    * Check if the table or view with the specified name exists. This can either be a temporary
-   * view or a table/view in the current database.
+   * view or a table/view.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a table/view in
+   *                  the current database.
    * @since 2.1.0
    */
   def tableExists(tableName: String): Boolean
@@ -167,14 +182,19 @@ abstract class Catalog {
   /**
    * Check if the table or view with the specified name exists in the specified database.
    *
+   * @param dbName is a name that designates a database.
+   * @param tableName is an unqualified name that designates a table.
    * @since 2.1.0
    */
   def tableExists(dbName: String, tableName: String): Boolean
 
   /**
    * Check if the function with the specified name exists. This can either be a temporary function
-   * or a function in the current database.
+   * or a function.
    *
+   * @param functionName is either a qualified or unqualified name that designates a function.
+   *                     If no database identifier is provided, it refers to a function in
+   *                     the current database.
    * @since 2.1.0
    */
   def functionExists(functionName: String): Boolean
@@ -182,87 +202,212 @@ abstract class Catalog {
   /**
    * Check if the function with the specified name exists in the specified database.
    *
+   * @param dbName is a name that designates a database.
+   * @param functionName is an unqualified name that designates a function.
    * @since 2.1.0
    */
   def functionExists(dbName: String, functionName: String): Boolean
 
   /**
-   * :: Experimental ::
-   * Creates an external table from the given path and returns the corresponding DataFrame.
+   * Creates a table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
-  def createExternalTable(tableName: String, path: String): DataFrame
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(tableName: String, path: String): DataFrame = {
+    createTable(tableName, path)
+  }
 
   /**
    * :: Experimental ::
-   * Creates an external table from the given path based on a data source
-   * and returns the corresponding DataFrame.
+   * Creates a table from the given path and returns the corresponding DataFrame.
+   * It will use the default data source configured by spark.sql.sources.default.
    *
-   * @since 2.0.0
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createExternalTable(tableName: String, path: String, source: String): DataFrame
+  def createTable(tableName: String, path: String): DataFrame
+
+  /**
+   * Creates a table from the given path based on a data source and returns the corresponding
+   * DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(tableName: String, path: String, source: String): DataFrame = {
+    createTable(tableName, path, source)
+  }
 
   /**
    * :: Experimental ::
-   * Creates an external table from the given path based on a data source and a set of options.
+   * Creates a table from the given path based on a data source and returns the corresponding
+   * DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(tableName: String, path: String, source: String): DataFrame
+
+  /**
+   * Creates a table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
+  @deprecated("use createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
-      options: java.util.Map[String, String]): DataFrame
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, options)
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a table based on the dataset in a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(
+      tableName: String,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, options.asScala.toMap)
+  }
+
+  /**
+   * (Scala-specific)
+   * Creates a table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, options)
+  }
 
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Creates an external table from the given path based on a data source and a set of options.
+   * Creates a table based on the dataset in a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
-   * @since 2.0.0
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createExternalTable(
+  def createTable(
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame
 
   /**
    * :: Experimental ::
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
    * @since 2.0.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
+  @deprecated("use createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       schema: StructType,
-      options: java.util.Map[String, String]): DataFrame
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options)
+  }
+
+  /**
+   * :: Experimental ::
+   * Create a table based on the dataset in a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options.asScala.toMap)
+  }
+
+  /**
+   * (Scala-specific)
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options)
+  }
 
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
+   * Create a table based on the dataset in a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
    *
-   * @since 2.0.0
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in
+   *                  the current database.
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createExternalTable(
+  def createTable(
       tableName: String,
       source: String,
       schema: StructType,
@@ -279,7 +424,7 @@ abstract class Catalog {
    * Note that, the return type of this method was Unit in Spark 2.0, but changed to Boolean
    * in Spark 2.1.
    *
-   * @param viewName the name of the view to be dropped.
+   * @param viewName the name of the temporary view to be dropped.
    * @return true if the view is dropped successfully, false otherwise.
    * @since 2.0.0
    */
@@ -291,18 +436,32 @@ abstract class Catalog {
    *
    * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
    * i.e. it will be automatically dropped when the application terminates. It's tied to a system
-   * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
-   * view, e.g. `SELECT * FROM _global_temp.view1`.
+   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM global_temp.view1`.
    *
-   * @param viewName the name of the view to be dropped.
+   * @param viewName the unqualified name of the temporary view to be dropped.
    * @return true if the view is dropped successfully, false otherwise.
    * @since 2.1.0
    */
   def dropGlobalTempView(viewName: String): Boolean
 
   /**
+   * Recovers all the partitions in the directory of a table and update the catalog.
+   * Only works with a partitioned table, and not a view.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table.
+   *                  If no database identifier is provided, it refers to a table in the
+   *                  current database.
+   * @since 2.1.1
+   */
+  def recoverPartitions(tableName: String): Unit
+
+  /**
    * Returns true if the table is currently cached in-memory.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a temporary view or
+   *                  a table/view in the current database.
    * @since 2.0.0
    */
   def isCached(tableName: String): Boolean
@@ -310,13 +469,31 @@ abstract class Catalog {
   /**
    * Caches the specified table in-memory.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a temporary view or
+   *                  a table/view in the current database.
    * @since 2.0.0
    */
   def cacheTable(tableName: String): Unit
 
   /**
+   * Caches the specified table with the given storage level.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a temporary view or
+   *                  a table/view in the current database.
+   * @param storageLevel storage level to cache table.
+   * @since 2.3.0
+   */
+  def cacheTable(tableName: String, storageLevel: StorageLevel): Unit
+
+
+  /**
    * Removes the specified table from the in-memory cache.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a temporary view or
+   *                  a table/view in the current database.
    * @since 2.0.0
    */
   def uncacheTable(tableName: String): Unit
@@ -329,21 +506,25 @@ abstract class Catalog {
   def clearCache(): Unit
 
   /**
-   * Invalidate and refresh all the cached metadata of the given table. For performance reasons,
-   * Spark SQL or the external data source library it uses might cache certain metadata about a
-   * table, such as the location of blocks. When those change outside of Spark SQL, users should
-   * call this function to invalidate the cache.
+   * Invalidates and refreshes all the cached data and metadata of the given table. For performance
+   * reasons, Spark SQL or the external data source library it uses might cache certain metadata
+   * about a table, such as the location of blocks. When those change outside of Spark SQL, users
+   * should call this function to invalidate the cache.
    *
    * If this table is cached as an InMemoryRelation, drop the original cached version and make the
    * new version cached lazily.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a temporary view or
+   *                  a table/view in the current database.
    * @since 2.0.0
    */
   def refreshTable(tableName: String): Unit
 
   /**
-   * Invalidate and refresh all the cached data (and the associated metadata) for any dataframe that
-   * contains the given data source path.
+   * Invalidates and refreshes all the cached data (and the associated metadata) for any `Dataset`
+   * that contains the given data source path. Path matching is by prefix, i.e. "/" would invalidate
+   * everything that is cached.
    *
    * @since 2.0.0
    */

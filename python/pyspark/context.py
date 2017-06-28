@@ -22,8 +22,11 @@ import shutil
 import signal
 import sys
 import threading
+import warnings
 from threading import RLock
 from tempfile import NamedTemporaryFile
+
+from py4j.protocol import Py4JError
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -129,6 +132,9 @@ class SparkContext(object):
             self._conf = conf
         else:
             self._conf = SparkConf(_jvm=SparkContext._jvm)
+            if conf is not None:
+                for k, v in conf.getAll():
+                    self._conf.set(k, v)
 
         self._batchSize = batchSize  # -1 represents an unlimited batch size
         self._unbatched_serializer = serializer
@@ -167,10 +173,8 @@ class SparkContext(object):
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
                 self.environment[varName] = v
-        if sys.version >= '3.3' and 'PYTHONHASHSEED' not in os.environ:
-            # disable randomness of hash of string in worker, if this is not
-            # launched by spark-submit
-            self.environment["PYTHONHASHSEED"] = "0"
+
+        self.environment["PYTHONHASHSEED"] = os.environ.get("PYTHONHASHSEED", "0")
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
@@ -186,6 +190,9 @@ class SparkContext(object):
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
+
+        if sys.version_info < (2, 7):
+            warnings.warn("Support for Python 2.6 is deprecated as of Spark 2.0.0")
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -232,6 +239,32 @@ class SparkContext(object):
         # see http://stackoverflow.com/questions/23206787/
         if isinstance(threading.current_thread(), threading._MainThread):
             signal.signal(signal.SIGINT, signal_handler)
+
+    def __repr__(self):
+        return "<SparkContext master={master} appName={appName}>".format(
+            master=self.master,
+            appName=self.appName,
+        )
+
+    def _repr_html_(self):
+        return """
+        <div>
+            <p><b>SparkContext</b></p>
+
+            <p><a href="{sc.uiWebUrl}">Spark UI</a></p>
+
+            <dl>
+              <dt>Version</dt>
+                <dd><code>v{sc.version}</code></dd>
+              <dt>Master</dt>
+                <dd><code>{sc.master}</code></dd>
+              <dt>AppName</dt>
+                <dd><code>{sc.appName}</code></dd>
+            </dl>
+        </div>
+        """.format(
+            sc=self
+        )
 
     def _initialize_context(self, jconf):
         """
@@ -369,8 +402,19 @@ class SparkContext(object):
         Shut down the SparkContext.
         """
         if getattr(self, "_jsc", None):
-            self._jsc.stop()
-            self._jsc = None
+            try:
+                self._jsc.stop()
+            except Py4JError:
+                # Case: SPARK-18523
+                warnings.warn(
+                    'Unable to cleanly shutdown Spark JVM process.'
+                    ' It is possible that the process has crashed,'
+                    ' been killed or may also be in a zombie state.',
+                    RuntimeWarning
+                )
+                pass
+            finally:
+                self._jsc = None
         if getattr(self, "_accumulatorServer", None):
             self._accumulatorServer.shutdown()
             self._accumulatorServer = None
@@ -516,8 +560,8 @@ class SparkContext(object):
           ...
           (a-hdfs-path/part-nnnnn, its content)
 
-        NOTE: Small files are preferred, as each file will be loaded
-        fully in memory.
+        .. note:: Small files are preferred, as each file will be loaded
+            fully in memory.
 
         >>> dirPath = os.path.join(tempdir, "files")
         >>> os.mkdir(dirPath)
@@ -543,8 +587,8 @@ class SparkContext(object):
         in a key-value pair, where the key is the path of each file, the
         value is the content of each file.
 
-        Note: Small files are preferred, large file is also allowable, but
-        may cause bad performance.
+        .. note:: Small files are preferred, large file is also allowable, but
+            may cause bad performance.
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.binaryFiles(path, minPartitions), self,
@@ -897,6 +941,12 @@ class SparkContext(object):
         L{setLocalProperty}
         """
         return self._jsc.getLocalProperty(key)
+
+    def setJobDescription(self, value):
+        """
+        Set a human readable description of the current job.
+        """
+        self._jsc.setJobDescription(value)
 
     def sparkUser(self):
         """

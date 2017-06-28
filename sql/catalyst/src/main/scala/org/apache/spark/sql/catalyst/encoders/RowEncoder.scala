@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -89,7 +89,7 @@ object RowEncoder {
         udtClass,
         Nil,
         dataType = ObjectType(udtClass), false)
-      Invoke(obj, "serialize", udt, inputObject :: Nil)
+      Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
     case TimestampType =>
       StaticInvoke(
@@ -119,32 +119,35 @@ object RowEncoder {
         "fromString",
         inputObject :: Nil)
 
-    case t @ ArrayType(et, _) => et match {
-      case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
-        // TODO: validate input type for primitive array.
-        NewInstance(
-          classOf[GenericArrayData],
-          inputObject :: Nil,
-          dataType = t)
-      case _ => MapObjects(
-        element => serializerFor(ValidateExternalType(element, et), et),
-        inputObject,
-        ObjectType(classOf[Object]))
-    }
+    case t @ ArrayType(et, cn) =>
+      et match {
+        case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
+          StaticInvoke(
+            classOf[ArrayData],
+            t,
+            "toArrayData",
+            inputObject :: Nil)
+        case _ => MapObjects(
+          element => serializerFor(ValidateExternalType(element, et), et),
+          inputObject,
+          ObjectType(classOf[Object]))
+      }
 
     case t @ MapType(kt, vt, valueNullable) =>
       val keys =
         Invoke(
-          Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]])),
+          Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]]),
+            returnNullable = false),
           "toSeq",
-          ObjectType(classOf[scala.collection.Seq[_]]))
+          ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
       val convertedKeys = serializerFor(keys, ArrayType(kt, false))
 
       val values =
         Invoke(
-          Invoke(inputObject, "valuesIterator", ObjectType(classOf[scala.collection.Iterator[_]])),
+          Invoke(inputObject, "valuesIterator", ObjectType(classOf[scala.collection.Iterator[_]]),
+            returnNullable = false),
           "toSeq",
-          ObjectType(classOf[scala.collection.Seq[_]]))
+          ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
       val convertedValues = serializerFor(values, ArrayType(vt, valueNullable))
 
       NewInstance(
@@ -261,17 +264,18 @@ object RowEncoder {
         input :: Nil)
 
     case _: DecimalType =>
-      Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]))
+      Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]),
+        returnNullable = false)
 
     case StringType =>
-      Invoke(input, "toString", ObjectType(classOf[String]))
+      Invoke(input, "toString", ObjectType(classOf[String]), returnNullable = false)
 
     case ArrayType(et, nullable) =>
       val arrayData =
         Invoke(
           MapObjects(deserializerFor(_), input, et),
           "array",
-          ObjectType(classOf[Array[_]]))
+          ObjectType(classOf[Array[_]]), returnNullable = false)
       StaticInvoke(
         scala.collection.mutable.WrappedArray.getClass,
         ObjectType(classOf[Seq[_]]),

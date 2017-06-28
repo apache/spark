@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+var uiRoot = "";
+
+function setUIRoot(val) {
+    uiRoot = val;
+}
+
 function collapseTablePageLoad(name, table){
   if (window.localStorage.getItem(name) == "true") {
     // Set it to false so that the click function can revert it

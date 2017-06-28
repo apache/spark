@@ -41,8 +41,8 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
 
   /**
    * Threshold for the number of values a categorical feature can take.
-   * If a feature is found to have > maxCategories values, then it is declared continuous.
-   * Must be >= 2.
+   * If a feature is found to have {@literal >} maxCategories values, then it is declared
+   * continuous. Must be greater than or equal to 2.
    *
    * (default = 20)
    * @group param
@@ -59,7 +59,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
 }
 
 /**
- * Class for indexing categorical feature columns in a dataset of [[Vector]].
+ * Class for indexing categorical feature columns in a dataset of `Vector`.
  *
  * This has 2 usage modes:
  *  - Automatically identify categorical features (default behavior)
@@ -76,7 +76,8 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *     - Warning: This can cause problems if features are continuous since this will collect ALL
  *       unique values to the driver.
  *     - E.g.: Feature 0 has unique values {-1.0, 0.0}, and feature 1 values {1.0, 3.0, 5.0}.
- *       If maxCategories >= 3, then both features will be declared categorical.
+ *       If maxCategories is greater than or equal to 3, then both features will be declared
+ *       categorical.
  *
  * This returns a model which can transform categorical features to use 0-based indices.
  *

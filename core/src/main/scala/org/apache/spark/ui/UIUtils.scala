@@ -25,6 +25,8 @@ import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
 
@@ -34,9 +36,12 @@ private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
+  private val NEWLINE_AND_SINGLE_QUOTE_REGEX = raw"(?i)(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)".r
+
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+    override def initialValue(): SimpleDateFormat =
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
   }
 
   def formatDate(date: Date): String = dateFormat.get.format(date)
@@ -170,6 +175,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/timeline-view.js")}></script>
     <script src={prependBaseUri("/static/log-view.js")}></script>
     <script src={prependBaseUri("/static/webui.js")}></script>
+    <script>setUIRoot('{UIUtils.uiRoot}')</script>
   }
 
   def vizHeaderNodes: Seq[Node] = {
@@ -226,7 +232,7 @@ private[spark] object UIUtils extends Logging {
             <div class="brand">
               <a href={prependBaseUri("/")} class="brand">
                 <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
-                <span class="version">{org.apache.spark.SPARK_VERSION}</span>
+                <span class="version">{activeTab.appSparkVersion}</span>
               </a>
             </div>
             <p class="navbar-text pull-right">
@@ -340,7 +346,7 @@ private[spark] object UIUtils extends Logging {
       completed: Int,
       failed: Int,
       skipped: Int,
-      killed: Int,
+      reasonToNumKilled: Map[String, Int],
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     // started + completed can be > total when there are speculative tasks
@@ -352,7 +358,10 @@ private[spark] object UIUtils extends Logging {
         {completed}/{total}
         { if (failed > 0) s"($failed failed)" }
         { if (skipped > 0) s"($skipped skipped)" }
-        { if (killed > 0) s"($killed killed)" }
+        { reasonToNumKilled.toSeq.sortBy(-_._2).map {
+            case (reason, count) => s"($count killed: $reason)"
+          }
+        }
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
       <div class="bar bar-running" style={startWidth}></div>
@@ -420,8 +429,8 @@ private[spark] object UIUtils extends Logging {
    * the whole string will rendered as a simple escaped text.
    *
    * Note: In terms of security, only anchor tags with root relative links are supported. So any
-   * attempts to embed links outside Spark UI, or other tags like <script> will cause in the whole
-   * description to be treated as plain text.
+   * attempts to embed links outside Spark UI, or other tags like {@code <script>} will cause in
+   * the whole description to be treated as plain text.
    *
    * @param desc        the original job or stage description string, which may contain html tags.
    * @param basePathUri with which to prepend the relative links; this is used when plainText is
@@ -441,7 +450,7 @@ private[spark] object UIUtils extends Logging {
       val xml = XML.loadString(s"""<span class="description-input">$desc</span>""")
 
       // Verify that this has only anchors and span (we are wrapping in span)
-      val allowedNodeLabels = Set("a", "span")
+      val allowedNodeLabels = Set("a", "span", "br")
       val illegalNodes = xml \\ "_"  filterNot { case node: Node =>
         allowedNodeLabels.contains(node.label)
       }
@@ -520,6 +529,23 @@ private[spark] object UIUtils extends Logging {
       s"/proxy/$id"
     } else {
       origHref
+    }
+  }
+
+  /**
+   * Remove suspicious characters of user input to prevent Cross-Site scripting (XSS) attacks
+   *
+   * For more information about XSS testing:
+   * https://www.owasp.org/index.php/XSS_Filter_Evasion_Cheat_Sheet and
+   * https://www.owasp.org/index.php/Testing_for_Reflected_Cross_site_scripting_(OTG-INPVAL-001)
+   */
+  def stripXSS(requestParameter: String): String = {
+    if (requestParameter == null) {
+      null
+    } else {
+      // Remove new lines and single quotes, followed by escaping HTML version 4.0
+      StringEscapeUtils.escapeHtml4(
+        NEWLINE_AND_SINGLE_QUOTE_REGEX.replaceAllIn(requestParameter, ""))
     }
   }
 }

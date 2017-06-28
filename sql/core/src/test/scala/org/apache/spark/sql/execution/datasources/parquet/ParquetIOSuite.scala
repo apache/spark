@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -40,6 +42,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -106,11 +109,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         |  required binary g(ENUM);
         |  required binary h(DECIMAL(32,0));
         |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
+        |  required int64 j(TIMESTAMP_MILLIS);
         |}
       """.stripMargin)
 
     val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0),
-      DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0))
+      DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0),
+      TimestampType)
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
@@ -297,7 +302,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     def checkCompressionCodec(codec: CompressionCodecName): Unit = {
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
-          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION).toUpperCase) {
+          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION).toUpperCase(Locale.ROOT)) {
             compressionCodecFor(path, codec.name())
           }
         }
@@ -462,16 +467,19 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overridden") {
-    val extraOptions = Map(
-      SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
-      "spark.sql.parquet.output.committer.class" ->
-        classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
-    )
-    withTempPath { dir =>
-      val message = intercept[SparkException] {
-        spark.range(0, 1).write.options(extraOptions).parquet(dir.getCanonicalPath)
-      }.getCause.getMessage
-      assert(message === "Intentional exception for testing purposes")
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+      val extraOptions = Map(
+        SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
+        "spark.sql.parquet.output.committer.class" ->
+          classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
+      )
+      withTempPath { dir =>
+        val message = intercept[SparkException] {
+          spark.range(0, 1).write.options(extraOptions).parquet(dir.getCanonicalPath)
+        }.getCause.getMessage
+        assert(message === "Intentional exception for testing purposes")
+      }
     }
   }
 
@@ -488,58 +496,64 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
-    // Using a output committer that always fail when committing a task, so that both
-    // `commitTask()` and `abortTask()` are invoked.
-    val extraOptions = Map[String, String](
-      "spark.sql.parquet.output.committer.class" ->
-        classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
-    )
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+      // Using a output committer that always fail when committing a task, so that both
+      // `commitTask()` and `abortTask()` are invoked.
+      val extraOptions = Map[String, String](
+        "spark.sql.parquet.output.committer.class" ->
+          classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
+      )
 
-    // Before fixing SPARK-7837, the following code results in an NPE because both
-    // `commitTask()` and `abortTask()` try to close output writers.
+      // Before fixing SPARK-7837, the following code results in an NPE because both
+      // `commitTask()` and `abortTask()` try to close output writers.
 
-    withTempPath { dir =>
-      val m1 = intercept[SparkException] {
-        spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
-      }.getCause.getMessage
-      assert(m1.contains("Intentional exception for testing purposes"))
-    }
+      withTempPath { dir =>
+        val m1 = intercept[SparkException] {
+          spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
+        }.getCause.getMessage
+        assert(m1.contains("Intentional exception for testing purposes"))
+      }
 
-    withTempPath { dir =>
-      val m2 = intercept[SparkException] {
-        val df = spark.range(1).select('id as 'a, 'id as 'b).coalesce(1)
-        df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
-      }.getCause.getMessage
-      assert(m2.contains("Intentional exception for testing purposes"))
+      withTempPath { dir =>
+        val m2 = intercept[SparkException] {
+          val df = spark.range(1).select('id as 'a, 'id as 'b).coalesce(1)
+          df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
+        }.getCause.getMessage
+        assert(m2.contains("Intentional exception for testing purposes"))
+      }
     }
   }
 
   test("SPARK-11044 Parquet writer version fixed as version1 ") {
-    // For dictionary encoding, Parquet changes the encoding types according to its writer
-    // version. So, this test checks one of the encoding types in order to ensure that
-    // the file is written with writer version2.
-    val extraOptions = Map[String, String](
-      // Write a Parquet file with writer version2.
-      ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString,
-      // By default, dictionary encoding is enabled from Parquet 1.2.0 but
-      // it is enabled just in case.
-      ParquetOutputFormat.ENABLE_DICTIONARY -> "true"
-    )
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+      // For dictionary encoding, Parquet changes the encoding types according to its writer
+      // version. So, this test checks one of the encoding types in order to ensure that
+      // the file is written with writer version2.
+      val extraOptions = Map[String, String](
+        // Write a Parquet file with writer version2.
+        ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString,
+        // By default, dictionary encoding is enabled from Parquet 1.2.0 but
+        // it is enabled just in case.
+        ParquetOutputFormat.ENABLE_DICTIONARY -> "true"
+      )
 
-    val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
+      val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
 
-    withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
-      withTempPath { dir =>
-        val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
-        spark.range(1 << 16).selectExpr("(id % 4) AS i")
-          .coalesce(1).write.options(extraOptions).mode("overwrite").parquet(path)
+      withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+        withTempPath { dir =>
+          val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
+          spark.range(1 << 16).selectExpr("(id % 4) AS i")
+            .coalesce(1).write.options(extraOptions).mode("overwrite").parquet(path)
 
-        val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
-        val columnChunkMetadata = blockMetadata.getColumns.asScala.head
+          val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+          val columnChunkMetadata = blockMetadata.getColumns.asScala.head
 
-        // If the file is written with version2, this should include
-        // Encoding.RLE_DICTIONARY type. For version1, it is Encoding.PLAIN_DICTIONARY
-        assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
+          // If the file is written with version2, this should include
+          // Encoding.RLE_DICTIONARY type. For version1, it is Encoding.PLAIN_DICTIONARY
+          assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
+        }
       }
     }
   }
@@ -593,6 +607,18 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           // Decimal column in this file is encoded using plain dictionary
           readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
           spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
+      }
+    }
+  }
+
+  test("read dictionary and plain encoded timestamp_millis written as INT64") {
+    ("true" :: "false" :: Nil).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        checkAnswer(
+          // timestamp column in this file is encoded using combination of plain
+          // and dictionary encodings.
+          readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
+          (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
       }
     }
   }
@@ -734,6 +760,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           vectorizedReader.close()
         }
       }
+    }
+  }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
+      val option = new ParquetOptions(Map("Compression" -> "uncompressed"), spark.sessionState.conf)
+      assert(option.compressionCodecClassName == "UNCOMPRESSED")
     }
   }
 }

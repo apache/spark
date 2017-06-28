@@ -22,6 +22,7 @@ import java.util.LinkedList;
 
 import org.apache.avro.reflect.Nullable;
 
+import org.apache.spark.TaskContext;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
@@ -84,7 +85,7 @@ public final class UnsafeInMemorySorter {
   private final PrefixComparators.RadixSortSupport radixSortSupport;
 
   /**
-   * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
+   * Within this buffer, position {@code 2 * i} holds a pointer to the record at
    * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
    *
    * Only part of the array will be used to store the pointers, the rest part is preserved as
@@ -253,6 +254,7 @@ public final class UnsafeInMemorySorter {
     private long keyPrefix;
     private int recordLength;
     private long currentPageNumber;
+    private final TaskContext taskContext = TaskContext.get();
 
     private SortedIterator(int numRecords, int offset) {
       this.numRecords = numRecords;
@@ -283,6 +285,14 @@ public final class UnsafeInMemorySorter {
 
     @Override
     public void loadNext() {
+      // Kill the task in case it has been marked as killed. This logic is from
+      // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
+      // to avoid performance overhead. This check is added here in `loadNext()` instead of in
+      // `hasNext()` because it's technically possible for the caller to be relying on
+      // `getNumRecords()` instead of `hasNext()` to know when to stop.
+      if (taskContext != null) {
+        taskContext.killTaskIfInterrupted();
+      }
       // This pointer points to a 4-byte record length, followed by the record's bytes
       final long recordPointer = array.get(offset + position);
       currentPageNumber = TaskMemoryManager.decodePageNumber(recordPointer);
@@ -322,7 +332,7 @@ public final class UnsafeInMemorySorter {
     if (sortComparator != null) {
       if (this.radixSortSupport != null) {
         offset = RadixSort.sortKeyPrefixArray(
-          array, nullBoundaryPos, (pos - nullBoundaryPos) / 2, 0, 7,
+          array, nullBoundaryPos, (pos - nullBoundaryPos) / 2L, 0, 7,
           radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
         MemoryBlock unused = new MemoryBlock(

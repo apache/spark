@@ -44,7 +44,8 @@ import org.apache.spark.storage.StorageLevel
 /**
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
  * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
- * Efficiently by Prefix-Projected Pattern Growth ([[http://doi.org/10.1109/ICDE.2001.914830]]).
+ * Efficiently by Prefix-Projected Pattern Growth
+ * (see <a href="http://doi.org/10.1109/ICDE.2001.914830">here</a>).
  *
  * @param minSupport the minimal support level of the sequential pattern, any pattern that appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
@@ -55,8 +56,8 @@ import org.apache.spark.storage.StorageLevel
  *                           processing. If a projected database exceeds this size, another
  *                           iteration of distributed prefix growth is run.
  *
- * @see [[https://en.wikipedia.org/wiki/Sequential_Pattern_Mining Sequential Pattern Mining
- *       (Wikipedia)]]
+ * @see <a href="https://en.wikipedia.org/wiki/Sequential_Pattern_Mining">Sequential Pattern Mining
+ * (Wikipedia)</a>
  */
 @Since("1.5.0")
 class PrefixSpan private (
@@ -143,45 +144,13 @@ class PrefixSpan private (
     logInfo(s"minimum count for a frequent pattern: $minCount")
 
     // Find frequent items.
-    val freqItemAndCounts = data.flatMap { itemsets =>
-        val uniqItems = mutable.Set.empty[Item]
-        itemsets.foreach { _.foreach { item =>
-          uniqItems += item
-        }}
-        uniqItems.toIterator.map((_, 1L))
-      }.reduceByKey(_ + _)
-      .filter { case (_, count) =>
-        count >= minCount
-      }.collect()
-    val freqItems = freqItemAndCounts.sortBy(-_._2).map(_._1)
+    val freqItems = findFrequentItems(data, minCount)
     logInfo(s"number of frequent items: ${freqItems.length}")
 
     // Keep only frequent items from input sequences and convert them to internal storage.
     val itemToInt = freqItems.zipWithIndex.toMap
-    val dataInternalRepr = data.flatMap { itemsets =>
-      val allItems = mutable.ArrayBuilder.make[Int]
-      var containsFreqItems = false
-      allItems += 0
-      itemsets.foreach { itemsets =>
-        val items = mutable.ArrayBuilder.make[Int]
-        itemsets.foreach { item =>
-          if (itemToInt.contains(item)) {
-            items += itemToInt(item) + 1 // using 1-indexing in internal format
-          }
-        }
-        val result = items.result()
-        if (result.nonEmpty) {
-          containsFreqItems = true
-          allItems ++= result.sorted
-        }
-        allItems += 0
-      }
-      if (containsFreqItems) {
-        Iterator.single(allItems.result())
-      } else {
-        Iterator.empty
-      }
-    }.persist(StorageLevel.MEMORY_AND_DISK)
+    val dataInternalRepr = toDatabaseInternalRepr(data, itemToInt)
+      .persist(StorageLevel.MEMORY_AND_DISK)
 
     val results = genFreqPatterns(dataInternalRepr, minCount, maxPatternLength, maxLocalProjDBSize)
 
@@ -210,7 +179,7 @@ class PrefixSpan private (
   }
 
   /**
-   * A Java-friendly version of [[run()]] that reads sequences from a [[JavaRDD]] and returns
+   * A Java-friendly version of `run()` that reads sequences from a `JavaRDD` and returns
    * frequent sequences in a [[PrefixSpanModel]].
    * @param data ordered sequences of itemsets stored as Java Iterable of Iterables
    * @tparam Item item type
@@ -229,6 +198,67 @@ class PrefixSpan private (
 
 @Since("1.5.0")
 object PrefixSpan extends Logging {
+
+  /**
+   * This methods finds all frequent items in a input dataset.
+   *
+   * @param data Sequences of itemsets.
+   * @param minCount The minimal number of sequence an item should be present in to be frequent
+   *
+   * @return An array of Item containing only frequent items.
+   */
+  private[fpm] def findFrequentItems[Item: ClassTag](
+      data: RDD[Array[Array[Item]]],
+      minCount: Long): Array[Item] = {
+
+    data.flatMap { itemsets =>
+      val uniqItems = mutable.Set.empty[Item]
+      itemsets.foreach(set => uniqItems ++= set)
+      uniqItems.toIterator.map((_, 1L))
+    }.reduceByKey(_ + _).filter { case (_, count) =>
+      count >= minCount
+    }.sortBy(-_._2).map(_._1).collect()
+  }
+
+  /**
+   * This methods cleans the input dataset from un-frequent items, and translate it's item
+   * to their corresponding Int identifier.
+   *
+   * @param data Sequences of itemsets.
+   * @param itemToInt A map allowing translation of frequent Items to their Int Identifier.
+   *                  The map should only contain frequent item.
+   *
+   * @return The internal repr of the inputted dataset. With properly placed zero delimiter.
+   */
+  private[fpm] def toDatabaseInternalRepr[Item: ClassTag](
+      data: RDD[Array[Array[Item]]],
+      itemToInt: Map[Item, Int]): RDD[Array[Int]] = {
+
+    data.flatMap { itemsets =>
+      val allItems = mutable.ArrayBuilder.make[Int]
+      var containsFreqItems = false
+      allItems += 0
+      itemsets.foreach { itemsets =>
+        val items = mutable.ArrayBuilder.make[Int]
+        itemsets.foreach { item =>
+          if (itemToInt.contains(item)) {
+            items += itemToInt(item) + 1 // using 1-indexing in internal format
+          }
+        }
+        val result = items.result()
+        if (result.nonEmpty) {
+          containsFreqItems = true
+          allItems ++= result.sorted
+          allItems += 0
+        }
+      }
+      if (containsFreqItems) {
+        Iterator.single(allItems.result())
+      } else {
+        Iterator.empty
+      }
+    }
+  }
 
   /**
    * Find the complete set of frequent sequential patterns in the input sequences.
@@ -365,13 +395,13 @@ object PrefixSpan extends Logging {
    * Items are represented by positive integers, and items in each itemset must be distinct and
    * ordered.
    * we use 0 as the delimiter between itemsets.
-   * For example, a sequence `<(12)(31)1>` is represented by `[0, 1, 2, 0, 1, 3, 0, 1, 0]`.
-   * The postfix of this sequence w.r.t. to prefix `<1>` is `<(_2)(13)1>`.
+   * For example, a sequence `(12)(31)1` is represented by `[0, 1, 2, 0, 1, 3, 0, 1, 0]`.
+   * The postfix of this sequence w.r.t. to prefix `1` is `(_2)(13)1`.
    * We may reuse the original items array `[0, 1, 2, 0, 1, 3, 0, 1, 0]` to represent the postfix,
    * and mark the start index of the postfix, which is `2` in this example.
    * So the active items in this postfix are `[2, 0, 1, 3, 0, 1, 0]`.
    * We also remember the start indices of partial projections, the ones that split an itemset.
-   * For example, another possible partial projection w.r.t. `<1>` is `<(_3)1>`.
+   * For example, another possible partial projection w.r.t. `1` is `(_3)1`.
    * We remember the start indices of partial projections, which is `[2, 5]` in this example.
    * This data structure makes it easier to do projections.
    *
@@ -582,7 +612,7 @@ class PrefixSpanModel[Item] @Since("1.5.0") (
    *  - human-readable (JSON) model metadata to path/metadata/
    *  - Parquet formatted data to path/data/
    *
-   * The model may be loaded using [[PrefixSpanModel.load]].
+   * The model may be loaded using `PrefixSpanModel.load`.
    *
    * @param sc  Spark context used to save model data.
    * @param path  Path specifying the directory in which to save this model.

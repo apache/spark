@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.net.URI
+
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.execution.datasources.{DataSource, ListingFileCatalog, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -35,6 +37,7 @@ class FileStreamSource(
     path: String,
     fileFormatClassName: String,
     override val schema: StructType,
+    partitionColumns: Seq[String],
     metadataPath: String,
     options: Map[String, String]) extends Source with Logging {
 
@@ -42,8 +45,10 @@ class FileStreamSource(
 
   private val sourceOptions = new FileStreamOptions(options)
 
+  private val hadoopConf = sparkSession.sessionState.newHadoopConf()
+
   private val qualifiedBasePath: Path = {
-    val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
+    val fs = new Path(path).getFileSystem(hadoopConf)
     fs.makeQualified(new Path(path))  // can contains glob patterns
   }
 
@@ -56,21 +61,43 @@ class FileStreamSource(
 
   private val metadataLog =
     new FileStreamSourceLog(FileStreamSourceLog.VERSION, sparkSession, metadataPath)
-  private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
+  private var metadataLogCurrentOffset = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   /** Maximum number of new files to be considered in each batch */
   private val maxFilesPerBatch = sourceOptions.maxFilesPerTrigger
 
+  private val fileSortOrder = if (sourceOptions.latestFirst) {
+      logWarning(
+        """'latestFirst' is true. New files will be processed first, which may affect the watermark
+          |value. In addition, 'maxFileAge' will be ignored.""".stripMargin)
+      implicitly[Ordering[Long]].reverse
+    } else {
+      implicitly[Ordering[Long]]
+    }
+
+  private val maxFileAgeMs: Long = if (sourceOptions.latestFirst && maxFilesPerBatch.isDefined) {
+    Long.MaxValue
+  } else {
+    sourceOptions.maxFileAgeMs
+  }
+
+  private val fileNameOnly = sourceOptions.fileNameOnly
+  if (fileNameOnly) {
+    logWarning("'fileNameOnly' is enabled. Make sure your file names are unique (e.g. using " +
+      "UUID), otherwise, files with the same name but under different paths will be considered " +
+      "the same and causes data lost.")
+  }
+
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
   // Visible for testing and debugging in production.
-  val seenFiles = new SeenFilesMap(sourceOptions.maxFileAgeMs)
+  val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly)
 
   metadataLog.allFiles().foreach { entry =>
     seenFiles.add(entry.path, entry.timestamp)
   }
   seenFiles.purge()
 
-  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAge = ${sourceOptions.maxFileAgeMs}")
+  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAgeMs = $maxFileAgeMs")
 
   /**
    * Returns the maximum offset that can be retrieved from the source.
@@ -78,7 +105,7 @@ class FileStreamSource(
    * `synchronized` on this method is for solving race conditions in tests. In the normal usage,
    * there is no race here, so the cost of `synchronized` should be rare.
    */
-  private def fetchMaxOffset(): LongOffset = synchronized {
+  private def fetchMaxOffset(): FileStreamSourceOffset = synchronized {
     // All the new files found - ignore aged files and files that we have seen.
     val newFiles = fetchAllFiles().filter {
       case (path, timestamp) => seenFiles.isNewFile(path, timestamp)
@@ -103,14 +130,14 @@ class FileStreamSource(
        """.stripMargin)
 
     if (batchFiles.nonEmpty) {
-      maxBatchId += 1
-      metadataLog.add(maxBatchId, batchFiles.map { case (path, timestamp) =>
-        FileEntry(path = path, timestamp = timestamp, batchId = maxBatchId)
+      metadataLogCurrentOffset += 1
+      metadataLog.add(metadataLogCurrentOffset, batchFiles.map { case (p, timestamp) =>
+        FileEntry(path = p, timestamp = timestamp, batchId = metadataLogCurrentOffset)
       }.toArray)
-      logInfo(s"Max batch id increased to $maxBatchId with ${batchFiles.size} new files")
+      logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
     }
 
-    new LongOffset(maxBatchId)
+    FileStreamSourceOffset(metadataLogCurrentOffset)
   }
 
   /**
@@ -121,27 +148,26 @@ class FileStreamSource(
     func
   }
 
-  /** Return the latest offset in the source */
-  def currentOffset: LongOffset = synchronized {
-    new LongOffset(maxBatchId)
-  }
+  /** Return the latest offset in the [[FileStreamSourceLog]] */
+  def currentLogOffset: Long = synchronized { metadataLogCurrentOffset }
 
   /**
    * Returns the data that is between the offsets (`start`, `end`].
    */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
-    val endId = end.asInstanceOf[LongOffset].offset
+    val startOffset = start.map(FileStreamSourceOffset(_).logOffset).getOrElse(-1L)
+    val endOffset = FileStreamSourceOffset(end).logOffset
 
-    assert(startId <= endId)
-    val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
-    logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
+    assert(startOffset <= endOffset)
+    val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
+    logInfo(s"Processing ${files.length} files from ${startOffset + 1}:$endOffset")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
     val newDataSource =
       DataSource(
         sparkSession,
         paths = files.map(_.path),
         userSpecifiedSchema = Some(schema),
+        partitionColumns = partitionColumns,
         className = fileFormatClassName,
         options = optionsWithPartitionBasePath)
     Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
@@ -149,13 +175,64 @@ class FileStreamSource(
   }
 
   /**
+   * If the source has a metadata log indicating which files should be read, then we should use it.
+   * Only when user gives a non-glob path that will we figure out whether the source has some
+   * metadata log
+   *
+   * None        means we don't know at the moment
+   * Some(true)  means we know for sure the source DOES have metadata
+   * Some(false) means we know for sure the source DOSE NOT have metadata
+   */
+  @volatile private[sql] var sourceHasMetadata: Option[Boolean] =
+    if (SparkHadoopUtil.get.isGlobPath(new Path(path))) Some(false) else None
+
+  private def allFilesUsingInMemoryFileIndex() = {
+    val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
+    val fileIndex = new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
+    fileIndex.allFiles()
+  }
+
+  private def allFilesUsingMetadataLogFileIndex() = {
+    // Note if `sourceHasMetadata` holds, then `qualifiedBasePath` is guaranteed to be a
+    // non-glob path
+    new MetadataLogFileIndex(sparkSession, qualifiedBasePath).allFiles()
+  }
+
+  /**
    * Returns a list of files found, sorted by their timestamp.
    */
   private def fetchAllFiles(): Seq[(String, Long)] = {
     val startTime = System.nanoTime
-    val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
-    val catalog = new ListingFileCatalog(sparkSession, globbedPaths, options, Some(new StructType))
-    val files = catalog.allFiles().sortBy(_.getModificationTime).map { status =>
+
+    var allFiles: Seq[FileStatus] = null
+    sourceHasMetadata match {
+      case None =>
+        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+          sourceHasMetadata = Some(true)
+          allFiles = allFilesUsingMetadataLogFileIndex()
+        } else {
+          allFiles = allFilesUsingInMemoryFileIndex()
+          if (allFiles.isEmpty) {
+            // we still cannot decide
+          } else {
+            // decide what to use for future rounds
+            // double check whether source has metadata, preventing the extreme corner case that
+            // metadata log and data files are only generated after the previous
+            // `FileStreamSink.hasMetadata` check
+            if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+              sourceHasMetadata = Some(true)
+              allFiles = allFilesUsingMetadataLogFileIndex()
+            } else {
+              sourceHasMetadata = Some(false)
+              // `allFiles` have already been fetched using InMemoryFileIndex in this round
+            }
+          }
+        }
+      case Some(true) => allFiles = allFilesUsingMetadataLogFileIndex()
+      case Some(false) => allFiles = allFilesUsingInMemoryFileIndex()
+    }
+
+    val files = allFiles.sortBy(_.getModificationTime)(fileSortOrder).map { status =>
       (status.getPath.toUri.toString, status.getModificationTime)
     }
     val endTime = System.nanoTime
@@ -170,9 +247,18 @@ class FileStreamSource(
     files
   }
 
-  override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
+  override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.logOffset == -1)
 
   override def toString: String = s"FileStreamSource[$qualifiedBasePath]"
+
+  /**
+   * Informs the source that Spark has completed processing all data for offsets less than or
+   * equal to `end` and will only request offsets greater than `end` in the future.
+   */
+  override def commit(end: Offset): Unit = {
+    // No-op for now; FileStreamSource currently garbage-collects files based on timestamp
+    // and the value of the maxFileAge parameter.
+  }
 
   override def stop() {}
 }
@@ -191,7 +277,7 @@ object FileStreamSource {
    * To prevent the hash map from growing indefinitely, a purge function is available to
    * remove files "maxAgeMs" older than the latest file.
    */
-  class SeenFilesMap(maxAgeMs: Long) {
+  class SeenFilesMap(maxAgeMs: Long, fileNameOnly: Boolean) {
     require(maxAgeMs >= 0)
 
     /** Mapping from file to its timestamp. */
@@ -203,9 +289,13 @@ object FileStreamSource {
     /** Timestamp for the last purge operation. */
     private var lastPurgeTimestamp: Timestamp = 0L
 
+    @inline private def stripPathIfNecessary(path: String) = {
+      if (fileNameOnly) new Path(new URI(path)).getName else path
+    }
+
     /** Add a new file to the map. */
     def add(path: String, timestamp: Timestamp): Unit = {
-      map.put(path, timestamp)
+      map.put(stripPathIfNecessary(path), timestamp)
       if (timestamp > latestTimestamp) {
         latestTimestamp = timestamp
       }
@@ -218,7 +308,7 @@ object FileStreamSource {
     def isNewFile(path: String, timestamp: Timestamp): Boolean = {
       // Note that we are testing against lastPurgeTimestamp here so we'd never miss a file that
       // is older than (latestTimestamp - maxAgeMs) but has not been purged yet.
-      timestamp >= lastPurgeTimestamp && !map.containsKey(path)
+      timestamp >= lastPurgeTimestamp && !map.containsKey(stripPathIfNecessary(path))
     }
 
     /** Removes aged entries and returns the number of files removed. */
@@ -237,9 +327,5 @@ object FileStreamSource {
     }
 
     def size: Int = map.size()
-
-    def allEntries: Seq[(String, Timestamp)] = {
-      map.asScala.toSeq
-    }
   }
 }

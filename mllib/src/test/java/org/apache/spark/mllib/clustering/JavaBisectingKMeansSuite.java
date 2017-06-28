@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering;
 
-import com.google.common.collect.Lists;
+import java.util.Arrays;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -31,7 +31,7 @@ public class JavaBisectingKMeansSuite extends SharedSparkSession {
 
   @Test
   public void twoDimensionalData() {
-    JavaRDD<Vector> points = jsc.parallelize(Lists.newArrayList(
+    JavaRDD<Vector> points = jsc.parallelize(Arrays.asList(
       Vectors.dense(4, -1),
       Vectors.dense(4, 1),
       Vectors.sparse(2, new int[]{0}, new double[]{1.0})

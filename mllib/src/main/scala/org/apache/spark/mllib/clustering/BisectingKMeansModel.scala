@@ -71,7 +71,7 @@ class BisectingKMeansModel private[clustering] (
   }
 
   /**
-   * Java-friendly version of [[predict()]].
+   * Java-friendly version of `predict()`.
    */
   @Since("1.6.0")
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
@@ -95,7 +95,7 @@ class BisectingKMeansModel private[clustering] (
   }
 
   /**
-   * Java-friendly version of [[computeCost()]].
+   * Java-friendly version of `computeCost()`.
    */
   @Since("1.6.0")
   def computeCost(data: JavaRDD[Vector]): Double = this.computeCost(data.rdd)
