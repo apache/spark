@@ -154,7 +154,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
 
 /**
  * Remove useless DISTINCT for MAX and MIN.
- * This rule should be applied before ReplaceDeduplicateWithAggregate.
+ * This rule should be applied before RewriteDistinctAggregates.
  */
 object EliminateDistinct extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
