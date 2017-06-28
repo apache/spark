@@ -22,6 +22,8 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
+import scala.util.Try
+
 class MulticlassClassificationEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -37,16 +39,51 @@ class MulticlassClassificationEvaluatorSuite
     testDefaultReadWrite(evaluator)
   }
 
-  test("read/write with label Value") {
+  test("metricName without labelValue") {
     val evaluator = new MulticlassClassificationEvaluator()
-        .setPredictionCol("myPrediction")
-        .setLabelCol("myLabel")
-        .setLabelValue(1)
-        .setMetricName("tpr")
-    testDefaultReadWrite(evaluator)
+      .setPredictionCol("myPrediction")
+      .setLabelCol("myLabel")
+
+    val weightedOptions: Array[String] = Array("f1", "weightedPrecision",
+      "weightedRecall", "accuracy")
+
+    weightedOptions.foreach{
+      metricName => assert(Try(evaluator.setMetricName(metricName)).isSuccess
+        , s"metric ${metricName} can be defined when label value is not set")
+    }
+
+    val onlyLabelOptions: Array[String] = Array("precision", "recall", "tpr", "fpr")
+
+    onlyLabelOptions.foreach{
+      metricName => assert(Try(evaluator.setMetricName(metricName)).isFailure
+        , s"metric ${metricName} cannot be defined when label value is not set")
+    }
+  }
+
+  test("metricName with labelValue") {
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setPredictionCol("myPrediction")
+      .setLabelCol("myLabel")
+
+    // f1 is supported for both
+    val onlyWeightedOptions: Array[String] = Array("weightedPrecision",
+      "weightedRecall", "accuracy")
+
+    onlyWeightedOptions.foreach{
+      metricName => assert(Try(evaluator.setLabelValue(1.0).setMetricName(metricName)).isFailure
+        , s"metric ${metricName} can be defined when label value is not set")
+    }
+
+    val labelOptions: Array[String] = Array("f1", "precision", "recall", "tpr", "fpr")
+
+    labelOptions.foreach{
+      metricName => assert(Try(evaluator.setLabelValue(1.0).setMetricName(metricName)).isSuccess
+        , s"metric ${metricName} cannot be defined when label value is not set")
+    }
   }
 
   test("should support all NumericType labels and not support other types") {
     MLTestingUtils.checkNumericTypes(new MulticlassClassificationEvaluator, spark)
   }
+
 }

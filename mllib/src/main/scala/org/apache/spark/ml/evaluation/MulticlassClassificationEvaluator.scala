@@ -47,6 +47,12 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
     new DoubleParam(this, "labelValue", "specific labelValue for metric to be used in evaluation")
   }
 
+  /** @group getParam */
+  def getLabelValue: Double = $(labelValue)
+
+  /** @group setParam */
+  def setLabelValue(labelClass: Double): this.type = set(labelValue, labelClass)
+
   /**
    * param for metric name in evaluation (supports `"f1"` (default), `"weightedPrecision"`,
    * `"weightedRecall"`, `"accuracy"` and with labelValue `"f1"`, `"precision"`, `"recall"`,
@@ -55,17 +61,17 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
    */
   @Since("1.5.0")
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("f1", "weightedPrecision", "weightedRecall",
-      "accuracy","precision","recall","tpr","fpr"))
-    new Param(this, "metricName", "metric name in evaluation " +
-      "(f1|weightedPrecision|weightedRecall|accuracy) and with label (f1|precision|recall|tpr|fpr)", allowedParams)
+
+    val allowedParams: String => Boolean = { (p: String) =>
+      if (isSet(labelValue)) {
+        ParamValidators.inArray(MulticlassClassificationEvaluator.labelOptions)(p)
+      } else ParamValidators.inArray(MulticlassClassificationEvaluator.weightedOptions)(p)
+    }
+
+    new Param(this, "metricName", "metric name in evaluation without label value " +
+    "(f1|weightedPrecision|weightedRecall|accuracy) and with label value " +
+    " (f1|precision|recall|tpr|fpr)", allowedParams)
   }
-
-  /** @group getParam */
-  def getLabelValue:Double = $(labelValue)
-
-  /** @group setParam */
-  def setLabelValue(labelClass:Double): this.type = set(labelValue,labelClass)
 
   /** @group getParam */
   @Since("1.5.0")
@@ -84,7 +90,6 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   setDefault(metricName -> "f1")
-  setDefault(labelValue -> -1.0)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
@@ -97,14 +102,19 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
         case Row(prediction: Double, label: Double) => (prediction, label)
       }
     val metrics = new MulticlassMetrics(predictionAndLabels)
-    val labelVal = getLabelValue
-    val metric = if (labelVal>=0) {
+    val metric = if (isSet(labelValue)) {
       $(metricName) match {
-        case "f1" => metrics.fMeasure(labelVal)
-        case "precision" => metrics.precision(labelVal)
-        case "recall" => metrics.recall(labelVal)
-        case "tpr" => metrics.truePositiveRate(labelVal)
-        case "fpr" => metrics.falsePositiveRate(labelVal)
+        case "f1" => metrics.fMeasure(getLabelValue)
+        case "precision" => metrics.precision(getLabelValue)
+        case "recall" => metrics.recall(getLabelValue)
+        case "tpr" => metrics.truePositiveRate(getLabelValue)
+        case "fpr" => metrics.falsePositiveRate(getLabelValue)
+        case weightedMetric
+          if(MulticlassClassificationEvaluator.weightedOptions.contains(weightedMetric)) =>
+          throw new IllegalArgumentException(
+            s"metricName $weightedMetric cannot be specified when label value is set.")
+        case _ => throw new IllegalArgumentException(
+          s"metricName parameter given invalid value $metricName.")
       }
     } else {
       $(metricName) match {
@@ -112,13 +122,20 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
         case "weightedPrecision" => metrics.weightedPrecision
         case "weightedRecall" => metrics.weightedRecall
         case "accuracy" => metrics.accuracy
+        case _ => throw new IllegalArgumentException(
+          s"metricName parameter given invalid value $metricName.")
       }
     }
     metric
   }
 
   @Since("1.5.0")
-  override def isLargerBetter: Boolean = true
+  override def isLargerBetter: Boolean = {
+    // Lower False Positive Rate is better for evaluation
+    if(isSet(labelValue) && getMetricName.equals("fpr"))
+      false
+    else true
+  }
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MulticlassClassificationEvaluator = defaultCopy(extra)
@@ -127,6 +144,11 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 @Since("1.6.0")
 object MulticlassClassificationEvaluator
   extends DefaultParamsReadable[MulticlassClassificationEvaluator] {
+
+  val weightedOptions: Array[String] = Array("f1", "weightedPrecision",
+    "weightedRecall", "accuracy")
+
+  val labelOptions: Array[String] = Array("f1", "precision", "recall", "tpr", "fpr")
 
   @Since("1.6.0")
   override def load(path: String): MulticlassClassificationEvaluator = super.load(path)
