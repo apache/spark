@@ -59,31 +59,6 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
     assert(interruptStatusBeforeExit === true)
   }
 
-  test("interrupt before runUninterruptibly runs") {
-    val interruptLatch = new CountDownLatch(1)
-    @volatile var hasInterruptedException = false
-    @volatile var interruptStatusBeforeExit = false
-    val t = new UninterruptibleThread("test") {
-      override def run(): Unit = {
-        Uninterruptibles.awaitUninterruptibly(interruptLatch, 10, TimeUnit.SECONDS)
-        try {
-          runUninterruptibly {
-            assert(false, "Should not reach here")
-          }
-        } catch {
-          case _: InterruptedException => hasInterruptedException = true
-        }
-        interruptStatusBeforeExit = Thread.interrupted()
-      }
-    }
-    t.start()
-    t.interrupt()
-    interruptLatch.countDown()
-    t.join()
-    assert(hasInterruptedException === true)
-    assert(interruptStatusBeforeExit === false)
-  }
-
   test("nested runUninterruptibly") {
     val enterRunUninterruptibly = new CountDownLatch(1)
     val interruptLatch = new CountDownLatch(1)
