@@ -243,6 +243,9 @@ configuration), this parameter specifies the frequency with which
 checkpoints will be created.  If `maxIterations` is large, using
 checkpointing can help reduce shuffle file sizes on disk and help with
 failure recovery.
+* `initialModel`: this parameter, only supported by `OnlineLDAOptimizer`,
+specifies a previously trained LDA model as a start point to start from, 
+instead of a random initialization. This can be used for incremental learning. 
 
 
 All of `spark.mllib`'s LDA models support:
