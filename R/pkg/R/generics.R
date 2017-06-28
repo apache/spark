@@ -987,8 +987,9 @@ setGeneric("conv", function(x, fromBase, toBase) { standardGeneric("conv") })
 #' @name NULL
 setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") })
 
-#' @rdname crc32
+#' @rdname column_misc_functions
 #' @export
+#' @name NULL
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
 #' @rdname create_array
@@ -999,8 +1000,9 @@ setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
 #' @export
 setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
 
-#' @rdname hash
+#' @rdname column_misc_functions
 #' @export
+#' @name NULL
 setGeneric("hash", function(x, ...) { standardGeneric("hash") })
 
 #' @param x empty. Should be used with no argument.
@@ -1182,8 +1184,9 @@ setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 #' @export
 setGeneric("ltrim", function(x) { standardGeneric("ltrim") })
 
-#' @rdname md5
+#' @rdname column_misc_functions
 #' @export
+#' @name NULL
 setGeneric("md5", function(x) { standardGeneric("md5") })
 
 #' @rdname column_datetime_functions
@@ -1317,12 +1320,14 @@ setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
 #' @name NULL
 setGeneric("second", function(x) { standardGeneric("second") })
 
-#' @rdname sha1
+#' @rdname column_misc_functions
 #' @export
+#' @name NULL
 setGeneric("sha1", function(x) { standardGeneric("sha1") })
 
-#' @rdname sha2
+#' @rdname column_misc_functions
 #' @export
+#' @name NULL
 setGeneric("sha2", function(y, x) { standardGeneric("sha2") })
 
 #' @rdname column_math_functions
