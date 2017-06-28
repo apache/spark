@@ -638,7 +638,7 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.string
   }
   read <- callJMethod(read, "options", options)
   sdf <- handledCallJMethod(read, "load")
-  dataFrame(callJMethod(sdf, "toDF"))
+  dataFrame(sdf)
 }
 
 read.df <- function(x = NULL, ...) {
@@ -769,5 +769,5 @@ read.stream <- function(source = NULL, schema = NULL, ...) {
   }
   read <- callJMethod(read, "options", options)
   sdf <- handledCallJMethod(read, "load")
-  dataFrame(callJMethod(sdf, "toDF"))
+  dataFrame(sdf)
 }
