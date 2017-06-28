@@ -986,6 +986,10 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
+#' @rdname data_type
+#' @export
+setGeneric("data_type", function(x) { standardGeneric("data_type") })
+
 #' @rdname create_array
 #' @export
 setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })

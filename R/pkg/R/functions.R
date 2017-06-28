@@ -598,6 +598,25 @@ setMethod("hash",
             column(jc)
           })
 
+#' data_type
+#'
+#' Returns the data type of a given column.
+#'
+#' @param x Column to get the data type.
+#'
+#' @rdname data_type
+#' @name data_type
+#' @family misc functions
+#' @aliases data_type,Column-method
+#' @export
+#' @examples \dontrun{data_type(df$c)}
+setMethod("data_type",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "data_type", x@jc)
+            column(jc)
+          })
+
 #' @details
 #' \code{dayofmonth}: Extracts the day of the month as an integer from a
 #' given date/timestamp/string.
