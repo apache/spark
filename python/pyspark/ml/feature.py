@@ -2097,14 +2097,6 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
     [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'a'), (4, 'a'), (5, 'c')]
-    >>> testData2 = sc.parallelize([Row(id=0, label="a"), Row(id=1, label="d"),
-    ...     Row(id=2, label=None)], 2)
-    >>> dfKeep= spark.createDataFrame(testData2)
-    >>> modelKeep = stringIndexer.setHandleInvalid("keep").fit(stringIndDf)
-    >>> tdK = modelKeep.transform(dfKeep)
-    >>> sorted(set([(i[0], i[1]) for i in tdK.select(tdK.id, tdK.indexed).collect()]),
-    ...     key=lambda x: x[0])
-    [(0, 0.0), (1, 3.0), (2, 3.0)]
     >>> stringIndexerPath = temp_path + "/string-indexer"
     >>> stringIndexer.save(stringIndexerPath)
     >>> loadedIndexer = StringIndexer.load(stringIndexerPath)
@@ -2132,7 +2124,6 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
 
     .. versionadded:: 1.4.0
     """
-
 
     stringOrderType = Param(Params._dummy(), "stringOrderType",
                             "How to order labels of string column. The first label after " +
@@ -2188,14 +2179,14 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
         """
         return self.getOrDefault(self.stringOrderType)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def setHandleInvalid(self, value):
         """
         Sets the value of :py:attr:`handleInvalid`.
         """
         return self._set(handleInvalid=value)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def getHandleInvalid(self):
         """
         Gets the value of :py:attr:`handleInvalid` or its default value.
