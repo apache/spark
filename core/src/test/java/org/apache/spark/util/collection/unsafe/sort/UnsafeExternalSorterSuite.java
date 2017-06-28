@@ -415,7 +415,10 @@ public class UnsafeExternalSorterSuite {
       record[0] = (long) i;
       sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, false);
     }
+    // We will have at-least 2 memory pages allocated because of rounding happening due to
+    // integer division of pageSizeBytes and recordSize.
     assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
+    assertTrue(taskContext.taskMetrics().diskBytesSpilled() == 0);
     UnsafeExternalSorter.SpillableIterator iter =
             (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
     assertTrue(iter.spill() > 0);
