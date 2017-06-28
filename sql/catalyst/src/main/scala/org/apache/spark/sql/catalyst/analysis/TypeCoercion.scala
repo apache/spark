@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
 import javax.annotation.Nullable
 
 import scala.annotation.tailrec
@@ -145,6 +146,12 @@ object TypeCoercion {
       .orElse((t1, t2) match {
         case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
           findWiderTypeForTwo(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
+        case (st1 @ StructType(fields1), st2 @ StructType(fields2)) if st1.sameType(st2) =>
+          Some(StructType(fields1.zip(fields2).map { case (sf1, sf2) =>
+            val name = if (sf1.name == sf2.name) sf1.name else sf1.name.toLowerCase(Locale.ROOT)
+            val dataType = findWiderTypeForTwo(sf1.dataType, sf2.dataType).get
+            StructField(name, dataType, nullable = sf1.nullable || sf2.nullable)
+          }))
         case _ => None
       })
   }

@@ -387,7 +387,7 @@ class TypeCoercionSuite extends AnalysisTest {
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
   }
 
-  test("wider common type for decimal and array") {
+  test("wider common type for decimal/array/struct") {
     def widenTestWithStringPromotion(
         t1: DataType,
         t2: DataType,
@@ -439,6 +439,40 @@ class TypeCoercionSuite extends AnalysisTest {
       ArrayType(LongType), ArrayType(StringType), Some(ArrayType(StringType)))
     widenTestWithStringPromotion(
       ArrayType(StringType), ArrayType(TimestampType), Some(ArrayType(StringType)))
+
+    // StructType does not widen the types, but supports case-sensitive options.
+    widenTestWithStringPromotion(
+      StructType(Seq(StructField("a", IntegerType))),
+      StructType(Seq(StructField("b", IntegerType))),
+      None)
+    widenTestWithStringPromotion(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = false)))))
+    widenTestWithStringPromotion(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+    widenTestWithStringPromotion(
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+    widenTestWithStringPromotion(
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      widenTestWithStringPromotion(
+        StructType(Seq(StructField("a", IntegerType))),
+        StructType(Seq(StructField("A", IntegerType))),
+        None)
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      widenTestWithStringPromotion(
+        StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType))),
+        StructType(Seq(StructField("A", IntegerType), StructField("b", IntegerType))),
+        Some(StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType)))))
+    }
   }
 
   private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {

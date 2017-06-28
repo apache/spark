@@ -2646,6 +2646,25 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-21247: Allow case-insensitive type equality in Set operation") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))")
+      sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val m1 = intercept[AnalysisException] {
+        sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))")
+      }.message
+      assert(m1.contains("Union can only be performed on tables with the compatible column types"))
+
+      val m2 = intercept[AnalysisException] {
+        sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
+      }.message
+      assert(m2.contains("Except can only be performed on tables with the compatible column types"))
+    }
+  }
+
   test("SPARK-21335: support un-aliased subquery") {
     withTempView("v") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
