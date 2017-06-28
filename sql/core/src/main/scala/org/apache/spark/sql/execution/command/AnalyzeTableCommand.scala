@@ -28,6 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Expression, Lite
 /**
  * Analyzes the given table or partition to generate statistics, which will be used in
  * query optimizations.
+ *
+ * If certain partition spec is specified, then statistics are gathered for only that partition.
  */
 case class AnalyzeTableCommand(
     tableIdent: TableIdentifier,

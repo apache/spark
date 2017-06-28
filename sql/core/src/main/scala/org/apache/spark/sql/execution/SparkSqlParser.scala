@@ -95,30 +95,26 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * {{{
    *   ANALYZE TABLE table COMPUTE STATISTICS [NOSCAN];
    * }}}
+   * Example SQL for analyzing a single partition :
+   * {{{
+   *   ANALYZE TABLE table PARTITION (key=value,..) COMPUTE STATISTICS [NOSCAN];
+   * }}}
    * Example SQL for analyzing columns :
    * {{{
    *   ANALYZE TABLE table COMPUTE STATISTICS FOR COLUMNS column1, column2;
    * }}}
    */
   override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
-    val noscan = if (ctx.identifier != null) {
-      if (ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-        throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
-      }
-      true
-    } else {
-      false
+    if (ctx.identifier != null &&
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
     }
 
-    val partitionSpec = if (ctx.partitionSpec != null) {
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
-    } else {
-      None
-    }
+    val partitionSpec = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
 
     val table = visitTableIdentifier(ctx.tableIdentifier)
     if (ctx.identifierSeq() == null) {
-      AnalyzeTableCommand(table, noscan, partitionSpec)
+      AnalyzeTableCommand(table, noscan = ctx.identifier != null, partitionSpec)
     } else {
       if (partitionSpec.isDefined) {
         logWarning(s"Partition specification is ignored: ${ctx.partitionSpec.getText}")
