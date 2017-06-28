@@ -46,7 +46,7 @@ class JdbcInsertSuite extends DataSourceTest with BeforeAndAfter with SharedSQLC
     conn = DriverManager.getConnection(url, properties)
     conn.prepareStatement("create schema test").executeUpdate()
     conn.prepareStatement(
-      "create table test.timetest (name TEXT(32) NOT NULL, time_stamp TIMESTAMP NOT NULL)").
+      "create table test.timestamp_test (id bigint(11) DEFAULT NULL, time_stamp TIMESTAMP NOT NULL)").
       executeUpdate()
 
     conn.commit()
@@ -55,28 +55,33 @@ class JdbcInsertSuite extends DataSourceTest with BeforeAndAfter with SharedSQLC
       s"""
          |CREATE OR REPLACE TEMPORARY VIEW jdbcTable
          |USING org.apache.spark.sql.jdbc
-         |OPTIONS (url '$url', dbtable 'test.timetest', user 'testUser', password 'testPass')
+         |OPTIONS (url '$url', dbtable 'test.timestamp_test', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
   }
+
   after {
-    conn.prepareStatement("drop table test.timetest").executeUpdate()
+    spark.catalog.dropTempView("jdbcTable")
+
+    conn.prepareStatement("drop table test.timestamp_test").executeUpdate()
     conn.prepareStatement("drop schema test").executeUpdate()
 
     conn.commit()
     conn.close()
   }
-  test("insert into null timestamp") {
-    var testPassed = false
-    try{
+
+  test("SPARK-19726 - Faild to insert null timestamp value to mysql using spark jdbc") {
+
+    val message = intercept[Exception] {
       sql(
         s"""
-           |INSERT INTO jdbcTable values(123, null)
+           |INSERT INTO jdbcTable values(222, null)
       """.stripMargin)
-    } catch {
-      case e: Exception =>
-        testPassed = true
-    }
-    assert(testPassed, "Throw Null Exception Correctlly!")
+    }.getMessage
+
+    assert(
+      message.contains("NULL not allowed for column \"TIME_STAMP\""),
+      "It is not allowed to insert into null into timestamp column which is defined not null."
+    )
   }
 }
 
