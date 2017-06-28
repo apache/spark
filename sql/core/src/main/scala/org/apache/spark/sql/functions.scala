@@ -2125,6 +2125,13 @@ object functions {
     new Murmur3Hash(cols.map(_.expr))
   }
 
+  /**
+    * Returns the data type of the given column.
+    *
+    * @group misc_funcs
+    */
+  def data_type(e: Column): Column = withExpr { GetDataType(e.expr) }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////

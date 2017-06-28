@@ -91,6 +91,29 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
   override def sql: String = s"assert_true(${child.sql})"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the data type of the `expr`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_("a");
+       string
+      > SELECT _FUNC_(OL);
+       bigint
+  """)
+case class GetDataType(child: Expression) extends UnaryExpression {
+
+  override def dataType: DataType = StringType
+
+  override def nullSafeEval(input: Any): Any = UTF8String.fromString(child.dataType.simpleString)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c =>
+      s"""UTF8String.fromString("${child.dataType.simpleString}")""")
+  }
+
+  override def prettyName: String = "data_type"
+}
+
 /**
  * Returns the current database of the SessionCatalog.
  */
