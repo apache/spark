@@ -1248,6 +1248,17 @@ def hash(*cols):
     return Column(jc)
 
 
+def data_type(col):
+    """Returns the data type of the given column.
+
+    >>> spark.createDataFrame([('ABC',)], ['a']).select(data_type('a').alias('data_type')).collect()
+    [Row(data_type=u'string')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.data_type(_to_java_column(col))
+    return Column(jc)
+
+
 # ---------------------- String/Binary functions ------------------------------
 
 _string_functions = {
