@@ -1199,6 +1199,8 @@ class Dataset[T] private[sql](
 
   /**
    * Selects column based on the column name specified as a regex and return it as [[Column]].
+   * @group untypedrel
+   * @since 2.3.0
    */
   def colRegex(colName: String): Column = colName match {
     case ParserUtils.escapedIdentifier(columnNameRegex) =>

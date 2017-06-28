@@ -247,21 +247,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("REGEX column specification") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
 
-    intercept[AnalysisException] {
-      ds.select(expr("`(_1)?+.+`").as[Int])
-    }
+    var e = intercept[AnalysisException] { ds.select(expr("`(_1)?+.+`").as[Int]) }.getMessage
+    assert(e.contains("cannot resolve '`(_1)?+.+`'"))
 
-    intercept[AnalysisException] {
-      ds.select(expr("`(_1|_2)`").as[Int])
-    }
+    e = intercept[AnalysisException] { ds.select(expr("`(_1|_2)`").as[Int]) }.getMessage
+    assert(e.contains("cannot resolve '`(_1|_2)`'"))
 
-    intercept[AnalysisException] {
-      ds.select(ds("`(_1)?+.+`"))
-    }
+    e = intercept[AnalysisException] { ds.select(ds("`(_1)?+.+`")) }.getMessage
+    assert(e.contains("Cannot resolve column name \"`(_1)?+.+`\""))
 
-    intercept[AnalysisException] {
-      ds.select(ds("`(_1|_2)`"))
-    }
+    e = intercept[AnalysisException] { ds.select(ds("`(_1|_2)`")) }.getMessage
+    assert(e.contains("Cannot resolve column name \"`(_1|_2)`\""))
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
       checkDataset(
