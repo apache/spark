@@ -86,6 +86,31 @@ NULL
 #' df <- createDataFrame(data.frame(time = as.POSIXct(dts), y = y))}
 NULL
 
+#' Math functions for Column operations
+#'
+#' Math functions defined for \code{Column}.
+#'
+#' @param x Column to compute on. In \code{shiftLeft}, \code{shiftRight} and \code{shiftRightUnsigned},
+#'          this is the number of bits to shift.
+#' @param y Column to compute on.
+#' @param ... additional argument(s).
+#' @name column_math_functions
+#' @rdname column_math_functions
+#' @family math functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' tmp <- mutate(df, v1 = log(df$mpg), v2 = cbrt(df$disp),
+#'                   v3 = bround(df$wt, 1), v4 = bin(df$cyl),
+#'                   v5 = hex(df$wt), v6 = toDegrees(df$gear),
+#'                   v7 = atan2(df$cyl, df$am), v8 = hypot(df$cyl, df$am),
+#'                   v9 = pmod(df$hp, df$cyl), v10 = shiftLeft(df$disp, 1),
+#'                   v11 = conv(df$hp, 10, 16), v12 = sign(df$vs - 0.5),
+#'                   v13 = sqrt(df$disp), v14 = ceil(df$wt))
+#' head(tmp)}
+NULL
+
 #' lit
 #'
 #' A new \linkS4class{Column} is created to represent the literal value.
@@ -112,18 +137,12 @@ setMethod("lit", signature("ANY"),
             column(jc)
           })
 
-#' abs
+#' @details
+#' \code{abs}: Computes the absolute value.
 #'
-#' Computes the absolute value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname abs
-#' @name abs
-#' @family non-aggregate functions
+#' @rdname column_math_functions
 #' @export
-#' @examples \dontrun{abs(df$c)}
-#' @aliases abs,Column-method
+#' @aliases abs abs,Column-method
 #' @note abs since 1.5.0
 setMethod("abs",
           signature(x = "Column"),
@@ -132,19 +151,13 @@ setMethod("abs",
             column(jc)
           })
 
-#' acos
+#' @details
+#' \code{acos}: Computes the cosine inverse of the given value; the returned angle is in
+#' the range 0.0 through pi.
 #'
-#' Computes the cosine inverse of the given value; the returned angle is in the range
-#' 0.0 through pi.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname acos
-#' @name acos
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @examples \dontrun{acos(df$c)}
-#' @aliases acos,Column-method
+#' @aliases acos acos,Column-method
 #' @note acos since 1.5.0
 setMethod("acos",
           signature(x = "Column"),
@@ -196,19 +209,13 @@ setMethod("ascii",
             column(jc)
           })
 
-#' asin
+#' @details
+#' \code{asin}: Computes the sine inverse of the given value; the returned angle is in
+#' the range -pi/2 through pi/2.
 #'
-#' Computes the sine inverse of the given value; the returned angle is in the range
-#' -pi/2 through pi/2.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname asin
-#' @name asin
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases asin,Column-method
-#' @examples \dontrun{asin(df$c)}
+#' @aliases asin asin,Column-method
 #' @note asin since 1.5.0
 setMethod("asin",
           signature(x = "Column"),
@@ -217,18 +224,12 @@ setMethod("asin",
             column(jc)
           })
 
-#' atan
+#' @details
+#' \code{atan}: Computes the tangent inverse of the given value.
 #'
-#' Computes the tangent inverse of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname atan
-#' @name atan
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases atan,Column-method
-#' @examples \dontrun{atan(df$c)}
+#' @aliases atan atan,Column-method
 #' @note atan since 1.5.0
 setMethod("atan",
           signature(x = "Column"),
@@ -276,19 +277,13 @@ setMethod("base64",
             column(jc)
           })
 
-#' bin
+#' @details
+#' \code{bin}: An expression that returns the string representation of the binary value
+#' of the given long column. For example, bin("12") returns "1100".
 #'
-#' An expression that returns the string representation of the binary value of the given long
-#' column. For example, bin("12") returns "1100".
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname bin
-#' @name bin
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases bin,Column-method
-#' @examples \dontrun{bin(df$c)}
+#' @aliases bin bin,Column-method
 #' @note bin since 1.5.0
 setMethod("bin",
           signature(x = "Column"),
@@ -317,18 +312,12 @@ setMethod("bitwiseNOT",
             column(jc)
           })
 
-#' cbrt
+#' @details
+#' \code{cbrt}: Computes the cube-root of the given value.
 #'
-#' Computes the cube-root of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname cbrt
-#' @name cbrt
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases cbrt,Column-method
-#' @examples \dontrun{cbrt(df$c)}
+#' @aliases cbrt cbrt,Column-method
 #' @note cbrt since 1.4.0
 setMethod("cbrt",
           signature(x = "Column"),
@@ -337,24 +326,31 @@ setMethod("cbrt",
             column(jc)
           })
 
-#' Computes the ceiling of the given value
+#' @details
+#' \code{ceil}: Computes the ceiling of the given value.
 #'
-#' Computes the ceiling of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname ceil
-#' @name ceil
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases ceil,Column-method
-#' @examples \dontrun{ceil(df$c)}
+#' @aliases ceil ceil,Column-method
 #' @note ceil since 1.5.0
 setMethod("ceil",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "ceil", x@jc)
             column(jc)
+          })
+
+#' @details
+#' \code{ceiling}: Alias for \code{ceil}.
+#'
+#' @rdname column_math_functions
+#' @aliases ceiling ceiling,Column-method
+#' @export
+#' @note ceiling since 1.5.0
+setMethod("ceiling",
+          signature(x = "Column"),
+          function(x) {
+            ceil(x)
           })
 
 #' Returns the first column that is not NA
@@ -405,6 +401,7 @@ setMethod("column",
           function(x) {
             col(x)
           })
+
 #' corr
 #'
 #' Computes the Pearson Correlation Coefficient for two Columns.
@@ -493,18 +490,12 @@ setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOr
             column(jc)
           })
 
-#' cos
+#' @details
+#' \code{cos}: Computes the cosine of the given value.
 #'
-#' Computes the cosine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname cos
-#' @name cos
-#' @family math functions
-#' @aliases cos,Column-method
+#' @rdname column_math_functions
+#' @aliases cos cos,Column-method
 #' @export
-#' @examples \dontrun{cos(df$c)}
 #' @note cos since 1.5.0
 setMethod("cos",
           signature(x = "Column"),
@@ -513,18 +504,12 @@ setMethod("cos",
             column(jc)
           })
 
-#' cosh
+#' @details
+#' \code{cosh}: Computes the hyperbolic cosine of the given value.
 #'
-#' Computes the hyperbolic cosine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname cosh
-#' @name cosh
-#' @family math functions
-#' @aliases cosh,Column-method
+#' @rdname column_math_functions
+#' @aliases cosh cosh,Column-method
 #' @export
-#' @examples \dontrun{cosh(df$c)}
 #' @note cosh since 1.5.0
 setMethod("cosh",
           signature(x = "Column"),
@@ -679,18 +664,12 @@ setMethod("encode",
             column(jc)
           })
 
-#' exp
+#' @details
+#' \code{exp}: Computes the exponential of the given value.
 #'
-#' Computes the exponential of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname exp
-#' @name exp
-#' @family math functions
-#' @aliases exp,Column-method
+#' @rdname column_math_functions
+#' @aliases exp exp,Column-method
 #' @export
-#' @examples \dontrun{exp(df$c)}
 #' @note exp since 1.5.0
 setMethod("exp",
           signature(x = "Column"),
@@ -699,18 +678,12 @@ setMethod("exp",
             column(jc)
           })
 
-#' expm1
+#' @details
+#' \code{expm1}: Computes the exponential of the given value minus one.
 #'
-#' Computes the exponential of the given value minus one.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname expm1
-#' @name expm1
-#' @aliases expm1,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases expm1 expm1,Column-method
 #' @export
-#' @examples \dontrun{expm1(df$c)}
 #' @note expm1 since 1.5.0
 setMethod("expm1",
           signature(x = "Column"),
@@ -719,18 +692,12 @@ setMethod("expm1",
             column(jc)
           })
 
-#' factorial
+#' @details
+#' \code{factorial}: Computes the factorial of the given value.
 #'
-#' Computes the factorial of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname factorial
-#' @name factorial
-#' @aliases factorial,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases factorial factorial,Column-method
 #' @export
-#' @examples \dontrun{factorial(df$c)}
 #' @note factorial since 1.5.0
 setMethod("factorial",
           signature(x = "Column"),
@@ -772,18 +739,12 @@ setMethod("first",
             column(jc)
           })
 
-#' floor
+#' @details
+#' \code{floor}: Computes the floor of the given value.
 #'
-#' Computes the floor of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname floor
-#' @name floor
-#' @aliases floor,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases floor floor,Column-method
 #' @export
-#' @examples \dontrun{floor(df$c)}
 #' @note floor since 1.5.0
 setMethod("floor",
           signature(x = "Column"),
@@ -792,18 +753,12 @@ setMethod("floor",
             column(jc)
           })
 
-#' hex
+#' @details
+#' \code{hex}: Computes hex value of the given column.
 #'
-#' Computes hex value of the given column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname hex
-#' @name hex
-#' @family math functions
-#' @aliases hex,Column-method
+#' @rdname column_math_functions
+#' @aliases hex hex,Column-method
 #' @export
-#' @examples \dontrun{hex(df$c)}
 #' @note hex since 1.5.0
 setMethod("hex",
           signature(x = "Column"),
@@ -983,18 +938,12 @@ setMethod("length",
             column(jc)
           })
 
-#' log
+#' @details
+#' \code{log}: Computes the natural logarithm of the given value.
 #'
-#' Computes the natural logarithm of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log
-#' @name log
-#' @aliases log,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases log log,Column-method
 #' @export
-#' @examples \dontrun{log(df$c)}
 #' @note log since 1.5.0
 setMethod("log",
           signature(x = "Column"),
@@ -1003,18 +952,12 @@ setMethod("log",
             column(jc)
           })
 
-#' log10
+#' @details
+#' \code{log10}: Computes the logarithm of the given value in base 10.
 #'
-#' Computes the logarithm of the given value in base 10.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log10
-#' @name log10
-#' @family math functions
-#' @aliases log10,Column-method
+#' @rdname column_math_functions
+#' @aliases log10 log10,Column-method
 #' @export
-#' @examples \dontrun{log10(df$c)}
 #' @note log10 since 1.5.0
 setMethod("log10",
           signature(x = "Column"),
@@ -1023,18 +966,12 @@ setMethod("log10",
             column(jc)
           })
 
-#' log1p
+#' @details
+#' \code{log1p}: Computes the natural logarithm of the given value plus one.
 #'
-#' Computes the natural logarithm of the given value plus one.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log1p
-#' @name log1p
-#' @family math functions
-#' @aliases log1p,Column-method
+#' @rdname column_math_functions
+#' @aliases log1p log1p,Column-method
 #' @export
-#' @examples \dontrun{log1p(df$c)}
 #' @note log1p since 1.5.0
 setMethod("log1p",
           signature(x = "Column"),
@@ -1043,18 +980,12 @@ setMethod("log1p",
             column(jc)
           })
 
-#' log2
+#' @details
+#' \code{log2}: Computes the logarithm of the given column in base 2.
 #'
-#' Computes the logarithm of the given column in base 2.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log2
-#' @name log2
-#' @family math functions
-#' @aliases log2,Column-method
+#' @rdname column_math_functions
+#' @aliases log2 log2,Column-method
 #' @export
-#' @examples \dontrun{log2(df$c)}
 #' @note log2 since 1.5.0
 setMethod("log2",
           signature(x = "Column"),
@@ -1287,19 +1218,13 @@ setMethod("reverse",
             column(jc)
           })
 
-#' rint
-#'
-#' Returns the double value that is closest in value to the argument and
+#' @details
+#' \code{rint}: Returns the double value that is closest in value to the argument and
 #' is equal to a mathematical integer.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname rint
-#' @name rint
-#' @family math functions
-#' @aliases rint,Column-method
+#' @rdname column_math_functions
+#' @aliases rint rint,Column-method
 #' @export
-#' @examples \dontrun{rint(df$c)}
 #' @note rint since 1.5.0
 setMethod("rint",
           signature(x = "Column"),
@@ -1308,18 +1233,13 @@ setMethod("rint",
             column(jc)
           })
 
-#' round
+#' @details
+#' \code{round}: Returns the value of the column rounded to 0 decimal places
+#' using HALF_UP rounding mode.
 #'
-#' Returns the value of the column \code{e} rounded to 0 decimal places using HALF_UP rounding mode.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname round
-#' @name round
-#' @family math functions
-#' @aliases round,Column-method
+#' @rdname column_math_functions
+#' @aliases round round,Column-method
 #' @export
-#' @examples \dontrun{round(df$c)}
 #' @note round since 1.5.0
 setMethod("round",
           signature(x = "Column"),
@@ -1328,24 +1248,18 @@ setMethod("round",
             column(jc)
           })
 
-#' bround
-#'
-#' Returns the value of the column \code{e} rounded to \code{scale} decimal places using HALF_EVEN rounding
-#' mode if \code{scale} >= 0 or at integer part when \code{scale} < 0.
+#' @details
+#' \code{bround}: Returns the value of the column \code{e} rounded to \code{scale} decimal places
+#' using HALF_EVEN rounding mode if \code{scale} >= 0 or at integer part when \code{scale} < 0.
 #' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
 #' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
 #'
-#' @param x Column to compute on.
 #' @param scale round to \code{scale} digits to the right of the decimal point when \code{scale} > 0,
 #'        the nearest even number when \code{scale} = 0, and \code{scale} digits to the left
 #'        of the decimal point when \code{scale} < 0.
-#' @param ... further arguments to be passed to or from other methods.
-#' @rdname bround
-#' @name bround
-#' @family math functions
-#' @aliases bround,Column-method
+#' @rdname column_math_functions
+#' @aliases bround bround,Column-method
 #' @export
-#' @examples \dontrun{bround(df$c, 0)}
 #' @note bround since 2.0.0
 setMethod("bround",
           signature(x = "Column"),
@@ -1353,7 +1267,6 @@ setMethod("bround",
             jc <- callJStatic("org.apache.spark.sql.functions", "bround", x@jc, as.integer(scale))
             column(jc)
           })
-
 
 #' rtrim
 #'
@@ -1374,7 +1287,6 @@ setMethod("rtrim",
             jc <- callJStatic("org.apache.spark.sql.functions", "rtrim", x@jc)
             column(jc)
           })
-
 
 #' @details
 #' \code{sd}: Alias for \code{stddev_samp}.
@@ -1429,18 +1341,12 @@ setMethod("sha1",
             column(jc)
           })
 
-#' signum
+#' @details
+#' \code{signum}: Computes the signum of the given value.
 #'
-#' Computes the signum of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sign
-#' @name signum
-#' @aliases signum,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases signum signum,Column-method
 #' @export
-#' @examples \dontrun{signum(df$c)}
 #' @note signum since 1.5.0
 setMethod("signum",
           signature(x = "Column"),
@@ -1449,18 +1355,24 @@ setMethod("signum",
             column(jc)
           })
 
-#' sin
+#' @details
+#' \code{sign}: Alias for \code{signum}.
 #'
-#' Computes the sine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sin
-#' @name sin
-#' @family math functions
-#' @aliases sin,Column-method
+#' @rdname column_math_functions
+#' @aliases sign sign,Column-method
 #' @export
-#' @examples \dontrun{sin(df$c)}
+#' @note sign since 1.5.0
+setMethod("sign", signature(x = "Column"),
+          function(x) {
+            signum(x)
+          })
+
+#' @details
+#' \code{sin}: Computes the sine of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases sin sin,Column-method
+#' @export
 #' @note sin since 1.5.0
 setMethod("sin",
           signature(x = "Column"),
@@ -1469,18 +1381,12 @@ setMethod("sin",
             column(jc)
           })
 
-#' sinh
+#' @details
+#' \code{sinh}: Computes the hyperbolic sine of the given value.
 #'
-#' Computes the hyperbolic sine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sinh
-#' @name sinh
-#' @family math functions
-#' @aliases sinh,Column-method
+#' @rdname column_math_functions
+#' @aliases sinh sinh,Column-method
 #' @export
-#' @examples \dontrun{sinh(df$c)}
 #' @note sinh since 1.5.0
 setMethod("sinh",
           signature(x = "Column"),
@@ -1616,18 +1522,12 @@ setMethod("struct",
             column(jc)
           })
 
-#' sqrt
+#' @details
+#' \code{sqrt}: Computes the square root of the specified float value.
 #'
-#' Computes the square root of the specified float value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sqrt
-#' @name sqrt
-#' @family math functions
-#' @aliases sqrt,Column-method
+#' @rdname column_math_functions
+#' @aliases sqrt sqrt,Column-method
 #' @export
-#' @examples \dontrun{sqrt(df$c)}
 #' @note sqrt since 1.5.0
 setMethod("sqrt",
           signature(x = "Column"),
@@ -1669,18 +1569,12 @@ setMethod("sumDistinct",
             column(jc)
           })
 
-#' tan
+#' @details
+#' \code{tan}: Computes the tangent of the given value.
 #'
-#' Computes the tangent of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname tan
-#' @name tan
-#' @family math functions
-#' @aliases tan,Column-method
+#' @rdname column_math_functions
+#' @aliases tan tan,Column-method
 #' @export
-#' @examples \dontrun{tan(df$c)}
 #' @note tan since 1.5.0
 setMethod("tan",
           signature(x = "Column"),
@@ -1689,18 +1583,12 @@ setMethod("tan",
             column(jc)
           })
 
-#' tanh
+#' @details
+#' \code{tanh}: Computes the hyperbolic tangent of the given value.
 #'
-#' Computes the hyperbolic tangent of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname tanh
-#' @name tanh
-#' @family math functions
-#' @aliases tanh,Column-method
+#' @rdname column_math_functions
+#' @aliases tanh tanh,Column-method
 #' @export
-#' @examples \dontrun{tanh(df$c)}
 #' @note tanh since 1.5.0
 setMethod("tanh",
           signature(x = "Column"),
@@ -1709,18 +1597,13 @@ setMethod("tanh",
             column(jc)
           })
 
-#' toDegrees
+#' @details
+#' \code{toDegrees}: Converts an angle measured in radians to an approximately equivalent angle
+#' measured in degrees.
 #'
-#' Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname toDegrees
-#' @name toDegrees
-#' @family math functions
-#' @aliases toDegrees,Column-method
+#' @rdname column_math_functions
+#' @aliases toDegrees toDegrees,Column-method
 #' @export
-#' @examples \dontrun{toDegrees(df$c)}
 #' @note toDegrees since 1.4.0
 setMethod("toDegrees",
           signature(x = "Column"),
@@ -1729,18 +1612,13 @@ setMethod("toDegrees",
             column(jc)
           })
 
-#' toRadians
+#' @details
+#' \code{toRadians}: Converts an angle measured in degrees to an approximately equivalent angle
+#' measured in radians.
 #'
-#' Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname toRadians
-#' @name toRadians
-#' @family math functions
-#' @aliases toRadians,Column-method
+#' @rdname column_math_functions
+#' @aliases toRadians toRadians,Column-method
 #' @export
-#' @examples \dontrun{toRadians(df$c)}
 #' @note toRadians since 1.4.0
 setMethod("toRadians",
           signature(x = "Column"),
@@ -1894,19 +1772,13 @@ setMethod("unbase64",
             column(jc)
           })
 
-#' unhex
-#'
-#' Inverse of hex. Interprets each pair of characters as a hexadecimal number
+#' @details
+#' \code{unhex}: Inverse of hex. Interprets each pair of characters as a hexadecimal number
 #' and converts to the byte representation of number.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname unhex
-#' @name unhex
-#' @family math functions
-#' @aliases unhex,Column-method
+#' @rdname column_math_functions
+#' @aliases unhex unhex,Column-method
 #' @export
-#' @examples \dontrun{unhex(df$c)}
 #' @note unhex since 1.5.0
 setMethod("unhex",
           signature(x = "Column"),
@@ -2020,20 +1892,13 @@ setMethod("year",
             column(jc)
           })
 
-#' atan2
+#' @details
+#' \code{atan2}: Returns the angle theta from the conversion of rectangular coordinates
+#' (x, y) to polar coordinates (r, theta).
 #'
-#' Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-#' polar coordinates (r, theta).
-#
-#' @param x Column to compute on.
-#' @param y Column to compute on.
-#'
-#' @rdname atan2
-#' @name atan2
-#' @family math functions
-#' @aliases atan2,Column-method
+#' @rdname column_math_functions
+#' @aliases atan2 atan2,Column-method
 #' @export
-#' @examples \dontrun{atan2(df$c, x)}
 #' @note atan2 since 1.5.0
 setMethod("atan2", signature(y = "Column"),
           function(y, x) {
@@ -2068,19 +1933,12 @@ setMethod("datediff", signature(y = "Column"),
             column(jc)
           })
 
-#' hypot
+#' @details
+#' \code{hypot}: Computes "sqrt(a^2 + b^2)" without intermediate overflow or underflow.
 #'
-#' Computes "sqrt(a^2 + b^2)" without intermediate overflow or underflow.
-#
-#' @param x Column to compute on.
-#' @param y Column to compute on.
-#'
-#' @rdname hypot
-#' @name hypot
-#' @family math functions
-#' @aliases hypot,Column-method
+#' @rdname column_math_functions
+#' @aliases hypot hypot,Column-method
 #' @export
-#' @examples \dontrun{hypot(df$c, x)}
 #' @note hypot since 1.4.0
 setMethod("hypot", signature(y = "Column"),
           function(y, x) {
@@ -2154,20 +2012,13 @@ setMethod("nanvl", signature(y = "Column"),
             column(jc)
           })
 
-#' pmod
+#' @details
+#' \code{pmod}: Returns the positive value of dividend mod divisor.
+#' Column \code{x} is divisor column, and column \code{y} is the dividend column.
 #'
-#' Returns the positive value of dividend mod divisor.
-#'
-#' @param x divisor Column.
-#' @param y dividend Column.
-#'
-#' @rdname pmod
-#' @name pmod
-#' @docType methods
-#' @family math functions
-#' @aliases pmod,Column-method
+#' @rdname column_math_functions
+#' @aliases pmod pmod,Column-method
 #' @export
-#' @examples \dontrun{pmod(df$c, x)}
 #' @note pmod since 1.5.0
 setMethod("pmod", signature(y = "Column"),
           function(y, x) {
@@ -2288,31 +2139,6 @@ setMethod("least",
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "least", jcols)
             column(jc)
-          })
-
-#' @rdname ceil
-#'
-#' @name ceiling
-#' @aliases ceiling,Column-method
-#' @export
-#' @examples \dontrun{ceiling(df$c)}
-#' @note ceiling since 1.5.0
-setMethod("ceiling",
-          signature(x = "Column"),
-          function(x) {
-            ceil(x)
-          })
-
-#' @rdname sign
-#'
-#' @name sign
-#' @aliases sign,Column-method
-#' @export
-#' @examples \dontrun{sign(df$c)}
-#' @note sign since 1.5.0
-setMethod("sign", signature(x = "Column"),
-          function(x) {
-            signum(x)
           })
 
 #' @details
@@ -2564,20 +2390,13 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' shiftLeft
+#' @details
+#' \code{shiftLeft}: Shifts the given value numBits left. If the given value is a long value,
+#' this function will return a long value else it will return an integer value.
 #'
-#' Shift the given value numBits left. If the given value is a long value, this function
-#' will return a long value else it will return an integer value.
-#'
-#' @param y column to compute on.
-#' @param x number of bits to shift.
-#'
-#' @family math functions
-#' @rdname shiftLeft
-#' @name shiftLeft
-#' @aliases shiftLeft,Column,numeric-method
+#' @rdname column_math_functions
+#' @aliases shiftLeft shiftLeft,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftLeft(df$c, 1)}
 #' @note shiftLeft since 1.5.0
 setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2587,20 +2406,13 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' shiftRight
+#' @details
+#' \code{shiftRight}: (Signed) shifts the given value numBits right. If the given value is a long value,
+#' it will return a long value else it will return an integer value.
 #'
-#' (Signed) shift the given value numBits right. If the given value is a long value, it will return
-#' a long value else it will return an integer value.
-#'
-#' @param y column to compute on.
-#' @param x number of bits to shift.
-#'
-#' @family math functions
-#' @rdname shiftRight
-#' @name shiftRight
-#' @aliases shiftRight,Column,numeric-method
+#' @rdname column_math_functions
+#' @aliases shiftRight shiftRight,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftRight(df$c, 1)}
 #' @note shiftRight since 1.5.0
 setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2610,20 +2422,13 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' shiftRightUnsigned
-#'
-#' Unsigned shift the given value numBits right. If the given value is a long value,
+#' @details
+#' \code{shiftRight}: (Unigned) shifts the given value numBits right. If the given value is a long value,
 #' it will return a long value else it will return an integer value.
 #'
-#' @param y column to compute on.
-#' @param x number of bits to shift.
-#'
-#' @family math functions
-#' @rdname shiftRightUnsigned
-#' @name shiftRightUnsigned
-#' @aliases shiftRightUnsigned,Column,numeric-method
+#' @rdname column_math_functions
+#' @aliases shiftRightUnsigned shiftRightUnsigned,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftRightUnsigned(df$c, 1)}
 #' @note shiftRightUnsigned since 1.5.0
 setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2656,20 +2461,14 @@ setMethod("concat_ws", signature(sep = "character", x = "Column"),
             column(jc)
           })
 
-#' conv
+#' @details
+#' \code{conv}: Converts a number in a string column from one base to another.
 #'
-#' Convert a number in a string column from one base to another.
-#'
-#' @param x column to convert.
 #' @param fromBase base to convert from.
 #' @param toBase base to convert to.
-#'
-#' @family math functions
-#' @rdname conv
-#' @aliases conv,Column,numeric,numeric-method
-#' @name conv
+#' @rdname column_math_functions
+#' @aliases conv conv,Column,numeric,numeric-method
 #' @export
-#' @examples \dontrun{conv(df$n, 2, 16)}
 #' @note conv since 1.5.0
 setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeric"),
           function(x, fromBase, toBase) {
