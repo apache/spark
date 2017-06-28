@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, Date, Timestamp}
+
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
 import org.apache.spark.sql.types._
@@ -121,6 +123,20 @@ abstract class JdbcDialect extends Serializable {
    * @param properties The connection properties.  This is passed through from the relation.
    */
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+  }
+
+  protected def escapeSql(value: String): String =
+    if (value == null) null else StringUtils.replace(value, "'", "''")
+
+  /**
+   * Converts value to SQL expression.
+   */
+  def compileValue(value: Any): Any = value match {
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case dateValue: Date => "'" + dateValue + "'"
+    case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case _ => value
   }
 
   /**

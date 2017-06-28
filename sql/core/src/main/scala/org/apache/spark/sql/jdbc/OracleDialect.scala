@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{Date, Timestamp, Types}
 
 import org.apache.spark.sql.types._
 
@@ -66,6 +66,14 @@ private case object OracleDialect extends JdbcDialect {
     case ShortType => Some(JdbcType("NUMBER(5)", java.sql.Types.SMALLINT))
     case StringType => Some(JdbcType("VARCHAR2(255)", java.sql.Types.VARCHAR))
     case _ => None
+  }
+
+  override def compileValue(value: Any): Any = value match {
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
+    case dateValue: Date => "{d '" + dateValue + "'}"
+    case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case _ => value
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
