@@ -53,7 +53,7 @@ class JdbcInsertSuite extends DataSourceTest with BeforeAndAfter with SharedSQLC
 
     sql(
       s"""
-         |CREATE OR REPLACE TEMPORARY VIEW jdbcTable
+         |CREATE OR REPLACE TEMPORARY VIEW timestamp_test
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$url', dbtable 'test.timestamp_test', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
@@ -74,13 +74,13 @@ class JdbcInsertSuite extends DataSourceTest with BeforeAndAfter with SharedSQLC
     val message = intercept[Exception] {
       sql(
         s"""
-           |INSERT INTO jdbcTable values(222, null)
+           |INSERT INTO timestamp_test values(111, null)
       """.stripMargin)
     }.getMessage
 
     assert(
       message.contains("NULL not allowed for column \"TIME_STAMP\""),
-      "It is not allowed to insert into null into timestamp column which is defined not null."
+      "It is not allowed to insert null into timestamp column which is defined not null."
     )
   }
 }
