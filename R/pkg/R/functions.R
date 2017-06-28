@@ -118,9 +118,9 @@ NULL
 #' @param x Column to compute on. Note the difference in the following methods:
 #'          \itemize{
 #'          \item \code{to_json}: it is the column containing the struct or array of the structs.
-#'          \item \code{from_json}: it is column containing the JSON string.
+#'          \item \code{from_json}: it is the column containing the JSON string.
 #'          }
-#' @param ... additional argument(s). In \code{to_json} and \code{from_json}: this contains
+#' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
 #'            additional named properties to control how it is converted, accepts the same
 #'            options as the JSON data source.
 #' @name column_collection_functions
