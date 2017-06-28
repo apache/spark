@@ -617,20 +617,31 @@ class StreamSuite extends StreamTest {
     query.stop()
   }
 
+  test("should resolve the checkpoint path") {
+    withTempDir { dir =>
+      val checkpointLocation = dir.getCanonicalPath
+      assert(!checkpointLocation.startsWith("file:/"))
+      val query = MemoryStream[Int].toDF
+        .writeStream
+        .option("checkpointLocation", checkpointLocation)
+        .format("console")
+        .start()
+      try {
+        val resolvedCheckpointDir =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot
+        assert(resolvedCheckpointDir.startsWith("file:/"))
+      } finally {
+        query.stop()
+      }
+    }
+  }
+
   testQuietly("specify custom state store provider") {
-    val queryName = "memStream"
     val providerClassName = classOf[TestStateStoreProvider].getCanonicalName
     withSQLConf("spark.sql.streaming.stateStore.providerClass" -> providerClassName) {
       val input = MemoryStream[Int]
-      val query = input
-        .toDS()
-        .groupBy()
-        .count()
-        .writeStream
-        .outputMode("complete")
-        .format("memory")
-        .queryName(queryName)
-        .start()
+      val df = input.toDS().groupBy().count()
+      val query = df.writeStream.outputMode("complete").format("memory").queryName("name").start()
       input.addData(1, 2, 3)
       val e = intercept[Exception] {
         query.awaitTermination()
@@ -638,6 +649,45 @@ class StreamSuite extends StreamTest {
 
       assert(e.getMessage.contains(providerClassName))
       assert(e.getMessage.contains("instantiated"))
+    }
+  }
+
+  testQuietly("custom state store provider read from offset log") {
+    val input = MemoryStream[Int]
+    val df = input.toDS().groupBy().count()
+    val providerConf1 = "spark.sql.streaming.stateStore.providerClass" ->
+      "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider"
+    val providerConf2 = "spark.sql.streaming.stateStore.providerClass" ->
+      classOf[TestStateStoreProvider].getCanonicalName
+
+    def runQuery(queryName: String, checkpointLoc: String): Unit = {
+      val query = df.writeStream
+        .outputMode("complete")
+        .format("memory")
+        .queryName(queryName)
+        .option("checkpointLocation", checkpointLoc)
+        .start()
+      input.addData(1, 2, 3)
+      query.processAllAvailable()
+      query.stop()
+    }
+
+    withTempDir { dir =>
+      val checkpointLoc1 = new File(dir, "1").getCanonicalPath
+      withSQLConf(providerConf1) {
+        runQuery("query1", checkpointLoc1)  // generate checkpoints
+      }
+
+      val checkpointLoc2 = new File(dir, "2").getCanonicalPath
+      withSQLConf(providerConf2) {
+        // Verify new query will use new provider that throw error on loading
+        intercept[Exception] {
+          runQuery("query2", checkpointLoc2)
+        }
+
+        // Verify old query from checkpoint will still use old provider
+        runQuery("query1", checkpointLoc1)
+      }
     }
   }
 }
@@ -758,7 +808,7 @@ class TestStateStoreProvider extends StateStoreProvider {
     throw new Exception("Successfully instantiated")
   }
 
-  override def id: StateStoreId = null
+  override def stateStoreId: StateStoreId = null
 
   override def close(): Unit = { }
 

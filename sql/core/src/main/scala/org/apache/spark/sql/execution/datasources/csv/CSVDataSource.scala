@@ -32,6 +32,7 @@ import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
@@ -111,8 +112,8 @@ abstract class CSVDataSource extends Serializable {
 
 object CSVDataSource {
   def apply(options: CSVOptions): CSVDataSource = {
-    if (options.wholeFile) {
-      WholeFileCSVDataSource
+    if (options.multiLine) {
+      MultiLineCSVDataSource
     } else {
       TextInputCSVDataSource
     }
@@ -144,8 +145,9 @@ object TextInputCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseDataset(sparkSession, inputPaths, parsedOptions)
-    val maybeFirstLine =
-      CSVUtils.filterCommentAndEmpty(csv, parsedOptions).takeInternal(1).headOption
+    val maybeFirstLine = SQLExecution.ignoreNestedExecutionId(sparkSession) {
+      CSVUtils.filterCommentAndEmpty(csv, parsedOptions).take(1).headOption
+    }
     inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions)
   }
 
@@ -197,7 +199,7 @@ object TextInputCSVDataSource extends CSVDataSource {
   }
 }
 
-object WholeFileCSVDataSource extends CSVDataSource {
+object MultiLineCSVDataSource extends CSVDataSource {
   override val isSplitable: Boolean = false
 
   override def readFile(

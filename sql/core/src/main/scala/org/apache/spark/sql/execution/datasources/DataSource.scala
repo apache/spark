@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -182,6 +183,11 @@ case class DataSource(
       throw new AnalysisException(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
+
+    SchemaUtils.checkColumnNameDuplication(
+      (dataSchema ++ partitionSchema).map(_.name), "in the data schema and the partition schema",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
     (dataSchema, partitionSchema)
   }
 
@@ -416,7 +422,7 @@ case class DataSource(
       }.head
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
-    // ordering of data.logicalPlan (partition columns are all moved after data column). This
+    // ordering of data.logicalPlan (partition columns are all moved after data column).  This
     // will be adjusted within InsertIntoHadoopFsRelation.
     InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath,

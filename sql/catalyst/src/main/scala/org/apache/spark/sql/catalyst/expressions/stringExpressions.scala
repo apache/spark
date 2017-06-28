@@ -654,8 +654,12 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   """,
   extended = """
     Examples:
+      > SELECT _FUNC_('bar', 'foobarbar');
+       4
       > SELECT _FUNC_('bar', 'foobarbar', 5);
        7
+      > SELECT POSITION('bar' IN 'foobarbar');
+       4
   """)
 // scalastyle:on line.size.limit
 case class StringLocate(substr: Expression, str: Expression, start: Expression)
@@ -1047,7 +1051,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   """,
   extended = """
     Examples:
-      > SELECT initcap('sPark sql');
+      > SELECT _FUNC_('sPark sql');
        Spark Sql
   """)
 case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
@@ -1195,15 +1199,22 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 }
 
 /**
- * A function that return the length of the given string or binary expression.
+ * A function that returns the char length of the given string expression or
+ * number of bytes of the given binary expression.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the length of `expr` or number of bytes in binary data.",
+  usage = "_FUNC_(expr) - Returns the character length of `expr` or number of bytes in binary data.",
   extended = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
        9
+      > SELECT CHAR_LENGTH('Spark SQL');
+       9
+      > SELECT CHARACTER_LENGTH('Spark SQL');
+       9
   """)
+// scalastyle:on line.size.limit
 case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
@@ -1216,6 +1227,60 @@ case class Length(child: Expression) extends UnaryExpression with ImplicitCastIn
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
       case StringType => defineCodeGen(ctx, ev, c => s"($c).numChars()")
+      case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
+    }
+  }
+}
+
+/**
+ * A function that returns the bit length of the given string or binary expression.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the bit length of `expr` or number of bits in binary data.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL');
+       72
+  """)
+case class BitLength(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  override def dataType: DataType = IntegerType
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
+
+  protected override def nullSafeEval(value: Any): Any = child.dataType match {
+    case StringType => value.asInstanceOf[UTF8String].numBytes * 8
+    case BinaryType => value.asInstanceOf[Array[Byte]].length * 8
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.dataType match {
+      case StringType => defineCodeGen(ctx, ev, c => s"($c).numBytes() * 8")
+      case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length * 8")
+    }
+  }
+}
+
+/**
+ * A function that returns the byte length of the given string or binary expression.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the byte length of `expr` or number of bytes in binary data.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL');
+       9
+  """)
+case class OctetLength(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  override def dataType: DataType = IntegerType
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
+
+  protected override def nullSafeEval(value: Any): Any = child.dataType match {
+    case StringType => value.asInstanceOf[UTF8String].numBytes
+    case BinaryType => value.asInstanceOf[Array[Byte]].length
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.dataType match {
+      case StringType => defineCodeGen(ctx, ev, c => s"($c).numBytes()")
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
     }
   }

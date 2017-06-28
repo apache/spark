@@ -18,6 +18,99 @@
 #' @include generics.R column.R
 NULL
 
+#' Aggregate functions for Column operations
+#'
+#' Aggregate functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param y,na.rm,use currently not used.
+#' @param ... additional argument(s). For example, it could be used to pass additional Columns.
+#' @name column_aggregate_functions
+#' @rdname column_aggregate_functions
+#' @family aggregate functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
+NULL
+
+#' Date time functions for Column operations
+#'
+#' Date time functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
+#'               x Column to DateType or TimestampType. For \code{trunc}, it is the string used
+#'               for specifying the truncation method. For example, "year", "yyyy", "yy" for
+#'               truncate by year, or "month", "mon", "mm" for truncate by month.
+#' @param ... additional argument(s).
+#' @name column_datetime_functions
+#' @rdname column_datetime_functions
+#' @family data time functions
+#' @examples
+#' \dontrun{
+#' dts <- c("2005-01-02 18:47:22",
+#'         "2005-12-24 16:30:58",
+#'         "2005-10-28 07:30:05",
+#'         "2005-12-28 07:01:05",
+#'         "2006-01-24 00:01:10")
+#' y <- c(2.0, 2.2, 3.4, 2.5, 1.8)
+#' df <- createDataFrame(data.frame(time = as.POSIXct(dts), y = y))}
+NULL
+
+#' Date time arithmetic functions for Column operations
+#'
+#' Date time arithmetic functions defined for \code{Column}.
+#'
+#' @param y Column to compute on.
+#' @param x For class \code{Column}, it is the column used to perform arithmetic operations
+#'          with column \code{y}. For class \code{numeric}, it is the number of months or
+#'          days to be added to or subtracted from \code{y}. For class \code{character}, it is
+#'          \itemize{
+#'          \item \code{date_format}: date format specification.
+#'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: time zone to use.
+#'          \item \code{next_day}: day of the week string.
+#'          }
+#'
+#' @name column_datetime_diff_functions
+#' @rdname column_datetime_diff_functions
+#' @family data time functions
+#' @examples
+#' \dontrun{
+#' dts <- c("2005-01-02 18:47:22",
+#'         "2005-12-24 16:30:58",
+#'         "2005-10-28 07:30:05",
+#'         "2005-12-28 07:01:05",
+#'         "2006-01-24 00:01:10")
+#' y <- c(2.0, 2.2, 3.4, 2.5, 1.8)
+#' df <- createDataFrame(data.frame(time = as.POSIXct(dts), y = y))}
+NULL
+
+#' Math functions for Column operations
+#'
+#' Math functions defined for \code{Column}.
+#'
+#' @param x Column to compute on. In \code{shiftLeft}, \code{shiftRight} and \code{shiftRightUnsigned},
+#'          this is the number of bits to shift.
+#' @param y Column to compute on.
+#' @param ... additional argument(s).
+#' @name column_math_functions
+#' @rdname column_math_functions
+#' @family math functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' tmp <- mutate(df, v1 = log(df$mpg), v2 = cbrt(df$disp),
+#'                   v3 = bround(df$wt, 1), v4 = bin(df$cyl),
+#'                   v5 = hex(df$wt), v6 = toDegrees(df$gear),
+#'                   v7 = atan2(df$cyl, df$am), v8 = hypot(df$cyl, df$am),
+#'                   v9 = pmod(df$hp, df$cyl), v10 = shiftLeft(df$disp, 1),
+#'                   v11 = conv(df$hp, 10, 16), v12 = sign(df$vs - 0.5),
+#'                   v13 = sqrt(df$disp), v14 = ceil(df$wt))
+#' head(tmp)}
+NULL
+
 #' lit
 #'
 #' A new \linkS4class{Column} is created to represent the literal value.
@@ -44,18 +137,12 @@ setMethod("lit", signature("ANY"),
             column(jc)
           })
 
-#' abs
+#' @details
+#' \code{abs}: Computes the absolute value.
 #'
-#' Computes the absolute value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname abs
-#' @name abs
-#' @family non-aggregate functions
+#' @rdname column_math_functions
 #' @export
-#' @examples \dontrun{abs(df$c)}
-#' @aliases abs,Column-method
+#' @aliases abs abs,Column-method
 #' @note abs since 1.5.0
 setMethod("abs",
           signature(x = "Column"),
@@ -64,19 +151,13 @@ setMethod("abs",
             column(jc)
           })
 
-#' acos
+#' @details
+#' \code{acos}: Computes the cosine inverse of the given value; the returned angle is in
+#' the range 0.0 through pi.
 #'
-#' Computes the cosine inverse of the given value; the returned angle is in the range
-#' 0.0 through pi.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname acos
-#' @name acos
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @examples \dontrun{acos(df$c)}
-#' @aliases acos,Column-method
+#' @aliases acos acos,Column-method
 #' @note acos since 1.5.0
 setMethod("acos",
           signature(x = "Column"),
@@ -85,17 +166,20 @@ setMethod("acos",
             column(jc)
           })
 
-#' Returns the approximate number of distinct items in a group
+#' @details
+#' \code{approxCountDistinct}: Returns the approximate number of distinct items in a group.
 #'
-#' Returns the approximate number of distinct items in a group. This is a column
-#' aggregate function.
-#'
-#' @rdname approxCountDistinct
-#' @name approxCountDistinct
-#' @return the approximate number of distinct items in a group.
+#' @rdname column_aggregate_functions
 #' @export
-#' @aliases approxCountDistinct,Column-method
-#' @examples \dontrun{approxCountDistinct(df$c)}
+#' @aliases approxCountDistinct approxCountDistinct,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, approxCountDistinct(df$gear)))
+#' head(select(df, approxCountDistinct(df$gear, 0.02)))
+#' head(select(df, countDistinct(df$gear, df$cyl)))
+#' head(select(df, n_distinct(df$gear)))
+#' head(distinct(select(df, "gear")))}
 #' @note approxCountDistinct(Column) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
@@ -125,19 +209,13 @@ setMethod("ascii",
             column(jc)
           })
 
-#' asin
+#' @details
+#' \code{asin}: Computes the sine inverse of the given value; the returned angle is in
+#' the range -pi/2 through pi/2.
 #'
-#' Computes the sine inverse of the given value; the returned angle is in the range
-#' -pi/2 through pi/2.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname asin
-#' @name asin
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases asin,Column-method
-#' @examples \dontrun{asin(df$c)}
+#' @aliases asin asin,Column-method
 #' @note asin since 1.5.0
 setMethod("asin",
           signature(x = "Column"),
@@ -146,18 +224,12 @@ setMethod("asin",
             column(jc)
           })
 
-#' atan
+#' @details
+#' \code{atan}: Computes the tangent inverse of the given value.
 #'
-#' Computes the tangent inverse of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname atan
-#' @name atan
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases atan,Column-method
-#' @examples \dontrun{atan(df$c)}
+#' @aliases atan atan,Column-method
 #' @note atan since 1.5.0
 setMethod("atan",
           signature(x = "Column"),
@@ -205,19 +277,13 @@ setMethod("base64",
             column(jc)
           })
 
-#' bin
+#' @details
+#' \code{bin}: An expression that returns the string representation of the binary value
+#' of the given long column. For example, bin("12") returns "1100".
 #'
-#' An expression that returns the string representation of the binary value of the given long
-#' column. For example, bin("12") returns "1100".
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname bin
-#' @name bin
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases bin,Column-method
-#' @examples \dontrun{bin(df$c)}
+#' @aliases bin bin,Column-method
 #' @note bin since 1.5.0
 setMethod("bin",
           signature(x = "Column"),
@@ -246,18 +312,12 @@ setMethod("bitwiseNOT",
             column(jc)
           })
 
-#' cbrt
+#' @details
+#' \code{cbrt}: Computes the cube-root of the given value.
 #'
-#' Computes the cube-root of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname cbrt
-#' @name cbrt
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases cbrt,Column-method
-#' @examples \dontrun{cbrt(df$c)}
+#' @aliases cbrt cbrt,Column-method
 #' @note cbrt since 1.4.0
 setMethod("cbrt",
           signature(x = "Column"),
@@ -266,24 +326,31 @@ setMethod("cbrt",
             column(jc)
           })
 
-#' Computes the ceiling of the given value
+#' @details
+#' \code{ceil}: Computes the ceiling of the given value.
 #'
-#' Computes the ceiling of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname ceil
-#' @name ceil
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases ceil,Column-method
-#' @examples \dontrun{ceil(df$c)}
+#' @aliases ceil ceil,Column-method
 #' @note ceil since 1.5.0
 setMethod("ceil",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "ceil", x@jc)
             column(jc)
+          })
+
+#' @details
+#' \code{ceiling}: Alias for \code{ceil}.
+#'
+#' @rdname column_math_functions
+#' @aliases ceiling ceiling,Column-method
+#' @export
+#' @note ceiling since 1.5.0
+setMethod("ceiling",
+          signature(x = "Column"),
+          function(x) {
+            ceil(x)
           })
 
 #' Returns the first column that is not NA
@@ -334,6 +401,7 @@ setMethod("column",
           function(x) {
             col(x)
           })
+
 #' corr
 #'
 #' Computes the Pearson Correlation Coefficient for two Columns.
@@ -342,10 +410,13 @@ setMethod("column",
 #'
 #' @rdname corr
 #' @name corr
-#' @family math functions
+#' @family aggregate functions
 #' @export
 #' @aliases corr,Column-method
-#' @examples \dontrun{corr(df$c, df$d)}
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' head(select(df, corr(df$mpg, df$hp)))}
 #' @note corr since 1.6.0
 setMethod("corr", signature(x = "Column"),
           function(x, col2) {
@@ -356,20 +427,22 @@ setMethod("corr", signature(x = "Column"),
 
 #' cov
 #'
-#' Compute the sample covariance between two expressions.
+#' Compute the covariance between two expressions.
+#'
+#' @details
+#' \code{cov}: Compute the sample covariance between two expressions.
 #'
 #' @rdname cov
 #' @name cov
-#' @family math functions
+#' @family aggregate functions
 #' @export
 #' @aliases cov,characterOrColumn-method
 #' @examples
 #' \dontrun{
-#' cov(df$c, df$d)
-#' cov("c", "d")
-#' covar_samp(df$c, df$d)
-#' covar_samp("c", "d")
-#' }
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' head(select(df, cov(df$mpg, df$hp), cov("mpg", "hp"),
+#'                 covar_samp(df$mpg, df$hp), covar_samp("mpg", "hp"),
+#'                 covar_pop(df$mpg, df$hp), covar_pop("mpg", "hp")))}
 #' @note cov since 1.6.0
 setMethod("cov", signature(x = "characterOrColumn"),
           function(x, col2) {
@@ -377,6 +450,9 @@ setMethod("cov", signature(x = "characterOrColumn"),
             covar_samp(x, col2)
           })
 
+#' @details
+#' \code{covar_sample}: Alias for \code{cov}.
+#'
 #' @rdname cov
 #'
 #' @param col1 the first Column.
@@ -395,23 +471,13 @@ setMethod("covar_samp", signature(col1 = "characterOrColumn", col2 = "characterO
             column(jc)
           })
 
-#' covar_pop
+#' @details
+#' \code{covar_pop}: Computes the population covariance between two expressions.
 #'
-#' Compute the population covariance between two expressions.
-#'
-#' @param col1 First column to compute cov_pop.
-#' @param col2 Second column to compute cov_pop.
-#'
-#' @rdname covar_pop
+#' @rdname cov
 #' @name covar_pop
-#' @family math functions
 #' @export
 #' @aliases covar_pop,characterOrColumn,characterOrColumn-method
-#' @examples
-#' \dontrun{
-#' covar_pop(df$c, df$d)
-#' covar_pop("c", "d")
-#' }
 #' @note covar_pop since 2.0.0
 setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOrColumn"),
           function(col1, col2) {
@@ -424,18 +490,12 @@ setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOr
             column(jc)
           })
 
-#' cos
+#' @details
+#' \code{cos}: Computes the cosine of the given value.
 #'
-#' Computes the cosine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname cos
-#' @name cos
-#' @family math functions
-#' @aliases cos,Column-method
+#' @rdname column_math_functions
+#' @aliases cos cos,Column-method
 #' @export
-#' @examples \dontrun{cos(df$c)}
 #' @note cos since 1.5.0
 setMethod("cos",
           signature(x = "Column"),
@@ -444,18 +504,12 @@ setMethod("cos",
             column(jc)
           })
 
-#' cosh
+#' @details
+#' \code{cosh}: Computes the hyperbolic cosine of the given value.
 #'
-#' Computes the hyperbolic cosine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname cosh
-#' @name cosh
-#' @family math functions
-#' @aliases cosh,Column-method
+#' @rdname column_math_functions
+#' @aliases cosh cosh,Column-method
 #' @export
-#' @examples \dontrun{cosh(df$c)}
 #' @note cosh since 1.5.0
 setMethod("cosh",
           signature(x = "Column"),
@@ -529,18 +583,20 @@ setMethod("hash",
             column(jc)
           })
 
-#' dayofmonth
+#' @details
+#' \code{dayofmonth}: Extracts the day of the month as an integer from a
+#' given date/timestamp/string.
 #'
-#' Extracts the day of the month as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname dayofmonth
-#' @name dayofmonth
-#' @family date time functions
-#' @aliases dayofmonth,Column-method
+#' @rdname column_datetime_functions
+#' @aliases dayofmonth dayofmonth,Column-method
 #' @export
-#' @examples \dontrun{dayofmonth(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, df$time, year(df$time), quarter(df$time), month(df$time),
+#'            dayofmonth(df$time), dayofyear(df$time), weekofyear(df$time)))
+#' head(agg(groupBy(df, year(df$time)), count(df$y), avg(df$y)))
+#' head(agg(groupBy(df, month(df$time)), avg(df$y)))}
 #' @note dayofmonth since 1.5.0
 setMethod("dayofmonth",
           signature(x = "Column"),
@@ -549,18 +605,13 @@ setMethod("dayofmonth",
             column(jc)
           })
 
-#' dayofyear
+#' @details
+#' \code{dayofyear}: Extracts the day of the year as an integer from a
+#' given date/timestamp/string.
 #'
-#' Extracts the day of the year as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname dayofyear
-#' @name dayofyear
-#' @family date time functions
-#' @aliases dayofyear,Column-method
+#' @rdname column_datetime_functions
+#' @aliases dayofyear dayofyear,Column-method
 #' @export
-#' @examples \dontrun{dayofyear(df$c)}
 #' @note dayofyear since 1.5.0
 setMethod("dayofyear",
           signature(x = "Column"),
@@ -613,18 +664,12 @@ setMethod("encode",
             column(jc)
           })
 
-#' exp
+#' @details
+#' \code{exp}: Computes the exponential of the given value.
 #'
-#' Computes the exponential of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname exp
-#' @name exp
-#' @family math functions
-#' @aliases exp,Column-method
+#' @rdname column_math_functions
+#' @aliases exp exp,Column-method
 #' @export
-#' @examples \dontrun{exp(df$c)}
 #' @note exp since 1.5.0
 setMethod("exp",
           signature(x = "Column"),
@@ -633,18 +678,12 @@ setMethod("exp",
             column(jc)
           })
 
-#' expm1
+#' @details
+#' \code{expm1}: Computes the exponential of the given value minus one.
 #'
-#' Computes the exponential of the given value minus one.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname expm1
-#' @name expm1
-#' @aliases expm1,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases expm1 expm1,Column-method
 #' @export
-#' @examples \dontrun{expm1(df$c)}
 #' @note expm1 since 1.5.0
 setMethod("expm1",
           signature(x = "Column"),
@@ -653,18 +692,12 @@ setMethod("expm1",
             column(jc)
           })
 
-#' factorial
+#' @details
+#' \code{factorial}: Computes the factorial of the given value.
 #'
-#' Computes the factorial of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname factorial
-#' @name factorial
-#' @aliases factorial,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases factorial factorial,Column-method
 #' @export
-#' @examples \dontrun{factorial(df$c)}
 #' @note factorial since 1.5.0
 setMethod("factorial",
           signature(x = "Column"),
@@ -706,18 +739,12 @@ setMethod("first",
             column(jc)
           })
 
-#' floor
+#' @details
+#' \code{floor}: Computes the floor of the given value.
 #'
-#' Computes the floor of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname floor
-#' @name floor
-#' @aliases floor,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases floor floor,Column-method
 #' @export
-#' @examples \dontrun{floor(df$c)}
 #' @note floor since 1.5.0
 setMethod("floor",
           signature(x = "Column"),
@@ -726,18 +753,12 @@ setMethod("floor",
             column(jc)
           })
 
-#' hex
+#' @details
+#' \code{hex}: Computes hex value of the given column.
 #'
-#' Computes hex value of the given column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname hex
-#' @name hex
-#' @family math functions
-#' @aliases hex,Column-method
+#' @rdname column_math_functions
+#' @aliases hex hex,Column-method
 #' @export
-#' @examples \dontrun{hex(df$c)}
 #' @note hex since 1.5.0
 setMethod("hex",
           signature(x = "Column"),
@@ -746,18 +767,19 @@ setMethod("hex",
             column(jc)
           })
 
-#' hour
+#' @details
+#' \code{hour}: Extracts the hours as an integer from a given date/timestamp/string.
 #'
-#' Extracts the hours as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname hour
-#' @name hour
-#' @aliases hour,Column-method
-#' @family date time functions
+#' @rdname column_datetime_functions
+#' @aliases hour hour,Column-method
 #' @export
-#' @examples \dontrun{hour(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, hour(df$time), minute(df$time), second(df$time)))
+#' head(agg(groupBy(df, dayofmonth(df$time)), avg(df$y)))
+#' head(agg(groupBy(df, hour(df$time)), avg(df$y)))
+#' head(agg(groupBy(df, minute(df$time)), avg(df$y)))}
 #' @note hour since 1.5.0
 setMethod("hour",
           signature(x = "Column"),
@@ -823,18 +845,16 @@ setMethod("isnan",
             column(jc)
           })
 
-#' kurtosis
+#' @details
+#' \code{kurtosis}: Returns the kurtosis of the values in a group.
 #'
-#' Aggregate function: returns the kurtosis of the values in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname kurtosis
-#' @name kurtosis
-#' @aliases kurtosis,Column-method
-#' @family aggregate functions
+#' @rdname column_aggregate_functions
+#' @aliases kurtosis kurtosis,Column-method
 #' @export
-#' @examples \dontrun{kurtosis(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, mean(df$mpg), sd(df$mpg), skewness(df$mpg), kurtosis(df$mpg)))}
 #' @note kurtosis since 1.6.0
 setMethod("kurtosis",
           signature(x = "Column"),
@@ -878,20 +898,18 @@ setMethod("last",
             column(jc)
           })
 
-#' last_day
+#' @details
+#' \code{last_day}: Given a date column, returns the last day of the month which the
+#' given date belongs to. For example, input "2015-07-27" returns "2015-07-31" since
+#' July 31 is the last day of the month in July 2015.
 #'
-#' Given a date column, returns the last day of the month which the given date belongs to.
-#' For example, input "2015-07-27" returns "2015-07-31" since July 31 is the last day of the
-#' month in July 2015.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname last_day
-#' @name last_day
-#' @aliases last_day,Column-method
-#' @family date time functions
+#' @rdname column_datetime_functions
+#' @aliases last_day last_day,Column-method
 #' @export
-#' @examples \dontrun{last_day(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, df$time, last_day(df$time), month(df$time)))}
 #' @note last_day since 1.5.0
 setMethod("last_day",
           signature(x = "Column"),
@@ -920,18 +938,12 @@ setMethod("length",
             column(jc)
           })
 
-#' log
+#' @details
+#' \code{log}: Computes the natural logarithm of the given value.
 #'
-#' Computes the natural logarithm of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log
-#' @name log
-#' @aliases log,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases log log,Column-method
 #' @export
-#' @examples \dontrun{log(df$c)}
 #' @note log since 1.5.0
 setMethod("log",
           signature(x = "Column"),
@@ -940,18 +952,12 @@ setMethod("log",
             column(jc)
           })
 
-#' log10
+#' @details
+#' \code{log10}: Computes the logarithm of the given value in base 10.
 #'
-#' Computes the logarithm of the given value in base 10.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log10
-#' @name log10
-#' @family math functions
-#' @aliases log10,Column-method
+#' @rdname column_math_functions
+#' @aliases log10 log10,Column-method
 #' @export
-#' @examples \dontrun{log10(df$c)}
 #' @note log10 since 1.5.0
 setMethod("log10",
           signature(x = "Column"),
@@ -960,18 +966,12 @@ setMethod("log10",
             column(jc)
           })
 
-#' log1p
+#' @details
+#' \code{log1p}: Computes the natural logarithm of the given value plus one.
 #'
-#' Computes the natural logarithm of the given value plus one.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log1p
-#' @name log1p
-#' @family math functions
-#' @aliases log1p,Column-method
+#' @rdname column_math_functions
+#' @aliases log1p log1p,Column-method
 #' @export
-#' @examples \dontrun{log1p(df$c)}
 #' @note log1p since 1.5.0
 setMethod("log1p",
           signature(x = "Column"),
@@ -980,18 +980,12 @@ setMethod("log1p",
             column(jc)
           })
 
-#' log2
+#' @details
+#' \code{log2}: Computes the logarithm of the given column in base 2.
 #'
-#' Computes the logarithm of the given column in base 2.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log2
-#' @name log2
-#' @family math functions
-#' @aliases log2,Column-method
+#' @rdname column_math_functions
+#' @aliases log2 log2,Column-method
 #' @export
-#' @examples \dontrun{log2(df$c)}
 #' @note log2 since 1.5.0
 setMethod("log2",
           signature(x = "Column"),
@@ -1040,18 +1034,11 @@ setMethod("ltrim",
             column(jc)
           })
 
-#' max
+#' @details
+#' \code{max}: Returns the maximum value of the expression in a group.
 #'
-#' Aggregate function: returns the maximum value of the expression in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname max
-#' @name max
-#' @family aggregate functions
-#' @aliases max,Column-method
-#' @export
-#' @examples \dontrun{max(df$c)}
+#' @rdname column_aggregate_functions
+#' @aliases max max,Column-method
 #' @note max since 1.5.0
 setMethod("max",
           signature(x = "Column"),
@@ -1081,19 +1068,24 @@ setMethod("md5",
             column(jc)
           })
 
-#' mean
+#' @details
+#' \code{mean}: Returns the average of the values in a group. Alias for \code{avg}.
 #'
-#' Aggregate function: returns the average of the values in a group.
-#' Alias for avg.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname mean
-#' @name mean
-#' @family aggregate functions
-#' @aliases mean,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases mean mean,Column-method
 #' @export
-#' @examples \dontrun{mean(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, avg(df$mpg), mean(df$mpg), sum(df$mpg), min(df$wt), max(df$qsec)))
+#'
+#' # metrics by num of cylinders
+#' tmp <- agg(groupBy(df, "cyl"), avg(df$mpg), avg(df$hp), avg(df$wt), avg(df$qsec))
+#' head(orderBy(tmp, "cyl"))
+#'
+#' # car with the max mpg
+#' mpg_max <- as.numeric(collect(agg(df, max(df$mpg))))
+#' head(where(df, df$mpg == mpg_max))}
 #' @note mean since 1.5.0
 setMethod("mean",
           signature(x = "Column"),
@@ -1102,18 +1094,12 @@ setMethod("mean",
             column(jc)
           })
 
-#' min
+#' @details
+#' \code{min}: Returns the minimum value of the expression in a group.
 #'
-#' Aggregate function: returns the minimum value of the expression in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname min
-#' @name min
-#' @aliases min,Column-method
-#' @family aggregate functions
+#' @rdname column_aggregate_functions
+#' @aliases min min,Column-method
 #' @export
-#' @examples \dontrun{min(df$c)}
 #' @note min since 1.5.0
 setMethod("min",
           signature(x = "Column"),
@@ -1122,18 +1108,12 @@ setMethod("min",
             column(jc)
           })
 
-#' minute
+#' @details
+#' \code{minute}: Extracts the minutes as an integer from a given date/timestamp/string.
 #'
-#' Extracts the minutes as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname minute
-#' @name minute
-#' @aliases minute,Column-method
-#' @family date time functions
+#' @rdname column_datetime_functions
+#' @aliases minute minute,Column-method
 #' @export
-#' @examples \dontrun{minute(df$c)}
 #' @note minute since 1.5.0
 setMethod("minute",
           signature(x = "Column"),
@@ -1170,18 +1150,12 @@ setMethod("monotonically_increasing_id",
             column(jc)
           })
 
-#' month
+#' @details
+#' \code{month}: Extracts the month as an integer from a given date/timestamp/string.
 #'
-#' Extracts the month as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname month
-#' @name month
-#' @aliases month,Column-method
-#' @family date time functions
+#' @rdname column_datetime_functions
+#' @aliases month month,Column-method
 #' @export
-#' @examples \dontrun{month(df$c)}
 #' @note month since 1.5.0
 setMethod("month",
           signature(x = "Column"),
@@ -1210,18 +1184,12 @@ setMethod("negate",
             column(jc)
           })
 
-#' quarter
+#' @details
+#' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
 #'
-#' Extracts the quarter as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname quarter
-#' @name quarter
-#' @family date time functions
-#' @aliases quarter,Column-method
+#' @rdname column_datetime_functions
+#' @aliases quarter quarter,Column-method
 #' @export
-#' @examples \dontrun{quarter(df$c)}
 #' @note quarter since 1.5.0
 setMethod("quarter",
           signature(x = "Column"),
@@ -1250,19 +1218,13 @@ setMethod("reverse",
             column(jc)
           })
 
-#' rint
-#'
-#' Returns the double value that is closest in value to the argument and
+#' @details
+#' \code{rint}: Returns the double value that is closest in value to the argument and
 #' is equal to a mathematical integer.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname rint
-#' @name rint
-#' @family math functions
-#' @aliases rint,Column-method
+#' @rdname column_math_functions
+#' @aliases rint rint,Column-method
 #' @export
-#' @examples \dontrun{rint(df$c)}
 #' @note rint since 1.5.0
 setMethod("rint",
           signature(x = "Column"),
@@ -1271,18 +1233,13 @@ setMethod("rint",
             column(jc)
           })
 
-#' round
+#' @details
+#' \code{round}: Returns the value of the column rounded to 0 decimal places
+#' using HALF_UP rounding mode.
 #'
-#' Returns the value of the column \code{e} rounded to 0 decimal places using HALF_UP rounding mode.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname round
-#' @name round
-#' @family math functions
-#' @aliases round,Column-method
+#' @rdname column_math_functions
+#' @aliases round round,Column-method
 #' @export
-#' @examples \dontrun{round(df$c)}
 #' @note round since 1.5.0
 setMethod("round",
           signature(x = "Column"),
@@ -1291,24 +1248,18 @@ setMethod("round",
             column(jc)
           })
 
-#' bround
-#'
-#' Returns the value of the column \code{e} rounded to \code{scale} decimal places using HALF_EVEN rounding
-#' mode if \code{scale} >= 0 or at integer part when \code{scale} < 0.
+#' @details
+#' \code{bround}: Returns the value of the column \code{e} rounded to \code{scale} decimal places
+#' using HALF_EVEN rounding mode if \code{scale} >= 0 or at integer part when \code{scale} < 0.
 #' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
 #' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
 #'
-#' @param x Column to compute on.
 #' @param scale round to \code{scale} digits to the right of the decimal point when \code{scale} > 0,
 #'        the nearest even number when \code{scale} = 0, and \code{scale} digits to the left
 #'        of the decimal point when \code{scale} < 0.
-#' @param ... further arguments to be passed to or from other methods.
-#' @rdname bround
-#' @name bround
-#' @family math functions
-#' @aliases bround,Column-method
+#' @rdname column_math_functions
+#' @aliases bround bround,Column-method
 #' @export
-#' @examples \dontrun{bround(df$c, 0)}
 #' @note bround since 2.0.0
 setMethod("bround",
           signature(x = "Column"),
@@ -1316,7 +1267,6 @@ setMethod("bround",
             jc <- callJStatic("org.apache.spark.sql.functions", "bround", x@jc, as.integer(scale))
             column(jc)
           })
-
 
 #' rtrim
 #'
@@ -1338,24 +1288,16 @@ setMethod("rtrim",
             column(jc)
           })
 
-#' sd
+#' @details
+#' \code{sd}: Alias for \code{stddev_samp}.
 #'
-#' Aggregate function: alias for \link{stddev_samp}
-#'
-#' @param x Column to compute on.
-#' @param na.rm currently not used.
-#' @rdname sd
-#' @name sd
-#' @family aggregate functions
-#' @aliases sd,Column-method
-#' @seealso \link{stddev_pop}, \link{stddev_samp}
+#' @rdname column_aggregate_functions
+#' @aliases sd sd,Column-method
 #' @export
 #' @examples
-#'\dontrun{
-#'stddev(df$c)
-#'select(df, stddev(df$age))
-#'agg(df, sd(df$age))
-#'}
+#'
+#' \dontrun{
+#' head(select(df, sd(df$mpg), stddev(df$mpg), stddev_pop(df$wt), stddev_samp(df$qsec)))}
 #' @note sd since 1.6.0
 setMethod("sd",
           signature(x = "Column"),
@@ -1364,18 +1306,12 @@ setMethod("sd",
             stddev_samp(x)
           })
 
-#' second
+#' @details
+#' \code{second}: Extracts the seconds as an integer from a given date/timestamp/string.
 #'
-#' Extracts the seconds as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname second
-#' @name second
-#' @family date time functions
-#' @aliases second,Column-method
+#' @rdname column_datetime_functions
+#' @aliases second second,Column-method
 #' @export
-#' @examples \dontrun{second(df$c)}
 #' @note second since 1.5.0
 setMethod("second",
           signature(x = "Column"),
@@ -1405,18 +1341,12 @@ setMethod("sha1",
             column(jc)
           })
 
-#' signum
+#' @details
+#' \code{signum}: Computes the signum of the given value.
 #'
-#' Computes the signum of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sign
-#' @name signum
-#' @aliases signum,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases signum signum,Column-method
 #' @export
-#' @examples \dontrun{signum(df$c)}
 #' @note signum since 1.5.0
 setMethod("signum",
           signature(x = "Column"),
@@ -1425,18 +1355,24 @@ setMethod("signum",
             column(jc)
           })
 
-#' sin
+#' @details
+#' \code{sign}: Alias for \code{signum}.
 #'
-#' Computes the sine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sin
-#' @name sin
-#' @family math functions
-#' @aliases sin,Column-method
+#' @rdname column_math_functions
+#' @aliases sign sign,Column-method
 #' @export
-#' @examples \dontrun{sin(df$c)}
+#' @note sign since 1.5.0
+setMethod("sign", signature(x = "Column"),
+          function(x) {
+            signum(x)
+          })
+
+#' @details
+#' \code{sin}: Computes the sine of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases sin sin,Column-method
+#' @export
 #' @note sin since 1.5.0
 setMethod("sin",
           signature(x = "Column"),
@@ -1445,18 +1381,12 @@ setMethod("sin",
             column(jc)
           })
 
-#' sinh
+#' @details
+#' \code{sinh}: Computes the hyperbolic sine of the given value.
 #'
-#' Computes the hyperbolic sine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sinh
-#' @name sinh
-#' @family math functions
-#' @aliases sinh,Column-method
+#' @rdname column_math_functions
+#' @aliases sinh sinh,Column-method
 #' @export
-#' @examples \dontrun{sinh(df$c)}
 #' @note sinh since 1.5.0
 setMethod("sinh",
           signature(x = "Column"),
@@ -1465,18 +1395,12 @@ setMethod("sinh",
             column(jc)
           })
 
-#' skewness
+#' @details
+#' \code{skewness}: Returns the skewness of the values in a group.
 #'
-#' Aggregate function: returns the skewness of the values in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname skewness
-#' @name skewness
-#' @family aggregate functions
-#' @aliases skewness,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases skewness skewness,Column-method
 #' @export
-#' @examples \dontrun{skewness(df$c)}
 #' @note skewness since 1.6.0
 setMethod("skewness",
           signature(x = "Column"),
@@ -1527,9 +1451,11 @@ setMethod("spark_partition_id",
             column(jc)
           })
 
-#' @rdname sd
-#' @aliases stddev,Column-method
-#' @name stddev
+#' @details
+#' \code{stddev}: Alias for \code{std_dev}.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases stddev stddev,Column-method
 #' @note stddev since 1.6.0
 setMethod("stddev",
           signature(x = "Column"),
@@ -1538,19 +1464,12 @@ setMethod("stddev",
             column(jc)
           })
 
-#' stddev_pop
+#' @details
+#' \code{stddev_pop}: Returns the population standard deviation of the expression in a group.
 #'
-#' Aggregate function: returns the population standard deviation of the expression in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname stddev_pop
-#' @name stddev_pop
-#' @family aggregate functions
-#' @aliases stddev_pop,Column-method
-#' @seealso \link{sd}, \link{stddev_samp}
+#' @rdname column_aggregate_functions
+#' @aliases stddev_pop stddev_pop,Column-method
 #' @export
-#' @examples \dontrun{stddev_pop(df$c)}
 #' @note stddev_pop since 1.6.0
 setMethod("stddev_pop",
           signature(x = "Column"),
@@ -1559,19 +1478,12 @@ setMethod("stddev_pop",
             column(jc)
           })
 
-#' stddev_samp
+#' @details
+#' \code{stddev_samp}: Returns the unbiased sample standard deviation of the expression in a group.
 #'
-#' Aggregate function: returns the unbiased sample standard deviation of the expression in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname stddev_samp
-#' @name stddev_samp
-#' @family aggregate functions
-#' @aliases stddev_samp,Column-method
-#' @seealso \link{stddev_pop}, \link{sd}
+#' @rdname column_aggregate_functions
+#' @aliases stddev_samp stddev_samp,Column-method
 #' @export
-#' @examples \dontrun{stddev_samp(df$c)}
 #' @note stddev_samp since 1.6.0
 setMethod("stddev_samp",
           signature(x = "Column"),
@@ -1610,18 +1522,12 @@ setMethod("struct",
             column(jc)
           })
 
-#' sqrt
+#' @details
+#' \code{sqrt}: Computes the square root of the specified float value.
 #'
-#' Computes the square root of the specified float value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sqrt
-#' @name sqrt
-#' @family math functions
-#' @aliases sqrt,Column-method
+#' @rdname column_math_functions
+#' @aliases sqrt sqrt,Column-method
 #' @export
-#' @examples \dontrun{sqrt(df$c)}
 #' @note sqrt since 1.5.0
 setMethod("sqrt",
           signature(x = "Column"),
@@ -1630,18 +1536,12 @@ setMethod("sqrt",
             column(jc)
           })
 
-#' sum
+#' @details
+#' \code{sum}: Returns the sum of all values in the expression.
 #'
-#' Aggregate function: returns the sum of all values in the expression.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sum
-#' @name sum
-#' @family aggregate functions
-#' @aliases sum,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases sum sum,Column-method
 #' @export
-#' @examples \dontrun{sum(df$c)}
 #' @note sum since 1.5.0
 setMethod("sum",
           signature(x = "Column"),
@@ -1650,18 +1550,17 @@ setMethod("sum",
             column(jc)
           })
 
-#' sumDistinct
+#' @details
+#' \code{sumDistinct}: Returns the sum of distinct values in the expression.
 #'
-#' Aggregate function: returns the sum of distinct values in the expression.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sumDistinct
-#' @name sumDistinct
-#' @family aggregate functions
-#' @aliases sumDistinct,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases sumDistinct sumDistinct,Column-method
 #' @export
-#' @examples \dontrun{sumDistinct(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, sumDistinct(df$gear)))
+#' head(distinct(select(df, "gear")))}
 #' @note sumDistinct since 1.4.0
 setMethod("sumDistinct",
           signature(x = "Column"),
@@ -1670,18 +1569,12 @@ setMethod("sumDistinct",
             column(jc)
           })
 
-#' tan
+#' @details
+#' \code{tan}: Computes the tangent of the given value.
 #'
-#' Computes the tangent of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname tan
-#' @name tan
-#' @family math functions
-#' @aliases tan,Column-method
+#' @rdname column_math_functions
+#' @aliases tan tan,Column-method
 #' @export
-#' @examples \dontrun{tan(df$c)}
 #' @note tan since 1.5.0
 setMethod("tan",
           signature(x = "Column"),
@@ -1690,18 +1583,12 @@ setMethod("tan",
             column(jc)
           })
 
-#' tanh
+#' @details
+#' \code{tanh}: Computes the hyperbolic tangent of the given value.
 #'
-#' Computes the hyperbolic tangent of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname tanh
-#' @name tanh
-#' @family math functions
-#' @aliases tanh,Column-method
+#' @rdname column_math_functions
+#' @aliases tanh tanh,Column-method
 #' @export
-#' @examples \dontrun{tanh(df$c)}
 #' @note tanh since 1.5.0
 setMethod("tanh",
           signature(x = "Column"),
@@ -1710,18 +1597,13 @@ setMethod("tanh",
             column(jc)
           })
 
-#' toDegrees
+#' @details
+#' \code{toDegrees}: Converts an angle measured in radians to an approximately equivalent angle
+#' measured in degrees.
 #'
-#' Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname toDegrees
-#' @name toDegrees
-#' @family math functions
-#' @aliases toDegrees,Column-method
+#' @rdname column_math_functions
+#' @aliases toDegrees toDegrees,Column-method
 #' @export
-#' @examples \dontrun{toDegrees(df$c)}
 #' @note toDegrees since 1.4.0
 setMethod("toDegrees",
           signature(x = "Column"),
@@ -1730,18 +1612,13 @@ setMethod("toDegrees",
             column(jc)
           })
 
-#' toRadians
+#' @details
+#' \code{toRadians}: Converts an angle measured in degrees to an approximately equivalent angle
+#' measured in radians.
 #'
-#' Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname toRadians
-#' @name toRadians
-#' @family math functions
-#' @aliases toRadians,Column-method
+#' @rdname column_math_functions
+#' @aliases toRadians toRadians,Column-method
 #' @export
-#' @examples \dontrun{toRadians(df$c)}
 #' @note toRadians since 1.4.0
 setMethod("toRadians",
           signature(x = "Column"),
@@ -1750,29 +1627,28 @@ setMethod("toRadians",
             column(jc)
           })
 
-#' to_date
-#'
-#' Converts the column into a DateType. You may optionally specify a format
-#' according to the rules in:
+#' @details
+#' \code{to_date}: Converts the column into a DateType. You may optionally specify
+#' a format according to the rules in:
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a DateType if the format is omitted
 #' (equivalent to \code{cast(df$x, "date")}).
 #'
-#' @param x Column to parse.
-#' @param format string to use to parse x Column to DateType. (optional)
-#'
-#' @rdname to_date
-#' @name to_date
-#' @family date time functions
-#' @aliases to_date,Column,missing-method
+#' @rdname column_datetime_functions
+#' @aliases to_date to_date,Column,missing-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' to_date(df$c)
-#' to_date(df$c, 'yyyy-MM-dd')
-#' }
+#' tmp <- createDataFrame(data.frame(time_string = dts))
+#' tmp2 <- mutate(tmp, date1 = to_date(tmp$time_string),
+#'                    date2 = to_date(tmp$time_string, "yyyy-MM-dd"),
+#'                    date3 = date_format(tmp$time_string, "MM/dd/yyy"),
+#'                    time1 = to_timestamp(tmp$time_string),
+#'                    time2 = to_timestamp(tmp$time_string, "yyyy-MM-dd"))
+#' head(tmp2)}
 #' @note to_date(Column) since 1.5.0
 setMethod("to_date",
           signature(x = "Column", format = "missing"),
@@ -1781,9 +1657,7 @@ setMethod("to_date",
             column(jc)
           })
 
-#' @rdname to_date
-#' @name to_date
-#' @family date time functions
+#' @rdname column_datetime_functions
 #' @aliases to_date,Column,character-method
 #' @export
 #' @note to_date(Column, character) since 2.2.0
@@ -1826,29 +1700,18 @@ setMethod("to_json", signature(x = "Column"),
             column(jc)
           })
 
-#' to_timestamp
-#'
-#' Converts the column into a TimestampType. You may optionally specify a format
-#' according to the rules in:
+#' @details
+#' \code{to_timestamp}: Converts the column into a TimestampType. You may optionally specify
+#' a format according to the rules in:
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a TimestampType if the format is omitted
 #' (equivalent to \code{cast(df$x, "timestamp")}).
 #'
-#' @param x Column to parse.
-#' @param format string to use to parse x Column to TimestampType. (optional)
-#'
-#' @rdname to_timestamp
-#' @name to_timestamp
-#' @family date time functions
-#' @aliases to_timestamp,Column,missing-method
+#' @rdname column_datetime_functions
+#' @aliases to_timestamp to_timestamp,Column,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#' to_timestamp(df$c)
-#' to_timestamp(df$c, 'yyyy-MM-dd')
-#' }
 #' @note to_timestamp(Column) since 2.2.0
 setMethod("to_timestamp",
           signature(x = "Column", format = "missing"),
@@ -1857,9 +1720,7 @@ setMethod("to_timestamp",
             column(jc)
           })
 
-#' @rdname to_timestamp
-#' @name to_timestamp
-#' @family date time functions
+#' @rdname column_datetime_functions
 #' @aliases to_timestamp,Column,character-method
 #' @export
 #' @note to_timestamp(Column, character) since 2.2.0
@@ -1911,19 +1772,13 @@ setMethod("unbase64",
             column(jc)
           })
 
-#' unhex
-#'
-#' Inverse of hex. Interprets each pair of characters as a hexadecimal number
+#' @details
+#' \code{unhex}: Inverse of hex. Interprets each pair of characters as a hexadecimal number
 #' and converts to the byte representation of number.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname unhex
-#' @name unhex
-#' @family math functions
-#' @aliases unhex,Column-method
+#' @rdname column_math_functions
+#' @aliases unhex unhex,Column-method
 #' @export
-#' @examples \dontrun{unhex(df$c)}
 #' @note unhex since 1.5.0
 setMethod("unhex",
           signature(x = "Column"),
@@ -1952,24 +1807,16 @@ setMethod("upper",
             column(jc)
           })
 
-#' var
+#' @details
+#' \code{var}: Alias for \code{var_samp}.
 #'
-#' Aggregate function: alias for \link{var_samp}.
-#'
-#' @param x a Column to compute on.
-#' @param y,na.rm,use currently not used.
-#' @rdname var
-#' @name var
-#' @family aggregate functions
-#' @aliases var,Column-method
-#' @seealso \link{var_pop}, \link{var_samp}
+#' @rdname column_aggregate_functions
+#' @aliases var var,Column-method
 #' @export
 #' @examples
+#'
 #'\dontrun{
-#'variance(df$c)
-#'select(df, var_pop(df$age))
-#'agg(df, var(df$age))
-#'}
+#'head(agg(df, var(df$mpg), variance(df$mpg), var_pop(df$mpg), var_samp(df$mpg)))}
 #' @note var since 1.6.0
 setMethod("var",
           signature(x = "Column"),
@@ -1978,9 +1825,9 @@ setMethod("var",
             var_samp(x)
           })
 
-#' @rdname var
-#' @aliases variance,Column-method
-#' @name variance
+#' @rdname column_aggregate_functions
+#' @aliases variance variance,Column-method
+#' @export
 #' @note variance since 1.6.0
 setMethod("variance",
           signature(x = "Column"),
@@ -1989,19 +1836,12 @@ setMethod("variance",
             column(jc)
           })
 
-#' var_pop
+#' @details
+#' \code{var_pop}: Returns the population variance of the values in a group.
 #'
-#' Aggregate function: returns the population variance of the values in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname var_pop
-#' @name var_pop
-#' @family aggregate functions
-#' @aliases var_pop,Column-method
-#' @seealso \link{var}, \link{var_samp}
+#' @rdname column_aggregate_functions
+#' @aliases var_pop var_pop,Column-method
 #' @export
-#' @examples \dontrun{var_pop(df$c)}
 #' @note var_pop since 1.5.0
 setMethod("var_pop",
           signature(x = "Column"),
@@ -2010,19 +1850,12 @@ setMethod("var_pop",
             column(jc)
           })
 
-#' var_samp
+#' @details
+#' \code{var_samp}: Returns the unbiased variance of the values in a group.
 #'
-#' Aggregate function: returns the unbiased variance of the values in a group.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname var_samp
-#' @name var_samp
-#' @aliases var_samp,Column-method
-#' @family aggregate functions
-#' @seealso \link{var_pop}, \link{var}
+#' @rdname column_aggregate_functions
+#' @aliases var_samp var_samp,Column-method
 #' @export
-#' @examples \dontrun{var_samp(df$c)}
 #' @note var_samp since 1.6.0
 setMethod("var_samp",
           signature(x = "Column"),
@@ -2031,18 +1864,12 @@ setMethod("var_samp",
             column(jc)
           })
 
-#' weekofyear
+#' @details
+#' \code{weekofyear}: Extracts the week number as an integer from a given date/timestamp/string.
 #'
-#' Extracts the week number as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname weekofyear
-#' @name weekofyear
-#' @aliases weekofyear,Column-method
-#' @family date time functions
+#' @rdname column_datetime_functions
+#' @aliases weekofyear weekofyear,Column-method
 #' @export
-#' @examples \dontrun{weekofyear(df$c)}
 #' @note weekofyear since 1.5.0
 setMethod("weekofyear",
           signature(x = "Column"),
@@ -2051,18 +1878,12 @@ setMethod("weekofyear",
             column(jc)
           })
 
-#' year
+#' @details
+#' \code{year}: Extracts the year as an integer from a given date/timestamp/string.
 #'
-#' Extracts the year as an integer from a given date/timestamp/string.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname year
-#' @name year
-#' @family date time functions
-#' @aliases year,Column-method
+#' @rdname column_datetime_functions
+#' @aliases year year,Column-method
 #' @export
-#' @examples \dontrun{year(df$c)}
 #' @note year since 1.5.0
 setMethod("year",
           signature(x = "Column"),
@@ -2071,20 +1892,13 @@ setMethod("year",
             column(jc)
           })
 
-#' atan2
+#' @details
+#' \code{atan2}: Returns the angle theta from the conversion of rectangular coordinates
+#' (x, y) to polar coordinates (r, theta).
 #'
-#' Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-#' polar coordinates (r, theta).
-#
-#' @param x Column to compute on.
-#' @param y Column to compute on.
-#'
-#' @rdname atan2
-#' @name atan2
-#' @family math functions
-#' @aliases atan2,Column-method
+#' @rdname column_math_functions
+#' @aliases atan2 atan2,Column-method
 #' @export
-#' @examples \dontrun{atan2(df$c, x)}
 #' @note atan2 since 1.5.0
 setMethod("atan2", signature(y = "Column"),
           function(y, x) {
@@ -2095,19 +1909,20 @@ setMethod("atan2", signature(y = "Column"),
             column(jc)
           })
 
-#' datediff
+#' @details
+#' \code{datediff}: Returns the number of days from \code{y} to \code{x}.
 #'
-#' Returns the number of days from \code{start} to \code{end}.
-#'
-#' @param x start Column to use.
-#' @param y end Column to use.
-#'
-#' @rdname datediff
-#' @name datediff
-#' @aliases datediff,Column-method
-#' @family date time functions
+#' @rdname column_datetime_diff_functions
+#' @aliases datediff datediff,Column-method
 #' @export
-#' @examples \dontrun{datediff(df$c, x)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- createDataFrame(data.frame(time_string1 = as.POSIXct(dts),
+#'              time_string2 = as.POSIXct(dts[order(runif(length(dts)))])))
+#' tmp2 <- mutate(tmp, datediff = datediff(tmp$time_string1, tmp$time_string2),
+#'                monthdiff = months_between(tmp$time_string1, tmp$time_string2))
+#' head(tmp2)}
 #' @note datediff since 1.5.0
 setMethod("datediff", signature(y = "Column"),
           function(y, x) {
@@ -2118,19 +1933,12 @@ setMethod("datediff", signature(y = "Column"),
             column(jc)
           })
 
-#' hypot
+#' @details
+#' \code{hypot}: Computes "sqrt(a^2 + b^2)" without intermediate overflow or underflow.
 #'
-#' Computes "sqrt(a^2 + b^2)" without intermediate overflow or underflow.
-#
-#' @param x Column to compute on.
-#' @param y Column to compute on.
-#'
-#' @rdname hypot
-#' @name hypot
-#' @family math functions
-#' @aliases hypot,Column-method
+#' @rdname column_math_functions
+#' @aliases hypot hypot,Column-method
 #' @export
-#' @examples \dontrun{hypot(df$c, x)}
 #' @note hypot since 1.4.0
 setMethod("hypot", signature(y = "Column"),
           function(y, x) {
@@ -2164,19 +1972,12 @@ setMethod("levenshtein", signature(y = "Column"),
             column(jc)
           })
 
-#' months_between
+#' @details
+#' \code{months_between}: Returns number of months between dates \code{y} and \code{x}.
 #'
-#' Returns number of months between dates \code{date1} and \code{date2}.
-#'
-#' @param x start Column to use.
-#' @param y end Column to use.
-#'
-#' @rdname months_between
-#' @name months_between
-#' @family date time functions
-#' @aliases months_between,Column-method
+#' @rdname column_datetime_diff_functions
+#' @aliases months_between months_between,Column-method
 #' @export
-#' @examples \dontrun{months_between(df$c, x)}
 #' @note months_between since 1.5.0
 setMethod("months_between", signature(y = "Column"),
           function(y, x) {
@@ -2211,20 +2012,13 @@ setMethod("nanvl", signature(y = "Column"),
             column(jc)
           })
 
-#' pmod
+#' @details
+#' \code{pmod}: Returns the positive value of dividend mod divisor.
+#' Column \code{x} is divisor column, and column \code{y} is the dividend column.
 #'
-#' Returns the positive value of dividend mod divisor.
-#'
-#' @param x divisor Column.
-#' @param y dividend Column.
-#'
-#' @rdname pmod
-#' @name pmod
-#' @docType methods
-#' @family math functions
-#' @aliases pmod,Column-method
+#' @rdname column_math_functions
+#' @aliases pmod pmod,Column-method
 #' @export
-#' @examples \dontrun{pmod(df$c, x)}
 #' @note pmod since 1.5.0
 setMethod("pmod", signature(y = "Column"),
           function(y, x) {
@@ -2235,17 +2029,11 @@ setMethod("pmod", signature(y = "Column"),
             column(jc)
           })
 
-
-#' @rdname approxCountDistinct
-#' @name approxCountDistinct
-#'
-#' @param x Column to compute on.
 #' @param rsd maximum estimation error allowed (default = 0.05)
-#' @param ... further arguments to be passed to or from other methods.
 #'
+#' @rdname column_aggregate_functions
 #' @aliases approxCountDistinct,Column-method
 #' @export
-#' @examples \dontrun{approxCountDistinct(df$c, 0.02)}
 #' @note approxCountDistinct(Column, numeric) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
@@ -2254,18 +2042,12 @@ setMethod("approxCountDistinct",
             column(jc)
           })
 
-#' Count Distinct Values
+#' @details
+#' \code{countDistinct}: Returns the number of distinct items in a group.
 #'
-#' @param x Column to compute on
-#' @param ... other columns
-#'
-#' @family aggregate functions
-#' @rdname countDistinct
-#' @name countDistinct
-#' @aliases countDistinct,Column-method
-#' @return the number of distinct items in a group.
+#' @rdname column_aggregate_functions
+#' @aliases countDistinct countDistinct,Column-method
 #' @export
-#' @examples \dontrun{countDistinct(df$c)}
 #' @note countDistinct since 1.4.0
 setMethod("countDistinct",
           signature(x = "Column"),
@@ -2359,40 +2141,12 @@ setMethod("least",
             column(jc)
           })
 
-#' @rdname ceil
+#' @details
+#' \code{n_distinct}: Returns the number of distinct items in a group.
 #'
-#' @name ceiling
-#' @aliases ceiling,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases n_distinct n_distinct,Column-method
 #' @export
-#' @examples \dontrun{ceiling(df$c)}
-#' @note ceiling since 1.5.0
-setMethod("ceiling",
-          signature(x = "Column"),
-          function(x) {
-            ceil(x)
-          })
-
-#' @rdname sign
-#'
-#' @name sign
-#' @aliases sign,Column-method
-#' @export
-#' @examples \dontrun{sign(df$c)}
-#' @note sign since 1.5.0
-setMethod("sign", signature(x = "Column"),
-          function(x) {
-            signum(x)
-          })
-
-#' n_distinct
-#'
-#' Aggregate function: returns the number of distinct items in a group.
-#'
-#' @rdname countDistinct
-#' @name n_distinct
-#' @aliases n_distinct,Column-method
-#' @export
-#' @examples \dontrun{n_distinct(df$c)}
 #' @note n_distinct since 1.4.0
 setMethod("n_distinct", signature(x = "Column"),
           function(x, ...) {
@@ -2410,26 +2164,18 @@ setMethod("n", signature(x = "Column"),
             count(x)
           })
 
-#' date_format
-#'
-#' Converts a date/timestamp/string to a value of string in the format specified by the date
-#' format given by the second argument.
-#'
-#' A pattern could be for instance \preformatted{dd.MM.yyyy} and could return a string like '18.03.1993'. All
+#' @details
+#' \code{date_format}: Converts a date/timestamp/string to a value of string in the format
+#' specified by the date format given by the second argument. A pattern could be for instance
+#' \code{dd.MM.yyyy} and could return a string like '18.03.1993'. All
 #' pattern letters of \code{java.text.SimpleDateFormat} can be used.
-#'
 #' Note: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
-#' @param y Column to compute on.
-#' @param x date format specification.
+#' @rdname column_datetime_diff_functions
 #'
-#' @family date time functions
-#' @rdname date_format
-#' @name date_format
-#' @aliases date_format,Column,character-method
+#' @aliases date_format date_format,Column,character-method
 #' @export
-#' @examples \dontrun{date_format(df$t, 'MM/dd/yyy')}
 #' @note date_format since 1.5.0
 setMethod("date_format", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2476,20 +2222,20 @@ setMethod("from_json", signature(x = "Column", schema = "structType"),
             column(jc)
           })
 
-#' from_utc_timestamp
+#' @details
+#' \code{from_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day in UTC,
+#' returns another timestamp that corresponds to the same time of day in the given timezone.
 #'
-#' Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
-#' that corresponds to the same time of day in the given timezone.
+#' @rdname column_datetime_diff_functions
 #'
-#' @param y Column to compute on.
-#' @param x time zone to use.
-#'
-#' @family date time functions
-#' @rdname from_utc_timestamp
-#' @name from_utc_timestamp
-#' @aliases from_utc_timestamp,Column,character-method
+#' @aliases from_utc_timestamp from_utc_timestamp,Column,character-method
 #' @export
-#' @examples \dontrun{from_utc_timestamp(df$t, 'PST')}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, from_utc = from_utc_timestamp(df$time, 'PST'),
+#'                  to_utc = to_utc_timestamp(df$time, 'PST'))
+#' head(tmp)}
 #' @note from_utc_timestamp since 1.5.0
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2520,30 +2266,16 @@ setMethod("instr", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' next_day
+#' @details
+#' \code{next_day}: Given a date column, returns the first date which is later than the value of
+#' the date column that is on the specified day of the week. For example,
+#' \code{next_day('2015-07-27', "Sunday")} returns 2015-08-02 because that is the first Sunday
+#' after 2015-07-27. Day of the week parameter is case insensitive, and accepts first three or
+#' two characters: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
 #'
-#' Given a date column, returns the first date which is later than the value of the date column
-#' that is on the specified day of the week.
-#'
-#' For example, \code{next_day('2015-07-27', "Sunday")} returns 2015-08-02 because that is the first
-#' Sunday after 2015-07-27.
-#'
-#' Day of the week parameter is case insensitive, and accepts first three or two characters:
-#' "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
-#'
-#' @param y Column to compute on.
-#' @param x Day of the week string.
-#'
-#' @family date time functions
-#' @rdname next_day
-#' @name next_day
-#' @aliases next_day,Column,character-method
+#' @rdname column_datetime_diff_functions
+#' @aliases next_day next_day,Column,character-method
 #' @export
-#' @examples
-#'\dontrun{
-#'next_day(df$d, 'Sun')
-#'next_day(df$d, 'Sunday')
-#'}
 #' @note next_day since 1.5.0
 setMethod("next_day", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2551,20 +2283,13 @@ setMethod("next_day", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' to_utc_timestamp
+#' @details
+#' \code{to_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day
+#' in the given timezone, returns another timestamp that corresponds to the same time of day in UTC.
 #'
-#' Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
-#' another timestamp that corresponds to the same time of day in UTC.
-#'
-#' @param y Column to compute on
-#' @param x timezone to use
-#'
-#' @family date time functions
-#' @rdname to_utc_timestamp
-#' @name to_utc_timestamp
-#' @aliases to_utc_timestamp,Column,character-method
+#' @rdname column_datetime_diff_functions
+#' @aliases to_utc_timestamp to_utc_timestamp,Column,character-method
 #' @export
-#' @examples \dontrun{to_utc_timestamp(df$t, 'PST')}
 #' @note to_utc_timestamp since 1.5.0
 setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2572,19 +2297,20 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' add_months
+#' @details
+#' \code{add_months}: Returns the date that is numMonths (\code{x}) after startDate (\code{y}).
 #'
-#' Returns the date that is numMonths after startDate.
-#'
-#' @param y Column to compute on
-#' @param x Number of months to add
-#'
-#' @name add_months
-#' @family date time functions
-#' @rdname add_months
-#' @aliases add_months,Column,numeric-method
+#' @rdname column_datetime_diff_functions
+#' @aliases add_months add_months,Column,numeric-method
 #' @export
-#' @examples \dontrun{add_months(df$d, 1)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, t1 = add_months(df$time, 1),
+#'                   t2 = date_add(df$time, 2),
+#'                   t3 = date_sub(df$time, 3),
+#'                   t4 = next_day(df$time, 'Sun'))
+#' head(tmp)}
 #' @note add_months since 1.5.0
 setMethod("add_months", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2592,19 +2318,12 @@ setMethod("add_months", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' date_add
+#' @details
+#' \code{date_add}: Returns the date that is \code{x} days after.
 #'
-#' Returns the date that is \code{x} days after
-#'
-#' @param y Column to compute on
-#' @param x Number of days to add
-#'
-#' @family date time functions
-#' @rdname date_add
-#' @name date_add
-#' @aliases date_add,Column,numeric-method
+#' @rdname column_datetime_diff_functions
+#' @aliases date_add date_add,Column,numeric-method
 #' @export
-#' @examples \dontrun{date_add(df$d, 1)}
 #' @note date_add since 1.5.0
 setMethod("date_add", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2612,19 +2331,13 @@ setMethod("date_add", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' date_sub
+#' @details
+#' \code{date_sub}: Returns the date that is \code{x} days before.
 #'
-#' Returns the date that is \code{x} days before
+#' @rdname column_datetime_diff_functions
 #'
-#' @param y Column to compute on
-#' @param x Number of days to substract
-#'
-#' @family date time functions
-#' @rdname date_sub
-#' @name date_sub
-#' @aliases date_sub,Column,numeric-method
+#' @aliases date_sub date_sub,Column,numeric-method
 #' @export
-#' @examples \dontrun{date_sub(df$d, 1)}
 #' @note date_sub since 1.5.0
 setMethod("date_sub", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2677,20 +2390,13 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' shiftLeft
+#' @details
+#' \code{shiftLeft}: Shifts the given value numBits left. If the given value is a long value,
+#' this function will return a long value else it will return an integer value.
 #'
-#' Shift the given value numBits left. If the given value is a long value, this function
-#' will return a long value else it will return an integer value.
-#'
-#' @param y column to compute on.
-#' @param x number of bits to shift.
-#'
-#' @family math functions
-#' @rdname shiftLeft
-#' @name shiftLeft
-#' @aliases shiftLeft,Column,numeric-method
+#' @rdname column_math_functions
+#' @aliases shiftLeft shiftLeft,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftLeft(df$c, 1)}
 #' @note shiftLeft since 1.5.0
 setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2700,20 +2406,13 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' shiftRight
+#' @details
+#' \code{shiftRight}: (Signed) shifts the given value numBits right. If the given value is a long value,
+#' it will return a long value else it will return an integer value.
 #'
-#' (Signed) shift the given value numBits right. If the given value is a long value, it will return
-#' a long value else it will return an integer value.
-#'
-#' @param y column to compute on.
-#' @param x number of bits to shift.
-#'
-#' @family math functions
-#' @rdname shiftRight
-#' @name shiftRight
-#' @aliases shiftRight,Column,numeric-method
+#' @rdname column_math_functions
+#' @aliases shiftRight shiftRight,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftRight(df$c, 1)}
 #' @note shiftRight since 1.5.0
 setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2723,20 +2422,13 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' shiftRightUnsigned
-#'
-#' Unsigned shift the given value numBits right. If the given value is a long value,
+#' @details
+#' \code{shiftRight}: (Unigned) shifts the given value numBits right. If the given value is a long value,
 #' it will return a long value else it will return an integer value.
 #'
-#' @param y column to compute on.
-#' @param x number of bits to shift.
-#'
-#' @family math functions
-#' @rdname shiftRightUnsigned
-#' @name shiftRightUnsigned
-#' @aliases shiftRightUnsigned,Column,numeric-method
+#' @rdname column_math_functions
+#' @aliases shiftRightUnsigned shiftRightUnsigned,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftRightUnsigned(df$c, 1)}
 #' @note shiftRightUnsigned since 1.5.0
 setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2769,20 +2461,14 @@ setMethod("concat_ws", signature(sep = "character", x = "Column"),
             column(jc)
           })
 
-#' conv
+#' @details
+#' \code{conv}: Converts a number in a string column from one base to another.
 #'
-#' Convert a number in a string column from one base to another.
-#'
-#' @param x column to convert.
 #' @param fromBase base to convert from.
 #' @param toBase base to convert to.
-#'
-#' @family math functions
-#' @rdname conv
-#' @aliases conv,Column,numeric,numeric-method
-#' @name conv
+#' @rdname column_math_functions
+#' @aliases conv conv,Column,numeric,numeric-method
 #' @export
-#' @examples \dontrun{conv(df$n, 2, 16)}
 #' @note conv since 1.5.0
 setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeric"),
           function(x, fromBase, toBase) {
@@ -2836,27 +2522,24 @@ setMethod("format_string", signature(format = "character", x = "Column"),
             column(jc)
           })
 
-#' from_unixtime
+#' @details
+#' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a
+#' string representing the timestamp of that moment in the current system time zone in the JVM in the
+#' given format. See \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#' Customizing Formats} for available options.
 #'
-#' Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
-#' representing the timestamp of that moment in the current system time zone in the given
-#' format.
+#' @rdname column_datetime_functions
 #'
-#' @param x a Column of unix timestamp.
-#' @param format the target format. See
-#'               \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
-#'               Customizing Formats} for available options.
-#' @param ... further arguments to be passed to or from other methods.
-#' @family date time functions
-#' @rdname from_unixtime
-#' @name from_unixtime
-#' @aliases from_unixtime,Column-method
+#' @aliases from_unixtime from_unixtime,Column-method
 #' @export
 #' @examples
-#'\dontrun{
-#'from_unixtime(df$t)
-#'from_unixtime(df$t, 'yyyy/MM/dd HH')
-#'}
+#'
+#' \dontrun{
+#' tmp <- mutate(df, to_unix = unix_timestamp(df$time),
+#'                   to_unix2 = unix_timestamp(df$time, 'yyyy-MM-dd HH'),
+#'                   from_unix = from_unixtime(unix_timestamp(df$time)),
+#'                   from_unix2 = from_unixtime(unix_timestamp(df$time), 'yyyy-MM-dd HH:mm'))
+#' head(tmp)}
 #' @note from_unixtime since 1.5.0
 setMethod("from_unixtime", signature(x = "Column"),
           function(x, format = "yyyy-MM-dd HH:mm:ss") {
@@ -3173,21 +2856,12 @@ setMethod("translate",
             column(jc)
           })
 
-#' unix_timestamp
+#' @details
+#' \code{unix_timestamp}: Gets current Unix timestamp in seconds.
 #'
-#' Gets current Unix timestamp in seconds.
-#'
-#' @family date time functions
-#' @rdname unix_timestamp
-#' @name unix_timestamp
-#' @aliases unix_timestamp,missing,missing-method
+#' @rdname column_datetime_functions
+#' @aliases unix_timestamp unix_timestamp,missing,missing-method
 #' @export
-#' @examples
-#'\dontrun{
-#'unix_timestamp()
-#'unix_timestamp(df$t)
-#'unix_timestamp(df$t, 'yyyy-MM-dd HH')
-#'}
 #' @note unix_timestamp since 1.5.0
 setMethod("unix_timestamp", signature(x = "missing", format = "missing"),
           function(x, format) {
@@ -3195,8 +2869,7 @@ setMethod("unix_timestamp", signature(x = "missing", format = "missing"),
             column(jc)
           })
 
-#' @rdname unix_timestamp
-#' @name unix_timestamp
+#' @rdname column_datetime_functions
 #' @aliases unix_timestamp,Column,missing-method
 #' @export
 #' @note unix_timestamp(Column) since 1.5.0
@@ -3206,12 +2879,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "missing"),
             column(jc)
           })
 
-#' @param x a Column of date, in string, date or timestamp type.
-#' @param format the target format. See
-#'               \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
-#'               Customizing Formats} for available options.
-#' @rdname unix_timestamp
-#' @name unix_timestamp
+#' @rdname column_datetime_functions
 #' @aliases unix_timestamp,Column,character-method
 #' @export
 #' @note unix_timestamp(Column, character) since 1.5.0
@@ -3717,18 +3385,18 @@ setMethod("create_map",
             column(jc)
           })
 
-#' collect_list
+#' @details
+#' \code{collect_list}: Creates a list of objects with duplicates.
 #'
-#' Creates a list of objects with duplicates.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname collect_list
-#' @name collect_list
-#' @family aggregate functions
-#' @aliases collect_list,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases collect_list collect_list,Column-method
 #' @export
-#' @examples \dontrun{collect_list(df$x)}
+#' @examples
+#'
+#' \dontrun{
+#' df2 = df[df$mpg > 20, ]
+#' collect(select(df2, collect_list(df2$gear)))
+#' collect(select(df2, collect_set(df2$gear)))}
 #' @note collect_list since 2.3.0
 setMethod("collect_list",
           signature(x = "Column"),
@@ -3737,18 +3405,12 @@ setMethod("collect_list",
             column(jc)
           })
 
-#' collect_set
+#' @details
+#' \code{collect_set}: Creates a list of objects with duplicate elements eliminated.
 #'
-#' Creates a list of objects with duplicate elements eliminated.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname collect_set
-#' @name collect_set
-#' @family aggregate functions
-#' @aliases collect_set,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases collect_set collect_set,Column-method
 #' @export
-#' @examples \dontrun{collect_set(df$x)}
 #' @note collect_set since 2.3.0
 setMethod("collect_set",
           signature(x = "Column"),
@@ -3908,24 +3570,17 @@ setMethod("not",
             column(jc)
           })
 
-#' grouping_bit
+#' @details
+#' \code{grouping_bit}: Indicates whether a specified column in a GROUP BY list is aggregated or not,
+#' returns 1 for aggregated or 0 for not aggregated in the result set. Same as \code{GROUPING} in SQL
+#' and \code{grouping} function in Scala.
 #'
-#' Indicates whether a specified column in a GROUP BY list is aggregated or not,
-#' returns 1 for aggregated or 0 for not aggregated in the result set.
-#'
-#' Same as \code{GROUPING} in SQL and \code{grouping} function in Scala.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname grouping_bit
-#' @name grouping_bit
-#' @family aggregate functions
-#' @aliases grouping_bit,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases grouping_bit grouping_bit,Column-method
 #' @export
 #' @examples
-#' \dontrun{
-#' df <- createDataFrame(mtcars)
 #'
+#' \dontrun{
 #' # With cube
 #' agg(
 #'   cube(df, "cyl", "gear", "am"),
@@ -3938,8 +3593,7 @@ setMethod("not",
 #'   rollup(df, "cyl", "gear", "am"),
 #'   mean(df$mpg),
 #'   grouping_bit(df$cyl), grouping_bit(df$gear), grouping_bit(df$am)
-#' )
-#' }
+#' )}
 #' @note grouping_bit since 2.3.0
 setMethod("grouping_bit",
           signature(x = "Column"),
@@ -3948,26 +3602,18 @@ setMethod("grouping_bit",
             column(jc)
           })
 
-#' grouping_id
-#'
-#' Returns the level of grouping.
-#'
+#' @details
+#' \code{grouping_id}: Returns the level of grouping.
 #' Equals to \code{
 #' grouping_bit(c1) * 2^(n - 1) + grouping_bit(c2) * 2^(n - 2)  + ... + grouping_bit(cn)
 #' }
 #'
-#' @param x Column to compute on
-#' @param ... additional Column(s) (optional).
-#'
-#' @rdname grouping_id
-#' @name grouping_id
-#' @family aggregate functions
-#' @aliases grouping_id,Column-method
+#' @rdname column_aggregate_functions
+#' @aliases grouping_id grouping_id,Column-method
 #' @export
 #' @examples
-#' \dontrun{
-#' df <- createDataFrame(mtcars)
 #'
+#' \dontrun{
 #' # With cube
 #' agg(
 #'   cube(df, "cyl", "gear", "am"),
@@ -3980,8 +3626,7 @@ setMethod("grouping_bit",
 #'   rollup(df, "cyl", "gear", "am"),
 #'   mean(df$mpg),
 #'   grouping_id(df$cyl, df$gear, df$am)
-#' )
-#' }
+#' )}
 #' @note grouping_id since 2.3.0
 setMethod("grouping_id",
           signature(x = "Column"),
@@ -4013,5 +3658,25 @@ setMethod("grouping_id",
 setMethod("input_file_name", signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "input_file_name")
+            column(jc)
+          })
+
+#' @details
+#' \code{trunc}: Returns date truncated to the unit specified by the format.
+#'
+#' @rdname column_datetime_functions
+#' @aliases trunc trunc,Column-method
+#' @export
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, df$time, trunc(df$time, "year"), trunc(df$time, "yy"),
+#'            trunc(df$time, "month"), trunc(df$time, "mon")))}
+#' @note trunc since 2.3.0
+setMethod("trunc",
+          signature(x = "Column"),
+          function(x, format) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "trunc",
+                              x@jc, as.character(format))
             column(jc)
           })

@@ -58,7 +58,7 @@ case object TERMINATED extends State
 class StreamExecution(
     override val sparkSession: SparkSession,
     override val name: String,
-    val checkpointRoot: String,
+    private val checkpointRoot: String,
     analyzedPlan: LogicalPlan,
     val sink: Sink,
     val trigger: Trigger,
@@ -83,6 +83,12 @@ class StreamExecution(
   private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
+
+  val resolvedCheckpointRoot = {
+    val checkpointPath = new Path(checkpointRoot)
+    val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    checkpointPath.makeQualified(fs.getUri(), fs.getWorkingDirectory()).toUri.toString
+  }
 
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
@@ -119,9 +125,8 @@ class StreamExecution(
   }
 
   /** Metadata associated with the offset seq of a batch in the query. */
-  protected var offsetSeqMetadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0,
-    conf = Map(SQLConf.SHUFFLE_PARTITIONS.key ->
-      sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS).toString))
+  protected var offsetSeqMetadata = OffsetSeqMetadata(
+    batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
 
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
@@ -154,7 +159,7 @@ class StreamExecution(
       case streamingRelation@StreamingRelation(dataSource, _, output) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
           // Materialize source to avoid creating it in every batch
-          val metadataPath = s"$checkpointRoot/sources/$nextSourceId"
+          val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           val source = dataSource.createSource(metadataPath)
           nextSourceId += 1
           // We still need to use the previous `output` instead of `source.schema` as attributes in
@@ -233,14 +238,14 @@ class StreamExecution(
 
   /** Returns the path of a file with `name` in the checkpoint directory. */
   private def checkpointFile(name: String): String =
-    new Path(new Path(checkpointRoot), name).toUri.toString
+    new Path(new Path(resolvedCheckpointRoot), name).toUri.toString
 
   /**
    * Starts the execution. This returns only after the thread has started and [[QueryStartedEvent]]
    * has been posted to all the listeners.
    */
   def start(): Unit = {
-    logInfo(s"Starting $prettyIdString. Use $checkpointRoot to store the query checkpoint.")
+    logInfo(s"Starting $prettyIdString. Use $resolvedCheckpointRoot to store the query checkpoint.")
     microBatchThread.setDaemon(true)
     microBatchThread.start()
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
@@ -279,9 +284,8 @@ class StreamExecution(
       val sparkSessionToRunBatches = sparkSession.cloneSession()
       // Adaptive execution can change num shuffle partitions, disallow
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
-      offsetSeqMetadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0,
-        conf = Map(SQLConf.SHUFFLE_PARTITIONS.key ->
-          sparkSessionToRunBatches.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)))
+      offsetSeqMetadata = OffsetSeqMetadata(
+        batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionToRunBatches.conf)
 
       if (state.compareAndSet(INITIALIZING, ACTIVE)) {
         // Unblock `awaitInitialization`
@@ -374,7 +378,7 @@ class StreamExecution(
 
         // Delete the temp checkpoint only when the query didn't fail
         if (deleteCheckpointOnStop && exception.isEmpty) {
-          val checkpointPath = new Path(checkpointRoot)
+          val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
             val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
             fs.delete(checkpointPath, true)
@@ -435,21 +439,9 @@ class StreamExecution(
 
         // update offset metadata
         nextOffsets.metadata.foreach { metadata =>
-          val shufflePartitionsSparkSession: Int =
-            sparkSessionToRunBatches.conf.get(SQLConf.SHUFFLE_PARTITIONS)
-          val shufflePartitionsToUse = metadata.conf.getOrElse(SQLConf.SHUFFLE_PARTITIONS.key, {
-            // For backward compatibility, if # partitions was not recorded in the offset log,
-            // then ensure it is not missing. The new value is picked up from the conf.
-            logWarning("Number of shuffle partitions from previous run not found in checkpoint. "
-              + s"Using the value from the conf, $shufflePartitionsSparkSession partitions.")
-            shufflePartitionsSparkSession
-          })
+          OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.conf)
           offsetSeqMetadata = OffsetSeqMetadata(
-            metadata.batchWatermarkMs, metadata.batchTimestampMs,
-            metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsToUse.toString))
-          // Update conf with correct number of shuffle partitions
-          sparkSessionToRunBatches.conf.set(
-            SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitionsToUse.toString)
+            metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
         }
 
         /* identify the current batch id: if commit log indicates we successfully processed the
@@ -646,6 +638,7 @@ class StreamExecution(
         triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
+        runId,
         currentBatchId,
         offsetSeqMetadata)
       lastExecution.executedPlan // Force the lazy generation of execution plan

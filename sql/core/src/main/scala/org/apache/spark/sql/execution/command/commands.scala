@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.UUID
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
@@ -170,7 +172,8 @@ case class ExplainCommand(
         // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
         // output mode does not matter since there is no `Sink`.
         new IncrementalExecution(
-          sparkSession, logicalPlan, OutputMode.Append(), "<unknown>", 0, OffsetSeqMetadata(0, 0))
+          sparkSession, logicalPlan, OutputMode.Append(), "<unknown>",
+          UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
       } else {
         sparkSession.sessionState.executePlan(logicalPlan)
       }
@@ -180,7 +183,7 @@ case class ExplainCommand(
       } else if (extended) {
         queryExecution.toString
       } else if (cost) {
-        queryExecution.toStringWithStats
+        queryExecution.stringWithStats
       } else {
         queryExecution.simpleString
       }
