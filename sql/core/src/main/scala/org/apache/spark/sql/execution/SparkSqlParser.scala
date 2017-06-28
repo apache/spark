@@ -91,17 +91,17 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
   /**
    * Create an [[AnalyzeTableCommand]] command or an [[AnalyzeColumnCommand]] command.
-   * Example SQL for analyzing table :
+   * Example SQL for analyzing table or a single partition :
    * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS [NOSCAN];
+   *   ANALYZE TABLE [db_name.]tablename [PARTITION (parcol1=val1, partcol2=val2, ...)]
+   *   COMPUTE STATISTICS [NOSCAN];
    * }}}
-   * Example SQL for analyzing a single partition :
-   * {{{
-   *   ANALYZE TABLE table PARTITION (key=value,..) COMPUTE STATISTICS [NOSCAN];
-   * }}}
+   * Partitions spec, if provided, must identify a single partition by specifying values
+   * for all partition columns.
+   *
    * Example SQL for analyzing columns :
    * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS FOR COLUMNS column1, column2;
+   *   ANALYZE TABLE [db_name.]tablename COMPUTE STATISTICS FOR COLUMNS column1, column2;
    * }}}
    */
   override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {

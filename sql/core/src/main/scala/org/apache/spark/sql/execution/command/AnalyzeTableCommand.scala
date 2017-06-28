@@ -30,6 +30,9 @@ import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Expression, Lite
  * query optimizations.
  *
  * If certain partition spec is specified, then statistics are gathered for only that partition.
+ * Partition spec must identify a single partition by specifying values for all partition columns.
+ *
+ * TODO Support a range of partitions by allowing partial partition specs
  */
 case class AnalyzeTableCommand(
     tableIdent: TableIdentifier,
