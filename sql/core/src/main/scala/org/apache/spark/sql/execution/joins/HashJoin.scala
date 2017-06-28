@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -212,10 +213,13 @@ trait HashJoin {
           s"BroadcastHashJoin should not take $x as the JoinType")
     }
 
+    // At the end of the task, we update the avg hash probe.
+    TaskContext.get().addTaskCompletionListener(_ =>
+      avgHashProbe.set(hashed.getAverageProbesPerLookup()))
+
     val resultProj = createResultProjection
     joinedIter.map { r =>
       numOutputRows += 1
-      avgHashProbe.set(hashed.getAverageProbesPerLookup())
       resultProj(r)
     }
   }

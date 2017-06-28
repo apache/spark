@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Dist
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.util.TaskCompletionListener
 
 /**
  * Performs an inner hash join of two child relations.  When the output RDD of this operator is
@@ -93,6 +94,23 @@ case class BroadcastHashJoinExec(
   }
 
   /**
+   * Returns the codes used to add a task completion listener to update avg hash probe
+   * at the end of the task.
+   */
+  private def genTaskListener(avgHashProbe: String, relationTerm: String): String = {
+    val listenerClass = classOf[TaskCompletionListener].getName
+    val taskContextClass = classOf[TaskContext].getName
+    s"""
+       | $taskContextClass$$.MODULE$$.get().addTaskCompletionListener(new $listenerClass() {
+       |   @Override
+       |   public void onTaskCompletion($taskContextClass context) {
+       |     $avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
+       |   }
+       | });
+     """.stripMargin
+  }
+
+  /**
    * Returns a tuple of Broadcast of HashedRelation and the variable name for it.
    */
   private def prepareBroadcast(ctx: CodegenContext): (Broadcast[HashedRelation], String) = {
@@ -101,10 +119,16 @@ case class BroadcastHashJoinExec(
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     val relationTerm = ctx.freshName("relation")
     val clsName = broadcastRelation.value.getClass.getName
+
+    // At the end of the task, we update the avg hash probe.
+    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
+    val addTaskListener = genTaskListener(avgHashProbe, relationTerm)
+
     ctx.addMutableState(clsName, relationTerm,
       s"""
          | $relationTerm = (($clsName) $broadcast.value()).asReadOnlyCopy();
          | incPeakExecutionMemory($relationTerm.estimatedSize());
+         | $addTaskListener
        """.stripMargin)
     (broadcastRelation, relationTerm)
   }
@@ -200,7 +224,6 @@ case class BroadcastHashJoinExec(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
 
     val resultVars = buildSide match {
       case BuildLeft => buildVars ++ input
@@ -212,7 +235,6 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |$avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
          |if ($matched == null) continue;
          |$checkCondition
          |$numOutput.add(1);
@@ -228,7 +250,6 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |$avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
          |if ($matches == null) continue;
          |while ($matches.hasNext()) {
          |  UnsafeRow $matched = (UnsafeRow) $matches.next();
@@ -249,7 +270,6 @@ case class BroadcastHashJoinExec(
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
 
     // filter the output via condition
     val conditionPassed = ctx.freshName("conditionPassed")
@@ -282,7 +302,6 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |$avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
          |${checkCondition.trim}
          |if (!$conditionPassed) {
          |  $matched = null;
@@ -303,7 +322,6 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |$avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
          |boolean $found = false;
          |// the last iteration of this loop is to emit an empty row if there is no matched rows.
          |while ($matches != null && $matches.hasNext() || !$found) {
@@ -327,14 +345,12 @@ case class BroadcastHashJoinExec(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
     if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |$avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
          |if ($matched == null) continue;
          |$checkCondition
          |$numOutput.add(1);
@@ -349,7 +365,6 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |$avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
          |if ($matches == null) continue;
          |boolean $found = false;
          |while (!$found && $matches.hasNext()) {
@@ -373,7 +388,6 @@ case class BroadcastHashJoinExec(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val (matched, checkCondition, _) = getJoinCondition(ctx, input, uniqueKeyCodePath)
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
 
     if (uniqueKeyCodePath) {
       s"""
@@ -388,7 +402,6 @@ case class BroadcastHashJoinExec(
          |    $checkCondition
          |  }
          |}
-         |$avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
          |$numOutput.add(1);
          |${consume(ctx, input)}
        """.stripMargin
@@ -414,7 +427,6 @@ case class BroadcastHashJoinExec(
          |    if ($found) continue;
          |  }
          |}
-         |$avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
          |$numOutput.add(1);
          |${consume(ctx, input)}
        """.stripMargin
@@ -428,7 +440,6 @@ case class BroadcastHashJoinExec(
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
     val existsVar = ctx.freshName("exists")
 
     val matched = ctx.freshName("matched")
@@ -457,7 +468,6 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |$avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
          |boolean $existsVar = false;
          |if ($matched != null) {
          |  $checkCondition
@@ -473,7 +483,6 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |$avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
          |boolean $existsVar = false;
          |if ($matches != null) {
          |  while (!$existsVar && $matches.hasNext()) {
