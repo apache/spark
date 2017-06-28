@@ -931,8 +931,9 @@ setGeneric("avg", function(x, ...) { standardGeneric("avg") })
 #' @export
 setGeneric("base64", function(x) { standardGeneric("base64") })
 
-#' @rdname bin
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("bin", function(x) { standardGeneric("bin") })
 
 #' @rdname column_nonaggregate_functions
@@ -940,16 +941,19 @@ setGeneric("bin", function(x) { standardGeneric("bin") })
 #' @name NULL
 setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
 
-#' @rdname bround
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("bround", function(x, ...) { standardGeneric("bround") })
 
-#' @rdname cbrt
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 
-#' @rdname ceil
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
 #' @rdname column_aggregate_functions
@@ -974,8 +978,9 @@ setGeneric("concat", function(x, ...) { standardGeneric("concat") })
 #' @export
 setGeneric("concat_ws", function(sep, x, ...) { standardGeneric("concat_ws") })
 
-#' @rdname conv
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("conv", function(x, fromBase, toBase) { standardGeneric("conv") })
 
 #' @rdname column_aggregate_functions
@@ -1099,8 +1104,9 @@ setGeneric("grouping_bit", function(x) { standardGeneric("grouping_bit") })
 #' @name NULL
 setGeneric("grouping_id", function(x, ...) { standardGeneric("grouping_id") })
 
-#' @rdname hex
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("hex", function(x) { standardGeneric("hex") })
 
 #' @rdname column_datetime_functions
@@ -1108,8 +1114,9 @@ setGeneric("hex", function(x) { standardGeneric("hex") })
 #' @name NULL
 setGeneric("hour", function(x) { standardGeneric("hour") })
 
-#' @rdname hypot
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
 
 #' @rdname initcap
@@ -1245,8 +1252,9 @@ setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 #' @export
 setGeneric("percent_rank", function(x = "missing") { standardGeneric("percent_rank") })
 
-#' @rdname pmod
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
 
 #' @rdname posexplode
@@ -1293,8 +1301,9 @@ setGeneric("repeat_string", function(x, n) { standardGeneric("repeat_string") })
 #' @export
 setGeneric("reverse", function(x) { standardGeneric("reverse") })
 
-#' @rdname rint
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("rint", function(x) { standardGeneric("rint") })
 
 #' @param x empty. Should be used with no argument.
@@ -1328,20 +1337,24 @@ setGeneric("sha1", function(x) { standardGeneric("sha1") })
 #' @export
 setGeneric("sha2", function(y, x) { standardGeneric("sha2") })
 
-#' @rdname shiftLeft
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("shiftLeft", function(y, x) { standardGeneric("shiftLeft") })
 
-#' @rdname shiftRight
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("shiftRight", function(y, x) { standardGeneric("shiftRight") })
 
-#' @rdname shiftRightUnsigned
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("shiftRightUnsigned", function(y, x) { standardGeneric("shiftRightUnsigned") })
 
-#' @rdname sign
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("signum", function(x) { standardGeneric("signum") })
 
 #' @rdname size
@@ -1399,12 +1412,14 @@ setGeneric("substring_index", function(x, delim, count) { standardGeneric("subst
 #' @name NULL
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
-#' @rdname toDegrees
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("toDegrees", function(x) { standardGeneric("toDegrees") })
 
-#' @rdname toRadians
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 
 #' @rdname column_datetime_functions
@@ -1438,8 +1453,9 @@ setGeneric("trim", function(x) { standardGeneric("trim") })
 #' @export
 setGeneric("unbase64", function(x) { standardGeneric("unbase64") })
 
-#' @rdname unhex
+#' @rdname column_math_functions
 #' @export
+#' @name NULL
 setGeneric("unhex", function(x) { standardGeneric("unhex") })
 
 #' @rdname column_datetime_functions
