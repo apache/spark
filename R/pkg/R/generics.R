@@ -1075,9 +1075,8 @@ setGeneric("format_number", function(y, x) { standardGeneric("format_number") })
 #' @export
 setGeneric("format_string", function(format, x, ...) { standardGeneric("format_string") })
 
-#' @rdname column_nonaggregate_functions
+#' @rdname from_json
 #' @export
-#' @name NULL
 setGeneric("from_json", function(x, schema, ...) { standardGeneric("from_json") })
 
 #' @rdname column_datetime_functions
@@ -1413,9 +1412,8 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 #' @name NULL
 setGeneric("to_date", function(x, format) { standardGeneric("to_date") })
 
-#' @rdname column_nonaggregate_functions
+#' @rdname to_json
 #' @export
-#' @name NULL
 setGeneric("to_json", function(x, ...) { standardGeneric("to_json") })
 
 #' @rdname column_datetime_functions
