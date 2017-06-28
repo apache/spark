@@ -59,9 +59,7 @@ case class AnalyzeTableCommand(
     // 2. when total size is changed, `oldRowCount` becomes invalid.
     // This is to make sure that we only record the right statistics.
     if (!noscan) {
-      val newRowCount = SQLExecution.ignoreNestedExecutionId(sparkSession) {
-        sparkSession.table(tableIdentWithDB).count()
-      }
+      val newRowCount = sparkSession.table(tableIdentWithDB).count()
       if (newRowCount >= 0 && newRowCount != oldRowCount) {
         newStats = if (newStats.isDefined) {
           newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))

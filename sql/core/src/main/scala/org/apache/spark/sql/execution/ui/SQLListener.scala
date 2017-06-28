@@ -314,6 +314,8 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
       if (executionUIData.isFailed) {
         failedExecutions += executionUIData
         trimExecutionsIfNecessary(failedExecutions)
+      } else if (executionUIData.jobs.isEmpty && executionUIData.accumulatorMetrics.isEmpty) {
+        // ignore the executions which don't have associated Spark jobs and metrics.
       } else {
         completedExecutions += executionUIData
         trimExecutionsIfNecessary(completedExecutions)
