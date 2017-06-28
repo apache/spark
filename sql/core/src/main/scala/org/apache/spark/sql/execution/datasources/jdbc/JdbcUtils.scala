@@ -273,6 +273,9 @@ object JdbcUtils extends Logging {
     val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
+    // if true, spark will propagate null to underlying DB engine instead of using type default value
+    val alwaysNullable = true
+
     var i = 0
     while (i < ncols) {
       val columnName = rsmd.getColumnLabel(i + 1)
@@ -290,7 +293,7 @@ object JdbcUtils extends Logging {
             rsmd.getClass.getName == "org.apache.hive.jdbc.HiveResultSetMetaData" => true
         }
       }
-      val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+      val nullable = if (alwaysNullable) alwaysNullable else rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       val metadata = new MetadataBuilder()
         .putString("name", columnName)
         .putLong("scale", fieldScale)
