@@ -368,9 +368,11 @@ object PowerIterationClustering extends Logging {
       val v = curG.aggregateMessages[Double](
         sendMsg = ctx => ctx.sendToSrc(ctx.attr * ctx.dstAttr),
         mergeMsg = _ + _,
+        // scalastyle:off
         new TripletFields(/* useSrc */ false,
                           /* useDst */ true,
                           /* useEdge */ true)).cache()
+        // scalastyle:on
       // normalize v
       val norm = v.values.map(math.abs).sum()
       logInfo(s"$msgPrefix: norm(v) = $norm.")
