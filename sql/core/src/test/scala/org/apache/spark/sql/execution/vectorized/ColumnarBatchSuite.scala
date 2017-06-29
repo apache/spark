@@ -24,13 +24,14 @@ import java.nio.ByteOrder
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.columnar.compression.{ColumnBuilderHelper, IntDelta, TestCompressibleColumnBuilder}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
