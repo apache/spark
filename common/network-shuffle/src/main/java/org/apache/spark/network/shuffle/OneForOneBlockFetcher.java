@@ -119,7 +119,12 @@ public class OneForOneBlockFetcher {
           // Immediately request all chunks -- we expect that the total size of the request is
           // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
           for (int i = 0; i < streamHandle.numChunks; i++) {
-            client.fetchChunk(streamHandle.streamId, i, chunkCallback);
+            if (shuffleFiles != null) {
+              client.stream(OneForOneStreamManager.genStreamChunkId(streamHandle.streamId, i),
+                new DownloadCallback(shuffleFiles[i], i));
+            } else {
+              client.fetchChunk(streamHandle.streamId, i, chunkCallback);
+            }
           }
         } catch (Exception e) {
           logger.error("Failed while starting block fetches after success", e);
