@@ -262,6 +262,10 @@ private[spark] class ExecutorAllocationManager(
    * and pending tasks, rounded up.
    */
   private def maxNumExecutorsNeeded(): Int = {
+    // scalastyle:off
+    println("!!!!!!!!!!!!!! maxNumExecutorsNeeded totalPendingTasks: " + listener.totalPendingTasks +
+      ", totalRunningTasks: " + listener.totalRunningTasks)
+    // scalastyle:on
     val numRunningOrPendingTasks = listener.totalPendingTasks + listener.totalRunningTasks
     (numRunningOrPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
   }
@@ -575,16 +579,19 @@ private[spark] class ExecutorAllocationManager(
    * A listener that notifies the given allocation manager of when to add and remove executors.
    *
    * This class is intentionally conservative in its assumptions about the relative ordering
-   * and consistency of events returned by the listener. For simplicity, it does not account
-   * for speculated tasks.
+   * and consistency of events returned by the listener.
    */
   private class ExecutorAllocationListener extends SparkListener {
 
     private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
     private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
-    // Number of tasks currently running on the cluster.  Should be 0 when no stages are active.
+    // Number of tasks currently running on the cluster including speculative tasks.
+    // Should be 0 when no stages are active.
     private var numRunningTasks: Int = _
+
+    private val stageIdToNumSpeculativeTasks = new mutable.HashMap[Int, Int]
+    private val stageIdToSpeculativeTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
 
     // stageId to tuple (the number of task with locality preferences, a map where each pair is a
     // node and the number of tasks that would like to be scheduled on that node) map,
@@ -624,7 +631,9 @@ private[spark] class ExecutorAllocationManager(
       val stageId = stageCompleted.stageInfo.stageId
       allocationManager.synchronized {
         stageIdToNumTasks -= stageId
+        stageIdToNumSpeculativeTasks -= stageId
         stageIdToTaskIndices -= stageId
+        stageIdToSpeculativeTaskIndices -= stageId
         stageIdToExecutorPlacementHints -= stageId
 
         // Update the executor placement hints
@@ -632,7 +641,7 @@ private[spark] class ExecutorAllocationManager(
 
         // If this is the last stage with pending tasks, mark the scheduler queue as empty
         // This is needed in case the stage is aborted for any reason
-        if (stageIdToNumTasks.isEmpty) {
+        if (stageIdToNumTasks.isEmpty && stageIdToNumSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
           if (numRunningTasks != 0) {
             logWarning("No stages are running, but numRunningTasks != 0")
@@ -658,7 +667,12 @@ private[spark] class ExecutorAllocationManager(
         }
 
         // If this is the last pending task, mark the scheduler queue as empty
-        stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
+        if (taskStart.taskInfo.speculative) {
+          stageIdToSpeculativeTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) +=
+            taskIndex
+        } else {
+          stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
+        }
         if (totalPendingTasks() == 0) {
           allocationManager.onSchedulerQueueEmpty()
         }
@@ -692,7 +706,11 @@ private[spark] class ExecutorAllocationManager(
           if (totalPendingTasks() == 0) {
             allocationManager.onSchedulerBacklogged()
           }
-          stageIdToTaskIndices.get(stageId).foreach { _.remove(taskIndex) }
+          if (taskEnd.taskInfo.speculative) {
+            stageIdToSpeculativeTaskIndices.get(stageId).foreach {_.remove(taskIndex)}
+          } else {
+            stageIdToTaskIndices.get(stageId).foreach {_.remove(taskIndex)}
+          }
         }
       }
     }
@@ -713,6 +731,17 @@ private[spark] class ExecutorAllocationManager(
       allocationManager.onExecutorRemoved(executorRemoved.executorId)
     }
 
+    override def onSpeculativeTaskAdded(speculativeTask: SparkListenerSpeculativeTaskAdd)
+      : Unit = {
+       val stageId = speculativeTask.stageId
+
+      allocationManager.synchronized {
+        stageIdToNumSpeculativeTasks(stageId) =
+          stageIdToNumSpeculativeTasks.getOrElse(stageId, 0) + 1
+        allocationManager.onSchedulerBacklogged()
+      }
+    }
+
     /**
      * An estimate of the total number of pending tasks remaining for currently running stages. Does
      * not account for tasks which may have failed and been resubmitted.
@@ -720,9 +749,15 @@ private[spark] class ExecutorAllocationManager(
      * Note: This is not thread-safe without the caller owning the `allocationManager` lock.
      */
     def totalPendingTasks(): Int = {
-      stageIdToNumTasks.map { case (stageId, numTasks) =>
+      val pendTasks = stageIdToNumTasks.map { case (stageId, numTasks) =>
         numTasks - stageIdToTaskIndices.get(stageId).map(_.size).getOrElse(0)
       }.sum
+
+      val pendSpeculativeTasks = stageIdToNumSpeculativeTasks.map { case (stageId, numTasks) =>
+        numTasks - stageIdToSpeculativeTaskIndices.get(stageId).map(_.size).getOrElse(0)
+      }.sum
+
+      pendTasks + pendSpeculativeTasks
     }
 
     /**

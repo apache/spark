@@ -140,6 +140,11 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   }
 
   @Override
+  public void onSpeculativeTaskAdded(SparkListenerSpeculativeTaskAdd speculativeTask) {
+    onEvent(speculativeTask);
+  }
+
+  @Override
   public void onOtherEvent(SparkListenerEvent event) {
     onEvent(event);
   }
