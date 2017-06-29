@@ -241,9 +241,9 @@ class PartitionedTablePerfStatsSuite
   genericTest("file status cache respects size limit") { spec =>
     withSQLConf(
         SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true",
-        //scalastyle:off
+        // scalastyle:off
         SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key -> "1" /* 1 byte */) {
-        //scalastyle:on
+        // scalastyle:on
       withTable("test") {
         withTempDir { dir =>
           spec.setupTable("test", dir)
