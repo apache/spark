@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
  */
 @DeveloperApi
 @InterfaceStability.Evolving
-case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
+case class JdbcType(databaseTypeDefinition: String, jdbcNullType: Int)
 
 /**
  * :: DeveloperApi ::
@@ -62,7 +62,7 @@ abstract class JdbcDialect extends Serializable {
    * @return True if the dialect can be applied on the given jdbc url.
    * @throws NullPointerException if the url is null.
    */
-  def canHandle(url : String): Boolean
+  def canHandle(url: String): Boolean
 
   /**
    * Get the custom datatype mapping for the given jdbc meta information.
@@ -153,7 +153,7 @@ object JdbcDialects {
    *
    * @param dialect The new dialect.
    */
-  def registerDialect(dialect: JdbcDialect) : Unit = {
+  def registerDialect(dialect: JdbcDialect): Unit = {
     dialects = dialect :: dialects.filterNot(_ == dialect)
   }
 
@@ -162,7 +162,7 @@ object JdbcDialects {
    *
    * @param dialect The jdbc dialect.
    */
-  def unregisterDialect(dialect : JdbcDialect) : Unit = {
+  def unregisterDialect(dialect: JdbcDialect): Unit = {
     dialects = dialects.filterNot(_ == dialect)
   }
 
@@ -193,5 +193,5 @@ object JdbcDialects {
  * NOOP dialect object, always returning the neutral element.
  */
 private object NoopDialect extends JdbcDialect {
-  override def canHandle(url : String): Boolean = true
+  override def canHandle(url: String): Boolean = true
 }

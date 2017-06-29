@@ -67,7 +67,7 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
   private val errMsg = s"'${child.simpleString}' is not true!"
 
-  override def eval(input: InternalRow) : Any = {
+  override def eval(input: InternalRow): Any = {
     val v = child.eval(input)
     if (v == null || java.lang.Boolean.FALSE.equals(v)) {
       throw new RuntimeException(errMsg)

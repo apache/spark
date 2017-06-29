@@ -237,7 +237,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
   /* Internal fields and methods */
 
-  @volatile private var stateStoreId_ : StateStoreId = _
+  @volatile private var stateStoreId_: StateStoreId = _
   @volatile private var keySchema: StructType = _
   @volatile private var valueSchema: StructType = _
   @volatile private var storeConf: StateStoreConf = _

@@ -35,10 +35,10 @@ import org.apache.spark.util.Utils
  */
 @DeveloperApi
 class BlockManagerId private (
-    private var executorId_ : String,
-    private var host_ : String,
-    private var port_ : Int,
-    private var topologyInfo_ : Option[String])
+    private var executorId_: String,
+    private var host_: String,
+    private var port_: Int,
+    private var topologyInfo_: Option[String])
   extends Externalizable {
 
   private def this() = this(null, null, 0, None)  // For deserialization only

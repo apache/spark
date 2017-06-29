@@ -45,7 +45,7 @@ import org.apache.spark.sql.SparkSession
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
  */
-class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: String)
+class HDFSMetadataLog[T <: AnyRef: ClassTag](sparkSession: SparkSession, path: String)
   extends MetadataLog[T] with Logging {
 
   private implicit val formats = Serialization.formats(NoTypeHints)

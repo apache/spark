@@ -95,7 +95,7 @@ private[python] class DoubleArrayToWritableConverter extends Converter[Any, Writ
 
 private[python] class WritableToDoubleArrayConverter extends Converter[Any, Array[Double]] {
   override def convert(obj: Any): Array[Double] = obj match {
-    case daw : DoubleArrayWritable => daw.get().map(_.asInstanceOf[DoubleWritable].get())
+    case daw: DoubleArrayWritable => daw.get().map(_.asInstanceOf[DoubleWritable].get())
     case other => throw new SparkException(s"Data of type $other is not supported")
   }
 }

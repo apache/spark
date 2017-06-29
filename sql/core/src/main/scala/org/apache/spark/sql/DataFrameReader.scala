@@ -273,7 +273,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
     val options = new JDBCOptions(url, table, params)
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
-      JDBCPartition(part, i) : Partition
+      JDBCPartition(part, i): Partition
     }
     val relation = JDBCRelation(parts, options)(sparkSession)
     sparkSession.baseRelationToDataFrame(relation)
@@ -342,7 +342,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def json(paths: String*): DataFrame = format("json").load(paths : _*)
+  def json(paths: String*): DataFrame = format("json").load(paths: _*)
 
   /**
    * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
@@ -542,7 +542,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
+  def csv(paths: String*): DataFrame = format("csv").load(paths: _*)
 
   /**
    * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation
@@ -632,7 +632,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+  def text(paths: String*): DataFrame = format("text").load(paths: _*)
 
   /**
    * Loads text files and returns a [[Dataset]] of String. See the documentation on the
@@ -666,7 +666,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   @scala.annotation.varargs
   def textFile(paths: String*): Dataset[String] = {
     assertNoSpecifiedSchema("textFile")
-    text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
+    text(paths: _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
   }
 
   /**

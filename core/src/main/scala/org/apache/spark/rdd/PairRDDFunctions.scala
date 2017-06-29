@@ -348,7 +348,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         map.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
       }
       Iterator(map)
-    } : Iterator[JHashMap[K, V]]
+    }: Iterator[JHashMap[K, V]]
 
     val mergeMaps = (m1: JHashMap[K, V], m2: JHashMap[K, V]) => {
       m2.asScala.foreach { pair =>
@@ -356,7 +356,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         m1.put(pair._1, if (old == null) pair._2 else cleanedF(old, pair._2))
       }
       m1
-    } : JHashMap[K, V]
+    }: JHashMap[K, V]
 
     self.mapPartitions(reducePartition).reduce(mergeMaps).asScala
   }
@@ -546,7 +546,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = self.withScope {
-    this.cogroup(other, partitioner).flatMapValues( pair =>
+    this.cogroup(other, partitioner).flatMapValues(pair =>
       for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, w)
     )
   }
@@ -944,7 +944,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
             buf += pair._2
           }
           buf
-        } : Seq[V]
+        }: Seq[V]
         val res = self.context.runJob(self, process, Array(index))
         res(0)
       case None =>

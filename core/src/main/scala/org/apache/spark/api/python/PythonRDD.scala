@@ -396,7 +396,7 @@ private class PairwiseRDD(prev: RDD[Array[Byte]]) extends RDD[(Long, Array[Byte]
       case Seq(a, b) => (Utils.deserializeLongValue(a), b)
       case x => throw new SparkException("PairwiseRDD: unexpected value: " + x)
     }
-  val asJavaPairRDD : JavaPairRDD[Long, Array[Byte]] = JavaPairRDD.fromRDD(this)
+  val asJavaPairRDD: JavaPairRDD[Long, Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
 
 private object SpecialLengths {
@@ -867,7 +867,7 @@ private[spark] object PythonRDD extends Logging {
 
 private
 class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
-  override def call(arr: Array[Byte]) : String = new String(arr, StandardCharsets.UTF_8)
+  override def call(arr: Array[Byte]): String = new String(arr, StandardCharsets.UTF_8)
 }
 
 /**

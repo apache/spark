@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
 object LegacyTypeStringParser extends RegexParsers {
 
   protected lazy val primitiveType: Parser[DataType] =
-    ( "StringType" ^^^ StringType
+    ("StringType" ^^^ StringType
       | "FloatType" ^^^ FloatType
       | "IntegerType" ^^^ IntegerType
       | "ByteType" ^^^ ByteType
@@ -65,7 +65,7 @@ object LegacyTypeStringParser extends RegexParsers {
     }
 
   protected lazy val boolVal: Parser[Boolean] =
-    ( "true" ^^^ true
+    ("true" ^^^ true
       | "false" ^^^ false
       )
 
@@ -75,7 +75,7 @@ object LegacyTypeStringParser extends RegexParsers {
     }
 
   protected lazy val dataType: Parser[DataType] =
-    ( arrayType
+    (arrayType
       | mapType
       | structType
       | primitiveType

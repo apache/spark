@@ -433,7 +433,7 @@ object JoinReorderDPFilters extends PredicateHelper {
   def starJoinFilter(
       oneSideJoinPlan: Set[Int],
       otherSideJoinPlan: Set[Int],
-      filters: JoinGraphInfo) : Boolean = {
+      filters: JoinGraphInfo): Boolean = {
     val starJoins = filters.starJoins
     val nonStarJoins = filters.nonStarJoins
     val join = oneSideJoinPlan.union(otherSideJoinPlan)

@@ -41,5 +41,5 @@ case class DatasetHolder[T] private[sql](private val ds: Dataset[T]) {
   // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
   def toDF(): DataFrame = ds.toDF()
 
-  def toDF(colNames: String*): DataFrame = ds.toDF(colNames : _*)
+  def toDF(colNames: String*): DataFrame = ds.toDF(colNames: _*)
 }

@@ -77,7 +77,7 @@ private[spark] object AllRDDResource {
             if (rddInfo.storageLevel.useOffHeap) status.memUsedByRdd(rddId) else 0L),
           onHeapMemoryRemaining = status.onHeapMemRemaining,
           offHeapMemoryRemaining = status.offHeapMemRemaining
-        ) } )
+       ) })
     } else {
       None
     }
@@ -90,7 +90,7 @@ private[spark] object AllRDDResource {
           diskUsed = block.diskSize,
           executors = locations
         )
-      } )
+      })
     } else {
       None
     }

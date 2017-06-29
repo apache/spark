@@ -122,7 +122,7 @@ object PageRank extends Logging {
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
       // Set the weight on the edges based on the degree
-      .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.Src )
+      .mapTriplets(e => 1.0 / e.srcAttr, TripletFields.Src)
       // Set the vertex attributes to the initial pagerank values
       .mapVertices { (id, attr) =>
         if (!(id != src && personalized)) 1.0 else 0.0
@@ -227,7 +227,7 @@ object PageRank extends Logging {
       // and adding start nodes back in with activation resetProb
       val rankUpdates = rankGraph.aggregateMessages[BV[Double]](
         ctx => ctx.sendToDst(ctx.srcAttr *:* ctx.attr),
-        (a : BV[Double], b : BV[Double]) => a +:+ b, TripletFields.Src)
+        (a: BV[Double], b: BV[Double]) => a +:+ b, TripletFields.Src)
 
       rankGraph = rankGraph.outerJoinVertices(rankUpdates) {
         (vid, oldRank, msgSumOpt) =>
@@ -310,7 +310,7 @@ object PageRank extends Logging {
         (vid, vdata, deg) => deg.getOrElse(0)
       }
       // Set the weight on the edges based on the degree
-      .mapTriplets( e => 1.0 / e.srcAttr )
+      .mapTriplets(e => 1.0 / e.srcAttr)
       // Set the vertex attributes to (initialPR, delta = 0)
       .mapVertices { (id, attr) =>
         if (id == src) (0.0, Double.NegativeInfinity) else (0.0, 0.0)

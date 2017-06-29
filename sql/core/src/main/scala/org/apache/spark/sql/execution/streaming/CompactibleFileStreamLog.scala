@@ -39,7 +39,7 @@ import org.apache.spark.sql.SparkSession
  * compact log files every 10 batches by default into a big file. When
  * doing a compaction, it will read all old log files and merge them with the new batch.
  */
-abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
+abstract class CompactibleFileStreamLog[T <: AnyRef: ClassTag](
     metadataLogVersion: Int,
     sparkSession: SparkSession,
     path: String)
@@ -305,7 +305,7 @@ object CompactibleFileStreamLog {
    * Derives a compact interval from the latest compact batch id and
    * a default compact interval.
    */
-  def deriveCompactInterval(defaultInterval: Int, latestCompactBatchId: Int) : Int = {
+  def deriveCompactInterval(defaultInterval: Int, latestCompactBatchId: Int): Int = {
     if (latestCompactBatchId + 1 <= defaultInterval) {
       latestCompactBatchId + 1
     } else if (defaultInterval < (latestCompactBatchId + 1) / 2) {

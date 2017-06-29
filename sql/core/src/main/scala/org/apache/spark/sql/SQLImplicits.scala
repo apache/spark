@@ -162,14 +162,14 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
    * @since 1.6.1
    * @deprecated use [[newSequenceEncoder]]
    */
-  def newProductSeqEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] = ExpressionEncoder()
+  def newProductSeqEncoder[A <: Product: TypeTag]: Encoder[Seq[A]] = ExpressionEncoder()
 
   /** @since 2.2.0 */
-  implicit def newSequenceEncoder[T <: Seq[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
+  implicit def newSequenceEncoder[T <: Seq[_]: TypeTag]: Encoder[T] = ExpressionEncoder()
 
   // Maps
   /** @since 2.3.0 */
-  implicit def newMapEncoder[T <: Map[_, _] : TypeTag]: Encoder[T] = ExpressionEncoder()
+  implicit def newMapEncoder[T <: Map[_, _]: TypeTag]: Encoder[T] = ExpressionEncoder()
 
   // Arrays
 
@@ -198,7 +198,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   implicit def newStringArrayEncoder: Encoder[Array[String]] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newProductArrayEncoder[A <: Product : TypeTag]: Encoder[Array[A]] =
+  implicit def newProductArrayEncoder[A <: Product: TypeTag]: Encoder[Array[A]] =
     ExpressionEncoder()
 
   /**
@@ -206,7 +206,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
    *
    * @since 1.6.0
    */
-  implicit def rddToDatasetHolder[T : Encoder](rdd: RDD[T]): DatasetHolder[T] = {
+  implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T] = {
     DatasetHolder(_sqlContext.createDataset(rdd))
   }
 
@@ -214,7 +214,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
    * Creates a [[Dataset]] from a local Seq.
    * @since 1.6.0
    */
-  implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {
+  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T] = {
     DatasetHolder(_sqlContext.createDataset(s))
   }
 
@@ -235,6 +235,6 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
  */
 trait LowPrioritySQLImplicits {
   /** @since 1.6.0 */
-  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = Encoders.product[T]
+  implicit def newProductEncoder[T <: Product: TypeTag]: Encoder[T] = Encoders.product[T]
 
 }

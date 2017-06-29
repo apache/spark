@@ -60,7 +60,7 @@ trait Source {
    * Informs the source that Spark has completed processing all data for offsets less than or
    * equal to `end` and will only request offsets greater than `end` in the future.
    */
-  def commit(end: Offset) : Unit = {}
+  def commit(end: Offset): Unit = {}
 
   /** Stop this source and free any resources it has allocated. */
   def stop(): Unit

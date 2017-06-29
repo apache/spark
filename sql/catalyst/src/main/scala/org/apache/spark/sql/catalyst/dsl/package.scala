@@ -63,9 +63,9 @@ package object dsl {
   trait ImplicitOperators {
     def expr: Expression
 
-    def unary_- : Expression = UnaryMinus(expr)
-    def unary_! : Predicate = Not(expr)
-    def unary_~ : Expression = BitwiseNot(expr)
+    def unary_-: Expression = UnaryMinus(expr)
+    def unary_!: Predicate = Not(expr)
+    def unary_~: Expression = BitwiseNot(expr)
 
     def + (other: Expression): Expression = Add(expr, other)
     def - (other: Expression): Expression = Subtract(expr, other)
@@ -144,7 +144,7 @@ package object dsl {
       // Note that if we make ExpressionConversions an object rather than a trait, we can
       // then make this a value class to avoid the small penalty of runtime instantiation.
       def $(args: Any*): analysis.UnresolvedAttribute = {
-        analysis.UnresolvedAttribute(sc.s(args : _*))
+        analysis.UnresolvedAttribute(sc.s(args: _*))
       }
     }
 
@@ -298,11 +298,11 @@ package object dsl {
 
       def where(condition: Expression): LogicalPlan = Filter(condition, logicalPlan)
 
-      def filter[T : Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
+      def filter[T: Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
 
-      def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
+      def serialize[T: Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
 
-      def deserialize[T : Encoder]: LogicalPlan = CatalystSerde.deserialize[T](logicalPlan)
+      def deserialize[T: Encoder]: LogicalPlan = CatalystSerde.deserialize[T](logicalPlan)
 
       def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, logicalPlan)
 

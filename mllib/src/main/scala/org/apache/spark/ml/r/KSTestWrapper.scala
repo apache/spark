@@ -49,7 +49,7 @@ private[r] object KSTestWrapper {
       case Row(feature: Double) => feature
     }
 
-    val ksTestResult = kolmogorovSmirnovTest(rddData, distName, distParams : _*)
+    val ksTestResult = kolmogorovSmirnovTest(rddData, distName, distParams: _*)
 
     new KSTestWrapper(ksTestResult, distName, distParams)
   }

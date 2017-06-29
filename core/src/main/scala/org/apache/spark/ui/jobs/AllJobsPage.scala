@@ -275,7 +275,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         desc = jobSortDesc
       ).table(page)
     } catch {
-      case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
+      case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
         <div class="alert alert-error">
           <p>Error while rendering job table:</p>
           <pre>

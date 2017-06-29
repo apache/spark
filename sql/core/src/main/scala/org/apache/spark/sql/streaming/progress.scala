@@ -116,7 +116,7 @@ class StreamingQueryProgress private[sql](
     def safeMapToJValue[T](map: ju.Map[String, T], valueToJValue: T => JValue): JValue = {
       if (map.isEmpty) return JNothing
       val keys = map.asScala.keySet.toSeq.sorted
-      keys.map { k => k -> valueToJValue(map.get(k)) : JObject }.reduce(_ ~ _)
+      keys.map { k => k -> valueToJValue(map.get(k)): JObject }.reduce(_ ~ _)
     }
 
     ("id" -> JString(id.toString)) ~

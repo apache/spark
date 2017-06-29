@@ -282,7 +282,7 @@ class SparkSession private(
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
+  def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame = {
     SparkSession.setActiveSession(this)
     val encoder = Encoders.product[A]
     Dataset.ofRows(self, ExternalRDD(rdd, self)(encoder))
@@ -296,7 +296,7 @@ class SparkSession private(
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
+  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {
     SparkSession.setActiveSession(this)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
@@ -454,7 +454,7 @@ class SparkSession private(
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
+  def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d).copy())
@@ -473,7 +473,7 @@ class SparkSession private(
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
+  def createDataset[T: Encoder](data: RDD[T]): Dataset[T] = {
     Dataset[T](self, ExternalRDD(data, self))
   }
 
@@ -495,7 +495,7 @@ class SparkSession private(
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
+  def createDataset[T: Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala)
   }
 

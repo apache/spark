@@ -60,7 +60,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def keyAs[L : Encoder]: KeyValueGroupedDataset[L, V] =
+  def keyAs[L: Encoder]: KeyValueGroupedDataset[L, V] =
     new KeyValueGroupedDataset(
       encoderFor[L],
       vExprEnc,
@@ -79,7 +79,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 2.1.0
    */
-  def mapValues[W : Encoder](func: V => W): KeyValueGroupedDataset[K, W] = {
+  def mapValues[W: Encoder](func: V => W): KeyValueGroupedDataset[K, W] = {
     val withNewData = AppendColumns(func, dataAttributes, logicalPlan)
     val projected = Project(withNewData.newColumns ++ groupingAttributes, withNewData)
     val executed = sparkSession.sessionState.executePlan(projected)
@@ -142,7 +142,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+  def flatMapGroups[U: Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
     Dataset[U](
       sparkSession,
       MapGroups(
@@ -193,7 +193,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def mapGroups[U : Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
+  def mapGroups[U: Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
     val func = (key: K, it: Iterator[V]) => Iterator(f(key, it))
     flatMapGroups(func)
   }
@@ -533,7 +533,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def cogroup[U, R : Encoder](
+  def cogroup[U, R: Encoder](
       other: KeyValueGroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
     implicit val uEncoder = other.vExprEnc

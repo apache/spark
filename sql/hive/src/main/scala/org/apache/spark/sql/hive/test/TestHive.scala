@@ -248,7 +248,7 @@ private[hive] class TestHiveSparkSession(
     new File(Thread.currentThread().getContextClassLoader.getResource(path).getFile)
   }
 
-  private def quoteHiveFile(path : String) = if (Utils.isWindows) {
+  private def quoteHiveFile(path: String) = if (Utils.isWindows) {
     getHiveFile(path).getPath.replace('\\', '/')
   } else {
     getHiveFile(path).getPath

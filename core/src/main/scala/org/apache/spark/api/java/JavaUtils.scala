@@ -54,7 +54,7 @@ private[spark] object JavaUtils {
 
       override def iterator: ju.Iterator[ju.Map.Entry[A, B]] = new ju.Iterator[ju.Map.Entry[A, B]] {
         val ui = underlying.iterator
-        var prev : Option[A] = None
+        var prev: Option[A] = None
 
         def hasNext: Boolean = ui.hasNext
 
@@ -65,7 +65,7 @@ private[spark] object JavaUtils {
             import scala.util.hashing.byteswap32
             override def getKey: A = k
             override def getValue: B = v
-            override def setValue(v1 : B): B = self.put(k, v1)
+            override def setValue(v1: B): B = self.put(k, v1)
             override def hashCode: Int = byteswap32(k.hashCode) + (byteswap32(v.hashCode) << 16)
             override def equals(other: Any): Boolean = other match {
               case e: ju.Map.Entry[_, _] => k == e.getKey && v == e.getValue

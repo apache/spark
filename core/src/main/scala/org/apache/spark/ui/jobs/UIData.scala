@@ -31,21 +31,21 @@ import org.apache.spark.util.collection.OpenHashSet
 private[spark] object UIData {
 
   class ExecutorSummary {
-    var taskTime : Long = 0
-    var failedTasks : Int = 0
-    var succeededTasks : Int = 0
-    var reasonToNumKilled : Map[String, Int] = Map.empty
-    var inputBytes : Long = 0
-    var inputRecords : Long = 0
-    var outputBytes : Long = 0
-    var outputRecords : Long = 0
-    var shuffleRead : Long = 0
-    var shuffleReadRecords : Long = 0
-    var shuffleWrite : Long = 0
-    var shuffleWriteRecords : Long = 0
-    var memoryBytesSpilled : Long = 0
-    var diskBytesSpilled : Long = 0
-    var isBlacklisted : Int = 0
+    var taskTime: Long = 0
+    var failedTasks: Int = 0
+    var succeededTasks: Int = 0
+    var reasonToNumKilled: Map[String, Int] = Map.empty
+    var inputBytes: Long = 0
+    var inputRecords: Long = 0
+    var outputBytes: Long = 0
+    var outputRecords: Long = 0
+    var shuffleRead: Long = 0
+    var shuffleReadRecords: Long = 0
+    var shuffleWrite: Long = 0
+    var shuffleWriteRecords: Long = 0
+    var memoryBytesSpilled: Long = 0
+    var diskBytesSpilled: Long = 0
+    var isBlacklisted: Int = 0
   }
 
   class JobUIData(
@@ -91,7 +91,7 @@ private[spark] object UIData {
     var outputBytes: Long = _
     var outputRecords: Long = _
     var shuffleReadTotalBytes: Long = _
-    var shuffleReadRecords : Long = _
+    var shuffleReadRecords: Long = _
     var shuffleWriteBytes: Long = _
     var shuffleWriteRecords: Long = _
     var memoryBytesSpilled: Long = _

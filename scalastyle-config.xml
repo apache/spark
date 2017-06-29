@@ -46,7 +46,7 @@ This file is divided into 3 sections:
 
   <check level="error" class="org.scalastyle.file.FileTabChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.file.HeaderMatchesChecker" enabled="true">
+  <check level="error" class="org.scalastyle.file.HeaderMatchesChecker" enabled="false">
     <parameters>
        <parameter name="header"><![CDATA[/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -245,7 +245,13 @@ This file is divided into 3 sections:
 
   <check level="error" class="org.scalastyle.scalariform.DisallowSpaceBeforeTokenChecker" enabled="true">
     <parameters>
-      <parameter name="tokens">COMMA</parameter>
+      <parameter name="tokens">COLON, COMMA, RPAREN</parameter>
+    </parameters>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.DisallowSpaceAfterTokenChecker" enabled="true">
+    <parameters>
+      <parameter name="tokens">LPAREN</parameter>
     </parameters>
   </check>
 

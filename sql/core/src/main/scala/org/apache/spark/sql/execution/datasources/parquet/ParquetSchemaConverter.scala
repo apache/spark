@@ -582,7 +582,7 @@ private[parquet] object ParquetSchemaConverter {
     }
   }
 
-  private def computeMinBytesForPrecision(precision : Int) : Int = {
+  private def computeMinBytesForPrecision(precision: Int): Int = {
     var numBytes = 1
     while (math.pow(2.0, 8 * numBytes - 1) < math.pow(10.0, precision)) {
       numBytes += 1

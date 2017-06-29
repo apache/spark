@@ -105,7 +105,7 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  * as the `partitions` parameter, in the case where the number of sampled records is less than
  * the value of `partitions`.
  */
-class RangePartitioner[K : Ordering : ClassTag, V](
+class RangePartitioner[K: Ordering: ClassTag, V](
     partitions: Int,
     rdd: RDD[_ <: Product2[K, V]],
     private var ascending: Boolean = true)
@@ -253,7 +253,7 @@ private[spark] object RangePartitioner {
    * @param sampleSizePerPartition max sample size per partition
    * @return (total number of items, an array of (partitionId, number of items, sample))
    */
-  def sketch[K : ClassTag](
+  def sketch[K: ClassTag](
       rdd: RDD[K],
       sampleSizePerPartition: Int): (Long, Array[(Int, Long, Array[K])]) = {
     val shift = rdd.id
@@ -276,7 +276,7 @@ private[spark] object RangePartitioner {
    * @param partitions number of partitions
    * @return selected bounds
    */
-  def determineBounds[K : Ordering : ClassTag](
+  def determineBounds[K: Ordering: ClassTag](
       candidates: ArrayBuffer[(K, Float)],
       partitions: Int): Array[K] = {
     val ordering = implicitly[Ordering[K]]

@@ -86,7 +86,7 @@ private[spark] abstract class LauncherBackend {
   /**
    * Callback for when the launcher handle disconnects from this backend.
    */
-  protected def onDisconnected() : Unit = { }
+  protected def onDisconnected(): Unit = { }
 
   private def fireStopRequest(): Unit = {
     val thread = LauncherBackend.threadFactory.newThread(new Runnable() {

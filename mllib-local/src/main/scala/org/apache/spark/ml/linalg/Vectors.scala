@@ -435,7 +435,7 @@ object Vectors {
  * A dense vector represented by a value array.
  */
 @Since("2.0.0")
-class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) extends Vector {
+class DenseVector @Since("2.0.0") (@Since("2.0.0") val values: Array[Double]) extends Vector {
 
   override def size: Int = values.length
 

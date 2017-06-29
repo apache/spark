@@ -268,7 +268,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
+  def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame = {
     sparkSession.createDataFrame(rdd)
   }
 
@@ -281,7 +281,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
+  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {
     sparkSession.createDataFrame(data)
   }
 
@@ -373,7 +373,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
+  def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
 
@@ -388,7 +388,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataset
    */
   @Experimental
-  def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
+  def createDataset[T: Encoder](data: RDD[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
 
@@ -411,7 +411,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    */
   @Experimental
   @InterfaceStability.Evolving
-  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
+  def createDataset[T: Encoder](data: java.util.List[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
 
@@ -803,7 +803,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
     if (paths.isEmpty) {
       emptyDataFrame
     } else {
-      read.parquet(paths : _*)
+      read.parquet(paths: _*)
     }
   }
 

@@ -57,7 +57,7 @@ object SparkALS {
     math.sqrt(sumSqs / (M.toDouble * U.toDouble))
   }
 
-  def update(i: Int, m: RealVector, us: Array[RealVector], R: RealMatrix) : RealVector = {
+  def update(i: Int, m: RealVector, us: Array[RealVector], R: RealMatrix): RealVector = {
     val U = us.length
     val F = us(0).getDimension
     var XtX: RealMatrix = new Array2DRowRealMatrix(F, F)

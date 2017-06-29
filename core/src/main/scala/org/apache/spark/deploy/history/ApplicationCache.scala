@@ -602,7 +602,7 @@ private[history] object ApplicationCacheCheckFilterRelay extends Logging {
    * @param cache new cache
    */
   def setApplicationCache(cache: ApplicationCache): Unit = {
-    applicationCache.foreach( c => logWarning(s"Overwriting application cache $c"))
+    applicationCache.foreach(c => logWarning(s"Overwriting application cache $c"))
     applicationCache = Some(cache)
   }
 
@@ -650,13 +650,13 @@ private[history] object ApplicationCacheCheckFilterRelay extends Logging {
   def registerFilter(
       ui: SparkUI,
       appId: String,
-      attemptId: Option[String] ): Unit = {
+      attemptId: Option[String]): Unit = {
     require(ui != null)
     val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.REQUEST)
     val holder = new FilterHolder()
     holder.setClassName(FILTER_NAME)
     holder.setInitParameter(APP_ID, appId)
-    attemptId.foreach( id => holder.setInitParameter(ATTEMPT_ID, id))
+    attemptId.foreach(id => holder.setInitParameter(ATTEMPT_ID, id))
     require(ui.getHandlers != null, "null handlers")
     ui.getHandlers.foreach { handler =>
       handler.addFilter(holder, "/*", enumDispatcher)

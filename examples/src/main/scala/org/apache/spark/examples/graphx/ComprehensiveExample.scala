@@ -47,7 +47,7 @@ object ComprehensiveExample {
     // $example on$
     // Load my user data and parse into tuples of user id and attribute list
     val users = (sc.textFile("data/graphx/users.txt")
-      .map(line => line.split(",")).map( parts => (parts.head.toLong, parts.tail) ))
+      .map(line => line.split(",")).map(parts => (parts.head.toLong, parts.tail)))
 
     // Parse the edge data which is already in userId -> userId format
     val followerGraph = GraphLoader.edgeListFile(sc, "data/graphx/followers.txt")

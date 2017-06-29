@@ -413,7 +413,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
+  def as[U: Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
 
   /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
@@ -438,7 +438,7 @@ class Dataset[T] private[sql](
     val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
       Column(oldAttribute).as(newName)
     }
-    select(newCols : _*)
+    select(newCols: _*)
   }
 
   /**
@@ -1083,7 +1083,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def sortWithinPartitions(sortCol: String, sortCols: String*): Dataset[T] = {
-    sortWithinPartitions((sortCol +: sortCols).map(Column(_)) : _*)
+    sortWithinPartitions((sortCol +: sortCols).map(Column(_)): _*)
   }
 
   /**
@@ -1113,7 +1113,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def sort(sortCol: String, sortCols: String*): Dataset[T] = {
-    sort((sortCol +: sortCols).map(apply) : _*)
+    sort((sortCol +: sortCols).map(apply): _*)
   }
 
   /**
@@ -1138,7 +1138,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def orderBy(sortCol: String, sortCols: String*): Dataset[T] = sort(sortCol, sortCols : _*)
+  def orderBy(sortCol: String, sortCols: String*): Dataset[T] = sort(sortCol, sortCols: _*)
 
   /**
    * Returns a new Dataset sorted by the given expressions.
@@ -1148,7 +1148,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def orderBy(sortExprs: Column*): Dataset[T] = sort(sortExprs : _*)
+  def orderBy(sortExprs: Column*): Dataset[T] = sort(sortExprs: _*)
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
@@ -1254,7 +1254,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) : _*)
+  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)): _*)
 
   /**
    * Selects a set of SQL expressions. This is a variant of `select` that accepts
@@ -1659,7 +1659,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
-    groupBy().agg(aggExpr, aggExprs : _*)
+    groupBy().agg(aggExpr, aggExprs: _*)
   }
 
   /**
@@ -1700,7 +1700,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
+  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs: _*)
 
   /**
    * Returns a new Dataset by taking the first `n` rows. The difference between this function
@@ -1859,7 +1859,7 @@ class Dataset[T] private[sql](
    */
   def randomSplitAsList(weights: Array[Double], seed: Long): java.util.List[Dataset[T]] = {
     val values = randomSplit(weights, seed)
-    java.util.Arrays.asList(values : _*)
+    java.util.Arrays.asList(values: _*)
   }
 
   /**
@@ -1911,7 +1911,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
-  def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
+  def explode[A <: Product: TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     val elementSchema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
     val convert = CatalystTypeConverters.createToCatalystConverter(elementSchema)
@@ -1948,7 +1948,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
-  def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => TraversableOnce[B])
+  def explode[A, B: TypeTag](inputColumn: String, outputColumn: String)(f: A => TraversableOnce[B])
     : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
@@ -1986,7 +1986,7 @@ class Dataset[T] private[sql](
           Column(field)
         }
       }
-      select(columns : _*)
+      select(columns: _*)
     } else {
       select(Column("*"), col.as(colName))
     }
@@ -2018,7 +2018,7 @@ class Dataset[T] private[sql](
           Column(col)
         }
       }
-      select(columns : _*)
+      select(columns: _*)
     } else {
       toDF()
     }
@@ -2035,7 +2035,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def drop(colName: String): DataFrame = {
-    drop(Seq(colName) : _*)
+    drop(Seq(colName): _*)
   }
 
   /**
@@ -2082,7 +2082,7 @@ class Dataset[T] private[sql](
     val colsAfterDrop = attrs.filter { attr =>
       attr != expression
     }.map(attr => Column(attr))
-    select(colsAfterDrop : _*)
+    select(colsAfterDrop: _*)
   }
 
   /**
@@ -2302,7 +2302,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def map[U : Encoder](func: T => U): Dataset[U] = withTypedPlan {
+  def map[U: Encoder](func: T => U): Dataset[U] = withTypedPlan {
     MapElements[T, U](func, logicalPlan)
   }
 
@@ -2331,7 +2331,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
+  def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     new Dataset[U](
       sparkSession,
       MapPartitions[T, U](func, logicalPlan),
@@ -2379,7 +2379,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def flatMap[U : Encoder](func: T => TraversableOnce[U]): Dataset[U] =
+  def flatMap[U: Encoder](func: T => TraversableOnce[U]): Dataset[U] =
     mapPartitions(_.flatMap(func))
 
   /**
@@ -2457,7 +2457,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def takeAsList(n: Int): java.util.List[T] = java.util.Arrays.asList(take(n) : _*)
+  def takeAsList(n: Int): java.util.List[T] = java.util.Arrays.asList(take(n): _*)
 
   /**
    * Returns an array that contains all rows in this Dataset.
@@ -2483,7 +2483,7 @@ class Dataset[T] private[sql](
    */
   def collectAsList(): java.util.List[T] = withAction("collectAsList", queryExecution) { plan =>
     val values = collectFromPlan(plan)
-    java.util.Arrays.asList(values : _*)
+    java.util.Arrays.asList(values: _*)
   }
 
   /**
@@ -2954,12 +2954,12 @@ class Dataset[T] private[sql](
   }
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */
-  @inline private def withTypedPlan[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
+  @inline private def withTypedPlan[U: Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
     Dataset(sparkSession, logicalPlan)
   }
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */
-  @inline private def withSetOperator[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
+  @inline private def withSetOperator[U: Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
     if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
       // Set operators widen types (change the schema), so we cannot reuse the row encoder.
       Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]

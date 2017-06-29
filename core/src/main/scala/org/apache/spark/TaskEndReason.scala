@@ -192,7 +192,7 @@ private[spark] class ThrowableSerializationWrapper(var exception: Throwable) ext
     try {
       exception = in.readObject().asInstanceOf[Throwable]
     } catch {
-      case e : Exception => log.warn("Task exception could not be deserialized", e)
+      case e: Exception => log.warn("Task exception could not be deserialized", e)
     }
   }
 }

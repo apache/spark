@@ -447,11 +447,11 @@ trait MesosSchedulerUtils extends Logging {
    * @return the ono-zero values of the ports
    */
   def nonZeroPortValuesFromConfig(conf: SparkConf): List[Long] = {
-    managedPortNames.map(conf.getLong(_, 0)).filter( _ != 0)
+    managedPortNames.map(conf.getLong(_, 0)).filter(_ != 0)
   }
 
   /** Creates a mesos resource for a specific port number. */
-  private def createResourcesFromPorts(portsAndRoles: List[(Long, String)]) : List[Resource] = {
+  private def createResourcesFromPorts(portsAndRoles: List[(Long, String)]): List[Resource] = {
     portsAndRoles.flatMap{ case (port, role) =>
       createMesosPortResource(List((port, port)), Some(role))}
   }

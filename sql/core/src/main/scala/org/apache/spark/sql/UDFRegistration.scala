@@ -90,7 +90,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 2.2.0
    */
   def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
-    def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
+    def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply): _*).expr
     functionRegistry.createOrReplaceTempFunction(name, builder)
     udf
   }

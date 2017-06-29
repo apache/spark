@@ -77,7 +77,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
         blockSortDesc)
       _blockTable.table(page)
     } catch {
-      case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
+      case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
         <div class="alert alert-error">{e.getMessage}</div>
     }
 

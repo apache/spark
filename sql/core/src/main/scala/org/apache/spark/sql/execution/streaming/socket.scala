@@ -65,7 +65,7 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
   @GuardedBy("this")
-  protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
+  protected var lastOffsetCommitted: LongOffset = new LongOffset(-1)
 
   initialize()
 

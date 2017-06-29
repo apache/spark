@@ -580,7 +580,7 @@ object DateTimeUtils {
    * The second year of a 400 year period (year 1) starts on day 365.
    */
   private[this] def yearBoundary(year: Int): Int = {
-    year * 365 + ((year / 4 ) - (year / 100) + (year / 400))
+    year * 365 + ((year / 4) - (year / 100) + (year / 400))
   }
 
   /**

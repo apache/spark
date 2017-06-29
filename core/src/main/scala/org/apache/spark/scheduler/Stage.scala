@@ -89,7 +89,7 @@ private[scheduler] abstract class Stage(
    */
   val fetchFailedAttemptIds = new HashSet[Int]
 
-  private[scheduler] def clearFailures() : Unit = {
+  private[scheduler] def clearFailures(): Unit = {
     fetchFailedAttemptIds.clear()
   }
 

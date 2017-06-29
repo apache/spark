@@ -381,7 +381,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def remainder(that: Decimal): Decimal = this % that
 
-  def unary_- : Decimal = {
+  def unary_-: Decimal = {
     if (decimalVal.ne(null)) {
       Decimal(-decimalVal, precision, scale)
     } else {

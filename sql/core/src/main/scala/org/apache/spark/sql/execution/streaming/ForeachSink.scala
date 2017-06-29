@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
  * @param writer The [[ForeachWriter]] to process all data.
  * @tparam T The expected type of the sink.
  */
-class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Serializable {
+class ForeachSink[T: Encoder](writer: ForeachWriter[T]) extends Sink with Serializable {
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     // This logic should've been as simple as:

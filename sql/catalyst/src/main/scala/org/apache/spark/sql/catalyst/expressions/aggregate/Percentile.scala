@@ -58,7 +58,7 @@ import org.apache.spark.SparkException
 case class Percentile(
     child: Expression,
     percentageExpression: Expression,
-    frequencyExpression : Expression,
+    frequencyExpression: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] with ImplicitCastInputTypes {
