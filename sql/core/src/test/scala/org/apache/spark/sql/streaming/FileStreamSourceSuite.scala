@@ -1232,7 +1232,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       f2.setLastModified(f1.lastModified + 3600 * 1000 /* 1 hour later */)
 
       runTwoBatchesAndVerifyResults(src, latestFirst = true, firstBatch = "2", secondBatch = "1",
+        // scalastyle:off
         maxFileAge = Some("1m") /* 1 minute */)
+        // scalastyle:on
     }
   }
 

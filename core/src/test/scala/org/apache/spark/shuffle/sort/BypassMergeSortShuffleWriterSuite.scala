@@ -140,7 +140,9 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       conf
     )
     writer.write(Iterator.empty)
+    // scalastyle:off
     writer.stop(/* success = */ true)
+    // scalastyle:on
     assert(writer.getPartitionLengths.sum === 0)
     assert(outputFile.exists())
     assert(outputFile.length() === 0)
@@ -164,7 +166,9 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       conf
     )
     writer.write(records)
+    // scalastyle:off
     writer.stop(/* success = */ true)
+    // scalastyle:on
     assert(temporaryFilesCreated.nonEmpty)
     assert(writer.getPartitionLengths.sum === outputFile.length())
     assert(writer.getPartitionLengths.count(_ == 0L) === 4) // should be 4 zero length files
@@ -206,8 +210,9 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     assert(temporaryFilesCreated.nonEmpty)
     // Only 3 temp shuffle files will be created
     assert(temporaryFilesCreated.count(_.exists()) === 3)
-
+    // scalastyle:off
     writer.stop(/* success = */ false)
+    // scalastyle:on
     assert(temporaryFilesCreated.count(_.exists()) === 0) // check that temporary files were deleted
   }
 
@@ -229,7 +234,9 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       }))
     }
     assert(temporaryFilesCreated.nonEmpty)
+    // scalastyle:off
     writer.stop(/* success = */ false)
+    // scalastyle:on
     assert(temporaryFilesCreated.count(_.exists()) === 0)
   }
 
