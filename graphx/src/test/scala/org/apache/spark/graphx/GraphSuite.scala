@@ -59,9 +59,9 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       val edges: RDD[Edge[Int]] = sc.parallelize(rawEdges).map { case (s, t) => Edge(s, t, 1) }
       val vertices: RDD[(VertexId, Boolean)] = sc.parallelize((0L until 10L).map(id => (id, true)))
       val graph = Graph(vertices, edges, false)
-      assert( graph.edges.count() === rawEdges.size )
+      assert(graph.edges.count() === rawEdges.size )
       // Vertices not explicitly provided but referenced by edges should be created automatically
-      assert( graph.vertices.count() === 100)
+      assert(graph.vertices.count() === 100)
       graph.triplets.collect().foreach { et =>
         assert((et.srcId < 10 && et.srcAttr) || (et.srcId >= 10 && !et.srcAttr))
         assert((et.dstId < 10 && et.dstAttr) || (et.dstId >= 10 && !et.dstAttr))

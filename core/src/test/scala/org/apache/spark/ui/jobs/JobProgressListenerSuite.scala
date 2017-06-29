@@ -84,7 +84,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   }
 
   test("test LRU eviction of stages") {
-    def runWithListener(listener: JobProgressListener) : Unit = {
+    def runWithListener(listener: JobProgressListener): Unit = {
       for (i <- 1 to 50) {
         listener.onStageSubmitted(createStageStartEvent(i))
         listener.onStageCompleted(createStageEndEvent(i))

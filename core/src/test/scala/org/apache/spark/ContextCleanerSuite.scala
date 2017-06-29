@@ -523,14 +523,14 @@ class CleanerTester(
     toBeCheckpointIds.synchronized { toBeCheckpointIds.isEmpty }
 
   private def getRDDBlocks(rddId: Int): Seq[BlockId] = {
-    blockManager.master.getMatchingBlockIds( _ match {
+    blockManager.master.getMatchingBlockIds(_ match {
       case RDDBlockId(`rddId`, _) => true
       case _ => false
     }, askSlaves = true)
   }
 
   private def getShuffleBlocks(shuffleId: Int): Seq[BlockId] = {
-    blockManager.master.getMatchingBlockIds( _ match {
+    blockManager.master.getMatchingBlockIds(_ match {
       case ShuffleBlockId(`shuffleId`, _, _) => true
       case ShuffleIndexBlockId(`shuffleId`, _, _) => true
       case _ => false
@@ -538,7 +538,7 @@ class CleanerTester(
   }
 
   private def getBroadcastBlocks(broadcastId: Long): Seq[BlockId] = {
-    blockManager.master.getMatchingBlockIds( _ match {
+    blockManager.master.getMatchingBlockIds(_ match {
       case BroadcastBlockId(`broadcastId`, _) => true
       case _ => false
     }, askSlaves = true)

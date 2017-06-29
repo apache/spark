@@ -190,10 +190,10 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val data = Array(
       Vectors.dense(-5.1971), Vectors.dense(-2.5359), Vectors.dense(-3.8220),
-      Vectors.dense(-5.2211), Vectors.dense(-5.0602), Vectors.dense( 4.7118),
-      Vectors.dense( 6.8989), Vectors.dense( 3.4592), Vectors.dense( 4.6322),
-      Vectors.dense( 5.7048), Vectors.dense( 4.6567), Vectors.dense( 5.5026),
-      Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
+      Vectors.dense(-5.2211), Vectors.dense(-5.0602), Vectors.dense(4.7118),
+      Vectors.dense(6.8989), Vectors.dense(3.4592), Vectors.dense(4.6322),
+      Vectors.dense(5.7048), Vectors.dense(4.6567), Vectors.dense(5.5026),
+      Vectors.dense(4.5605), Vectors.dense(5.2043), Vectors.dense(6.2734)
     )
 
     val data2: Array[Vector] = Array.tabulate(25) { i: Int =>

@@ -1466,7 +1466,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     import org.apache.spark.unsafe.types.CalendarInterval
 
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
+    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123)))
     withTempPath(f => {
       // Currently we don't yet support saving out values of interval data type.
       val e = intercept[AnalysisException] {
@@ -2549,7 +2549,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withTable("_tbl") {
       sql("CREATE TABLE `_tbl`(i INT) USING parquet")
       sql("INSERT INTO `_tbl` VALUES (1), (2), (3)")
-      checkAnswer( sql("SELECT * FROM `_tbl`"), Row(1) :: Row(2) :: Row(3) :: Nil)
+      checkAnswer(sql("SELECT * FROM `_tbl`"), Row(1) :: Row(2) :: Row(3) :: Nil)
     }
   }
 

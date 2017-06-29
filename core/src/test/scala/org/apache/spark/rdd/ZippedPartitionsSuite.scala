@@ -20,7 +20,7 @@ package org.apache.spark.rdd
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 
 object ZippedPartitionsSuite {
-  def procZippedData(i: Iterator[Int], s: Iterator[String], d: Iterator[Double]) : Iterator[Int] = {
+  def procZippedData(i: Iterator[Int], s: Iterator[String], d: Iterator[Double]): Iterator[Int] = {
     Iterator(i.toArray.size, s.toArray.size, d.toArray.size)
   }
 }

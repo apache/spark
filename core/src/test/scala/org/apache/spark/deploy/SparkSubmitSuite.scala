@@ -64,7 +64,7 @@ trait TestPrematureExit {
   private[spark] def testPrematureExit(
       input: Array[String],
       searchString: String,
-      mainObject: CommandLineUtils = SparkSubmit) : Unit = {
+      mainObject: CommandLineUtils = SparkSubmit): Unit = {
     val printStream = new BufferPrintStream()
     mainObject.printStream = printStream
 

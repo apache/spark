@@ -68,7 +68,7 @@ class ConstantFoldingSuite extends PlanTest {
         .where(
           Literal(1) === Literal(1) &&
           Literal(2) > Literal(3) ||
-          Literal(3) > Literal(2) )
+          Literal(3) > Literal(2))
         .groupBy(
           Literal(2) * Literal(3) - Literal(6) / (Literal(4) - Literal(2))
         )(Literal(9) / Literal(3) as Symbol("9/3"))

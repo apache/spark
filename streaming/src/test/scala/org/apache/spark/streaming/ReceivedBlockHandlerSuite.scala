@@ -100,7 +100,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   }
 
   after {
-    for ( blockManager <- blockManagerBuffer ) {
+    for (blockManager <- blockManagerBuffer) {
       if (blockManager != null) {
         blockManager.stop()
       }

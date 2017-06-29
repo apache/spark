@@ -213,7 +213,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.select(
         expr("_1").as[String],
-        expr("_2").as[Int]) : Dataset[(String, Int)],
+        expr("_2").as[Int]): Dataset[(String, Int)],
       ("a", 1), ("b", 2), ("c", 3))
   }
 
@@ -577,7 +577,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14696: implicit encoders for boxed types") {
-    assert(spark.range(1).map { i => i : java.lang.Long }.head == 0L)
+    assert(spark.range(1).map { i => i: java.lang.Long }.head == 0L)
   }
 
   test("SPARK-11894: Incorrect results are returned when using null") {
@@ -727,9 +727,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
-    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")}: _*)
     // Make sure the generated code for this plan can compile and execute.
-    checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
+    checkDataset(wideDF.map(_.getLong(0)), 0L until 10: _*)
   }
 
   test("SPARK-14838: estimating sizeInBytes in operators with ObjectProducer shouldn't fail") {
@@ -1144,7 +1144,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test ("SPARK-17460: the sizeInBytes in Statistics shouldn't overflow to a negative number") {
     // Since the sizeInBytes in Statistics could exceed the limit of an Int, we should use BigInt
     // instead of Int for avoiding possible overflow.
-    val ds = (0 to 10000).map( i =>
+    val ds = (0 to 10000).map(i =>
       (i, Seq((i, Seq((i, "This is really not that long of a string")))))).toDS()
     val sizeInBytes = ds.logicalPlan.stats.sizeInBytes
     // sizeInBytes is 2404280404, before the fix, it overflows to a negative number

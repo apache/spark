@@ -691,7 +691,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       "partitioned_parquet_with_key_and_complextypes",
       "normal_parquet")
 
-    sql( s"""
+    sql(s"""
       CREATE TEMPORARY VIEW partitioned_parquet
       USING org.apache.spark.sql.parquet
       OPTIONS (
@@ -699,7 +699,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       )
     """)
 
-    sql( s"""
+    sql(s"""
       CREATE TEMPORARY VIEW partitioned_parquet_with_key
       USING org.apache.spark.sql.parquet
       OPTIONS (
@@ -707,7 +707,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       )
     """)
 
-    sql( s"""
+    sql(s"""
       CREATE TEMPORARY VIEW normal_parquet
       USING org.apache.spark.sql.parquet
       OPTIONS (
@@ -715,7 +715,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       )
     """)
 
-    sql( s"""
+    sql(s"""
       CREATE TEMPORARY VIEW partitioned_parquet_with_key_and_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
@@ -723,7 +723,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       )
     """)
 
-    sql( s"""
+    sql(s"""
       CREATE TEMPORARY VIEW partitioned_parquet_with_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (

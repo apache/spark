@@ -126,7 +126,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def assertBroadcastJoin(df : Dataset[Row]) : Unit = {
+  private def assertBroadcastJoin(df: Dataset[Row]): Unit = {
     val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
     val joined = df1.join(df, Seq("key"), "inner")
 

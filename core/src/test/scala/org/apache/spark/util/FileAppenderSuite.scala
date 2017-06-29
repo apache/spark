@@ -65,7 +65,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val rolloverIntervalMillis = 100
     val durationMillis = 1000
     val numRollovers = durationMillis / rolloverIntervalMillis
-    val textToAppend = (1 to numRollovers).map( _.toString * 10 )
+    val textToAppend = (1 to numRollovers).map(_.toString * 10 )
 
     val appender = new RollingFileAppender(testInputStream, testFile,
       new TimeBasedRollingPolicy(rolloverIntervalMillis, s"--HH-mm-ss-SSSS", false),
@@ -81,7 +81,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val rolloverIntervalMillis = 100
     val durationMillis = 1000
     val numRollovers = durationMillis / rolloverIntervalMillis
-    val textToAppend = (1 to numRollovers).map( _.toString * 10 )
+    val textToAppend = (1 to numRollovers).map(_.toString * 10 )
 
     val sparkConf = new SparkConf()
     sparkConf.set("spark.executor.logs.rolling.enableCompression", "true")
@@ -98,7 +98,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val testOutputStream = new PipedOutputStream()
     val testInputStream = new PipedInputStream(testOutputStream, 100 * 1000)
     val rolloverSize = 1000
-    val textToAppend = (1 to 3).map( _.toString * 1000 )
+    val textToAppend = (1 to 3).map(_.toString * 1000 )
 
     val appender = new RollingFileAppender(testInputStream, testFile,
       new SizeBasedRollingPolicy(rolloverSize, false), new SparkConf(), 99)
@@ -115,7 +115,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val testOutputStream = new PipedOutputStream()
     val testInputStream = new PipedInputStream(testOutputStream, 100 * 1000)
     val rolloverSize = 1000
-    val textToAppend = (1 to 3).map( _.toString * 1000 )
+    val textToAppend = (1 to 3).map(_.toString * 1000 )
 
     val sparkConf = new SparkConf()
     sparkConf.set("spark.executor.logs.rolling.enableCompression", "true")

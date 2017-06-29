@@ -205,7 +205,7 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
       "for batch queries on Kafka")
 
     // Now do it with an explicit json start offset indicating latest
-    val startPartitionOffsets = Map( new TopicPartition("t", 0) -> -1L)
+    val startPartitionOffsets = Map(new TopicPartition("t", 0) -> -1L)
     val startingOffsets = JsonUtils.partitionOffsets(startPartitionOffsets)
     testBadOptions("subscribe" -> "t", "startingOffsets" -> startingOffsets)(
       "startingOffsets for t-0 can't be latest for batch queries on Kafka")

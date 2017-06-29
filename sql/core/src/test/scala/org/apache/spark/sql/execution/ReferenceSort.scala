@@ -40,7 +40,7 @@ case class ReferenceSort(
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
-    child.execute().mapPartitions( { iterator =>
+    child.execute().mapPartitions({ iterator =>
       val ordering = newOrdering(sortOrder, child.output)
       val sorter = new ExternalSorter[InternalRow, Null, InternalRow](
         TaskContext.get(), ordering = Some(ordering))

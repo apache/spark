@@ -75,13 +75,13 @@ class PercentileSuite extends SparkFunSuite {
 
     // Run test with Flatten data
     val flattenRows = (1 to countForFrequencyTest).flatMap(current =>
-      (1 to current).map(y => current )).map(Seq(_))
+      (1 to current).map(y => current)).map(Seq(_))
     runTest(agg, flattenRows, expectedPercentilesWithFrquency)
   }
 
   private def runTest(agg: Percentile,
-        rows : Seq[Seq[Any]],
-        expectedPercentiles : Seq[Double]) {
+        rows: Seq[Seq[Any]],
+        expectedPercentiles: Seq[Double]) {
     assert(agg.nullable)
     val group1 = (0 until rows.length / 2)
     val group1Buffer = agg.createAggregationBuffer()

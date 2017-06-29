@@ -245,7 +245,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.handleAllocatedContainers(Array(container1, container2))
 
     handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map.empty, Set.empty)
-    handler.executorIdToContainer.keys.foreach { id => handler.killExecutor(id ) }
+    handler.executorIdToContainer.keys.foreach { id => handler.killExecutor(id) }
 
     val statuses = Seq(container1, container2).map { c =>
       ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Finished", 0)

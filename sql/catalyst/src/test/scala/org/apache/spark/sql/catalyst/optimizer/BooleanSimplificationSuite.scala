@@ -103,13 +103,13 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
   }
 
   test("e && (!e || f)") {
-    checkCondition('e && (!'e || 'f ), 'e && 'f)
+    checkCondition('e && (!'e || 'f), 'e && 'f)
 
-    checkCondition('e && ('f || !'e ), 'e && 'f)
+    checkCondition('e && ('f || !'e), 'e && 'f)
 
-    checkCondition((!'e || 'f ) && 'e, 'f && 'e)
+    checkCondition((!'e || 'f) && 'e, 'f && 'e)
 
-    checkCondition(('f || !'e ) && 'e, 'f && 'e)
+    checkCondition(('f || !'e) && 'e, 'f && 'e)
   }
 
   test("a < 1 && (!(a < 1) || f)") {
@@ -127,10 +127,10 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
   }
 
   test("a < 1 && ((a >= 1) || f)") {
-    checkCondition('a < 1 && ('a >= 1 || 'f ), ('a < 1) && 'f)
+    checkCondition('a < 1 && ('a >= 1 || 'f), ('a < 1) && 'f)
     checkCondition('a < 1 && ('f || 'a >= 1), ('a < 1) && 'f)
 
-    checkCondition('a <= 1 && ('a > 1 || 'f ), ('a <= 1) && 'f)
+    checkCondition('a <= 1 && ('a > 1 || 'f), ('a <= 1) && 'f)
     checkCondition('a <= 1 && ('f || 'a > 1), ('a <= 1) && 'f)
 
     checkCondition('a > 1 && (('a <= 1) || 'f), ('a > 1) && 'f)

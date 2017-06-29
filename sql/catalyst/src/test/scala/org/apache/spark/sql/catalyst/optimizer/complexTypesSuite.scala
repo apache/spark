@@ -55,7 +55,7 @@ class ComplexTypesSuite extends PlanTest{
     val query = relation
       .select(
         GetStructField(
-          CreateNamedStruct(Seq("att", 'id )),
+          CreateNamedStruct(Seq("att", 'id)),
           0,
           None) as "outerAtt").analyze
     val expected = relation.select('id as "outerAtt").analyze
@@ -301,7 +301,7 @@ class ComplexTypesSuite extends PlanTest{
             Literal(2L), 'id,
             ('id + 3L), ('id + 4L),
             ('id + 4L), ('id + 5L))),
-          2L ) as "a")
+          2L) as "a")
       .analyze
 
     val expected = relation

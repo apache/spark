@@ -47,7 +47,7 @@ object GridPageRank {
       pr = new Array[Double](nRows * nCols)
       for (ind <- 0 until (nRows * nCols)) {
         pr(ind) = resetProb + (1.0 - resetProb) *
-          inNbrs(ind).map( nbr => oldPr(nbr) / outDegree(nbr)).sum
+          inNbrs(ind).map(nbr => oldPr(nbr) / outDegree(nbr)).sum
       }
     }
     val prSum = pr.sum

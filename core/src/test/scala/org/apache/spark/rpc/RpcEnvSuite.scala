@@ -745,18 +745,18 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     // Construct RpcTimeout with a single property
     val rt1 = RpcTimeout(conf, testProp)
-    assert( testDurationSeconds === rt1.duration.toSeconds )
+    assert(testDurationSeconds === rt1.duration.toSeconds )
 
     // Construct RpcTimeout with prioritized list of properties
     val rt2 = RpcTimeout(conf, Seq("spark.ask.invalid.timeout", testProp, secondaryProp), "1s")
-    assert( testDurationSeconds === rt2.duration.toSeconds )
+    assert(testDurationSeconds === rt2.duration.toSeconds )
 
     // Construct RpcTimeout with default value,
     val defaultProp = "spark.ask.default.timeout"
     val defaultDurationSeconds = 1
     val rt3 = RpcTimeout(conf, Seq(defaultProp), defaultDurationSeconds.toString + "s")
-    assert( defaultDurationSeconds === rt3.duration.toSeconds )
-    assert( rt3.timeoutProp.contains(defaultProp) )
+    assert(defaultDurationSeconds === rt3.duration.toSeconds )
+    assert(rt3.timeoutProp.contains(defaultProp) )
 
     // Try to construct RpcTimeout with an unconfigured property
     intercept[NoSuchElementException] {

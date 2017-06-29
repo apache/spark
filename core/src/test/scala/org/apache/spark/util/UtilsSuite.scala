@@ -384,7 +384,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("deserialize long value") {
-    val testval : Long = 9730889947L
+    val testval: Long = 9730889947L
     val bbuf = ByteBuffer.allocate(8)
     assert(bbuf.hasArray)
     bbuf.order(ByteOrder.BIG_ENDIAN)

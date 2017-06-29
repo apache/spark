@@ -760,7 +760,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   // when we abort the stage. This message will also be consumed by the EventLoggingListener
   // so this will propagate up to the user.
   var ended = false
-  var jobResult : JobResult = null
+  var jobResult: JobResult = null
 
   class EndListener extends SparkListener {
     override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {

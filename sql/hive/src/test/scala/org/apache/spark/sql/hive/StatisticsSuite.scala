@@ -612,7 +612,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val tableName = "column_stats_test2"
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    val df = data.toDF(stats.keys.toSeq:+ "carray": _*)
 
     withTable(tableName) {
       df.write.saveAsTable(tableName)

@@ -104,7 +104,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("column stats round trip serialization") {
     // Make sure we serialize and then deserialize and we will get the result data
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    val df = data.toDF(stats.keys.toSeq:+ "carray": _*)
     stats.zip(df.schema).foreach { case ((k, v), field) =>
       withClue(s"column $k with type ${field.dataType}") {
         val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap(k, field.dataType))
@@ -116,7 +116,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyze column command - result verification") {
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    val df = data.toDF(stats.keys.toSeq:+ "carray": _*)
     checkColStats(df, stats)
   }
 
@@ -147,7 +147,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       BigInt(4444444444L) -> ("4.1 GB", "4.44E+9"),
       BigInt(5555555555555L) -> ("5.1 TB", "5.56E+12"),
       BigInt(6666666666666666L) -> ("5.9 PB", "6.67E+15"),
-      BigInt(1L << 10 ) * (1L << 60) -> ("1024.0 EB", "1.18E+21"),
+      BigInt(1L << 10) * (1L << 60) -> ("1024.0 EB", "1.18E+21"),
       BigInt(1L << 11) * (1L << 60) -> ("2.36E+21 B", "2.36E+21")
     )
     numbers.foreach { case (input, (expectedSize, expectedRows)) =>

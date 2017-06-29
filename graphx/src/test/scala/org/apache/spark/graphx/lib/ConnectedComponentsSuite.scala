@@ -53,7 +53,7 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
       val twoChains = Graph.fromEdgeTuples(rawEdges, 1.0)
       val ccGraph = twoChains.connectedComponents()
       val vertices = ccGraph.vertices.collect()
-      for ( (id, cc) <- vertices ) {
+      for ((id, cc) <- vertices) {
         if (id < 10) {
           assert(cc === 0)
         } else {
@@ -79,7 +79,7 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
       val twoChains = Graph.fromEdgeTuples(rawEdges, true).reverse
       val ccGraph = twoChains.connectedComponents()
       val vertices = ccGraph.vertices.collect()
-      for ( (id, cc) <- vertices ) {
+      for ((id, cc) <- vertices) {
         if (id < 10) {
           assert(cc === 0)
         } else {
@@ -87,7 +87,7 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
         }
       }
       val ccMap = vertices.toMap
-      for ( id <- 0 until 20 ) {
+      for (id <- 0 until 20) {
         if (id < 10) {
           assert(ccMap(id) === 0)
         } else {
@@ -121,7 +121,7 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
       val graph = Graph(users, relationships, defaultUser)
       val ccGraph = graph.connectedComponents()
       val vertices = ccGraph.vertices.collect()
-      for ( (id, cc) <- vertices ) {
+      for ((id, cc) <- vertices) {
         assert(cc === 0)
       }
     }

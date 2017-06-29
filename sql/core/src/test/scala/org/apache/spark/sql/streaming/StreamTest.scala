@@ -120,7 +120,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts with Befo
    * This operation automatically blocks until all added data has been processed.
    */
   object CheckAnswer {
-    def apply[A : Encoder](data: A*): CheckAnswerRows = {
+    def apply[A: Encoder](data: A*): CheckAnswerRows = {
       val encoder = encoderFor[A]
       val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
       CheckAnswerRows(
@@ -137,7 +137,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts with Befo
    * This operation automatically blocks until all added data has been processed.
    */
   object CheckLastBatch {
-    def apply[A : Encoder](data: A*): CheckAnswerRows = {
+    def apply[A: Encoder](data: A*): CheckAnswerRows = {
       apply(isSorted = false, data: _*)
     }
 
@@ -179,7 +179,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts with Befo
    *                     UncaughtExceptionHandler.
    * @param assertFailure a function to verify the error.
    */
-  case class ExpectFailure[T <: Throwable : ClassTag](
+  case class ExpectFailure[T <: Throwable: ClassTag](
       assertFailure: Throwable => Unit = _ => {},
       isFatalError: Boolean = false) extends StreamAction {
     val causeClass: Class[T] = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
@@ -195,8 +195,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts with Befo
 
   object Assert {
     def apply(condition: => Boolean, message: String = ""): Assert = new Assert(condition, message)
-    def apply(message: String)(body: => Unit): Assert = new Assert( { body; true }, message)
-    def apply(body: => Unit): Assert = new Assert( { body; true }, "")
+    def apply(message: String)(body: => Unit): Assert = new Assert({ body; true }, message)
+    def apply(body: => Unit): Assert = new Assert({ body; true }, "")
   }
 
   /** Assert that a condition on the active query is true */

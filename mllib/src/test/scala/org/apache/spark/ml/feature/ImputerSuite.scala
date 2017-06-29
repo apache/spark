@@ -25,7 +25,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("Imputer for Double with default missing Value NaN") {
-    val df = spark.createDataFrame( Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 1.0, 4.0, 1.0, 1.0, 4.0, 4.0),
       (1, 11.0, 12.0, 11.0, 11.0, 12.0, 12.0),
       (2, 3.0, Double.NaN, 3.0, 3.0, 10.0, 12.0),
@@ -39,7 +39,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
   }
 
   test("Imputer should handle NaNs when computing surrogate value, if missingValue is not NaN") {
-    val df = spark.createDataFrame( Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 1.0, 1.0, 1.0),
       (1, 3.0, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN),
@@ -51,7 +51,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
   }
 
   test("Imputer for Float with missing Value -1.0") {
-    val df = spark.createDataFrame( Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 1.0F, 1.0F, 1.0F),
       (1, 3.0F, 3.0F, 3.0F),
       (2, 10.0F, 10.0F, 10.0F),
@@ -64,7 +64,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
   }
 
   test("Imputer should impute null as well as 'missingValue'") {
-    val rawDf = spark.createDataFrame( Seq(
+    val rawDf = spark.createDataFrame(Seq(
       (0, 4.0, 4.0, 4.0),
       (1, 10.0, 10.0, 10.0),
       (2, 10.0, 10.0, 10.0),
@@ -77,7 +77,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
   }
 
   test("Imputer throws exception when surrogate cannot be computed") {
-    val df = spark.createDataFrame( Seq(
+    val df = spark.createDataFrame(Seq(
       (0, Double.NaN, 1.0, 1.0),
       (1, Double.NaN, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN)
@@ -95,7 +95,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
   }
 
   test("Imputer input & output column validation") {
-    val df = spark.createDataFrame( Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 1.0, 1.0, 1.0),
       (1, Double.NaN, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN)

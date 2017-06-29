@@ -77,7 +77,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
       logDebug(s"getAppUI($appId, $attemptId)")
       getAppUICount += 1
-      instances.get(CacheKey(appId, attemptId)).map( e =>
+      instances.get(CacheKey(appId, attemptId)).map(e =>
         LoadedAppUI(e.ui, updateProbe(appId, attemptId, e.probeTime)))
     }
 
@@ -393,7 +393,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val ids = new ListBuffer[String]()
     // build a list of applications
     val count = 100
-    for (i <- 1 to count ) {
+    for (i <- 1 to count) {
       val appId = f"app-$i%04d"
       ids += appId
       clock.advance(10)

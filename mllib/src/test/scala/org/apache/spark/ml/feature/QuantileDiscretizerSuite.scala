@@ -45,7 +45,7 @@ class QuantileDiscretizerSuite
 
     val relativeError = discretizer.getRelativeError
     val isGoodBucket = udf {
-      (size: Int) => math.abs( size - (datasetSize / numBuckets)) <= (relativeError * datasetSize)
+      (size: Int) => math.abs(size - (datasetSize / numBuckets)) <= (relativeError * datasetSize)
     }
     val numGoodBuckets = result.groupBy("result").count.filter(isGoodBucket($"count")).count
     assert(numGoodBuckets === numBuckets,

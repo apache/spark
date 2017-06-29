@@ -35,7 +35,7 @@ class EliminateSerializationSuite extends PlanTest {
         EliminateSerialization) :: Nil
   }
 
-  implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
+  implicit private def productEncoder[T <: Product: TypeTag] = ExpressionEncoder[T]()
   implicit private def intEncoder = ExpressionEncoder[Int]()
 
   test("back to back serialization") {

@@ -64,9 +64,9 @@ class BasicOperationsSuite extends TestSuiteBase {
     assert(numInputPartitions === 2, "Number of input partitions has been changed from 2")
     val input = Seq(1 to 4, 5 to 8, 9 to 12)
     val output = Seq(
-      Seq( Seq(1, 2), Seq(3, 4) ),
-      Seq( Seq(5, 6), Seq(7, 8) ),
-      Seq( Seq(9, 10), Seq(11, 12) )
+      Seq(Seq(1, 2), Seq(3, 4)),
+      Seq(Seq(5, 6), Seq(7, 8)),
+      Seq(Seq(9, 10), Seq(11, 12))
     )
     val operation = (r: DStream[Int]) => r.glom().map(_.toSeq)
     testOperation(input, operation, output)
@@ -124,18 +124,18 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   test("groupByKey") {
     testOperation(
-      Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
+      Seq(Seq("a", "a", "b"), Seq("", ""), Seq()),
       (s: DStream[String]) => s.map(x => (x, 1)).groupByKey().mapValues(_.toSeq),
-      Seq( Seq(("a", Seq(1, 1)), ("b", Seq(1))), Seq(("", Seq(1, 1))), Seq() ),
+      Seq(Seq(("a", Seq(1, 1)), ("b", Seq(1))), Seq(("", Seq(1, 1))), Seq()),
       true
     )
   }
 
   test("reduceByKey") {
     testOperation(
-      Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
+      Seq(Seq("a", "a", "b"), Seq("", ""), Seq()),
       (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _),
-      Seq( Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq() ),
+      Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
       true
     )
   }
@@ -167,20 +167,20 @@ class BasicOperationsSuite extends TestSuiteBase {
 
   test("mapValues") {
     testOperation(
-      Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
+      Seq(Seq("a", "a", "b"), Seq("", ""), Seq()),
       (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _).mapValues(_ + 10),
-      Seq( Seq(("a", 12), ("b", 11)), Seq(("", 12)), Seq() ),
+      Seq(Seq(("a", 12), ("b", 11)), Seq(("", 12)), Seq()),
       true
     )
   }
 
   test("flatMapValues") {
     testOperation(
-      Seq( Seq("a", "a", "b"), Seq("", ""), Seq() ),
+      Seq(Seq("a", "a", "b"), Seq("", ""), Seq()),
       (s: DStream[String]) => {
         s.map(x => (x, 1)).reduceByKey(_ + _).flatMapValues(x => Seq(x, x + 10))
       },
-      Seq( Seq(("a", 2), ("a", 12), ("b", 1), ("b", 11)), Seq(("", 2), ("", 12)), Seq() ),
+      Seq(Seq(("a", 2), ("a", 12), ("b", 1), ("b", 11)), Seq(("", 2), ("", 12)), Seq()),
       true
     )
   }
@@ -256,13 +256,13 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("transformWith") {
-    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
-    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
+    val inputData1 = Seq(Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
+    val inputData2 = Seq(Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
     val outputData = Seq(
-      Seq( ("a", (1, "x")), ("b", (1, "x")) ),
-      Seq( ("", (1, "x")) ),
-      Seq(  ),
-      Seq(  )
+      Seq(("a", (1, "x")), ("b", (1, "x"))),
+      Seq(("", (1, "x"))),
+      Seq(),
+      Seq()
     )
     val operation = (s1: DStream[String], s2: DStream[String]) => {
       val t1 = s1.map(x => (x, 1))
@@ -276,8 +276,8 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("transformWith with input stream return None") {
-    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), null )
-    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), null )
+    val inputData1 = Seq(Seq("a", "b"), Seq("a", ""), Seq(""), null )
+    val inputData2 = Seq(Seq("a", "b"), Seq("b", ""), Seq(), null )
     val outputData = Seq(
       Seq("a", "b", "a", "b"),
       Seq("a", "b", "", ""),
@@ -331,13 +331,13 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("cogroup") {
-    val inputData1 = Seq( Seq("a", "a", "b"), Seq("a", ""), Seq(""), Seq() )
-    val inputData2 = Seq( Seq("a", "a", "b"), Seq("b", ""), Seq(), Seq()   )
+    val inputData1 = Seq(Seq("a", "a", "b"), Seq("a", ""), Seq(""), Seq() )
+    val inputData2 = Seq(Seq("a", "a", "b"), Seq("b", ""), Seq(), Seq()   )
     val outputData = Seq(
-      Seq( ("a", (Seq(1, 1), Seq("x", "x"))), ("b", (Seq(1), Seq("x"))) ),
-      Seq( ("a", (Seq(1), Seq())), ("b", (Seq(), Seq("x"))), ("", (Seq(1), Seq("x"))) ),
-      Seq( ("", (Seq(1), Seq())) ),
-      Seq(  )
+      Seq(("a", (Seq(1, 1), Seq("x", "x"))), ("b", (Seq(1), Seq("x")))),
+      Seq(("a", (Seq(1), Seq())), ("b", (Seq(), Seq("x"))), ("", (Seq(1), Seq("x")))),
+      Seq(("", (Seq(1), Seq()))),
+      Seq()
     )
     val operation = (s1: DStream[String], s2: DStream[String]) => {
       s1.map(x => (x, 1)).cogroup(s2.map(x => (x, "x"))).mapValues(x => (x._1.toSeq, x._2.toSeq))
@@ -346,13 +346,13 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("join") {
-    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
-    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
+    val inputData1 = Seq(Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
+    val inputData2 = Seq(Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
     val outputData = Seq(
-      Seq( ("a", (1, "x")), ("b", (1, "x")) ),
-      Seq( ("", (1, "x")) ),
-      Seq(  ),
-      Seq(  )
+      Seq(("a", (1, "x")), ("b", (1, "x"))),
+      Seq(("", (1, "x"))),
+      Seq(),
+      Seq()
     )
     val operation = (s1: DStream[String], s2: DStream[String]) => {
       s1.map(x => (x, 1)).join(s2.map(x => (x, "x")))
@@ -361,13 +361,13 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("leftOuterJoin") {
-    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
-    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
+    val inputData1 = Seq(Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
+    val inputData2 = Seq(Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
     val outputData = Seq(
-      Seq( ("a", (1, Some("x"))), ("b", (1, Some("x"))) ),
-      Seq( ("", (1, Some("x"))), ("a", (1, None)) ),
-      Seq( ("", (1, None)) ),
-      Seq(  )
+      Seq(("a", (1, Some("x"))), ("b", (1, Some("x")))),
+      Seq(("", (1, Some("x"))), ("a", (1, None))),
+      Seq(("", (1, None))),
+      Seq()
     )
     val operation = (s1: DStream[String], s2: DStream[String]) => {
       s1.map(x => (x, 1)).leftOuterJoin(s2.map(x => (x, "x")))
@@ -376,13 +376,13 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("rightOuterJoin") {
-    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
-    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
+    val inputData1 = Seq(Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
+    val inputData2 = Seq(Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
     val outputData = Seq(
-      Seq( ("a", (Some(1), "x")), ("b", (Some(1), "x")) ),
-      Seq( ("", (Some(1), "x")), ("b", (None, "x")) ),
-      Seq(  ),
-      Seq( ("", (None, "x")) )
+      Seq(("a", (Some(1), "x")), ("b", (Some(1), "x"))),
+      Seq(("", (Some(1), "x")), ("b", (None, "x"))),
+      Seq(),
+      Seq(("", (None, "x")))
     )
     val operation = (s1: DStream[String], s2: DStream[String]) => {
       s1.map(x => (x, 1)).rightOuterJoin(s2.map(x => (x, "x")))
@@ -391,13 +391,13 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("fullOuterJoin") {
-    val inputData1 = Seq( Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
-    val inputData2 = Seq( Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
+    val inputData1 = Seq(Seq("a", "b"), Seq("a", ""), Seq(""), Seq() )
+    val inputData2 = Seq(Seq("a", "b"), Seq("b", ""), Seq(), Seq("")   )
     val outputData = Seq(
-      Seq( ("a", (Some(1), Some("x"))), ("b", (Some(1), Some("x"))) ),
-      Seq( ("", (Some(1), Some("x"))), ("a", (Some(1), None)), ("b", (None, Some("x"))) ),
-      Seq( ("", (Some(1), None)) ),
-      Seq( ("", (None, Some("x"))) )
+      Seq(("a", (Some(1), Some("x"))), ("b", (Some(1), Some("x")))),
+      Seq(("", (Some(1), Some("x"))), ("a", (Some(1), None)), ("b", (None, Some("x")))),
+      Seq(("", (Some(1), None))),
+      Seq(("", (None, Some("x"))))
     )
     val operation = (s1: DStream[String], s2: DStream[String]) => {
       s1.map(x => (x, 1)).fullOuterJoin(s2.map(x => (x, "x")))

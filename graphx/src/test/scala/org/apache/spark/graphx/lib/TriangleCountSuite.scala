@@ -26,7 +26,7 @@ class TriangleCountSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Count a single triangle") {
     withSpark { sc =>
-      val rawEdges = sc.parallelize(Array( 0L -> 1L, 1L -> 2L, 2L -> 0L ), 2)
+      val rawEdges = sc.parallelize(Array(0L -> 1L, 1L -> 2L, 2L -> 0L), 2)
       val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
       val triangleCount = graph.triangleCount()
       val verts = triangleCount.vertices

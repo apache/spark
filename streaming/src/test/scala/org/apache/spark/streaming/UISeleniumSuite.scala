@@ -93,7 +93,7 @@ class UISeleniumSuite
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))
-        find(cssSelector( """ul li a[href*="streaming"]""")) should not be (None)
+        find(cssSelector("""ul li a[href*="streaming"]""")) should not be (None)
       }
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
@@ -154,7 +154,7 @@ class UISeleniumSuite
         outputOpIds.map(_.text) should be (List("0", "1"))
 
         // Check job ids
-        val jobIdCells = findAll(cssSelector( """#batch-job-table a""")).toSeq
+        val jobIdCells = findAll(cssSelector("""#batch-job-table a""")).toSeq
         jobIdCells.map(_.text) should be (List("0", "1", "2", "3"))
 
         val jobLinks = jobIdCells.flatMap(_.attribute("href"))
@@ -192,7 +192,7 @@ class UISeleniumSuite
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))
-        find(cssSelector( """ul li a[href*="streaming"]""")) should be(None)
+        find(cssSelector("""ul li a[href*="streaming"]""")) should be(None)
       }
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
