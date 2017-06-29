@@ -188,6 +188,13 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("Aggregate metrics: track avg probe") {
+    // The executed plan looks like:
+    // HashAggregate(keys=[a#61], functions=[count(1)], output=[a#61, count#71L])
+    // +- Exchange hashpartitioning(a#61, 5)
+    //    +- HashAggregate(keys=[a#61], functions=[partial_count(1)], output=[a#61, count#76L])
+    //       +- Exchange RoundRobinPartitioning(1)
+    //          +- LocalTableScan [a#61]
+    //
     // Assume the execution plan is:
     // Wholestage disabled:
     // LocalTableScan(nodeId = 4) ->Exchange (nodeId = 3) -> HashAggregate(nodeId = 2) ->
