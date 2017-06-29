@@ -223,8 +223,8 @@ abstract class RDD[T: ClassTag](
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
-  private var dependencies_: Seq[Dependency[_]] = null
-  @transient private var partitions_: Array[Partition] = null
+  private var _dependencies: Seq[Dependency[_]] = null
+  @transient private var _partitions: Array[Partition] = null
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
   private def checkpointRDD: Option[CheckpointRDD[T]] = checkpointData.flatMap(_.checkpointRDD)
@@ -235,10 +235,10 @@ abstract class RDD[T: ClassTag](
    */
   final def dependencies: Seq[Dependency[_]] = {
     checkpointRDD.map(r => List(new OneToOneDependency(r))).getOrElse {
-      if (dependencies_ == null) {
-        dependencies_ = getDependencies
+      if (_dependencies == null) {
+        _dependencies = getDependencies
       }
-      dependencies_
+      _dependencies
     }
   }
 
@@ -248,14 +248,14 @@ abstract class RDD[T: ClassTag](
    */
   final def partitions: Array[Partition] = {
     checkpointRDD.map(_.partitions).getOrElse {
-      if (partitions_ == null) {
-        partitions_ = getPartitions
-        partitions_.zipWithIndex.foreach { case (partition, index) =>
+      if (_partitions == null) {
+        _partitions = getPartitions
+        _partitions.zipWithIndex.foreach { case (partition, index) =>
           require(partition.index == index,
             s"partitions($index).partition == ${partition.index}, but it should equal $index")
         }
       }
-      partitions_
+      _partitions
     }
   }
 
@@ -1743,7 +1743,7 @@ abstract class RDD[T: ClassTag](
    */
   private[spark] def markCheckpointed(): Unit = {
     clearDependencies()
-    partitions_ = null
+    _partitions = null
     deps = null    // Forget the constructor argument for dependencies too
   }
 
@@ -1754,7 +1754,7 @@ abstract class RDD[T: ClassTag](
    * logic. See [[org.apache.spark.rdd.UnionRDD]] for an example.
    */
   protected def clearDependencies() {
-    dependencies_ = null
+    _dependencies = null
   }
 
   /** A description of this RDD and its recursive dependencies for debugging. */

@@ -380,8 +380,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
 
   def remainder(that: Decimal): Decimal = this % that
-
-  def unary_-: Decimal = {
+  // scalastyle:off
+  def unary_- : Decimal = {
+    // scalastyle:on
     if (decimalVal.ne(null)) {
       Decimal(-decimalVal, precision, scale)
     } else {

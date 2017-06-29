@@ -63,10 +63,11 @@ package object dsl {
   trait ImplicitOperators {
     def expr: Expression
 
-    def unary_-: Expression = UnaryMinus(expr)
-    def unary_!: Predicate = Not(expr)
-    def unary_~: Expression = BitwiseNot(expr)
-
+    // scalastyle:off
+    def unary_- : Expression = UnaryMinus(expr)
+    def unary_! : Predicate = Not(expr)
+    def unary_~ : Expression = BitwiseNot(expr)
+    // scalastyle:on
     def + (other: Expression): Expression = Add(expr, other)
     def - (other: Expression): Expression = Subtract(expr, other)
     def * (other: Expression): Expression = Multiply(expr, other)

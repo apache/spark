@@ -365,7 +365,9 @@ private[hive] class HiveClientImpl(
   }
 
   override def tableExists(dbName: String, tableName: String): Boolean = withHiveState {
-    Option(client.getTable(dbName, tableName, false /* do not throw exception */)).nonEmpty
+    // scalastyle:off
+    Option(client.getTable(dbName, tableName, false/* do not throw exception */)).nonEmpty
+    // scalastyle:on
   }
 
   override def getTableOption(

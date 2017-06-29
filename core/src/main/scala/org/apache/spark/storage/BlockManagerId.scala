@@ -35,19 +35,19 @@ import org.apache.spark.util.Utils
  */
 @DeveloperApi
 class BlockManagerId private (
-    private var executorId_: String,
-    private var host_: String,
-    private var port_: Int,
-    private var topologyInfo_: Option[String])
+    private var _executorId: String,
+    private var _host: String,
+    private var _port: Int,
+    private var _topologyInfo: Option[String])
   extends Externalizable {
 
   private def this() = this(null, null, 0, None)  // For deserialization only
 
-  def executorId: String = executorId_
+  def executorId: String = _executorId
 
-  if (null != host_) {
-    Utils.checkHost(host_)
-    assert (port_ > 0)
+  if (null != _host) {
+    Utils.checkHost(_host)
+    assert (_port > 0)
   }
 
   def hostPort: String = {
@@ -57,11 +57,11 @@ class BlockManagerId private (
     host + ":" + port
   }
 
-  def host: String = host_
+  def host: String = _host
 
-  def port: Int = port_
+  def port: Int = _port
 
-  def topologyInfo: Option[String] = topologyInfo_
+  def topologyInfo: Option[String] = _topologyInfo
 
   def isDriver: Boolean = {
     executorId == SparkContext.DRIVER_IDENTIFIER ||
@@ -69,20 +69,20 @@ class BlockManagerId private (
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    out.writeUTF(executorId_)
-    out.writeUTF(host_)
-    out.writeInt(port_)
-    out.writeBoolean(topologyInfo_.isDefined)
+    out.writeUTF(_executorId)
+    out.writeUTF(_host)
+    out.writeInt(_port)
+    out.writeBoolean(_topologyInfo.isDefined)
     // we only write topologyInfo if we have it
     topologyInfo.foreach(out.writeUTF(_))
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    executorId_ = in.readUTF()
-    host_ = in.readUTF()
-    port_ = in.readInt()
+    _executorId = in.readUTF()
+    _host = in.readUTF()
+    _port = in.readInt()
     val isTopologyInfoAvailable = in.readBoolean()
-    topologyInfo_ = if (isTopologyInfoAvailable) Option(in.readUTF()) else None
+    _topologyInfo = if (isTopologyInfoAvailable) Option(in.readUTF()) else None
   }
 
   @throws(classOf[IOException])

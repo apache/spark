@@ -211,7 +211,7 @@ class Column(val expr: Expression) extends Logging {
   def apply(extraction: Any): Column = withExpr {
     UnresolvedExtractValue(expr, lit(extraction).expr)
   }
-
+  // scalastyle:off
   /**
    * Unary minus, i.e. negate the expression.
    * {{{
@@ -226,7 +226,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def unary_-: Column = withExpr { UnaryMinus(expr) }
+  def unary_- : Column = withExpr { UnaryMinus(expr) }
 
   /**
    * Inversion of boolean expression, i.e. NOT.
@@ -242,7 +242,9 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def unary_!: Column = withExpr { Not(expr) }
+
+  def unary_! : Column = withExpr { Not(expr) }
+  // scalastyle:on
 
   /**
    * Equality test.

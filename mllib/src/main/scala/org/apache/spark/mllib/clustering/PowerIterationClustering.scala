@@ -270,9 +270,11 @@ object PowerIterationClustering extends Logging {
     Graph(vD, graph.edges)
       .mapTriplets(
         e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
+        // scalastyle:off
         new TripletFields(/* useSrc */ true,
                           /* useDst */ false,
                           /* useEdge */ true))
+        // scalastyle:on
   }
 
   /**
@@ -301,9 +303,11 @@ object PowerIterationClustering extends Logging {
     Graph(vD, gA.edges)
       .mapTriplets(
         e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
+        // scalastyle:off
         new TripletFields(/* useSrc */ true,
-                          /* useDst */ false,
-                          /* useEdge */ true))
+          /* useDst */ false,
+          /* useEdge */ true))
+        // scalastyle:on
   }
 
   /**
