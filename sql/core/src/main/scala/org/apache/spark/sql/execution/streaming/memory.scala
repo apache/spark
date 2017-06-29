@@ -194,23 +194,21 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
     }
     if (notCommitted) {
       logDebug(s"Committing batch $batchId to $this")
-      SQLExecution.ignoreNestedExecutionId(data.sparkSession) {
-        outputMode match {
-          case Append | Update =>
-            val rows = AddedData(batchId, data.collect())
-            synchronized { batches += rows }
+      outputMode match {
+        case Append | Update =>
+          val rows = AddedData(batchId, data.collect())
+          synchronized { batches += rows }
 
-          case Complete =>
-            val rows = AddedData(batchId, data.collect())
-            synchronized {
-              batches.clear()
-              batches += rows
-            }
+        case Complete =>
+          val rows = AddedData(batchId, data.collect())
+          synchronized {
+            batches.clear()
+            batches += rows
+          }
 
-          case _ =>
-            throw new IllegalArgumentException(
-              s"Output mode $outputMode is not supported by MemorySink")
-        }
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Output mode $outputMode is not supported by MemorySink")
       }
     } else {
       logDebug(s"Skipping already committed batch: $batchId")
