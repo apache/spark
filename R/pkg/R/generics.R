@@ -422,9 +422,8 @@ setGeneric("cache", function(x) { standardGeneric("cache") })
 setGeneric("checkpoint", function(x, eager = TRUE) { standardGeneric("checkpoint") })
 
 #' @rdname coalesce
-#' @param x a Column or a SparkDataFrame.
-#' @param ... additional argument(s). If \code{x} is a Column, additional Columns can be optionally
-#'        provided.
+#' @param x a SparkDataFrame.
+#' @param ... additional argument(s).
 #' @export
 setGeneric("coalesce", function(x, ...) { standardGeneric("coalesce") })
 
@@ -863,8 +862,9 @@ setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 #' @export
 setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
 
-#' @rdname when
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("when", function(condition, value) { standardGeneric("when") })
 
 #' @rdname otherwise
@@ -939,8 +939,9 @@ setGeneric("base64", function(x) { standardGeneric("base64") })
 #' @name NULL
 setGeneric("bin", function(x) { standardGeneric("bin") })
 
-#' @rdname bitwiseNOT
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
 
 #' @rdname column_math_functions
@@ -996,12 +997,14 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
-#' @rdname create_array
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
 
-#' @rdname create_map
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
 
 #' @rdname hash
@@ -1068,8 +1071,9 @@ setGeneric("explode", function(x) { standardGeneric("explode") })
 #' @name NULL
 setGeneric("explode_outer", function(x) { standardGeneric("explode_outer") })
 
-#' @rdname expr
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("expr", function(x) { standardGeneric("expr") })
 
 #' @rdname column_datetime_diff_functions
@@ -1097,8 +1101,9 @@ setGeneric("from_json", function(x, schema, ...) { standardGeneric("from_json") 
 #' @name NULL
 setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
 
-#' @rdname greatest
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("greatest", function(x, ...) { standardGeneric("greatest") })
 
 #' @rdname column_aggregate_functions
@@ -1131,9 +1136,9 @@ setGeneric("hypot", function(y, x) { standardGeneric("hypot") })
 #' @name NULL
 setGeneric("initcap", function(x) { standardGeneric("initcap") })
 
-#' @param x empty. Should be used with no argument.
-#' @rdname input_file_name
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("input_file_name",
            function(x = "missing") { standardGeneric("input_file_name") })
 
@@ -1142,8 +1147,9 @@ setGeneric("input_file_name",
 #' @name NULL
 setGeneric("instr", function(y, x) { standardGeneric("instr") })
 
-#' @rdname is.nan
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("isnan", function(x) { standardGeneric("isnan") })
 
 #' @rdname column_aggregate_functions
@@ -1168,8 +1174,9 @@ setGeneric("last_day", function(x) { standardGeneric("last_day") })
 #' @export
 setGeneric("lead", function(x, offset, defaultValue = NULL) { standardGeneric("lead") })
 
-#' @rdname least
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("least", function(x, ...) { standardGeneric("least") })
 
 #' @rdname column_string_functions
@@ -1177,8 +1184,9 @@ setGeneric("least", function(x, ...) { standardGeneric("least") })
 #' @name NULL
 setGeneric("levenshtein", function(y, x) { standardGeneric("levenshtein") })
 
-#' @rdname lit
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("lit", function(x) { standardGeneric("lit") })
 
 #' @rdname column_string_functions
@@ -1210,9 +1218,9 @@ setGeneric("md5", function(x) { standardGeneric("md5") })
 #' @name NULL
 setGeneric("minute", function(x) { standardGeneric("minute") })
 
-#' @param x empty. Should be used with no argument.
-#' @rdname monotonically_increasing_id
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("monotonically_increasing_id",
            function(x = "missing") { standardGeneric("monotonically_increasing_id") })
 
@@ -1230,12 +1238,14 @@ setGeneric("months_between", function(y, x) { standardGeneric("months_between") 
 #' @export
 setGeneric("n", function(x) { standardGeneric("n") })
 
-#' @rdname nanvl
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
 
-#' @rdname negate
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("negate", function(x) { standardGeneric("negate") })
 
 #' @rdname not
@@ -1281,12 +1291,14 @@ setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer")
 #' @name NULL
 setGeneric("quarter", function(x) { standardGeneric("quarter") })
 
-#' @rdname rand
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("rand", function(seed) { standardGeneric("rand") })
 
-#' @rdname randn
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("randn", function(seed) { standardGeneric("randn") })
 
 #' @rdname rank
@@ -1417,8 +1429,9 @@ setGeneric("stddev_pop", function(x) { standardGeneric("stddev_pop") })
 #' @name NULL
 setGeneric("stddev_samp", function(x) { standardGeneric("stddev_samp") })
 
-#' @rdname struct
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("struct", function(x, ...) { standardGeneric("struct") })
 
 #' @rdname column_string_functions

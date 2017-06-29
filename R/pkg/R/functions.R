@@ -132,6 +132,24 @@ NULL
 #' df <- createDataFrame(as.data.frame(Titanic, stringsAsFactors = FALSE))}
 NULL
 
+#' Non-aggregate functions for Column operations
+#'
+#' Non-aggregate functions defined for \code{Column}.
+#'
+#' @param x Column to compute on. In \code{lit}, it is a literal value or a Column.
+#'          In \code{expr}, it contains an expression character object to be parsed.
+#' @param y Column to compute on.
+#' @param ... additional Columns.
+#' @name column_nonaggregate_functions
+#' @rdname column_nonaggregate_functions
+#' @seealso coalesce,SparkDataFrame-method
+#' @family non-aggregate functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
+NULL
+
 #' Collection functions for Column operations
 #'
 #' Collection functions defined for \code{Column}.
@@ -161,23 +179,21 @@ NULL
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))}
 NULL
 
-#' lit
+#' @details
+#' \code{lit}: A new Column is created to represent the literal value.
+#' If the parameter is a Column, it is returned unchanged.
 #'
-#' A new \linkS4class{Column} is created to represent the literal value.
-#' If the parameter is a \linkS4class{Column}, it is returned unchanged.
-#'
-#' @param x a literal value or a Column.
-#' @family non-aggregate functions
-#' @rdname lit
-#' @name lit
+#' @rdname column_nonaggregate_functions
 #' @export
-#' @aliases lit,ANY-method
+#' @aliases lit lit,ANY-method
 #' @examples
+#'
 #' \dontrun{
-#' lit(df$name)
-#' select(df, lit("x"))
-#' select(df, lit("2015-01-01"))
-#'}
+#' tmp <- mutate(df, v1 = lit(df$mpg), v2 = lit("x"), v3 = lit("2015-01-01"),
+#'                   v4 = negate(df$mpg), v5 = expr('length(model)'),
+#'                   v6 = greatest(df$vs, df$am), v7 = least(df$vs, df$am),
+#'                   v8 = column("mpg"))
+#' head(tmp)}
 #' @note lit since 1.5.0
 setMethod("lit", signature("ANY"),
           function(x) {
@@ -343,18 +359,16 @@ setMethod("bin",
             column(jc)
           })
 
-#' bitwiseNOT
+#' @details
+#' \code{bitwiseNOT}: Computes bitwise NOT.
 #'
-#' Computes bitwise NOT.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname bitwiseNOT
-#' @name bitwiseNOT
-#' @family non-aggregate functions
+#' @rdname column_nonaggregate_functions
 #' @export
-#' @aliases bitwiseNOT,Column-method
-#' @examples \dontrun{bitwiseNOT(df$c)}
+#' @aliases bitwiseNOT bitwiseNOT,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, bitwiseNOT(cast(df$vs, "int"))))}
 #' @note bitwiseNOT since 1.5.0
 setMethod("bitwiseNOT",
           signature(x = "Column"),
@@ -404,16 +418,12 @@ setMethod("ceiling",
             ceil(x)
           })
 
-#' Returns the first column that is not NA
+#' @details
+#' \code{coalesce}: Returns the first column that is not NA, or NA if all inputs are.
 #'
-#' Returns the first column that is not NA, or NA if all inputs are.
-#'
-#' @rdname coalesce
-#' @name coalesce
-#' @family non-aggregate functions
+#' @rdname column_nonaggregate_functions
 #' @export
 #' @aliases coalesce,Column-method
-#' @examples \dontrun{coalesce(df$c, df$d, df$e)}
 #' @note coalesce(Column) since 2.1.1
 setMethod("coalesce",
           signature(x = "Column"),
@@ -853,38 +863,29 @@ setMethod("initcap",
             column(jc)
           })
 
-#' is.nan
-#'
-#' Return true if the column is NaN, alias for \link{isnan}
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname is.nan
-#' @name is.nan
-#' @family non-aggregate functions
-#' @aliases is.nan,Column-method
-#' @export
-#' @examples
-#' \dontrun{
-#' is.nan(df$c)
-#' isnan(df$c)
-#' }
-#' @note is.nan since 2.0.0
-setMethod("is.nan",
-          signature(x = "Column"),
-          function(x) {
-            isnan(x)
-          })
-
-#' @rdname is.nan
-#' @name isnan
-#' @aliases isnan,Column-method
+#' @details
+#' \code{isnan}: Returns true if the column is NaN.
+#' @rdname column_nonaggregate_functions
+#' @aliases isnan isnan,Column-method
 #' @note isnan since 2.0.0
 setMethod("isnan",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "isnan", x@jc)
             column(jc)
+          })
+
+#' @details
+#' \code{is.nan}: Alias for \link{isnan}.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases is.nan is.nan,Column-method
+#' @export
+#' @note is.nan since 2.0.0
+setMethod("is.nan",
+          signature(x = "Column"),
+          function(x) {
+            isnan(x)
           })
 
 #' @details
@@ -1158,27 +1159,24 @@ setMethod("minute",
             column(jc)
           })
 
-#' monotonically_increasing_id
-#'
-#' Return a column that generates monotonically increasing 64-bit integers.
-#'
-#' The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
-#' The current implementation puts the partition ID in the upper 31 bits, and the record number
-#' within each partition in the lower 33 bits. The assumption is that the SparkDataFrame has
-#' less than 1 billion partitions, and each partition has less than 8 billion records.
-#'
-#' As an example, consider a SparkDataFrame with two partitions, each with 3 records.
+#' @details
+#' \code{monotonically_increasing_id}: Returns a column that generates monotonically increasing
+#' 64-bit integers. The generated ID is guaranteed to be monotonically increasing and unique,
+#' but not consecutive. The current implementation puts the partition ID in the upper 31 bits,
+#' and the record number within each partition in the lower 33 bits. The assumption is that the
+#' SparkDataFrame has less than 1 billion partitions, and each partition has less than 8 billion
+#' records. As an example, consider a SparkDataFrame with two partitions, each with 3 records.
 #' This expression would return the following IDs:
 #' 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
-#'
 #' This is equivalent to the MONOTONICALLY_INCREASING_ID function in SQL.
+#' The method should be used with no argument.
 #'
-#' @rdname monotonically_increasing_id
-#' @aliases monotonically_increasing_id,missing-method
-#' @name monotonically_increasing_id
-#' @family misc functions
+#' @rdname column_nonaggregate_functions
+#' @aliases monotonically_increasing_id monotonically_increasing_id,missing-method
 #' @export
-#' @examples \dontrun{select(df, monotonically_increasing_id())}
+#' @examples
+#'
+#' \dontrun{head(select(df, monotonically_increasing_id()))}
 setMethod("monotonically_increasing_id",
           signature("missing"),
           function() {
@@ -1200,18 +1198,12 @@ setMethod("month",
             column(jc)
           })
 
-#' negate
+#' @details
+#' \code{negate}: Unary minus, i.e. negate the expression.
 #'
-#' Unary minus, i.e. negate the expression.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname negate
-#' @name negate
-#' @family non-aggregate functions
-#' @aliases negate,Column-method
+#' @rdname column_nonaggregate_functions
+#' @aliases negate negate,Column-method
 #' @export
-#' @examples \dontrun{negate(df$c)}
 #' @note negate since 1.5.0
 setMethod("negate",
           signature(x = "Column"),
@@ -1510,23 +1502,19 @@ setMethod("stddev_samp",
             column(jc)
           })
 
-#' struct
+#' @details
+#' \code{struct}: Creates a new struct column that composes multiple input columns.
 #'
-#' Creates a new struct column that composes multiple input columns.
-#'
-#' @param x a column to compute on.
-#' @param ... optional column(s) to be included.
-#'
-#' @rdname struct
-#' @name struct
-#' @family non-aggregate functions
-#' @aliases struct,characterOrColumn-method
+#' @rdname column_nonaggregate_functions
+#' @aliases struct struct,characterOrColumn-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' struct(df$c, df$d)
-#' struct("col1", "col2")
-#' }
+#' tmp <- mutate(df, v1 = struct(df$mpg, df$cyl), v2 = struct("hp", "wt", "vs"),
+#'                   v3 = create_array(df$mpg, df$cyl, df$hp),
+#'                   v4 = create_map(lit("x"), lit(1.0), lit("y"), lit(-1.0)))
+#' head(tmp)}
 #' @note struct since 1.6.0
 setMethod("struct",
           signature(x = "characterOrColumn"),
@@ -1981,20 +1969,13 @@ setMethod("months_between", signature(y = "Column"),
             column(jc)
           })
 
-#' nanvl
+#' @details
+#' \code{nanvl}: Returns the first column (\code{y}) if it is not NaN, or the second column (\code{x}) if
+#' the first column is NaN. Both inputs should be floating point columns (DoubleType or FloatType).
 #'
-#' Returns col1 if it is not NaN, or col2 if col1 is NaN.
-#' Both inputs should be floating point columns (DoubleType or FloatType).
-#'
-#' @param x first Column.
-#' @param y second Column.
-#'
-#' @rdname nanvl
-#' @name nanvl
-#' @family non-aggregate functions
-#' @aliases nanvl,Column-method
+#' @rdname column_nonaggregate_functions
+#' @aliases nanvl nanvl,Column-method
 #' @export
-#' @examples \dontrun{nanvl(df$c, x)}
 #' @note nanvl since 1.5.0
 setMethod("nanvl", signature(y = "Column"),
           function(y, x) {
@@ -2082,20 +2063,13 @@ setMethod("concat",
             column(jc)
           })
 
-#' greatest
-#'
-#' Returns the greatest value of the list of column names, skipping null values.
+#' @details
+#' \code{greatest}: Returns the greatest value of the list of column names, skipping null values.
 #' This function takes at least 2 parameters. It will return null if all parameters are null.
 #'
-#' @param x Column to compute on
-#' @param ... other columns
-#'
-#' @family non-aggregate functions
-#' @rdname greatest
-#' @name greatest
-#' @aliases greatest,Column-method
+#' @rdname column_nonaggregate_functions
+#' @aliases greatest greatest,Column-method
 #' @export
-#' @examples \dontrun{greatest(df$c, df$d)}
 #' @note greatest since 1.5.0
 setMethod("greatest",
           signature(x = "Column"),
@@ -2109,20 +2083,13 @@ setMethod("greatest",
             column(jc)
           })
 
-#' least
-#'
-#' Returns the least value of the list of column names, skipping null values.
+#' @details
+#' \code{least}: Returns the least value of the list of column names, skipping null values.
 #' This function takes at least 2 parameters. It will return null if all parameters are null.
 #'
-#' @param x Column to compute on
-#' @param ... other columns
-#'
-#' @family non-aggregate functions
-#' @rdname least
-#' @aliases least,Column-method
-#' @name least
+#' @rdname column_nonaggregate_functions
+#' @aliases least least,Column-method
 #' @export
-#' @examples \dontrun{least(df$c, df$d)}
 #' @note least since 1.5.0
 setMethod("least",
           signature(x = "Column"),
@@ -2467,18 +2434,13 @@ setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeri
             column(jc)
           })
 
-#' expr
+#' @details
+#' \code{expr}: Parses the expression string into the column that it represents, similar to
+#' \code{SparkDataFrame.selectExpr}
 #'
-#' Parses the expression string into the column that it represents, similar to
-#' SparkDataFrame.selectExpr
-#'
-#' @param x an expression character object to be parsed.
-#' @family non-aggregate functions
-#' @rdname expr
-#' @aliases expr,character-method
-#' @name expr
+#' @rdname column_nonaggregate_functions
+#' @aliases expr expr,character-method
 #' @export
-#' @examples \dontrun{expr('length(name)')}
 #' @note expr since 1.5.0
 setMethod("expr", signature(x = "character"),
           function(x) {
@@ -2639,18 +2601,19 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
             column(jc)
           })
 
-#' rand
-#'
-#' Generate a random column with independent and identically distributed (i.i.d.) samples
+#' @details
+#' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.) samples
 #' from U[0.0, 1.0].
 #'
+#' @rdname column_nonaggregate_functions
 #' @param seed a random seed. Can be missing.
-#' @family non-aggregate functions
-#' @rdname rand
-#' @name rand
-#' @aliases rand,missing-method
+#' @aliases rand rand,missing-method
 #' @export
-#' @examples \dontrun{rand()}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, r1 = rand(), r2 = rand(10), r3 = randn(), r4 = randn(10))
+#' head(tmp)}
 #' @note rand since 1.5.0
 setMethod("rand", signature(seed = "missing"),
           function(seed) {
@@ -2658,8 +2621,7 @@ setMethod("rand", signature(seed = "missing"),
             column(jc)
           })
 
-#' @rdname rand
-#' @name rand
+#' @rdname column_nonaggregate_functions
 #' @aliases rand,numeric-method
 #' @export
 #' @note rand(numeric) since 1.5.0
@@ -2669,18 +2631,13 @@ setMethod("rand", signature(seed = "numeric"),
             column(jc)
           })
 
-#' randn
-#'
-#' Generate a column with independent and identically distributed (i.i.d.) samples from
+#' @details
+#' \code{randn}: Generates a column with independent and identically distributed (i.i.d.) samples from
 #' the standard normal distribution.
 #'
-#' @param seed a random seed. Can be missing.
-#' @family non-aggregate functions
-#' @rdname randn
-#' @name randn
-#' @aliases randn,missing-method
+#' @rdname column_nonaggregate_functions
+#' @aliases randn randn,missing-method
 #' @export
-#' @examples \dontrun{randn()}
 #' @note randn since 1.5.0
 setMethod("randn", signature(seed = "missing"),
           function(seed) {
@@ -2688,8 +2645,7 @@ setMethod("randn", signature(seed = "missing"),
             column(jc)
           })
 
-#' @rdname randn
-#' @name randn
+#' @rdname column_nonaggregate_functions
 #' @aliases randn,numeric-method
 #' @export
 #' @note randn(numeric) since 1.5.0
@@ -2841,20 +2797,26 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
             jc <- callJStatic("org.apache.spark.sql.functions", "unix_timestamp", x@jc, format)
             column(jc)
           })
-#' when
-#'
-#' Evaluates a list of conditions and returns one of multiple possible result expressions.
+
+#' @details
+#' \code{when}: Evaluates a list of conditions and returns one of multiple possible result expressions.
 #' For unmatched expressions null is returned.
 #'
+#' @rdname column_nonaggregate_functions
 #' @param condition the condition to test on. Must be a Column expression.
 #' @param value result expression.
-#' @family non-aggregate functions
-#' @rdname when
-#' @name when
-#' @aliases when,Column-method
-#' @seealso \link{ifelse}
+#' @aliases when when,Column-method
 #' @export
-#' @examples \dontrun{when(df$age == 2, df$age + 1)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, mpg_na = otherwise(when(df$mpg > 20, df$mpg), lit(NaN)),
+#'                   mpg2 = ifelse(df$mpg > 20 & df$am > 0, 0, 1),
+#'                   mpg3 = ifelse(df$mpg > 20, df$mpg, 20.0))
+#' head(tmp)
+#' tmp <- mutate(tmp, ind_na1 = is.nan(tmp$mpg_na), ind_na2 = isnan(tmp$mpg_na))
+#' head(select(tmp, coalesce(tmp$mpg_na, tmp$mpg)))
+#' head(select(tmp, nanvl(tmp$mpg_na, tmp$hp)))}
 #' @note when since 1.5.0
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
@@ -2864,25 +2826,16 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
               column(jc)
           })
 
-#' ifelse
-#'
-#' Evaluates a list of conditions and returns \code{yes} if the conditions are satisfied.
+#' @details
+#' \code{ifelse}: Evaluates a list of conditions and returns \code{yes} if the conditions are satisfied.
 #' Otherwise \code{no} is returned for unmatched conditions.
 #'
+#' @rdname column_nonaggregate_functions
 #' @param test a Column expression that describes the condition.
 #' @param yes return values for \code{TRUE} elements of test.
 #' @param no return values for \code{FALSE} elements of test.
-#' @family non-aggregate functions
-#' @rdname ifelse
-#' @name ifelse
-#' @aliases ifelse,Column-method
-#' @seealso \link{when}
+#' @aliases ifelse ifelse,Column-method
 #' @export
-#' @examples
-#' \dontrun{
-#' ifelse(df$a > 1 & df$b > 2, 0, 1)
-#' ifelse(df$a > 1, df$a, 1)
-#' }
 #' @note ifelse since 1.5.0
 setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
@@ -3255,19 +3208,12 @@ setMethod("posexplode",
             column(jc)
           })
 
-#' create_array
+#' @details
+#' \code{create_array}: Creates a new array column. The input columns must all have the same data type.
 #'
-#' Creates a new array column. The input columns must all have the same data type.
-#'
-#' @param x Column to compute on
-#' @param ... additional Column(s).
-#'
-#' @family non-aggregate functions
-#' @rdname create_array
-#' @name create_array
-#' @aliases create_array,Column-method
+#' @rdname column_nonaggregate_functions
+#' @aliases create_array create_array,Column-method
 #' @export
-#' @examples \dontrun{create_array(df$x, df$y, df$z)}
 #' @note create_array since 2.3.0
 setMethod("create_array",
           signature(x = "Column"),
@@ -3280,22 +3226,15 @@ setMethod("create_array",
             column(jc)
           })
 
-#' create_map
-#'
-#' Creates a new map column. The input columns must be grouped as key-value pairs,
+#' @details
+#' \code{create_map}: Creates a new map column. The input columns must be grouped as key-value pairs,
 #' e.g. (key1, value1, key2, value2, ...).
 #' The key columns must all have the same data type, and can't be null.
 #' The value columns must all have the same data type.
 #'
-#' @param x Column to compute on
-#' @param ... additional Column(s).
-#'
-#' @family non-aggregate functions
-#' @rdname create_map
-#' @name create_map
-#' @aliases create_map,Column-method
+#' @rdname column_nonaggregate_functions
+#' @aliases create_map create_map,Column-method
 #' @export
-#' @examples \dontrun{create_map(lit("x"), lit(1.0), lit("y"), lit(-1.0))}
 #' @note create_map since 2.3.0
 setMethod("create_map",
           signature(x = "Column"),
@@ -3530,21 +3469,18 @@ setMethod("grouping_id",
             column(jc)
           })
 
-#' input_file_name
+#' @details
+#' \code{input_file_name}: Creates a string column with the input file name for a given row.
+#' The method should be used with no argument.
 #'
-#' Creates a string column with the input file name for a given row
-#'
-#' @rdname input_file_name
-#' @name input_file_name
-#' @family non-aggregate functions
-#' @aliases input_file_name,missing-method
+#' @rdname column_nonaggregate_functions
+#' @aliases input_file_name input_file_name,missing-method
 #' @export
 #' @examples
-#' \dontrun{
-#' df <- read.text("README.md")
 #'
-#' head(select(df, input_file_name()))
-#' }
+#' \dontrun{
+#' tmp <- read.text("README.md")
+#' head(select(tmp, input_file_name()))}
 #' @note input_file_name since 2.3.0
 setMethod("input_file_name", signature("missing"),
           function() {
