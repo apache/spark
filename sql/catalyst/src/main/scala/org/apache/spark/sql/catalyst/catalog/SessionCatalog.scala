@@ -380,7 +380,7 @@ class SessionCatalog(
    * Alter Spark's statistics of an existing metastore table identified by the provided table
    * identifier.
    */
-  def alterTableStats(identifier: TableIdentifier, newStats: CatalogStatistics): Unit = {
+  def alterTableStats(identifier: TableIdentifier, newStats: Option[CatalogStatistics]): Unit = {
     val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
