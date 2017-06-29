@@ -601,12 +601,12 @@ def main():
         build_spark_assembly_sbt(hadoop_version)
 
     # run the test suites
-    run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
+    # run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
-    if modules_with_python_tests:
-        run_python_tests(modules_with_python_tests, opts.parallelism)
-        run_python_packaging_tests()
+    # if modules_with_python_tests:
+    #    run_python_tests(modules_with_python_tests, opts.parallelism)
+    #    run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
 

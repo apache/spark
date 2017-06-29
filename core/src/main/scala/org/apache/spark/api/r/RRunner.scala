@@ -290,6 +290,10 @@ private[r] class BufferedStreamThread(
   var lineIdx = 0
   override def run() {
     for (line <- Source.fromInputStream(in).getLines) {
+      // scalastyle:off println
+      // Try to print everything just for easy debugging.
+      println(line)
+      // scalastyle:on println
       synchronized {
         lines(lineIdx) = line
         lineIdx = (lineIdx + 1) % errBufferSize
