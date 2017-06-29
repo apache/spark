@@ -58,7 +58,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   override def add(v: Long): Unit = _value += v
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
-  // average metrics. We simply take the ceil of the double value.
+  // average metrics.
   def set(v: Double): Unit = SQLMetrics.setDoubleForAverageMetrics(this, v)
 
   def set(v: Long): Unit = _value = v
@@ -80,14 +80,17 @@ object SQLMetrics {
   private val TIMING_METRIC = "timing"
   private val AVERAGE_METRIC = "average"
 
+  private val baseForAvgMetric: Int = 10
+
   /**
-   * Converts a double value to long value, so we can store it in `SQLMetrics`. It only works
-   * for average metrics. We simply take the ceil value of the double for now.
+   * Converts a double value to long value by multiplying a base integer, so we can store it in
+   * `SQLMetrics`. It only works for average metrics. When showing the metrics on UI, we restore
+   * it back to a double value up to the decimal places bound by the base integer.
    */
   private[sql] def setDoubleForAverageMetrics(metric: SQLMetric, v: Double): Unit = {
     assert(metric.metricType == AVERAGE_METRIC,
       s"Can't set a double to a metric of metrics type: ${metric.metricType}")
-    metric.set(v.ceil.toLong)
+    metric.set((v * baseForAvgMetric).toLong)
   }
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
@@ -120,14 +123,14 @@ object SQLMetrics {
 
   /**
    * Create a metric to report the average information (including min, med, max) like
-   * avg hash probe. Because `SQLMetric` stores long values, we take the ceil of the average
-   * values before storing them. This metric is used to record an average value computed in the
-   * execution of a task. The initial values (zeros) of this metrics will be excluded after.
+   * avg hash probe. As average metrics are double values, this kind of metrics should be
+   * only set with `SQLMetric.set` method instead of other methods like `SQLMetric.add`.
+   * The initial values (zeros) of this metrics will be excluded after.
    */
   def createAverageMetric(sc: SparkContext, name: String): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
     // probe avg (min, med, max):
-    // (1, 2, 6)
+    // (1.2, 2.2, 6.3)
     val acc = new SQLMetric(AVERAGE_METRIC)
     acc.register(sc, name = Some(s"$name (min, med, max)"), countFailedValues = false)
     acc
@@ -142,7 +145,7 @@ object SQLMetrics {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
     } else if (metricsType == AVERAGE_METRIC) {
-      val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
+      val numberFormat = NumberFormat.getNumberInstance(Locale.US)
 
       val validValues = values.filter(_ > 0)
       val Seq(min, med, max) = {
@@ -152,7 +155,7 @@ object SQLMetrics {
           val sorted = validValues.sorted
           Seq(sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
         }
-        metric.map(numberFormat.format)
+        metric.map(v => numberFormat.format(v.toDouble / baseForAvgMetric))
       }
       s"\n($min, $med, $max)"
     } else {

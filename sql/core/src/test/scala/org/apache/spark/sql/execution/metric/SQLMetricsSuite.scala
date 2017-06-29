@@ -195,15 +195,22 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     //       +- Exchange RoundRobinPartitioning(1)
     //          +- LocalTableScan [a#61]
     //
-    // Assume the execution plan is:
+    // Assume the execution plan with node id is:
     // Wholestage disabled:
-    // LocalTableScan(nodeId = 4) ->Exchange (nodeId = 3) -> HashAggregate(nodeId = 2) ->
-    // Exchange(nodeId = 1) -> HashAggregate(nodeId = 0)
+    // HashAggregate(nodeId = 0)
+    //   Exchange(nodeId = 1)
+    //     HashAggregate(nodeId = 2)
+    //       Exchange (nodeId = 3)
+    //         LocalTableScan(nodeId = 4)
     //
     // Wholestage enabled:
-    // LocalTableScan(nodeId = 6) -> Exchange(nodeId = 5) ->
-    // WholeStageCodegen(nodeId = 3, HashAggregate(nodeId = 4)) -> Exchange(nodeId = 2)
-    // WholeStageCodegen(nodeId = 0, HashAggregate(nodeId = 1))
+    // WholeStageCodegen(nodeId = 0)
+    //   HashAggregate(nodeId = 1)
+    //     Exchange(nodeId = 2)
+    //       WholeStageCodegen(nodeId = 3)
+    //         HashAggregate(nodeId = 4)
+    //           Exchange(nodeId = 5)
+    //             LocalTableScan(nodeId = 6)
     Seq(true, false).foreach { enableWholeStage =>
       val df = generateRandomBytesDF().repartition(1).groupBy('a).count()
       val nodeIds = if (enableWholeStage) {
@@ -215,7 +222,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       nodeIds.foreach { nodeId =>
         val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
         probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-          assert(probe.toInt > 1)
+          assert(probe.toDouble > 1.0)
         }
       }
     }
@@ -315,14 +322,19 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     //          +- Filter isnotnull(_1#217)
     //             +- LocalTableScan [_1#217, _2#218]
     //
-    // Assume the execution plan is
+    // Assume the execution plan with node id is
     // WholeStageCodegen disabled:
-    // ... -> BroadcastHashJoin(nodeId = 1) -> Project(nodeId = 0)
+    // Project(nodeId = 0)
+    //   BroadcastHashJoin(nodeId = 1)
+    //     ...(ignored)
     //
     // WholeStageCodegen enabled:
-    // ... ->
-    // WholeStageCodegen(nodeId = 0, Filter(nodeId = 4) -> Project(nodeId = 3) ->
-    //   BroadcastHashJoin(nodeId = 2) -> Project(nodeId = 1))
+    // WholeStageCodegen(nodeId = 0)
+    //   Project(nodeId = 1)
+    //     BroadcastHashJoin(nodeId = 2)
+    //       Project(nodeId = 3)
+    //         Filter(nodeId = 4)
+    //           ...(ignored)
     Seq(true, false).foreach { enableWholeStage =>
       val df1 = generateRandomBytesDF()
       val df2 = generateRandomBytesDF()
@@ -336,7 +348,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       nodeIds.foreach { nodeId =>
         val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
         probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-          assert(probe.toInt > 1)
+          assert(probe.toDouble > 1.0)
         }
       }
     }
@@ -373,13 +385,17 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     //          +- Filter isnotnull(_1#315)
     //             +- LocalTableScan [_1#315, _2#316]
     //
-    // Assume the execution plan is
+    // Assume the execution plan with node id is
     // WholeStageCodegen disabled:
-    // ... -> ShuffledHashJoin(nodeId = 1) -> Project(nodeId = 0)
+    // Project(nodeId = 0)
+    //   ShuffledHashJoin(nodeId = 1)
+    //     ...(ignored)
     //
     // WholeStageCodegen enabled:
-    // ... ->
-    // WholeStageCodegen(nodeId = 0, ShuffledHashJoin(nodeId = 2) -> Project(nodeId = 1))
+    // WholeStageCodegen(nodeId = 0)
+    //   Project(nodeId = 1)
+    //     ShuffledHashJoin(nodeId = 2)
+    //       ...(ignored)
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "5000000",
         "spark.sql.shuffle.partitions" -> "2",
         "spark.sql.join.preferSortMergeJoin" -> "false") {
@@ -396,7 +412,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         nodeIds.foreach { nodeId =>
           val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
           probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-            assert(probe.toInt > 1)
+            assert(probe.toDouble > 1.0)
           }
         }
       }
