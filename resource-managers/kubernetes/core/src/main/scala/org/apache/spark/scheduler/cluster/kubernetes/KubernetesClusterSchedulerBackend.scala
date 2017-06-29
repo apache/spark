@@ -35,6 +35,7 @@ import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.deploy.kubernetes.{ConfigurationUtils, SparkPodInitContainerBootstrap}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
+import org.apache.spark.internal.config
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.kubernetes.KubernetesExternalShuffleClient
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointAddress, RpcEnv}
@@ -209,7 +210,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     new KubernetesExternalShuffleClient(
       SparkTransportConf.fromSparkConf(conf, "shuffle"),
       sc.env.securityManager,
-      sc.env.securityManager.isAuthenticationEnabled())
+      sc.env.securityManager.isAuthenticationEnabled(),
+      conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
   }
 
   private def getInitialTargetExecutorNumber(defaultNumExecutors: Int = 1): Int = {
