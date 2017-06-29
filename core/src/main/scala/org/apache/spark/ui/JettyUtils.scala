@@ -213,8 +213,8 @@ private[spark] object JettyUtils extends Logging {
       override def newHttpClient(): HttpClient = {
         // Use the Jetty logic to calculate the number of selector threads (#CPUs/2),
         // but limit it to 8 max.
-        val numSelectors = math.max(1, math.min(8, Runtime.getRuntime().availableProcessors()/2))
-        return new HttpClient(new HttpClientTransportOverHTTP(numSelectors), null)
+        val numSelectors = math.max(1, math.min(8, Runtime.getRuntime().availableProcessors() / 2))
+        new HttpClient(new HttpClientTransportOverHTTP(numSelectors), null)
       }
 
       override def filterServerResponseHeader(
