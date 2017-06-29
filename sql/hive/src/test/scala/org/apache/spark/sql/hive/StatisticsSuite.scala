@@ -565,7 +565,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               assert(fetched4.get.sizeInBytes < fetched1.get.sizeInBytes)
               assert(fetched4.get.colStats.isEmpty)
               val statsProp = getStatsProperties(table)
-              assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched3.get.sizeInBytes)
+              assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched4.get.sizeInBytes)
             } else {
               assert(getStatsProperties(table).isEmpty)
             }
