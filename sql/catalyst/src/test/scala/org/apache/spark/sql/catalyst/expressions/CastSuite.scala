@@ -23,7 +23,7 @@ import java.util.{Calendar, Locale, TimeZone}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.CatalystTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
 import org.apache.spark.sql.types._
@@ -32,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Test suite for data type casting expression [[Cast]].
  */
-class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
+class CastSuite extends SparkFunSuite with ExpressionEvalHelper with CatalystTestUtils {
 
   private def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
     v match {

@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.util.CatalystTestUtils
 import org.apache.spark.sql.internal.SQLConf
 
-class InferFiltersFromConstraintsSuite extends PlanTest {
+class InferFiltersFromConstraintsSuite extends PlanTest with CatalystTestUtils {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -206,13 +207,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("No inferred filter when constraint propagation is disabled") {
-    try {
-      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, false)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
-    } finally {
-      SQLConf.get.unsetConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED)
     }
   }
 }

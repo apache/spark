@@ -24,9 +24,10 @@ import org.apache.spark.sql.catalyst.expressions.{Coalesce, IsNotNull}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.util.CatalystTestUtils
 import org.apache.spark.sql.internal.SQLConf
 
-class OuterJoinEliminationSuite extends PlanTest {
+class OuterJoinEliminationSuite extends PlanTest with CatalystTestUtils {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
@@ -234,9 +235,7 @@ class OuterJoinEliminationSuite extends PlanTest {
   }
 
   test("no outer join elimination if constraint propagation is disabled") {
-    try {
-      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, false)
-
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val x = testRelation.subquery('x)
       val y = testRelation1.subquery('y)
 
@@ -251,8 +250,6 @@ class OuterJoinEliminationSuite extends PlanTest {
       val optimized = Optimize.execute(originalQuery.analyze)
 
       comparePlans(optimized, originalQuery.analyze)
-    } finally {
-      SQLConf.get.unsetConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED)
     }
   }
 }
