@@ -137,10 +137,9 @@ NULL
 #' Non-aggregate functions defined for \code{Column}.
 #'
 #' @param x Column to compute on. In \code{lit}, it is a literal value or a Column.
-#'          In \code{monotonically_increasing_id}, it should be empty.
+#'          In \code{expr}, it contains an expression character object to be parsed.
 #' @param y Column to compute on.
-#' @param ... additional argument(s). In \code{expr}, it contains an expression character
-#'            object to be parsed.
+#' @param ... additional Columns.
 #' @name column_nonaggregate_functions
 #' @rdname column_nonaggregate_functions
 #' @seealso coalesce,SparkDataFrame-method
@@ -152,8 +151,8 @@ NULL
 NULL
 
 #' @details
-#' \code{lit}: A new \linkS4class{Column} is created to represent the literal value.
-#' If the parameter is a \linkS4class{Column}, it is returned unchanged.
+#' \code{lit}: A new Column is created to represent the literal value.
+#' If the parameter is a Column, it is returned unchanged.
 #'
 #' @rdname column_nonaggregate_functions
 #' @export
@@ -836,6 +835,18 @@ setMethod("initcap",
           })
 
 #' @details
+#' \code{isnan}: Returns true if the column is NaN.
+#' @rdname column_nonaggregate_functions
+#' @aliases isnan isnan,Column-method
+#' @note isnan since 2.0.0
+setMethod("isnan",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "isnan", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{is.nan}: Alias for \link{isnan}.
 #'
 #' @rdname column_nonaggregate_functions
@@ -846,18 +857,6 @@ setMethod("is.nan",
           signature(x = "Column"),
           function(x) {
             isnan(x)
-          })
-
-#' @details
-#' \code{isnan}: Returns true if the column is NaN.
-#' @rdname column_nonaggregate_functions
-#' @aliases isnan isnan,Column-method
-#' @note isnan since 2.0.0
-setMethod("isnan",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "isnan", x@jc)
-            column(jc)
           })
 
 #' @details
@@ -1141,6 +1140,7 @@ setMethod("minute",
 #' This expression would return the following IDs:
 #' 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
 #' This is equivalent to the MONOTONICALLY_INCREASING_ID function in SQL.
+#' The method should be used with no argument.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases monotonically_increasing_id monotonically_increasing_id,missing-method
@@ -3495,6 +3495,7 @@ setMethod("grouping_id",
 
 #' @details
 #' \code{input_file_name}: Creates a string column with the input file name for a given row.
+#' The method should be used with no argument.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases input_file_name input_file_name,missing-method
