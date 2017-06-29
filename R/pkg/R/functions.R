@@ -138,7 +138,7 @@ NULL
 #'
 #' @param x Column to compute on. In \code{sha2}, it is one of 224, 256, 384, or 512.
 #' @param y Column to compute on.
-#' @param ... additional columns.
+#' @param ... additional Columns.
 #' @name column_misc_functions
 #' @rdname column_misc_functions
 #' @family misc functions
