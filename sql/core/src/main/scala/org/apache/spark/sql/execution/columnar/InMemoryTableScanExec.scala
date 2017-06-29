@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
@@ -34,18 +34,35 @@ case class InMemoryTableScanExec(
     @transient relation: InMemoryRelation)
   extends LeafExecNode {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = attributes
 
+  private def updateAttribute(expr: Expression): Expression = {
+    // attributes can be pruned so using relation's output.
+    // E.g., relation.output is [id, item] but this scan's output can be [item] only.
+    val attrMap = AttributeMap(relation.child.output.zip(relation.output))
+    expr.transform {
+      case attr: Attribute => attrMap.getOrElse(attr, attr)
+    }
+  }
+
   // The cached version does not change the outputPartitioning of the original SparkPlan.
-  override def outputPartitioning: Partitioning = relation.child.outputPartitioning
+  // But the cached version could alias output, so we need to replace output.
+  override def outputPartitioning: Partitioning = {
+    relation.child.outputPartitioning match {
+      case h: HashPartitioning => updateAttribute(h).asInstanceOf[HashPartitioning]
+      case _ => relation.child.outputPartitioning
+    }
+  }
 
   // The cached version does not change the outputOrdering of the original SparkPlan.
-  override def outputOrdering: Seq[SortOrder] = relation.child.outputOrdering
+  // But the cached version could alias output, so we need to replace output.
+  override def outputOrdering: Seq[SortOrder] =
+    relation.child.outputOrdering.map(updateAttribute(_).asInstanceOf[SortOrder])
 
   private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
 
@@ -63,6 +80,11 @@ case class InMemoryTableScanExec(
     case EqualTo(a: AttributeReference, l: Literal) =>
       statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
     case EqualTo(l: Literal, a: AttributeReference) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+
+    case EqualNullSafe(a: AttributeReference, l: Literal) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+    case EqualNullSafe(l: Literal, a: AttributeReference) =>
       statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
 
     case LessThan(a: AttributeReference, l: Literal) => statsFor(a).lowerBound < l
@@ -127,10 +149,11 @@ case class InMemoryTableScanExec(
     val relOutput: AttributeSeq = relation.output
     val buffers = relation.cachedColumnBuffers
 
-    buffers.mapPartitionsInternal { cachedBatchIterator =>
+    buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
       val partitionFilter = newPredicate(
         partitionFilters.reduceOption(And).getOrElse(Literal(true)),
         schema)
+      partitionFilter.initialize(index)
 
       // Find the ordinals and data types of the requested columns.
       val (requestedColumnIndices, requestedColumnDataTypes) =
@@ -142,7 +165,7 @@ case class InMemoryTableScanExec(
       val cachedBatchesToScan =
         if (inMemoryPartitionPruningEnabled) {
           cachedBatchIterator.filter { cachedBatch =>
-            if (!partitionFilter(cachedBatch.stats)) {
+            if (!partitionFilter.eval(cachedBatch.stats)) {
               def statsString: String = schemaIndex.map {
                 case (a, i) =>
                   val value = cachedBatch.stats.get(i, a.dataType)

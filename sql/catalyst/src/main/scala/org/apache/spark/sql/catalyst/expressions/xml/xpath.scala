@@ -55,9 +55,15 @@ abstract class XPathExtract extends BinaryExpression with ExpectsInputTypes with
   def path: Expression
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Evaluates a boolean xpath expression.",
-  extended = "> SELECT _FUNC_('<a><b>1</b></a>','a/b');\ntrue")
+  usage = "_FUNC_(xml, xpath) - Returns true if the XPath expression evaluates to true, or if a matching node is found.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('<a><b>1</b></a>','a/b');
+       true
+  """)
+// scalastyle:on line.size.limit
 case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract {
 
   override def prettyName: String = "xpath_boolean"
@@ -68,11 +74,17 @@ case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract 
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns a short value that matches the xpath expression",
-  extended = "> SELECT _FUNC_('<a><b>1</b><b>2</b></a>','sum(a/b)');\n3")
+  usage = "_FUNC_(xml, xpath) - Returns a short integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
+       3
+  """)
+// scalastyle:on line.size.limit
 case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
-  override def prettyName: String = "xpath_int"
+  override def prettyName: String = "xpath_short"
   override def dataType: DataType = ShortType
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
@@ -81,9 +93,15 @@ case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns an integer value that matches the xpath expression",
-  extended = "> SELECT _FUNC_('<a><b>1</b><b>2</b></a>','sum(a/b)');\n3")
+  usage = "_FUNC_(xml, xpath) - Returns an integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
+       3
+  """)
+// scalastyle:on line.size.limit
 case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_int"
   override def dataType: DataType = IntegerType
@@ -94,9 +112,15 @@ case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns a long value that matches the xpath expression",
-  extended = "> SELECT _FUNC_('<a><b>1</b><b>2</b></a>','sum(a/b)');\n3")
+  usage = "_FUNC_(xml, xpath) - Returns a long integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
+       3
+  """)
+// scalastyle:on line.size.limit
 case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_long"
   override def dataType: DataType = LongType
@@ -107,9 +131,15 @@ case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns a float value that matches the xpath expression",
-  extended = "> SELECT _FUNC_('<a><b>1</b><b>2</b></a>','sum(a/b)');\n3.0")
+  usage = "_FUNC_(xml, xpath) - Returns a float value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
+       3.0
+  """)
+// scalastyle:on line.size.limit
 case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_float"
   override def dataType: DataType = FloatType
@@ -120,9 +150,15 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns a double value that matches the xpath expression",
-  extended = "> SELECT _FUNC_('<a><b>1</b><b>2</b></a>','sum(a/b)');\n3.0")
+  usage = "_FUNC_(xml, xpath) - Returns a double value, the value zero if no match is found, or NaN if a match is found but the value is non-numeric.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
+       3.0
+  """)
+// scalastyle:on line.size.limit
 case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_float"
   override def dataType: DataType = DoubleType
@@ -135,8 +171,12 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns the text contents of the first xml node that matches the xpath expression",
-  extended = "> SELECT _FUNC_('<a><b>b</b><c>cc</c></a>','a/c');\ncc")
+  usage = "_FUNC_(xml, xpath) - Returns the text contents of the first xml node that matches the XPath expression.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('<a><b>b</b><c>cc</c></a>','a/c');
+       cc
+  """)
 // scalastyle:on line.size.limit
 case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_string"
@@ -150,8 +190,12 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns a string array of values within xml nodes that match the xpath expression",
-  extended = "> SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');\n['b1','b2','b3']")
+  usage = "_FUNC_(xml, xpath) - Returns a string array of values within the nodes of xml that match the XPath expression.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');
+       ['b1','b2','b3']
+  """)
 // scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath"

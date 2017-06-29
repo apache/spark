@@ -1,8 +1,8 @@
 Package: SparkR
 Type: Package
+Version: 2.3.0
 Title: R Frontend for Apache Spark
-Version: 2.0.0
-Date: 2016-08-27
+Description: The SparkR package provides an R Frontend for Apache Spark.
 Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
                     email = "shivaram@cs.berkeley.edu"),
              person("Xiangrui", "Meng", role = "aut",
@@ -10,17 +10,18 @@ Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
              person("Felix", "Cheung", role = "aut",
                     email = "felixcheung@apache.org"),
              person(family = "The Apache Software Foundation", role = c("aut", "cph")))
+License: Apache License (== 2.0)
 URL: http://www.apache.org/ http://spark.apache.org/
-BugReports: https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-ContributingBugReports
+BugReports: http://spark.apache.org/contributing.html
 Depends:
     R (>= 3.0),
     methods
 Suggests:
+    knitr,
+    rmarkdown,
     testthat,
     e1071,
     survival
-Description: The SparkR package provides an R frontend for Apache Spark.
-License: Apache License (== 2.0)
 Collate:
     'schema.R'
     'generics.R'
@@ -34,17 +35,27 @@ Collate:
     'WindowSpec.R'
     'backend.R'
     'broadcast.R'
+    'catalog.R'
     'client.R'
     'context.R'
     'deserialize.R'
     'functions.R'
     'install.R'
     'jvm.R'
-    'mllib.R'
+    'mllib_classification.R'
+    'mllib_clustering.R'
+    'mllib_fpm.R'
+    'mllib_recommendation.R'
+    'mllib_regression.R'
+    'mllib_stat.R'
+    'mllib_tree.R'
+    'mllib_utils.R'
     'serialize.R'
     'sparkR.R'
     'stats.R'
+    'streaming.R'
     'types.R'
     'utils.R'
     'window.R'
 RoxygenNote: 5.0.1
+VignetteBuilder: knitr

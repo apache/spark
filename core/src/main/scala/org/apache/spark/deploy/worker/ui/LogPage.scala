@@ -33,13 +33,16 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
   private val supportedLogTypes = Set("stderr", "stdout")
   private val defaultBytes = 100 * 1024
 
+  // stripXSS is called first to remove suspicious characters used in XSS attacks
   def renderLog(request: HttpServletRequest): String = {
-    val appId = Option(request.getParameter("appId"))
-    val executorId = Option(request.getParameter("executorId"))
-    val driverId = Option(request.getParameter("driverId"))
-    val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset")).map(_.toLong)
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
+    val appId = Option(UIUtils.stripXSS(request.getParameter("appId")))
+    val executorId = Option(UIUtils.stripXSS(request.getParameter("executorId")))
+    val driverId = Option(UIUtils.stripXSS(request.getParameter("driverId")))
+    val logType = UIUtils.stripXSS(request.getParameter("logType"))
+    val offset = Option(UIUtils.stripXSS(request.getParameter("offset"))).map(_.toLong)
+    val byteLength =
+      Option(UIUtils.stripXSS(request.getParameter("byteLength"))).map(_.toInt)
+      .getOrElse(defaultBytes)
 
     val logDir = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
@@ -55,13 +58,16 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     pre + logText
   }
 
+  // stripXSS is called first to remove suspicious characters used in XSS attacks
   def render(request: HttpServletRequest): Seq[Node] = {
-    val appId = Option(request.getParameter("appId"))
-    val executorId = Option(request.getParameter("executorId"))
-    val driverId = Option(request.getParameter("driverId"))
-    val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset")).map(_.toLong)
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
+    val appId = Option(UIUtils.stripXSS(request.getParameter("appId")))
+    val executorId = Option(UIUtils.stripXSS(request.getParameter("executorId")))
+    val driverId = Option(UIUtils.stripXSS(request.getParameter("driverId")))
+    val logType = UIUtils.stripXSS(request.getParameter("logType"))
+    val offset = Option(UIUtils.stripXSS(request.getParameter("offset"))).map(_.toLong)
+    val byteLength =
+      Option(UIUtils.stripXSS(request.getParameter("byteLength"))).map(_.toInt)
+      .getOrElse(defaultBytes)
 
     val (logDir, params, pageName) = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
@@ -138,7 +144,8 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       val files = RollingFileAppender.getSortedRolledOverFiles(logDirectory, logType)
       logDebug(s"Sorted log files of type $logType in $logDirectory:\n${files.mkString("\n")}")
 
-      val totalLength = files.map { _.length }.sum
+      val fileLengths: Seq[Long] = files.map(Utils.getFileLength(_, worker.conf))
+      val totalLength = fileLengths.sum
       val offset = offsetOption.getOrElse(totalLength - byteLength)
       val startIndex = {
         if (offset < 0) {
@@ -151,7 +158,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       }
       val endIndex = math.min(startIndex + byteLength, totalLength)
       logDebug(s"Getting log from $startIndex to $endIndex")
-      val logText = Utils.offsetBytes(files, startIndex, endIndex)
+      val logText = Utils.offsetBytes(files, fileLengths, startIndex, endIndex)
       logDebug(s"Got log of length ${logText.length} bytes")
       (logText, startIndex, endIndex, totalLength)
     } catch {

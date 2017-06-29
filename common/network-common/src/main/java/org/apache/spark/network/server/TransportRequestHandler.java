@@ -22,8 +22,6 @@ import java.nio.ByteBuffer;
 
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,7 +51,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * The messages should have been processed by the pipeline setup by {@link TransportServer}.
  */
 public class TransportRequestHandler extends MessageHandler<RequestMessage> {
-  private final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
 
   /** The Netty channel that this handler is associated with. */
   private final Channel channel;
@@ -116,7 +114,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   private void processFetchRequest(final ChunkFetchRequest req) {
     if (logger.isTraceEnabled()) {
-      logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel), req.streamChunkId);
+      logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel),
+        req.streamChunkId);
     }
 
     ManagedBuffer buf;
@@ -125,8 +124,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       streamManager.registerChannel(channel, req.streamChunkId.streamId);
       buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
     } catch (Exception e) {
-      logger.error(String.format(
-        "Error opening block %s for request from %s", req.streamChunkId, getRemoteAddress(channel)), e);
+      logger.error(String.format("Error opening block %s for request from %s",
+        req.streamChunkId, getRemoteAddress(channel)), e);
       respond(new ChunkFetchFailure(req.streamChunkId, Throwables.getStackTraceAsString(e)));
       return;
     }
@@ -188,21 +187,16 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
    * Responds to a single message with some Encodable object. If a failure occurs while sending,
    * it will be logged and the channel closed.
    */
-  private void respond(final Encodable result) {
-    final SocketAddress remoteAddress = channel.remoteAddress();
-    channel.writeAndFlush(result).addListener(
-      new ChannelFutureListener() {
-        @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
-          if (future.isSuccess()) {
-            logger.trace("Sent result {} to client {}", result, remoteAddress);
-          } else {
-            logger.error(String.format("Error sending result %s to %s; closing connection",
-              result, remoteAddress), future.cause());
-            channel.close();
-          }
-        }
+  private void respond(Encodable result) {
+    SocketAddress remoteAddress = channel.remoteAddress();
+    channel.writeAndFlush(result).addListener(future -> {
+      if (future.isSuccess()) {
+        logger.trace("Sent result {} to client {}", result, remoteAddress);
+      } else {
+        logger.error(String.format("Error sending result %s to %s; closing connection",
+          result, remoteAddress), future.cause());
+        channel.close();
       }
-    );
+    });
   }
 }

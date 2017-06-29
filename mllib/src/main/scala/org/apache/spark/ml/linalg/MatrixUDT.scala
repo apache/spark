@@ -18,7 +18,7 @@
 package org.apache.spark.ml.linalg
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -46,7 +46,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
   }
 
   override def serialize(obj: Matrix): InternalRow = {
-    val row = new GenericMutableRow(7)
+    val row = new GenericInternalRow(7)
     obj match {
       case sm: SparseMatrix =>
         row.setByte(0, 0)

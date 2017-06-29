@@ -20,25 +20,22 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => BasePredicate}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 
 object InterpretedPredicate {
-  def create(expression: Expression, inputSchema: Seq[Attribute]): (InternalRow => Boolean) =
+  def create(expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
     create(BindReferences.bindReference(expression, inputSchema))
 
-  def create(expression: Expression): (InternalRow => Boolean) = {
-    expression.foreach {
-      case n: Nondeterministic => n.setInitialValues()
-      case _ =>
-    }
-    (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean]
-  }
+  def create(expression: Expression): InterpretedPredicate = new InterpretedPredicate(expression)
 }
 
+case class InterpretedPredicate(expression: Expression) extends BasePredicate {
+  override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+}
 
 /**
  * An [[Expression]] that returns a boolean value.
@@ -84,15 +81,37 @@ trait PredicateHelper {
    *
    * For example consider a join between two relations R(a, b) and S(c, d).
    *
-   * `canEvaluate(EqualTo(a,b), R)` returns `true` where as `canEvaluate(EqualTo(a,c), R)` returns
-   * `false`.
+   * - `canEvaluate(EqualTo(a,b), R)` returns `true`
+   * - `canEvaluate(EqualTo(a,c), R)` returns `false`
+   * - `canEvaluate(Literal(1), R)` returns `true` as literals CAN be evaluated on any plan
    */
   protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
     expr.references.subsetOf(plan.outputSet)
+
+  /**
+   * Returns true iff `expr` could be evaluated as a condition within join.
+   */
+  protected def canEvaluateWithinJoin(expr: Expression): Boolean = expr match {
+    // Non-deterministic expressions are not allowed as join conditions.
+    case e if !e.deterministic => false
+    case _: ListQuery | _: Exists =>
+      // A ListQuery defines the query which we want to search in an IN subquery expression.
+      // Currently the only way to evaluate an IN subquery is to convert it to a
+      // LeftSemi/LeftAnti/ExistenceJoin by `RewritePredicateSubquery` rule.
+      // It cannot be evaluated as part of a Join operator.
+      // An Exists shouldn't be push into a Join operator too.
+      false
+    case e: SubqueryExpression =>
+      // non-correlated subquery will be replaced as literal
+      e.children.isEmpty
+    case a: AttributeReference => true
+    case e: Unevaluable => false
+    case e => e.children.forall(canEvaluateWithinJoin)
+  }
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_ a - Logical not")
+  usage = "_FUNC_ expr - Logical not.")
 case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
@@ -114,20 +133,57 @@ case class Not(child: Expression)
  * Evaluates to `true` if `list` contains `value`.
  */
 @ExpressionDescription(
-  usage = "expr _FUNC_(val1, val2, ...) - Returns true if expr equals to any valN.")
-case class In(value: Expression, list: Seq[Expression]) extends Predicate
-    with ImplicitCastInputTypes {
+  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.")
+case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   require(list != null, "list should not be null")
-
-  override def inputTypes: Seq[AbstractDataType] = value.dataType +: list.map(_.dataType)
-
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (list.exists(l => l.dataType != value.dataType)) {
-      TypeCheckResult.TypeCheckFailure(
-        "Arguments must be same type")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
+    list match {
+      case ListQuery(sub, _, _) :: Nil =>
+        val valExprs = value match {
+          case cns: CreateNamedStruct => cns.valExprs
+          case expr => Seq(expr)
+        }
+        if (valExprs.length != sub.output.length) {
+          TypeCheckResult.TypeCheckFailure(
+            s"""
+               |The number of columns in the left hand side of an IN subquery does not match the
+               |number of columns in the output of subquery.
+               |#columns in left hand side: ${valExprs.length}.
+               |#columns in right hand side: ${sub.output.length}.
+               |Left side columns:
+               |[${valExprs.map(_.sql).mkString(", ")}].
+               |Right side columns:
+               |[${sub.output.map(_.sql).mkString(", ")}].
+             """.stripMargin)
+        } else {
+          val mismatchedColumns = valExprs.zip(sub.output).flatMap {
+            case (l, r) if l.dataType != r.dataType =>
+              s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
+            case _ => None
+          }
+          if (mismatchedColumns.nonEmpty) {
+            TypeCheckResult.TypeCheckFailure(
+              s"""
+                 |The data type of one or more elements in the left hand side of an IN subquery
+                 |is not compatible with the data type of the output of the subquery
+                 |Mismatched columns:
+                 |[${mismatchedColumns.mkString(", ")}]
+                 |Left side:
+                 |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
+                 |Right side:
+                 |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
+               """.stripMargin)
+          } else {
+            TypeCheckResult.TypeCheckSuccess
+          }
+        }
+      case _ =>
+        if (list.exists(l => l.dataType != value.dataType)) {
+          TypeCheckResult.TypeCheckFailure("Arguments must be same type")
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
     }
   }
 
@@ -251,7 +307,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Logical AND.")
+  usage = "expr1 _FUNC_ expr2 - Logical AND.")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -314,7 +370,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Logical OR.")
+  usage = "expr1 _FUNC_ expr2 - Logical OR.")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -391,6 +447,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
       defineCodeGen(ctx, ev, (c1, c2) => s"${ctx.genComp(left.dataType, c1, c2)} $symbol 0")
     }
   }
+
+  protected lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 }
 
 
@@ -409,25 +467,30 @@ object Equality {
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns TRUE if a equals b and false otherwise.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` equals `expr2`, or false otherwise.")
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = AnyDataType
 
-  override def symbol: String = "="
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    if (left.dataType == FloatType) {
-      Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
-    } else if (left.dataType == DoubleType) {
-      Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
-    } else if (left.dataType != BinaryType) {
-      input1 == input2
-    } else {
-      java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        // TODO: although map type is not orderable, technically map type should be able to be used
+        // in equality comparison, remove this type check once we support it.
+        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
+          TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualTo, but the actual " +
+            s"input type is ${left.dataType.catalogString}.")
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
+      case failure => failure
     }
   }
+
+  override def symbol: String = "="
+
+  protected override def nullSafeEval(left: Any, right: Any): Any = ordering.equiv(left, right)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
@@ -435,11 +498,28 @@ case class EqualTo(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = """a _FUNC_ b - Returns same result with EQUAL(=) operator for non-null operands,
-    but returns TRUE if both are NULL, FALSE if one of the them is NULL.""")
+  usage = """
+    expr1 _FUNC_ expr2 - Returns same result as the EQUAL(=) operator for non-null operands,
+      but returns true if both are null, false if one of the them is null.
+  """)
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
   override def inputType: AbstractDataType = AnyDataType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        // TODO: although map type is not orderable, technically map type should be able to be used
+        // in equality comparison, remove this type check once we support it.
+        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
+          TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualNullSafe, but the actual " +
+            s"input type is ${left.dataType.catalogString}.")
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
+      case failure => failure
+    }
+  }
 
   override def symbol: String = "<=>"
 
@@ -453,15 +533,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (input1 == null || input2 == null) {
       false
     } else {
-      if (left.dataType == FloatType) {
-        Utils.nanSafeCompareFloats(input1.asInstanceOf[Float], input2.asInstanceOf[Float]) == 0
-      } else if (left.dataType == DoubleType) {
-        Utils.nanSafeCompareDoubles(input1.asInstanceOf[Double], input2.asInstanceOf[Double]) == 0
-      } else if (left.dataType != BinaryType) {
-        input1 == input2
-      } else {
-        java.util.Arrays.equals(input1.asInstanceOf[Array[Byte]], input2.asInstanceOf[Array[Byte]])
-      }
+      ordering.equiv(input1, input2)
     }
   }
 
@@ -476,7 +548,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns TRUE if a is less than b.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.")
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -484,13 +556,11 @@ case class LessThan(left: Expression, right: Expression)
 
   override def symbol: String = "<"
 
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns TRUE if a is not greater than b.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.")
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -498,13 +568,11 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 
   override def symbol: String = "<="
 
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns TRUE if a is greater than b.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.")
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -512,21 +580,17 @@ case class GreaterThan(left: Expression, right: Expression)
 
   override def symbol: String = ">"
 
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns TRUE if a is not smaller than b.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than or equal to `expr2`.")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = ">="
-
-  private lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }

@@ -139,9 +139,12 @@ if __name__ == "__main__":
          "model.", "True", "TypeConverters.toBoolean"),
         ("thresholds", "Thresholds in multi-class classification to adjust the probability of " +
          "predicting each class. Array must have length equal to the number of classes, with " +
-         "values >= 0. The class with largest value p/t is predicted, where p is the original " +
-         "probability of that class and t is the class' threshold.", None,
+         "values > 0, excepting that at most one value may be 0. " +
+         "The class with largest value p/t is predicted, where p is the original " +
+         "probability of that class and t is the class's threshold.", None,
          "TypeConverters.toListFloat"),
+        ("threshold", "threshold in binary classification prediction, in range [0, 1]",
+         "0.5", "TypeConverters.toFloat"),
         ("weightCol", "weight column name. If this is not set or empty, we treat " +
          "all instance weights as 1.0.", None, "TypeConverters.toString"),
         ("solver", "the solver algorithm for optimization. If this is not set or empty, " +

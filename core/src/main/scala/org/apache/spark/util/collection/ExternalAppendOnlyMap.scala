@@ -184,7 +184,7 @@ class ExternalAppendOnlyMap[K, V, C](
   override protected[this] def spill(collection: SizeTracker): Unit = {
     val inMemoryIterator = currentMap.destructiveSortedIterator(keyComparator)
     val diskMapIterator = spillMemoryIteratorToDisk(inMemoryIterator)
-    spilledMaps.append(diskMapIterator)
+    spilledMaps += diskMapIterator
   }
 
   /**
@@ -192,12 +192,19 @@ class ExternalAppendOnlyMap[K, V, C](
    * It will be called by TaskMemoryManager when there is not enough memory for the task.
    */
   override protected[this] def forceSpill(): Boolean = {
-    assert(readingIterator != null)
-    val isSpilled = readingIterator.spill()
-    if (isSpilled) {
-      currentMap = null
+    if (readingIterator != null) {
+      val isSpilled = readingIterator.spill()
+      if (isSpilled) {
+        currentMap = null
+      }
+      isSpilled
+    } else if (currentMap.size > 0) {
+      spill(currentMap)
+      currentMap = new SizeTrackingAppendOnlyMap[K, C]
+      true
+    } else {
+      false
     }
-    isSpilled
   }
 
   /**
@@ -215,7 +222,7 @@ class ExternalAppendOnlyMap[K, V, C](
     // Flush the disk writer's contents to disk, and update relevant variables
     def flush(): Unit = {
       val segment = writer.commitAndGet()
-      batchSizes.append(segment.length)
+      batchSizes += segment.length
       _diskBytesSpilled += segment.length
       objectsWritten = 0
     }

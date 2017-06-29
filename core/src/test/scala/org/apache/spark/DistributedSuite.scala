@@ -21,6 +21,7 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
+import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -28,7 +29,8 @@ class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
 
 
-class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContext {
+class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContext
+  with EncryptionFunSuite {
 
   val clusterUrl = "local-cluster[2,1,1024]"
 
@@ -149,8 +151,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc.parallelize(1 to 10).count()
   }
 
-  private def testCaching(storageLevel: StorageLevel): Unit = {
-    sc = new SparkContext(clusterUrl, "test")
+  private def testCaching(conf: SparkConf, storageLevel: StorageLevel): Unit = {
+    sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
     sc.jobProgressListener.waitUntilExecutorsUp(2, 30000)
     val data = sc.parallelize(1 to 1000, 10)
     val cachedData = data.persist(storageLevel)
@@ -170,10 +172,12 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString)
-      val deserialized = serializerManager.dataDeserializeStream[Int](blockId,
-        new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream()).toList
+      val deserialized = serializerManager.dataDeserializeStream(blockId,
+        new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
       assert(deserialized === (1 to 100).toList)
     }
+    // This will exercise the getRemoteBytes / getRemoteValues code paths:
+    assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
   }
 
   Seq(
@@ -185,8 +189,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
     "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
   ).foreach { case (testName, storageLevel) =>
-    test(testName) {
-      testCaching(storageLevel)
+    encryptionTest(testName) { conf =>
+      testCaching(conf, storageLevel)
     }
   }
 

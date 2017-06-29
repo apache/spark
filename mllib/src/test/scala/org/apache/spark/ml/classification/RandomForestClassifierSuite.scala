@@ -39,6 +39,7 @@ class RandomForestClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import RandomForestClassifierSuite.compareAPIs
+  import testImplicits._
 
   private var orderedLabeledPoints50_1000: RDD[LabeledPoint] = _
   private var orderedLabeledPoints5_20: RDD[LabeledPoint] = _
@@ -140,8 +141,7 @@ class RandomForestClassifierSuite
     val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val model = rf.fit(df)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(rf, model)
 
     val predictions = model.transform(df)
       .select(rf.getPredictionCol, rf.getRawPredictionCol, rf.getProbabilityCol)
@@ -158,7 +158,7 @@ class RandomForestClassifierSuite
   }
 
   test("Fitting without numClasses in metadata") {
-    val df: DataFrame = spark.createDataFrame(TreeTests.featureImportanceData(sc))
+    val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val rf = new RandomForestClassifier().setMaxDepth(1).setNumTrees(1)
     rf.fit(df)
   }
@@ -217,7 +217,8 @@ class RandomForestClassifierSuite
 
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
-    testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
+      allParamSettings, checkModelData)
   }
 }
 

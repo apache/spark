@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.TestUtils.assertSpilled
 
 case class WindowData(month: Int, area: String, product: Int)
 
@@ -361,7 +362,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
         |with
         | v0 as (select 0 as key, 1 as value),
         | v1 as (select key, count(value) over (partition by key) cnt_val from v0),
-        | v2 as (select v1.key, v1_lag.cnt_val from v1, v1 v1_lag where v1.key = v1_lag.key)
+        | v2 as (select v1.key, v1_lag.cnt_val from v1 cross join v1 v1_lag
+        |        where v1.key = v1_lag.key)
         | select key, cnt_val from v2 order by key limit 1
       """.stripMargin), Row(0, 1))
   }
@@ -410,5 +412,37 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
         |      select cast(null as int) as id, 2 as b, 4 as c) tmp
       """.stripMargin),
       Row(1, 3, null) :: Row(2, null, 4) :: Nil)
+  }
+
+  test("test with low buffer spill threshold") {
+    val nums = sparkContext.parallelize(1 to 10).map(x => (x, x % 2)).toDF("x", "y")
+    nums.createOrReplaceTempView("nums")
+
+    val expected =
+      Row(1, 1, 1) ::
+        Row(0, 2, 3) ::
+        Row(1, 3, 6) ::
+        Row(0, 4, 10) ::
+        Row(1, 5, 15) ::
+        Row(0, 6, 21) ::
+        Row(1, 7, 28) ::
+        Row(0, 8, 36) ::
+        Row(1, 9, 45) ::
+        Row(0, 10, 55) :: Nil
+
+    val actual = sql(
+      """
+        |SELECT y, x, sum(x) OVER w1 AS running_sum
+        |FROM nums
+        |WINDOW w1 AS (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDiNG AND CURRENT RoW)
+      """.stripMargin)
+
+    withSQLConf("spark.sql.windowExec.buffer.spill.threshold" -> "1") {
+      assertSpilled(sparkContext, "test with low buffer spill threshold") {
+        checkAnswer(actual, expected)
+      }
+    }
+
+    spark.catalog.dropTempView("nums")
   }
 }

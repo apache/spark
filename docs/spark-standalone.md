@@ -83,7 +83,7 @@ Once you've set up this file, you can launch or stop your cluster with the follo
 - `sbin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
 - `sbin/start-slave.sh` - Starts a slave instance on the machine the script is executed on.
 - `sbin/start-all.sh` - Starts both a master and a number of slaves as described above.
-- `sbin/stop-master.sh` - Stops the master that was started via the `bin/start-master.sh` script.
+- `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
 - `sbin/stop-slaves.sh` - Stops all slave instances on the machines specified in the `conf/slaves` file.
 - `sbin/stop-all.sh` - Stops both the master and the slaves as described above.
 
@@ -242,12 +242,21 @@ SPARK_WORKER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.appDataTtl</code></td>
-  <td>7 * 24 * 3600 (7 days)</td>
+  <td>604800 (7 days, 7 * 24 * 3600)</td>
   <td>
     The number of seconds to retain application work directories on each worker.  This is a Time To Live
     and should depend on the amount of available disk space you have.  Application logs and jars are
     downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
     especially if you run jobs very frequently.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
+  <td>100</td>
+  <td>
+    For compressed log files, the uncompressed file can only be computed by uncompressing the files.
+    Spark caches the uncompressed file size of compressed log files. This property controls the cache
+    size.
   </td>
 </tr>
 </table>
@@ -348,7 +357,7 @@ Learn more about getting started with ZooKeeper [here](http://zookeeper.apache.o
 **Configuration**
 
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
-For more information about these configurations please refer to the configurations (doc)[configurations.html#deploy]
+For more information about these configurations please refer to the [configuration doc](configuration.html#deploy)
 
 Possible gotcha: If you have multiple Masters in your cluster but fail to correctly configure the Masters to use ZooKeeper, the Masters will fail to discover each other and think they're all leaders. This will not lead to a healthy cluster state (as all Masters will schedule independently).
 

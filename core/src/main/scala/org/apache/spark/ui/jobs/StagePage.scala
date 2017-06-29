@@ -70,8 +70,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   // if we find that it's okay.
   private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
 
-  private val displayPeakExecutionMemory = parent.conf.getBoolean("spark.sql.unsafe.enabled", true)
-
   private def getLocalitySummaryString(stageData: StageUIData): String = {
     val localities = stageData.taskData.values.map(_.taskInfo.taskLocality)
     val localityCounts = localities.groupBy(identity).mapValues(_.size)
@@ -89,17 +87,18 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
-      val parameterId = request.getParameter("id")
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
+      val parameterId = UIUtils.stripXSS(request.getParameter("id"))
       require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-      val parameterAttempt = request.getParameter("attempt")
+      val parameterAttempt = UIUtils.stripXSS(request.getParameter("attempt"))
       require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
 
-      val parameterTaskPage = request.getParameter("task.page")
-      val parameterTaskSortColumn = request.getParameter("task.sort")
-      val parameterTaskSortDesc = request.getParameter("task.desc")
-      val parameterTaskPageSize = request.getParameter("task.pageSize")
-      val parameterTaskPrevPageSize = request.getParameter("task.prevPageSize")
+      val parameterTaskPage = UIUtils.stripXSS(request.getParameter("task.page"))
+      val parameterTaskSortColumn = UIUtils.stripXSS(request.getParameter("task.sort"))
+      val parameterTaskSortDesc = UIUtils.stripXSS(request.getParameter("task.desc"))
+      val parameterTaskPageSize = UIUtils.stripXSS(request.getParameter("task.pageSize"))
+      val parameterTaskPrevPageSize = UIUtils.stripXSS(request.getParameter("task.prevPageSize"))
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
       val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
@@ -144,7 +143,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val allAccumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
       val externalAccumulables = allAccumulables.values.filter { acc => !acc.internal }
-      val hasAccumulators = externalAccumulables.size > 0
+      val hasAccumulators = externalAccumulables.nonEmpty
 
       val summary =
         <div>
@@ -252,15 +251,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                   <span class="additional-metric-title">Getting Result Time</span>
                 </span>
               </li>
-              {if (displayPeakExecutionMemory) {
-                <li>
-                  <span data-toggle="tooltip"
-                        title={ToolTips.PEAK_EXECUTION_MEMORY} data-placement="right">
-                    <input type="checkbox" name={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}/>
-                    <span class="additional-metric-title">Peak Execution Memory</span>
-                  </span>
-                </li>
-              }}
+              <li>
+                <span data-toggle="tooltip"
+                      title={ToolTips.PEAK_EXECUTION_MEMORY} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}/>
+                  <span class="additional-metric-title">Peak Execution Memory</span>
+                </span>
+              </li>
             </ul>
           </div>
         </div>
@@ -343,7 +340,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.metrics.isDefined)
 
       val summaryTable: Option[Seq[Node]] =
-        if (validTasks.size == 0) {
+        if (validTasks.isEmpty) {
           None
         }
         else {
@@ -532,13 +529,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               {serializationQuantiles}
             </tr>,
             <tr class={TaskDetailsClassNames.GETTING_RESULT_TIME}>{gettingResultQuantiles}</tr>,
-            if (displayPeakExecutionMemory) {
-              <tr class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
-                {peakExecutionMemoryQuantiles}
-              </tr>
-            } else {
-              Nil
-            },
+            <tr class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
+              {peakExecutionMemoryQuantiles}
+            </tr>,
             if (stageData.hasInput) <tr>{inputQuantiles}</tr> else Nil,
             if (stageData.hasOutput) <tr>{outputQuantiles}</tr> else Nil,
             if (stageData.hasShuffleRead) {
@@ -651,9 +644,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         }
         val executorComputingTime = executorRunTime - shuffleReadTime - shuffleWriteTime
         val executorComputingTimeProportion =
-          (100 - schedulerDelayProportion - shuffleReadTimeProportion -
+          math.max(100 - schedulerDelayProportion - shuffleReadTimeProportion -
             shuffleWriteTimeProportion - serializationTimeProportion -
-            deserializationTimeProportion - gettingResultTimeProportion)
+            deserializationTimeProportion - gettingResultTimeProportion, 0)
 
         val schedulerDelayProportionPos = 0
         val deserializationTimeProportionPos =
@@ -794,8 +787,8 @@ private[ui] object StagePage {
       info: TaskInfo, metrics: TaskMetricsUIData, currentTime: Long): Long = {
     if (info.finished) {
       val totalExecutionTime = info.finishTime - info.launchTime
-      val executorOverhead = (metrics.executorDeserializeTime +
-        metrics.resultSerializationTime)
+      val executorOverhead = metrics.executorDeserializeTime +
+        metrics.resultSerializationTime
       math.max(
         0,
         totalExecutionTime - metrics.executorRunTime - executorOverhead -
@@ -880,7 +873,7 @@ private[ui] class TaskDataSource(
   // so that we can avoid creating duplicate contents during sorting the data
   private val data = tasks.map(taskRow).sorted(ordering(sortColumn, desc))
 
-  private var _slicedTaskIds: Set[Long] = null
+  private var _slicedTaskIds: Set[Long] = _
 
   override def dataSize: Int = data.size
 
@@ -895,10 +888,8 @@ private[ui] class TaskDataSource(
   private def taskRow(taskData: TaskUIData): TaskTableRowData = {
     val info = taskData.taskInfo
     val metrics = taskData.metrics
-    val duration = if (info.status == "RUNNING") info.timeRunning(currentTime)
-      else metrics.map(_.executorRunTime).getOrElse(1L)
-    val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
-      else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
+    val duration = taskData.taskDuration.getOrElse(1L)
+    val formatDuration = taskData.taskDuration.map(d => UIUtils.formatDuration(d)).getOrElse("")
     val schedulerDelay = metrics.map(getSchedulerDelay(info, _, currentTime)).getOrElse(0L)
     val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
     val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
@@ -1017,8 +1008,8 @@ private[ui] class TaskDataSource(
         None
       }
 
-    val logs = executorsListener.executorToLogUrls.getOrElse(info.executorId, Map.empty)
-
+    val logs = executorsListener.executorToTaskSummary.get(info.executorId)
+      .map(_.executorLogs).getOrElse(Map.empty)
     new TaskTableRowData(
       info.index,
       info.taskId,
@@ -1050,89 +1041,38 @@ private[ui] class TaskDataSource(
    * Return Ordering according to sortColumn and desc
    */
   private def ordering(sortColumn: String, desc: Boolean): Ordering[TaskTableRowData] = {
-    val ordering = sortColumn match {
-      case "Index" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Int.compare(x.index, y.index)
-      }
-      case "ID" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.taskId, y.taskId)
-      }
-      case "Attempt" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Int.compare(x.attempt, y.attempt)
-      }
-      case "Status" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.String.compare(x.status, y.status)
-      }
-      case "Locality Level" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.String.compare(x.taskLocality, y.taskLocality)
-      }
-      case "Executor ID / Host" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.String.compare(x.executorIdAndHost, y.executorIdAndHost)
-      }
-      case "Launch Time" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.launchTime, y.launchTime)
-      }
-      case "Duration" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.duration, y.duration)
-      }
-      case "Scheduler Delay" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.schedulerDelay, y.schedulerDelay)
-      }
-      case "Task Deserialization Time" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.taskDeserializationTime, y.taskDeserializationTime)
-      }
-      case "GC Time" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.gcTime, y.gcTime)
-      }
-      case "Result Serialization Time" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.serializationTime, y.serializationTime)
-      }
-      case "Getting Result Time" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.gettingResultTime, y.gettingResultTime)
-      }
-      case "Peak Execution Memory" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.peakExecutionMemoryUsed, y.peakExecutionMemoryUsed)
-      }
+    val ordering: Ordering[TaskTableRowData] = sortColumn match {
+      case "Index" => Ordering.by(_.index)
+      case "ID" => Ordering.by(_.taskId)
+      case "Attempt" => Ordering.by(_.attempt)
+      case "Status" => Ordering.by(_.status)
+      case "Locality Level" => Ordering.by(_.taskLocality)
+      case "Executor ID / Host" => Ordering.by(_.executorIdAndHost)
+      case "Launch Time" => Ordering.by(_.launchTime)
+      case "Duration" => Ordering.by(_.duration)
+      case "Scheduler Delay" => Ordering.by(_.schedulerDelay)
+      case "Task Deserialization Time" => Ordering.by(_.taskDeserializationTime)
+      case "GC Time" => Ordering.by(_.gcTime)
+      case "Result Serialization Time" => Ordering.by(_.serializationTime)
+      case "Getting Result Time" => Ordering.by(_.gettingResultTime)
+      case "Peak Execution Memory" => Ordering.by(_.peakExecutionMemoryUsed)
       case "Accumulators" =>
         if (hasAccumulators) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.accumulators.get, y.accumulators.get)
-          }
+          Ordering.by(_.accumulators.get)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Accumulators because of no accumulators")
         }
       case "Input Size / Records" =>
         if (hasInput) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.input.get.inputSortable, y.input.get.inputSortable)
-          }
+          Ordering.by(_.input.get.inputSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Input Size / Records because of no inputs")
         }
       case "Output Size / Records" =>
         if (hasOutput) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.output.get.outputSortable, y.output.get.outputSortable)
-          }
+          Ordering.by(_.output.get.outputSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Output Size / Records because of no outputs")
@@ -1140,33 +1080,21 @@ private[ui] class TaskDataSource(
       // ShuffleRead
       case "Shuffle Read Blocked Time" =>
         if (hasShuffleRead) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.shuffleRead.get.shuffleReadBlockedTimeSortable,
-                y.shuffleRead.get.shuffleReadBlockedTimeSortable)
-          }
+          Ordering.by(_.shuffleRead.get.shuffleReadBlockedTimeSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Read Blocked Time because of no shuffle reads")
         }
       case "Shuffle Read Size / Records" =>
         if (hasShuffleRead) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.shuffleRead.get.shuffleReadSortable,
-                y.shuffleRead.get.shuffleReadSortable)
-          }
+          Ordering.by(_.shuffleRead.get.shuffleReadSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Read Size / Records because of no shuffle reads")
         }
       case "Shuffle Remote Reads" =>
         if (hasShuffleRead) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.shuffleRead.get.shuffleReadRemoteSortable,
-                y.shuffleRead.get.shuffleReadRemoteSortable)
-          }
+          Ordering.by(_.shuffleRead.get.shuffleReadRemoteSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Remote Reads because of no shuffle reads")
@@ -1174,22 +1102,14 @@ private[ui] class TaskDataSource(
       // ShuffleWrite
       case "Write Time" =>
         if (hasShuffleWrite) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.shuffleWrite.get.writeTimeSortable,
-                y.shuffleWrite.get.writeTimeSortable)
-          }
+          Ordering.by(_.shuffleWrite.get.writeTimeSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Write Time because of no shuffle writes")
         }
       case "Shuffle Write Size / Records" =>
         if (hasShuffleWrite) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.shuffleWrite.get.shuffleWriteSortable,
-                y.shuffleWrite.get.shuffleWriteSortable)
-          }
+          Ordering.by(_.shuffleWrite.get.shuffleWriteSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Write Size / Records because of no shuffle writes")
@@ -1197,30 +1117,19 @@ private[ui] class TaskDataSource(
       // BytesSpilled
       case "Shuffle Spill (Memory)" =>
         if (hasBytesSpilled) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.bytesSpilled.get.memoryBytesSpilledSortable,
-                y.bytesSpilled.get.memoryBytesSpilledSortable)
-          }
+          Ordering.by(_.bytesSpilled.get.memoryBytesSpilledSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Spill (Memory) because of no spills")
         }
       case "Shuffle Spill (Disk)" =>
         if (hasBytesSpilled) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.bytesSpilled.get.diskBytesSpilledSortable,
-                y.bytesSpilled.get.diskBytesSpilledSortable)
-          }
+          Ordering.by(_.bytesSpilled.get.diskBytesSpilledSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Spill (Disk) because of no spills")
         }
-      case "Errors" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.String.compare(x.error, y.error)
-      }
+      case "Errors" => Ordering.by(_.error)
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
     }
     if (desc) {
@@ -1247,9 +1156,6 @@ private[ui] class TaskPagedTable(
     sortColumn: String,
     desc: Boolean,
     executorsListener: ExecutorsListener) extends PagedTable[TaskTableRowData] {
-
-  // We only track peak memory used for unsafe operators
-  private val displayPeakExecutionMemory = conf.getBoolean("spark.sql.unsafe.enabled", true)
 
   override def tableId: String = "task-table"
 
@@ -1299,14 +1205,8 @@ private[ui] class TaskPagedTable(
         ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
         ("GC Time", ""),
         ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
-        ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
-        {
-          if (displayPeakExecutionMemory) {
-            Seq(("Peak Execution Memory", TaskDetailsClassNames.PEAK_EXECUTION_MEMORY))
-          } else {
-            Nil
-          }
-        } ++
+        ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME),
+        ("Peak Execution Memory", TaskDetailsClassNames.PEAK_EXECUTION_MEMORY)) ++
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
         {if (hasInput) Seq(("Input Size / Records", "")) else Nil} ++
         {if (hasOutput) Seq(("Output Size / Records", "")) else Nil} ++
@@ -1398,11 +1298,9 @@ private[ui] class TaskPagedTable(
       <td class={TaskDetailsClassNames.GETTING_RESULT_TIME}>
         {UIUtils.formatDuration(task.gettingResultTime)}
       </td>
-      {if (displayPeakExecutionMemory) {
-        <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
-          {Utils.bytesToString(task.peakExecutionMemoryUsed)}
-        </td>
-      }}
+      <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
+        {Utils.bytesToString(task.peakExecutionMemoryUsed)}
+      </td>
       {if (task.accumulators.nonEmpty) {
         <td>{Unparsed(task.accumulators.get)}</td>
       }}

@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.util.Properties
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 
@@ -102,10 +102,7 @@ private[sql] object JDBCRelation extends Logging {
 }
 
 private[sql] case class JDBCRelation(
-    url: String,
-    table: String,
-    parts: Array[Partition],
-    properties: Properties = new Properties())(@transient val sparkSession: SparkSession)
+    parts: Array[Partition], jdbcOptions: JDBCOptions)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan
   with InsertableRelation {
@@ -114,11 +111,11 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
+  override val schema: StructType = JDBCRDD.resolveTable(jdbcOptions)
 
   // Check if JDBCRDD.compileFilter can accept input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
-    filters.filter(JDBCRDD.compileFilter(_).isEmpty)
+    filters.filter(JDBCRDD.compileFilter(_, JdbcDialects.get(jdbcOptions.url)).isEmpty)
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
@@ -126,22 +123,23 @@ private[sql] case class JDBCRelation(
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
       schema,
-      url,
-      properties,
-      table,
       requiredColumns,
       filters,
-      parts).asInstanceOf[RDD[Row]]
+      parts,
+      jdbcOptions).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
-    data.write
-      .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
-      .jdbc(url, table, properties)
+    SQLExecution.ignoreNestedExecutionId(data.sparkSession) {
+      data.write
+        .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
+        .jdbc(jdbcOptions.url, jdbcOptions.table, jdbcOptions.asProperties)
+    }
   }
 
   override def toString: String = {
+    val partitioningInfo = if (parts.nonEmpty) s" [numPartitions=${parts.length}]" else ""
     // credentials should not be included in the plan output, table information is sufficient.
-    s"JDBCRelation(${table})"
+    s"JDBCRelation(${jdbcOptions.table})" + partitioningInfo
   }
 }

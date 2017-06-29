@@ -26,7 +26,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.VectorUDT
-import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -36,6 +36,42 @@ import org.apache.spark.sql.types._
  * Base trait for [[RFormula]] and [[RFormulaModel]].
  */
 private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
+
+  /**
+   * Param for how to order categories of a string FEATURE column used by `StringIndexer`.
+   * The last category after ordering is dropped when encoding strings.
+   * Supported options: 'frequencyDesc', 'frequencyAsc', 'alphabetDesc', 'alphabetAsc'.
+   * The default value is 'frequencyDesc'. When the ordering is set to 'alphabetDesc', `RFormula`
+   * drops the same category as R when encoding strings.
+   *
+   * The options are explained using an example `'b', 'a', 'b', 'a', 'c', 'b'`:
+   * {{{
+   * +-----------------+---------------------------------------+----------------------------------+
+   * |      Option     | Category mapped to 0 by StringIndexer |  Category dropped by RFormula    |
+   * +-----------------+---------------------------------------+----------------------------------+
+   * | 'frequencyDesc' | most frequent category ('b')          | least frequent category ('c')    |
+   * | 'frequencyAsc'  | least frequent category ('c')         | most frequent category ('b')     |
+   * | 'alphabetDesc'  | last alphabetical category ('c')      | first alphabetical category ('a')|
+   * | 'alphabetAsc'   | first alphabetical category ('a')     | last alphabetical category ('c') |
+   * +-----------------+---------------------------------------+----------------------------------+
+   * }}}
+   * Note that this ordering option is NOT used for the label column. When the label column is
+   * indexed, it uses the default descending frequency ordering in `StringIndexer`.
+   *
+   * @group param
+   */
+  @Since("2.3.0")
+  final val stringIndexerOrderType: Param[String] = new Param(this, "stringIndexerOrderType",
+    "How to order categories of a string FEATURE column used by StringIndexer. " +
+    "The last category after ordering is dropped when encoding strings. " +
+    s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}. " +
+    "The default value is 'frequencyDesc'. When the ordering is set to 'alphabetDesc', " +
+    "RFormula drops the same category as R when encoding strings.",
+    ParamValidators.inArray(StringIndexer.supportedStringOrderType))
+
+  /** @group getParam */
+  @Since("2.3.0")
+  def getStringIndexerOrderType: String = $(stringIndexerOrderType)
 
   protected def hasLabelCol(schema: StructType): Boolean = {
     schema.map(_.name).contains($(labelCol))
@@ -104,6 +140,32 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  /**
+   * Force to index label whether it is numeric or string type.
+   * Usually we index label only when it is string type.
+   * If the formula was used by classification algorithms,
+   * we can force to index label even it is numeric type by setting this param with true.
+   * Default: false.
+   * @group param
+   */
+  @Since("2.1.0")
+  val forceIndexLabel: BooleanParam = new BooleanParam(this, "forceIndexLabel",
+    "Force to index label whether it is numeric or string")
+  setDefault(forceIndexLabel -> false)
+
+  /** @group getParam */
+  @Since("2.1.0")
+  def getForceIndexLabel: Boolean = $(forceIndexLabel)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setForceIndexLabel(value: Boolean): this.type = set(forceIndexLabel, value)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setStringIndexerOrderType(value: String): this.type = set(stringIndexerOrderType, value)
+  setDefault(stringIndexerOrderType, StringIndexer.frequencyDesc)
+
   /** Whether the formula specifies fitting an intercept. */
   private[ml] def hasIntercept: Boolean = {
     require(isDefined(formula), "Formula must be defined first.")
@@ -134,6 +196,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           encoderStages += new StringIndexer()
             .setInputCol(term)
             .setOutputCol(indexCol)
+            .setStringOrderType($(stringIndexerOrderType))
           prefixesToRewrite(indexCol + "_") = term + "_"
           (term, indexCol)
         case _ =>
@@ -167,8 +230,8 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     encoderStages += new VectorAttributeRewriter($(featuresCol), prefixesToRewrite.toMap)
     encoderStages += new ColumnPruner(tempColumns.toSet)
 
-    if (dataset.schema.fieldNames.contains(resolvedFormula.label) &&
-      dataset.schema(resolvedFormula.label).dataType == StringType) {
+    if ((dataset.schema.fieldNames.contains(resolvedFormula.label) &&
+      dataset.schema(resolvedFormula.label).dataType == StringType) || $(forceIndexLabel)) {
       encoderStages += new StringIndexer()
         .setInputCol(resolvedFormula.label)
         .setOutputCol($(labelCol))
@@ -181,6 +244,8 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   // optimistic schema; does not contain any ML attributes
   override def transformSchema(schema: StructType): StructType = {
+    require(!hasLabelCol(schema) || !$(forceIndexLabel),
+      "If label column already exists, forceIndexLabel can not be set with true.")
     if (hasLabelCol(schema)) {
       StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
     } else {
@@ -245,8 +310,10 @@ class RFormulaModel private[feature](
   }
 
   @Since("1.5.0")
-  override def copy(extra: ParamMap): RFormulaModel = copyValues(
-    new RFormulaModel(uid, resolvedFormula, pipelineModel))
+  override def copy(extra: ParamMap): RFormulaModel = {
+    val copied = new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(parent)
+    copyValues(copied, extra)
+  }
 
   @Since("2.0.0")
   override def toString: String = s"RFormulaModel($resolvedFormula) (uid=$uid)"

@@ -27,14 +27,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 /**
- * The Collect aggregate function collects all seen expression values into a list of values.
+ * A base class for collect_list and collect_set aggregate functions.
  *
- * The operator is bound to the slower sort based aggregation path because the number of
- * elements (and their memory usage) can not be determined in advance. This also means that the
- * collected elements are stored on heap, and that too many elements can cause GC pauses and
- * eventually Out of Memory Errors.
+ * We have to store all the collected elements in memory, and so notice that too many elements
+ * can cause GC paused and eventually OutOfMemory Errors.
  */
-abstract class Collect extends ImperativeAggregate {
+abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImperativeAggregate[T] {
 
   val child: Expression
 
@@ -44,36 +42,43 @@ abstract class Collect extends ImperativeAggregate {
 
   override def dataType: DataType = ArrayType(child.dataType)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
-
-  override def supportsPartial: Boolean = false
-
-  override def aggBufferAttributes: Seq[AttributeReference] = Nil
-
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
-
-  override def inputAggBufferAttributes: Seq[AttributeReference] = Nil
-
   // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
   // actual order of input rows.
   override def deterministic: Boolean = false
 
-  protected[this] val buffer: Growable[Any] with Iterable[Any]
+  override def update(buffer: T, input: InternalRow): T = {
+    val value = child.eval(input)
 
-  override def initialize(b: MutableRow): Unit = {
-    buffer.clear()
+    // Do not allow null values. We follow the semantics of Hive's collect_list/collect_set here.
+    // See: org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMkCollectionEvaluator
+    if (value != null) {
+      buffer += value
+    }
+    buffer
   }
 
-  override def update(b: MutableRow, input: InternalRow): Unit = {
-    buffer += child.eval(input)
+  override def merge(buffer: T, other: T): T = {
+    buffer ++= other
   }
 
-  override def merge(buffer: MutableRow, input: InternalRow): Unit = {
-    sys.error("Collect cannot be used in partial aggregations.")
-  }
-
-  override def eval(input: InternalRow): Any = {
+  override def eval(buffer: T): Any = {
     new GenericArrayData(buffer.toArray)
+  }
+
+  private lazy val projection = UnsafeProjection.create(
+    Array[DataType](ArrayType(elementType = child.dataType, containsNull = false)))
+  private lazy val row = new UnsafeRow(1)
+
+  override def serialize(obj: T): Array[Byte] = {
+    val array = new GenericArrayData(obj.toArray)
+    projection.apply(InternalRow.apply(array)).getBytes()
+  }
+
+  override def deserialize(bytes: Array[Byte]): T = {
+    val buffer = createAggregationBuffer()
+    row.pointTo(bytes, bytes.length)
+    row.getArray(0).foreach(child.dataType, (_, x: Any) => buffer += x)
+    buffer
   }
 }
 
@@ -85,7 +90,7 @@ abstract class Collect extends ImperativeAggregate {
 case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect {
+    inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]] {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -95,20 +100,20 @@ case class CollectList(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def prettyName: String = "collect_list"
+  override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 
-  override protected[this] val buffer: mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
+  override def prettyName: String = "collect_list"
 }
 
 /**
- * Collect a list of unique elements.
+ * Collect a set of unique elements.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.")
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect {
+    inputAggBufferOffset: Int = 0) extends Collect[mutable.HashSet[Any]] {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -128,5 +133,5 @@ case class CollectSet(
 
   override def prettyName: String = "collect_set"
 
-  override protected[this] val buffer: mutable.HashSet[Any] = mutable.HashSet.empty
+  override def createAggregationBuffer(): mutable.HashSet[Any] = mutable.HashSet.empty
 }

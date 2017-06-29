@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.types
 
+import com.fasterxml.jackson.core.JsonParseException
+
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 
 class DataTypeSuite extends SparkFunSuite {
 
@@ -131,55 +134,6 @@ class DataTypeSuite extends SparkFunSuite {
     assert(mapped === expected)
   }
 
-  test("merge where right is empty") {
-    val left = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val right = StructType(List())
-    val merged = left.merge(right)
-
-    assert(DataType.equalsIgnoreCompatibleNullability(merged, left))
-    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-  }
-
-  test("merge where left is empty") {
-
-    val left = StructType(List())
-
-    val right = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val merged = left.merge(right)
-
-    assert(DataType.equalsIgnoreCompatibleNullability(merged, right))
-    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-  }
-
-  test("merge where both are non-empty") {
-    val left = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val right = StructType(
-      StructField("c", LongType) :: Nil)
-
-    val expected = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) ::
-      StructField("c", LongType) :: Nil)
-
-    val merged = left.merge(right)
-
-    assert(DataType.equalsIgnoreCompatibleNullability(merged, expected))
-    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-  }
-
   test("merge where right contains type conflict") {
     val left = StructType(
       StructField("a", LongType) ::
@@ -217,30 +171,72 @@ class DataTypeSuite extends SparkFunSuite {
     assert(!arrayType.existsRecursively(_.isInstanceOf[IntegerType]))
   }
 
-  def checkDataTypeJsonRepr(dataType: DataType): Unit = {
-    test(s"JSON - $dataType") {
+  def checkDataTypeFromJson(dataType: DataType): Unit = {
+    test(s"from Json - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)
     }
   }
 
-  checkDataTypeJsonRepr(NullType)
-  checkDataTypeJsonRepr(BooleanType)
-  checkDataTypeJsonRepr(ByteType)
-  checkDataTypeJsonRepr(ShortType)
-  checkDataTypeJsonRepr(IntegerType)
-  checkDataTypeJsonRepr(LongType)
-  checkDataTypeJsonRepr(FloatType)
-  checkDataTypeJsonRepr(DoubleType)
-  checkDataTypeJsonRepr(DecimalType(10, 5))
-  checkDataTypeJsonRepr(DecimalType.SYSTEM_DEFAULT)
-  checkDataTypeJsonRepr(DateType)
-  checkDataTypeJsonRepr(TimestampType)
-  checkDataTypeJsonRepr(StringType)
-  checkDataTypeJsonRepr(BinaryType)
-  checkDataTypeJsonRepr(ArrayType(DoubleType, true))
-  checkDataTypeJsonRepr(ArrayType(StringType, false))
-  checkDataTypeJsonRepr(MapType(IntegerType, StringType, true))
-  checkDataTypeJsonRepr(MapType(IntegerType, ArrayType(DoubleType), false))
+  def checkDataTypeFromDDL(dataType: DataType): Unit = {
+    test(s"from DDL - $dataType") {
+      val parsed = StructType.fromDDL(s"a ${dataType.sql}")
+      val expected = new StructType().add("a", dataType)
+      assert(parsed.sameType(expected))
+    }
+  }
+
+  checkDataTypeFromJson(NullType)
+
+  checkDataTypeFromJson(BooleanType)
+  checkDataTypeFromDDL(BooleanType)
+
+  checkDataTypeFromJson(ByteType)
+  checkDataTypeFromDDL(ByteType)
+
+  checkDataTypeFromJson(ShortType)
+  checkDataTypeFromDDL(ShortType)
+
+  checkDataTypeFromJson(IntegerType)
+  checkDataTypeFromDDL(IntegerType)
+
+  checkDataTypeFromJson(LongType)
+  checkDataTypeFromDDL(LongType)
+
+  checkDataTypeFromJson(FloatType)
+  checkDataTypeFromDDL(FloatType)
+
+  checkDataTypeFromJson(DoubleType)
+  checkDataTypeFromDDL(DoubleType)
+
+  checkDataTypeFromJson(DecimalType(10, 5))
+  checkDataTypeFromDDL(DecimalType(10, 5))
+
+  checkDataTypeFromJson(DecimalType.SYSTEM_DEFAULT)
+  checkDataTypeFromDDL(DecimalType.SYSTEM_DEFAULT)
+
+  checkDataTypeFromJson(DateType)
+  checkDataTypeFromDDL(DateType)
+
+  checkDataTypeFromJson(TimestampType)
+  checkDataTypeFromDDL(TimestampType)
+
+  checkDataTypeFromJson(StringType)
+  checkDataTypeFromDDL(StringType)
+
+  checkDataTypeFromJson(BinaryType)
+  checkDataTypeFromDDL(BinaryType)
+
+  checkDataTypeFromJson(ArrayType(DoubleType, true))
+  checkDataTypeFromDDL(ArrayType(DoubleType, true))
+
+  checkDataTypeFromJson(ArrayType(StringType, false))
+  checkDataTypeFromDDL(ArrayType(StringType, false))
+
+  checkDataTypeFromJson(MapType(IntegerType, StringType, true))
+  checkDataTypeFromDDL(MapType(IntegerType, StringType, true))
+
+  checkDataTypeFromJson(MapType(IntegerType, ArrayType(DoubleType), false))
+  checkDataTypeFromDDL(MapType(IntegerType, ArrayType(DoubleType), false))
 
   val metadata = new MetadataBuilder()
     .putString("name", "age")
@@ -249,10 +245,37 @@ class DataTypeSuite extends SparkFunSuite {
     StructField("a", IntegerType, nullable = true),
     StructField("b", ArrayType(DoubleType), nullable = false),
     StructField("c", DoubleType, nullable = false, metadata)))
-  checkDataTypeJsonRepr(structType)
+  checkDataTypeFromJson(structType)
+  checkDataTypeFromDDL(structType)
+
+  test("fromJson throws an exception when given type string is invalid") {
+    var message = intercept[IllegalArgumentException] {
+      DataType.fromJson(""""abcd"""")
+    }.getMessage
+    assert(message.contains(
+      "Failed to convert the JSON string 'abcd' to a data type."))
+
+    message = intercept[IllegalArgumentException] {
+      DataType.fromJson("""{"abcd":"a"}""")
+    }.getMessage
+    assert(message.contains(
+      """Failed to convert the JSON string '{"abcd":"a"}' to a data type"""))
+
+    message = intercept[IllegalArgumentException] {
+      DataType.fromJson("""{"fields": [{"a":123}], "type": "struct"}""")
+    }.getMessage
+    assert(message.contains(
+      """Failed to convert the JSON string '{"a":123}' to a field."""))
+
+    // Malformed JSON string
+    message = intercept[JsonParseException] {
+      DataType.fromJson("abcd")
+    }.getMessage
+    assert(message.contains("Unrecognized token 'abcd'"))
+  }
 
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
-    test(s"Check the default size of ${dataType}") {
+    test(s"Check the default size of $dataType") {
       assert(dataType.defaultSize === expectedDefaultSize)
     }
   }
@@ -271,18 +294,18 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(TimestampType, 8)
   checkDefaultSize(StringType, 20)
   checkDefaultSize(BinaryType, 100)
-  checkDefaultSize(ArrayType(DoubleType, true), 800)
-  checkDefaultSize(ArrayType(StringType, false), 2000)
-  checkDefaultSize(MapType(IntegerType, StringType, true), 2400)
-  checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 80400)
-  checkDefaultSize(structType, 812)
+  checkDefaultSize(ArrayType(DoubleType, true), 8)
+  checkDefaultSize(ArrayType(StringType, false), 20)
+  checkDefaultSize(MapType(IntegerType, StringType, true), 24)
+  checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 12)
+  checkDefaultSize(structType, 20)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
       to: DataType,
       expected: Boolean): Unit = {
     val testName =
-      s"equalsIgnoreCompatibleNullability: (from: ${from}, to: ${to})"
+      s"equalsIgnoreCompatibleNullability: (from: $from, to: $to)"
     test(testName) {
       assert(DataType.equalsIgnoreCompatibleNullability(from, to) === expected)
     }
@@ -359,4 +382,64 @@ class DataTypeSuite extends SparkFunSuite {
       StructField("a", StringType, nullable = false) ::
       StructField("b", StringType, nullable = false) :: Nil),
     expected = false)
+
+  def checkCatalogString(dt: DataType): Unit = {
+    test(s"catalogString: $dt") {
+      val dt2 = CatalystSqlParser.parseDataType(dt.catalogString)
+      assert(dt === dt2)
+    }
+  }
+  def createStruct(n: Int): StructType = new StructType(Array.tabulate(n) {
+    i => StructField(s"col$i", IntegerType, nullable = true)
+  })
+
+  checkCatalogString(BooleanType)
+  checkCatalogString(ByteType)
+  checkCatalogString(ShortType)
+  checkCatalogString(IntegerType)
+  checkCatalogString(LongType)
+  checkCatalogString(FloatType)
+  checkCatalogString(DoubleType)
+  checkCatalogString(DecimalType(10, 5))
+  checkCatalogString(BinaryType)
+  checkCatalogString(StringType)
+  checkCatalogString(DateType)
+  checkCatalogString(TimestampType)
+  checkCatalogString(createStruct(4))
+  checkCatalogString(createStruct(40))
+  checkCatalogString(ArrayType(IntegerType))
+  checkCatalogString(ArrayType(createStruct(40)))
+  checkCatalogString(MapType(IntegerType, StringType))
+  checkCatalogString(MapType(IntegerType, createStruct(40)))
+
+  def checkEqualsStructurally(from: DataType, to: DataType, expected: Boolean): Unit = {
+    val testName = s"equalsStructurally: (from: $from, to: $to)"
+    test(testName) {
+      assert(DataType.equalsStructurally(from, to) === expected)
+    }
+  }
+
+  checkEqualsStructurally(BooleanType, BooleanType, true)
+  checkEqualsStructurally(IntegerType, IntegerType, true)
+  checkEqualsStructurally(IntegerType, LongType, false)
+  checkEqualsStructurally(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true)
+  checkEqualsStructurally(ArrayType(IntegerType, true), ArrayType(IntegerType, false), false)
+
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType),
+    new StructType().add("f2", IntegerType),
+    true)
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType),
+    new StructType().add("f2", IntegerType, false),
+    false)
+
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
+    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
+    true)
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType, false)),
+    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
+    false)
 }

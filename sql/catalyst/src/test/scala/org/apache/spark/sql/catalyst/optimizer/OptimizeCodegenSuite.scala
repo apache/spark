@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -29,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules._
 class OptimizeCodegenSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("OptimizeCodegen", Once, OptimizeCodegen(SimpleCatalystConf(true))) :: Nil
+    val batches = Batch("OptimizeCodegen", Once, OptimizeCodegen(conf)) :: Nil
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
@@ -51,10 +50,10 @@ class OptimizeCodegenSuite extends PlanTest {
   test("Nested CaseWhen Codegen.") {
     assertEquivalent(
       CaseWhen(
-        Seq((CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)), Literal(3))),
+        Seq((CaseWhen(Seq((TrueLiteral, TrueLiteral)), FalseLiteral), Literal(3))),
         CaseWhen(Seq((TrueLiteral, Literal(4))), Literal(5))),
       CaseWhen(
-        Seq((CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen(), Literal(3))),
+        Seq((CaseWhen(Seq((TrueLiteral, TrueLiteral)), FalseLiteral).toCodegen(), Literal(3))),
         CaseWhen(Seq((TrueLiteral, Literal(4))), Literal(5)).toCodegen()).toCodegen())
   }
 

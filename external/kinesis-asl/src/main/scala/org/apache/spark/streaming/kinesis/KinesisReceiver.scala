@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer, IRecordProcessorFactory}
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration, Worker}
 import com.amazonaws.services.kinesis.model.Record
@@ -33,13 +32,6 @@ import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
 import org.apache.spark.util.Utils
-
-private[kinesis]
-case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
-  extends AWSCredentials {
-  override def getAWSAccessKeyId: String = accessKeyId
-  override def getAWSSecretKey: String = secretKey
-}
 
 /**
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
@@ -78,8 +70,14 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  *                            See the Kinesis Spark Streaming documentation for more
  *                            details on the different types of checkpoints.
  * @param storageLevel Storage level to use for storing the received objects
- * @param awsCredentialsOption Optional AWS credentials, used when user directly specifies
- *                             the credentials
+ * @param kinesisCreds SparkAWSCredentials instance that will be used to generate the
+ *                     AWSCredentialsProvider passed to the KCL to authorize Kinesis API calls.
+ * @param cloudWatchCreds Optional SparkAWSCredentials instance that will be used to generate the
+ *                        AWSCredentialsProvider passed to the KCL to authorize CloudWatch API
+ *                        calls. Will use kinesisCreds if value is None.
+ * @param dynamoDBCreds Optional SparkAWSCredentials instance that will be used to generate the
+ *                      AWSCredentialsProvider passed to the KCL to authorize DynamoDB API calls.
+ *                      Will use kinesisCreds if value is None.
  */
 private[kinesis] class KinesisReceiver[T](
     val streamName: String,
@@ -90,7 +88,9 @@ private[kinesis] class KinesisReceiver[T](
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
     messageHandler: Record => T,
-    awsCredentialsOption: Option[SerializableAWSCredentials])
+    kinesisCreds: SparkAWSCredentials,
+    dynamoDBCreds: Option[SparkAWSCredentials],
+    cloudWatchCreds: Option[SparkAWSCredentials])
   extends Receiver[T](storageLevel) with Logging { receiver =>
 
   /*
@@ -147,14 +147,18 @@ private[kinesis] class KinesisReceiver[T](
     workerId = Utils.localHostName() + ":" + UUID.randomUUID()
 
     kinesisCheckpointer = new KinesisCheckpointer(receiver, checkpointInterval, workerId)
-    // KCL config instance
-    val awsCredProvider = resolveAWSCredentialsProvider()
-    val kinesisClientLibConfiguration =
-      new KinesisClientLibConfiguration(checkpointAppName, streamName, awsCredProvider, workerId)
-      .withKinesisEndpoint(endpointUrl)
-      .withInitialPositionInStream(initialPositionInStream)
-      .withTaskBackoffTimeMillis(500)
-      .withRegionName(regionName)
+    val kinesisProvider = kinesisCreds.provider
+    val kinesisClientLibConfiguration = new KinesisClientLibConfiguration(
+          checkpointAppName,
+          streamName,
+          kinesisProvider,
+          dynamoDBCreds.map(_.provider).getOrElse(kinesisProvider),
+          cloudWatchCreds.map(_.provider).getOrElse(kinesisProvider),
+          workerId)
+        .withKinesisEndpoint(endpointUrl)
+        .withInitialPositionInStream(initialPositionInStream)
+        .withTaskBackoffTimeMillis(500)
+        .withRegionName(regionName)
 
    /*
     *  RecordProcessorFactory creates impls of IRecordProcessor.
@@ -216,9 +220,16 @@ private[kinesis] class KinesisReceiver[T](
     if (records.size > 0) {
       val dataIterator = records.iterator().asScala.map(messageHandler)
       val metadata = SequenceNumberRange(streamName, shardId,
-        records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber())
+        records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber(),
+        records.size())
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
     }
+  }
+
+  /** Return the current rate limit defined in [[BlockGenerator]]. */
+  private[kinesis] def getCurrentLimit: Int = {
+    assert(blockGenerator != null)
+    math.min(blockGenerator.getCurrentLimit, Int.MaxValue).toInt
   }
 
   /** Get the latest sequence number for the given shard that can be checkpointed through KCL */
@@ -298,25 +309,6 @@ private[kinesis] class KinesisReceiver[T](
       shardIdToLatestStoredSeqNum.put(range.shardId, range.toSeqNumber)
     }
   }
-
-  /**
-   * If AWS credential is provided, return a AWSCredentialProvider returning that credential.
-   * Otherwise, return the DefaultAWSCredentialsProviderChain.
-   */
-  private def resolveAWSCredentialsProvider(): AWSCredentialsProvider = {
-    awsCredentialsOption match {
-      case Some(awsCredentials) =>
-        logInfo("Using provided AWS credentials")
-        new AWSCredentialsProvider {
-          override def getCredentials: AWSCredentials = awsCredentials
-          override def refresh(): Unit = { }
-        }
-      case None =>
-        logInfo("Using DefaultAWSCredentialsProviderChain")
-        new DefaultAWSCredentialsProviderChain()
-    }
-  }
-
 
   /**
    * Class to handle blocks generated by this receiver's block generator. Specifically, in

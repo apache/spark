@@ -21,19 +21,19 @@ import java.{lang => jl, util => ju}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
- * :: Experimental ::
- * Statistic functions for [[DataFrame]]s.
+ * Statistic functions for `DataFrame`s.
  *
  * @since 1.4.0
  */
-@Experimental
+@InterfaceStability.Stable
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
@@ -45,21 +45,26 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * of `x` is close to (p * N).
    * More precisely,
    *
-   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
+   * {{{
+   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N)
+   * }}}
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
    * optimizations).
-   * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
-   * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
+   * The algorithm was first present in <a href="http://dx.doi.org/10.1145/375663.375670">
+   * Space-efficient Online Computation of Quantile Summaries</a> by Greenwald and Khanna.
    *
    * @param col the name of the numerical column
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
    *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
-   * @param relativeError The relative target precision to achieve (>= 0).
+   * @param relativeError The relative target precision to achieve (greater than or equal to 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities
+   *
+   * @note null and NaN values will be removed from the numerical column before calculation. If
+   *   the dataframe is empty or the column only contains null or NaN, an empty array is returned.
    *
    * @since 2.0.0
    */
@@ -67,17 +72,48 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       col: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    StatFunctions.multipleApproxQuantiles(df, Seq(col), probabilities, relativeError).head.toArray
+    approxQuantile(Array(col), probabilities, relativeError).head
   }
+
+  /**
+   * Calculates the approximate quantiles of numerical columns of a DataFrame.
+   * @see `approxQuantile(col:Str* approxQuantile)` for detailed description.
+   *
+   * @param cols the names of the numerical columns
+   * @param probabilities a list of quantile probabilities
+   *   Each number must belong to [0, 1].
+   *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError The relative target precision to achieve (greater than or equal to 0).
+   *   If set to zero, the exact quantiles are computed, which could be very expensive.
+   *   Note that values greater than 1 are accepted but give the same result as 1.
+   * @return the approximate quantiles at the given probabilities of each column
+   *
+   * @note null and NaN values will be ignored in numerical columns before calculation. For
+   *   columns only containing null or NaN values, an empty array is returned.
+   *
+   * @since 2.2.0
+   */
+  def approxQuantile(
+      cols: Array[String],
+      probabilities: Array[Double],
+      relativeError: Double): Array[Array[Double]] = {
+    StatFunctions.multipleApproxQuantiles(
+      df.select(cols.map(col): _*),
+      cols,
+      probabilities,
+      relativeError).map(_.toArray).toArray
+  }
+
 
   /**
    * Python-friendly version of [[approxQuantile()]]
    */
   private[spark] def approxQuantile(
-      col: String,
+      cols: List[String],
       probabilities: List[Double],
-      relativeError: Double): java.util.List[Double] = {
-    approxQuantile(col, probabilities.toArray, relativeError).toList.asJava
+      relativeError: Double): java.util.List[java.util.List[Double]] = {
+    approxQuantile(cols.toArray, probabilities.toArray, relativeError)
+      .map(_.toList.asJava).toList.asJava
   }
 
   /**
@@ -148,7 +184,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * The number of distinct values for each column should be less than 1e4. At most 1e6 non-zero
    * pair frequencies will be returned.
    * The first column of each row will be the distinct values of `col1` and the column names will
-   * be the distinct values of `col2`. The name of the first column will be `$col1_$col2`. Counts
+   * be the distinct values of `col2`. The name of the first column will be `col1_col2`. Counts
    * will be returned as `Long`s. Pairs that have no occurrences will have zero as their counts.
    * Null elements will be replaced by "null", and back ticks will be dropped from elements if they
    * exist.
@@ -182,11 +218,12 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp,
+   * Schenker, and Papadimitriou.
    * The `support` should be greater than 1e-4.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
-   * backward compatibility of the schema of the resulting [[DataFrame]].
+   * backward compatibility of the schema of the resulting `DataFrame`.
    *
    * @param cols the names of the columns to search frequent items in.
    * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
@@ -228,11 +265,12 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp,
+   * Schenker, and Papadimitriou.
    * Uses a `default` support of 1%.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
-   * backward compatibility of the schema of the resulting [[DataFrame]].
+   * backward compatibility of the schema of the resulting `DataFrame`.
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
@@ -246,10 +284,11 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp, Schenker,
+   * and Papadimitriou.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
-   * backward compatibility of the schema of the resulting [[DataFrame]].
+   * backward compatibility of the schema of the resulting `DataFrame`.
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
@@ -289,11 +328,12 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
-   * [[http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou]].
+   * <a href="http://dx.doi.org/10.1145/762471.762473">here</a>, proposed by Karp, Schenker,
+   * and Papadimitriou.
    * Uses a `default` support of 1%.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
-   * backward compatibility of the schema of the resulting [[DataFrame]].
+   * backward compatibility of the schema of the resulting `DataFrame`.
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
@@ -311,7 +351,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *                  its fraction as zero.
    * @param seed random seed
    * @tparam T stratum type
-   * @return a new [[DataFrame]] that represents the stratified sample
+   * @return a new `DataFrame` that represents the stratified sample
    *
    * {{{
    *    val df = spark.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
@@ -348,7 +388,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *                  its fraction as zero.
    * @param seed random seed
    * @tparam T stratum type
-   * @return a new [[DataFrame]] that represents the stratified sample
+   * @return a new `DataFrame` that represents the stratified sample
    *
    * @since 1.5.0
    */
@@ -363,7 +403,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param depth depth of the sketch
    * @param width width of the sketch
    * @param seed random seed
-   * @return a [[CountMinSketch]] over column `colName`
+   * @return a `CountMinSketch` over column `colName`
    * @since 2.0.0
    */
   def countMinSketch(colName: String, depth: Int, width: Int, seed: Int): CountMinSketch = {
@@ -377,7 +417,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param eps relative error of the sketch
    * @param confidence confidence of the sketch
    * @param seed random seed
-   * @return a [[CountMinSketch]] over column `colName`
+   * @return a `CountMinSketch` over column `colName`
    * @since 2.0.0
    */
   def countMinSketch(
@@ -392,7 +432,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param depth depth of the sketch
    * @param width width of the sketch
    * @param seed random seed
-   * @return a [[CountMinSketch]] over column `colName`
+   * @return a `CountMinSketch` over column `colName`
    * @since 2.0.0
    */
   def countMinSketch(col: Column, depth: Int, width: Int, seed: Int): CountMinSketch = {
@@ -406,7 +446,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param eps relative error of the sketch
    * @param confidence confidence of the sketch
    * @param seed random seed
-   * @return a [[CountMinSketch]] over column `colName`
+   * @return a `CountMinSketch` over column `colName`
    * @since 2.0.0
    */
   def countMinSketch(col: Column, eps: Double, confidence: Double, seed: Int): CountMinSketch = {
@@ -511,7 +551,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
         )
     }
 
-    singleCol.queryExecution.toRdd.aggregate(zero)(
+    singleCol.queryExecution.toRdd.treeAggregate(zero)(
       (filter: BloomFilter, row: InternalRow) => {
         updater(filter, row)
         filter

@@ -18,18 +18,20 @@
 package org.apache.spark.repl
 
 import java.io.File
+import java.util.Locale
 
 import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark._
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 
 object Main extends Logging {
 
   initializeLogIfNecessary(true)
+  Signaling.cancelOnInterrupt()
 
   val conf = new SparkConf()
   val rootDir = conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
@@ -66,7 +68,7 @@ object Main extends Logging {
 
     if (!hasErrors) {
       interp.process(settings) // Repl starts and goes in loop of R.E.P.L
-      Option(sparkContext).map(_.stop)
+      Option(sparkContext).foreach(_.stop)
     }
   }
 
@@ -87,7 +89,7 @@ object Main extends Logging {
     }
 
     val builder = SparkSession.builder.config(conf)
-    if (conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase == "hive") {
+    if (conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) == "hive") {
       if (SparkSession.hiveClassesArePresent) {
         // In the case that the property is not set at all, builder's config
         // does not have this value set to 'hive' yet. The original default
@@ -108,7 +110,6 @@ object Main extends Logging {
       logInfo("Created Spark session")
     }
     sparkContext = sparkSession.sparkContext
-    Signaling.cancelOnInterrupt(sparkContext)
     sparkSession
   }
 

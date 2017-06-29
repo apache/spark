@@ -84,7 +84,6 @@ private[spark] object RUtils {
       }
     } else {
       // Otherwise, assume the package is local
-      // TODO: support this for Mesos
       val sparkRPkgPath = localSparkRPackagePath.getOrElse {
           throw new SparkException("SPARK_HOME not set. Can't locate SparkR package.")
       }

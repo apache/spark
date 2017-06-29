@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog.SimpleCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.UsingJoin
+import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
+import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -44,6 +45,18 @@ trait CheckAnalysis extends PredicateHelper {
     exprs.flatMap(_.collect {
       case e: Generator => e
     }).length > 1
+  }
+
+  protected def hasMapType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[MapType])
+  }
+
+  protected def mapColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
+    case _: Intersect | _: Except | _: Distinct =>
+      plan.output.find(a => hasMapType(a.dataType))
+    case d: Deduplicate =>
+      d.keys.find(a => hasMapType(a.dataType))
+    case _ => None
   }
 
   private def checkLimitClause(limitExpr: Expression): Unit = {
@@ -118,82 +131,35 @@ trait CheckAnalysis extends PredicateHelper {
               case None => w
             }
 
-          case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
-            // Make sure we are using equi-joins.
-            conditions.foreach {
-              case _: EqualTo | _: EqualNullSafe => // ok
-              case e => failAnalysis(
-                s"The correlated scalar subquery can only contain equality predicates: $e")
-            }
-
-            // Make sure correlated scalar subqueries contain one row for every outer row by
-            // enforcing that they are aggregates which contain exactly one aggregate expressions.
-            // The analyzer has already checked that subquery contained only one output column, and
-            // added all the grouping expressions to the aggregate.
-            def checkAggregate(a: Aggregate): Unit = {
-              val aggregates = a.expressions.flatMap(_.collect {
-                case a: AggregateExpression => a
-              })
-              if (aggregates.isEmpty) {
-                failAnalysis("The output of a correlated scalar subquery must be aggregated")
-              }
-            }
-
-            // Skip projects and subquery aliases added by the Analyzer and the SQLBuilder.
-            def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
-              case s: SubqueryAlias => cleanQuery(s.child)
-              case p: Project => cleanQuery(p.child)
-              case child => child
-            }
-
-            cleanQuery(query) match {
-              case a: Aggregate => checkAggregate(a)
-              case Filter(_, a: Aggregate) => checkAggregate(a)
-              case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
-            }
+          case s: SubqueryExpression =>
+            checkSubqueryExpression(operator, s)
             s
         }
 
         operator match {
+          case etw: EventTimeWatermark =>
+            etw.eventTime.dataType match {
+              case s: StructType
+                if s.find(_.name == "end").map(_.dataType) == Some(TimestampType) =>
+              case _: TimestampType =>
+              case _ =>
+                failAnalysis(
+                  s"Event time must be defined on a window or a timestamp, but " +
+                  s"${etw.eventTime.name} is of type ${etw.eventTime.dataType.simpleString}")
+            }
           case f: Filter if f.condition.dataType != BooleanType =>
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case f @ Filter(condition, child) =>
-            splitConjunctivePredicates(condition).foreach {
-              case _: PredicateSubquery | Not(_: PredicateSubquery) =>
-              case e if PredicateSubquery.hasNullAwarePredicateWithinNot(e) =>
-                failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
-                  s" conditions: $e")
-              case e =>
-            }
-
-          case j @ Join(_, _, UsingJoin(_, cols), _) =>
-            val from = operator.inputSet.map(_.name).mkString(", ")
-            failAnalysis(
-              s"using columns [${cols.mkString(",")}] " +
-                s"can not be resolved given input columns: [$from] ")
+          case Filter(condition, _) if hasNullAwarePredicateWithinNot(condition) =>
+            failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
+              s"conditions: $condition")
 
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.simpleString} is not a boolean.")
-
-          case j @ Join(_, _, _, Some(condition)) =>
-            def checkValidJoinConditionExprs(expr: Expression): Unit = expr match {
-              case p: Predicate =>
-                p.asInstanceOf[Expression].children.foreach(checkValidJoinConditionExprs)
-              case e if e.dataType.isInstanceOf[BinaryType] =>
-                failAnalysis(s"binary type expression ${e.sql} cannot be used " +
-                  "in join conditions")
-              case e if e.dataType.isInstanceOf[MapType] =>
-                failAnalysis(s"map type expression ${e.sql} cannot be used " +
-                  "in join conditions")
-              case _ => // OK
-            }
-
-            checkValidJoinConditionExprs(condition)
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
@@ -214,6 +180,18 @@ trait CheckAnalysis extends PredicateHelper {
                         s"appear in the arguments of an aggregate function.")
                   }
                 }
+              case e: Attribute if groupingExprs.isEmpty =>
+                // Collect all [[AggregateExpressions]]s.
+                val aggExprs = aggregateExprs.filter(_.collect {
+                  case a: AggregateExpression => a
+                }.nonEmpty)
+                failAnalysis(
+                  s"grouping expressions sequence is empty, " +
+                    s"and '${e.sql}' is not an aggregate function. " +
+                    s"Wrap '${aggExprs.map(_.sql).mkString("(", ", ", ")")}' in windowing " +
+                    s"function(s) or wrap '${e.sql}' in first() (or first_value) " +
+                    s"if you don't care which value you get."
+                )
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.sql}' is neither present in the group by, " +
@@ -225,6 +203,11 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
             def checkValidGroupingExprs(expr: Expression): Unit = {
+              if (expr.find(_.isInstanceOf[AggregateExpression]).isDefined) {
+                failAnalysis(
+                  "aggregate functions are not allowed in GROUP BY, but found " + expr.sql)
+              }
+
               // Check if the data type of expr is orderable.
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
@@ -242,8 +225,8 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-            aggregateExprs.foreach(checkValidAggregateExpression)
             groupingExprs.foreach(checkValidGroupingExprs)
+            aggregateExprs.foreach(checkValidAggregateExpression)
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>
@@ -256,16 +239,6 @@ trait CheckAnalysis extends PredicateHelper {
           case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
 
           case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
-
-          case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
-            p match {
-              case _: Filter | _: Aggregate | _: Project => // Ok
-              case other => failAnalysis(
-                s"Correlated scalar sub-queries can only be used in a Filter/Aggregate/Project: $p")
-            }
-
-          case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
-            failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
@@ -287,12 +260,13 @@ trait CheckAnalysis extends PredicateHelper {
               }
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-                if (dt1 != dt2) {
+                // SPARK-18058: we shall not care about the nullability of columns
+                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. $dt1 <> $dt2 at the ${ordinalNumber(ci)} column of
-                      |the ${ordinalNumber(ti + 1)} table
+                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
+                      |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
@@ -342,42 +316,13 @@ trait CheckAnalysis extends PredicateHelper {
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
 
-          case s: SimpleCatalogRelation =>
-            failAnalysis(
-              s"""
-                 |Hive support is required to select over the following tables:
-                 |${s.catalogTable.identifier}
-               """.stripMargin)
-
-          // TODO: We need to consolidate this kind of checks for InsertIntoTable
-          // with the rule of PreWriteCheck defined in extendedCheckRules.
-          case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
-            failAnalysis(
-              s"""
-                 |Hive support is required to insert into the following tables:
-                 |${s.catalogTable.identifier}
-               """.stripMargin)
-
-          case InsertIntoTable(t, _, _, _, _)
-            if !t.isInstanceOf[LeafNode] ||
-              t == OneRowRelation ||
-              t.isInstanceOf[LocalRelation] =>
-            failAnalysis(s"Inserting into an RDD-based table is not allowed.")
-
-          case i @ InsertIntoTable(table, partitions, query, _, _) =>
-            val numStaticPartitions = partitions.values.count(_.isDefined)
-            if (table.output.size != (query.output.size + numStaticPartitions)) {
-              failAnalysis(
-                s"$table requires that the data to be inserted have the same number of " +
-                  s"columns as the target table: target table has ${table.output.size} " +
-                  s"column(s) but the inserted data has " +
-                  s"${query.output.size + numStaticPartitions} column(s), including " +
-                  s"$numStaticPartitions partition column(s) having constant value(s).")
-            }
-
-          case o if !o.resolved =>
-            failAnalysis(
-              s"unresolved operator ${operator.simpleString}")
+          // TODO: although map type is not orderable, technically map type should be able to be
+          // used in equality comparison, remove this type check once we support it.
+          case o if mapColumnInSetOperation(o).isDefined =>
+            val mapCol = mapColumnInSetOperation(o).get
+            failAnalysis("Cannot have map type columns in DataFrame which calls " +
+              s"set operations(intersect, except, etc.), but the type of column ${mapCol.name} " +
+              "is " + mapCol.dataType.simpleString)
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
@@ -390,11 +335,287 @@ trait CheckAnalysis extends PredicateHelper {
                  |in operator ${operator.simpleString}
                """.stripMargin)
 
+          case _: UnresolvedHint =>
+            throw new IllegalStateException(
+              "Internal error: logical hint operator should have been removed during analysis")
+
           case _ => // Analysis successful!
         }
     }
     extendedCheckRules.foreach(_(plan))
+    plan.foreachUp {
+      case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
+      case _ =>
+    }
 
     plan.foreach(_.setAnalyzed())
+  }
+
+  /**
+   * Validates subquery expressions in the plan. Upon failure, returns an user facing error.
+   */
+  private def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
+    def checkAggregateInScalarSubquery(
+        conditions: Seq[Expression],
+        query: LogicalPlan, agg: Aggregate): Unit = {
+      // Make sure correlated scalar subqueries contain one row for every outer row by
+      // enforcing that they are aggregates containing exactly one aggregate expression.
+      val aggregates = agg.expressions.flatMap(_.collect {
+        case a: AggregateExpression => a
+      })
+      if (aggregates.isEmpty) {
+        failAnalysis("The output of a correlated scalar subquery must be aggregated")
+      }
+
+      // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
+      // are not part of the correlated columns.
+      val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
+      // Collect the local references from the correlated predicate in the subquery.
+      val subqueryColumns = getCorrelatedPredicates(query).flatMap(_.references)
+        .filterNot(conditions.flatMap(_.references).contains)
+      val correlatedCols = AttributeSet(subqueryColumns)
+      val invalidCols = groupByCols -- correlatedCols
+      // GROUP BY columns must be a subset of columns in the predicates
+      if (invalidCols.nonEmpty) {
+        failAnalysis(
+          "A GROUP BY clause in a scalar correlated subquery " +
+            "cannot contain non-correlated columns: " +
+            invalidCols.mkString(","))
+      }
+    }
+
+    // Skip subquery aliases added by the Analyzer.
+    // For projects, do the necessary mapping and skip to its child.
+    def cleanQueryInScalarSubquery(p: LogicalPlan): LogicalPlan = p match {
+      case s: SubqueryAlias => cleanQueryInScalarSubquery(s.child)
+      case p: Project => cleanQueryInScalarSubquery(p.child)
+      case child => child
+    }
+
+    // Validate the subquery plan.
+    checkAnalysis(expr.plan)
+
+    expr match {
+      case ScalarSubquery(query, conditions, _) =>
+        // Scalar subquery must return one column as output.
+        if (query.output.size != 1) {
+          failAnalysis(
+            s"Scalar subquery must return only one column, but got ${query.output.size}")
+        }
+
+        if (conditions.nonEmpty) {
+          cleanQueryInScalarSubquery(query) match {
+            case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
+            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
+            case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
+          }
+
+          // Only certain operators are allowed to host subquery expression containing
+          // outer references.
+          plan match {
+            case _: Filter | _: Aggregate | _: Project => // Ok
+            case other => failAnalysis(
+              "Correlated scalar sub-queries can only be used in a " +
+                s"Filter/Aggregate/Project: $plan")
+          }
+        }
+
+      case inSubqueryOrExistsSubquery =>
+        plan match {
+          case _: Filter => // Ok
+          case _ =>
+            failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in a Filter: $plan")
+        }
+    }
+
+    // Validate to make sure the correlations appearing in the query are valid and
+    // allowed by spark.
+    checkCorrelationsInSubquery(expr.plan)
+  }
+
+  /**
+   * Validates to make sure the outer references appearing inside the subquery
+   * are allowed.
+   */
+  private def checkCorrelationsInSubquery(sub: LogicalPlan): Unit = {
+    // Validate that correlated aggregate expression do not contain a mixture
+    // of outer and local references.
+    def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
+      expr.foreach {
+        case a: AggregateExpression if containsOuter(a) =>
+          val outer = a.collect { case OuterReference(e) => e.toAttribute }
+          val local = a.references -- outer
+          if (local.nonEmpty) {
+            val msg =
+              s"""
+                 |Found an aggregate expression in a correlated predicate that has both
+                 |outer and local references, which is not supported yet.
+                 |Aggregate expression: ${SubExprUtils.stripOuterReference(a).sql},
+                 |Outer references: ${outer.map(_.sql).mkString(", ")},
+                 |Local references: ${local.map(_.sql).mkString(", ")}.
+               """.stripMargin.replace("\n", " ").trim()
+            failAnalysis(msg)
+          }
+        case _ =>
+      }
+    }
+
+    // Make sure a plan's subtree does not contain outer references
+    def failOnOuterReferenceInSubTree(p: LogicalPlan): Unit = {
+      if (hasOuterReferences(p)) {
+        failAnalysis(s"Accessing outer query column is not allowed in:\n$p")
+      }
+    }
+
+    // Make sure a plan's expressions do not contain :
+    // 1. Aggregate expressions that have mixture of outer and local references.
+    // 2. Expressions containing outer references on plan nodes other than Filter.
+    def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
+      p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
+      if (!p.isInstanceOf[Filter] && p.expressions.exists(containsOuter)) {
+        failAnalysis(
+          "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
+            s"clauses:\n$p")
+      }
+    }
+
+    // SPARK-17348: A potential incorrect result case.
+    // When a correlated predicate is a non-equality predicate,
+    // certain operators are not permitted from the operator
+    // hosting the correlated predicate up to the operator on the outer table.
+    // Otherwise, the pull up of the correlated predicate
+    // will generate a plan with a different semantics
+    // which could return incorrect result.
+    // Currently we check for Aggregate and Window operators
+    //
+    // Below shows an example of a Logical Plan during Analyzer phase that
+    // show this problem. Pulling the correlated predicate [outer(c2#77) >= ..]
+    // through the Aggregate (or Window) operator could alter the result of
+    // the Aggregate.
+    //
+    // Project [c1#76]
+    // +- Project [c1#87, c2#88]
+    // :  (Aggregate or Window operator)
+    // :  +- Filter [outer(c2#77) >= c2#88)]
+    // :     +- SubqueryAlias t2, `t2`
+    // :        +- Project [_1#84 AS c1#87, _2#85 AS c2#88]
+    // :           +- LocalRelation [_1#84, _2#85]
+    // +- SubqueryAlias t1, `t1`
+    // +- Project [_1#73 AS c1#76, _2#74 AS c2#77]
+    // +- LocalRelation [_1#73, _2#74]
+    def failOnNonEqualCorrelatedPredicate(found: Boolean, p: LogicalPlan): Unit = {
+      if (found) {
+        // Report a non-supported case as an exception
+        failAnalysis(s"Correlated column is not allowed in a non-equality predicate:\n$p")
+      }
+    }
+
+    var foundNonEqualCorrelatedPred: Boolean = false
+
+    // Simplify the predicates before validating any unsupported correlation patterns
+    // in the plan.
+    BooleanSimplification(sub).foreachUp {
+      // Whitelist operators allowed in a correlated subquery
+      // There are 4 categories:
+      // 1. Operators that are allowed anywhere in a correlated subquery, and,
+      //    by definition of the operators, they either do not contain
+      //    any columns or cannot host outer references.
+      // 2. Operators that are allowed anywhere in a correlated subquery
+      //    so long as they do not host outer references.
+      // 3. Operators that need special handlings. These operators are
+      //    Filter, Join, Aggregate, and Generate.
+      //
+      // Any operators that are not in the above list are allowed
+      // in a correlated subquery only if they are not on a correlation path.
+      // In other word, these operators are allowed only under a correlation point.
+      //
+      // A correlation path is defined as the sub-tree of all the operators that
+      // are on the path from the operator hosting the correlated expressions
+      // up to the operator producing the correlated values.
+
+      // Category 1:
+      // ResolvedHint, Distinct, LeafNode, Repartition, and SubqueryAlias
+      case _: ResolvedHint | _: Distinct | _: LeafNode | _: Repartition | _: SubqueryAlias =>
+
+      // Category 2:
+      // These operators can be anywhere in a correlated subquery.
+      // so long as they do not host outer references in the operators.
+      case p: Project =>
+        failOnInvalidOuterReference(p)
+
+      case s: Sort =>
+        failOnInvalidOuterReference(s)
+
+      case r: RepartitionByExpression =>
+        failOnInvalidOuterReference(r)
+
+      // Category 3:
+      // Filter is one of the two operators allowed to host correlated expressions.
+      // The other operator is Join. Filter can be anywhere in a correlated subquery.
+      case f: Filter =>
+        val (correlated, _) = splitConjunctivePredicates(f.condition).partition(containsOuter)
+
+        // Find any non-equality correlated predicates
+        foundNonEqualCorrelatedPred = foundNonEqualCorrelatedPred || correlated.exists {
+          case _: EqualTo | _: EqualNullSafe => false
+          case _ => true
+        }
+        failOnInvalidOuterReference(f)
+
+      // Aggregate cannot host any correlated expressions
+      // It can be on a correlation path if the correlation contains
+      // only equality correlated predicates.
+      // It cannot be on a correlation path if the correlation has
+      // non-equality correlated predicates.
+      case a: Aggregate =>
+        failOnInvalidOuterReference(a)
+        failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, a)
+
+      // Join can host correlated expressions.
+      case j @ Join(left, right, joinType, _) =>
+        joinType match {
+          // Inner join, like Filter, can be anywhere.
+          case _: InnerLike =>
+            failOnInvalidOuterReference(j)
+
+          // Left outer join's right operand cannot be on a correlation path.
+          // LeftAnti and ExistenceJoin are special cases of LeftOuter.
+          // Note that ExistenceJoin cannot be expressed externally in both SQL and DataFrame
+          // so it should not show up here in Analysis phase. This is just a safety net.
+          //
+          // LeftSemi does not allow output from the right operand.
+          // Any correlated references in the subplan
+          // of the right operand cannot be pulled up.
+          case LeftOuter | LeftSemi | LeftAnti | ExistenceJoin(_) =>
+            failOnInvalidOuterReference(j)
+            failOnOuterReferenceInSubTree(right)
+
+          // Likewise, Right outer join's left operand cannot be on a correlation path.
+          case RightOuter =>
+            failOnInvalidOuterReference(j)
+            failOnOuterReferenceInSubTree(left)
+
+          // Any other join types not explicitly listed above,
+          // including Full outer join, are treated as Category 4.
+          case _ =>
+            failOnOuterReferenceInSubTree(j)
+        }
+
+      // Generator with join=true, i.e., expressed with
+      // LATERAL VIEW [OUTER], similar to inner join,
+      // allows to have correlation under it
+      // but must not host any outer references.
+      // Note:
+      // Generator with join=false is treated as Category 4.
+      case g: Generate if g.join =>
+        failOnInvalidOuterReference(g)
+
+      // Category 4: Any other operators not in the above 3 categories
+      // cannot be on a correlation path, that is they are allowed only
+      // under a correlation point but they and their descendant operators
+      // are not allowed to have any correlated expressions.
+      case p =>
+        failOnOuterReferenceInSubTree(p)
+    }
   }
 }

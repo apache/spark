@@ -34,6 +34,7 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.log4j.{Level, Logger}
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.internal.Logging
@@ -46,8 +47,8 @@ import org.apache.spark.util.ShutdownHookManager
  * has dropped its support.
  */
 private[hive] object SparkSQLCLIDriver extends Logging {
-  private var prompt = "spark-sql"
-  private var continuedPrompt = "".padTo(prompt.length, ' ')
+  private val prompt = "spark-sql"
+  private val continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport: TSocket = _
 
   installSignalHandler()
@@ -275,6 +276,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   private val console = new SessionState.LogHelper(LOG)
 
+  if (sessionState.getIsSilent) {
+    Logger.getRootLogger.setLevel(Level.WARN)
+  }
+
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)
   }
@@ -291,9 +296,13 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     throw new RuntimeException("Remote operations not supported")
   }
 
+  override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {
+    hiveVariables.asScala.foreach(kv => SparkSQLEnv.sqlContext.conf.setConfString(kv._1, kv._2))
+  }
+
   override def processCmd(cmd: String): Int = {
     val cmd_trimmed: String = cmd.trim()
-    val cmd_lower = cmd_trimmed.toLowerCase(Locale.ENGLISH)
+    val cmd_lower = cmd_trimmed.toLowerCase(Locale.ROOT)
     val tokens: Array[String] = cmd_trimmed.split("\\s+")
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
     if (cmd_lower.equals("quit") ||
@@ -301,7 +310,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       sessionState.close()
       System.exit(0)
     }
-    if (tokens(0).toLowerCase(Locale.ENGLISH).equals("source") ||
+    if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||
       cmd_trimmed.startsWith("!") || isRemoteMode) {
       val start = System.currentTimeMillis()
       super.processCmd(cmd)

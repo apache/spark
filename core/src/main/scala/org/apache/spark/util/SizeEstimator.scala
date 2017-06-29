@@ -350,7 +350,7 @@ object SizeEstimator extends Logging {
     // 3. consistent fields layouts throughout the hierarchy: This means we should layout
     // superclass first. And we can use superclass's shellSize as a starting point to layout the
     // other fields in this class.
-    // 4. class alignment: HotSpot rounds field blocks up to to HeapOopSize not 4 bytes, confirmed
+    // 4. class alignment: HotSpot rounds field blocks up to HeapOopSize not 4 bytes, confirmed
     // with Aleksey. see https://bugs.openjdk.java.net/browse/CODETOOLS-7901322
     //
     // The real world field layout is much more complicated. There are three kinds of fields

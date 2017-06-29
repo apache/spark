@@ -21,10 +21,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchange}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
@@ -38,84 +37,36 @@ class PlannerSuite extends SharedSQLContext {
 
   setupTestData()
 
-  private def testPartialAggregationPlan(query: LogicalPlan): Seq[SparkPlan] = {
+  private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val planner = spark.sessionState.planner
     import planner._
-    val ensureRequirements = EnsureRequirements(spark.sessionState.conf)
-    val planned = Aggregation(query).headOption.map(ensureRequirements(_))
-      .getOrElse(fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
-    planned.collect { case n if n.nodeName contains "Aggregate" => n }
+    val plannedOption = Aggregation(query).headOption
+    val planned =
+      plannedOption.getOrElse(
+        fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
+    val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
+
+    // For the new aggregation code path, there will be four aggregate operator for
+    // distinct aggregations.
+    assert(
+      aggregations.size == 2 || aggregations.size == 4,
+      s"The plan of query $query does not have partial aggregations.")
   }
 
   test("count is partially aggregated") {
     val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
-    assert(testPartialAggregationPlan(query).size == 2,
-      s"The plan of query $query does not have partial aggregations.")
+    testPartialAggregationPlan(query)
   }
 
   test("count distinct is partially aggregated") {
     val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)
-    // For the new aggregation code path, there will be four aggregate operator for  distinct
-    // aggregations.
-    assert(testPartialAggregationPlan(query).size == 4,
-      s"The plan of query $query does not have partial aggregations.")
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
       testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
-    // For the new aggregation code path, there will be four aggregate operator for  distinct
-    // aggregations.
-    assert(testPartialAggregationPlan(query).size == 4,
-      s"The plan of query $query does not have partial aggregations.")
-  }
-
-  test("SPARK-17289 sort-based partial aggregation needs a sort operator as a child") {
-    withTempView("testSortBasedPartialAggregation") {
-      val schema = StructType(
-        StructField(s"key", IntegerType, true) :: StructField(s"value", StringType, true) :: Nil)
-      val rowRDD = sparkContext.parallelize((0 until 1000).map(d => Row(d % 2, d.toString)))
-      spark.createDataFrame(rowRDD, schema)
-        .createOrReplaceTempView("testSortBasedPartialAggregation")
-
-      // This test assumes a query below uses sort-based aggregations
-      val planned = sql("SELECT MAX(value) FROM testSortBasedPartialAggregation GROUP BY key")
-        .queryExecution.executedPlan
-      // This line extracts both SortAggregate and Sort operators
-      val extractedOps = planned.collect { case n if n.nodeName contains "Sort" => n }
-      val aggOps = extractedOps.collect { case n if n.nodeName contains "SortAggregate" => n }
-      assert(extractedOps.size == 4 && aggOps.size == 2,
-        s"The plan $planned does not have correct sort-based partial aggregate pairs.")
-    }
-  }
-
-  test("non-partial aggregation for aggregates") {
-    withTempView("testNonPartialAggregation") {
-      val schema = StructType(StructField(s"value", IntegerType, true) :: Nil)
-      val row = Row.fromSeq(Seq.fill(1)(null))
-      val rowRDD = sparkContext.parallelize(row :: Nil)
-      spark.createDataFrame(rowRDD, schema).repartition($"value")
-        .createOrReplaceTempView("testNonPartialAggregation")
-
-      val planned1 = sql("SELECT SUM(value) FROM testNonPartialAggregation GROUP BY value")
-        .queryExecution.executedPlan
-
-      // If input data are already partitioned and the same columns are used in grouping keys and
-      // aggregation values, no partial aggregation exist in query plans.
-      val aggOps1 = planned1.collect { case n if n.nodeName contains "Aggregate" => n }
-      assert(aggOps1.size == 1, s"The plan $planned1 has partial aggregations.")
-
-      val planned2 = sql(
-        """
-          |SELECT t.value, SUM(DISTINCT t.value)
-          |FROM (SELECT * FROM testNonPartialAggregation ORDER BY value) t
-          |GROUP BY t.value
-        """.stripMargin).queryExecution.executedPlan
-
-      val aggOps2 = planned1.collect { case n if n.nodeName contains "Aggregate" => n }
-      assert(aggOps2.size == 1, s"The plan $planned2 has partial aggregations.")
-    }
+    testPartialAggregationPlan(query)
   }
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
@@ -291,15 +242,18 @@ class PlannerSuite extends SharedSQLContext {
     val doubleRepartitioned = testData.repartition(10).repartition(20).coalesce(5)
     def countRepartitions(plan: LogicalPlan): Int = plan.collect { case r: Repartition => r }.length
     assert(countRepartitions(doubleRepartitioned.queryExecution.logical) === 3)
-    assert(countRepartitions(doubleRepartitioned.queryExecution.optimizedPlan) === 1)
+    assert(countRepartitions(doubleRepartitioned.queryExecution.optimizedPlan) === 2)
     doubleRepartitioned.queryExecution.optimizedPlan match {
-      case r: Repartition =>
-        assert(r.numPartitions === 5)
-        assert(r.shuffle === false)
+      case Repartition (numPartitions, shuffle, Repartition(_, shuffleChild, _)) =>
+        assert(numPartitions === 5)
+        assert(shuffle === false)
+        assert(shuffleChild === true)
     }
   }
 
-  // --- Unit tests of EnsureRequirements ---------------------------------------------------------
+  ///////////////////////////////////////////////////////////////////////////
+  // Unit tests of EnsureRequirements for Exchange
+  ///////////////////////////////////////////////////////////////////////////
 
   // When it comes to testing whether EnsureRequirements properly ensures distribution requirements,
   // there two dimensions that need to be considered: are the child partitionings compatible and
@@ -412,7 +366,7 @@ class PlannerSuite extends SharedSQLContext {
   // This is a regression test for SPARK-9703
   test("EnsureRequirements should not repartition if only ordering requirement is unsatisfied") {
     // Consider an operator that imposes both output distribution and  ordering requirements on its
-    // children, such as sort sort merge join. If the distribution requirements are satisfied but
+    // children, such as sort merge join. If the distribution requirements are satisfied but
     // the output ordering requirements are unsatisfied, then the planner should only add sorts and
     // should not need to add additional shuffles / exchanges.
     val outputOrdering = Seq(SortOrder(Literal(1), Ascending))
@@ -432,93 +386,6 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("EnsureRequirements adds sort when there is no existing ordering") {
-    val orderingA = SortOrder(Literal(1), Ascending)
-    val orderingB = SortOrder(Literal(2), Ascending)
-    assert(orderingA != orderingB)
-    val inputPlan = DummySparkPlan(
-      children = DummySparkPlan(outputOrdering = Seq.empty) :: Nil,
-      requiredChildOrdering = Seq(Seq(orderingB)),
-      requiredChildDistribution = Seq(UnspecifiedDistribution)
-    )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: SortExec => true }.isEmpty) {
-      fail(s"Sort should have been added:\n$outputPlan")
-    }
-  }
-
-  test("EnsureRequirements skips sort when required ordering is prefix of existing ordering") {
-    val orderingA = SortOrder(Literal(1), Ascending)
-    val orderingB = SortOrder(Literal(2), Ascending)
-    assert(orderingA != orderingB)
-    val inputPlan = DummySparkPlan(
-      children = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB)) :: Nil,
-      requiredChildOrdering = Seq(Seq(orderingA)),
-      requiredChildDistribution = Seq(UnspecifiedDistribution)
-    )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: SortExec => true }.nonEmpty) {
-      fail(s"No sorts should have been added:\n$outputPlan")
-    }
-  }
-
-  test("EnsureRequirements skips sort when required ordering is semantically equal to " +
-    "existing ordering") {
-    val exprId: ExprId = NamedExpression.newExprId
-    val attribute1 =
-      AttributeReference(
-        name = "col1",
-        dataType = LongType,
-        nullable = false
-      ) (exprId = exprId,
-        qualifier = Some("col1_qualifier")
-      )
-
-    val attribute2 =
-      AttributeReference(
-        name = "col1",
-        dataType = LongType,
-        nullable = false
-      ) (exprId = exprId)
-
-    val orderingA1 = SortOrder(attribute1, Ascending)
-    val orderingA2 = SortOrder(attribute2, Ascending)
-
-    assert(orderingA1 != orderingA2, s"$orderingA1 should NOT equal to $orderingA2")
-    assert(orderingA1.semanticEquals(orderingA2),
-      s"$orderingA1 should be semantically equal to $orderingA2")
-
-    val inputPlan = DummySparkPlan(
-      children = DummySparkPlan(outputOrdering = Seq(orderingA1)) :: Nil,
-      requiredChildOrdering = Seq(Seq(orderingA2)),
-      requiredChildDistribution = Seq(UnspecifiedDistribution)
-    )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: SortExec => true }.nonEmpty) {
-      fail(s"No sorts should have been added:\n$outputPlan")
-    }
-  }
-
-  // This is a regression test for SPARK-11135
-  test("EnsureRequirements adds sort when required ordering isn't a prefix of existing ordering") {
-    val orderingA = SortOrder(Literal(1), Ascending)
-    val orderingB = SortOrder(Literal(2), Ascending)
-    assert(orderingA != orderingB)
-    val inputPlan = DummySparkPlan(
-      children = DummySparkPlan(outputOrdering = Seq(orderingA)) :: Nil,
-      requiredChildOrdering = Seq(Seq(orderingA, orderingB)),
-      requiredChildDistribution = Seq(UnspecifiedDistribution)
-    )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: SortExec => true }.isEmpty) {
-      fail(s"Sort should have been added:\n$outputPlan")
-    }
-  }
-
   test("EnsureRequirements eliminates Exchange if child has Exchange with same partitioning") {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
@@ -529,7 +396,7 @@ class PlannerSuite extends SharedSQLContext {
         children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
         requiredChildDistribution = Seq(distribution),
         requiredChildOrdering = Seq(Seq.empty)),
-        None)
+      None)
 
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
@@ -558,8 +425,6 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  // ---------------------------------------------------------------------------------------------
-
   test("Reuse exchanges") {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
@@ -573,12 +438,12 @@ class PlannerSuite extends SharedSQLContext {
       None)
 
     val inputPlan = SortMergeJoinExec(
-        Literal(1) :: Nil,
-        Literal(1) :: Nil,
-        Inner,
-        None,
-        shuffle,
-        shuffle)
+      Literal(1) :: Nil,
+      Literal(1) :: Nil,
+      Inner,
+      None,
+      shuffle,
+      shuffle)
 
     val outputPlan = ReuseExchange(spark.sessionState.conf).apply(inputPlan)
     if (outputPlan.collect { case e: ReusedExchangeExec => true }.size != 1) {
@@ -604,6 +469,158 @@ class PlannerSuite extends SharedSQLContext {
     if (outputPlan2.collect { case e: ShuffleExchange => true }.size != 2) {
       fail(s"Should have only two shuffles:\n$outputPlan")
     }
+  }
+
+  ///////////////////////////////////////////////////////////////////////////
+  // Unit tests of EnsureRequirements for Sort
+  ///////////////////////////////////////////////////////////////////////////
+
+  private val exprA = Literal(1)
+  private val exprB = Literal(2)
+  private val exprC = Literal(3)
+  private val orderingA = SortOrder(exprA, Ascending)
+  private val orderingB = SortOrder(exprB, Ascending)
+  private val orderingC = SortOrder(exprC, Ascending)
+  private val planA = DummySparkPlan(outputOrdering = Seq(orderingA),
+    outputPartitioning = HashPartitioning(exprA :: Nil, 5))
+  private val planB = DummySparkPlan(outputOrdering = Seq(orderingB),
+    outputPartitioning = HashPartitioning(exprB :: Nil, 5))
+  private val planC = DummySparkPlan(outputOrdering = Seq(orderingC),
+    outputPartitioning = HashPartitioning(exprC :: Nil, 5))
+
+  assert(orderingA != orderingB && orderingA != orderingC && orderingB != orderingC)
+
+  private def assertSortRequirementsAreSatisfied(
+      childPlan: SparkPlan,
+      requiredOrdering: Seq[SortOrder],
+      shouldHaveSort: Boolean): Unit = {
+    val inputPlan = DummySparkPlan(
+      children = childPlan :: Nil,
+      requiredChildOrdering = Seq(requiredOrdering),
+      requiredChildDistribution = Seq(UnspecifiedDistribution)
+    )
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (shouldHaveSort) {
+      if (outputPlan.collect { case s: SortExec => true }.isEmpty) {
+        fail(s"Sort should have been added:\n$outputPlan")
+      }
+    } else {
+      if (outputPlan.collect { case s: SortExec => true }.nonEmpty) {
+        fail(s"No sorts should have been added:\n$outputPlan")
+      }
+    }
+  }
+
+  test("EnsureRequirements skips sort when either side of join keys is required after inner SMJ") {
+    val innerSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, planA, planB)
+    // Both left and right keys should be sorted after the SMJ.
+    Seq(orderingA, orderingB).foreach { ordering =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = innerSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = false)
+    }
+  }
+
+  test("EnsureRequirements skips sort when key order of a parent SMJ is propagated from its " +
+    "child SMJ") {
+    val childSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, planA, planB)
+    val parentSmj = SortMergeJoinExec(exprB :: Nil, exprC :: Nil, Inner, None, childSmj, planC)
+    // After the second SMJ, exprA, exprB and exprC should all be sorted.
+    Seq(orderingA, orderingB, orderingC).foreach { ordering =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = parentSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = false)
+    }
+  }
+
+  test("EnsureRequirements for sort operator after left outer sort merge join") {
+    // Only left key is sorted after left outer SMJ (thus doesn't need a sort).
+    val leftSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, LeftOuter, None, planA, planB)
+    Seq((orderingA, false), (orderingB, true)).foreach { case (ordering, needSort) =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = leftSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = needSort)
+    }
+  }
+
+  test("EnsureRequirements for sort operator after right outer sort merge join") {
+    // Only right key is sorted after right outer SMJ (thus doesn't need a sort).
+    val rightSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, RightOuter, None, planA, planB)
+    Seq((orderingA, true), (orderingB, false)).foreach { case (ordering, needSort) =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = rightSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = needSort)
+    }
+  }
+
+  test("EnsureRequirements adds sort after full outer sort merge join") {
+    // Neither keys is sorted after full outer SMJ, so they both need sorts.
+    val fullSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, FullOuter, None, planA, planB)
+    Seq(orderingA, orderingB).foreach { ordering =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = fullSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = true)
+    }
+  }
+
+  test("EnsureRequirements adds sort when there is no existing ordering") {
+    assertSortRequirementsAreSatisfied(
+      childPlan = DummySparkPlan(outputOrdering = Seq.empty),
+      requiredOrdering = Seq(orderingB),
+      shouldHaveSort = true)
+  }
+
+  test("EnsureRequirements skips sort when required ordering is prefix of existing ordering") {
+    assertSortRequirementsAreSatisfied(
+      childPlan = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB)),
+      requiredOrdering = Seq(orderingA),
+      shouldHaveSort = false)
+  }
+
+  test("EnsureRequirements skips sort when required ordering is semantically equal to " +
+    "existing ordering") {
+    val exprId: ExprId = NamedExpression.newExprId
+    val attribute1 =
+      AttributeReference(
+        name = "col1",
+        dataType = LongType,
+        nullable = false
+      ) (exprId = exprId,
+        qualifier = Some("col1_qualifier")
+      )
+
+    val attribute2 =
+      AttributeReference(
+        name = "col1",
+        dataType = LongType,
+        nullable = false
+      ) (exprId = exprId)
+
+    val orderingA1 = SortOrder(attribute1, Ascending)
+    val orderingA2 = SortOrder(attribute2, Ascending)
+
+    assert(orderingA1 != orderingA2, s"$orderingA1 should NOT equal to $orderingA2")
+    assert(orderingA1.semanticEquals(orderingA2),
+      s"$orderingA1 should be semantically equal to $orderingA2")
+
+    assertSortRequirementsAreSatisfied(
+      childPlan = DummySparkPlan(outputOrdering = Seq(orderingA1)),
+      requiredOrdering = Seq(orderingA2),
+      shouldHaveSort = false)
+  }
+
+  // This is a regression test for SPARK-11135
+  test("EnsureRequirements adds sort when required ordering isn't a prefix of existing ordering") {
+    assertSortRequirementsAreSatisfied(
+      childPlan = DummySparkPlan(outputOrdering = Seq(orderingA)),
+      requiredOrdering = Seq(orderingA, orderingB),
+      shouldHaveSort = true)
   }
 }
 

@@ -48,7 +48,7 @@ import org.apache.spark.network.util.TransportFrameDecoder;
  * Concurrency: thread safe and can be called from multiple threads.
  */
 public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
-  private final Logger logger = LoggerFactory.getLogger(TransportResponseHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportResponseHandler.class);
 
   private final Channel channel;
 

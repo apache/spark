@@ -46,13 +46,13 @@ class EliminateSubqueryAliasesSuite extends PlanTest with PredicateHelper {
 
   test("eliminate top level subquery") {
     val input = LocalRelation('a.int, 'b.int)
-    val query = SubqueryAlias("a", input, None)
+    val query = SubqueryAlias("a", input)
     comparePlans(afterOptimization(query), input)
   }
 
   test("eliminate mid-tree subquery") {
     val input = LocalRelation('a.int, 'b.int)
-    val query = Filter(TrueLiteral, SubqueryAlias("a", input, None))
+    val query = Filter(TrueLiteral, SubqueryAlias("a", input))
     comparePlans(
       afterOptimization(query),
       Filter(TrueLiteral, LocalRelation('a.int, 'b.int)))
@@ -61,7 +61,7 @@ class EliminateSubqueryAliasesSuite extends PlanTest with PredicateHelper {
   test("eliminate multiple subqueries") {
     val input = LocalRelation('a.int, 'b.int)
     val query = Filter(TrueLiteral,
-      SubqueryAlias("c", SubqueryAlias("b", SubqueryAlias("a", input, None), None), None))
+      SubqueryAlias("c", SubqueryAlias("b", SubqueryAlias("a", input))))
     comparePlans(
       afterOptimization(query),
       Filter(TrueLiteral, LocalRelation('a.int, 'b.int)))

@@ -20,16 +20,18 @@ package org.apache.spark.sql.hive.execution
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util
+import java.util.Locale
 
 import scala.util.control.NonFatal
 
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.SQLBuilder
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 
@@ -167,7 +169,7 @@ abstract class HiveComparisonTest
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
       case _: ExplainCommand => answer
-      case _: DescribeTableCommand | ShowColumnsCommand(_) =>
+      case _: DescribeTableCommand | ShowColumnsCommand(_, _) =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -191,12 +193,7 @@ abstract class HiveComparisonTest
     "last_modified_by",
     "last_modified_time",
     "Owner:",
-    "COLUMN_STATS_ACCURATE",
     // The following are hive specific schema parameters which we do not need to match exactly.
-    "numFiles",
-    "numRows",
-    "rawDataSize",
-    "totalSize",
     "totalNumberFiles",
     "maxFileSize",
     "minFileSize"
@@ -207,6 +204,7 @@ abstract class HiveComparisonTest
   // This list contains indicators for those lines which do not have actual results and we
   // want to ignore.
   lazy val ignoredLineIndicators = Seq(
+    "# Detailed Table Information",
     "# Partition Information",
     "# col_name"
   )
@@ -226,7 +224,8 @@ abstract class HiveComparisonTest
       testCaseName: String,
       sql: String,
       reset: Boolean = true,
-      tryWithoutResettingFirst: Boolean = false) {
+      tryWithoutResettingFirst: Boolean = false,
+      skip: Boolean = false) {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -255,6 +254,7 @@ abstract class HiveComparisonTest
     }
 
     test(testCaseName) {
+      assume(!skip)
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
       val sqlWithoutComment =
@@ -296,10 +296,11 @@ abstract class HiveComparisonTest
         // thus the tables referenced in those DDL commands cannot be extracted for use by our
         // test table auto-loading mechanism. In addition, the tests which use the SHOW TABLES
         // command expect these tables to exist.
-        val hasShowTableCommand = queryList.exists(_.toLowerCase.contains("show tables"))
+        val hasShowTableCommand =
+          queryList.exists(_.toLowerCase(Locale.ROOT).contains("show tables"))
         for (table <- Seq("src", "srcpart")) {
           val hasMatchingQuery = queryList.exists { query =>
-            val normalizedQuery = query.toLowerCase.stripSuffix(";")
+            val normalizedQuery = query.toLowerCase(Locale.ROOT).stripSuffix(";")
             normalizedQuery.endsWith(table) ||
               normalizedQuery.contains(s"from $table") ||
               normalizedQuery.contains(s"from default.$table")
@@ -340,57 +341,11 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          var query: TestHiveQueryExecution = null
-          try {
-            query = {
-              val originalQuery = new TestHiveQueryExecution(
-                queryString.replace("../../data", testDataPath))
-              val containsCommands = originalQuery.analyzed.collectFirst {
-                case _: Command => ()
-                case _: InsertIntoTable => ()
-              }.nonEmpty
-
-              if (containsCommands) {
-                originalQuery
-              } else {
-                val convertedSQL = try {
-                  new SQLBuilder(originalQuery.analyzed).toSQL
-                } catch {
-                  case NonFatal(e) => fail(
-                    s"""Cannot convert the following HiveQL query plan back to SQL query string:
-                        |
-                        |# Original HiveQL query string:
-                        |$queryString
-                        |
-                        |# Resolved query plan:
-                        |${originalQuery.analyzed.treeString}
-                     """.stripMargin, e)
-                }
-
-                try {
-                  val queryExecution = new TestHiveQueryExecution(convertedSQL)
-                  // Trigger the analysis of this converted SQL query.
-                  queryExecution.analyzed
-                  queryExecution
-                } catch {
-                  case NonFatal(e) => fail(
-                    s"""Failed to analyze the converted SQL string:
-                        |
-                        |# Original HiveQL query string:
-                        |$queryString
-                        |
-                        |# Resolved query plan:
-                        |${originalQuery.analyzed.treeString}
-                        |
-                        |# Converted SQL query string:
-                        |$convertedSQL
-                     """.stripMargin, e)
-                }
-              }
-            }
-
-            (query, prepareAnswer(query, query.hiveResultString()))
-          } catch {
+          val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
+          def getResult(): Seq[String] = {
+            SQLExecution.withNewExecutionId(query.sparkSession, query)(query.hiveResultString())
+          }
+          try { (query, prepareAnswer(query, getResult())) } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
@@ -405,7 +360,7 @@ abstract class HiveComparisonTest
               stringToFile(new File(failedDirectory, testCaseName), errorMessage + consoleTestCase)
               fail(errorMessage)
           }
-        }.toSeq
+        }
 
         (queryList, hiveResults, catalystResults).zipped.foreach {
           case (query, hive, (hiveQuery, catalyst)) =>
@@ -416,6 +371,7 @@ abstract class HiveComparisonTest
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
                 (!hiveQuery.logical.isInstanceOf[ShowFunctionsCommand]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeFunctionCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeTableCommand]) &&
                 preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive
@@ -432,30 +388,27 @@ abstract class HiveComparisonTest
               // also print out the query plans and results for those.
               val computedTablesMessages: String = try {
                 val tablesRead = new TestHiveQueryExecution(query).executedPlan.collect {
-                  case ts: HiveTableScanExec => ts.relation.tableName
+                  case ts: HiveTableScanExec => ts.relation.tableMeta.identifier
                 }.toSet
 
                 TestHive.reset()
                 val executions = queryList.map(new TestHiveQueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
-                  // We should take executedPlan instead of sparkPlan, because in following codes we
-                  // will run the collected plans. As we will do extra processing for sparkPlan such
-                  // as adding exchange, collapsing codegen stages, etc., collecting sparkPlan here
-                  // will cause some errors when running these plans later.
-                  case (q, e) => e.executedPlan.collect {
-                    case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
+                  case (q, e) => e.analyzed.collect {
+                    case i: InsertIntoHiveTable if tablesRead contains i.table.identifier =>
                       (q, e, i)
                   }
                 }
 
                 tablesGenerated.map { case (hiveql, execution, insert) =>
+                  val rdd = Dataset.ofRows(TestHive.sparkSession, insert.query).queryExecution.toRdd
                   s"""
                      |=== Generated Table ===
                      |$hiveql
                      |$execution
                      |== Results ==
-                     |${insert.child.execute().collect().mkString("\n")}
+                     |${rdd.collect().mkString("\n")}
                    """.stripMargin
                 }.mkString("\n")
 
@@ -492,7 +445,7 @@ abstract class HiveComparisonTest
           "create table",
           "drop index"
         )
-        !queryList.map(_.toLowerCase).exists { query =>
+        !queryList.map(_.toLowerCase(Locale.ROOT)).exists { query =>
           excludedSubstrings.exists(s => query.contains(s))
         }
       }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-import java.util.{Map => JMap}
+import java.util.{Locale, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
@@ -28,15 +28,16 @@ import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.command.ShowTablesCommand
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
 
 private[sql] object SQLUtils extends Logging {
-  SerDe.registerSqlSerDe((readSqlObject, writeSqlObject))
+  SerDe.setSQLReadObject(readSqlObject).setSQLWriteObject(writeSqlObject)
 
   private[this] def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
     sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
@@ -47,15 +48,19 @@ private[sql] object SQLUtils extends Logging {
       jsc: JavaSparkContext,
       sparkConfigMap: JMap[Object, Object],
       enableHiveSupport: Boolean): SparkSession = {
-    val spark = if (SparkSession.hiveClassesArePresent && enableHiveSupport) {
-      SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
-    } else {
-      if (enableHiveSupport) {
-        logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
-          "Spark is not built with Hive; falling back to without Hive support.")
+    val spark =
+      if (SparkSession.hiveClassesArePresent && enableHiveSupport &&
+          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
+            "hive") {
+        SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
+      } else {
+        if (enableHiveSupport) {
+          logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
+            s"Spark is not built with Hive or ${CATALOG_IMPLEMENTATION.key} is not set to " +
+            "'hive', falling back to without Hive support.")
+        }
+        SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
       }
-      SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
-    }
     setSparkContextSessionConf(spark, sparkConfigMap)
     spark
   }
@@ -64,7 +69,7 @@ private[sql] object SQLUtils extends Logging {
       spark: SparkSession,
       sparkConfigMap: JMap[Object, Object]): Unit = {
     for ((name, value) <- sparkConfigMap.asScala) {
-      spark.conf.set(name.toString, value.toString)
+      spark.sessionState.conf.setConfString(name.toString, value.toString)
     }
     for ((name, value) <- sparkConfigMap.asScala) {
       spark.sparkContext.conf.set(name.toString, value.toString)
@@ -79,7 +84,7 @@ private[sql] object SQLUtils extends Logging {
     new JavaSparkContext(spark.sparkContext)
   }
 
-  def createStructType(fields : Seq[StructField]): StructType = {
+  def createStructType(fields: Seq[StructField]): StructType = {
     StructType(fields)
   }
 
@@ -88,48 +93,8 @@ private[sql] object SQLUtils extends Logging {
     def r: Regex = new Regex(sc.parts.mkString, sc.parts.tail.map(_ => "x"): _*)
   }
 
-  def getSQLDataType(dataType: String): DataType = {
-    dataType match {
-      case "byte" => org.apache.spark.sql.types.ByteType
-      case "integer" => org.apache.spark.sql.types.IntegerType
-      case "float" => org.apache.spark.sql.types.FloatType
-      case "double" => org.apache.spark.sql.types.DoubleType
-      case "numeric" => org.apache.spark.sql.types.DoubleType
-      case "character" => org.apache.spark.sql.types.StringType
-      case "string" => org.apache.spark.sql.types.StringType
-      case "binary" => org.apache.spark.sql.types.BinaryType
-      case "raw" => org.apache.spark.sql.types.BinaryType
-      case "logical" => org.apache.spark.sql.types.BooleanType
-      case "boolean" => org.apache.spark.sql.types.BooleanType
-      case "timestamp" => org.apache.spark.sql.types.TimestampType
-      case "date" => org.apache.spark.sql.types.DateType
-      case r"\Aarray<(.+)${elemType}>\Z" =>
-        org.apache.spark.sql.types.ArrayType(getSQLDataType(elemType))
-      case r"\Amap<(.+)${keyType},(.+)${valueType}>\Z" =>
-        if (keyType != "string" && keyType != "character") {
-          throw new IllegalArgumentException("Key type of a map must be string or character")
-        }
-        org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
-      case r"\Astruct<(.+)${fieldsStr}>\Z" =>
-        if (fieldsStr(fieldsStr.length - 1) == ',') {
-          throw new IllegalArgumentException(s"Invalid type $dataType")
-        }
-        val fields = fieldsStr.split(",")
-        val structFields = fields.map { field =>
-          field match {
-            case r"\A(.+)${fieldName}:(.+)${fieldType}\Z" =>
-              createStructField(fieldName, fieldType, true)
-
-            case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
-          }
-        }
-        createStructType(structFields)
-      case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
-    }
-  }
-
   def createStructField(name: String, dataType: String, nullable: Boolean): StructField = {
-    val dtObj = getSQLDataType(dataType)
+    val dtObj = CatalystSqlParser.parseDataType(dataType)
     StructField(name, dtObj, nullable)
   }
 
@@ -158,7 +123,7 @@ private[sql] object SQLUtils extends Logging {
     val dis = new DataInputStream(bis)
     val num = SerDe.readInt(dis)
     Row.fromSeq((0 until num).map { i =>
-      doConversion(SerDe.readObject(dis), schema.fields(i).dataType)
+      doConversion(SerDe.readObject(dis, jvmObjectTracker = null), schema.fields(i).dataType)
     })
   }
 
@@ -167,7 +132,7 @@ private[sql] object SQLUtils extends Logging {
     val dos = new DataOutputStream(bos)
 
     val cols = (0 until row.length).map(row(_).asInstanceOf[Object]).toArray
-    SerDe.writeObject(dos, cols)
+    SerDe.writeObject(dos, cols, jvmObjectTracker = null)
     bos.toByteArray()
   }
 
@@ -247,7 +212,7 @@ private[sql] object SQLUtils extends Logging {
     dataType match {
       case 's' =>
         // Read StructType for DataFrame
-        val fields = SerDe.readList(dis).asInstanceOf[Array[Object]]
+        val fields = SerDe.readList(dis, jvmObjectTracker = null).asInstanceOf[Array[Object]]
         Row.fromSeq(fields)
       case _ => null
     }
@@ -258,8 +223,8 @@ private[sql] object SQLUtils extends Logging {
       // Handle struct type in DataFrame
       case v: GenericRowWithSchema =>
         dos.writeByte('s')
-        SerDe.writeObject(dos, v.schema.fieldNames)
-        SerDe.writeObject(dos, v.values)
+        SerDe.writeObject(dos, v.schema.fieldNames, jvmObjectTracker = null)
+        SerDe.writeObject(dos, v.values, jvmObjectTracker = null)
         true
       case _ =>
         false
@@ -276,11 +241,12 @@ private[sql] object SQLUtils extends Logging {
   }
 
   def getTableNames(sparkSession: SparkSession, databaseName: String): Array[String] = {
-    databaseName match {
-      case n: String if n != null && n.trim.nonEmpty =>
-        sparkSession.catalog.listTables(n).collect().map(_.name)
+    val db = databaseName match {
+      case _ if databaseName != null && databaseName.trim.nonEmpty =>
+        databaseName
       case _ =>
-        sparkSession.catalog.listTables().collect().map(_.name)
+        sparkSession.catalog.currentDatabase
     }
+    sparkSession.sessionState.catalog.listTables(db).map(_.table).toArray
   }
 }

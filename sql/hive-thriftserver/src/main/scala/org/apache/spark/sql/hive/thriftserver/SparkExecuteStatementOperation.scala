@@ -50,20 +50,22 @@ private[hive] class SparkExecuteStatementOperation(
   with Logging {
 
   private var result: DataFrame = _
+
+  // We cache the returned rows to get iterators again in case the user wants to use FETCH_FIRST.
+  // This is only used when `spark.sql.thriftServer.incrementalCollect` is set to `false`.
+  // In case of `true`, this will be `None` and FETCH_FIRST will trigger re-execution.
+  private var resultList: Option[Array[SparkRow]] = _
+
   private var iter: Iterator[SparkRow] = _
-  private var iterHeader: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
 
   private lazy val resultSchema: TableSchema = {
-    if (result == null || result.queryExecution.analyzed.output.size == 0) {
+    if (result == null || result.schema.isEmpty) {
       new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
     } else {
-      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
-      val schema = result.queryExecution.analyzed.output.map { attr =>
-        new FieldSchema(attr.name, attr.dataType.catalogString, "")
-      }
-      new TableSchema(schema.asJava)
+      logInfo(s"Result Schema: ${result.schema}")
+      SparkExecuteStatementOperation.getTableSchema(result.schema)
     }
   }
 
@@ -114,9 +116,15 @@ private[hive] class SparkExecuteStatementOperation(
 
     // Reset iter to header when fetching start from first row
     if (order.equals(FetchOrientation.FETCH_FIRST)) {
-      val (ita, itb) = iterHeader.duplicate
-      iter = ita
-      iterHeader = itb
+      iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
+        resultList = None
+        result.toLocalIterator.asScala
+      } else {
+        if (resultList.isEmpty) {
+          resultList = Some(result.collect())
+        }
+        resultList.get.iterator
+      }
     }
 
     if (!iter.hasNext) {
@@ -230,17 +238,14 @@ private[hive] class SparkExecuteStatementOperation(
       }
       HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
       iter = {
-        val useIncrementalCollect =
-          sqlContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
-        if (useIncrementalCollect) {
+        if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
+          resultList = None
           result.toLocalIterator.asScala
         } else {
-          result.collect().iterator
+          resultList = Some(result.collect())
+          resultList.get.iterator
         }
       }
-      val (itra, itrb) = iter.duplicate
-      iterHeader = itra
-      iter = itrb
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
       case e: HiveSQLException =>
@@ -248,6 +253,8 @@ private[hive] class SparkExecuteStatementOperation(
           return
         } else {
           setState(OperationState.ERROR)
+          HiveThriftServer2.listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
           throw e
         }
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
@@ -280,5 +287,15 @@ private[hive] class SparkExecuteStatementOperation(
         backgroundHandle.cancel(true)
       }
     }
+  }
+}
+
+object SparkExecuteStatementOperation {
+  def getTableSchema(structType: StructType): TableSchema = {
+    val schema = structType.map { field =>
+      val attrTypeString = if (field.dataType == NullType) "void" else field.dataType.catalogString
+      new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
+    }
+    new TableSchema(schema.asJava)
   }
 }

@@ -21,7 +21,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.feature.LabeledPoint
@@ -38,7 +38,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 /**
- * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * <a href="http://en.wikipedia.org/wiki/Gradient_boosting">Gradient-Boosted Trees (GBTs)</a>
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
  *
@@ -65,31 +65,48 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   // Override parameter setters from parent trait for Java API compatibility.
 
   // Parameters from TreeRegressorParams:
-  @Since("1.4.0")
-  override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
+  override def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setMinInstancesPerNode(value: Int): this.type =
-    super.setMinInstancesPerNode(value)
+  override def setMaxBins(value: Int): this.type = set(maxBins, value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
+  override def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
+  override def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
+  /** @group expertSetParam */
   @Since("1.4.0")
-  override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
+  override def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
 
+  /** @group expertSetParam */
   @Since("1.4.0")
-  override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
+  override def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
+
+  /**
+   * Specifies how often to checkpoint the cached node IDs.
+   * E.g. 10 means that the cache will get checkpointed every 10 iterations.
+   * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
+   * [[org.apache.spark.SparkContext]].
+   * Must be at least 1.
+   * (default = 10)
+   * @group setParam
+   */
+  @Since("1.4.0")
+  override def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /**
    * The impurity setting is ignored for GBT models.
    * Individual trees are built using impurity "Variance."
+   *
+   * @group setParam
    */
   @Since("1.4.0")
   override def setImpurity(value: String): this.type = {
@@ -98,18 +115,24 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   }
 
   // Parameters from TreeEnsembleParams:
-  @Since("1.4.0")
-  override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setSeed(value: Long): this.type = super.setSeed(value)
+  override def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
+
+  /** @group setParam */
+  @Since("1.4.0")
+  override def setSeed(value: Long): this.type = set(seed, value)
 
   // Parameters from GBTParams:
-  @Since("1.4.0")
-  override def setMaxIter(value: Int): this.type = super.setMaxIter(value)
 
+  /** @group setParam */
   @Since("1.4.0")
-  override def setStepSize(value: Double): this.type = super.setStepSize(value)
+  override def setMaxIter(value: Int): this.type = set(maxIter, value)
+
+  /** @group setParam */
+  @Since("1.4.0")
+  override def setStepSize(value: Double): this.type = set(stepSize, value)
 
   // Parameters from GBTRegressorParams:
 
@@ -123,9 +146,18 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(labelCol, featuresCol, predictionCol, impurity, lossType,
+      maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
+      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval)
+    instr.logNumFeatures(numFeatures)
+
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
       $(seed))
-    new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
+    val m = new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.4.0")
@@ -144,7 +176,7 @@ object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
 }
 
 /**
- * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * <a href="http://en.wikipedia.org/wiki/Gradient_boosting">Gradient-Boosted Trees (GBTs)</a>
  * model for regression.
  * It supports both continuous and categorical features.
  * @param _trees  Decision trees in the ensemble.
@@ -175,6 +207,12 @@ class GBTRegressionModel private[ml](
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
+
+  /**
+   * Number of trees in ensemble
+   */
+  @Since("2.0.0")
+  val getNumTrees: Int = trees.length
 
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
@@ -216,7 +254,7 @@ class GBTRegressionModel private[ml](
    * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
    * and follows the implementation from scikit-learn.
    *
-   * @see [[DecisionTreeRegressionModel.featureImportances]]
+   * @see `DecisionTreeRegressionModel.featureImportances`
    */
   @Since("2.0.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)

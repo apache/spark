@@ -52,7 +52,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Number of features.  Should be > 0.
+   * Number of features. Should be greater than 0.
    * (default = 2^18^)
    * @group param
    */

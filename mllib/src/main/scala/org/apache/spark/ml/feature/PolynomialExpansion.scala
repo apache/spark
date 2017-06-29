@@ -30,10 +30,12 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * Perform feature expansion in a polynomial space. As said in wikipedia of Polynomial Expansion,
- * which is available at [[http://en.wikipedia.org/wiki/Polynomial_expansion]], "In mathematics, an
- * expansion of a product of sums expresses it as a sum of products by using the fact that
- * multiplication distributes over addition". Take a 2-variable feature vector as an example:
- * `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
+ * which is available at
+ * <a href="http://en.wikipedia.org/wiki/Polynomial_expansion">Polynomial expansion (Wikipedia)</a>
+ * , "In mathematics, an expansion of a product of sums expresses it as a sum of products by using
+ * the fact that multiplication distributes over addition". Take a 2-variable feature vector
+ * as an example: `(x, y)`, if we want to expand it with degree 2, then we get
+ * `(x, x * x, y, x * y, y * y)`.
  */
 @Since("1.4.0")
 class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: String)
@@ -43,7 +45,8 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
   def this() = this(Identifiable.randomUID("poly"))
 
   /**
-   * The polynomial degree to expand, which should be >= 1.  A value of 1 means no expansion.
+   * The polynomial degree to expand, which should be greater than equal to 1. A value of 1 means
+   * no expansion.
    * Default: 2
    * @group param
    */
@@ -76,11 +79,11 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
  * (n + d choose d) (including 1 and first-order values). For example, let f([a, b, c], 3) be the
  * function that expands [a, b, c] to their monomials of degree 3. We have the following recursion:
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    f([a, b, c], 3) &= f([a, b], 3) ++ f([a, b], 2) * c ++ f([a, b], 1) * c^2 ++ [c^3]
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * To handle sparsity, if c is zero, we can skip all monomials that contain it. We remember the
  * current index and increment it properly for sparse input.

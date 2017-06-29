@@ -229,6 +229,59 @@ class OrcFilterSuite extends QueryTest with OrcTest {
     }
   }
 
+  test("filter pushdown - decimal") {
+    withOrcDataFrame((1 to 4).map(i => Tuple1.apply(BigDecimal.valueOf(i)))) { implicit df =>
+      checkFilterPredicate('_1.isNull, PredicateLeaf.Operator.IS_NULL)
+
+      checkFilterPredicate('_1 === BigDecimal.valueOf(1), PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate('_1 <=> BigDecimal.valueOf(1), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+
+      checkFilterPredicate('_1 < BigDecimal.valueOf(2), PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate('_1 > BigDecimal.valueOf(3), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate('_1 <= BigDecimal.valueOf(1), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate('_1 >= BigDecimal.valueOf(4), PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(1)) === '_1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(1)) <=> '_1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(2)) > '_1, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(3)) < '_1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(1)) >= '_1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(
+        Literal(BigDecimal.valueOf(4)) <= '_1, PredicateLeaf.Operator.LESS_THAN)
+    }
+  }
+
+  test("filter pushdown - timestamp") {
+    val timeString = "2015-08-20 14:57:00"
+    val timestamps = (1 to 4).map { i =>
+      val milliseconds = Timestamp.valueOf(timeString).getTime + i * 3600
+      new Timestamp(milliseconds)
+    }
+    withOrcDataFrame(timestamps.map(Tuple1(_))) { implicit df =>
+      checkFilterPredicate('_1.isNull, PredicateLeaf.Operator.IS_NULL)
+
+      checkFilterPredicate('_1 === timestamps(0), PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate('_1 <=> timestamps(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+
+      checkFilterPredicate('_1 < timestamps(1), PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate('_1 > timestamps(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate('_1 <= timestamps(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate('_1 >= timestamps(3), PredicateLeaf.Operator.LESS_THAN)
+
+      checkFilterPredicate(Literal(timestamps(0)) === '_1, PredicateLeaf.Operator.EQUALS)
+      checkFilterPredicate(Literal(timestamps(0)) <=> '_1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+      checkFilterPredicate(Literal(timestamps(1)) > '_1, PredicateLeaf.Operator.LESS_THAN)
+      checkFilterPredicate(Literal(timestamps(2)) < '_1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(timestamps(0)) >= '_1, PredicateLeaf.Operator.LESS_THAN_EQUALS)
+      checkFilterPredicate(Literal(timestamps(3)) <= '_1, PredicateLeaf.Operator.LESS_THAN)
+    }
+  }
+
   test("filter pushdown - combinations with logical operators") {
     withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
       // Because `ExpressionTree` is not accessible at Hive 1.2.x, this should be checked
@@ -277,18 +330,9 @@ class OrcFilterSuite extends QueryTest with OrcTest {
     withOrcDataFrame((1 to 4).map(i => Tuple1(Array(i)))) { implicit df =>
       checkNoFilterPredicate('_1.isNull)
     }
-    // DecimalType
-    withOrcDataFrame((1 to 4).map(i => Tuple1(BigDecimal.valueOf(i)))) { implicit df =>
-      checkNoFilterPredicate('_1 <= BigDecimal.valueOf(4))
-    }
     // BinaryType
     withOrcDataFrame((1 to 4).map(i => Tuple1(i.b))) { implicit df =>
       checkNoFilterPredicate('_1 <=> 1.b)
-    }
-    // TimestampType
-    val stringTimestamp = "2015-08-20 15:57:00"
-    withOrcDataFrame(Seq(Tuple1(Timestamp.valueOf(stringTimestamp)))) { implicit df =>
-      checkNoFilterPredicate('_1 <=> Timestamp.valueOf(stringTimestamp))
     }
     // DateType
     val stringDate = "2015-01-01"

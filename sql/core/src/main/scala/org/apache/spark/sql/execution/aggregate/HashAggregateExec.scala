@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -24,6 +25,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
@@ -41,7 +43,11 @@ case class HashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends AggregateExec with CodegenSupport {
+  extends UnaryExecNode with CodegenSupport {
+
+  private[this] val aggregateBufferAttributes = {
+    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
+  }
 
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
@@ -53,7 +59,25 @@ case class HashAggregateExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"))
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"),
+    "avgHashmapProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hashmap probe"))
+
+  override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def producedAttributes: AttributeSet =
+    AttributeSet(aggregateAttributes) ++
+    AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
+    AttributeSet(aggregateBufferAttributes)
+
+  override def requiredChildDistribution: List[Distribution] = {
+    requiredChildDistributionExpressions match {
+      case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
+      case Some(exprs) if exprs.nonEmpty => ClusteredDistribution(exprs) :: Nil
+      case None => UnspecifiedDistribution :: Nil
+    }
+  }
 
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
   // map and/or the sort-based aggregation once it has processed a given number of input rows.
@@ -70,6 +94,7 @@ case class HashAggregateExec(
     val numOutputRows = longMetric("numOutputRows")
     val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
+    val avgHashmapProbe = longMetric("avgHashmapProbe")
 
     child.execute().mapPartitions { iter =>
 
@@ -93,7 +118,8 @@ case class HashAggregateExec(
             testFallbackStartsAt,
             numOutputRows,
             peakMemory,
-            spillSize)
+            spillSize,
+            avgHashmapProbe)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -134,7 +160,7 @@ case class HashAggregateExec(
     }
   }
 
-  // The variables used as aggregation buffer
+  // The variables used as aggregation buffer. Only used for aggregation without keys.
   private var bufVars: Seq[ExprCode] = _
 
   private def doProduceWithoutKeys(ctx: CodegenContext): String = {
@@ -186,7 +212,7 @@ case class HashAggregateExec(
     }
 
     val doAgg = ctx.freshName("doAggregateWithoutKey")
-    ctx.addNewFunction(doAgg,
+    val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
          | private void $doAgg() throws java.io.IOException {
          |   // initialize aggregation buffer
@@ -203,7 +229,7 @@ case class HashAggregateExec(
        | while (!$initAgg) {
        |   $initAgg = true;
        |   long $beforeAgg = System.nanoTime();
-       |   $doAgg();
+       |   $doAggFuncName();
        |   $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
        |
        |   // output the result
@@ -214,6 +240,8 @@ case class HashAggregateExec(
        | }
      """.stripMargin
   }
+
+  protected override val shouldStopRequired = false
 
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
@@ -259,9 +287,14 @@ case class HashAggregateExec(
     .map(_.asInstanceOf[DeclarativeAggregate])
   private val bufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
 
-  // The name for Vectorized HashMap
-  private var vectorizedHashMapTerm: String = _
-  private var isVectorizedHashMapEnabled: Boolean = _
+  // The name for Fast HashMap
+  private var fastHashMapTerm: String = _
+  private var isFastHashMapEnabled: Boolean = false
+
+  // whether a vectorized hashmap is used instead
+  // we have decided to always use the row-based hashmap,
+  // but the vectorized hashmap can still be switched on for testing and benchmarking purposes.
+  private var isVectorizedHashMapEnabled: Boolean = false
 
   // The name for UnsafeRow HashMap
   private var hashMapTerm: String = _
@@ -282,9 +315,18 @@ case class HashAggregateExec(
       groupingKeySchema,
       TaskContext.get().taskMemoryManager(),
       1024 * 16, // initial capacity
-      TaskContext.get().taskMemoryManager().pageSizeBytes,
-      false // disable tracking of performance metrics
+      TaskContext.get().taskMemoryManager().pageSizeBytes
     )
+  }
+
+  def getTaskMemoryManager(): TaskMemoryManager = {
+    TaskContext.get().taskMemoryManager()
+  }
+
+  def getEmptyAggregationBuffer(): InternalRow = {
+    val initExpr = declFunctions.flatMap(f => f.initialValues)
+    val initialBuffer = UnsafeProjection.create(initExpr)(EmptyRow)
+    initialBuffer
   }
 
   /**
@@ -301,7 +343,8 @@ case class HashAggregateExec(
       hashMap: UnsafeFixedWidthAggregationMap,
       sorter: UnsafeKVExternalSorter,
       peakMemory: SQLMetric,
-      spillSize: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
+      spillSize: SQLMetric,
+      avgHashmapProbe: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
 
     // update peak execution memory
     val mapMemory = hashMap.getPeakMemoryUsedBytes
@@ -310,6 +353,10 @@ case class HashAggregateExec(
     val metrics = TaskContext.get().taskMetrics()
     peakMemory.add(maxMemory)
     metrics.incPeakExecutionMemory(maxMemory)
+
+    // Update average hashmap probe
+    val avgProbes = hashMap.getAverageProbesPerLookup()
+    avgHashmapProbe.add(avgProbes.ceil.toLong)
 
     if (sorter == null) {
       // not spilled
@@ -439,52 +486,91 @@ case class HashAggregateExec(
   }
 
   /**
-   * Using the vectorized hash map in HashAggregate is currently supported for all primitive
-   * data types during partial aggregation. However, we currently only enable the hash map for a
-   * subset of cases that've been verified to show performance improvements on our benchmarks
-   * subject to an internal conf that sets an upper limit on the maximum length of the aggregate
-   * key/value schema.
-   *
+   * A required check for any fast hash map implementation (basically the common requirements
+   * for row-based and vectorized).
+   * Currently fast hash map is supported for primitive data types during partial aggregation.
    * This list of supported use-cases should be expanded over time.
    */
-  private def enableVectorizedHashMap(ctx: CodegenContext): Boolean = {
-    val schemaLength = (groupingKeySchema ++ bufferSchema).length
+  private def checkIfFastHashMapSupported(ctx: CodegenContext): Boolean = {
     val isSupported =
       (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
         bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
 
-    // We do not support byte array based decimal type for aggregate values as
-    // ColumnVector.putDecimal for high-precision decimals doesn't currently support in-place
+    // For vectorized hash map, We do not support byte array based decimal type for aggregate values
+    // as ColumnVector.putDecimal for high-precision decimals doesn't currently support in-place
     // updates. Due to this, appending the byte array in the vectorized hash map can turn out to be
     // quite inefficient and can potentially OOM the executor.
+    // For row-based hash map, while decimal update is supported in UnsafeRow, we will just act
+    // conservative here, due to lack of testing and benchmarking.
     val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
       .forall(!DecimalType.isByteArrayDecimalType(_))
 
-    isSupported  && isNotByteArrayDecimalType &&
-      schemaLength <= sqlContext.conf.vectorizedAggregateMapMaxColumns
+    isSupported  && isNotByteArrayDecimalType
+  }
+
+  private def enableTwoLevelHashMap(ctx: CodegenContext) = {
+    if (!checkIfFastHashMapSupported(ctx)) {
+      if (modes.forall(mode => mode == Partial || mode == PartialMerge) && !Utils.isTesting) {
+        logInfo("spark.sql.codegen.aggregate.map.twolevel.enable is set to true, but"
+          + " current version of codegened fast hashmap does not support this aggregate.")
+      }
+    } else {
+      isFastHashMapEnabled = true
+
+      // This is for testing/benchmarking only.
+      // We enforce to first level to be a vectorized hashmap, instead of the default row-based one.
+      sqlContext.getConf("spark.sql.codegen.aggregate.map.vectorized.enable", null) match {
+        case "true" => isVectorizedHashMapEnabled = true
+        case null | "" | "false" => None      }
+    }
   }
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
-    isVectorizedHashMapEnabled = enableVectorizedHashMap(ctx)
-    vectorizedHashMapTerm = ctx.freshName("vectorizedHashMap")
-    val vectorizedHashMapClassName = ctx.freshName("VectorizedHashMap")
-    val vectorizedHashMapGenerator = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
-      vectorizedHashMapClassName, groupingKeySchema, bufferSchema)
+    if (sqlContext.conf.enableTwoLevelAggMap) {
+      enableTwoLevelHashMap(ctx)
+    } else {
+      sqlContext.getConf("spark.sql.codegen.aggregate.map.vectorized.enable", null) match {
+        case "true" => logWarning("Two level hashmap is disabled but vectorized hashmap is " +
+          "enabled.")
+        case null | "" | "false" => None
+      }
+    }
+    fastHashMapTerm = ctx.freshName("fastHashMap")
+    val fastHashMapClassName = ctx.freshName("FastHashMap")
+    val fastHashMapGenerator =
+      if (isVectorizedHashMapEnabled) {
+        new VectorizedHashMapGenerator(ctx, aggregateExpressions,
+          fastHashMapClassName, groupingKeySchema, bufferSchema)
+      } else {
+        new RowBasedHashMapGenerator(ctx, aggregateExpressions,
+          fastHashMapClassName, groupingKeySchema, bufferSchema)
+      }
+
+    val thisPlan = ctx.addReferenceObj("plan", this)
+
     // Create a name for iterator from vectorized HashMap
-    val iterTermForVectorizedHashMap = ctx.freshName("vectorizedHashMapIter")
-    if (isVectorizedHashMapEnabled) {
-      ctx.addMutableState(vectorizedHashMapClassName, vectorizedHashMapTerm,
-        s"$vectorizedHashMapTerm = new $vectorizedHashMapClassName();")
-      ctx.addMutableState(
-        "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>",
-        iterTermForVectorizedHashMap, "")
+    val iterTermForFastHashMap = ctx.freshName("fastHashMapIter")
+    if (isFastHashMapEnabled) {
+      if (isVectorizedHashMapEnabled) {
+        ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
+          s"$fastHashMapTerm = new $fastHashMapClassName();")
+        ctx.addMutableState(
+          "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>",
+          iterTermForFastHashMap, "")
+      } else {
+        ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
+          s"$fastHashMapTerm = new $fastHashMapClassName(" +
+            s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());")
+        ctx.addMutableState(
+          "org.apache.spark.unsafe.KVIterator",
+          iterTermForFastHashMap, "")
+      }
     }
 
     // create hashMap
-    val thisPlan = ctx.addReferenceObj("plan", this)
     hashMapTerm = ctx.freshName("hashMap")
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
     ctx.addMutableState(hashMapClassName, hashMapTerm, "")
@@ -498,17 +584,34 @@ case class HashAggregateExec(
     val doAgg = ctx.freshName("doAggregateWithKeys")
     val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
-    ctx.addNewFunction(doAgg,
+    val avgHashmapProbe = metricTerm(ctx, "avgHashmapProbe")
+
+    def generateGenerateCode(): String = {
+      if (isFastHashMapEnabled) {
+        if (isVectorizedHashMapEnabled) {
+          s"""
+               | ${fastHashMapGenerator.asInstanceOf[VectorizedHashMapGenerator].generate()}
+          """.stripMargin
+        } else {
+          s"""
+               | ${fastHashMapGenerator.asInstanceOf[RowBasedHashMapGenerator].generate()}
+          """.stripMargin
+        }
+      } else ""
+    }
+
+    val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
-        ${if (isVectorizedHashMapEnabled) vectorizedHashMapGenerator.generate() else ""}
+        ${generateGenerateCode}
         private void $doAgg() throws java.io.IOException {
           $hashMapTerm = $thisPlan.createHashMap();
           ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
 
-          ${if (isVectorizedHashMapEnabled) {
-              s"$iterTermForVectorizedHashMap = $vectorizedHashMapTerm.rowIterator();"} else ""}
+          ${if (isFastHashMapEnabled) {
+              s"$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();"} else ""}
 
-          $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm, $peakMemory, $spillSize);
+          $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm, $peakMemory, $spillSize,
+            $avgHashmapProbe);
         }
        """)
 
@@ -522,33 +625,55 @@ case class HashAggregateExec(
     // so `copyResult` should be reset to `false`.
     ctx.copyResult = false
 
+    def outputFromGeneratedMap: String = {
+      if (isFastHashMapEnabled) {
+        if (isVectorizedHashMapEnabled) {
+          outputFromVectorizedMap
+        } else {
+          outputFromRowBasedMap
+        }
+      } else ""
+    }
+
+    def outputFromRowBasedMap: String = {
+      s"""
+       while ($iterTermForFastHashMap.next()) {
+         $numOutput.add(1);
+         UnsafeRow $keyTerm = (UnsafeRow) $iterTermForFastHashMap.getKey();
+         UnsafeRow $bufferTerm = (UnsafeRow) $iterTermForFastHashMap.getValue();
+         $outputCode
+
+         if (shouldStop()) return;
+       }
+       $fastHashMapTerm.close();
+     """
+    }
+
     // Iterate over the aggregate rows and convert them from ColumnarBatch.Row to UnsafeRow
-    def outputFromGeneratedMap: Option[String] = {
-      if (isVectorizedHashMapEnabled) {
-        val row = ctx.freshName("vectorizedHashMapRow")
+    def outputFromVectorizedMap: String = {
+        val row = ctx.freshName("fastHashMapRow")
         ctx.currentVars = null
         ctx.INPUT_ROW = row
         var schema: StructType = groupingKeySchema
         bufferSchema.foreach(i => schema = schema.add(i))
         val generateRow = GenerateUnsafeProjection.createCode(ctx, schema.toAttributes.zipWithIndex
           .map { case (attr, i) => BoundReference(i, attr.dataType, attr.nullable) })
-        Option(
-          s"""
-             | while ($iterTermForVectorizedHashMap.hasNext()) {
-             |   $numOutput.add(1);
-             |   org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $row =
-             |     (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row)
-             |     $iterTermForVectorizedHashMap.next();
-             |   ${generateRow.code}
-             |   ${consume(ctx, Seq.empty, {generateRow.value})}
-             |
-             |   if (shouldStop()) return;
-             | }
-             |
-             | $vectorizedHashMapTerm.close();
-           """.stripMargin)
-      } else None
+        s"""
+           | while ($iterTermForFastHashMap.hasNext()) {
+           |   $numOutput.add(1);
+           |   org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $row =
+           |     (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row)
+           |     $iterTermForFastHashMap.next();
+           |   ${generateRow.code}
+           |   ${consume(ctx, Seq.empty, {generateRow.value})}
+           |
+           |   if (shouldStop()) return;
+           | }
+           |
+           | $fastHashMapTerm.close();
+         """.stripMargin
     }
+
 
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
@@ -556,12 +681,12 @@ case class HashAggregateExec(
      if (!$initAgg) {
        $initAgg = true;
        long $beforeAgg = System.nanoTime();
-       $doAgg();
+       $doAggFuncName();
        $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
      }
 
      // output the result
-     ${outputFromGeneratedMap.getOrElse("")}
+     ${outputFromGeneratedMap}
 
      while ($iterTerm.next()) {
        $numOutput.add(1);
@@ -585,11 +710,11 @@ case class HashAggregateExec(
     ctx.currentVars = input
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
       ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
-    val vectorizedRowKeys = ctx.generateExpressions(
-      groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
+    val fastRowKeys = ctx.generateExpressions(
+          groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
     val unsafeRowKeys = unsafeRowKeyCode.value
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
-    val vectorizedRowBuffer = ctx.freshName("vectorizedAggBuffer")
+    val fastRowBuffer = ctx.freshName("fastAggBuffer")
 
     // only have DeclarativeAggregate
     val updateExpr = aggregateExpressions.flatMap { e =>
@@ -619,17 +744,18 @@ case class HashAggregateExec(
       ("true", "true", "", "")
     }
 
-    // We first generate code to probe and update the vectorized hash map. If the probe is
-    // successful the corresponding vectorized row buffer will hold the mutable row
-    val findOrInsertInVectorizedHashMap: Option[String] = {
-      if (isVectorizedHashMapEnabled) {
+    // We first generate code to probe and update the fast hash map. If the probe is
+    // successful the corresponding fast row buffer will hold the mutable row
+    val findOrInsertFastHashMap: Option[String] = {
+      if (isFastHashMapEnabled) {
         Option(
           s"""
+             |
              |if ($checkFallbackForGeneratedHashMap) {
-             |  ${vectorizedRowKeys.map(_.code).mkString("\n")}
-             |  if (${vectorizedRowKeys.map("!" + _.isNull).mkString(" && ")}) {
-             |    $vectorizedRowBuffer = $vectorizedHashMapTerm.findOrInsert(
-             |        ${vectorizedRowKeys.map(_.value).mkString(", ")});
+             |  ${fastRowKeys.map(_.code).mkString("\n")}
+             |  if (${fastRowKeys.map("!" + _.isNull).mkString(" && ")}) {
+             |    $fastRowBuffer = $fastHashMapTerm.findOrInsert(
+             |        ${fastRowKeys.map(_.value).mkString(", ")});
              |  }
              |}
          """.stripMargin)
@@ -638,36 +764,35 @@ case class HashAggregateExec(
       }
     }
 
-    val updateRowInVectorizedHashMap: Option[String] = {
-      if (isVectorizedHashMapEnabled) {
-        ctx.INPUT_ROW = vectorizedRowBuffer
-        val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
-        val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
-        val effectiveCodes = subExprs.codes.mkString("\n")
-        val vectorizedRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
-          boundUpdateExpr.map(_.genCode(ctx))
-        }
-        val updateVectorizedRow = vectorizedRowEvals.zipWithIndex.map { case (ev, i) =>
-          val dt = updateExpr(i).dataType
-          ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable,
-            isVectorized = true)
-        }
-        Option(
-          s"""
-             |// common sub-expressions
-             |$effectiveCodes
-             |// evaluate aggregate function
-             |${evaluateVariables(vectorizedRowEvals)}
-             |// update vectorized row
-             |${updateVectorizedRow.mkString("\n").trim}
-           """.stripMargin)
-      } else None
+
+    def updateRowInFastHashMap(isVectorized: Boolean): Option[String] = {
+      ctx.INPUT_ROW = fastRowBuffer
+      val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
+      val effectiveCodes = subExprs.codes.mkString("\n")
+      val fastRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
+        boundUpdateExpr.map(_.genCode(ctx))
+      }
+      val updateFastRow = fastRowEvals.zipWithIndex.map { case (ev, i) =>
+        val dt = updateExpr(i).dataType
+        ctx.updateColumn(fastRowBuffer, dt, i, ev, updateExpr(i).nullable, isVectorized)
+      }
+      Option(
+        s"""
+           |// common sub-expressions
+           |$effectiveCodes
+           |// evaluate aggregate function
+           |${evaluateVariables(fastRowEvals)}
+           |// update fast row
+           |${updateFastRow.mkString("\n").trim}
+           |
+         """.stripMargin)
     }
 
     // Next, we generate code to probe and update the unsafe row hash map.
     val findOrInsertInUnsafeRowMap: String = {
       s"""
-         | if ($vectorizedRowBuffer == null) {
+         | if ($fastRowBuffer == null) {
          |   // generate grouping key
          |   ${unsafeRowKeyCode.code.trim}
          |   ${hashEval.code.trim}
@@ -676,6 +801,8 @@ case class HashAggregateExec(
          |     $unsafeRowBuffer =
          |       $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
          |   }
+         |   // Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
+         |   // aggregation after processing all input rows.
          |   if ($unsafeRowBuffer == null) {
          |     if ($sorterTerm == null) {
          |       $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
@@ -684,7 +811,7 @@ case class HashAggregateExec(
          |     }
          |     $resetCounter
          |     // the hash map had be spilled, it should have enough memory now,
-         |     // try  to allocate buffer again.
+         |     // try to allocate buffer again.
          |     $unsafeRowBuffer =
          |       $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
          |     if ($unsafeRowBuffer == null) {
@@ -725,17 +852,31 @@ case class HashAggregateExec(
     // Finally, sort the spilled aggregate buffers by key, and merge them together for same key.
     s"""
      UnsafeRow $unsafeRowBuffer = null;
-     org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $vectorizedRowBuffer = null;
+     ${
+        if (isVectorizedHashMapEnabled) {
+          s"""
+             | org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $fastRowBuffer = null;
+           """.stripMargin
+        } else {
+          s"""
+             | UnsafeRow $fastRowBuffer = null;
+           """.stripMargin
+        }
+      }
 
-     ${findOrInsertInVectorizedHashMap.getOrElse("")}
+     ${findOrInsertFastHashMap.getOrElse("")}
 
      $findOrInsertInUnsafeRowMap
 
      $incCounter
 
-     if ($vectorizedRowBuffer != null) {
-       // update vectorized row
-       ${updateRowInVectorizedHashMap.getOrElse("")}
+     if ($fastRowBuffer != null) {
+       // update fast row
+       ${
+          if (isFastHashMapEnabled) {
+            updateRowInFastHashMap(isVectorizedHashMapEnabled).getOrElse("")
+          } else ""
+        }
      } else {
        // update unsafe row
        $updateRowInUnsafeRowMap

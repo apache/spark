@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.util.Locale
+
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
@@ -25,14 +27,13 @@ import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
@@ -41,64 +42,21 @@ import org.apache.spark.util.Utils
 
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
-    sparkSession: SparkSession,
-    functionResourceLoader: FunctionResourceLoader,
+    globalTempViewManager: GlobalTempViewManager,
+    val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
-    hadoopConf: Configuration)
+    hadoopConf: Configuration,
+    parser: ParserInterface,
+    functionResourceLoader: FunctionResourceLoader)
   extends SessionCatalog(
-    externalCatalog,
-    functionResourceLoader,
-    functionRegistry,
-    conf,
-    hadoopConf) {
-
-  override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
-    val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.contains(table)) {
-      val database = name.database.map(formatDatabaseName)
-      val newName = name.copy(database = database, table = table)
-      metastoreCatalog.lookupRelation(newName, alias)
-    } else {
-      val relation = tempTables(table)
-      val tableWithQualifiers = SubqueryAlias(table, relation, None)
-      // If an alias was specified by the lookup, wrap the plan in a subquery so that
-      // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, tableWithQualifiers, None)).getOrElse(tableWithQualifiers)
-    }
-  }
-
-  // ----------------------------------------------------------------
-  // | Methods and fields for interacting with HiveMetastoreCatalog |
-  // ----------------------------------------------------------------
-
-  // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
-  // essentially a cache for metastore tables. However, it relies on a lot of session-specific
-  // things so it would be a lot of work to split its functionality between HiveSessionCatalog
-  // and HiveCatalog. We should still do it at some point...
-  private val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
-
-  val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
-  val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions
-
-  override def refreshTable(name: TableIdentifier): Unit = {
-    super.refreshTable(name)
-    metastoreCatalog.refreshTable(name)
-  }
-
-  def invalidateCache(): Unit = {
-    metastoreCatalog.cachedDataSourceTables.invalidateAll()
-  }
-
-  def hiveDefaultTableFilePath(name: TableIdentifier): String = {
-    metastoreCatalog.hiveDefaultTableFilePath(name)
-  }
-
-  // For testing only
-  private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
-    val key = metastoreCatalog.getQualifiedTableName(table)
-    metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
-  }
+      externalCatalog,
+      globalTempViewManager,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser,
+      functionResourceLoader) {
 
   override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
     makeFunctionBuilder(funcName, Utils.classForName(className))
@@ -166,19 +124,12 @@ private[sql] class HiveSessionCatalog(
   }
 
   private def lookupFunction0(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
-    // TODO: Once lookupFunction accepts a FunctionIdentifier, we should refactor this method to
-    // if (super.functionExists(name)) {
-    //   super.lookupFunction(name, children)
-    // } else {
-    //   // This function is a Hive builtin function.
-    //   ...
-    // }
     val database = name.database.map(formatDatabaseName)
     val funcName = name.copy(database = database)
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(funcName.unquotedString)) {
+        if (functionRegistry.functionExists(funcName)) {
           // If the function actually exists in functionRegistry, it means that there is an
           // error when we create the Expression using the given children.
           // We need to throw the original exception.
@@ -187,9 +138,9 @@ private[sql] class HiveSessionCatalog(
           // This function is not in functionRegistry, let's try to load it as a Hive's
           // built-in function.
           // Hive is case insensitive.
-          val functionName = funcName.unquotedString.toLowerCase
+          val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
           if (!hiveFunctions.contains(functionName)) {
-            failFunctionLookup(funcName.unquotedString)
+            failFunctionLookup(funcName)
           }
 
           // TODO: Remove this fallback path once we implement the list of fallback functions
@@ -197,23 +148,29 @@ private[sql] class HiveSessionCatalog(
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                failFunctionLookup(funcName.unquotedString))
+                failFunctionLookup(funcName))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => failFunctionLookup(funcName.unquotedString)
+              case NonFatal(e) => failFunctionLookup(funcName)
             }
           }
           val className = functionInfo.getFunctionClass.getName
-          val builder = makeFunctionBuilder(functionName, className)
+          val functionIdentifier =
+            FunctionIdentifier(functionName.toLowerCase(Locale.ROOT), database)
+          val func = CatalogFunction(functionIdentifier, className, Nil)
           // Put this Hive built-in function to our function registry.
-          val info = new ExpressionInfo(className, functionName)
-          createTempFunction(functionName, info, builder, ignoreIfExists = false)
+          registerFunction(func, ignoreIfExists = false)
           // Now, we need to create the Expression.
-          functionRegistry.lookupFunction(functionName, children)
+          functionRegistry.lookupFunction(functionIdentifier, children)
         }
     }
+  }
+
+  // TODO Removes this method after implementing Spark native "histogram_numeric".
+  override def functionExists(name: FunctionIdentifier): Boolean = {
+    super.functionExists(name) || hiveFunctions.contains(name.funcName)
   }
 
   /** List of functions we pass over to Hive. Note that over time this list should go to 0. */
@@ -224,10 +181,8 @@ private[sql] class HiveSessionCatalog(
   // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
   // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
   // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
+  // Note: don't forget to update SessionCatalog.isTemporaryFunction
   private val hiveFunctions = Seq(
-    "hash",
-    "histogram_numeric",
-    "percentile",
-    "percentile_approx"
+    "histogram_numeric"
   )
 }

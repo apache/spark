@@ -509,6 +509,19 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, null, 110.0, null, null, 10.0) :: Nil)
   }
 
+  test("non-deterministic children expressions of UDAF") {
+    val e = intercept[AnalysisException] {
+      spark.sql(
+        """
+          |SELECT mydoublesum(value + 1.5 * key + rand())
+          |FROM agg1
+          |GROUP BY key
+        """.stripMargin)
+    }.getMessage
+    assert(Seq("nondeterministic expression",
+      "should not appear in the arguments of an aggregate function").forall(e.contains))
+  }
+
   test("interpreted aggregate function") {
     checkAnswer(
       spark.sql(
@@ -998,9 +1011,9 @@ class HashAggregationQuerySuite extends AggregationQuerySuite
 class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    Seq(0, 10).foreach { maxColumnarHashMapColumns =>
-      withSQLConf("spark.sql.codegen.aggregate.map.columns.max" ->
-        maxColumnarHashMapColumns.toString) {
+    Seq("true", "false").foreach { enableTwoLevelMaps =>
+      withSQLConf("spark.sql.codegen.aggregate.map.twolevel.enable" ->
+        enableTwoLevelMaps) {
         (1 to 3).foreach { fallbackStartsAt =>
           withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
             s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {

@@ -289,7 +289,7 @@ class MatricesSuite extends SparkFunSuite {
     val spHorz2 = Matrices.horzcat(Array(spMat1, deMat2))
     val spHorz3 = Matrices.horzcat(Array(deMat1, spMat2))
     val deHorz1 = Matrices.horzcat(Array(deMat1, deMat2))
-    val deHorz2 = Matrices.horzcat(Array[Matrix]())
+    val deHorz2 = Matrices.horzcat(Array.empty[Matrix])
 
     assert(deHorz1.numRows === 3)
     assert(spHorz2.numRows === 3)
@@ -343,7 +343,7 @@ class MatricesSuite extends SparkFunSuite {
     val deVert1 = Matrices.vertcat(Array(deMat1, deMat3))
     val spVert2 = Matrices.vertcat(Array(spMat1, deMat3))
     val spVert3 = Matrices.vertcat(Array(deMat1, spMat3))
-    val deVert2 = Matrices.vertcat(Array[Matrix]())
+    val deVert2 = Matrices.vertcat(Array.empty[Matrix])
 
     assert(deVert1.numRows === 5)
     assert(spVert2.numRows === 5)
@@ -511,6 +511,26 @@ class MatricesSuite extends SparkFunSuite {
       Array(1.0, 2, 2, 4), 3, 3, Array(0, 0, 2, 4), Array(1, 2, 1, 2))
     val sum = bm1 + bm2
     Matrices.fromBreeze(sum)
+  }
+
+  test("Test FromBreeze when Breeze.CSCMatrix.rowIndices has trailing zeros. - SPARK-20687") {
+    // (2, 0, 0)
+    // (2, 0, 0)
+    val mat1Brz = Matrices.sparse(2, 3, Array(0, 2, 2, 2), Array(0, 1), Array(2, 2)).asBreeze
+    // (2, 1E-15, 1E-15)
+    // (2, 1E-15, 1E-15)
+    val mat2Brz = Matrices.sparse(2, 3,
+      Array(0, 2, 4, 6),
+      Array(0, 0, 0, 1, 1, 1),
+      Array(2, 1E-15, 1E-15, 2, 1E-15, 1E-15)).asBreeze
+    val t1Brz = mat1Brz - mat2Brz
+    val t2Brz = mat2Brz - mat1Brz
+    // The following operations raise exceptions on un-patch Matrices.fromBreeze
+    val t1 = Matrices.fromBreeze(t1Brz)
+    val t2 = Matrices.fromBreeze(t2Brz)
+    // t1 == t1Brz && t2 == t2Brz
+    assert((t1.asBreeze - t1Brz).iterator.map((x) => math.abs(x._2)).sum < 1E-15)
+    assert((t2.asBreeze - t2Brz).iterator.map((x) => math.abs(x._2)).sum < 1E-15)
   }
 
   test("row/col iterator") {

@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql
 
+import scala.collection.Map
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
@@ -28,7 +30,8 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  *
  * @since 1.6.0
  */
-abstract class SQLImplicits {
+@InterfaceStability.Evolving
+abstract class SQLImplicits extends LowPrioritySQLImplicits {
 
   protected def _sqlContext: SQLContext
 
@@ -42,9 +45,6 @@ abstract class SQLImplicits {
       new ColumnName(sc.s(args: _*))
     }
   }
-
-  /** @since 1.6.0 */
-  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = Encoders.product[T]
 
   // Primitives
 
@@ -72,6 +72,19 @@ abstract class SQLImplicits {
   /** @since 1.6.0 */
   implicit def newStringEncoder: Encoder[String] = Encoders.STRING
 
+  /** @since 2.2.0 */
+  implicit def newJavaDecimalEncoder: Encoder[java.math.BigDecimal] = Encoders.DECIMAL
+
+  /** @since 2.2.0 */
+  implicit def newScalaDecimalEncoder: Encoder[scala.math.BigDecimal] = ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newDateEncoder: Encoder[java.sql.Date] = Encoders.DATE
+
+  /** @since 2.2.0 */
+  implicit def newTimeStampEncoder: Encoder[java.sql.Timestamp] = Encoders.TIMESTAMP
+
+
   // Boxed primitives
 
   /** @since 2.0.0 */
@@ -97,32 +110,66 @@ abstract class SQLImplicits {
 
   // Seqs
 
-  /** @since 1.6.1 */
-  implicit def newIntSeqEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newSequenceEncoder]]
+   */
+  def newIntSeqEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newLongSeqEncoder: Encoder[Seq[Long]] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newSequenceEncoder]]
+   */
+  def newLongSeqEncoder: Encoder[Seq[Long]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newDoubleSeqEncoder: Encoder[Seq[Double]] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newSequenceEncoder]]
+   */
+  def newDoubleSeqEncoder: Encoder[Seq[Double]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newFloatSeqEncoder: Encoder[Seq[Float]] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newSequenceEncoder]]
+   */
+  def newFloatSeqEncoder: Encoder[Seq[Float]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newByteSeqEncoder: Encoder[Seq[Byte]] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newSequenceEncoder]]
+   */
+  def newByteSeqEncoder: Encoder[Seq[Byte]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newShortSeqEncoder: Encoder[Seq[Short]] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newSequenceEncoder]]
+   */
+  def newShortSeqEncoder: Encoder[Seq[Short]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newBooleanSeqEncoder: Encoder[Seq[Boolean]] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newSequenceEncoder]]
+   */
+  def newBooleanSeqEncoder: Encoder[Seq[Boolean]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newStringSeqEncoder: Encoder[Seq[String]] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newSequenceEncoder]]
+   */
+  def newStringSeqEncoder: Encoder[Seq[String]] = ExpressionEncoder()
 
-  /** @since 1.6.1 */
-  implicit def newProductSeqEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] = ExpressionEncoder()
+  /**
+   * @since 1.6.1
+   * @deprecated use [[newSequenceEncoder]]
+   */
+  def newProductSeqEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] = ExpressionEncoder()
+
+  /** @since 2.2.0 */
+  implicit def newSequenceEncoder[T <: Seq[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
+
+  // Maps
+  /** @since 2.3.0 */
+  implicit def newMapEncoder[T <: Map[_, _] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   // Arrays
 
@@ -139,7 +186,7 @@ abstract class SQLImplicits {
   implicit def newFloatArrayEncoder: Encoder[Array[Float]] = ExpressionEncoder()
 
   /** @since 1.6.1 */
-  implicit def newByteArrayEncoder: Encoder[Array[Byte]] = ExpressionEncoder()
+  implicit def newByteArrayEncoder: Encoder[Array[Byte]] = Encoders.BINARY
 
   /** @since 1.6.1 */
   implicit def newShortArrayEncoder: Encoder[Array[Short]] = ExpressionEncoder()
@@ -176,5 +223,18 @@ abstract class SQLImplicits {
    * @since 1.3.0
    */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
+
+}
+
+/**
+ * Lower priority implicit methods for converting Scala objects into [[Dataset]]s.
+ * Conflicting implicits are placed here to disambiguate resolution.
+ *
+ * Reasons for including specific implicits:
+ * newProductEncoder - to disambiguate for `List`s which are both `Seq` and `Product`
+ */
+trait LowPrioritySQLImplicits {
+  /** @since 1.6.0 */
+  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = Encoders.product[T]
 
 }

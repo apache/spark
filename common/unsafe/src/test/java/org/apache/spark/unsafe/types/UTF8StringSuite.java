@@ -17,15 +17,20 @@
 
 package org.apache.spark.unsafe.types;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashMap;
+import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
+import org.apache.spark.unsafe.Platform;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.types.UTF8String.*;
 
 public class UTF8StringSuite {
@@ -232,6 +237,16 @@ public class UTF8StringSuite {
     assertEquals(fromString("数据砖头"), fromString("数据砖头").trim());
     assertEquals(fromString("数据砖头"), fromString("数据砖头").trimLeft());
     assertEquals(fromString("数据砖头"), fromString("数据砖头").trimRight());
+
+    char[] charsLessThan0x20 = new char[10];
+    Arrays.fill(charsLessThan0x20, (char)(' ' - 1));
+    String stringStartingWithSpace =
+      new String(charsLessThan0x20) + "hello" + new String(charsLessThan0x20);
+    assertEquals(fromString(stringStartingWithSpace), fromString(stringStartingWithSpace).trim());
+    assertEquals(fromString(stringStartingWithSpace),
+      fromString(stringStartingWithSpace).trimLeft());
+    assertEquals(fromString(stringStartingWithSpace),
+      fromString(stringStartingWithSpace).trimRight());
   }
 
   @Test
@@ -488,5 +503,231 @@ public class UTF8StringSuite {
     assertEquals(fromString("").soundex(), fromString(""));
     assertEquals(fromString("123").soundex(), fromString("123"));
     assertEquals(fromString("世界千世").soundex(), fromString("世界千世"));
+  }
+
+  @Test
+  public void writeToOutputStreamUnderflow() throws IOException {
+    // offset underflow is apparently supported?
+    final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
+
+    for (int i = 1; i <= Platform.BYTE_ARRAY_OFFSET; ++i) {
+      UTF8String.fromAddress(test, Platform.BYTE_ARRAY_OFFSET - i, test.length + i)
+          .writeTo(outputStream);
+      final ByteBuffer buffer = ByteBuffer.wrap(outputStream.toByteArray(), i, test.length);
+      assertEquals("01234567", StandardCharsets.UTF_8.decode(buffer).toString());
+      outputStream.reset();
+    }
+  }
+
+  @Test
+  public void writeToOutputStreamSlice() throws IOException {
+    final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
+
+    for (int i = 0; i < test.length; ++i) {
+      for (int j = 0; j < test.length - i; ++j) {
+        UTF8String.fromAddress(test, Platform.BYTE_ARRAY_OFFSET + i, j)
+            .writeTo(outputStream);
+
+        assertArrayEquals(Arrays.copyOfRange(test, i, i + j), outputStream.toByteArray());
+        outputStream.reset();
+      }
+    }
+  }
+
+  @Test
+  public void writeToOutputStreamOverflow() throws IOException {
+    final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
+
+    final HashSet<Long> offsets = new HashSet<>();
+    for (int i = 0; i < 16; ++i) {
+      // touch more points around MAX_VALUE
+      offsets.add((long) Integer.MAX_VALUE - i);
+      // subtract off BYTE_ARRAY_OFFSET to avoid wrapping around to a negative value,
+      // which will hit the slower copy path instead of the optimized one
+      offsets.add(Long.MAX_VALUE - BYTE_ARRAY_OFFSET - i);
+    }
+
+    for (long i = 1; i > 0L; i <<= 1) {
+      for (long j = 0; j < 32L; ++j) {
+        offsets.add(i + j);
+      }
+    }
+
+    for (final long offset : offsets) {
+      try {
+        fromAddress(test, BYTE_ARRAY_OFFSET + offset, test.length)
+            .writeTo(outputStream);
+
+        throw new IllegalStateException(Long.toString(offset));
+      } catch (ArrayIndexOutOfBoundsException e) {
+        // ignore
+      } finally {
+        outputStream.reset();
+      }
+    }
+  }
+
+  @Test
+  public void writeToOutputStream() throws IOException {
+    final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    EMPTY_UTF8.writeTo(outputStream);
+    assertEquals("", outputStream.toString("UTF-8"));
+    outputStream.reset();
+
+    fromString("数据砖很重").writeTo(outputStream);
+    assertEquals(
+        "数据砖很重",
+        outputStream.toString("UTF-8"));
+    outputStream.reset();
+  }
+
+  @Test
+  public void writeToOutputStreamIntArray() throws IOException {
+    // verify that writes work on objects that are not byte arrays
+    final ByteBuffer buffer = StandardCharsets.UTF_8.encode("大千世界");
+    buffer.position(0);
+    buffer.order(ByteOrder.nativeOrder());
+
+    final int length = buffer.limit();
+    assertEquals(12, length);
+
+    final int ints = length / 4;
+    final int[] array = new int[ints];
+
+    for (int i = 0; i < ints; ++i) {
+      array[i] = buffer.getInt();
+    }
+
+    final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    fromAddress(array, Platform.INT_ARRAY_OFFSET, length)
+        .writeTo(outputStream);
+    assertEquals("大千世界", outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testToShort() throws IOException {
+    Map<String, Short> inputToExpectedOutput = new HashMap<>();
+    inputToExpectedOutput.put("1", (short) 1);
+    inputToExpectedOutput.put("+1", (short) 1);
+    inputToExpectedOutput.put("-1", (short) -1);
+    inputToExpectedOutput.put("0", (short) 0);
+    inputToExpectedOutput.put("1111.12345678901234567890", (short) 1111);
+    inputToExpectedOutput.put(String.valueOf(Short.MAX_VALUE), Short.MAX_VALUE);
+    inputToExpectedOutput.put(String.valueOf(Short.MIN_VALUE), Short.MIN_VALUE);
+
+    Random rand = new Random();
+    for (int i = 0; i < 10; i++) {
+      short value = (short) rand.nextInt();
+      inputToExpectedOutput.put(String.valueOf(value), value);
+    }
+
+    IntWrapper wrapper = new IntWrapper();
+    for (Map.Entry<String, Short> entry : inputToExpectedOutput.entrySet()) {
+      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toShort(wrapper));
+      assertEquals((short) entry.getValue(), wrapper.value);
+    }
+
+    List<String> negativeInputs =
+      Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121", "3276700");
+
+    for (String negativeInput : negativeInputs) {
+      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toShort(wrapper));
+    }
+  }
+
+  @Test
+  public void testToByte() throws IOException {
+    Map<String, Byte> inputToExpectedOutput = new HashMap<>();
+    inputToExpectedOutput.put("1", (byte) 1);
+    inputToExpectedOutput.put("+1",(byte)  1);
+    inputToExpectedOutput.put("-1", (byte)  -1);
+    inputToExpectedOutput.put("0", (byte)  0);
+    inputToExpectedOutput.put("111.12345678901234567890", (byte) 111);
+    inputToExpectedOutput.put(String.valueOf(Byte.MAX_VALUE), Byte.MAX_VALUE);
+    inputToExpectedOutput.put(String.valueOf(Byte.MIN_VALUE), Byte.MIN_VALUE);
+
+    Random rand = new Random();
+    for (int i = 0; i < 10; i++) {
+      byte value = (byte) rand.nextInt();
+      inputToExpectedOutput.put(String.valueOf(value), value);
+    }
+
+    IntWrapper intWrapper = new IntWrapper();
+    for (Map.Entry<String, Byte> entry : inputToExpectedOutput.entrySet()) {
+      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toByte(intWrapper));
+      assertEquals((byte) entry.getValue(), intWrapper.value);
+    }
+
+    List<String> negativeInputs =
+      Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121", "12345678901234567890");
+
+    for (String negativeInput : negativeInputs) {
+      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toByte(intWrapper));
+    }
+  }
+
+  @Test
+  public void testToInt() throws IOException {
+    Map<String, Integer> inputToExpectedOutput = new HashMap<>();
+    inputToExpectedOutput.put("1", 1);
+    inputToExpectedOutput.put("+1", 1);
+    inputToExpectedOutput.put("-1", -1);
+    inputToExpectedOutput.put("0", 0);
+    inputToExpectedOutput.put("11111.1234567", 11111);
+    inputToExpectedOutput.put(String.valueOf(Integer.MAX_VALUE), Integer.MAX_VALUE);
+    inputToExpectedOutput.put(String.valueOf(Integer.MIN_VALUE), Integer.MIN_VALUE);
+
+    Random rand = new Random();
+    for (int i = 0; i < 10; i++) {
+      int value = rand.nextInt();
+      inputToExpectedOutput.put(String.valueOf(value), value);
+    }
+
+    IntWrapper intWrapper = new IntWrapper();
+    for (Map.Entry<String, Integer> entry : inputToExpectedOutput.entrySet()) {
+      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toInt(intWrapper));
+      assertEquals((int) entry.getValue(), intWrapper.value);
+    }
+
+    List<String> negativeInputs =
+      Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121", "12345678901234567890");
+
+    for (String negativeInput : negativeInputs) {
+      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toInt(intWrapper));
+    }
+  }
+
+  @Test
+  public void testToLong() throws IOException {
+    Map<String, Long> inputToExpectedOutput = new HashMap<>();
+    inputToExpectedOutput.put("1", 1L);
+    inputToExpectedOutput.put("+1", 1L);
+    inputToExpectedOutput.put("-1", -1L);
+    inputToExpectedOutput.put("0", 0L);
+    inputToExpectedOutput.put("1076753423.12345678901234567890", 1076753423L);
+    inputToExpectedOutput.put(String.valueOf(Long.MAX_VALUE), Long.MAX_VALUE);
+    inputToExpectedOutput.put(String.valueOf(Long.MIN_VALUE), Long.MIN_VALUE);
+
+    Random rand = new Random();
+    for (int i = 0; i < 10; i++) {
+      long value = rand.nextLong();
+      inputToExpectedOutput.put(String.valueOf(value), value);
+    }
+
+    LongWrapper wrapper = new LongWrapper();
+    for (Map.Entry<String, Long> entry : inputToExpectedOutput.entrySet()) {
+      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toLong(wrapper));
+      assertEquals((long) entry.getValue(), wrapper.value);
+    }
+
+    List<String> negativeInputs = Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121",
+        "1234567890123456789012345678901234");
+
+    for (String negativeInput : negativeInputs) {
+      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toLong(wrapper));
+    }
   }
 }

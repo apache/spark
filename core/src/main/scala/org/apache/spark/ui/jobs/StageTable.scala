@@ -34,6 +34,7 @@ import org.apache.spark.util.Utils
 private[ui] class StageTableBase(
     request: HttpServletRequest,
     stages: Seq[StageInfo],
+    tableHeaderID: String,
     stageTag: String,
     basePath: String,
     subPath: String,
@@ -41,15 +42,17 @@ private[ui] class StageTableBase(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
-  val allParameters = request.getParameterMap().asScala.toMap
+  // stripXSS is called to remove suspicious characters used in XSS attacks
+  val allParameters = request.getParameterMap.asScala.toMap.mapValues(_.map(UIUtils.stripXSS))
   val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
     .map(para => para._1 + "=" + para._2(0))
 
-  val parameterStagePage = request.getParameter(stageTag + ".page")
-  val parameterStageSortColumn = request.getParameter(stageTag + ".sort")
-  val parameterStageSortDesc = request.getParameter(stageTag + ".desc")
-  val parameterStagePageSize = request.getParameter(stageTag + ".pageSize")
-  val parameterStagePrevPageSize = request.getParameter(stageTag + ".prevPageSize")
+  val parameterStagePage = UIUtils.stripXSS(request.getParameter(stageTag + ".page"))
+  val parameterStageSortColumn = UIUtils.stripXSS(request.getParameter(stageTag + ".sort"))
+  val parameterStageSortDesc = UIUtils.stripXSS(request.getParameter(stageTag + ".desc"))
+  val parameterStagePageSize = UIUtils.stripXSS(request.getParameter(stageTag + ".pageSize"))
+  val parameterStagePrevPageSize =
+    UIUtils.stripXSS(request.getParameter(stageTag + ".prevPageSize"))
 
   val stagePage = Option(parameterStagePage).map(_.toInt).getOrElse(1)
   val stageSortColumn = Option(parameterStageSortColumn).map { sortColumn =>
@@ -77,6 +80,7 @@ private[ui] class StageTableBase(
   val toNodeSeq = try {
     new StagePagedTable(
       stages,
+      tableHeaderID,
       stageTag,
       basePath,
       subPath,
@@ -107,7 +111,6 @@ private[ui] class StageTableRowData(
     val stageId: Int,
     val attemptId: Int,
     val schedulingPool: String,
-    val description: String,
     val descriptionOption: Option[String],
     val submissionTime: Long,
     val formattedSubmissionTime: String,
@@ -126,11 +129,12 @@ private[ui] class MissingStageTableRowData(
     stageInfo: StageInfo,
     stageId: Int,
     attemptId: Int) extends StageTableRowData(
-  stageInfo, None, stageId, attemptId, "", "", None, 0, "", -1, "", 0, "", 0, "", 0, "", 0, "")
+  stageInfo, None, stageId, attemptId, "", None, 0, "", -1, "", 0, "", 0, "", 0, "", 0, "")
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StagePagedTable(
     stages: Seq[StageInfo],
+    tableHeaderId: String,
     stageTag: String,
     basePath: String,
     subPath: String,
@@ -147,7 +151,8 @@ private[ui] class StagePagedTable(
   override def tableId: String = stageTag + "-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped table-head-clickable"
+    "table table-bordered table-condensed table-striped " +
+      "table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = stageTag + ".pageSize"
 
@@ -173,12 +178,13 @@ private[ui] class StagePagedTable(
       s"&$pageNumberFormField=$page" +
       s"&$stageTag.sort=$encodedSortColumn" +
       s"&$stageTag.desc=$desc" +
-      s"&$pageSizeFormField=$pageSize"
+      s"&$pageSizeFormField=$pageSize" +
+      s"#$tableHeaderId"
   }
 
   override def goButtonFormPath: String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    s"$parameterPath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc"
+    s"$parameterPath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc#$tableHeaderId"
   }
 
   override def headers: Seq[Node] = {
@@ -226,7 +232,8 @@ private[ui] class StagePagedTable(
             parameterPath +
               s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
               s"&$stageTag.desc=${!desc}" +
-              s"&$stageTag.pageSize=$pageSize")
+              s"&$stageTag.pageSize=$pageSize") +
+              s"#$tableHeaderId"
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
 
           <th>
@@ -241,7 +248,8 @@ private[ui] class StagePagedTable(
             val headerLink = Unparsed(
               parameterPath +
                 s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
-                s"&$stageTag.pageSize=$pageSize")
+                s"&$stageTag.pageSize=$pageSize") +
+                s"#$tableHeaderId"
 
             <th>
               <a href={headerLink}>
@@ -294,7 +302,7 @@ private[ui] class StagePagedTable(
         <td class="progress-cell">
           {UIUtils.makeProgressBar(started = stageData.numActiveTasks,
           completed = stageData.completedIndices.size, failed = stageData.numFailedTasks,
-          skipped = 0, killed = stageData.numKilledTasks, total = info.numTasks)}
+          skipped = 0, reasonToNumKilled = stageData.reasonToNumKilled, total = info.numTasks)}
         </td>
         <td>{data.inputReadWithUnit}</td>
         <td>{data.outputWriteWithUnit}</td>
@@ -348,12 +356,13 @@ private[ui] class StagePagedTable(
       val killLinkUri = s"$basePathUri/stages/stage/kill/"
       <form action={killLinkUri} method="POST" style="display:inline">
         <input type="hidden" name="id" value={s.stageId.toString}/>
-        <input type="hidden" name="terminate" value="true"/>
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
        */
-      val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}&terminate=true"
+      val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}"
       <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
+    } else {
+      Seq.empty
     }
 
     val nameLinkUri = s"$basePathUri/stages/stage?id=${s.stageId}&attempt=${s.attemptId}"
@@ -405,7 +414,7 @@ private[ui] class StageDataSource(
   // so that we can avoid creating duplicate contents during sorting the data
   private val data = stages.map(stageRow).sorted(ordering(sortColumn, desc))
 
-  private var _slicedStageIds: Set[Int] = null
+  private var _slicedStageIds: Set[Int] = _
 
   override def dataSize: Int = data.size
 
@@ -464,7 +473,6 @@ private[ui] class StageDataSource(
       s.stageId,
       s.attemptId,
       stageData.schedulingPool,
-      description.getOrElse(""),
       description,
       s.submissionTime.getOrElse(0),
       formattedSubmissionTime,
@@ -485,43 +493,16 @@ private[ui] class StageDataSource(
    * Return Ordering according to sortColumn and desc
    */
   private def ordering(sortColumn: String, desc: Boolean): Ordering[StageTableRowData] = {
-    val ordering = sortColumn match {
-      case "Stage Id" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Int.compare(x.stageId, y.stageId)
-      }
-      case "Pool Name" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.String.compare(x.schedulingPool, y.schedulingPool)
-      }
-      case "Description" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.String.compare(x.description, y.description)
-      }
-      case "Submitted" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.submissionTime, y.submissionTime)
-      }
-      case "Duration" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.duration, y.duration)
-      }
-      case "Input" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.inputRead, y.inputRead)
-      }
-      case "Output" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.outputWrite, y.outputWrite)
-      }
-      case "Shuffle Read" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.shuffleRead, y.shuffleRead)
-      }
-      case "Shuffle Write" => new Ordering[StageTableRowData] {
-        override def compare(x: StageTableRowData, y: StageTableRowData): Int =
-          Ordering.Long.compare(x.shuffleWrite, y.shuffleWrite)
-      }
+    val ordering: Ordering[StageTableRowData] = sortColumn match {
+      case "Stage Id" => Ordering.by(_.stageId)
+      case "Pool Name" => Ordering.by(_.schedulingPool)
+      case "Description" => Ordering.by(x => (x.descriptionOption, x.stageInfo.name))
+      case "Submitted" => Ordering.by(_.submissionTime)
+      case "Duration" => Ordering.by(_.duration)
+      case "Input" => Ordering.by(_.inputRead)
+      case "Output" => Ordering.by(_.outputWrite)
+      case "Shuffle Read" => Ordering.by(_.shuffleRead)
+      case "Shuffle Write" => Ordering.by(_.shuffleWrite)
       case "Tasks: Succeeded/Total" =>
         throw new IllegalArgumentException(s"Unsortable column: $sortColumn")
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
@@ -533,4 +514,3 @@ private[ui] class StageDataSource(
     }
   }
 }
-

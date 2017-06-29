@@ -92,13 +92,13 @@ object NameAgg extends Aggregator[AggData, String, String] {
 }
 
 
-object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[Int]] {
+object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[(Int, Int)]] {
   def zero: Seq[Int] = Nil
   def reduce(b: Seq[Int], a: AggData): Seq[Int] = a.a +: b
   def merge(b1: Seq[Int], b2: Seq[Int]): Seq[Int] = b1 ++ b2
-  def finish(r: Seq[Int]): Seq[Int] = r
+  def finish(r: Seq[Int]): Seq[(Int, Int)] = r.map(i => i -> i)
   override def bufferEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
-  override def outputEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
+  override def outputEncoder: Encoder[Seq[(Int, Int)]] = ExpressionEncoder()
 }
 
 
@@ -132,6 +132,19 @@ object NullResultAgg extends Aggregator[AggData, AggData, AggData] {
   override def merge(b1: AggData, b2: AggData): AggData = AggData(b1.a + b2.a, b1.b + b2.b)
   override def bufferEncoder: Encoder[AggData] = Encoders.product[AggData]
   override def outputEncoder: Encoder[AggData] = Encoders.product[AggData]
+}
+
+case class ComplexAggData(d1: AggData, d2: AggData)
+
+object VeryComplexResultAgg extends Aggregator[Row, String, ComplexAggData] {
+  override def zero: String = ""
+  override def reduce(buffer: String, input: Row): String = buffer + input.getString(1)
+  override def merge(b1: String, b2: String): String = b1 + b2
+  override def finish(reduction: String): ComplexAggData = {
+    ComplexAggData(AggData(reduction.length, reduction), AggData(reduction.length, reduction))
+  }
+  override def bufferEncoder: Encoder[String] = Encoders.STRING
+  override def outputEncoder: Encoder[ComplexAggData] = Encoders.product[ComplexAggData]
 }
 
 
@@ -268,7 +281,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
     checkDataset(
       ds.groupByKey(_.b).agg(SeqAgg.toColumn),
-      "a" -> Seq(1, 2)
+      "a" -> Seq(1 -> 1, 2 -> 2)
     )
   }
 
@@ -311,5 +324,13 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
     val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
     assert(ds3.select(NameAgg.toColumn).schema.head.nullable === true)
+  }
+
+  test("SPARK-18147: very complex aggregator result type") {
+    val df = Seq(1 -> "a", 2 -> "b", 2 -> "c").toDF("i", "j")
+
+    checkAnswer(
+      df.groupBy($"i").agg(VeryComplexResultAgg.toColumn),
+      Row(1, Row(Row(1, "a"), Row(1, "a"))) :: Row(2, Row(Row(2, "bc"), Row(2, "bc"))) :: Nil)
   }
 }

@@ -163,12 +163,7 @@ space into words.
 
 {% highlight java %}
 // Split each line into words
-JavaDStream<String> words = lines.flatMap(
-  new FlatMapFunction<String, String>() {
-    @Override public Iterator<String> call(String x) {
-      return Arrays.asList(x.split(" ")).iterator();
-    }
-  });
+JavaDStream<String> words = lines.flatMap(x -> Arrays.asList(x.split(" ")).iterator());
 {% endhighlight %}
 
 `flatMap` is a DStream operation that creates a new DStream by
@@ -183,18 +178,8 @@ Next, we want to count these words.
 
 {% highlight java %}
 // Count each word in each batch
-JavaPairDStream<String, Integer> pairs = words.mapToPair(
-  new PairFunction<String, String, Integer>() {
-    @Override public Tuple2<String, Integer> call(String s) {
-      return new Tuple2<>(s, 1);
-    }
-  });
-JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
-  new Function2<Integer, Integer, Integer>() {
-    @Override public Integer call(Integer i1, Integer i2) {
-      return i1 + i2;
-    }
-  });
+JavaPairDStream<String, Integer> pairs = words.mapToPair(s -> new Tuple2<>(s, 1));
+JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey((i1, i2) -> i1 + i2);
 
 // Print the first ten elements of each RDD generated in this DStream to the console
 wordCounts.print();
@@ -836,11 +821,9 @@ the `(word, 1)` pairs) and the `runningCount` having the previous count.
 
 {% highlight java %}
 Function2<List<Integer>, Optional<Integer>, Optional<Integer>> updateFunction =
-  new Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
-    @Override public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
-      Integer newSum = ...  // add the new values with the previous running count to get the new count
-      return Optional.of(newSum);
-    }
+  (values, state) -> {
+    Integer newSum = ...  // add the new values with the previous running count to get the new count
+    return Optional.of(newSum);
   };
 {% endhighlight %}
 
@@ -915,15 +898,12 @@ val cleanedDStream = wordCounts.transform { rdd =>
 {% highlight java %}
 import org.apache.spark.streaming.api.java.*;
 // RDD containing spam information
-final JavaPairRDD<String, Double> spamInfoRDD = jssc.sparkContext().newAPIHadoopRDD(...);
+JavaPairRDD<String, Double> spamInfoRDD = jssc.sparkContext().newAPIHadoopRDD(...);
 
-JavaPairDStream<String, Integer> cleanedDStream = wordCounts.transform(
-  new Function<JavaPairRDD<String, Integer>, JavaPairRDD<String, Integer>>() {
-    @Override public JavaPairRDD<String, Integer> call(JavaPairRDD<String, Integer> rdd) throws Exception {
-      rdd.join(spamInfoRDD).filter(...); // join data stream with spam information to do data cleaning
-      ...
-    }
-  });
+JavaPairDStream<String, Integer> cleanedDStream = wordCounts.transform(rdd -> {
+  rdd.join(spamInfoRDD).filter(...); // join data stream with spam information to do data cleaning
+  ...
+});
 {% endhighlight %}
 
 </div>
@@ -986,15 +966,8 @@ val windowedWordCounts = pairs.reduceByKeyAndWindow((a:Int,b:Int) => (a + b), Se
 <div data-lang="java" markdown="1">
 
 {% highlight java %}
-// Reduce function adding two integers, defined separately for clarity
-Function2<Integer, Integer, Integer> reduceFunc = new Function2<Integer, Integer, Integer>() {
-  @Override public Integer call(Integer i1, Integer i2) {
-    return i1 + i2;
-  }
-};
-
 // Reduce last 30 seconds of data, every 10 seconds
-JavaPairDStream<String, Integer> windowedWordCounts = pairs.reduceByKeyAndWindow(reduceFunc, Durations.seconds(30), Durations.seconds(10));
+JavaPairDStream<String, Integer> windowedWordCounts = pairs.reduceByKeyAndWindow((i1, i2) -> i1 + i2, Durations.seconds(30), Durations.seconds(10));
 {% endhighlight %}
 
 </div>
@@ -1141,14 +1114,7 @@ val joinedStream = windowedStream.transform { rdd => rdd.join(dataset) }
 {% highlight java %}
 JavaPairRDD<String, String> dataset = ...
 JavaPairDStream<String, String> windowedStream = stream.window(Durations.seconds(20));
-JavaPairDStream<String, String> joinedStream = windowedStream.transform(
-  new Function<JavaRDD<Tuple2<String, String>>, JavaRDD<Tuple2<String, String>>>() {
-    @Override
-    public JavaRDD<Tuple2<String, String>> call(JavaRDD<Tuple2<String, String>> rdd) {
-      return rdd.join(dataset);
-    }
-  }
-);
+JavaPairDStream<String, String> joinedStream = windowedStream.transform(rdd -> rdd.join(dataset));
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1246,6 +1212,16 @@ dstream.foreachRDD { rdd =>
 }
 {% endhighlight %}
 </div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(rdd -> {
+  Connection connection = createNewConnection(); // executed at the driver
+  rdd.foreach(record -> {
+    connection.send(record); // executed at the worker
+  });
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendRecord(rdd):
@@ -1279,6 +1255,17 @@ dstream.foreachRDD { rdd =>
 }
 {% endhighlight %}
 </div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(rdd -> {
+  rdd.foreach(record -> {
+    Connection connection = createNewConnection();
+    connection.send(record);
+    connection.close();
+  });
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendRecord(record):
@@ -1307,6 +1294,19 @@ dstream.foreachRDD { rdd =>
     connection.close()
   }
 }
+{% endhighlight %}
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(rdd -> {
+  rdd.foreachPartition(partitionOfRecords -> {
+    Connection connection = createNewConnection();
+    while (partitionOfRecords.hasNext()) {
+      connection.send(partitionOfRecords.next());
+    }
+    connection.close();
+  });
+});
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1342,6 +1342,20 @@ dstream.foreachRDD { rdd =>
 {% endhighlight %}
 </div>
 
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(rdd -> {
+  rdd.foreachPartition(partitionOfRecords -> {
+    // ConnectionPool is a static, lazily initialized pool of connections
+    Connection connection = ConnectionPool.getConnection();
+    while (partitionOfRecords.hasNext()) {
+      connection.send(partitionOfRecords.next());
+    }
+    ConnectionPool.returnConnection(connection); // return to the pool for future reuse
+  });
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendPartition(iter):
@@ -1365,170 +1379,6 @@ Note that the connections in the pool should be lazily created on demand and tim
 - DStreams are executed lazily by the output operations, just like RDDs are lazily executed by RDD actions. Specifically, RDD actions inside the DStream output operations force the processing of the received data. Hence, if your application does not have any output operation, or has output operations like `dstream.foreachRDD()` without any RDD action inside them, then nothing will get executed. The system will simply receive the data and discard it.
 
 - By default, output operations are executed one-at-a-time. And they are executed in the order they are defined in the application.
-
-***
-
-## Accumulators and Broadcast Variables
-
-[Accumulators](programming-guide.html#accumulators) and [Broadcast variables](programming-guide.html#broadcast-variables) cannot be recovered from checkpoint in Spark Streaming. If you enable checkpointing and use [Accumulators](programming-guide.html#accumulators) or [Broadcast variables](programming-guide.html#broadcast-variables) as well, you'll have to create lazily instantiated singleton instances for [Accumulators](programming-guide.html#accumulators) and [Broadcast variables](programming-guide.html#broadcast-variables) so that they can be re-instantiated after the driver restarts on failure. This is shown in the following example.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-{% highlight scala %}
-
-object WordBlacklist {
-
-  @volatile private var instance: Broadcast[Seq[String]] = null
-
-  def getInstance(sc: SparkContext): Broadcast[Seq[String]] = {
-    if (instance == null) {
-      synchronized {
-        if (instance == null) {
-          val wordBlacklist = Seq("a", "b", "c")
-          instance = sc.broadcast(wordBlacklist)
-        }
-      }
-    }
-    instance
-  }
-}
-
-object DroppedWordsCounter {
-
-  @volatile private var instance: LongAccumulator = null
-
-  def getInstance(sc: SparkContext): LongAccumulator = {
-    if (instance == null) {
-      synchronized {
-        if (instance == null) {
-          instance = sc.longAccumulator("WordsInBlacklistCounter")
-        }
-      }
-    }
-    instance
-  }
-}
-
-wordCounts.foreachRDD { (rdd: RDD[(String, Int)], time: Time) =>
-  // Get or register the blacklist Broadcast
-  val blacklist = WordBlacklist.getInstance(rdd.sparkContext)
-  // Get or register the droppedWordsCounter Accumulator
-  val droppedWordsCounter = DroppedWordsCounter.getInstance(rdd.sparkContext)
-  // Use blacklist to drop words and use droppedWordsCounter to count them
-  val counts = rdd.filter { case (word, count) =>
-    if (blacklist.value.contains(word)) {
-      droppedWordsCounter.add(count)
-      false
-    } else {
-      true
-    }
-  }.collect().mkString("[", ", ", "]")
-  val output = "Counts at time " + time + " " + counts
-})
-
-{% endhighlight %}
-
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/RecoverableNetworkWordCount.scala).
-</div>
-<div data-lang="java" markdown="1">
-{% highlight java %}
-
-class JavaWordBlacklist {
-
-  private static volatile Broadcast<List<String>> instance = null;
-
-  public static Broadcast<List<String>> getInstance(JavaSparkContext jsc) {
-    if (instance == null) {
-      synchronized (JavaWordBlacklist.class) {
-        if (instance == null) {
-          List<String> wordBlacklist = Arrays.asList("a", "b", "c");
-          instance = jsc.broadcast(wordBlacklist);
-        }
-      }
-    }
-    return instance;
-  }
-}
-
-class JavaDroppedWordsCounter {
-
-  private static volatile LongAccumulator instance = null;
-
-  public static LongAccumulator getInstance(JavaSparkContext jsc) {
-    if (instance == null) {
-      synchronized (JavaDroppedWordsCounter.class) {
-        if (instance == null) {
-          instance = jsc.sc().longAccumulator("WordsInBlacklistCounter");
-        }
-      }
-    }
-    return instance;
-  }
-}
-
-wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() {
-  @Override
-  public Void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
-    // Get or register the blacklist Broadcast
-    final Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
-    // Get or register the droppedWordsCounter Accumulator
-    final LongAccumulator droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
-    // Use blacklist to drop words and use droppedWordsCounter to count them
-    String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
-      @Override
-      public Boolean call(Tuple2<String, Integer> wordCount) throws Exception {
-        if (blacklist.value().contains(wordCount._1())) {
-          droppedWordsCounter.add(wordCount._2());
-          return false;
-        } else {
-          return true;
-        }
-      }
-    }).collect().toString();
-    String output = "Counts at time " + time + " " + counts;
-  }
-}
-
-{% endhighlight %}
-
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaRecoverableNetworkWordCount.java).
-</div>
-<div data-lang="python" markdown="1">
-{% highlight python %}
-def getWordBlacklist(sparkContext):
-    if ("wordBlacklist" not in globals()):
-        globals()["wordBlacklist"] = sparkContext.broadcast(["a", "b", "c"])
-    return globals()["wordBlacklist"]
-
-def getDroppedWordsCounter(sparkContext):
-    if ("droppedWordsCounter" not in globals()):
-        globals()["droppedWordsCounter"] = sparkContext.accumulator(0)
-    return globals()["droppedWordsCounter"]
-
-def echo(time, rdd):
-    # Get or register the blacklist Broadcast
-    blacklist = getWordBlacklist(rdd.context)
-    # Get or register the droppedWordsCounter Accumulator
-    droppedWordsCounter = getDroppedWordsCounter(rdd.context)
-
-    # Use blacklist to drop words and use droppedWordsCounter to count them
-    def filterFunc(wordCount):
-        if wordCount[0] in blacklist.value:
-            droppedWordsCounter.add(wordCount[1])
-            False
-        else:
-            True
-
-    counts = "Counts at time %s %s" % (time, rdd.filter(filterFunc).collect())
-
-wordCounts.foreachRDD(echo)
-
-{% endhighlight %}
-
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/recoverable_network_wordcount.py).
-
-</div>
-</div>
 
 ***
 
@@ -1587,35 +1437,26 @@ public class JavaRow implements java.io.Serializable {
 
 JavaDStream<String> words = ... 
 
-words.foreachRDD(
-  new Function2<JavaRDD<String>, Time, Void>() {
-    @Override
-    public Void call(JavaRDD<String> rdd, Time time) {
+words.foreachRDD((rdd, time) -> {
+  // Get the singleton instance of SparkSession
+  SparkSession spark = SparkSession.builder().config(rdd.sparkContext().getConf()).getOrCreate();
 
-      // Get the singleton instance of SparkSession
-      SparkSession spark = SparkSession.builder().config(rdd.sparkContext().getConf()).getOrCreate();
+  // Convert RDD[String] to RDD[case class] to DataFrame
+  JavaRDD<JavaRow> rowRDD = rdd.map(word -> {
+    JavaRow record = new JavaRow();
+    record.setWord(word);
+    return record;
+  });
+  DataFrame wordsDataFrame = spark.createDataFrame(rowRDD, JavaRow.class);
 
-      // Convert RDD[String] to RDD[case class] to DataFrame
-      JavaRDD<JavaRow> rowRDD = rdd.map(new Function<String, JavaRow>() {
-        public JavaRow call(String word) {
-          JavaRow record = new JavaRow();
-          record.setWord(word);
-          return record;
-        }
-      });
-      DataFrame wordsDataFrame = spark.createDataFrame(rowRDD, JavaRow.class);
+  // Creates a temporary view using the DataFrame
+  wordsDataFrame.createOrReplaceTempView("words");
 
-      // Creates a temporary view using the DataFrame
-      wordsDataFrame.createOrReplaceTempView("words");
-
-      // Do word count on table using SQL and print it
-      DataFrame wordCountsDataFrame =
-        spark.sql("select word, count(*) as total from words group by word");
-      wordCountsDataFrame.show();
-      return null;
-    }
-  }
-);
+  // Do word count on table using SQL and print it
+  DataFrame wordCountsDataFrame =
+    spark.sql("select word, count(*) as total from words group by word");
+  wordCountsDataFrame.show();
+});
 {% endhighlight %}
 
 See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaSqlNetworkWordCount.java).
@@ -1877,6 +1718,164 @@ batch interval that is at least 10 seconds. It can be set by using
 
 ***
 
+## Accumulators, Broadcast Variables, and Checkpoints
+
+[Accumulators](programming-guide.html#accumulators) and [Broadcast variables](programming-guide.html#broadcast-variables) cannot be recovered from checkpoint in Spark Streaming. If you enable checkpointing and use [Accumulators](programming-guide.html#accumulators) or [Broadcast variables](programming-guide.html#broadcast-variables) as well, you'll have to create lazily instantiated singleton instances for [Accumulators](programming-guide.html#accumulators) and [Broadcast variables](programming-guide.html#broadcast-variables) so that they can be re-instantiated after the driver restarts on failure. This is shown in the following example.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+object WordBlacklist {
+
+  @volatile private var instance: Broadcast[Seq[String]] = null
+
+  def getInstance(sc: SparkContext): Broadcast[Seq[String]] = {
+    if (instance == null) {
+      synchronized {
+        if (instance == null) {
+          val wordBlacklist = Seq("a", "b", "c")
+          instance = sc.broadcast(wordBlacklist)
+        }
+      }
+    }
+    instance
+  }
+}
+
+object DroppedWordsCounter {
+
+  @volatile private var instance: LongAccumulator = null
+
+  def getInstance(sc: SparkContext): LongAccumulator = {
+    if (instance == null) {
+      synchronized {
+        if (instance == null) {
+          instance = sc.longAccumulator("WordsInBlacklistCounter")
+        }
+      }
+    }
+    instance
+  }
+}
+
+wordCounts.foreachRDD { (rdd: RDD[(String, Int)], time: Time) =>
+  // Get or register the blacklist Broadcast
+  val blacklist = WordBlacklist.getInstance(rdd.sparkContext)
+  // Get or register the droppedWordsCounter Accumulator
+  val droppedWordsCounter = DroppedWordsCounter.getInstance(rdd.sparkContext)
+  // Use blacklist to drop words and use droppedWordsCounter to count them
+  val counts = rdd.filter { case (word, count) =>
+    if (blacklist.value.contains(word)) {
+      droppedWordsCounter.add(count)
+      false
+    } else {
+      true
+    }
+  }.collect().mkString("[", ", ", "]")
+  val output = "Counts at time " + time + " " + counts
+})
+
+{% endhighlight %}
+
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/RecoverableNetworkWordCount.scala).
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+class JavaWordBlacklist {
+
+  private static volatile Broadcast<List<String>> instance = null;
+
+  public static Broadcast<List<String>> getInstance(JavaSparkContext jsc) {
+    if (instance == null) {
+      synchronized (JavaWordBlacklist.class) {
+        if (instance == null) {
+          List<String> wordBlacklist = Arrays.asList("a", "b", "c");
+          instance = jsc.broadcast(wordBlacklist);
+        }
+      }
+    }
+    return instance;
+  }
+}
+
+class JavaDroppedWordsCounter {
+
+  private static volatile LongAccumulator instance = null;
+
+  public static LongAccumulator getInstance(JavaSparkContext jsc) {
+    if (instance == null) {
+      synchronized (JavaDroppedWordsCounter.class) {
+        if (instance == null) {
+          instance = jsc.sc().longAccumulator("WordsInBlacklistCounter");
+        }
+      }
+    }
+    return instance;
+  }
+}
+
+wordCounts.foreachRDD((rdd, time) -> {
+  // Get or register the blacklist Broadcast
+  Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
+  // Get or register the droppedWordsCounter Accumulator
+  LongAccumulator droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
+  // Use blacklist to drop words and use droppedWordsCounter to count them
+  String counts = rdd.filter(wordCount -> {
+    if (blacklist.value().contains(wordCount._1())) {
+      droppedWordsCounter.add(wordCount._2());
+      return false;
+    } else {
+      return true;
+    }
+  }).collect().toString();
+  String output = "Counts at time " + time + " " + counts;
+}
+
+{% endhighlight %}
+
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaRecoverableNetworkWordCount.java).
+</div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+def getWordBlacklist(sparkContext):
+    if ("wordBlacklist" not in globals()):
+        globals()["wordBlacklist"] = sparkContext.broadcast(["a", "b", "c"])
+    return globals()["wordBlacklist"]
+
+def getDroppedWordsCounter(sparkContext):
+    if ("droppedWordsCounter" not in globals()):
+        globals()["droppedWordsCounter"] = sparkContext.accumulator(0)
+    return globals()["droppedWordsCounter"]
+
+def echo(time, rdd):
+    # Get or register the blacklist Broadcast
+    blacklist = getWordBlacklist(rdd.context)
+    # Get or register the droppedWordsCounter Accumulator
+    droppedWordsCounter = getDroppedWordsCounter(rdd.context)
+
+    # Use blacklist to drop words and use droppedWordsCounter to count them
+    def filterFunc(wordCount):
+        if wordCount[0] in blacklist.value:
+            droppedWordsCounter.add(wordCount[1])
+            False
+        else:
+            True
+
+    counts = "Counts at time %s %s" % (time, rdd.filter(filterFunc).collect())
+
+wordCounts.foreachRDD(echo)
+
+{% endhighlight %}
+
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/recoverable_network_wordcount.py).
+
+</div>
+</div>
+
+***
+
 ## Deploying Applications
 This section discusses the steps to deploy a Spark Streaming application.
 
@@ -1945,6 +1944,9 @@ To run a Spark Streaming applications, you need to have the following.
   `spark.streaming.driver.writeAheadLog.closeFileAfterWrite` and
   `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. See
   [Spark Streaming Configuration](configuration.html#spark-streaming) for more details.
+  Note that Spark will not encrypt data written to the write ahead log when I/O encryption is
+  enabled. If encryption of the write ahead log data is desired, it should be stored in a file
+  system that supports encryption natively.
 
 - *Setting the max receiving rate* - If the cluster resources is not large enough for the streaming
   application to process data as fast as it is being received, the receivers can be rate limited
@@ -2072,7 +2074,7 @@ unifiedStream.pprint()
 </div>
 </div>
 
-Another parameter that should be considered is the receiver's blocking interval,
+Another parameter that should be considered is the receiver's block interval,
 which is determined by the [configuration parameter](configuration.html#spark-streaming)
 `spark.streaming.blockInterval`. For most receivers, the received data is coalesced together into
 blocks of data before storing inside Spark's memory. The number of blocks in each batch
@@ -2191,7 +2193,7 @@ consistent batch processing times. Make sure you set the CMS GC on both the driv
 
 - When data is received from a stream source, receiver creates blocks of data.  A new block of data is generated every blockInterval milliseconds. N blocks of data are created during the batchInterval where N = batchInterval/blockInterval. These blocks are distributed by the BlockManager of the current executor to the block managers of other executors. After that, the Network Input Tracker running on the driver is informed about the block locations for further processing.
 
-- A RDD is created on the driver for the blocks created during the batchInterval. The blocks generated during the batchInterval are partitions of the RDD. Each partition is a task in spark. blockInterval== batchinterval would mean that a single partition is created and probably it is processed locally.
+- An RDD is created on the driver for the blocks created during the batchInterval. The blocks generated during the batchInterval are partitions of the RDD. Each partition is a task in spark. blockInterval== batchinterval would mean that a single partition is created and probably it is processed locally.
 
 - The map tasks on the blocks are processed in the executors (one that received the block, and another where the block was replicated) that has the blocks irrespective of block interval, unless non-local scheduling kicks in.
 Having bigger blockinterval means bigger blocks. A high value of `spark.locality.wait` increases the chance of processing a block on the local node. A balance needs to be found out between these two parameters to ensure that the bigger blocks are processed locally.
@@ -2382,7 +2384,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Kafka Integration Guide](streaming-kafka-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
-* Third-party DStream data sources can be found in [Spark Packages](https://spark-packages.org/)
+* Third-party DStream data sources can be found in [Third Party Projects](http://spark.apache.org/third-party-projects.html)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and

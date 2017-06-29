@@ -23,6 +23,8 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import scala.Tuple2;
+
 import com.google.common.base.Preconditions;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
@@ -36,7 +38,7 @@ import org.apache.spark.network.client.TransportClient;
  * individually fetched as chunks by the client. Each registered buffer is one chunk.
  */
 public class OneForOneStreamManager extends StreamManager {
-  private final Logger logger = LoggerFactory.getLogger(OneForOneStreamManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(OneForOneStreamManager.class);
 
   private final AtomicLong nextStreamId;
   private final ConcurrentHashMap<Long, StreamState> streams;
@@ -92,6 +94,25 @@ public class OneForOneStreamManager extends StreamManager {
     }
 
     return nextChunk;
+  }
+
+  @Override
+  public ManagedBuffer openStream(String streamChunkId) {
+    Tuple2<Long, Integer> streamIdAndChunkId = parseStreamChunkId(streamChunkId);
+    return getChunk(streamIdAndChunkId._1, streamIdAndChunkId._2);
+  }
+
+  public static String genStreamChunkId(long streamId, int chunkId) {
+    return String.format("%d_%d", streamId, chunkId);
+  }
+
+  public static Tuple2<Long, Integer> parseStreamChunkId(String streamChunkId) {
+    String[] array = streamChunkId.split("_");
+    assert array.length == 2:
+      "Stream id and chunk index should be specified when open stream for fetching block.";
+    long streamId = Long.valueOf(array[0]);
+    int chunkIndex = Integer.valueOf(array[1]);
+    return new Tuple2<>(streamId, chunkIndex);
   }
 
   @Override

@@ -59,7 +59,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
       checkThatPlansAgree(
         generateRandomInputData(),
         input =>
-          noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, None, input)),
+          noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
         input =>
           GlobalLimitExec(limit,
             LocalLimitExec(limit,
@@ -74,7 +74,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
         generateRandomInputData(),
         input =>
           noOpFilter(
-            TakeOrderedAndProjectExec(limit, sortOrder, Some(Seq(input.output.last)), input)),
+            TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last), input)),
         input =>
           GlobalLimitExec(limit,
             LocalLimitExec(limit,
