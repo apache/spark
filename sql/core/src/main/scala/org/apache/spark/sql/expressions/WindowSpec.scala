@@ -180,16 +180,20 @@ class WindowSpec private[sql](
   private def between(typ: FrameType, start: Long, end: Long): WindowSpec = {
     val boundaryStart = start match {
       case 0 => CurrentRow
-      case Long.MinValue => UnboundedPreceding
-      case x if x < 0 => ValuePreceding(-start.toInt)
-      case x if x > 0 => ValueFollowing(start.toInt)
+      case x if x < Int.MinValue => UnboundedPreceding
+      case x if x < 0 && x >= Int.MinValue => ValuePreceding(-start.toInt)
+      case x if x > 0 && x <= Int.MaxValue => ValueFollowing(start.toInt)
+      case _ => throw new IllegalArgumentException(s"Boundary start($start) should not be " +
+        s"larger than Int.MaxValue(${Int.MaxValue}).")
     }
 
     val boundaryEnd = end match {
       case 0 => CurrentRow
-      case Long.MaxValue => UnboundedFollowing
-      case x if x < 0 => ValuePreceding(-end.toInt)
-      case x if x > 0 => ValueFollowing(end.toInt)
+      case x if x > Int.MaxValue => UnboundedFollowing
+      case x if x < 0 && x >= Int.MinValue => ValuePreceding(-end.toInt)
+      case x if x > 0 && x <= Int.MaxValue => ValueFollowing(end.toInt)
+      case _ => throw new IllegalArgumentException(s"Boundary end($end) should not be " +
+        s"less than Int.MinValue(${Int.MinValue}).")
     }
 
     new WindowSpec(

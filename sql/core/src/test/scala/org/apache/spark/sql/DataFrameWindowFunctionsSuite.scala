@@ -423,4 +423,118 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(selectList: _*).where($"value" < 2),
       Seq(Row(3, "1", null, 3.0, 4.0, 3.0), Row(5, "1", false, 4.0, 5.0, 5.0)))
   }
+
+  test("SPARK-19451: Underlying integer overflow in Window function") {
+    val df = Seq((1L, "a"), (1L, "a"), (2L, "a"), (1L, "b"), (2L, "b"), (3L, "b"))
+      .toDF("id", "category")
+    df.createOrReplaceTempView("window_table")
+
+    // range frames
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rangeBetween(-2160000000L, -1))),
+      Seq(
+        Row(1, "b", null), Row(2, "b", 1), Row(3, "b", 3),
+        Row(1, "a", null), Row(1, "a", null), Row(2, "a", 2)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rangeBetween(-2160000000L, 0))),
+      Seq(
+        Row(1, "b", 1), Row(2, "b", 3), Row(3, "b", 6),
+        Row(1, "a", 2), Row(1, "a", 2), Row(2, "a", 4)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rangeBetween(-2160000000L, 2))),
+      Seq(
+        Row(1, "b", 6), Row(2, "b", 6), Row(3, "b", 6),
+        Row(1, "a", 4), Row(1, "a", 4), Row(2, "a", 4)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rangeBetween(-2160000000L, 2160000000L))),
+      Seq(
+        Row(1, "b", 6), Row(2, "b", 6), Row(3, "b", 6),
+        Row(1, "a", 4), Row(1, "a", 4), Row(2, "a", 4)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rangeBetween(-1, 2160000000L))),
+      Seq(
+        Row(1, "b", 6), Row(2, "b", 6), Row(3, "b", 5),
+        Row(1, "a", 4), Row(1, "a", 4), Row(2, "a", 4)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rangeBetween(0, 2160000000L))),
+      Seq(
+        Row(1, "b", 6), Row(2, "b", 5), Row(3, "b", 3),
+        Row(1, "a", 4), Row(1, "a", 4), Row(2, "a", 2)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rangeBetween(2, 2160000000L))),
+      Seq(
+        Row(1, "b", 3), Row(2, "b", null), Row(3, "b", null),
+        Row(1, "a", null), Row(1, "a", null), Row(2, "a", null)))
+
+    // row frames
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rowsBetween(-2160000000L, -1))),
+      Seq(
+        Row(1, "b", null), Row(2, "b", 1), Row(3, "b", 3),
+        Row(1, "a", null), Row(1, "a", 1), Row(2, "a", 2)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rowsBetween(-2160000000L, 0))),
+      Seq(
+        Row(1, "b", 1), Row(2, "b", 3), Row(3, "b", 6),
+        Row(1, "a", 1), Row(1, "a", 2), Row(2, "a", 4)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rowsBetween(-2160000000L, 2))),
+      Seq(
+        Row(1, "b", 6), Row(2, "b", 6), Row(3, "b", 6),
+        Row(1, "a", 4), Row(1, "a", 4), Row(2, "a", 4)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rowsBetween(-2160000000L, 2160000000L))),
+      Seq(
+        Row(1, "b", 6), Row(2, "b", 6), Row(3, "b", 6),
+        Row(1, "a", 4), Row(1, "a", 4), Row(2, "a", 4)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rowsBetween(-1, 2160000000L))),
+      Seq(
+        Row(1, "b", 6), Row(2, "b", 6), Row(3, "b", 5),
+        Row(1, "a", 4), Row(1, "a", 4), Row(2, "a", 3)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rowsBetween(0, 2160000000L))),
+      Seq(
+        Row(1, "b", 6), Row(2, "b", 5), Row(3, "b", 3),
+        Row(1, "a", 4), Row(1, "a", 3), Row(2, "a", 2)))
+    checkAnswer(
+      df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+        .rowsBetween(2, 2160000000L))),
+      Seq(
+        Row(1, "b", 3), Row(2, "b", null), Row(3, "b", null),
+        Row(1, "a", 2), Row(1, "a", null), Row(2, "a", null)))
+    try {
+      checkAnswer(
+        df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+          .rowsBetween(-3160000000L, -2160000000L))),
+        Seq())
+      assert(false, "Boundary end should not be smaller than Int.MinValue(-2147483648).")
+    } catch {
+      case e: IllegalArgumentException =>
+        // expected
+    }
+    try {
+      checkAnswer(
+        df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+          .rowsBetween(2160000000L, 3160000000L))),
+        Seq())
+      assert(false, "Boundary start should not be larger than Int.MaxValue(2147483647).")
+    } catch {
+      case e: IllegalArgumentException =>
+      // expected
+    }
+  }
 }
