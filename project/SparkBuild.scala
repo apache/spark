@@ -29,7 +29,7 @@ import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.simplytyped.Antlr4Plugin._
-import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import com.typesafe.sbt.pom.{MavenHelper, PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin._
 import org.scalastyle.sbt.Tasks
@@ -296,7 +296,12 @@ object SparkBuild extends PomBuild {
         sys.error(s"$failed fatal warnings")
       }
       analysis
-    }
+    },
+    dependencyOverrides ++= MavenHelper.fromPom { pom =>
+      for {
+        dep <- pom.getDependencyManagement.getDependencies.asScala
+      } yield MavenHelper.convertDep(dep)
+    }.value.toSet
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef): Unit = {

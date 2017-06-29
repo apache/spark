@@ -14,9 +14,9 @@ api-asn1-api-1.0.0-M20.jar
 api-util-1.0.0-M20.jar
 arpack_combined_all-0.1.jar
 automaton-1.11-8.jar
-avro-1.7.7.jar
-avro-ipc-1.7.7.jar
-avro-mapred-1.7.7-hadoop2.jar
+avro-1.8.1.jar
+avro-ipc-1.8.1.jar
+avro-mapred-1.8.1-hadoop2.jar
 aws-java-sdk-core-1.11.45.jar
 aws-java-sdk-kms-1.11.45.jar
 aws-java-sdk-s3-1.11.45.jar
@@ -38,7 +38,7 @@ commons-cli-1.2.jar
 commons-codec-1.10.jar
 commons-collections-3.2.2.jar
 commons-compiler-3.0.0.jar
-commons-compress-1.4.1.jar
+commons-compress-1.8.1.jar
 commons-configuration-1.6.jar
 commons-crypto-1.0.0.jar
 commons-dbcp-1.4.jar
@@ -225,6 +225,6 @@ univocity-parsers-2.2.1.jar
 validation-api-1.1.0.Final.jar
 xbean-asm5-shaded-4.4.jar
 xmlenc-0.52.jar
-xz-1.0.jar
+xz-1.5.jar
 zjsonpatch-0.3.0.jar
 zookeeper-3.4.6.jar
