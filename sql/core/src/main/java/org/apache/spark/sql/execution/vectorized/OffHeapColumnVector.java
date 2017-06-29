@@ -95,6 +95,9 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public void putNulls(int rowId, int count) {
+    if (!containsNull) {
+      throw new RuntimeException("Not allowed to put nulls in this column.");
+    }
     long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 1);

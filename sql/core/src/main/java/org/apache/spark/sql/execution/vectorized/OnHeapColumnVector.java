@@ -91,6 +91,9 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public void putNulls(int rowId, int count) {
+    if (!containsNull) {
+      throw new RuntimeException("Not allowed to put nulls in this column.");
+    }
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)1;
     }
