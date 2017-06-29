@@ -158,7 +158,7 @@ NULL
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1)))
-#' head(select(tmp, sort_array(tmp$v1, FALSE)))}
+#' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))}
 NULL
 
 #' lit
@@ -2181,7 +2181,7 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' @details
 #' \code{from_json}: Parses a column containing a JSON string into a Column of \code{structType}
 #' with the specified \code{schema} or array of \code{structType} if \code{as.json.array} is set
-#' to \code{TRUE}. If the string is unparseable, the Column will contains the value NA.
+#' to \code{TRUE}. If the string is unparseable, the Column will contain the value NA.
 #'
 #' @rdname column_collection_functions
 #' @param schema a structType object to use as the schema to use when parsing the JSON string.
@@ -2191,6 +2191,11 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' @examples
 #'
 #' \dontrun{
+#' df2 <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' df2 <- mutate(df2, d2 = to_json(df2$d, dateFormat = 'dd/MM/yyyy'))
+#' schema <- structType(structField("date", "string"))
+#' head(select(df2, from_json(df2$d2, schema, dateFormat = 'dd/MM/yyyy')))
+
 #' df2 <- sql("SELECT named_struct('name', 'Bob') as people")
 #' df2 <- mutate(df2, people_json = to_json(df2$people))
 #' schema <- structType(structField("name", "string"))
