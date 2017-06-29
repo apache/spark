@@ -17,6 +17,8 @@
 global-exclude *.py[cod] __pycache__ .DS_Store
 recursive-include deps/jars *.jar
 graft deps/bin
+recursive-include deps/data *.data *.txt
+recursive-include deps/licenses *.txt
 recursive-include deps/examples *.py
 recursive-include lib *.zip
 include README.md

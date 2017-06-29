@@ -100,8 +100,10 @@ public class TransportClientFactory implements Closeable {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     this.socketChannelClass = NettyUtils.getClientChannelClass(ioMode);
-    // TODO: Make thread pool name configurable.
-    this.workerGroup = NettyUtils.createEventLoop(ioMode, conf.clientThreads(), "shuffle-client");
+    this.workerGroup = NettyUtils.createEventLoop(
+        ioMode,
+        conf.clientThreads(),
+        conf.getModuleName() + "-client");
     this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
       conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
   }
@@ -120,7 +122,8 @@ public class TransportClientFactory implements Closeable {
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
-  public TransportClient createClient(String remoteHost, int remotePort) throws IOException {
+  public TransportClient createClient(String remoteHost, int remotePort)
+      throws IOException, InterruptedException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
     // Use unresolved address here to avoid DNS resolution each time we creates a client.
@@ -188,13 +191,14 @@ public class TransportClientFactory implements Closeable {
    * As with {@link #createClient(String, int)}, this method is blocking.
    */
   public TransportClient createUnmanagedClient(String remoteHost, int remotePort)
-      throws IOException {
+      throws IOException, InterruptedException {
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
     return createClient(address);
   }
 
   /** Create a completely new {@link TransportClient} to the remote address. */
-  private TransportClient createClient(InetSocketAddress address) throws IOException {
+  private TransportClient createClient(InetSocketAddress address)
+      throws IOException, InterruptedException {
     logger.debug("Creating new connection to {}", address);
 
     Bootstrap bootstrap = new Bootstrap();
@@ -221,7 +225,7 @@ public class TransportClientFactory implements Closeable {
     // Connect to the remote server
     long preConnect = System.nanoTime();
     ChannelFuture cf = bootstrap.connect(address);
-    if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
+    if (!cf.await(conf.connectionTimeoutMs())) {
       throw new IOException(
         String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
     } else if (cf.cause() != null) {

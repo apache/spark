@@ -91,23 +91,13 @@ private[spark] abstract class WebUI(
   /** Attach a handler to this UI. */
   def attachHandler(handler: ServletContextHandler) {
     handlers += handler
-    serverInfo.foreach { info =>
-      info.rootHandler.addHandler(handler)
-      if (!handler.isStarted) {
-        handler.start()
-      }
-    }
+    serverInfo.foreach(_.addHandler(handler))
   }
 
   /** Detach a handler from this UI. */
   def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
-    serverInfo.foreach { info =>
-      info.rootHandler.removeHandler(handler)
-      if (handler.isStarted) {
-        handler.stop()
-      }
-    }
+    serverInfo.foreach(_.removeHandler(handler))
   }
 
   /**
@@ -134,7 +124,7 @@ private[spark] abstract class WebUI(
 
   /** Bind to the HTTP server behind this web interface. */
   def bind(): Unit = {
-    assert(!serverInfo.isDefined, s"Attempted to bind $className more than once!")
+    assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       serverInfo = Some(startJettyServer(host, port, sslOptions, handlers, conf, name))
@@ -147,10 +137,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Return the url of web interface. Only valid after bind(). */
-  def webUrl: String = {
-    val protocol = if (sslOptions.enabled) "https" else "http"
-    s"$protocol://$publicHostName:$boundPort"
-  }
+  def webUrl: String = s"http://$publicHostName:$boundPort"
 
   /** Return the actual port to which this server is bound. Only valid after bind(). */
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)

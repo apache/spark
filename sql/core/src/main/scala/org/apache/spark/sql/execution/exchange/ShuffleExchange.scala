@@ -40,14 +40,17 @@ case class ShuffleExchange(
     child: SparkPlan,
     @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
 
+  // NOTE: coordinator can be null after serialization/deserialization,
+  //       e.g. it can be null on the Executor side
+
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"))
 
   override def nodeName: String = {
     val extraInfo = coordinator match {
       case Some(exchangeCoordinator) =>
-        s"(coordinator id: ${System.identityHashCode(coordinator)})"
-      case None => ""
+        s"(coordinator id: ${System.identityHashCode(exchangeCoordinator)})"
+      case _ => ""
     }
 
     val simpleNodeName = "Exchange"
@@ -70,7 +73,7 @@ case class ShuffleExchange(
     // the plan.
     coordinator match {
       case Some(exchangeCoordinator) => exchangeCoordinator.registerExchange(this)
-      case None =>
+      case _ =>
     }
   }
 
@@ -117,7 +120,7 @@ case class ShuffleExchange(
           val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
           assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
           shuffleRDD
-        case None =>
+        case _ =>
           val shuffleDependency = prepareShuffleDependency()
           preparePostShuffleRDD(shuffleDependency)
       }

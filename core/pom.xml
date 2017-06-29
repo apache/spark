@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.1.0-SNAPSHOT</version>
+    <version>2.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -33,6 +33,10 @@
   <name>Spark Project Core</name>
   <url>http://spark.apache.org/</url>
   <dependencies>
+    <dependency>
+      <groupId>org.apache.avro</groupId>
+      <artifactId>avro</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro-mapred</artifactId>
@@ -337,10 +341,50 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
+
+    <!--
+      This spark-tags test-dep is needed even though it isn't used in this module, otherwise testing-cmds that exclude
+      them will yield errors.
+    -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-crypto</artifactId>
     </dependency>
+
+    <!--
+     The following dependencies are depended upon in HiveCredentialProvider, but are only executed if Hive is enabled in
+     the user's Hadoop configuration.  So in order to prevent spark-core from depending on Hive, these deps have been
+     placed in the "provided" scope, rather than the "compile" scope, and NoClassDefFoundError exceptions are handled
+     when the user has not explicitly compiled with the Hive module.
+    -->
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-exec</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-metastore</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libthrift</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libfb303</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

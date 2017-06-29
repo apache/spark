@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -34,15 +35,16 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
  * See [[org.apache.spark.sql.catalyst.parser.PlanParserSuite]] for rules
  * defined in the Catalyst module.
  */
-class SparkSqlParserSuite extends PlanTest {
+class SparkSqlParserSuite extends AnalysisTest {
 
-  private lazy val parser = new SparkSqlParser(new SQLConf)
+  val newConf = new SQLConf
+  private lazy val parser = new SparkSqlParser(newConf)
 
   /**
    * Normalizes plans:
    * - CreateTable the createTime in tableDesc will replaced by -1L.
    */
-  private def normalizePlan(plan: LogicalPlan): LogicalPlan = {
+  override def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case CreateTable(tableDesc, mode, query) =>
         val newTableDesc = tableDesc.copy(createTime = -1L)
@@ -121,7 +123,8 @@ class SparkSqlParserSuite extends PlanTest {
       tableType: CatalogTableType = CatalogTableType.MANAGED,
       storage: CatalogStorageFormat = CatalogStorageFormat.empty.copy(
         inputFormat = HiveSerDe.sourceToSerDe("textfile").get.inputFormat,
-        outputFormat = HiveSerDe.sourceToSerDe("textfile").get.outputFormat),
+        outputFormat = HiveSerDe.sourceToSerDe("textfile").get.outputFormat,
+        serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
       schema: StructType = new StructType,
       provider: Option[String] = Some("hive"),
       partitionColumnNames: Seq[String] = Seq.empty,
@@ -206,16 +209,27 @@ class SparkSqlParserSuite extends PlanTest {
       "no viable alternative at input")
   }
 
+  test("create view as insert into table") {
+    // Single insert query
+    intercept("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)",
+      "Operation not allowed: CREATE VIEW ... AS INSERT INTO")
+
+    // Multi insert query
+    intercept("CREATE VIEW testView AS FROM jt INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
+      "INSERT INTO tbl2 SELECT * WHERE jt.id > 4",
+      "Operation not allowed: CREATE VIEW ... AS FROM ... [INSERT INTO ...]+")
+  }
+
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     assertEqual("describe table t",
       DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = false))
+        TableIdentifier("t"), Map.empty, isExtended = false))
     assertEqual("describe table extended t",
       DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = true, isFormatted = false))
+        TableIdentifier("t"), Map.empty, isExtended = true))
     assertEqual("describe table formatted t",
       DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = true))
+        TableIdentifier("t"), Map.empty, isExtended = true))
 
     intercept("explain describe tables x", "Unsupported SQL statement")
   }
@@ -249,5 +263,41 @@ class SparkSqlParserSuite extends PlanTest {
 
     assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
       AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
+  }
+
+  test("query organization") {
+    // Test all valid combinations of order by/sort by/distribute by/cluster by/limit/windows
+    val baseSql = "select * from t"
+    val basePlan =
+      Project(Seq(UnresolvedStar(None)), UnresolvedRelation(TableIdentifier("t")))
+
+    assertEqual(s"$baseSql distribute by a, b",
+      RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
+        basePlan,
+        numPartitions = newConf.numShufflePartitions))
+    assertEqual(s"$baseSql distribute by a sort by b",
+      Sort(SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+        global = false,
+        RepartitionByExpression(UnresolvedAttribute("a") :: Nil,
+          basePlan,
+          numPartitions = newConf.numShufflePartitions)))
+    assertEqual(s"$baseSql cluster by a, b",
+      Sort(SortOrder(UnresolvedAttribute("a"), Ascending) ::
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+        global = false,
+        RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
+          basePlan,
+          numPartitions = newConf.numShufflePartitions)))
+  }
+
+  test("pipeline concatenation") {
+    val concat = Concat(
+      Concat(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil) ::
+      UnresolvedAttribute("c") ::
+      Nil
+    )
+    assertEqual(
+      "SELECT a || b || c FROM t",
+      Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))
   }
 }

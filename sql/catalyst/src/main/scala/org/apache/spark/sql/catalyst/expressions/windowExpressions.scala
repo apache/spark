@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -111,7 +113,7 @@ sealed trait FrameType
  * or a [[ValueFollowing]] is used as its [[FrameBoundary]], the value is considered
  * as a physical offset.
  * For example, `ROW BETWEEN 1 PRECEDING AND 1 FOLLOWING` represents a 3-row frame,
- * from the row precedes the current row to the row follows the current row.
+ * from the row that precedes the current row to the row that follows the current row.
  */
 case object RowFrame extends FrameType
 
@@ -124,7 +126,7 @@ case object RowFrame extends FrameType
  * `RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING` represents a frame containing rows whose values
  * `expr` are in the range of [v-1, v+1].
  *
- * If `ORDER BY` clause is not defined, all rows in the partition is considered as peers
+ * If `ORDER BY` clause is not defined, all rows in the partition are considered as peers
  * of the current row.
  */
 case object RangeFrame extends FrameType
@@ -215,11 +217,11 @@ case object UnboundedFollowing extends FrameBoundary {
 }
 
 /**
- * The trait used to represent the a Window Frame.
+ * Represents a window frame.
  */
 sealed trait WindowFrame
 
-/** Used as a place holder when a frame specification is not defined.  */
+/** Used as a placeholder when a frame specification is not defined. */
 case object UnspecifiedFrame extends WindowFrame
 
 /** A specified Window Frame. */
@@ -436,7 +438,6 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
-  override def supportsPartial: Boolean = false
   override lazy val mergeExpressions =
     throw new UnsupportedOperationException("Window Functions do not support merging.")
 }
@@ -517,7 +518,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
  * into the number of buckets); both variables are based on the size of the current partition.
  * During the calculation process the function keeps track of the current row number, the current
  * bucket number, and the row number at which the bucket will change (bucketThreshold). When the
- * current row number reaches bucket threshold, the bucket value is increased by one and the the
+ * current row number reaches bucket threshold, the bucket value is increased by one and the
  * threshold is increased by the bucket size (plus one extra if the current bucket is padded).
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
@@ -632,7 +633,7 @@ abstract class RankLike extends AggregateWindowFunction {
   override val updateExpressions = increaseRank +: increaseRowNumber +: children
   override val evaluateExpression: Expression = rank
 
-  override def sql: String = s"${prettyName.toUpperCase}()"
+  override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}()"
 
   def withOrder(order: Seq[Expression]): RankLike
 }
@@ -696,7 +697,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
  *
- * @param children to base the rank on; a change in the value of one the children will trigger a
+ * @param children to base the rank on; a change in the value of one of the children will trigger a
  *                 change in rank. This is an internal parameter and will be assigned by the
  *                 Analyser.
  */

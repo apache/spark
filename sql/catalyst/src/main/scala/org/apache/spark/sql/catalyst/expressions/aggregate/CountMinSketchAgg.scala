@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -42,9 +40,9 @@ import org.apache.spark.util.sketch.CountMinSketch
 @ExpressionDescription(
   usage = """
     _FUNC_(col, eps, confidence, seed) - Returns a count-min sketch of a column with the given esp,
-      confidence and seed. The result is an array of bytes, which should be deserialized to a
-      `CountMinSketch` before usage. `CountMinSketch` is useful for equality predicates and join
-      size estimation.
+      confidence and seed. The result is an array of bytes, which can be deserialized to a
+      `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
+      cardinality estimation using sub-linear space.
   """)
 case class CountMinSketchAgg(
     child: Expression,
@@ -75,13 +73,13 @@ case class CountMinSketchAgg(
     } else if (!epsExpression.foldable || !confidenceExpression.foldable ||
       !seedExpression.foldable) {
       TypeCheckFailure(
-        "The eps, confidence or seed provided must be a literal or constant foldable")
+        "The eps, confidence or seed provided must be a literal or foldable")
     } else if (epsExpression.eval() == null || confidenceExpression.eval() == null ||
       seedExpression.eval() == null) {
       TypeCheckFailure("The eps, confidence or seed provided should not be null")
-    } else if (eps <= 0D) {
+    } else if (eps <= 0.0) {
       TypeCheckFailure(s"Relative error must be positive (current value = $eps)")
-    } else if (confidence <= 0D || confidence >= 1D) {
+    } else if (confidence <= 0.0 || confidence >= 1.0) {
       TypeCheckFailure(s"Confidence must be within range (0.0, 1.0) (current value = $confidence)")
     } else {
       TypeCheckSuccess
@@ -92,37 +90,33 @@ case class CountMinSketchAgg(
     CountMinSketch.create(eps, confidence, seed)
   }
 
-  override def update(buffer: CountMinSketch, input: InternalRow): Unit = {
+  override def update(buffer: CountMinSketch, input: InternalRow): CountMinSketch = {
     val value = child.eval(input)
     // Ignore empty rows
     if (value != null) {
       child.dataType match {
-        // `Decimal` and `UTF8String` are internal types in spark sql, we need to convert them
-        // into acceptable types for `CountMinSketch`.
-        case DecimalType() => buffer.add(value.asInstanceOf[Decimal].toJavaBigDecimal)
         // For string type, we can get bytes of our `UTF8String` directly, and call the `addBinary`
         // instead of `addString` to avoid unnecessary conversion.
         case StringType => buffer.addBinary(value.asInstanceOf[UTF8String].getBytes)
         case _ => buffer.add(value)
       }
     }
+    buffer
   }
 
-  override def merge(buffer: CountMinSketch, input: CountMinSketch): Unit = {
+  override def merge(buffer: CountMinSketch, input: CountMinSketch): CountMinSketch = {
     buffer.mergeInPlace(input)
+    buffer
   }
 
   override def eval(buffer: CountMinSketch): Any = serialize(buffer)
 
   override def serialize(buffer: CountMinSketch): Array[Byte] = {
-    val out = new ByteArrayOutputStream()
-    buffer.writeTo(out)
-    out.toByteArray
+    buffer.toByteArray
   }
 
   override def deserialize(storageFormat: Array[Byte]): CountMinSketch = {
-    val in = new ByteArrayInputStream(storageFormat)
-    CountMinSketch.readFrom(in)
+    CountMinSketch.readFrom(storageFormat)
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): CountMinSketchAgg =
@@ -132,8 +126,7 @@ case class CountMinSketchAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(NumericType, StringType, DateType, TimestampType, BooleanType, BinaryType),
-      DoubleType, DoubleType, IntegerType)
+    Seq(TypeCollection(IntegralType, StringType, BinaryType), DoubleType, DoubleType, IntegerType)
   }
 
   override def nullable: Boolean = false

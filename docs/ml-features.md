@@ -9,6 +9,7 @@ This section covers algorithms for working with features, roughly divided into t
 * Extraction: Extracting features from "raw" data
 * Transformation: Scaling, converting, or modifying features
 * Selection: Selecting a subset from a larger set of features
+* Locality Sensitive Hashing (LSH): This class of algorithms combines aspects of feature transformation with other algorithms.
 
 **Table of Contents**
 
@@ -502,6 +503,7 @@ for more details on the API.
 
 `StringIndexer` encodes a string column of labels to a column of label indices.
 The indices are in `[0, numLabels)`, ordered by label frequencies, so the most frequent label gets index `0`.
+The unseen labels will be put at index numLabels if user chooses to keep them.
 If the input column is numeric, we cast it to string and index the string
 values. When downstream pipeline components such as `Estimator` or
 `Transformer` make use of this string-indexed label, you must set the input
@@ -541,12 +543,13 @@ column, we should get the following:
 "a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
 index `2`.
 
-Additionally, there are two strategies regarding how `StringIndexer` will handle
+Additionally, there are three strategies regarding how `StringIndexer` will handle
 unseen labels when you have fit a `StringIndexer` on one dataset and then use it
 to transform another:
 
 - throw an exception (which is the default)
 - skip the row containing the unseen label entirely
+- put unseen labels in a special additional bucket, at index numLabels
 
 **Examples**
 
@@ -560,6 +563,7 @@ Let's go back to our previous example but this time reuse our previously defined
  1  | b
  2  | c
  3  | d
+ 4  | e
 ~~~~
 
 If you've not set how `StringIndexer` handles unseen labels or set it to
@@ -575,7 +579,22 @@ will be generated:
  2  | c        | 1.0
 ~~~~
 
-Notice that the row containing "d" does not appear.
+Notice that the rows containing "d" or "e" do not appear.
+
+If you call `setHandleInvalid("keep")`, the following dataset
+will be generated:
+
+~~~~
+ id | category | categoryIndex
+----|----------|---------------
+ 0  | a        | 0.0
+ 1  | b        | 2.0
+ 2  | c        | 1.0
+ 3  | d        | 3.0
+ 4  | e        | 3.0
+~~~~
+
+Notice that the rows containing "d" or "e" are mapped to index "3.0"
 
 <div class="codetabs">
 
@@ -751,7 +770,7 @@ for more details on the API.
 
 `Interaction` is a `Transformer` which takes vector or double-valued columns, and generates a single vector column that contains the product of all combinations of one value from each input column.
 
-For example, if you have 2 vector type columns each of which has 3 dimensions as input columns, then then you'll get a 9-dimensional vector as the output column.
+For example, if you have 2 vector type columns each of which has 3 dimensions as input columns, then you'll get a 9-dimensional vector as the output column.
 
 **Examples**
 
@@ -1265,6 +1284,72 @@ for more details on the API.
 
 </div>
 
+
+## Imputer
+
+The `Imputer` transformer completes missing values in a dataset, either using the mean or the 
+median of the columns in which the missing values are located. The input columns should be of
+`DoubleType` or `FloatType`. Currently `Imputer` does not support categorical features and possibly
+creates incorrect values for columns containing categorical features.
+
+**Note** all `null` values in the input columns are treated as missing, and so are also imputed.
+
+**Examples**
+
+Suppose that we have a DataFrame with the columns `a` and `b`:
+
+~~~
+      a     |      b      
+------------|-----------
+     1.0    | Double.NaN
+     2.0    | Double.NaN
+ Double.NaN |     3.0   
+     4.0    |     4.0   
+     5.0    |     5.0   
+~~~
+
+In this example, Imputer will replace all occurrences of `Double.NaN` (the default for the missing value)
+with the mean (the default imputation strategy) computed from the other values in the corresponding columns.
+In this example, the surrogate values for columns `a` and `b` are 3.0 and 4.0 respectively. After
+transformation, the missing values in the output columns will be replaced by the surrogate value for
+the relevant column.
+
+~~~
+      a     |      b     | out_a | out_b   
+------------|------------|-------|-------
+     1.0    | Double.NaN |  1.0  |  4.0 
+     2.0    | Double.NaN |  2.0  |  4.0 
+ Double.NaN |     3.0    |  3.0  |  3.0 
+     4.0    |     4.0    |  4.0  |  4.0
+     5.0    |     5.0    |  5.0  |  5.0 
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Imputer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Imputer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/ImputerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Imputer Java docs](api/java/org/apache/spark/ml/feature/Imputer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaImputerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Imputer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Imputer)
+for more details on the API.
+
+{% include_example python/ml/imputer_example.py %}
+</div>
+</div>
+
 # Feature Selectors
 
 ## VectorSlicer
@@ -1422,12 +1507,12 @@ for more details on the API.
 `ChiSqSelector` stands for Chi-Squared feature selection. It operates on labeled data with
 categorical features. ChiSqSelector uses the
 [Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
-features to choose. It supports three selection methods: `numTopFeatures`, `percentile`, `fpr`:
-
+features to choose. It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
 * `numTopFeatures` chooses a fixed number of top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
 * `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
-* `fpr` chooses all features whose p-value is below a threshold, thus controlling the false positive rate of selection.
-
+* `fpr` chooses all features whose p-values are below a threshold, thus controlling the false positive rate of selection.
+* `fdr` uses the [Benjamini-Hochberg procedure](https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure) to choose all features whose false discovery rate is below a threshold.
+* `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by 1/numFeatures, thus controlling the family-wise error rate of selection.
 By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
 The user can choose a selection method using `setSelectorType`.
 
@@ -1478,5 +1563,132 @@ Refer to the [ChiSqSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.f
 for more details on the API.
 
 {% include_example python/ml/chisq_selector_example.py %}
+</div>
+</div>
+
+# Locality Sensitive Hashing
+[Locality Sensitive Hashing (LSH)](https://en.wikipedia.org/wiki/Locality-sensitive_hashing) is an important class of hashing techniques, which is commonly used in clustering, approximate nearest neighbor search and outlier detection with large datasets.
+
+The general idea of LSH is to use a family of functions ("LSH families") to hash data points into buckets, so that the data points which are close to each other are in the same buckets with high probability, while data points that are far away from each other are very likely in different buckets. An LSH family is formally defined as follows.
+
+In a metric space `(M, d)`, where `M` is a set and `d` is a distance function on `M`, an LSH family is a family of functions `h` that satisfy the following properties:
+`\[
+\forall p, q \in M,\\
+d(p,q) \leq r1 \Rightarrow Pr(h(p)=h(q)) \geq p1\\
+d(p,q) \geq r2 \Rightarrow Pr(h(p)=h(q)) \leq p2
+\]`
+This LSH family is called `(r1, r2, p1, p2)`-sensitive.
+
+In Spark, different LSH families are implemented in separate classes (e.g., `MinHash`), and APIs for feature transformation, approximate similarity join and approximate nearest neighbor are provided in each class.
+
+In LSH, we define a false positive as a pair of distant input features (with `$d(p,q) \geq r2$`) which are hashed into the same bucket, and we define a false negative as a pair of nearby features (with `$d(p,q) \leq r1$`) which are hashed into different buckets.
+
+## LSH Operations
+
+We describe the major types of operations which LSH can be used for.  A fitted LSH model has methods for each of these operations.
+
+### Feature Transformation
+Feature transformation is the basic functionality to add hashed values as a new column. This can be useful for dimensionality reduction. Users can specify input and output column names by setting `inputCol` and `outputCol`.
+
+LSH also supports multiple LSH hash tables. Users can specify the number of hash tables by setting `numHashTables`. This is also used for [OR-amplification](https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Amplification) in approximate similarity join and approximate nearest neighbor. Increasing the number of hash tables will increase the accuracy but will also increase communication cost and running time.
+
+The type of `outputCol` is `Seq[Vector]` where the dimension of the array equals `numHashTables`, and the dimensions of the vectors are currently set to 1. In future releases, we will implement AND-amplification so that users can specify the dimensions of these vectors.
+
+### Approximate Similarity Join
+Approximate similarity join takes two datasets and approximately returns pairs of rows in the datasets whose distance is smaller than a user-defined threshold. Approximate similarity join supports both joining two different datasets and self-joining. Self-joining will produce some duplicate pairs.
+
+Approximate similarity join accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as `outputCol`.
+
+In the joined dataset, the origin datasets can be queried in `datasetA` and `datasetB`. A distance column will be added to the output dataset to show the true distance between each pair of rows returned.
+
+### Approximate Nearest Neighbor Search
+Approximate nearest neighbor search takes a dataset (of feature vectors) and a key (a single feature vector), and it approximately returns a specified number of rows in the dataset that are closest to the vector.
+
+Approximate nearest neighbor search accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as `outputCol`.
+
+A distance column will be added to the output dataset to show the true distance between each output row and the searched key.
+
+**Note:** Approximate nearest neighbor search will return fewer than `k` rows when there are not enough candidates in the hash bucket.
+
+## LSH Algorithms
+
+### Bucketed Random Projection for Euclidean Distance
+
+[Bucketed Random Projection](https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions) is an LSH family for Euclidean distance. The Euclidean distance is defined as follows:
+`\[
+d(\mathbf{x}, \mathbf{y}) = \sqrt{\sum_i (x_i - y_i)^2}
+\]`
+Its LSH family projects feature vectors `$\mathbf{x}$` onto a random unit vector `$\mathbf{v}$` and portions the projected results into hash buckets:
+`\[
+h(\mathbf{x}) = \Big\lfloor \frac{\mathbf{x} \cdot \mathbf{v}}{r} \Big\rfloor
+\]`
+where `r` is a user-defined bucket length. The bucket length can be used to control the average size of hash buckets (and thus the number of buckets). A larger bucket length (i.e., fewer buckets) increases the probability of features being hashed to the same bucket (increasing the numbers of true and false positives).
+
+Bucketed Random Projection accepts arbitrary vectors as input features, and supports both sparse and dense vectors.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [BucketedRandomProjectionLSH Scala docs](api/scala/index.html#org.apache.spark.ml.feature.BucketedRandomProjectionLSH)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/BucketedRandomProjectionLSHExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [BucketedRandomProjectionLSH Java docs](api/java/org/apache/spark/ml/feature/BucketedRandomProjectionLSH.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaBucketedRandomProjectionLSHExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [BucketedRandomProjectionLSH Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.BucketedRandomProjectionLSH)
+for more details on the API.
+
+{% include_example python/ml/bucketed_random_projection_lsh_example.py %}
+</div>
+
+</div>
+
+### MinHash for Jaccard Distance
+[MinHash](https://en.wikipedia.org/wiki/MinHash) is an LSH family for Jaccard distance where input features are sets of natural numbers. Jaccard distance of two sets is defined by the cardinality of their intersection and union:
+`\[
+d(\mathbf{A}, \mathbf{B}) = 1 - \frac{|\mathbf{A} \cap \mathbf{B}|}{|\mathbf{A} \cup \mathbf{B}|}
+\]`
+MinHash applies a random hash function `g` to each element in the set and take the minimum of all hashed values:
+`\[
+h(\mathbf{A}) = \min_{a \in \mathbf{A}}(g(a))
+\]`
+
+The input sets for MinHash are represented as binary vectors, where the vector indices represent the elements themselves and the non-zero values in the vector represent the presence of that element in the set. While both dense and sparse vectors are supported, typically sparse vectors are recommended for efficiency. For example, `Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])` means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5. All non-zero values are treated as binary "1" values.
+
+**Note:** Empty sets cannot be transformed by MinHash, which means any input vector must have at least 1 non-zero entry.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [MinHashLSH Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MinHashLSH)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/MinHashLSHExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [MinHashLSH Java docs](api/java/org/apache/spark/ml/feature/MinHashLSH.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaMinHashLSHExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MinHashLSH Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinHashLSH)
+for more details on the API.
+
+{% include_example python/ml/min_hash_lsh_example.py %}
 </div>
 </div>

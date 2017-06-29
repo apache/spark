@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 
 /**
- * An abstract class for row used internal in Spark SQL, which only contain the columns as
+ * An abstract class for row used internally in Spark SQL, which only contains the columns as
  * internal types.
  */
 abstract class InternalRow extends SpecializedGetters with Serializable {

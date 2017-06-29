@@ -18,19 +18,20 @@
 package org.apache.spark.scheduler
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
-import java.net.URI
 
 import scala.collection.mutable
 import scala.io.Source
 
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
+import org.mockito.Mockito
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.io._
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
@@ -50,7 +51,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   private var testDirPath: Path = _
 
   before {
-    testDir = Utils.createTempDir()
+    testDir = Utils.createTempDir(namePrefix = s"history log")
     testDir.deleteOnExit()
     testDirPath = new Path(testDir.getAbsolutePath())
   }
@@ -109,7 +110,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   test("Log overwriting") {
     val logUri = EventLoggingListener.getLogPath(testDir.toURI, "test", None)
-    val logPath = new URI(logUri).getPath
+    val logPath = new Path(logUri).toUri.getPath
     // Create file before writing the event log
     new FileOutputStream(new File(logPath)).close()
     // Expected IOException, since we haven't enabled log overwrite.
@@ -119,19 +120,20 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   test("Event log name") {
+    val baseDirUri = Utils.resolveURI("/base-dir")
     // without compression
-    assert(s"file:/base-dir/app1" === EventLoggingListener.getLogPath(
-      Utils.resolveURI("/base-dir"), "app1", None))
+    assert(s"${baseDirUri.toString}/app1" === EventLoggingListener.getLogPath(
+      baseDirUri, "app1", None))
     // with compression
-    assert(s"file:/base-dir/app1.lzf" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"), "app1", None, Some("lzf")))
+    assert(s"${baseDirUri.toString}/app1.lzf" ===
+      EventLoggingListener.getLogPath(baseDirUri, "app1", None, Some("lzf")))
     // illegal characters in app ID
-    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
+    assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1" ===
+      EventLoggingListener.getLogPath(baseDirUri,
         "a fine:mind$dollar{bills}.1", None))
     // illegal characters in app ID with compression
-    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1.lz4" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
+    assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1.lz4" ===
+      EventLoggingListener.getLogPath(baseDirUri,
         "a fine:mind$dollar{bills}.1", None, Some("lz4")))
   }
 
@@ -154,17 +156,18 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     extraConf.foreach { case (k, v) => conf.set(k, v) }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
     val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
-    val listenerBus = new LiveListenerBus(sc)
+    val listenerBus = new LiveListenerBus(conf)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
 
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite
     eventLogger.start()
-    listenerBus.start()
+    listenerBus.start(Mockito.mock(classOf[SparkContext]), Mockito.mock(classOf[MetricsSystem]))
     listenerBus.addListener(eventLogger)
     listenerBus.postToAll(applicationStart)
     listenerBus.postToAll(applicationEnd)
+    listenerBus.stop()
     eventLogger.stop()
 
     // Verify file contains exactly the two events logged

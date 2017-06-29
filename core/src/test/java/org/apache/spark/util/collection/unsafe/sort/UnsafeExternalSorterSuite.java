@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.UUID;
 
-import scala.Tuple2;
 import scala.Tuple2$;
 
 import org.junit.After;
@@ -31,8 +30,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
@@ -96,25 +93,18 @@ public class UnsafeExternalSorterSuite {
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
-    when(diskBlockManager.createTempLocalBlock()).thenAnswer(
-        new Answer<Tuple2<TempLocalBlockId, File>>() {
-      @Override
-      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock)
-          throws Throwable {
-        TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
-        File file = File.createTempFile("spillFile", ".spill", tempDir);
-        spillFilesCreated.add(file);
-        return Tuple2$.MODULE$.apply(blockId, file);
-      }
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(invocationOnMock -> {
+      TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
+      File file = File.createTempFile("spillFile", ".spill", tempDir);
+      spillFilesCreated.add(file);
+      return Tuple2$.MODULE$.apply(blockId, file);
     });
     when(blockManager.getDiskWriter(
       any(BlockId.class),
       any(File.class),
       any(SerializerInstance.class),
       anyInt(),
-      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockObjectWriter>() {
-      @Override
-      public DiskBlockObjectWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
+      any(ShuffleWriteMetrics.class))).thenAnswer(invocationOnMock -> {
         Object[] args = invocationOnMock.getArguments();
 
         return new DiskBlockObjectWriter(
@@ -126,8 +116,7 @@ public class UnsafeExternalSorterSuite {
           (ShuffleWriteMetrics) args[4],
           (BlockId) args[0]
         );
-      }
-    });
+      });
   }
 
   @After
@@ -412,6 +401,31 @@ public class UnsafeExternalSorterSuite {
       iter.loadNext();
       assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
     }
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testDiskSpilledBytes() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    long[] record = new long[100];
+    int recordSize = record.length * 8;
+    int n = (int) pageSizeBytes / recordSize * 3;
+    for (int i = 0; i < n; i++) {
+      record[0] = (long) i;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, false);
+    }
+    // We will have at-least 2 memory pages allocated because of rounding happening due to
+    // integer division of pageSizeBytes and recordSize.
+    assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
+    assertTrue(taskContext.taskMetrics().diskBytesSpilled() == 0);
+    UnsafeExternalSorter.SpillableIterator iter =
+            (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
+    assertTrue(iter.spill() > 0);
+    assertTrue(taskContext.taskMetrics().diskBytesSpilled() > 0);
+    assertEquals(0, iter.spill());
+    // Even if we did not spill second time, the disk spilled bytes should still be non-zero
+    assertTrue(taskContext.taskMetrics().diskBytesSpilled() > 0);
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
   }

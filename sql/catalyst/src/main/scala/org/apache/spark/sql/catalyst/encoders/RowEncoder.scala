@@ -89,7 +89,7 @@ object RowEncoder {
         udtClass,
         Nil,
         dataType = ObjectType(udtClass), false)
-      Invoke(obj, "serialize", udt, inputObject :: Nil)
+      Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
     case TimestampType =>
       StaticInvoke(
@@ -141,16 +141,18 @@ object RowEncoder {
     case t @ MapType(kt, vt, valueNullable) =>
       val keys =
         Invoke(
-          Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]])),
+          Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]]),
+            returnNullable = false),
           "toSeq",
-          ObjectType(classOf[scala.collection.Seq[_]]))
+          ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
       val convertedKeys = serializerFor(keys, ArrayType(kt, false))
 
       val values =
         Invoke(
-          Invoke(inputObject, "valuesIterator", ObjectType(classOf[scala.collection.Iterator[_]])),
+          Invoke(inputObject, "valuesIterator", ObjectType(classOf[scala.collection.Iterator[_]]),
+            returnNullable = false),
           "toSeq",
-          ObjectType(classOf[scala.collection.Seq[_]]))
+          ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
       val convertedValues = serializerFor(values, ArrayType(vt, valueNullable))
 
       NewInstance(
@@ -269,17 +271,18 @@ object RowEncoder {
         returnNullable = false)
 
     case _: DecimalType =>
-      Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]))
+      Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]),
+        returnNullable = false)
 
     case StringType =>
-      Invoke(input, "toString", ObjectType(classOf[String]))
+      Invoke(input, "toString", ObjectType(classOf[String]), returnNullable = false)
 
     case ArrayType(et, nullable) =>
       val arrayData =
         Invoke(
           MapObjects(deserializerFor(_), input, et),
           "array",
-          ObjectType(classOf[Array[_]]))
+          ObjectType(classOf[Array[_]]), returnNullable = false)
       StaticInvoke(
         scala.collection.mutable.WrappedArray.getClass,
         ObjectType(classOf[Seq[_]]),

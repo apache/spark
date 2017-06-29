@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.roaringbitmap.RoaringBitmap
 
@@ -76,6 +76,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("basic types") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
@@ -106,6 +109,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("pairs") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
@@ -130,12 +136,16 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("Scala data structures") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(List[Int]())
     check(List[Int](1, 2, 3))
+    check(Seq[Int](1, 2, 3))
     check(List[String]())
     check(List[String]("x", "y", "z"))
     check(None)
@@ -351,6 +361,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val ser = new KryoSerializer(conf).newInstance()
     val thrown = intercept[SparkException](ser.serialize(largeObject))
     assert(thrown.getMessage.contains(kryoBufferMaxProperty))
+    assert(thrown.getCause.isInstanceOf[KryoException])
   }
 
   test("SPARK-12222: deserialize RoaringBitmap throw Buffer underflow exception") {

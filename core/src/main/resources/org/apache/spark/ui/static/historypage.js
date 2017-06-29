@@ -78,6 +78,12 @@ jQuery.extend( jQuery.fn.dataTableExt.oSort, {
     }
 } );
 
+jQuery.extend( jQuery.fn.dataTableExt.ofnSearch, {
+    "appid-numeric": function ( a ) {
+        return a.replace(/[\r\n]/g, " ").replace(/<.*?>/g, "");
+    }
+} );
+
 $(document).ajaxStop($.unblockUI);
 $(document).ajaxStart(function(){
     $.blockUI({ message: '<h3>Loading history summary...</h3>'});
@@ -114,6 +120,9 @@ $(document).ready(function() {
           attempt["startTime"] = formatDate(attempt["startTime"]);
           attempt["endTime"] = formatDate(attempt["endTime"]);
           attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
+          attempt["log"] = uiRoot + "/api/v1/applications/" + id + "/" +
+            (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
+
           var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
           array.push(app_clone);
         }
@@ -168,10 +177,22 @@ $(document).ready(function() {
           }
         }
 
-        var durationCells = document.getElementsByClassName("durationClass");
-        for (i = 0; i < durationCells.length; i++) {
-          var timeInMilliseconds = parseInt(durationCells[i].title);
-          durationCells[i].innerHTML = formatDuration(timeInMilliseconds);
+        if (requestedIncomplete) {
+          var completedCells = document.getElementsByClassName("completedColumn");
+          for (i = 0; i < completedCells.length; i++) {
+            completedCells[i].style.display='none';
+          }
+
+          var durationCells = document.getElementsByClassName("durationColumn");
+          for (i = 0; i < durationCells.length; i++) {
+            durationCells[i].style.display='none';
+          }
+        } else {
+          var durationCells = document.getElementsByClassName("durationClass");
+          for (i = 0; i < durationCells.length; i++) {
+            var timeInMilliseconds = parseInt(durationCells[i].title);
+            durationCells[i].innerHTML = formatDuration(timeInMilliseconds);
+          }
         }
 
         if ($(selector.concat(" tr")).length < 20) {
@@ -179,7 +200,7 @@ $(document).ready(function() {
         }
 
         $(selector).DataTable(conf);
-        $('#hisotry-summary [data-toggle="tooltip"]').tooltip();
+        $('#history-summary [data-toggle="tooltip"]').tooltip();
       });
     });
 });

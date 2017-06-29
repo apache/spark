@@ -28,6 +28,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -70,11 +72,11 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   def schema: StructType = encoder.schema
 
-  def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
+  def toDS(): Dataset[A] = {
     Dataset(sqlContext.sparkSession, logicalPlan)
   }
 
-  def toDF()(implicit sqlContext: SQLContext): DataFrame = {
+  def toDF(): DataFrame = {
     Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
   }
 
@@ -186,16 +188,23 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
     }.mkString("\n")
   }
 
-  override def addBatch(batchId: Long, data: DataFrame): Unit = synchronized {
-    if (latestBatchId.isEmpty || batchId > latestBatchId.get) {
+  override def addBatch(batchId: Long, data: DataFrame): Unit = {
+    val notCommitted = synchronized {
+      latestBatchId.isEmpty || batchId > latestBatchId.get
+    }
+    if (notCommitted) {
       logDebug(s"Committing batch $batchId to $this")
       outputMode match {
-        case InternalOutputModes.Append | InternalOutputModes.Update =>
-          batches.append(AddedData(batchId, data.collect()))
+        case Append | Update =>
+          val rows = AddedData(batchId, data.collect())
+          synchronized { batches += rows }
 
-        case InternalOutputModes.Complete =>
-          batches.clear()
-          batches += AddedData(batchId, data.collect())
+        case Complete =>
+          val rows = AddedData(batchId, data.collect())
+          synchronized {
+            batches.clear()
+            batches += rows
+          }
 
         case _ =>
           throw new IllegalArgumentException(
@@ -206,7 +215,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
     }
   }
 
-  def clear(): Unit = {
+  def clear(): Unit = synchronized {
     batches.clear()
   }
 
@@ -221,5 +230,6 @@ case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode
 
   private val sizePerRow = sink.schema.toAttributes.map(_.dataType.defaultSize).sum
 
-  override def statistics: Statistics = Statistics(sizePerRow * sink.allData.size)
+  override def computeStats: Statistics =
+    Statistics(sizePerRow * sink.allData.size)
 }

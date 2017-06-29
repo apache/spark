@@ -42,6 +42,19 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
 
   def array: Array[Any]
 
+  def setNullAt(i: Int): Unit
+
+  def update(i: Int, value: Any): Unit
+
+  // default implementation (slow)
+  def setBoolean(i: Int, value: Boolean): Unit = update(i, value)
+  def setByte(i: Int, value: Byte): Unit = update(i, value)
+  def setShort(i: Int, value: Short): Unit = update(i, value)
+  def setInt(i: Int, value: Int): Unit = update(i, value)
+  def setLong(i: Int, value: Long): Unit = update(i, value)
+  def setFloat(i: Int, value: Float): Unit = update(i, value)
+  def setDouble(i: Int, value: Double): Unit = update(i, value)
+
   def toBooleanArray(): Array[Boolean] = {
     val size = numElements()
     val values = new Array[Boolean](size)

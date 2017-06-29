@@ -82,7 +82,7 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
    * E.g. 10 means that the cache will get checkpointed every 10 iterations.
    * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
    * [[org.apache.spark.SparkContext]].
-   * Must be >= 1.
+   * Must be at least 1.
    * (default = 10)
    * @group setParam
    */
@@ -122,14 +122,16 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
 
     val instr = Instrumentation.create(this, oldDataset)
-    instr.logParams(params: _*)
+    instr.logParams(labelCol, featuresCol, predictionCol, impurity, numTrees,
+      featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
+      minInstancesPerNode, seed, subsamplingRate, cacheNodeIds, checkpointInterval)
 
     val trees = RandomForest
       .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
       .map(_.asInstanceOf[DecisionTreeRegressionModel])
 
     val numFeatures = oldDataset.first().features.size
-    val m = new RandomForestRegressionModel(trees, numFeatures)
+    val m = new RandomForestRegressionModel(uid, trees, numFeatures)
     instr.logSuccess(m)
     m
   }

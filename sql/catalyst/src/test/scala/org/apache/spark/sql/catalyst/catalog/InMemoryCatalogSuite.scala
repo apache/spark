@@ -24,6 +24,7 @@ class InMemoryCatalogSuite extends ExternalCatalogSuite {
   protected override val utils: CatalogTestUtils = new CatalogTestUtils {
     override val tableInputFormat: String = "org.apache.park.SequenceFileInputFormat"
     override val tableOutputFormat: String = "org.apache.park.SequenceFileOutputFormat"
+    override val defaultProvider: String = "parquet"
     override def newEmptyCatalog(): ExternalCatalog = new InMemoryCatalog
   }
 

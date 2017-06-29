@@ -25,15 +25,7 @@ import scala.collection.immutable.Map
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.mapred.FileSplit
-import org.apache.hadoop.mapred.InputFormat
-import org.apache.hadoop.mapred.InputSplit
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapred.JobID
-import org.apache.hadoop.mapred.RecordReader
-import org.apache.hadoop.mapred.Reporter
-import org.apache.hadoop.mapred.TaskAttemptID
-import org.apache.hadoop.mapred.TaskID
+import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
 import org.apache.hadoop.util.ReflectionUtils
@@ -47,7 +39,7 @@ import org.apache.spark.internal.config.IGNORE_CORRUPT_FILES
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager}
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -131,9 +123,9 @@ class HadoopRDD[K, V](
       minPartitions)
   }
 
-  protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
+  protected val jobConfCacheKey: String = "rdd_%d_job_conf".format(id)
 
-  protected val inputFormatCacheKey = "rdd_%d_input_format".format(id)
+  protected val inputFormatCacheKey: String = "rdd_%d_input_format".format(id)
 
   // used to build JobTracker ID
   private val createTime = new Date()
@@ -210,54 +202,72 @@ class HadoopRDD[K, V](
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
 
-      val split = theSplit.asInstanceOf[HadoopPartition]
+      private val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
-      val jobConf = getJobConf()
+      private val jobConf = getJobConf()
 
-      val inputMetrics = context.taskMetrics().inputMetrics
-      val existingBytesRead = inputMetrics.bytesRead
+      private val inputMetrics = context.taskMetrics().inputMetrics
+      private val existingBytesRead = inputMetrics.bytesRead
 
-      // Sets the thread local variable for the file's name
+      // Sets InputFileBlockHolder for the file block's information
       split.inputSplit.value match {
-        case fs: FileSplit => InputFileNameHolder.setInputFileName(fs.getPath.toString)
-        case _ => InputFileNameHolder.unsetInputFileName()
+        case fs: FileSplit =>
+          InputFileBlockHolder.set(fs.getPath.toString, fs.getStart, fs.getLength)
+        case _ =>
+          InputFileBlockHolder.unset()
       }
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
-      val getBytesReadCallback: Option[() => Long] = split.inputSplit.value match {
+      private val getBytesReadCallback: Option[() => Long] = split.inputSplit.value match {
         case _: FileSplit | _: CombineFileSplit =>
-          SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+          Some(SparkHadoopUtil.get.getFSBytesReadOnThreadCallback())
         case _ => None
       }
 
-      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+      // We get our input bytes from thread-local Hadoop FileSystem statistics.
       // If we do a coalesce, however, we are likely to compute multiple partitions in the same
       // task and in the same thread, in which case we need to avoid override values written by
       // previous partitions (SPARK-13071).
-      def updateBytesRead(): Unit = {
+      private def updateBytesRead(): Unit = {
         getBytesReadCallback.foreach { getBytesRead =>
           inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
         }
       }
 
-      var reader: RecordReader[K, V] = null
-      val inputFormat = getInputFormat(jobConf)
+      private var reader: RecordReader[K, V] = null
+      private val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(
         new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(createTime),
         context.stageId, theSplit.index, context.attemptNumber, jobConf)
-      reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
+      reader =
+        try {
+          inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
+        } catch {
+          case e: IOException if ignoreCorruptFiles =>
+            logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
+            finished = true
+            null
+        }
       // Register an on-task-completion callback to close the input stream.
-      context.addTaskCompletionListener{ context => closeIfNeeded() }
-      val key: K = reader.createKey()
-      val value: V = reader.createValue()
+      context.addTaskCompletionListener { context =>
+        // Update the bytes read before closing is to make sure lingering bytesRead statistics in
+        // this thread get correctly added.
+        updateBytesRead()
+        closeIfNeeded()
+      }
+
+      private val key: K = if (reader == null) null.asInstanceOf[K] else reader.createKey()
+      private val value: V = if (reader == null) null.asInstanceOf[V] else reader.createValue()
 
       override def getNext(): (K, V) = {
         try {
           finished = !reader.next(key, value)
         } catch {
-          case e: IOException if ignoreCorruptFiles => finished = true
+          case e: IOException if ignoreCorruptFiles =>
+            logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
+            finished = true
         }
         if (!finished) {
           inputMetrics.incRecordsRead(1)
@@ -268,13 +278,9 @@ class HadoopRDD[K, V](
         (key, value)
       }
 
-      override def close() {
+      override def close(): Unit = {
         if (reader != null) {
-          InputFileNameHolder.unsetInputFileName()
-          // Close the reader and release it. Note: it's very important that we don't close the
-          // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
-          // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
-          // corruption issues when reading compressed input.
+          InputFileBlockHolder.unset()
           try {
             reader.close()
           } catch {
@@ -314,18 +320,10 @@ class HadoopRDD[K, V](
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val hsplit = split.asInstanceOf[HadoopPartition].inputSplit.value
-    val locs: Option[Seq[String]] = HadoopRDD.SPLIT_INFO_REFLECTIONS match {
-      case Some(c) =>
-        try {
-          val lsplit = c.inputSplitWithLocationInfo.cast(hsplit)
-          val infos = c.getLocationInfo.invoke(lsplit).asInstanceOf[Array[AnyRef]]
-          HadoopRDD.convertSplitLocationInfo(infos)
-        } catch {
-          case e: Exception =>
-            logDebug("Failed to use InputSplitWithLocations.", e)
-            None
-        }
-      case None => None
+    val locs = hsplit match {
+      case lsplit: InputSplitWithLocationInfo =>
+        HadoopRDD.convertSplitLocationInfo(lsplit.getLocationInfo)
+      case _ => None
     }
     locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
   }
@@ -373,11 +371,11 @@ private[spark] object HadoopRDD extends Logging {
     val jobID = new JobID(jobTrackerId, jobId)
     val taId = new TaskAttemptID(new TaskID(jobID, TaskType.MAP, splitId), attemptId)
 
-    conf.set("mapred.tip.id", taId.getTaskID.toString)
-    conf.set("mapred.task.id", taId.toString)
-    conf.setBoolean("mapred.task.is.map", true)
-    conf.setInt("mapred.task.partition", splitId)
-    conf.set("mapred.job.id", jobID.toString)
+    conf.set("mapreduce.task.id", taId.getTaskID.toString)
+    conf.set("mapreduce.task.attempt.id", taId.toString)
+    conf.setBoolean("mapreduce.task.ismap", true)
+    conf.setInt("mapreduce.task.partition", splitId)
+    conf.set("mapreduce.job.id", jobID.toString)
   }
 
   /**
@@ -401,32 +399,12 @@ private[spark] object HadoopRDD extends Logging {
     }
   }
 
-  private[spark] class SplitInfoReflections {
-    val inputSplitWithLocationInfo =
-      Utils.classForName("org.apache.hadoop.mapred.InputSplitWithLocationInfo")
-    val getLocationInfo = inputSplitWithLocationInfo.getMethod("getLocationInfo")
-    val newInputSplit = Utils.classForName("org.apache.hadoop.mapreduce.InputSplit")
-    val newGetLocationInfo = newInputSplit.getMethod("getLocationInfo")
-    val splitLocationInfo = Utils.classForName("org.apache.hadoop.mapred.SplitLocationInfo")
-    val isInMemory = splitLocationInfo.getMethod("isInMemory")
-    val getLocation = splitLocationInfo.getMethod("getLocation")
-  }
-
-  private[spark] val SPLIT_INFO_REFLECTIONS: Option[SplitInfoReflections] = try {
-    Some(new SplitInfoReflections)
-  } catch {
-    case e: Exception =>
-      logDebug("SplitLocationInfo and other new Hadoop classes are " +
-          "unavailable. Using the older Hadoop location info code.", e)
-      None
-  }
-
-  private[spark] def convertSplitLocationInfo(infos: Array[AnyRef]): Option[Seq[String]] = {
+  private[spark] def convertSplitLocationInfo(
+       infos: Array[SplitLocationInfo]): Option[Seq[String]] = {
     Option(infos).map(_.flatMap { loc =>
-      val reflections = HadoopRDD.SPLIT_INFO_REFLECTIONS.get
-      val locationStr = reflections.getLocation.invoke(loc).asInstanceOf[String]
+      val locationStr = loc.getLocation
       if (locationStr != "localhost") {
-        if (reflections.isInMemory.invoke(loc).asInstanceOf[Boolean]) {
+        if (loc.isInMemory) {
           logDebug(s"Partition $locationStr is cached by Hadoop.")
           Some(HDFSCacheTaskLocation(locationStr).toString)
         } else {

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OverwriteOptions}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.sources.InsertableRelation
 
@@ -30,20 +30,21 @@ import org.apache.spark.sql.sources.InsertableRelation
 case class InsertIntoDataSourceCommand(
     logicalRelation: LogicalRelation,
     query: LogicalPlan,
-    overwrite: OverwriteOptions)
+    overwrite: Boolean)
   extends RunnableCommand {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
     val data = Dataset.ofRows(sparkSession, query)
     // Apply the schema of the existing table to the new data.
     val df = sparkSession.internalCreateDataFrame(data.queryExecution.toRdd, logicalRelation.schema)
-    relation.insert(df, overwrite.enabled)
+    relation.insert(df, overwrite)
 
-    // Invalidate the cache.
-    sparkSession.sharedState.cacheManager.invalidateCache(logicalRelation)
+    // Re-cache all cached plans(including this relation itself, if it's cached) that refer to this
+    // data source relation.
+    sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
 
     Seq.empty[Row]
   }

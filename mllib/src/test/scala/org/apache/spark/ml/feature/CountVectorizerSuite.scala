@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
@@ -68,10 +68,11 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     val cv = new CountVectorizer()
       .setInputCol("words")
       .setOutputCol("features")
-      .fit(df)
-    assert(cv.vocabulary.toSet === Set("a", "b", "c", "d", "e"))
+    val cvm = cv.fit(df)
+    MLTestingUtils.checkCopyAndUids(cv, cvm)
+    assert(cvm.vocabulary.toSet === Set("a", "b", "c", "d", "e"))
 
-    cv.transform(df).select("features", "expected").collect().foreach {
+    cvm.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }

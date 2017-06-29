@@ -69,10 +69,14 @@ elif len(JARS_PATH) == 0 and not os.path.exists(TEMP_PATH):
 
 EXAMPLES_PATH = os.path.join(SPARK_HOME, "examples/src/main/python")
 SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
+DATA_PATH = os.path.join(SPARK_HOME, "data")
+LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
+
 SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
-
+DATA_TARGET = os.path.join(TEMP_PATH, "data")
+LICENSES_TARGET = os.path.join(TEMP_PATH, "licenses")
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
 # This is important because we only want to build the symlink farm while under Spark otherwise we
@@ -114,11 +118,15 @@ try:
             os.symlink(JARS_PATH, JARS_TARGET)
             os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
             os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
+            os.symlink(DATA_PATH, DATA_TARGET)
+            os.symlink(LICENSES_PATH, LICENSES_TARGET)
         else:
             # For windows fall back to the slower copytree
             copytree(JARS_PATH, JARS_TARGET)
             copytree(SCRIPTS_PATH, SCRIPTS_TARGET)
             copytree(EXAMPLES_PATH, EXAMPLES_TARGET)
+            copytree(DATA_PATH, DATA_TARGET)
+            copytree(LICENSES_PATH, LICENSES_TARGET)
     else:
         # If we are not inside of SPARK_HOME verify we have the required symlink farm
         if not os.path.exists(JARS_TARGET):
@@ -154,25 +162,35 @@ try:
         url='https://github.com/apache/spark/tree/master/python',
         packages=['pyspark',
                   'pyspark.mllib',
+                  'pyspark.mllib.linalg',
+                  'pyspark.mllib.stat',
                   'pyspark.ml',
+                  'pyspark.ml.linalg',
+                  'pyspark.ml.param',
                   'pyspark.sql',
                   'pyspark.streaming',
                   'pyspark.bin',
                   'pyspark.jars',
                   'pyspark.python.pyspark',
                   'pyspark.python.lib',
+                  'pyspark.data',
+                  'pyspark.licenses',
                   'pyspark.examples.src.main.python'],
         include_package_data=True,
         package_dir={
             'pyspark.jars': 'deps/jars',
             'pyspark.bin': 'deps/bin',
             'pyspark.python.lib': 'lib',
+            'pyspark.data': 'deps/data',
+            'pyspark.licenses': 'deps/licenses',
             'pyspark.examples.src.main.python': 'deps/examples',
         },
         package_data={
             'pyspark.jars': ['*.jar'],
             'pyspark.bin': ['*'],
             'pyspark.python.lib': ['*.zip'],
+            'pyspark.data': ['*.txt', '*.data'],
+            'pyspark.licenses': ['*.txt'],
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
@@ -181,7 +199,7 @@ try:
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
-            'sql': ['pandas']
+            'sql': ['pandas>=0.13.0']
         },
         classifiers=[
             'Development Status :: 5 - Production/Stable',
@@ -202,8 +220,12 @@ finally:
             os.remove(os.path.join(TEMP_PATH, "jars"))
             os.remove(os.path.join(TEMP_PATH, "bin"))
             os.remove(os.path.join(TEMP_PATH, "examples"))
+            os.remove(os.path.join(TEMP_PATH, "data"))
+            os.remove(os.path.join(TEMP_PATH, "licenses"))
         else:
             rmtree(os.path.join(TEMP_PATH, "jars"))
             rmtree(os.path.join(TEMP_PATH, "bin"))
             rmtree(os.path.join(TEMP_PATH, "examples"))
+            rmtree(os.path.join(TEMP_PATH, "data"))
+            rmtree(os.path.join(TEMP_PATH, "licenses"))
         os.rmdir(TEMP_PATH)

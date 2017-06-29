@@ -27,26 +27,6 @@ import org.apache.spark.sql.internal.SQLConf
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object AggUtils {
-
-  def planAggregateWithoutPartial(
-      groupingExpressions: Seq[NamedExpression],
-      aggregateExpressions: Seq[AggregateExpression],
-      resultExpressions: Seq[NamedExpression],
-      child: SparkPlan): Seq[SparkPlan] = {
-
-    val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
-    val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
-    SortAggregateExec(
-      requiredChildDistributionExpressions = Some(groupingExpressions),
-      groupingExpressions = groupingExpressions,
-      aggregateExpressions = completeAggregateExpressions,
-      aggregateAttributes = completeAggregateAttributes,
-      initialInputBufferOffset = 0,
-      resultExpressions = resultExpressions,
-      child = child
-    ) :: Nil
-  }
-
   private def createAggregate(
       requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
       groupingExpressions: Seq[NamedExpression] = Nil,
@@ -331,7 +311,7 @@ object AggUtils {
     val saved =
       StateStoreSaveExec(
         groupingAttributes,
-        stateId = None,
+        stateInfo = None,
         outputMode = None,
         eventTimeWatermark = None,
         partialMerged2)

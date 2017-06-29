@@ -52,7 +52,7 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
     @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]])
   extends Saveable with Serializable {
   /**
-   * Generates association rules for the [[Item]]s in [[freqItemsets]].
+   * Generates association rules for the `Item`s in [[freqItemsets]].
    * @param confidence minimal confidence of the rules produced
    */
   @Since("1.5.0")
@@ -218,7 +218,9 @@ class FPGrowth private (
     new FPGrowthModel(freqItemsets)
   }
 
-  /** Java-friendly version of [[run]]. */
+  /**
+   * Java-friendly version of `run`.
+   */
   @Since("1.3.0")
   def run[Item, Basket <: JavaIterable[Item]](data: JavaRDD[Basket]): FPGrowthModel[Item] = {
     implicit val tag = fakeClassTag[Item]

@@ -39,4 +39,9 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
   }
 
+  test("uuid") {
+    checkEvaluation(Length(Uuid()), 36)
+    assert(evaluate(Uuid()) !== evaluate(Uuid()))
+  }
+
 }

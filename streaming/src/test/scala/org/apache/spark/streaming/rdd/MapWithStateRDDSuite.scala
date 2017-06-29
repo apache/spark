@@ -326,7 +326,7 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with B
       // Create a MapWithStateRDD that has a long lineage using the data RDD with a long lineage
       val stateRDDWithLongLineage = makeStateRDDWithLongLineageDataRDD(longLineageRDD)
 
-      // Create a new MapWithStateRDD, with the lineage lineage MapWithStateRDD as the parent
+      // Create a new MapWithStateRDD, with the lineage MapWithStateRDD as the parent
       new MapWithStateRDD[Int, Int, Int, Int](
         stateRDDWithLongLineage,
         stateRDDWithLongLineage.sparkContext.emptyRDD[(Int, Int)].partitionBy(partitioner),

@@ -86,7 +86,11 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   }
 
   /**
-   * Copy this buffer into a new ByteBuffer.
+   * Convert this buffer to a ByteBuffer. If this buffer is backed by a single chunk, its underlying
+   * data will not be copied. Instead, it will be duplicated. If this buffer is backed by multiple
+   * chunks, the data underlying this buffer will be copied into a new byte buffer. As a result, it
+   * is suggested to use this method only if the caller does not need to manage the memory
+   * underlying this buffer.
    *
    * @throws UnsupportedOperationException if this buffer's size exceeds the max ByteBuffer size.
    */
@@ -132,10 +136,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   }
 
   /**
-   * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
-   * might cause errors if one attempts to read from the unmapped buffer, but it's better than
-   * waiting for the GC to find it because that could lead to huge numbers of open files. There's
-   * unfortunately no standard API to do this.
+   * Attempt to clean up any ByteBuffer in this ChunkedByteBuffer which is direct or memory-mapped.
+   * See [[StorageUtils.dispose]] for more information.
    */
   def dispose(): Unit = {
     if (!disposed) {
@@ -143,6 +145,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
       disposed = true
     }
   }
+
 }
 
 /**
@@ -151,7 +154,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
  * @param dispose if true, `ChunkedByteBuffer.dispose()` will be called at the end of the stream
  *                in order to close any memory-mapped files which back the buffer.
  */
-private class ChunkedByteBufferInputStream(
+private[spark] class ChunkedByteBufferInputStream(
     var chunkedByteBuffer: ChunkedByteBuffer,
     dispose: Boolean)
   extends InputStream {

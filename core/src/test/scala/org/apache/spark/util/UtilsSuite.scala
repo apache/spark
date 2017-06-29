@@ -17,7 +17,8 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream, PrintStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
+  FileOutputStream, PrintStream}
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -199,7 +200,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.bytesToString(2097152) === "2.0 MB")
     assert(Utils.bytesToString(2306867) === "2.2 MB")
     assert(Utils.bytesToString(5368709120L) === "5.0 GB")
-    assert(Utils.bytesToString(5L * 1024L * 1024L * 1024L * 1024L) === "5.0 TB")
+    assert(Utils.bytesToString(5L * (1L << 40)) === "5.0 TB")
+    assert(Utils.bytesToString(5L * (1L << 50)) === "5.0 PB")
+    assert(Utils.bytesToString(5L * (1L << 60)) === "5.0 EB")
+    assert(Utils.bytesToString(BigInt(1L << 11) * (1L << 60)) === "2.36E+21 B")
   }
 
   test("copyStream") {
@@ -389,6 +393,28 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.deserializeLongValue(bbuf.array) === testval)
   }
 
+  test("writeByteBuffer should not change ByteBuffer position") {
+    // Test a buffer with an underlying array, for both writeByteBuffer methods.
+    val testBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
+    assert(testBuffer.hasArray)
+    val bytesOut = new ByteBufferOutputStream(4096)
+    Utils.writeByteBuffer(testBuffer, bytesOut)
+    assert(testBuffer.position() === 0)
+
+    val dataOut = new DataOutputStream(bytesOut)
+    Utils.writeByteBuffer(testBuffer, dataOut: DataOutput)
+    assert(testBuffer.position() === 0)
+
+    // Test a buffer without an underlying array, for both writeByteBuffer methods.
+    val testDirectBuffer = ByteBuffer.allocateDirect(8)
+    assert(!testDirectBuffer.hasArray())
+    Utils.writeByteBuffer(testDirectBuffer, bytesOut)
+    assert(testDirectBuffer.position() === 0)
+
+    Utils.writeByteBuffer(testDirectBuffer, dataOut: DataOutput)
+    assert(testDirectBuffer.position() === 0)
+  }
+
   test("get iterator size") {
     val empty = Seq[Int]()
     assert(Utils.getIteratorSize(empty.toIterator) === 0L)
@@ -435,19 +461,17 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     def assertResolves(before: String, after: String): Unit = {
       // This should test only single paths
       assume(before.split(",").length === 1)
-      // Repeated invocations of resolveURI should yield the same result
       def resolve(uri: String): String = Utils.resolveURI(uri).toString
+      assert(resolve(before) === after)
       assert(resolve(after) === after)
+      // Repeated invocations of resolveURI should yield the same result
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
-      // Also test resolveURIs with single paths
-      assert(new URI(Utils.resolveURIs(before)) === new URI(after))
-      assert(new URI(Utils.resolveURIs(after)) === new URI(after))
     }
     val rawCwd = System.getProperty("user.dir")
     val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
-    assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
+    assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:///root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
     assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
     assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
@@ -456,20 +480,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assertResolves("C:\\path to\\file.txt", "file:/C:/path%20to/file.txt")
     }
     assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt")
-    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt")
+    assertResolves("file:///C:/path/to/file.txt", "file:///C:/path/to/file.txt")
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt")
-    assertResolves("file:foo", s"file:foo")
-    assertResolves("file:foo:baby", s"file:foo:baby")
+    assertResolves("file:foo", "file:foo")
+    assertResolves("file:foo:baby", "file:foo:baby")
   }
 
   test("resolveURIs with multiple paths") {
     def assertResolves(before: String, after: String): Unit = {
       assume(before.split(",").length > 1)
-      assert(Utils.resolveURIs(before) === after)
-      assert(Utils.resolveURIs(after) === after)
-      // Repeated invocations of resolveURIs should yield the same result
       def resolve(uri: String): String = Utils.resolveURIs(uri)
+      assert(resolve(before) === after)
       assert(resolve(after) === after)
+      // Repeated invocations of resolveURIs should yield the same result
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
     }
@@ -482,8 +505,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5,file:$cwd/path%20to/jar6")
     if (Utils.isWindows) {
       assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
-        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi,file:/C:/path%20to/jar4")
+        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
     }
+    assertResolves(",jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
+    // Also test resolveURIs with single paths
+    assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
   }
 
   test("nonLocalPaths") {
@@ -896,7 +922,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         assert(pidExists(pid))
         val terminated = Utils.terminateProcess(process, 5000)
         assert(terminated.isDefined)
-        Utils.waitForProcess(process, 5000)
+        process.waitFor(5, TimeUnit.SECONDS)
         val durationMs = System.currentTimeMillis() - startTimeMs
         assert(durationMs < 5000)
         assert(!pidExists(pid))
@@ -909,7 +935,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       var majorVersion = versionParts(0).toInt
       if (majorVersion == 1) majorVersion = versionParts(1).toInt
       if (majorVersion >= 8) {
-        // Java8 added a way to forcibly terminate a process. We'll make sure that works by
+        // We'll make sure that forcibly terminating a process works by
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.
         val file = File.createTempFile("temp-file-name", ".tmp")
@@ -930,7 +956,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
           val start = System.currentTimeMillis()
           val terminated = Utils.terminateProcess(process, 5000)
           assert(terminated.isDefined)
-          Utils.waitForProcess(process, 5000)
+          process.waitFor(5, TimeUnit.SECONDS)
           val duration = System.currentTimeMillis() - start
           assert(duration < 6000) // add a little extra time to allow a force kill to finish
           assert(!pidExists(pid))
@@ -983,15 +1009,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
       "spark.my.password",
       "spark.my.sECreT")
-    secretKeys.foreach { key => sparkConf.set(key, "secret_password") }
+    secretKeys.foreach { key => sparkConf.set(key, "sensitive_value") }
     // Set a non-secret key
-    sparkConf.set("spark.regular.property", "not_a_secret")
+    sparkConf.set("spark.regular.property", "regular_value")
+    // Set a property with a regular key but secret in the value
+    sparkConf.set("spark.sensitive.property", "has_secret_in_value")
 
     // Redact sensitive information
     val redactedConf = Utils.redact(sparkConf, sparkConf.getAll).toMap
 
     // Assert that secret information got redacted while the regular property remained the same
     secretKeys.foreach { key => assert(redactedConf(key) === Utils.REDACTION_REPLACEMENT_TEXT) }
-    assert(redactedConf("spark.regular.property") === "not_a_secret")
+    assert(redactedConf("spark.regular.property") === "regular_value")
+    assert(redactedConf("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
+
   }
 }

@@ -115,9 +115,27 @@ class TextSuite extends QueryTest with SharedSQLContext {
     )
     withTempDir { dir =>
       val testDf = spark.read.text(testFile)
-      val tempDir = Utils.createTempDir()
-      val tempDirPath = tempDir.getAbsolutePath
+      val tempDirPath = dir.getAbsolutePath
       testDf.write.option("compression", "none")
+        .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
+      val compressedFiles = new File(tempDirPath).listFiles()
+      assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
+      verifyFrame(spark.read.options(extraOptions).text(tempDirPath))
+    }
+  }
+
+  test("case insensitive option") {
+    val extraOptions = Map[String, String](
+      "mApReDuCe.output.fileoutputformat.compress" -> "true",
+      "mApReDuCe.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
+      "mApReDuCe.map.output.compress" -> "true",
+      "mApReDuCe.output.fileoutputformat.compress.codec" -> classOf[GzipCodec].getName,
+      "mApReDuCe.map.output.compress.codec" -> classOf[GzipCodec].getName
+    )
+    withTempDir { dir =>
+      val testDf = spark.read.text(testFile)
+      val tempDirPath = dir.getAbsolutePath
+      testDf.write.option("CoMpReSsIoN", "none")
         .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
       val compressedFiles = new File(tempDirPath).listFiles()
       assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))

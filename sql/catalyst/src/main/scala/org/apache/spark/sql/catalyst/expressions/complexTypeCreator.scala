@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -43,7 +44,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
 
-  override def dataType: DataType = {
+  override def dataType: ArrayType = {
     ArrayType(
       children.headOption.map(_.dataType).getOrElse(NullType),
       containsNull = children.exists(_.nullable))
@@ -56,31 +57,97 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val arrayClass = classOf[GenericArrayData].getName
-    val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
-
-    ev.copy(code = s"""
-      this.$values = new Object[${children.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        children.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
-          eval.code + s"""
-            if (${eval.isNull}) {
-              $values[$i] = null;
-            } else {
-              $values[$i] = ${eval.value};
-            }
-           """
-        }) +
-      s"""
-        final ArrayData ${ev.value} = new $arrayClass($values);
-        this.$values = null;
-      """, isNull = "false")
+    val et = dataType.elementType
+    val evals = children.map(e => e.genCode(ctx))
+    val (preprocess, assigns, postprocess, arrayData) =
+      GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false)
+    ev.copy(
+      code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
+      value = arrayData,
+      isNull = "false")
   }
 
   override def prettyName: String = "array"
+}
+
+private [sql] object GenArrayData {
+  /**
+   * Return Java code pieces based on DataType and isPrimitive to allocate ArrayData class
+   *
+   * @param ctx a [[CodegenContext]]
+   * @param elementType data type of underlying array elements
+   * @param elementsCode a set of [[ExprCode]] for each element of an underlying array
+   * @param isMapKey if true, throw an exception when the element is null
+   * @return (code pre-assignments, assignments to each array elements, code post-assignments,
+   *           arrayData name)
+   */
+  def genCodeToCreateArrayData(
+      ctx: CodegenContext,
+      elementType: DataType,
+      elementsCode: Seq[ExprCode],
+      isMapKey: Boolean): (String, Seq[String], String, String) = {
+    val arrayName = ctx.freshName("array")
+    val arrayDataName = ctx.freshName("arrayData")
+    val numElements = elementsCode.length
+
+    if (!ctx.isPrimitiveType(elementType)) {
+      val genericArrayClass = classOf[GenericArrayData].getName
+      ctx.addMutableState("Object[]", arrayName,
+        s"$arrayName = new Object[${numElements}];")
+
+      val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
+        val isNullAssignment = if (!isMapKey) {
+          s"$arrayName[$i] = null;"
+        } else {
+          "throw new RuntimeException(\"Cannot use null as map key!\");"
+        }
+        eval.code + s"""
+         if (${eval.isNull}) {
+           $isNullAssignment
+         } else {
+           $arrayName[$i] = ${eval.value};
+         }
+       """
+      }
+
+      ("",
+       assignments,
+       s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
+       arrayDataName)
+    } else {
+      val unsafeArraySizeInBytes =
+        UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
+        ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
+      val baseOffset = Platform.BYTE_ARRAY_OFFSET
+      ctx.addMutableState("UnsafeArrayData", arrayDataName, "");
+
+      val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
+      val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
+        val isNullAssignment = if (!isMapKey) {
+          s"$arrayDataName.setNullAt($i);"
+        } else {
+          "throw new RuntimeException(\"Cannot use null as map key!\");"
+        }
+        eval.code + s"""
+         if (${eval.isNull}) {
+           $isNullAssignment
+         } else {
+           $arrayDataName.set$primitiveValueTypeName($i, ${eval.value});
+         }
+       """
+      }
+
+      (s"""
+        byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
+        $arrayDataName = new UnsafeArrayData();
+        Platform.putLong($arrayName, $baseOffset, $numElements);
+        $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
+      """,
+       assignments,
+       "",
+       arrayDataName)
+    }
+  }
 }
 
 /**
@@ -133,49 +200,26 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val arrayClass = classOf[GenericArrayData].getName
     val mapClass = classOf[ArrayBasedMapData].getName
-    val keyArray = ctx.freshName("keyArray")
-    val valueArray = ctx.freshName("valueArray")
-    ctx.addMutableState("Object[]", keyArray, s"this.$keyArray = null;")
-    ctx.addMutableState("Object[]", valueArray, s"this.$valueArray = null;")
-
-    val keyData = s"new $arrayClass($keyArray)"
-    val valueData = s"new $arrayClass($valueArray)"
-    ev.copy(code = s"""
-      $keyArray = new Object[${keys.size}];
-      $valueArray = new Object[${values.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        keys.zipWithIndex.map { case (key, i) =>
-          val eval = key.genCode(ctx)
-          s"""
-            ${eval.code}
-            if (${eval.isNull}) {
-              throw new RuntimeException("Cannot use null as map key!");
-            } else {
-              $keyArray[$i] = ${eval.value};
-            }
-          """
-        }) +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        values.zipWithIndex.map { case (value, i) =>
-          val eval = value.genCode(ctx)
-          s"""
-            ${eval.code}
-            if (${eval.isNull}) {
-              $valueArray[$i] = null;
-            } else {
-              $valueArray[$i] = ${eval.value};
-            }
-          """
-        }) +
+    val MapType(keyDt, valueDt, _) = dataType
+    val evalKeys = keys.map(e => e.genCode(ctx))
+    val evalValues = values.map(e => e.genCode(ctx))
+    val (preprocessKeyData, assignKeys, postprocessKeyData, keyArrayData) =
+      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, evalKeys, true)
+    val (preprocessValueData, assignValues, postprocessValueData, valueArrayData) =
+      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, evalValues, false)
+    val code =
       s"""
-        final MapData ${ev.value} = new $mapClass($keyData, $valueData);
-        this.$keyArray = null;
-        this.$valueArray = null;
-      """, isNull = "false")
+       final boolean ${ev.isNull} = false;
+       $preprocessKeyData
+       ${ctx.splitExpressions(ctx.INPUT_ROW, assignKeys)}
+       $postprocessKeyData
+       $preprocessValueData
+       ${ctx.splitExpressions(ctx.INPUT_ROW, assignValues)}
+       $postprocessValueData
+       final MapData ${ev.value} = new $mapClass($keyArrayData, $valueArrayData);
+      """
+    ev.copy(code = code)
   }
 
   override def prettyName: String = "map"
@@ -296,7 +340,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+    ctx.addMutableState("Object[]", values, s"$values = null;")
 
     ev.copy(code = s"""
       $values = new Object[${valExprs.size}];""" +
@@ -313,7 +357,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
         }) +
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
+        $values = null;
       """, isNull = "false")
   }
 
@@ -346,6 +390,8 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateName
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
        map("a":"1","b":"2","c":"3")
+      > SELECT _FUNC_('a');
+       map("a":null)
   """)
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
@@ -363,7 +409,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
 
-  override def dataType: DataType = MapType(StringType, StringType, valueContainsNull = false)
+  override def dataType: DataType = MapType(StringType, StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (Seq(pairDelim, keyValueDelim).exists(! _.foldable)) {

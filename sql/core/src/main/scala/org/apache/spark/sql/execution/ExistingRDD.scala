@@ -86,16 +86,9 @@ case class ExternalRDD[T](
   override def newInstance(): ExternalRDD.this.type =
     ExternalRDD(outputObjAttr.newInstance(), rdd)(session).asInstanceOf[this.type]
 
-  override def sameResult(plan: LogicalPlan): Boolean = {
-    plan.canonicalized match {
-      case ExternalRDD(_, otherRDD) => rdd.id == otherRDD.id
-      case _ => false
-    }
-  }
-
   override protected def stringArgs: Iterator[Any] = Iterator(output)
 
-  @transient override lazy val statistics: Statistics = Statistics(
+  @transient override def computeStats: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
@@ -161,16 +154,9 @@ case class LogicalRDD(
     )(session).asInstanceOf[this.type]
   }
 
-  override def sameResult(plan: LogicalPlan): Boolean = {
-    plan.canonicalized match {
-      case LogicalRDD(_, otherRDD, _, _) => rdd.id == otherRDD.id
-      case _ => false
-    }
-  }
-
   override protected def stringArgs: Iterator[Any] = Iterator(output)
 
-  @transient override lazy val statistics: Statistics = Statistics(
+  @transient override def computeStats: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)

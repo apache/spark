@@ -21,6 +21,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.test.SharedSQLContext
 
+/**
+ * End-to-end tests for approximate percentile aggregate function.
+ */
 class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
