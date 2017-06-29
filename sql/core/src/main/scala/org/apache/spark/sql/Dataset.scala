@@ -990,7 +990,7 @@ class Dataset[T] private[sql](
    * @param condition Join expression.
    * @param joinType Type of join to perform. Default `inner`. Must be one of:
    *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
-   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
+   *                 `right`, `right_outer`.
    *
    * @group typedrel
    * @since 1.6.0
