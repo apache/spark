@@ -114,9 +114,8 @@ class JavaParams(JavaWrapper, Params):
         if isinstance(value, Estimator) or isinstance(value, Model):
             # used in the case of an estimator having another estimator as a parameter
             # such as with the OneVsRest classifier
-            # the reason why this is not in _py2java in common.py is that importing Estimator and Model in common.py results
-            # in a circular import with inherit_doc
-            # print "IN THE ESTIMATOR CASE - estimator: {}, model: {}".format(isinstance(value, Estimator), isinstance(value, Model))
+            # the reason why this is not in _py2java in common.py is that importing
+            # Estimator and Model in common.py results in a circular import with inherit_doc
             java_value = value._to_java()
         else:
             java_value = _py2java(sc, value)
@@ -152,9 +151,7 @@ class JavaParams(JavaWrapper, Params):
             if self._java_obj.hasParam(param.name):
                 java_param = self._java_obj.getParam(param.name)
                 # SPARK-14931: Only check set params back to avoid default params mismatch.
-                # print "PARAM NAME IN _transfer_params_from_java:",param.name
                 if self._java_obj.isSet(java_param):
-                    # print "Entered if with param name:",param.name
                     value = _java2py(sc, self._java_obj.getOrDefault(java_param))
                     self._set(**{param.name: value})
 

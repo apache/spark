@@ -49,7 +49,8 @@ from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.common import _java2py, _py2java
-from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator, RegressionEvaluator
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
+    MulticlassClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
 from pyspark.ml.linalg import DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT, \
@@ -694,7 +695,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         lr = LogisticRegression()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
         evaluator = BinaryClassificationEvaluator()
-        
+
         # test save/load of CrossValidator
         cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
         cvModel = cv.fit(dataset)
@@ -720,13 +721,13 @@ class CrossValidatorTests(SparkSessionTestCase):
              (Vectors.dense([0.6]), 1.0),
              (Vectors.dense([1.0]), 1.0)] * 10,
             ["features", "label"])
-        
+
         ova = OneVsRest(classifier=LogisticRegression())
         lr1 = LogisticRegression().setMaxIter(100)
         lr2 = LogisticRegression().setMaxIter(150)
         grid = ParamGridBuilder().addGrid(ova.classifier, [lr1, lr2]).build()
         evaluator = MulticlassClassificationEvaluator()
-        
+
         # test save/load of CrossValidator
         cv = CrossValidator(estimator=ova, estimatorParamMaps=grid, evaluator=evaluator)
         cvModel = cv.fit(dataset)
@@ -738,8 +739,7 @@ class CrossValidatorTests(SparkSessionTestCase):
 
         originalParamMap = cv.getEstimatorParamMaps()
         loadedParamMap = loadedCV.getEstimatorParamMaps()
-        for i,param in enumerate(loadedParamMap):
-            # print "PARAM:",param
+        for i, param in enumerate(loadedParamMap):
             for p in param:
                 if p.name == "classifier":
                     self.assertEqual(param[p].uid, originalParamMap[i][p].uid)
@@ -878,7 +878,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         lr2 = LogisticRegression().setMaxIter(150)
         grid = ParamGridBuilder().addGrid(ova.classifier, [lr1, lr2]).build()
         evaluator = MulticlassClassificationEvaluator()
-        
+
         tvs = TrainValidationSplit(estimator=ova, estimatorParamMaps=grid, evaluator=evaluator)
         tvsModel = tvs.fit(dataset)
         tvsPath = temp_path + "/tvs"
@@ -886,10 +886,10 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         loadedTvs = TrainValidationSplit.load(tvsPath)
         self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
         self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
-        
+
         originalParamMap = tvs.getEstimatorParamMaps()
         loadedParamMap = loadedTvs.getEstimatorParamMaps()
-        for i,param in enumerate(loadedParamMap):
+        for i, param in enumerate(loadedParamMap):
             for p in param:
                 if p.name == "classifier":
                     self.assertEqual(param[p].uid, originalParamMap[i][p].uid)
@@ -1488,8 +1488,8 @@ class DefaultValuesTests(PySparkTestCase):
             py_has_default = py_stage.hasDefault(p)
             java_has_default = java_stage.hasDefault(java_param)
             self.assertEqual(py_has_default, java_has_default,
-                             "Default value mismatch of param %s for Params %s, py has default: %s java has default: %s"
-                             % (p.name, str(py_stage), py_has_default, java_has_default))
+                             "Default value mismatch of param %s for Params %s"
+                             % (p.name, str(py_stage)))
             if py_has_default:
                 if p.name == "seed":
                     return  # Random seeds between Spark and PySpark are different

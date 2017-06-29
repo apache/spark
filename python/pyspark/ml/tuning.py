@@ -141,36 +141,36 @@ class ValidatorParams(HasSeed):
         return self.getOrDefault(self.evaluator)
 
     def getEvaluator(self):
-         """
-         Gets the value of evaluator or its default value.
-         """
-         return self.getOrDefault(self.evaluator)
- 
+        """
+        Gets the value of evaluator or its default value.
+        """
+        return self.getOrDefault(self.evaluator)
+
     @classmethod
     def _from_java_impl(cls, java_stage):
         """
         Return Python estimator, estimatorParamMaps, and evaluator from a Java ValidatorParams.
         """
- 
+
         # Load information from java_stage to the instance.
         estimator = JavaParams._from_java(java_stage.getEstimator())
         evaluator = JavaParams._from_java(java_stage.getEvaluator())
         epms = [estimator._transfer_param_map_from_java(epm)
                 for epm in java_stage.getEstimatorParamMaps()]
         return estimator, epms, evaluator
-    
+
     def _to_java_impl(self):
         """
         Return Java estimator, estimatorParamMaps, and evaluator from this Python instance.
         """
- 
+
         gateway = SparkContext._gateway
         cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
- 
+
         java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
         for idx, epm in enumerate(self.getEstimatorParamMaps()):
             java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
- 
+
         java_estimator = self.getEstimator()._to_java()
         java_evaluator = self.getEvaluator()._to_java()
         return java_estimator, java_epms, java_evaluator
@@ -301,47 +301,47 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
             newCV.setEvaluator(self.getEvaluator().copy(extra))
         return newCV
 
-    @since("2.2.0")
+    @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
         self.write().save(path)
 
     @classmethod
-    @since("2.2.0")
+    @since("2.3.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
 
     @classmethod
-    @since("2.2.0")
+    @since("2.3.0")
     def _from_java(cls, java_stage):
         """
         Given a Java CrossValidator, create and return a Python wrapper of it.
         Used for ML persistence.
         """
- 
+
         estimator, epms, evaluator = super(CrossValidator, cls)._from_java_impl(java_stage)
         numFolds = java_stage.getNumFolds()
         seed = java_stage.getSeed()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
-                        numFolds=numFolds, seed=seed)
+                       numFolds=numFolds, seed=seed)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
-    @since("2.2.0")
+    @since("2.3.0")
     def _to_java(self):
         """
         Transfer this instance to a Java CrossValidator. Used for ML persistence.
 
         :return: Java object equivalent to this instance.
         """
- 
+
         estimator, epms, evaluator = super(CrossValidator, self)._to_java_impl()
 
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidator", self.uid)
@@ -392,24 +392,24 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         avgMetrics = self.avgMetrics
         return CrossValidatorModel(bestModel, avgMetrics)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
         self.write().save(path)
 
     @classmethod
-    @since("2.2.0")
+    @since("2.3.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
 
     @classmethod
-    @since("2.2.0")
+    @since("2.3.0")
     def _from_java(cls, java_stage):
         """
         Given a Java CrossValidatorModel, create and return a Python wrapper of it.
@@ -417,27 +417,28 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         """
 
         bestModel = JavaParams._from_java(java_stage.bestModel())
-        #  avgMetrics = JavaParams._from_java(java_stage.avgMetrics())
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
-        
-        py_stage = cls(bestModel=bestModel).setEstimator(estimator).setEstimatorParamMaps(epms).setEvaluator(evaluator)
+
+        py_stage = cls(bestModel=bestModel).setEstimator(estimator)
+        py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
+
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
-    @since("2.2.0")
+    @since("2.3.0")
     def _to_java(self):
         """
         Transfer this instance to a Java CrossValidatorModel. Used for ML persistence.
 
         :return: Java object equivalent to this instance.
         """
- 
-        sc = SparkContext._active_spark_context
 
+        sc = SparkContext._active_spark_context
+        # TODO: persist average metrics as well
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel",
-                                              self.uid,
-                                              self.bestModel._to_java(),
-                                              _py2java(sc, self.avgMetrics))
+                                             self.uid,
+                                             self.bestModel._to_java(),
+                                             _py2java(sc, []))
         estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)
@@ -561,23 +562,24 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
             newTVS.setEvaluator(self.getEvaluator().copy(extra))
         return newTVS
 
-    @since("2.2.0")
+    @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
-    @since("2.2.0")
+    @since("2.3.0")
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
         self.write().save(path)
 
     @classmethod
-    @since("2.2.0")
+    @since("2.3.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
 
     @classmethod
+    @since("2.3.0")
     def _from_java(cls, java_stage):
         """
         Given a Java TrainValidationSplit, create and return a Python wrapper of it.
@@ -593,6 +595,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
+    @since("2.3.0")
     def _to_java(self):
         """
         Transfer this instance to a Java TrainValidationSplit. Used for ML persistence.
@@ -602,7 +605,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         estimator, epms, evaluator = super(TrainValidationSplit, self)._to_java_impl()
 
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplit",
-                                              self.uid)
+                                             self.uid)
         _java_obj.setEstimatorParamMaps(epms)
         _java_obj.setEvaluator(evaluator)
         _java_obj.setEstimator(estimator)
@@ -610,8 +613,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         _java_obj.setSeed(self.getSeed())
 
         return _java_obj
-
-
 
 
 class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
@@ -651,23 +652,24 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         validationMetrics = list(self.validationMetrics)
         return TrainValidationSplitModel(bestModel, validationMetrics)
 
-    @since("2.0.0")
+    @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
-    @since("2.0.0")
+    @since("2.3.0")
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
         self.write().save(path)
 
     @classmethod
-    @since("2.0.0")
+    @since("2.3.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
 
     @classmethod
+    @since("2.3.0")
     def _from_java(cls, java_stage):
         """
         Given a Java TrainValidationSplitModel, create and return a Python wrapper of it.
@@ -676,12 +678,16 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
 
         # Load information from java_stage to the instance.
         bestModel = JavaParams._from_java(java_stage.bestModel())
-        estimator, epms, evaluator = super(TrainValidationSplitModel, cls)._from_java_impl(java_stage)
+        estimator, epms, evaluator = super(TrainValidationSplitModel,
+                                           cls)._from_java_impl(java_stage)
         # Create a new instance of this stage.
-        py_stage = cls(bestModel=bestModel).setEstimator(estimator).setEstimatorParamMaps(epms).setEvaluator(evaluator)
+        py_stage = cls(bestModel=bestModel).setEstimator(estimator)
+        py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
+
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
+    @since("2.3.0")
     def _to_java(self):
         """
         Transfer this instance to a Java TrainValidationSplitModel. Used for ML persistence.
@@ -689,19 +695,18 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         """
 
         sc = SparkContext._active_spark_context
-
+        # TODO: persst validation metrics as well
         _java_obj = JavaParams._new_java_obj(
             "org.apache.spark.ml.tuning.TrainValidationSplitModel",
             self.uid,
             self.bestModel._to_java(),
-            _py2java(sc, self.validationMetrics))
+            _py2java(sc, []))
         estimator, epms, evaluator = super(TrainValidationSplitModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)
         _java_obj.set("estimator", estimator)
         _java_obj.set("estimatorParamMaps", epms)
         return _java_obj
-
 
 
 if __name__ == "__main__":
