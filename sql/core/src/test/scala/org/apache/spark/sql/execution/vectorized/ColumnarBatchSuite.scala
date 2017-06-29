@@ -24,14 +24,16 @@ import java.nio.ByteOrder
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.columnar.compression.{ColumnBuilderHelper, IntDelta, TestCompressibleColumnBuilder}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class ColumnarBatchSuite extends SparkFunSuite {
   test("Null Apis") {
@@ -320,6 +322,58 @@ class ColumnarBatchSuite extends SparkFunSuite {
         if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.valuesNativeAddress()
           assert(v._1 == Platform.getInt(null, addr + 4 * v._2))
+        }
+      }
+      column.close
+    }}
+  }
+
+  test("CachedBatch primitive Apis") {
+    (BooleanType :: IntegerType :: DoubleType :: Nil).foreach { dataType => {
+      val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+      val row = new SpecificInternalRow(Array(dataType))
+      for (i <- 0 until 16) {
+        dataType match {
+          case _ : BooleanType => row.setBoolean(0, i % 2 == 0)
+          case _ : IntegerType => row.setInt(0, i)
+          case _ : DoubleType => row.setDouble(0, i)
+        }
+        columnBuilder.appendFrom(row, 0)
+      }
+
+      val column = ColumnVector.allocate(1024, dataType, MemoryMode.ON_HEAP_CACHEDBATCH)
+      column.asInstanceOf[OnHeapCachedBatch]
+        .putByteArray(JavaUtils.bufferToArray(columnBuilder.build))
+
+      for (i <- 0 until 16) {
+        assert(column.isNullAt(i) == false)
+        dataType match {
+          case _ : BooleanType => assert(column.getBoolean(i) == (i % 2 == 0))
+          case _ : IntegerType => assert(column.getInt(i) == i)
+          case _ : DoubleType => assert(column.getDouble(i) == i.toDouble)
+        }
+      }
+      column.close
+    }}
+  }
+
+  test("CachedBatch complex type Apis") {
+    (StringType :: Nil).foreach { dataType => {
+      val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+      for (i <- 0 until 16) {
+        val converter = UnsafeProjection.create(Array[DataType](dataType))
+        val row = converter.apply(InternalRow(UTF8String.fromString((i % 4).toString)))
+        columnBuilder.appendFrom(row, 0)
+      }
+
+      val column = ColumnVector.allocate(1024, dataType, MemoryMode.ON_HEAP_CACHEDBATCH)
+      column.asInstanceOf[OnHeapCachedBatch]
+        .putByteArray(JavaUtils.bufferToArray(columnBuilder.build))
+
+      for (i <- 0 until 16) {
+        assert(column.isNullAt(i) == false)
+        dataType match {
+          case _ : StringType => assert(column.getUTF8String(i).toString == (i % 4).toString)
         }
       }
       column.close

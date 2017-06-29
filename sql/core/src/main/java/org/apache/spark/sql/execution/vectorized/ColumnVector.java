@@ -64,6 +64,8 @@ public abstract class ColumnVector implements AutoCloseable {
   public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
     if (mode == MemoryMode.OFF_HEAP) {
       return new OffHeapColumnVector(capacity, type);
+    } else if (mode == MemoryMode.ON_HEAP_CACHEDBATCH) {
+      return new OnHeapCachedBatch(capacity, type);
     } else {
       return new OnHeapColumnVector(capacity, type);
     }
@@ -954,6 +956,11 @@ public abstract class ColumnVector implements AutoCloseable {
   protected int MAX_CAPACITY = Integer.MAX_VALUE;
 
   /**
+   * Memory mode for this column.
+   */
+  private MemoryMode mode;
+
+  /**
    * Data type for this column.
    */
   protected DataType type;
@@ -1052,6 +1059,13 @@ public abstract class ColumnVector implements AutoCloseable {
   protected ColumnVector(int capacity, DataType type, MemoryMode memMode) {
     this.capacity = capacity;
     this.type = type;
+    this.mode = memMode;
+    if (mode == MemoryMode.ON_HEAP_CACHEDBATCH && type instanceof StringType) {
+      this.childColumns = null;
+      this.resultArray = null;
+      this.resultStruct = null;
+      return;
+    }
 
     if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
         || DecimalType.isByteArrayDecimalType(type)) {
