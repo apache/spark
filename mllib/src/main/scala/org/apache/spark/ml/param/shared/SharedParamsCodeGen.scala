@@ -20,6 +20,7 @@ package org.apache.spark.ml.param.shared
 import java.io.PrintWriter
 
 import scala.reflect.ClassTag
+import scala.xml.Utility
 
 /**
  * Code generator for shared params (sharedParams.scala). Run under the Spark folder with
@@ -167,6 +168,8 @@ private[shared] object SharedParamsCodeGen {
       "def"
     }
 
+    val htmlCompliantDoc = Utility.escape(doc)
+
     s"""
       |/**
       | * Trait for shared param $name$defaultValueDoc.
@@ -174,7 +177,7 @@ private[shared] object SharedParamsCodeGen {
       |private[ml] trait Has$Name extends Params {
       |
       |  /**
-      |   * Param for $doc.
+      |   * Param for $htmlCompliantDoc.
       |   * @group ${groupStr(0)}
       |   */
       |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
