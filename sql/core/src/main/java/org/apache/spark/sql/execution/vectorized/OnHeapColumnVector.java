@@ -201,7 +201,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   @Override
   public void getShorts(short[] dst, int rowId, int count) {
     assert(dictionary == null);
-    System.arraycopy(byteData, rowId, dst, 0, count);
+    System.arraycopy(shortData, rowId, dst, 0, count);
   }
 
 
@@ -307,7 +307,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   @Override
   public void getLongs(long[] dst, int rowId, int count) {
     assert(dictionary == null);
-    System.arraycopy(byteData, rowId, dst, 0, count);
+    System.arraycopy(longData, rowId, dst, 0, count);
   }
 
   //
@@ -352,7 +352,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   @Override
   public void getFloats(float[] dst, int rowId, int count) {
     assert(dictionary == null);
-    System.arraycopy(byteData, rowId, dst, 0, count);
+    System.arraycopy(floatData, rowId, dst, 0, count);
   }
 
   //
@@ -399,7 +399,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   @Override
   public void getDoubles(double[] dst, int rowId, int count) {
     assert(dictionary == null);
-    System.arraycopy(byteData, rowId, dst, 0, count);
+    System.arraycopy(doubleData, rowId, dst, 0, count);
   }
 
   //
