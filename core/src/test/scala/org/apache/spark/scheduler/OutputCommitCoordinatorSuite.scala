@@ -269,6 +269,8 @@ private case class OutputCommitFunctions(tempDirPath: String) {
       isAppend = false)
 
     // Create TaskAttemptContext.
+    // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
+    // around by taking a mod. We expect that no task will be attempted 2 billion times.
     val taskAttemptId = (ctx.taskAttemptId % Int.MaxValue).toInt
     val attemptId = new TaskAttemptID(
       new TaskID(jobId.value, TaskType.MAP, ctx.partitionId), taskAttemptId)
