@@ -91,13 +91,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
   /**
    * Create an [[AnalyzeTableCommand]] command or an [[AnalyzeColumnCommand]] command.
-   * Example SQL for analyzing table or a single partition :
+   * Example SQL for analyzing table or a set of partitions :
    * {{{
    *   ANALYZE TABLE [db_name.]tablename [PARTITION (partcol1=val1, partcol2=val2, ...)]
    *   COMPUTE STATISTICS [NOSCAN];
    * }}}
-   * Partitions spec, if provided, must identify a single partition by specifying values
-   * for all partition columns.
    *
    * Example SQL for analyzing columns :
    * {{{

@@ -327,6 +327,106 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("analyze a set of partitions") {
+    val tableName = "analyzeTable_part"
+
+    def queryStats(ds: String, hr: String): Option[CatalogStatistics] = {
+      val tableId = TableIdentifier(tableName)
+      val partition =
+        spark.sessionState.catalog.getPartition(tableId, Map("ds" -> ds, "hr" -> hr))
+      partition.stats
+    }
+
+    def assertStats(ds: String, hr: String, rowCount: BigInt, sizeInBytes: BigInt): Unit = {
+      val stats = queryStats(ds, hr).get
+      assert(stats.rowCount === Some(rowCount))
+      assert(stats.sizeInBytes === sizeInBytes)
+    }
+
+    def assertNoStats(ds: String, hr: String): Unit = {
+      assert(queryStats(ds, hr) === None)
+    }
+
+    def createPartition(ds: String, hr: Int, query: String): Unit = {
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds', hr=$hr) $query")
+    }
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+
+      createPartition("2010-01-01", 10, "SELECT * FROM SRC")
+      createPartition("2010-01-01", 11, "SELECT * FROM SRC")
+      createPartition("2010-01-02", 10, "SELECT * FROM SRC")
+      createPartition("2010-01-02", 11, "SELECT * FROM SRC UNION ALL SELECT * FROM SRC")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS")
+        .collect()
+
+      assertStats("2010-01-01", "10", 500, 5812)
+      assertStats("2010-01-01", "11", 500, 5812)
+      assertNoStats("2010-01-02", "10")
+      assertNoStats("2010-01-02", "11")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS")
+        .collect()
+
+      assertStats("2010-01-01", "10", 500, 5812)
+      assertStats("2010-01-01", "11", 500, 5812)
+      assertStats("2010-01-02", "10", 500, 5812)
+      assertStats("2010-01-02", "11", 2*500, 2*5812)
+    }
+  }
+
+  test("analyze a set of partitions noscan") {
+    val tableName = "analyzeTable_part"
+
+    def queryStats(ds: String, hr: String): Option[CatalogStatistics] = {
+      val tableId = TableIdentifier(tableName)
+      val partition =
+        spark.sessionState.catalog.getPartition(tableId, Map("ds" -> ds, "hr" -> hr))
+      partition.stats
+    }
+
+    def assertStats(ds: String, hr: String, sizeInBytes: BigInt): Unit = {
+      val stats = queryStats(ds, hr).get
+      assert(stats.rowCount === None)
+      assert(stats.sizeInBytes === sizeInBytes)
+    }
+
+    def assertNoStats(ds: String, hr: String): Unit = {
+      assert(queryStats(ds, hr) === None)
+    }
+
+    def createPartition(ds: String, hr: Int, query: String): Unit = {
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds', hr=$hr) $query")
+    }
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+
+      createPartition("2010-01-01", 10, "SELECT * FROM SRC")
+      createPartition("2010-01-01", 11, "SELECT * FROM SRC")
+      createPartition("2010-01-02", 10, "SELECT * FROM SRC")
+      createPartition("2010-01-02", 11, "SELECT * FROM SRC UNION ALL SELECT * FROM SRC")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
+        .collect()
+
+      assertStats("2010-01-01", "10", 5812)
+      assertStats("2010-01-01", "11", 5812)
+      assertNoStats("2010-01-02", "10")
+      assertNoStats("2010-01-02", "11")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS NOSCAN")
+        .collect()
+
+      assertStats("2010-01-01", "10", 5812)
+      assertStats("2010-01-01", "11", 5812)
+      assertStats("2010-01-02", "10", 5812)
+      assertStats("2010-01-02", "11", 2*5812)
+    }
+  }
+
   test("analyze non-existent partition") {
     val tableName = "analyzeTable_part"
     withTable(tableName) {
