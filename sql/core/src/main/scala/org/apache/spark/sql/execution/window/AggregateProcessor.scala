@@ -145,6 +145,8 @@ private[window] final class AggregateProcessor(
 
   /** Update the buffer. */
   def update(input: InternalRow): Unit = {
+    // TODO(hvanhovell) this sacrifices performance for correctness. We should make sure that
+    // MutableProjection makes copies of the complex input objects it buffer.
     val copy = input.copy()
     updateProjection(join(buffer, copy))
     var i = 0
