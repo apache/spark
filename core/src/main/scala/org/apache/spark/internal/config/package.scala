@@ -300,6 +300,13 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val SHUFFLE_HIGHLY_COMPRESSED_MAPSTATUS_THRESHOLD =
+    ConfigBuilder("spark.shuffle.highlyCompressedMapStatusThreshold")
+      .doc("Compress the size of shuffle blocks in HighlyCompressedMapStatus when the number of" +
+        "reduce partitions is above this threshold.")
+      .intConf
+      .createWithDefault(2000)
+
   private[spark] val SHUFFLE_ACCURATE_BLOCK_THRESHOLD =
     ConfigBuilder("spark.shuffle.accurateBlockThreshold")
       .doc("When we compress the size of shuffle blocks in HighlyCompressedMapStatus, we will " +
