@@ -377,13 +377,13 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     addInputStream(ssc).register()
     ssc.start()
 
-    val sources = StreamingContextSuite.getSources(ssc.env.metricsSystem)
+    val sources = ssc.env.metricsSystem.getSources
     val streamingSource = StreamingContextSuite.getStreamingSource(ssc)
     assert(sources.contains(streamingSource))
     assert(ssc.getState() === StreamingContextState.ACTIVE)
 
     ssc.stop()
-    val sourcesAfterStop = StreamingContextSuite.getSources(ssc.env.metricsSystem)
+    val sourcesAfterStop = ssc.env.metricsSystem.getSources
     val streamingSourceAfterStop = StreamingContextSuite.getStreamingSource(ssc)
     assert(ssc.getState() === StreamingContextState.STOPPED)
     assert(!sourcesAfterStop.contains(streamingSourceAfterStop))
@@ -979,10 +979,6 @@ package object testPackage extends Assertions {
  * This includes methods to access private methods and fields in StreamingContext and MetricsSystem
  */
 private object StreamingContextSuite extends PrivateMethodTester {
-  private val _sources = PrivateMethod[ArrayBuffer[Source]]('sources)
-  private def getSources(metricsSystem: MetricsSystem): ArrayBuffer[Source] = {
-    metricsSystem.invokePrivate(_sources())
-  }
   private val _streamingSource = PrivateMethod[StreamingSource]('streamingSource)
   private def getStreamingSource(streamingContext: StreamingContext): StreamingSource = {
     streamingContext.invokePrivate(_streamingSource())
