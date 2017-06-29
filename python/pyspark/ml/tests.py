@@ -1497,8 +1497,6 @@ class DefaultValuesTests(PySparkTestCase):
                     _java2py(self.sc, java_stage.clear(java_param).getOrDefault(java_param))
                 py_stage._clear(p)
                 py_default = py_stage.getOrDefault(p)
-                if p.name == "classifier":
-                    print "py default: {} java default: {}".format(py_default, java_default)
                 if isinstance(py_stage, pyspark.ml.feature.Imputer) and p.name == "missingValue":
                     # SPARK-15040 - default value for Imputer param 'missingValue' is NaN,
                     # and NaN != NaN, so handle it specially here
