@@ -43,6 +43,7 @@ while (TRUE) {
       }
     }
     p <- parallel:::mcfork()
+
     if (inherits(p, "masterProcess")) {
       close(inputCon)
       Sys.setenv(SPARKR_WORKER_PORT = port)
