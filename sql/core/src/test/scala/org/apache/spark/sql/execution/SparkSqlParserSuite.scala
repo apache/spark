@@ -280,7 +280,7 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-        AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
 
     intercept("analyze table t compute statistics xxxx",
       "Expected `NOSCAN` instead of `xxxx`")
