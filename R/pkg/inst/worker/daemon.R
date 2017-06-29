@@ -33,9 +33,6 @@ inputCon <- socketConnection(
 # Waits indefinitely for a socket connecion by default.
 selectTimeout <- NULL
 
-# Exit code that children send to the parent to indicate they exited.
-exitCode <- 1
-
 while (TRUE) {
   ready <- socketSelect(list(inputCon), timeout = selectTimeout)
 
@@ -56,19 +53,17 @@ while (TRUE) {
   # any worker is running or right before launching other worker children from the following
   # new socket connection.
 
-  # Only the process IDs of children sent data to the parent are returned below. The children
-  # send a custom exit code to the parent after being exited and the parent tries
-  # to terminate them only if they sent the exit code.
+  # The process IDs of exited children are returned below.
   children <- parallel:::selectChildren(timeout = 0)
 
   if (is.integer(children)) {
     lapply(children, function(child) {
-      # This data should be raw bytes if any data was sent from this child.
-      # Otherwise, this returns the PID.
-      data <- parallel:::readChild(child)
-      if (is.raw(data)) {
-        # This checks if the data from this child is the exit code that indicates an exited child.
-        if (unserialize(data) == exitCode) {
+      # This should be the PIDs of exited children. Otherwise, this returns raw bytes if any data
+      # was sent from this child.
+      pid <- parallel:::readChild(child)
+      if (is.integer(pid)) {
+        # This checks if the data from this child is a pid.
+        if (child == pid) {
           # If so, we terminate this child.
           tools::pskill(child, tools::SIGUSR1)
         }
@@ -95,9 +90,8 @@ while (TRUE) {
       close(inputCon)
       Sys.setenv(SPARKR_WORKER_PORT = port)
       try(source(script))
-      # Note that this mcexit does not fully terminate this child. So, this writes back
-      # a custom exit code so that the parent can read and terminate this child.
-      parallel:::mcexit(0L, send = exitCode)
+      # Note that this mcexit does not fully terminate this child.
+      parallel:::mcexit(0L)
     } else {
       # Forking succeeded and we need to check if they finished their jobs every second.
       selectTimeout <- 1
