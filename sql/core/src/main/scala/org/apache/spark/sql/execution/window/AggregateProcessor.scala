@@ -145,10 +145,11 @@ private[window] final class AggregateProcessor(
 
   /** Update the buffer. */
   def update(input: InternalRow): Unit = {
-    updateProjection(join(buffer, input))
+    val copy = input.copy()
+    updateProjection(join(buffer, copy))
     var i = 0
     while (i < numImperatives) {
-      imperatives(i).update(buffer, input)
+      imperatives(i).update(buffer, copy)
       i += 1
     }
   }
