@@ -149,6 +149,7 @@ private[sql] trait SQLTestUtils
         .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
     }
   }
+
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
    * returns.
@@ -161,6 +162,19 @@ private[sql] trait SQLTestUtils
       // wait for all tasks to finish before deleting files
       waitForTasksToFinish()
       Utils.deleteRecursively(dir)
+    }
+  }
+
+  /**
+   * Creates the specified number of temporary directories, which is then passed to `f` and will be
+   * deleted after `f` returns.
+   */
+  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
+    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
+    try f(files) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      files.foreach(Utils.deleteRecursively)
     }
   }
 

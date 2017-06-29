@@ -145,9 +145,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseDataset(sparkSession, inputPaths, parsedOptions)
-    val maybeFirstLine = SQLExecution.ignoreNestedExecutionId(sparkSession) {
-      CSVUtils.filterCommentAndEmpty(csv, parsedOptions).take(1).headOption
-    }
+    val maybeFirstLine = CSVUtils.filterCommentAndEmpty(csv, parsedOptions).take(1).headOption
     inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions)
   }
 
