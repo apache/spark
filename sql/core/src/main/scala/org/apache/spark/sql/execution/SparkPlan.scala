@@ -65,6 +65,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     false
   }
 
+  override def verboseStringWithSuffix: String = {
+    s"$verboseString $outputPartitioning"
+  }
+
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     SparkSession.setActiveSession(sqlContext.sparkSession)

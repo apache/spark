@@ -26,6 +26,10 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.exchange.Exchange
 
 class JoinSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -34,6 +38,70 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
   def statisticSizeInByte(df: DataFrame): BigInt = {
     df.queryExecution.optimizedPlan.stats.sizeInBytes
+  }
+
+  test("SPARK-16683 Repeated joins to same table can leak attributes via partitioning") {
+    val hier = sqlContext.sparkSession.sparkContext.parallelize(Seq(
+      ("A10", "A1"),
+      ("A11", "A1"),
+      ("A20", "A2"),
+      ("A21", "A2"),
+      ("B10", "B1"),
+      ("B11", "B1"),
+      ("B20", "B2"),
+      ("B21", "B2"),
+      ("A1", "A"),
+      ("A2", "A"),
+      ("B1", "B"),
+      ("B2", "B")
+    )).toDF("son", "parent").cache() // passes if cache is removed but with count on dist1
+    hier.createOrReplaceTempView("hier")
+    hier.count() // if this is removed it passes
+
+    val base = sqlContext.sparkSession.sparkContext.parallelize(Seq(
+      Tuple1("A10"),
+      Tuple1("A11"),
+      Tuple1("A20"),
+      Tuple1("A21"),
+      Tuple1("B10"),
+      Tuple1("B11"),
+      Tuple1("B20"),
+      Tuple1("B21")
+    )).toDF("id")
+    base.createOrReplaceTempView("base")
+
+    val dist1 = spark.sql("""
+    SELECT parent level1
+    FROM base INNER JOIN hier h1 ON base.id = h1.son
+    GROUP BY parent""")
+
+    dist1.createOrReplaceTempView("dist1")
+    // dist1.count() // or put a count here
+
+    val dist2 = spark.sql("""
+    SELECT parent level2
+    FROM dist1 INNER JOIN hier h2 ON dist1.level1 = h2.son
+    GROUP BY parent""")
+
+    val plan = dist2.queryExecution.executedPlan
+    // For debug print tree string with partitioning suffix
+    // println(plan.treeString(verbose = true, addSuffix = true))
+
+    dist2.createOrReplaceTempView("dist2")
+    checkAnswer(dist2, Row("A") :: Row("B") :: Nil)
+
+    assert(plan.isInstanceOf[WholeStageCodegenExec])
+    assert(plan.outputPartitioning === UnknownPartitioning(5))
+
+    val agg = plan.children.head
+
+    assert(agg.isInstanceOf[HashAggregateExec])
+    assert(agg.outputPartitioning === UnknownPartitioning(5))
+
+    // Skip input adaptor
+    val exchange = agg.children.head.children.head
+    assert(exchange.isInstanceOf[Exchange])
+    assert(exchange.outputPartitioning.isInstanceOf[HashPartitioning])
   }
 
   test("equi-join is hash-join") {

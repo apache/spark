@@ -171,6 +171,16 @@ sealed trait Partitioning {
    * produced by `A` could have also been produced by `B`.
    */
   def guarantees(other: Partitioning): Boolean = this == other
+
+  /**
+   * Returns the partitioning scheme that is valid under restriction to a given set of output
+   * attributes. If the partitioning is an [[Expression]] then the attributes that it depends on
+   * must be in the outputSet otherwise the attribute leaks.
+   */
+  def restrict(outputSet: AttributeSet): Partitioning = this match {
+    case p: Expression if !p.references.subsetOf(outputSet) => UnknownPartitioning(numPartitions)
+    case _ => this
+  }
 }
 
 object Partitioning {
@@ -355,6 +365,14 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
    */
   override def guarantees(other: Partitioning): Boolean =
     partitionings.exists(_.guarantees(other))
+
+  override def restrict(outputSet: AttributeSet): Partitioning = {
+    partitionings.map(_.restrict(outputSet)).filter(!_.isInstanceOf[UnknownPartitioning]) match {
+      case Nil => UnknownPartitioning(numPartitions)
+      case singlePartitioning :: Nil => singlePartitioning
+      case more => PartitioningCollection(more)
+    }
+  }
 
   override def toString: String = {
     partitionings.map(_.toString).mkString("(", " or ", ")")

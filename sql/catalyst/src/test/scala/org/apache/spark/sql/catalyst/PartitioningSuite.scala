@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{InterpretedMutableProjection, Literal}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning}
+
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, AttributeSet, InterpretedMutableProjection, Literal, NullsFirst, SortOrder}
+import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.types.DataTypes
 
 class PartitioningSuite extends SparkFunSuite {
   test("HashPartitioning compatibility should be sensitive to expression ordering (SPARK-9785)") {
@@ -51,5 +53,42 @@ class PartitioningSuite extends SparkFunSuite {
     assert(partitioningA === partitioningA)
     assert(partitioningA.guarantees(partitioningA))
     assert(partitioningA.compatibleWith(partitioningA))
+  }
+
+  test("restriction of Partitioning works") {
+    val n = 5
+
+    val a1 = AttributeReference("a1", DataTypes.IntegerType)()
+    val a2 = AttributeReference("a2", DataTypes.IntegerType)()
+    val a3 = AttributeReference("a3", DataTypes.IntegerType)()
+
+    val hashPartitioning = HashPartitioning(Seq(a1, a2), n)
+
+    assert(hashPartitioning.restrict(AttributeSet(Seq())) === UnknownPartitioning(n))
+    assert(hashPartitioning.restrict(AttributeSet(Seq(a1))) === UnknownPartitioning(n))
+    assert(hashPartitioning.restrict(AttributeSet(Seq(a1, a2))) === hashPartitioning)
+    assert(hashPartitioning.restrict(AttributeSet(Seq(a1, a2, a3))) === hashPartitioning)
+
+    val so1 = SortOrder(a1, Ascending)
+    val so2 = SortOrder(a2, Ascending)
+
+    val rangePartitioning1 = RangePartitioning(Seq(so1), n)
+    val rangePartitioning2 = RangePartitioning(Seq(so1, so2), n)
+
+    assert(rangePartitioning2.restrict(AttributeSet(Seq())) == UnknownPartitioning(n))
+    assert(rangePartitioning2.restrict(AttributeSet(Seq(a1))) == UnknownPartitioning(n))
+    assert(rangePartitioning2.restrict(AttributeSet(Seq(a1, a2))) === rangePartitioning2)
+    assert(rangePartitioning2.restrict(AttributeSet(Seq(a1, a2, a3))) === rangePartitioning2)
+
+    assert(SinglePartition.restrict(AttributeSet(a1)) === SinglePartition)
+
+    val all = Seq(hashPartitioning, rangePartitioning1, rangePartitioning2)
+    val partitioningCollection = PartitioningCollection(all)
+
+    assert(partitioningCollection.restrict(AttributeSet(Seq())) == UnknownPartitioning(n))
+    assert(partitioningCollection.restrict(AttributeSet(Seq(a1))) == rangePartitioning1)
+    assert(partitioningCollection.restrict(AttributeSet(Seq(a1, a2))) == partitioningCollection)
+    assert(partitioningCollection.restrict(AttributeSet(Seq(a1, a2, a3))) == partitioningCollection)
+
   }
 }
