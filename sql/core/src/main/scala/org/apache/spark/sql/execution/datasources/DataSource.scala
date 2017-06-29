@@ -87,6 +87,14 @@ case class DataSource(
   lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
+  private val equality = sparkSession.sessionState.conf.resolver
+
+  userSpecifiedSchema.foreach { dataSchema =>
+    SchemaUtils.checkColumnNameDuplication(
+      dataSchema.map(_.name), "in the data schema", equality)
+  }
+  SchemaUtils.checkColumnNameDuplication(
+    partitionColumns, "in the partition schema", equality)
 
   /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
@@ -128,7 +136,6 @@ case class DataSource(
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
-    val equality = sparkSession.sessionState.conf.resolver
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource

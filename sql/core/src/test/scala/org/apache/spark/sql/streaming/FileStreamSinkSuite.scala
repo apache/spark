@@ -385,7 +385,7 @@ class FileStreamSinkSuite extends StreamTest {
         val errorMsg = intercept[AnalysisException] {
           spark.read.schema(s"$c0 INT, $c1 INT").json(outputDir).as[(Int, Int)]
         }.getMessage
-        assert(errorMsg.contains("Found duplicate column(s) in the datasource: "))
+        assert(errorMsg.contains("Found duplicate column(s) in the data schema: "))
       }
     }
   }
