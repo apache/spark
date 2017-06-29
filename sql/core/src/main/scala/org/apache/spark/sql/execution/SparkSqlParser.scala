@@ -108,7 +108,17 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
     }
 
-    val partitionSpec = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    val partitionSpec =
+      if (ctx.partitionSpec != null) {
+        val filteredSpec = visitPartitionSpec(ctx.partitionSpec).filter(x => x._2.isDefined)
+        if (filteredSpec.isEmpty) {
+          None
+        } else {
+          Some(filteredSpec.mapValues(v => v.get))
+        }
+      } else {
+        None
+      }
 
     val table = visitTableIdentifier(ctx.tableIdentifier)
     if (ctx.identifierSeq() == null) {

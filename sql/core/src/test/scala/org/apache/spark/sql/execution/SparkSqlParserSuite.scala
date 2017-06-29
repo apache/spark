@@ -258,7 +258,7 @@ class SparkSqlParserSuite extends AnalysisTest {
       AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
     assertEqual("analyze table t compute statistics noscan",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
-    assertEqual("analyze table t compute statistics nOscAn",
+    assertEqual("analyze table t partition (a) compute statistics nOscAn",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
 
     // Partitions specified
@@ -268,10 +268,19 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = true,
         partitionSpec = Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
-    intercept("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
-      "empty partition key 'ds'")
-    intercept("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      "empty partition key 'ds'")
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Some(Map("ds" -> "2008-04-09"))))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Some(Map("ds" -> "2008-04-09"))))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Some(Map("ds" -> "2008-04-09"))))
+    assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+    assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
+        AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
 
     intercept("analyze table t compute statistics xxxx",
       "Expected `NOSCAN` instead of `xxxx`")
