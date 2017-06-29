@@ -138,8 +138,12 @@ case class RowDataSourceScanExec(
   }
 
   // Only care about `relation` and `metadata` when canonicalizing.
-  override def preCanonicalized: SparkPlan =
-    copy(rdd = null, outputPartitioning = null, metastoreTableIdentifier = None)
+  override lazy val canonicalized: SparkPlan =
+    copy(
+      output.map(QueryPlan.normalizeExprId(_, output)),
+      rdd = null,
+      outputPartitioning = null,
+      metastoreTableIdentifier = None)
 }
 
 /**
