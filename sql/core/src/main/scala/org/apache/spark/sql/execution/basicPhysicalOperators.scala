@@ -82,7 +82,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
 
 /** Physical plan for Filter. */
-case class FilterExec(condition: Expression, child: SparkPlan)
+case class FilterExec(condition: Expression, child: SparkPlan, outputAttrs: Seq[Attribute])
   extends UnaryExecNode with CodegenSupport with PredicateHelper {
 
   // Split out all the IsNotNulls from condition.
@@ -91,27 +91,14 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     case _ => false
   }
 
-  // If one expression and its children are null intolerant, it is null intolerant.
-  private def isNullIntolerant(expr: Expression): Boolean = expr match {
-    case e: NullIntolerant => e.children.forall(isNullIntolerant)
-    case _ => false
-  }
-
-  // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
-  private val notNullAttributes = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
-
   // Mark this as empty. We'll evaluate the input during doConsume(). We don't want to evaluate
   // all the variables at the beginning to take advantage of short circuiting.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
+  // Since some plan rewrite rules (e.g., python.ExtractPythonUDFs) possibly change child's output
+  // from optimized logical plans, we need to adjust the filter's output here.
   override def output: Seq[Attribute] = {
-    child.output.map { a =>
-      if (a.nullable && notNullAttributes.contains(a.exprId)) {
-        a.withNullability(false)
-      } else {
-        a
-      }
-    }
+    child.output.map { attr => outputAttrs.find(_.exprId == attr.exprId).getOrElse(attr) }
   }
 
   override lazy val metrics = Map(
@@ -188,10 +175,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       }
     }.mkString("\n")
 
-    // Reset the isNull to false for the not-null columns, then the followed operators could
+    // Reset the isNull to false for the not-nullable columns, then the followed operators could
     // generate better code (remove dead branches).
     val resultVars = input.zipWithIndex.map { case (ev, i) =>
-      if (notNullAttributes.contains(child.output(i).exprId)) {
+      if (!output(i).nullable) {
         ev.isNull = "false"
       }
       ev
@@ -224,6 +211,15 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  // Don't display `outputAttrs` names in explain
+  override def simpleString: String = s"Filter ($condition)"
+}
+
+object FilterExec {
+  def apply(condition: Expression, child: SparkPlan): FilterExec = {
+    FilterExec(condition, child, child.output)
+  }
 }
 
 /**

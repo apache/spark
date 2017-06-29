@@ -521,7 +521,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   def getPhysicalFilters(df: DataFrame): ExpressionSet = {
     ExpressionSet(
       df.queryExecution.executedPlan.collect {
-        case execution.FilterExec(f, _) => splitConjunctivePredicates(f)
+        case execution.FilterExec(f, _, _) => splitConjunctivePredicates(f)
       }.flatten)
   }
 

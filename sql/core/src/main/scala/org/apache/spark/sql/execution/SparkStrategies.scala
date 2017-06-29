@@ -429,11 +429,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object InMemoryScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>
+        val scanBuilder = (attrs: Seq[Attribute]) => {
+          // Since filters might change the nullability of attributes in `pruneFilterProject`,
+          // we need to update the nullability based on `InMemoryRelation` output.
+          val nullabilityMap = AttributeMap(mem.output.map { a => a -> a.nullable })
+          val newOutputAttrs = attrs.map { ar =>
+            nullabilityMap.get(ar).filterNot(_ == ar.nullable).map { nullable =>
+              ar.withNullability(nullable)
+            }.getOrElse(ar)
+          }
+          InMemoryTableScanExec(newOutputAttrs, filters, mem)
+        }
         pruneFilterProject(
           projectList,
           filters,
           identity[Seq[Expression]], // All filters still need to be evaluated.
-          InMemoryTableScanExec(_, filters, mem)) :: Nil
+          scanBuilder) :: Nil
       case _ => Nil
     }
   }
@@ -538,10 +549,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.SortExec(sortExprs, global, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.ProjectExec(projectList, planLater(child)) :: Nil
-      case logical.Filter(condition, child) =>
-        execution.FilterExec(condition, planLater(child)) :: Nil
+      case f @ logical.Filter(condition, child) =>
+        execution.FilterExec(condition, planLater(child), f.output) :: Nil
       case f: logical.TypedFilter =>
-        execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
+        execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child), f.output) :: Nil
       case e @ logical.Expand(_, _, child) =>
         execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
       case logical.Window(windowExprs, partitionSpec, orderSpec, child) =>

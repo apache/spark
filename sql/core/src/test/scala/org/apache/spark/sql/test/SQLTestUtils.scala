@@ -366,7 +366,7 @@ private[sql] trait SQLTestUtilsBase
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
     val withoutFilters = df.queryExecution.sparkPlan.transform {
-      case FilterExec(_, child) => child
+      case FilterExec(_, child, _) => child
     }
 
     spark.internalCreateDataFrame(withoutFilters.execute(), schema)
