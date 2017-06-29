@@ -1073,8 +1073,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     TaskContext.setTaskContext(TaskContext.empty())
     // if the try, catch and finally blocks throw different exception instances
     try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock =
-        { throw catchBlockError }, finallyBlock = { throw finallyBlockError })
+      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(
+        catchBlock = { throw catchBlockError }, finallyBlock = { throw finallyBlockError })
     } catch {
       case t: Error =>
         assert(t.getSuppressed.head == catchBlockError)
@@ -1087,8 +1087,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     e = new Error("Block1")
     isErrorOccurred = false
     try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock =
-        { throw e }, finallyBlock = { throw e })
+      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock = { throw e },
+        finallyBlock = { throw e })
     } catch {
       case t: Error =>
         assert(t.getSuppressed.length == 0)
