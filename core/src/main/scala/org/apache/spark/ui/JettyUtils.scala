@@ -211,8 +211,11 @@ private[spark] object JettyUtils extends Logging {
       }
 
       override def newHttpClient(): HttpClient = {
-        // Use the Jetty logic to calculate the number of selector threads (#CPUs/2),
+        // SPARK-21176: Use the Jetty logic to calculate the number of selector threads (#CPUs/2),
         // but limit it to 8 max.
+        // Otherwise, it might happen that we exhaust the threadpool since in reverse proxy mode
+        // a proxy is instantiated for each executor. If the head node has many processors, this
+        // can quickly add up to an unreasonably high number of threads.
         val numSelectors = math.max(1, math.min(8, Runtime.getRuntime().availableProcessors() / 2))
         new HttpClient(new HttpClientTransportOverHTTP(numSelectors), null)
       }
