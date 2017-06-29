@@ -139,10 +139,12 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * as 0.0. The feature specified as offset has a constant coefficient of 1.0.
    * @group param
    */
+  @Since("2.3.0")
   final val offsetCol: Param[String] = new Param[String](this, "offsetCol", "The offset " +
     "column name. If this is not set or empty, we treat all instance offsets as 0.0")
 
   /** @group getParam */
+  @Since("2.3.0")
   def getOffsetCol: String = $(offsetCol)
 
   /** Checks whether weight column is set and nonempty. */
@@ -333,7 +335,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    *
    * @group setParam
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setOffsetCol(value: String): this.type = set(offsetCol, value)
 
   /**
@@ -990,7 +992,7 @@ class GeneralizedLinearRegressionModel private[ml] (
   /**
    * Calculates the predicted value when offset is set.
    */
-  def predict(features: Vector, offset: Double): Double = {
+  private def predict(features: Vector, offset: Double): Double = {
     val eta = predictLink(features, offset)
     familyAndLink.fitted(eta)
   }

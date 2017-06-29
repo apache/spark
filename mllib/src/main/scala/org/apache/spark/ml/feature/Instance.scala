@@ -44,12 +44,7 @@ private[ml] case class OffsetInstance(
     offset: Double,
     features: Vector) {
 
-  /** Constructs from an [[Instance]] object and offset */
-  def this(instance: Instance, offset: Double = 0.0) = {
-    this(instance.label, instance.weight, offset, instance.features)
-  }
-
   /** Converts to an [[Instance]] object by leaving out the offset. */
-  private[ml] def toInstance: Instance = Instance(label, weight, features)
+  def toInstance: Instance = Instance(label, weight, features)
 
 }
