@@ -26,6 +26,7 @@ from py4j.java_gateway import JavaObject
 from py4j.java_collections import JavaArray, JavaList
 
 from pyspark import RDD, SparkContext
+# from pyspark.ml import Estimator, Model
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql import DataFrame, SQLContext
 

@@ -23,7 +23,7 @@ import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressio
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -95,7 +95,7 @@ class TrainValidationSplitSuite
   }
 
   test("transformSchema should check estimatorParamMaps") {
-    import TrainValidationSplitSuite._
+    import TrainValidationSplitSuite.{MyEstimator, MyEvaluator}
 
     val est = new MyEstimator("est")
     val eval = new MyEvaluator
@@ -134,6 +134,18 @@ class TrainValidationSplitSuite
 
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
     assert(tvs.getSeed === tvs2.getSeed)
+
+    TrainValidationSplitSuite
+      .compareParamMaps(tvs.getEstimatorParamMaps, tvs2.getEstimatorParamMaps)
+
+    tvs2.getEstimator match {
+      case lr2: LogisticRegression =>
+        assert(lr.uid === lr2.uid)
+        assert(lr.getMaxIter === lr2.getMaxIter)
+      case other =>
+        throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
+          s" LogisticRegression but found ${other.getClass.getName}")
+    }
   }
 
   test("read/write: TrainValidationSplit with nested estimator") {
@@ -157,6 +169,24 @@ class TrainValidationSplitSuite
 
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
     assert(tvs.getSeed === tvs2.getSeed)
+
+    tvs2.getEstimator match {
+      case ova2: OneVsRest =>
+        assert(ova.uid === ova2.uid)
+        val classifier = ova2.getClassifier
+        classifier match {
+          case lr: LogisticRegression =>
+            assert(ova.getClassifier.asInstanceOf[LogisticRegression].getMaxIter
+              === lr.asInstanceOf[LogisticRegression].getMaxIter)
+          case _ =>
+            throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
+              s" LogisticREgression but found ${classifier.getClass.getName}")
+        }
+
+      case other =>
+        throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
+          s" OneVsRest but found ${other.getClass.getName}")
+    }
   }
 
   test("read/write: TrainValidationSplitModel") {
@@ -183,8 +213,21 @@ class TrainValidationSplitSuite
   }
 }
 
-object TrainValidationSplitSuite {
-
+object TrainValidationSplitSuite extends SparkFunSuite{
+  /**
+   * Assert sequences of estimatorParamMaps are identical.
+   * Params must be simple types comparable with `===`.
+   */
+  def compareParamMaps(pMaps: Array[ParamMap], pMaps2: Array[ParamMap]): Unit = {
+    assert(pMaps.length === pMaps2.length)
+    pMaps.zip(pMaps2).foreach { case (pMap, pMap2) =>
+      assert(pMap.size === pMap2.size)
+      pMap.toSeq.foreach { case ParamPair(p, v) =>
+        assert(pMap2.contains(p))
+        assert(pMap2(p) === v)
+      }
+    }
+  }
   abstract class MyModel extends Model[MyModel]
 
   class MyEstimator(override val uid: String) extends Estimator[MyModel] with HasInputCol {

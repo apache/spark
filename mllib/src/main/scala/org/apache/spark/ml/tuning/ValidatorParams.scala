@@ -131,13 +131,16 @@ private[ml] object ValidatorParams {
       instance.getEstimatorParamMaps.map { case paramMap =>
         paramMap.toSeq.map { case ParamPair(p, v) =>
           v match {
-            case writeableObj: MLWritable =>
+            case writeableObj: DefaultParamsWritable =>
+              val paramPath = new Path(path, "epm_" + p.name + numParamsNotJson).toString
               numParamsNotJson += 1
-              val paramPath = new Path(path, "param" + p.name + numParamsNotJson).toString
               writeableObj.save(paramPath)
               Map("parent" -> p.parent, "name" -> p.name,
                 "value" -> compact(render(JString(paramPath))),
                 "isJson" -> compact(render(JBool(false))))
+            case _: MLWritable =>
+              throw new NotImplementedError("ValidatorParams.saveImpl does not handle parameters " +
+                "of type: MLWritable that are not DefaultParamsWritable")
             case _ =>
               Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v),
                 "isJson" -> compact(render(JBool(true))))

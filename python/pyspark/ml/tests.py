@@ -49,7 +49,7 @@ from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.common import _java2py, _py2java
-from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
 from pyspark.ml.linalg import DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT, \
@@ -657,7 +657,7 @@ class CrossValidatorTests(SparkSessionTestCase):
                          "Best model should have zero induced error")
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
-    def test_save_load(self):
+    def test_save_load_trained_model(self):
         # This tests saving and loading the trained model only.
         # Save/load for CrossValidator will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
@@ -680,6 +680,77 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedLrModel = LogisticRegressionModel.load(cvModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+    def test_save_load_simple_estimator(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+        
+        # test save/load of CrossValidator
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        cvModel = cv.fit(dataset)
+        cvPath = temp_path + "/cv"
+        cv.save(cvPath)
+        loadedCV = CrossValidator.load(cvPath)
+        self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
+        self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
+        self.assertEqual(loadedCV.getEstimatorParamMaps(), cv.getEstimatorParamMaps())
+
+        # test save/load of CrossValidatorModel
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedModel = CrossValidatorModel.load(cvModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+
+    def test_save_load_nested_stimator(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        
+        ova = OneVsRest(classifier=LogisticRegression())
+        lr1 = LogisticRegression().setMaxIter(100)
+        lr2 = LogisticRegression().setMaxIter(150)
+        grid = ParamGridBuilder().addGrid(ova.classifier, [lr1, lr2]).build()
+        evaluator = MulticlassClassificationEvaluator()
+        
+        # test save/load of CrossValidator
+        cv = CrossValidator(estimator=ova, estimatorParamMaps=grid, evaluator=evaluator)
+        cvModel = cv.fit(dataset)
+        cvPath = temp_path + "/cv"
+        cv.save(cvPath)
+        loadedCV = CrossValidator.load(cvPath)
+        self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
+        self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
+
+        originalParamMap = cv.getEstimatorParamMaps()
+        loadedParamMap = loadedCV.getEstimatorParamMaps()
+        for i,param in enumerate(loadedParamMap):
+            # print "PARAM:",param
+            for p in param:
+                if p.name == "classifier":
+                    self.assertEqual(param[p].uid, originalParamMap[i][p].uid)
+                else:
+                    self.assertEqual(param[p], originalParamMap[i][p])
+
+        # test save/load of CrossValidatorModel
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedModel = CrossValidatorModel.load(cvModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
 
 class TrainValidationSplitTests(SparkSessionTestCase):
@@ -738,7 +809,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
                          "validationMetrics has the same size of grid parameter")
         self.assertEqual(1.0, max(validationMetrics))
 
-    def test_save_load(self):
+    def test_save_load_trained_model(self):
         # This tests saving and loading the trained model only.
         # Save/load for TrainValidationSplit will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
@@ -761,6 +832,74 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         loadedLrModel = LogisticRegressionModel.load(tvsModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+    def test_save_load_simple_estimator(self):
+        # This tests saving and loading the trained model only.
+        # Save/load for TrainValidationSplit will be added later: SPARK-13786
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        tvsModel = tvs.fit(dataset)
+
+        tvsPath = temp_path + "/tvs"
+        tvs.save(tvsPath)
+        loadedTvs = TrainValidationSplit.load(tvsPath)
+        self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
+        self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
+        self.assertEqual(loadedTvs.getEstimatorParamMaps(), tvs.getEstimatorParamMaps())
+
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+
+    def test_save_load_nested_estimator(self):
+        # This tests saving and loading the trained model only.
+        # Save/load for TrainValidationSplit will be added later: SPARK-13786
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        ova = OneVsRest(classifier=LogisticRegression())
+        lr1 = LogisticRegression().setMaxIter(100)
+        lr2 = LogisticRegression().setMaxIter(150)
+        grid = ParamGridBuilder().addGrid(ova.classifier, [lr1, lr2]).build()
+        evaluator = MulticlassClassificationEvaluator()
+        
+        tvs = TrainValidationSplit(estimator=ova, estimatorParamMaps=grid, evaluator=evaluator)
+        tvsModel = tvs.fit(dataset)
+        tvsPath = temp_path + "/tvs"
+        tvs.save(tvsPath)
+        loadedTvs = TrainValidationSplit.load(tvsPath)
+        self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
+        self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
+        
+        originalParamMap = tvs.getEstimatorParamMaps()
+        loadedParamMap = loadedTvs.getEstimatorParamMaps()
+        for i,param in enumerate(loadedParamMap):
+            for p in param:
+                if p.name == "classifier":
+                    self.assertEqual(param[p].uid, originalParamMap[i][p].uid)
+                else:
+                    self.assertEqual(param[p], originalParamMap[i][p])
+
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
 
     def test_copy(self):
         dataset = self.spark.createDataFrame([
@@ -1349,8 +1488,8 @@ class DefaultValuesTests(PySparkTestCase):
             py_has_default = py_stage.hasDefault(p)
             java_has_default = java_stage.hasDefault(java_param)
             self.assertEqual(py_has_default, java_has_default,
-                             "Default value mismatch of param %s for Params %s"
-                             % (p.name, str(py_stage)))
+                             "Default value mismatch of param %s for Params %s, py has default: %s java has default: %s"
+                             % (p.name, str(py_stage), py_has_default, java_has_default))
             if py_has_default:
                 if p.name == "seed":
                     return  # Random seeds between Spark and PySpark are different
@@ -1358,6 +1497,8 @@ class DefaultValuesTests(PySparkTestCase):
                     _java2py(self.sc, java_stage.clear(java_param).getOrDefault(java_param))
                 py_stage._clear(p)
                 py_default = py_stage.getOrDefault(p)
+                if p.name == "classifier":
+                    print "py default: {} java default: {}".format(py_default, java_default)
                 if isinstance(py_stage, pyspark.ml.feature.Imputer) and p.name == "missingValue":
                     # SPARK-15040 - default value for Imputer param 'missingValue' is NaN,
                     # and NaN != NaN, so handle it specially here
