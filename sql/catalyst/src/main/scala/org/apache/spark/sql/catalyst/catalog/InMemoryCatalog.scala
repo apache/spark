@@ -315,10 +315,10 @@ class InMemoryCatalog(
   override def alterTableStats(
       db: String,
       table: String,
-      stats: CatalogStatistics): Unit = synchronized {
+      stats: Option[CatalogStatistics]): Unit = synchronized {
     requireTableExists(db, table)
     val origTable = catalog(db).tables(table).table
-    catalog(db).tables(table).table = origTable.copy(stats = Some(stats))
+    catalog(db).tables(table).table = origTable.copy(stats = stats)
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {
