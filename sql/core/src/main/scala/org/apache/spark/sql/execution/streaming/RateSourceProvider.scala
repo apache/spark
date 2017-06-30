@@ -25,7 +25,7 @@ import org.apache.commons.io.IOUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
@@ -52,8 +52,13 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
       sqlContext: SQLContext,
       schema: Option[StructType],
       providerName: String,
-      parameters: Map[String, String]): (String, StructType) =
+      parameters: Map[String, String]): (String, StructType) = {
+    if (schema.nonEmpty) {
+      throw new AnalysisException("The rate source does not support a user-specified schema.")
+    }
+
     (shortName(), RateSourceProvider.SCHEMA)
+  }
 
   override def createSource(
       sqlContext: SQLContext,

@@ -44,7 +44,7 @@ class InMemorySessionCatalogSuite extends SessionCatalogSuite {
  * signatures but do not extend a common parent. This is largely by design but
  * unfortunately leads to very similar test code in two places.
  */
-abstract class SessionCatalogSuite extends PlanTest {
+abstract class SessionCatalogSuite extends AnalysisTest {
   protected val utils: CatalogTestUtils
 
   protected val isHiveExternalCatalog = false
@@ -454,7 +454,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       val oldTableStats = catalog.getTableMetadata(tableId).stats
       assert(oldTableStats.isEmpty)
       val newStats = CatalogStatistics(sizeInBytes = 1)
-      catalog.alterTableStats(tableId, newStats)
+      catalog.alterTableStats(tableId, Some(newStats))
       val newTableStats = catalog.getTableMetadata(tableId).stats
       assert(newTableStats.get == newStats)
     }

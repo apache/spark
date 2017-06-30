@@ -201,7 +201,7 @@ class OuterJoinEliminationSuite extends PlanTest {
 
     val originalQuery =
       x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
-        .where(Coalesce("y.e".attr :: "x.a".attr :: Nil))
+        .where(Coalesce("y.e".attr :: "x.a".attr :: Nil) === 0)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -209,7 +209,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     val right = testRelation1
     val correctAnswer =
       left.join(right, FullOuter, Option("a".attr === "d".attr))
-        .where(Coalesce("e".attr :: "a".attr :: Nil)).analyze
+        .where(Coalesce("e".attr :: "a".attr :: Nil) === 0).analyze
 
     comparePlans(optimized, correctAnswer)
   }
