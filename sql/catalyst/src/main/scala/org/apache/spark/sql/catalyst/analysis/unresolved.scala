@@ -317,15 +317,16 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
  * @param table an optional table that should be the target of the expansion.  If omitted all
  *              tables' columns are produced.
  */
-case class UnresolvedRegex(regexPattern: String, table: Option[String])
+case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSensitive: Boolean)
   extends Star with Unevaluable {
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
+    val pattern = if (caseSensitive) regexPattern else s"(?i)$regexPattern"
     table match {
       // If there is no table specified, use all input attributes that match expr
-      case None => input.output.filter(_.name.matches(s"(?i)$regexPattern"))
+      case None => input.output.filter(_.name.matches(pattern))
       // If there is a table, pick out attributes that are part of this table that match expr
       case Some(t) => input.output.filter(_.qualifier.exists(resolver(_, t)))
-        .filter(_.name.matches(s"(?i)$regexPattern"))
+        .filter(_.name.matches(pattern))
     }
   }
 

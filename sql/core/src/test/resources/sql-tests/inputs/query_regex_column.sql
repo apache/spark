@@ -27,3 +27,13 @@ SELECT `(e|f)` FROM testData2;
 SELECT t.`(e|f)` FROM testData2 t;
 SELECT p.`(KEY)?+.+`, b, testdata2.`(b)?+.+` FROM testData p join testData2 ON p.key = testData2.a WHERE key < 3;
 SELECT p.`(key)?+.+`, b, testdata2.`(b)?+.+` FROM testData p join testData2 ON p.key = testData2.a WHERE key < 3;
+
+set spark.sql.caseSensitive=true;
+
+CREATE OR REPLACE TEMPORARY VIEW testdata3 AS SELECT * FROM VALUES
+(0, 1), (1, 2), (2, 3), (3, 4)
+AS testdata3(a, b);
+
+-- Regex columns
+SELECT `(A)?+.+` FROM testdata3;
+SELECT `(a)?+.+` FROM testdata3;

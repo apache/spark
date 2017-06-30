@@ -1201,13 +1201,16 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.3.0
    */
-  def colRegex(colName: String): Column = colName match {
-    case ParserUtils.escapedIdentifier(columnNameRegex) =>
-      Column(UnresolvedRegex(columnNameRegex, None))
-    case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
-      Column(UnresolvedRegex(columnNameRegex, Some(nameParts)))
-    case _ =>
-      Column(resolve(colName))
+  def colRegex(colName: String): Column = {
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    colName match {
+      case ParserUtils.escapedIdentifier(columnNameRegex) =>
+        Column(UnresolvedRegex(columnNameRegex, None, caseSensitive))
+      case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
+        Column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
+      case _ =>
+        Column(resolve(colName))
+    }
   }
 
   /**
