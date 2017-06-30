@@ -1283,6 +1283,32 @@ public class JavaDatasetSuite implements Serializable {
     ds.collectAsList();
   }
 
+  public enum EnumBean {
+    B("www.google.com");
+
+    private String url;
+
+    EnumBean(String url) {
+      this.url = url;
+    }
+
+    public String getUrl() {
+      return url;
+    }
+
+    public void setUrl(String url) {
+      this.url = url;
+    }
+  }
+
+  @Test
+  public void testEnum() throws Exception {
+    List<EnumBean> data = Arrays.asList(EnumBean.B);
+    Dataset<EnumBean> ds = spark.createDataset(data, Encoders.bean(EnumBean.class));
+
+    Assert.assertEquals(ds.collectAsList().size(), 1);
+  }
+
   public static class EmptyBean implements Serializable {}
 
   @Test
