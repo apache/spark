@@ -382,7 +382,7 @@ private[ml] trait HasSolver extends Params {
    * Param for the solver algorithm for optimization.
    * @group param
    */
-  final val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization")
+  val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization")
 
   /** @group getParam */
   final def getSolver: String = $(solver)
