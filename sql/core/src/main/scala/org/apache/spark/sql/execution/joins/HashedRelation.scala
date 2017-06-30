@@ -83,7 +83,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   /**
    * Returns the average number of probes per key lookup.
    */
-  def getAverageProbesPerLookup(): Double
+  def getAverageProbesPerLookup: Double
 }
 
 private[execution] object HashedRelation {
@@ -280,7 +280,7 @@ private[joins] class UnsafeHashedRelation(
     read(in.readInt, in.readLong, in.readBytes)
   }
 
-  override def getAverageProbesPerLookup(): Double = binaryMap.getAverageProbesPerLookup()
+  override def getAverageProbesPerLookup: Double = binaryMap.getAverageProbesPerLookup
 }
 
 private[joins] object UnsafeHashedRelation {
@@ -776,7 +776,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   /**
    * Returns the average number of probes per key lookup.
    */
-  def getAverageProbesPerLookup(): Double = numProbes.toDouble / numKeyLookups
+  def getAverageProbesPerLookup: Double = numProbes.toDouble / numKeyLookups
 }
 
 private[joins] class LongHashedRelation(
@@ -829,7 +829,7 @@ private[joins] class LongHashedRelation(
     map = in.readObject().asInstanceOf[LongToUnsafeRowMap]
   }
 
-  override def getAverageProbesPerLookup(): Double = map.getAverageProbesPerLookup()
+  override def getAverageProbesPerLookup: Double = map.getAverageProbesPerLookup
 }
 
 /**
