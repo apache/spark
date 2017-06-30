@@ -436,7 +436,7 @@ case class View(
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
-  override def simpleString: String = {
+  override def verboseString: String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
 }
@@ -452,7 +452,7 @@ case class View(
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def simpleString: String = {
+  override def verboseString: String = {
     val cteAliases = Utils.truncatedString(cteRelations.map(_._1), "[", ", ", "]")
     s"CTE $cteAliases"
   }
@@ -527,7 +527,7 @@ case class Range(
     Statistics( sizeInBytes = sizeInBytes )
   }
 
-  override def simpleString: String = {
+  override def verboseString: String = {
     s"Range ($start, $end, step=$step, splits=$numSlices)"
   }
 }

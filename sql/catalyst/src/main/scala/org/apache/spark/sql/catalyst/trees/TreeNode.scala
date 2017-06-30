@@ -432,24 +432,35 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def nodeName: String = getClass.getSimpleName.replaceAll("Exec$", "")
 
   /**
+   * Returns a user-facing string representation of this node's name. By default it's `nodeName`.
+   */
+  def prettyName: String = nodeName
+
+  /**
    * The arguments that should be included in the arg string.  Defaults to the `productIterator`.
    */
   protected def stringArgs: Iterator[Any] = productIterator
 
   private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
+  /** Converts a node to string. Subclasses can override this to use other string representation. */
+  protected def argToString(arg: Any): String = arg match {
+    case tn: TreeNode[_] => tn.verboseString
+    case _ => arg.toString
+  }
+
   /** Returns a string representing the arguments to this node, minus any children */
   def argString: String = stringArgs.flatMap {
     case tn: TreeNode[_] if allChildren.contains(tn) => Nil
     case Some(tn: TreeNode[_]) if allChildren.contains(tn) => Nil
-    case Some(tn: TreeNode[_]) => tn.simpleString :: Nil
-    case tn: TreeNode[_] => tn.simpleString :: Nil
+    case Some(tn: TreeNode[_]) => tn :: Nil
+    case tn: TreeNode[_] => tn :: Nil
     case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
-    case seq: Seq[_] => Utils.truncatedString(seq, "[", ", ", "]") :: Nil
-    case set: Set[_] => Utils.truncatedString(set.toSeq, "{", ", ", "}") :: Nil
+    case seq: Seq[_] => Utils.truncatedString(seq.map(argToString), "[", ", ", "]") :: Nil
+    case set: Set[_] => Utils.truncatedString(set.toSeq.map(argToString), "{", ", ", "}") :: Nil
     case array: Array[_] if array.isEmpty => Nil
-    case array: Array[_] => Utils.truncatedString(array, "[", ", ", "]") :: Nil
+    case array: Array[_] => Utils.truncatedString(array.map(argToString), "[", ", ", "]") :: Nil
     case null => Nil
     case None => Nil
     case Some(null) => Nil
@@ -460,17 +471,28 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case _ => table.identifier :: Nil
       }
     case other => other :: Nil
-  }.mkString(", ")
+  }.map(argToString).mkString(", ")
 
-  /** ONE line description of this node. */
-  def simpleString: String = s"$nodeName $argString".trim
+  /** ONE line description of this node, not including any arguments and children information */
+  def simpleString: String = prettyName
 
-  /** ONE line description of this node with more information */
-  def verboseString: String
+  /**
+   * ONE line description of this node with more information, without any children information.
+   * By default, it includes the arguments to this node, minus any children.
+   * It is mainly called by `generateTreeString`, when constructing the string representation
+   * of the nodes in this tree. Subclasses can override it to provide more user-friendly
+   * representation.
+   */
+  def verboseString: String = if (argString != "") {
+    s"$prettyName $argString".trim
+  } else {
+    simpleString
+  }
 
-  /** ONE line description of this node with some suffix information */
+  /** ONE line description of this node by adding some suffix information to `verboseString` */
   def verboseStringWithSuffix: String = verboseString
 
+  /** The string representation of this tree, by default including all the nodes in this tree */
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */

@@ -166,7 +166,7 @@ case class TakeOrderedAndProjectExec(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  override def simpleString: String = {
+  override def verboseString: String = {
     val orderByString = Utils.truncatedString(sortOrder, "[", ",", "]")
     val outputString = Utils.truncatedString(output, "[", ",", "]")
 

@@ -573,4 +573,19 @@ class TreeNodeSuite extends SparkFunSuite {
     val right = JsonMethods.parse(rightJson)
     assert(left == right)
   }
+
+  test("The size of treeString should grow linearly") {
+    def getTreeString(nestedLevel: Int): String = {
+      var currentExpr = Dummy(None)
+      (1 to nestedLevel).foreach { _ =>
+        currentExpr = Dummy(Some(currentExpr))
+      }
+      currentExpr.treeString
+    }
+    val treeStringSizes = Seq(10, 100, 1000).map { nestedLevel =>
+      getTreeString(nestedLevel).replaceAll("\\s", "").size.toDouble
+    }
+    assert(treeStringSizes(1) / treeStringSizes(0) <= 100 / 10)
+    assert(treeStringSizes(2) / treeStringSizes(0) <= 1000 / 10)
+  }
 }

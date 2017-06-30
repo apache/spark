@@ -167,7 +167,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   override def simpleString: String = statePrefix + super.simpleString
 
-  override def verboseString: String = simpleString
+  override def verboseString: String = statePrefix + super.verboseString
+
+  /**
+   * In `verboseString` of a query plan, we'd like to see the children information of argument
+   * if it's a tree node, which typically is an [[Expression]]. Thus, instead of calling
+   * `verboseString`, we call its `toString`.
+   */
+  override protected def argToString(arg: Any): String = arg.toString
 
   /**
    * All the subqueries of current plan.

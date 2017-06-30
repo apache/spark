@@ -174,6 +174,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   def this(child: Expression, dataType: DataType) = this(child, dataType, None)
 
+  override def verboseString: String = s"cast to ${dataType.simpleString}"
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
   override def checkInputDataTypes(): TypeCheckResult = {

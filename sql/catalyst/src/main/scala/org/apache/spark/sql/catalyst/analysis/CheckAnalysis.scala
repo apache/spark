@@ -282,7 +282,7 @@ trait CheckAnalysis extends PredicateHelper {
 
             failAnalysis(
               s"resolved attribute(s) $missingAttributes missing from $input " +
-                s"in operator ${operator.simpleString}")
+                s"in operator ${operator.verboseString}")
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
@@ -332,7 +332,7 @@ trait CheckAnalysis extends PredicateHelper {
               s"""nondeterministic expressions are only allowed in
                  |Project, Filter, Aggregate or Window, found:
                  | ${o.expressions.map(_.sql).mkString(",")}
-                 |in operator ${operator.simpleString}
+                 |in operator ${operator.verboseString}
                """.stripMargin)
 
           case _: UnresolvedHint =>
@@ -344,7 +344,7 @@ trait CheckAnalysis extends PredicateHelper {
     }
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
-      case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
+      case o if !o.resolved => failAnalysis(s"unresolved operator ${o.verboseString}")
       case _ =>
     }
 

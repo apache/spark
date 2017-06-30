@@ -196,7 +196,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   def simpleString: String = {
     s"""== Physical Plan ==
-       |${stringOrError(executedPlan.treeString(verbose = false))}
+       |${stringOrError(executedPlan.treeString(verbose = true))}
       """.stripMargin.trim
   }
 

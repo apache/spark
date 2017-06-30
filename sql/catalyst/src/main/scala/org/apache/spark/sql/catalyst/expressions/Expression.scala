@@ -186,19 +186,15 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns a user-facing string representation of this expression's name.
    * This should usually match the name of the function in SQL.
    */
-  def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
+  override def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
 
   protected def flatArguments: Iterator[Any] = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
   }
 
-  // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
-  // overridden by concrete classes.
-  final override def verboseString: String = simpleString
-
-  override def simpleString: String = toString
-
+  // Different to [[TreeNode]], we usually want `toString` returns ONE line description, instead of
+  // tree representation for [[Expression]].
   override def toString: String = prettyName + Utils.truncatedString(
     flatArguments.toSeq, "(", ", ", ")")
 

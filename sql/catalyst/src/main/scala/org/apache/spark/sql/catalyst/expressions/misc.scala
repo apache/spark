@@ -33,7 +33,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   protected override def nullSafeEval(input: Any): Any = input
 
-  private val outputPrefix = s"Result of ${child.simpleString} is "
+  private val outputPrefix = s"Result of ${child.verboseString} is "
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val outputPrefixField = ctx.addReferenceObj("outputPrefix", outputPrefix)
@@ -65,7 +65,7 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def prettyName: String = "assert_true"
 
-  private val errMsg = s"'${child.simpleString}' is not true!"
+  private val errMsg = s"'${child.verboseString}' is not true!"
 
   override def eval(input: InternalRow) : Any = {
     val v = child.eval(input)

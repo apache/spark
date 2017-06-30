@@ -111,6 +111,11 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   override def dataType: DataType = childSchema(ordinal).dataType
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
 
+  override def verboseString: String = {
+    val fieldName = if (resolved) childSchema(ordinal).name else s"_$ordinal"
+    s"$simpleString(${name.getOrElse(fieldName)})"
+  }
+
   override def toString: String = {
     val fieldName = if (resolved) childSchema(ordinal).name else s"_$ordinal"
     s"$child.${name.getOrElse(fieldName)}"
@@ -155,6 +160,7 @@ case class GetArrayStructFields(
     containsNull: Boolean) extends UnaryExpression with ExtractValue with NullIntolerant {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
+  override def verboseString: String = s"$simpleString(${field.name})"
   override def toString: String = s"$child.${field.name}"
   override def sql: String = s"${child.sql}.${quoteIdentifier(field.name)}"
 
@@ -218,6 +224,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
 
+  override def verboseString: String = s"$simpleString($ordinal)"
   override def toString: String = s"$child[$ordinal]"
   override def sql: String = s"${child.sql}[${ordinal.sql}]"
 
@@ -267,6 +274,7 @@ case class GetMapValue(child: Expression, key: Expression)
   // We have done type checking for child in `ExtractValue`, so only need to check the `key`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType)
 
+  override def verboseString: String = s"$simpleString($key)"
   override def toString: String = s"$child[$key]"
   override def sql: String = s"${child.sql}[${key.sql}]"
 
