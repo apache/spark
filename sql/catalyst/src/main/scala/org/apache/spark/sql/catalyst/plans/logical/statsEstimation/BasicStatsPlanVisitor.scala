@@ -26,6 +26,7 @@ import org.apache.spark.sql.types.LongType
  */
 object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
+  /** Falls back to the estimation computed by [[SizeInBytesOnlyStatsPlanVisitor]]. */
   private def fallback(p: LogicalPlan): Statistics = SizeInBytesOnlyStatsPlanVisitor.visit(p)
 
   override def default(p: LogicalPlan): Statistics = fallback(p)

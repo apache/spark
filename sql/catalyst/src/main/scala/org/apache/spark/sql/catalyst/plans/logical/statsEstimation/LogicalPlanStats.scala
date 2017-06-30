@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.plans.logical._
 
-
+/**
+ * A trait to add statistics propagation to [[LogicalPlan]].
+ */
 trait LogicalPlanStats { self: LogicalPlan =>
 
   /**

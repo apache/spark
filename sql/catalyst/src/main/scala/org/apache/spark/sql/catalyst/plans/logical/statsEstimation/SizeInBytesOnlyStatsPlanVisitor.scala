@@ -27,6 +27,31 @@ import org.apache.spark.sql.catalyst.plans.logical._
  */
 object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
+  /**
+   * A default, commonly used estimation for unary nodes. We assume the input row number is the
+   * same as the output row number, and compute sizes based on the column types.
+   */
+  private def visitUnaryNode(p: UnaryNode): Statistics = {
+    // There should be some overhead in Row object, the size should not be zero when there is
+    // no columns, this help to prevent divide-by-zero error.
+    val childRowSize = p.child.output.map(_.dataType.defaultSize).sum + 8
+    val outputRowSize = p.output.map(_.dataType.defaultSize).sum + 8
+    // Assume there will be the same number of rows as child has.
+    var sizeInBytes = (p.child.stats.sizeInBytes * outputRowSize) / childRowSize
+    if (sizeInBytes == 0) {
+      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+      // (product of children).
+      sizeInBytes = 1
+    }
+
+    // Don't propagate rowCount and attributeStats, since they are not estimated here.
+    Statistics(sizeInBytes = sizeInBytes, hints = p.child.stats.hints)
+  }
+
+  /**
+   * For leaf nodes, use its computeStats. For other nodes, we assume the size in bytes is the
+   * sum of all of the children's.
+   */
   override def default(p: LogicalPlan): Statistics = p match {
     case p: LeafNode => p.computeStats()
     case _: LogicalPlan => Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).product)
@@ -134,22 +159,5 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitUnion(p: Union): Statistics = {
     Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).sum)
-  }
-
-  private def visitUnaryNode(p: UnaryNode): Statistics = {
-    // There should be some overhead in Row object, the size should not be zero when there is
-    // no columns, this help to prevent divide-by-zero error.
-    val childRowSize = p.child.output.map(_.dataType.defaultSize).sum + 8
-    val outputRowSize = p.output.map(_.dataType.defaultSize).sum + 8
-    // Assume there will be the same number of rows as child has.
-    var sizeInBytes = (p.child.stats.sizeInBytes * outputRowSize) / childRowSize
-    if (sizeInBytes == 0) {
-      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
-      // (product of children).
-      sizeInBytes = 1
-    }
-
-    // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes, hints = p.child.stats.hints)
   }
 }
