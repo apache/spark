@@ -321,6 +321,16 @@ package object config {
       .intConf
       .createWithDefault(3)
 
+  private[spark] val REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS =
+    ConfigBuilder("spark.reducer.maxBlocksInFlightPerAddress")
+      .doc("This configuration limits the number of remote blocks being fetched from a given " +
+        " host port at any given point. When external shuffle is enabled and a large number of " +
+        " blocks are being requested from a given node in a single fetch or simultaneously, this " +
+        " could crash the Node Manager under increased load. You can mitigate this issue by " +
+        " setting it to a lower value.")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
   private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
     ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
       .internal()
