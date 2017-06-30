@@ -1534,8 +1534,9 @@ setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
 #' @name NULL
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 
-#' @rdname window
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("window", function(x, ...) { standardGeneric("window") })
 
 #' @rdname column_datetime_functions

@@ -38,7 +38,7 @@ NULL
 #'
 #' Date time functions defined for \code{Column}.
 #'
-#' @param x Column to compute on.
+#' @param x Column to compute on. In \code{window}, it must be a time Column of \code{TimestampType}.
 #' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
 #'               x Column to DateType or TimestampType. For \code{trunc}, it is the string used
 #'               for specifying the truncation method. For example, "year", "yyyy", "yy" for
@@ -2374,8 +2374,8 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRight}: (Unigned) shifts the given value numBits right. If the given value is a long value,
-#' it will return a long value else it will return an integer value.
+#' \code{shiftRightUnsigned}: (Unigned) shifts the given value numBits right. If the given value is
+#' a long value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions
 #' @aliases shiftRightUnsigned shiftRightUnsigned,Column,numeric-method
@@ -2483,14 +2483,13 @@ setMethod("from_unixtime", signature(x = "Column"),
             column(jc)
           })
 
-#' window
-#'
-#' Bucketize rows into one or more time windows given a timestamp specifying column. Window
-#' starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+#' @details
+#' \code{window}: Bucketizes rows into one or more time windows given a timestamp specifying column.
+#' Window starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
 #' [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
-#' the order of months are not supported.
+#' the order of months are not supported. It returns an output column of struct called 'window'
+#' by default with the nested columns 'start' and 'end'
 #'
-#' @param x a time Column. Must be of TimestampType.
 #' @param windowDuration a string specifying the width of the window, e.g. '1 second',
 #'                       '1 day 12 hours', '2 minutes'. Valid interval strings are 'week',
 #'                       'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'. Note that
@@ -2506,27 +2505,22 @@ setMethod("from_unixtime", signature(x = "Column"),
 #'                  window intervals. For example, in order to have hourly tumbling windows
 #'                  that start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
 #'                  \code{startTime} as \code{"15 minutes"}.
-#' @param ... further arguments to be passed to or from other methods.
-#' @return An output column of struct called 'window' by default with the nested columns 'start'
-#'         and 'end'.
-#' @family date time functions
-#' @rdname window
-#' @name window
-#' @aliases window,Column-method
+#' @rdname column_datetime_functions
+#' @aliases window window,Column-method
 #' @export
 #' @examples
-#'\dontrun{
-#'   # One minute windows every 15 seconds 10 seconds after the minute, e.g. 09:00:10-09:01:10,
-#'   # 09:00:25-09:01:25, 09:00:40-09:01:40, ...
-#'   window(df$time, "1 minute", "15 seconds", "10 seconds")
 #'
-#'   # One minute tumbling windows 15 seconds after the minute, e.g. 09:00:15-09:01:15,
-#'    # 09:01:15-09:02:15...
-#'   window(df$time, "1 minute", startTime = "15 seconds")
+#' \dontrun{
+#' # One minute windows every 15 seconds 10 seconds after the minute, e.g. 09:00:10-09:01:10,
+#' # 09:00:25-09:01:25, 09:00:40-09:01:40, ...
+#' window(df$time, "1 minute", "15 seconds", "10 seconds")
 #'
-#'   # Thirty-second windows every 10 seconds, e.g. 09:00:00-09:00:30, 09:00:10-09:00:40, ...
-#'   window(df$time, "30 seconds", "10 seconds")
-#'}
+#' # One minute tumbling windows 15 seconds after the minute, e.g. 09:00:15-09:01:15,
+#' # 09:01:15-09:02:15...
+#' window(df$time, "1 minute", startTime = "15 seconds")
+#'
+#' # Thirty-second windows every 10 seconds, e.g. 09:00:00-09:00:30, 09:00:10-09:00:40, ...
+#' window(df$time, "30 seconds", "10 seconds")}
 #' @note window since 2.0.0
 setMethod("window", signature(x = "Column"),
           function(x, windowDuration, slideDuration = NULL, startTime = NULL) {
