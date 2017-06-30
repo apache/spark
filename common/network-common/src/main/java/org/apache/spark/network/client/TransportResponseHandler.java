@@ -92,7 +92,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   public void addStreamCallback(String streamId, StreamCallback callback) {
     timeOfLastRequestNs.set(System.nanoTime());
-    streamCallbacks.offer(Tuple2.apply(streamId, callback));
+    streamCallbacks.offer(new Tuple2<>(streamId, callback));
   }
 
   @VisibleForTesting
