@@ -231,6 +231,7 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
     assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
     assertEqual("`select`(all a, b)", 'select.function('a, 'b))
+    intercept("foo(a x)", "extraneous input 'x'")
   }
 
   test("window function expressions") {
