@@ -2603,7 +2603,16 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def cache(): this.type = persist()
+  def cache(tableName: Option[String] = None): this.type =
+    persist(tableName, StorageLevel.MEMORY_AND_DISK)
+
+  /**
+    * Persist this Dataset with table name and the default storage level (`MEMORY_AND_DISK`).
+    *
+    * @group basic
+    * @since 1.6.0
+    */
+  def cache(tableName: String): this.type = persist(tableName, StorageLevel.MEMORY_AND_DISK)
 
   /**
    * Persist this Dataset with the given storage level.
@@ -2614,8 +2623,23 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def persist(newLevel: StorageLevel): this.type = {
-    sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
+  def persist(tableName: Option[String] = None, newLevel: StorageLevel): this.type = {
+    sparkSession.sharedState.cacheManager.cacheQuery(this, tableName, newLevel)
+    this
+  }
+
+  /**
+   * Persist this Dataset with the given storage level.
+   * @param tableName RDD name used in cache
+   * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
+   *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
+   *                 `MEMORY_AND_DISK_2`, etc.
+   *
+   * @group basic
+   * @since 1.6.0
+   */
+  def persist(tableName: String, newLevel: StorageLevel): this.type = {
+    sparkSession.sharedState.cacheManager.cacheQuery(this, Some(tableName), newLevel)
     this
   }
 
