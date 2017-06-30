@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Unio
 import org.apache.spark.sql.types._
 
 
-class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
+class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
   private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
   private val analyzer = new Analyzer(catalog, conf)
 

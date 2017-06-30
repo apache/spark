@@ -60,7 +60,7 @@ case class HashAggregateExec(
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"),
-    "avgHashmapProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hashmap probe"))
+    "avgHashProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hash probe"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -94,7 +94,7 @@ case class HashAggregateExec(
     val numOutputRows = longMetric("numOutputRows")
     val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
-    val avgHashmapProbe = longMetric("avgHashmapProbe")
+    val avgHashProbe = longMetric("avgHashProbe")
 
     child.execute().mapPartitions { iter =>
 
@@ -119,7 +119,7 @@ case class HashAggregateExec(
             numOutputRows,
             peakMemory,
             spillSize,
-            avgHashmapProbe)
+            avgHashProbe)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -212,7 +212,7 @@ case class HashAggregateExec(
     }
 
     val doAgg = ctx.freshName("doAggregateWithoutKey")
-    ctx.addNewFunction(doAgg,
+    val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
          | private void $doAgg() throws java.io.IOException {
          |   // initialize aggregation buffer
@@ -229,7 +229,7 @@ case class HashAggregateExec(
        | while (!$initAgg) {
        |   $initAgg = true;
        |   long $beforeAgg = System.nanoTime();
-       |   $doAgg();
+       |   $doAggFuncName();
        |   $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
        |
        |   // output the result
@@ -344,7 +344,7 @@ case class HashAggregateExec(
       sorter: UnsafeKVExternalSorter,
       peakMemory: SQLMetric,
       spillSize: SQLMetric,
-      avgHashmapProbe: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
+      avgHashProbe: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
 
     // update peak execution memory
     val mapMemory = hashMap.getPeakMemoryUsedBytes
@@ -355,8 +355,7 @@ case class HashAggregateExec(
     metrics.incPeakExecutionMemory(maxMemory)
 
     // Update average hashmap probe
-    val avgProbes = hashMap.getAverageProbesPerLookup()
-    avgHashmapProbe.add(avgProbes.ceil.toLong)
+    avgHashProbe.set(hashMap.getAverageProbesPerLookup())
 
     if (sorter == null) {
       // not spilled
@@ -584,7 +583,7 @@ case class HashAggregateExec(
     val doAgg = ctx.freshName("doAggregateWithKeys")
     val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
-    val avgHashmapProbe = metricTerm(ctx, "avgHashmapProbe")
+    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
 
     def generateGenerateCode(): String = {
       if (isFastHashMapEnabled) {
@@ -600,7 +599,7 @@ case class HashAggregateExec(
       } else ""
     }
 
-    ctx.addNewFunction(doAgg,
+    val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
         ${generateGenerateCode}
         private void $doAgg() throws java.io.IOException {
@@ -611,7 +610,7 @@ case class HashAggregateExec(
               s"$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();"} else ""}
 
           $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm, $peakMemory, $spillSize,
-            $avgHashmapProbe);
+            $avgHashProbe);
         }
        """)
 
@@ -681,7 +680,7 @@ case class HashAggregateExec(
      if (!$initAgg) {
        $initAgg = true;
        long $beforeAgg = System.nanoTime();
-       $doAgg();
+       $doAggFuncName();
        $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
      }
 

@@ -159,7 +159,9 @@ case class CreateViewCommand(
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
+        // Nothing we need to retain from the old view, so just drop and create a new one
+        catalog.dropTable(viewIdent, ignoreIfNotExists = false, purge = false)
+        catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
