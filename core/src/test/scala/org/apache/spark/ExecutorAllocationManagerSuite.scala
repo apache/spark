@@ -188,6 +188,40 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 10)
   }
 
+  test("add executors when speculative tasks added") {
+    sc = createSparkContext(0, 10, 0)
+    val manager = sc.executorAllocationManager.get
+
+    // Verify that we're capped at number of tasks including the speculative ones in the stage
+    sc.listenerBus.postToAll(SparkListenerSpeculativeTaskAdd(1))
+    assert(numExecutorsTarget(manager) === 0)
+    assert(numExecutorsToAdd(manager) === 1)
+    assert(addExecutors(manager) === 1)
+    sc.listenerBus.postToAll(SparkListenerSpeculativeTaskAdd(1))
+    sc.listenerBus.postToAll(SparkListenerSpeculativeTaskAdd(1))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, 2)))
+    assert(numExecutorsTarget(manager) === 1)
+    assert(numExecutorsToAdd(manager) === 2)
+    assert(addExecutors(manager) === 2)
+    assert(numExecutorsTarget(manager) === 3)
+    assert(numExecutorsToAdd(manager) === 4)
+    assert(addExecutors(manager) === 2)
+    assert(numExecutorsTarget(manager) === 5)
+    assert(numExecutorsToAdd(manager) === 1)
+
+    // Verify that running a task doesn't affect the target
+    sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
+    assert(numExecutorsTarget(manager) === 5)
+    assert(addExecutors(manager) === 0)
+    assert(numExecutorsToAdd(manager) === 1)
+
+    // Verify that running a speculative task doesn't affect the target
+    sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-2", true)))
+    assert(numExecutorsTarget(manager) === 5)
+    assert(addExecutors(manager) === 0)
+    assert(numExecutorsToAdd(manager) === 1)
+  }
+
   test("cancel pending executors when no longer needed") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get
@@ -980,9 +1014,11 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       taskLocalityPreferences = taskLocalityPreferences)
   }
 
-  private def createTaskInfo(taskId: Int, taskIndex: Int, executorId: String): TaskInfo = {
-    new TaskInfo(taskId, taskIndex, 0, 0, executorId, "", TaskLocality.ANY, speculative = false)
+  private def createTaskInfo(taskId: Int, taskIndex: Int, executorId: String,
+                             speculative: Boolean = false): TaskInfo = {
+    new TaskInfo(taskId, taskIndex, 0, 0, executorId, "", TaskLocality.ANY, speculative)
   }
+
 
   /* ------------------------------------------------------- *
    | Helper methods for accessing private methods and fields |
@@ -1010,6 +1046,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _onExecutorBusy = PrivateMethod[Unit]('onExecutorBusy)
   private val _localityAwareTasks = PrivateMethod[Int]('localityAwareTasks)
   private val _hostToLocalTaskCount = PrivateMethod[Map[String, Int]]('hostToLocalTaskCount)
+  private val _onSpeculativeTaskAdded = PrivateMethod[Unit]('onSpeculativeTaskAdded)
 
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsToAdd()
@@ -1083,6 +1120,10 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def onExecutorBusy(manager: ExecutorAllocationManager, id: String): Unit = {
     manager invokePrivate _onExecutorBusy(id)
+  }
+
+  private def onSpeculativeTaskAdded(manager: ExecutorAllocationManager, id: String) : Unit = {
+    manager invokePrivate _onSpeculativeTaskAdded(id)
   }
 
   private def localityAwareTasks(manager: ExecutorAllocationManager): Int = {

@@ -71,6 +71,8 @@ private[spark] trait SparkListenerBus
         listener.onNodeUnblacklisted(nodeUnblacklisted)
       case blockUpdated: SparkListenerBlockUpdated =>
         listener.onBlockUpdated(blockUpdated)
+      case speculativeTaskAdd: SparkListenerSpeculativeTaskAdd =>
+        listener.onSpeculativeTaskAdded(speculativeTaskAdd)
       case _ => listener.onOtherEvent(event)
     }
   }
