@@ -468,7 +468,7 @@ class Column(val expr: Expression) extends Logging {
     val right = lit(other).expr
     if (this.expr == right) {
       logWarning(
-        s"Constructing trivially true equals predicate, '${this.expr} = $right'. " +
+        s"Constructing trivially true equals predicate, '${this.expr} <=> $right'. " +
           "Perhaps you need to use aliases.")
     }
     EqualNullSafe(expr, right)
