@@ -707,7 +707,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
-  test("describeExtended") {
+  test("summary") {
     val describeTestData = person2
 
     val describeResult = Seq(
@@ -732,7 +732,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val describeTwoCols = describeTestData.describeExtended("name", "age", "height")
+    val describeTwoCols = describeTestData.summary()
     assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeTwoCols, describeResult)
     // All aggregate value should have been cast to string
@@ -741,42 +741,40 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(row.get(3).isInstanceOf[String], "expected string but found " + row.get(3).getClass)
     }
 
-    val describeAllCols = describeTestData.describeExtended()
+    val describeAllCols = describeTestData.summary()
     assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeAllCols, describeResult)
 
-    val describeOneCol = describeTestData.describeExtended("age")
+    val describeOneCol = describeTestData.select("age").summary()
     assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
     checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d)} )
 
-    val describeNoCol = describeTestData.select("name").describeExtended()
+    val describeNoCol = describeTestData.select("name").summary()
     assert(getSchemaAsSeq(describeNoCol) === Seq("summary", "name"))
     checkAnswer(describeNoCol, describeResult.map { case Row(s, n, _, _) => Row(s, n)} )
 
-    val emptyDescription = describeTestData.limit(0).describeExtended()
+    val emptyDescription = describeTestData.limit(0).summary()
     assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
-  test("describeAdvanced") {
+  test("summary advanced") {
     val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
-    val orderMatters = person2.describeAdvanced(stats)
+    val orderMatters = person2.summary(stats: _*)
     assert(orderMatters.collect().map(_.getString(0)) === stats)
 
-    val onlyPercentiles = person2.describeAdvanced(Array("0.1%", "99.9%"))
+    val onlyPercentiles = person2.summary("0.1%", "99.9%")
     assert(onlyPercentiles.count() === 2)
 
     val fooE = intercept[IllegalArgumentException] {
-      person2.describeAdvanced(Array("foo"))
+      person2.summary("foo")
     }
     assert(fooE.getMessage === "requirement failed: foo is not a recognised statistic")
 
     val parseE = intercept[IllegalArgumentException] {
-      person2.describeAdvanced(Array("foo%"))
+      person2.summary("foo%")
     }
     assert(parseE.getMessage === "Unable to parse foo% as a double")
-
-    assert(person2.describeAdvanced(Array()).count() === 0)
   }
 
   test("apply on query results (SPARK-5462)") {

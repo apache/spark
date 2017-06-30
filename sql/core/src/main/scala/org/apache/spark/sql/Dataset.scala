@@ -2205,7 +2205,7 @@ class Dataset[T] private[sql](
    *   // max     92.0  192.0
    * }}}
    *
-   * See also [[describeExtended]] and [[describeAdvanced]]
+   * See also [[summary]]
    *
    * @param cols Columns to compute statistics on.
    *
@@ -2213,20 +2213,30 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def describe(cols: String*): DataFrame =
-    describeAdvanced(Array("count", "mean", "stddev", "min", "max"), cols: _*)
+  def describe(cols: String*): DataFrame = {
+    val selected = if (cols.isEmpty) this else select(cols.head, cols.tail: _*)
+    selected.summary("count", "mean", "stddev", "min", "max")
+  }
 
   /**
-   * Computes statistics for numeric and string columns, including count, mean, stddev, min,
-   * approximate quartiles, and max. If no columns are given, this function computes
-   * statistics for all numerical or string columns.
+   * Computes specified statistics for numeric and string columns. Available statistics are:
+   *
+   * - count
+   * - mean
+   * - stddev
+   * - min
+   * - max
+   * - arbitrary approximate percentiles specified as a percentage (eg, 75%)
+   *
+   * If no statistics are given, this function computes count, mean, stddev, min,
+   * approximate quartiles, and max.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
    * backward compatibility of the schema of the resulting Dataset. If you want to
    * programmatically compute summary statistics, use the `agg` function instead.
    *
    * {{{
-   *   ds.describeExtended("age", "height").show()
+   *   ds.summary().show()
    *
    *   // output:
    *   // summary age   height
@@ -2240,36 +2250,8 @@ class Dataset[T] private[sql](
    *   // max     92.0  192.0
    * }}}
    *
-   * To specify which statistics or percentiles are desired see [[describeAdvanced]]
-   *
-   * @param cols Columns to compute statistics on.
-   *
-   * @group action
-   * @since 2.3.0
-   */
-  @scala.annotation.varargs
-  def describeExtended(cols: String*): DataFrame =
-    describeAdvanced(Array("count", "mean", "stddev", "min", "25%", "50%", "75%", "max"), cols: _*)
-
-  /**
-   * Computes specified statistics for numeric and string columns. Available statistics are:
-   *
-   * - count
-   * - mean
-   * - stddev
-   * - min
-   * - max
-   * - arbitrary approximate percentiles specifid as a percentage (eg, 75%)
-   *
-   * If no columns are given, this function computes statistics for all numerical or string
-   * columns.
-   *
-   * This function is meant for exploratory data analysis, as we make no guarantee about the
-   * backward compatibility of the schema of the resulting Dataset. If you want to
-   * programmatically compute summary statistics, use the `agg` function instead.
-   *
    * {{{
-   *   ds.describeAdvanced(Array("count", "min", "25%", "75%", "max"), "age", "height").show()
+   *   ds.summary("count", "min", "25%", "75%", "max").show()
    *
    *   // output:
    *   // summary age   height
@@ -2281,29 +2263,31 @@ class Dataset[T] private[sql](
    * }}}
    *
    * @param statistics Statistics from above list to be computed.
-   * @param cols Columns to compute statistics on.
    *
    * @group action
    * @since 2.3.0
    */
   @scala.annotation.varargs
-  def describeAdvanced(statistics: Array[String], cols: String*): DataFrame = withPlan {
+  def summary(statistics: String*): DataFrame = withPlan {
 
-    val hasPercentiles = statistics.exists(_.endsWith("%"))
+    val defaultStatistics = Seq("count", "mean", "stddev", "min", "25%", "50%", "75%", "max")
+    val selectedStatistics = if (statistics.nonEmpty) statistics.toSeq else defaultStatistics
+
+    val hasPercentiles = selectedStatistics.exists(_.endsWith("%"))
     val (percentiles, percentileNames, remainingAggregates) = if (hasPercentiles) {
-      val (pStrings, rest) = statistics.toSeq.partition(a => a.endsWith("%"))
+      val (pStrings, rest) = selectedStatistics.partition(a => a.endsWith("%"))
       val percentiles = pStrings.map { p =>
         try {
           p.stripSuffix("%").toDouble / 100.0
         } catch {
           case e: NumberFormatException =>
-            throw new IllegalArgumentException(s"Unable to parse $p as a double", e)
+            throw new IllegalArgumentException(s"Unable to parse $p as a percentile", e)
         }
       }
       require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
       (percentiles, pStrings, rest)
     } else {
-      (Seq(), Seq(), statistics.toSeq)
+      (Seq(), Seq(), selectedStatistics)
     }
 
 
@@ -2324,10 +2308,9 @@ class Dataset[T] private[sql](
         new ApproximatePercentile(child, CreateArray(percentiles.map(Literal(_))))
           .toAggregateExpression()
 
-    val outputCols =
-      (if (cols.isEmpty) aggregatableColumns.map(usePrettyExpression(_).sql) else cols).toList
+    val outputCols = aggregatableColumns.map(usePrettyExpression(_).sql).toList
 
-    val ret: Seq[Row] = if (outputCols.nonEmpty && statistics.nonEmpty) {
+    val ret: Seq[Row] = if (outputCols.nonEmpty) {
       var aggExprs = statisticFns.toList.flatMap { case (_, colToAgg) =>
         outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
       }
@@ -2359,16 +2342,14 @@ class Dataset[T] private[sql](
               Row(name :: values.map(nullSafeString).toList: _*)
           }
         (rows ++ percentileRows)
-          .sortWith((left, right) => statistics.indexOf(left(0)) < statistics.indexOf(right(0)))
+          .sortWith((left, right) =>
+            selectedStatistics.indexOf(left(0)) < selectedStatistics.indexOf(right(0)))
       } else {
         rows
       }
-    } else if (outputCols.isEmpty) {
-      // If there are no output columns, just output a single column that contains the stats.
-      statistics.map(Row(_))
     } else {
-      // If there are no aggregates, return empty Seq
-      Seq()
+      // If there are no output columns, just output a single column that contains the stats.
+      selectedStatistics.map(Row(_))
     }
 
     // All columns are string type
