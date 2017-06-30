@@ -209,6 +209,7 @@ NULL
 #' @param offset In \code{lag}, the number of rows back from the current row from which to obtain
 #'               a value. In \code{lead}, the number of rows after the current row from which to
 #'               obtain a value. If not specified, the default is 1.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
 #' @param ... additional argument(s).
 #' @name column_window_functions
 #' @rdname column_window_functions
@@ -220,8 +221,10 @@ NULL
 #' ws <- orderBy(windowPartitionBy("am"), "hp")
 #' tmp <- mutate(df, dist = over(cume_dist(), ws), dense_rank = over(dense_rank(), ws),
 #'               lag = over(lag(df$mpg), ws), lead = over(lead(df$mpg, 1), ws),
-#'               ntile = over(ntile(4), ws), percent_rank = over(percent_rank(), ws),
+#'               percent_rank = over(percent_rank(), ws),
 #'               rank = over(rank(), ws), row_number = over(row_number(), ws))
+#' # Get ntile group id (1-4) for hp
+#' tmp <- mutate(tmp, ntile = over(ntile(4), ws))
 #' head(tmp)}
 NULL
 
@@ -2871,10 +2874,10 @@ setMethod("ifelse",
 
 #' @details
 #' \code{cume_dist}: Returns the cumulative distribution of values within a window partition,
-#' i.e. the fraction of rows that are below the current row.
-#' N = total number of rows in the partition
-#' cume_dist(x) = number of values before (and including) x / N
+#' i.e. the fraction of rows that are below the current row:
+#' number of values before (and including) x / total number of rows in the partition.
 #' This is equivalent to the \code{CUME_DIST} function in SQL.
+#' This should be used with no argument.
 #'
 #' @rdname column_window_functions
 #' @aliases cume_dist cume_dist,missing-method
@@ -2895,6 +2898,7 @@ setMethod("cume_dist",
 #' place and that the next person came in third. Rank would give me sequential numbers, making
 #' the person that came in third place (after the ties) would register as coming in fifth.
 #' This is equivalent to the \code{DENSE_RANK} function in SQL.
+#' This should be used with no argument.
 #'
 #' @rdname column_window_functions
 #' @aliases dense_rank dense_rank,missing-method
@@ -2913,7 +2917,6 @@ setMethod("dense_rank",
 #' an \code{offset} of one will return the previous row at any given point in the window partition.
 #' This is equivalent to the \code{LAG} function in SQL.
 #'
-#' @param defaultValue (optional) default to use when the offset row does not exist.
 #' @rdname column_window_functions
 #' @aliases lag lag,characterOrColumn-method
 #' @export
@@ -2976,9 +2979,9 @@ setMethod("ntile",
 
 #' @details
 #' \code{percent_rank}: Returns the relative rank (i.e. percentile) of rows within a window partition.
-#' This is computed by:
-#'   (rank of row in its partition - 1) / (number of rows in the partition - 1).
+#' This is computed by: (rank of row in its partition - 1) / (number of rows in the partition - 1).
 #' This is equivalent to the \code{PERCENT_RANK} function in SQL.
+#' This should be used with no argument.
 #'
 #' @rdname column_window_functions
 #' @aliases percent_rank percent_rank,missing-method
@@ -2999,6 +3002,7 @@ setMethod("percent_rank",
 #' place and that the next person came in third. Rank would give me sequential numbers, making
 #' the person that came in third place (after the ties) would register as coming in fifth.
 #' This is equivalent to the \code{RANK} function in SQL.
+#' This should be used with no argument.
 #'
 #' @rdname column_window_functions
 #' @aliases rank rank,missing-method
@@ -3011,9 +3015,6 @@ setMethod("rank",
             column(jc)
           })
 
-#' @details
-#' \code{rank}: Exposes \code{rank()} in the R base package. In this case, \code{x}
-#' could be a numeric, complex, character or logical vector.
 #' @rdname column_window_functions
 #' @aliases rank,ANY-method
 #' @export
@@ -3026,6 +3027,7 @@ setMethod("rank",
 #' @details
 #' \code{row_number}: Returns a sequential number starting at 1 within a window partition.
 #' This is equivalent to the \code{ROW_NUMBER} function in SQL.
+#' This should be used with no argument.
 #'
 #' @rdname column_window_functions
 #' @aliases row_number row_number,missing-method
