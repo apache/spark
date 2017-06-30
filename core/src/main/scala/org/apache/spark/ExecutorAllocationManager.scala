@@ -262,10 +262,6 @@ private[spark] class ExecutorAllocationManager(
    * and pending tasks, rounded up.
    */
   private def maxNumExecutorsNeeded(): Int = {
-    // scalastyle:off
-    println("!!!!!!!!!!!!!! maxNumExecutorsNeeded totalPendingTasks: " + listener.totalPendingTasks +
-      ", totalRunningTasks: " + listener.totalRunningTasks)
-    // scalastyle:on
     val numRunningOrPendingTasks = listener.totalPendingTasks + listener.totalRunningTasks
     (numRunningOrPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
   }
