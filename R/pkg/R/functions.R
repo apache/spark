@@ -39,8 +39,8 @@ NULL
 #' Date time functions defined for \code{Column}.
 #'
 #' @param x Column to compute on. In \code{window}, it must be a time Column of \code{TimestampType}.
-#' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
-#'               x Column to DateType or TimestampType. For \code{trunc}, it is the string used
+#' @param format For \code{to_date} and \code{to_timestamp}, it is the string used to parse
+#'               Column \code{x} to DateType or TimestampType. For \code{trunc}, it is the string used
 #'               for specifying the truncation method. For example, "year", "yyyy", "yy" for
 #'               truncate by year, or "month", "mon", "mm" for truncate by month.
 #' @param ... additional argument(s).
@@ -167,8 +167,7 @@ NULL
 #' tmp <- mutate(df, v1 = crc32(df$model), v2 = hash(df$model),
 #'                   v3 = hash(df$model, df$mpg), v4 = md5(df$model),
 #'                   v5 = sha1(df$model), v6 = sha2(df$model, 256))
-#' head(tmp)
-#' }
+#' head(tmp)}
 NULL
 
 #' Collection functions for Column operations
@@ -365,7 +364,7 @@ setMethod("base64",
           })
 
 #' @details
-#' \code{bin}: An expression that returns the string representation of the binary value
+#' \code{bin}: Returns the string representation of the binary value
 #' of the given long column. For example, bin("12") returns "1100".
 #'
 #' @rdname column_math_functions
@@ -693,7 +692,7 @@ setMethod("dayofyear",
 #' \code{decode}: Computes the first argument into a string from a binary using the provided
 #' character set.
 #'
-#' @param charset Character set to use (one of "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE",
+#' @param charset character set to use (one of "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE",
 #'                "UTF-16LE", "UTF-16").
 #'
 #' @rdname column_string_functions
@@ -826,7 +825,7 @@ setMethod("hex",
           })
 
 #' @details
-#' \code{hour}: Extracts the hours as an integer from a given date/timestamp/string.
+#' \code{hour}: Extracts the hour as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
 #' @aliases hour hour,Column-method
@@ -1148,7 +1147,7 @@ setMethod("min",
           })
 
 #' @details
-#' \code{minute}: Extracts the minutes as an integer from a given date/timestamp/string.
+#' \code{minute}: Extracts the minute as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
 #' @aliases minute minute,Column-method
@@ -1325,7 +1324,7 @@ setMethod("sd",
           })
 
 #' @details
-#' \code{second}: Extracts the seconds as an integer from a given date/timestamp/string.
+#' \code{second}: Extracts the second as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
 #' @aliases second second,Column-method
@@ -1997,7 +1996,7 @@ setMethod("pmod", signature(y = "Column"),
             column(jc)
           })
 
-#' @param rsd maximum estimation error allowed (default = 0.05)
+#' @param rsd maximum estimation error allowed (default = 0.05).
 #'
 #' @rdname column_aggregate_functions
 #' @aliases approxCountDistinct,Column-method
@@ -2189,8 +2188,8 @@ setMethod("from_json", signature(x = "Column", schema = "structType"),
 #' @examples
 #'
 #' \dontrun{
-#' tmp <- mutate(df, from_utc = from_utc_timestamp(df$time, 'PST'),
-#'                  to_utc = to_utc_timestamp(df$time, 'PST'))
+#' tmp <- mutate(df, from_utc = from_utc_timestamp(df$time, "PST"),
+#'                  to_utc = to_utc_timestamp(df$time, "PST"))
 #' head(tmp)}
 #' @note from_utc_timestamp since 1.5.0
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
@@ -2224,7 +2223,7 @@ setMethod("instr", signature(y = "Column", x = "character"),
 #' @details
 #' \code{next_day}: Given a date column, returns the first date which is later than the value of
 #' the date column that is on the specified day of the week. For example,
-#' \code{next_day('2015-07-27', "Sunday")} returns 2015-08-02 because that is the first Sunday
+#' \code{next_day("2015-07-27", "Sunday")} returns 2015-08-02 because that is the first Sunday
 #' after 2015-07-27. Day of the week parameter is case insensitive, and accepts first three or
 #' two characters: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
 #'
@@ -2264,7 +2263,7 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
 #' tmp <- mutate(df, t1 = add_months(df$time, 1),
 #'                   t2 = date_add(df$time, 2),
 #'                   t3 = date_sub(df$time, 3),
-#'                   t4 = next_day(df$time, 'Sun'))
+#'                   t4 = next_day(df$time, "Sun"))
 #' head(tmp)}
 #' @note add_months since 1.5.0
 setMethod("add_months", signature(y = "Column", x = "numeric"),
@@ -3118,7 +3117,7 @@ setMethod("row_number",
 #' \code{array_contains}: Returns null if the array is null, true if the array contains
 #' the value, and false otherwise.
 #'
-#' @param value A value to be checked if contained in the column
+#' @param value a value to be checked if contained in the column
 #' @rdname column_collection_functions
 #' @aliases array_contains array_contains,Column-method
 #' @export
@@ -3163,7 +3162,7 @@ setMethod("size",
 #' to the natural ordering of the array elements.
 #'
 #' @rdname column_collection_functions
-#' @param asc A logical flag indicating the sorting order.
+#' @param asc a logical flag indicating the sorting order.
 #'            TRUE, sorting is in ascending order.
 #'            FALSE, sorting is in descending order.
 #' @aliases sort_array sort_array,Column-method
@@ -3290,7 +3289,7 @@ setMethod("split_string",
 #' \code{repeat_string}: Repeats string n times.
 #' Equivalent to \code{repeat} SQL function.
 #'
-#' @param n Number of repetitions
+#' @param n number of repetitions.
 #' @rdname column_string_functions
 #' @aliases repeat_string repeat_string,Column-method
 #' @export
@@ -3419,7 +3418,7 @@ setMethod("grouping_bit",
 #' \code{grouping_id}: Returns the level of grouping.
 #' Equals to \code{
 #' grouping_bit(c1) * 2^(n - 1) + grouping_bit(c2) * 2^(n - 2)  + ... + grouping_bit(cn)
-#' }
+#' }.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases grouping_id grouping_id,Column-method
