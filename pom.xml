@@ -140,7 +140,7 @@
     <okio.version>1.13.0</okio.version>
     <retrofit.version>2.2.0</retrofit.version>
     <bouncycastle.version>1.54</bouncycastle.version>
-    <jetty.version>9.4.5.v20170502</jetty.version>
+    <jetty.version>9.4.6.v20170531</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.0</chill.version>
     <ivy.version>2.4.0</ivy.version>
