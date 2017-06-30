@@ -374,17 +374,15 @@ private[ml] trait HasWeightCol extends Params {
 }
 
 /**
- * Trait for shared param solver (default: "auto").
+ * Trait for shared param solver.
  */
 private[ml] trait HasSolver extends Params {
 
   /**
-   * Param for the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+   * Param for the solver algorithm for optimization.
    * @group param
    */
-  final val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'")
-
-  setDefault(solver, "auto")
+  final val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization")
 
   /** @group getParam */
   final def getSolver: String = $(solver)

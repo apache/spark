@@ -34,7 +34,7 @@ import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.optim.aggregator.LeastSquaresAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.RegressionMetrics
@@ -53,7 +53,23 @@ import org.apache.spark.storage.StorageLevel
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-    with HasAggregationDepth
+    with HasAggregationDepth {
+
+  import LinearRegression._
+
+  /**
+   * The solver algorithm for optimization.
+   * Supported options: "l-bfgs", "normal" and "auto".
+   * Default: "auto"
+   *
+   * @group expertParam
+   */
+  @Since("2.3.0")
+  final override val solver: Param[String] = new Param[String](this, "solver",
+    "The solver algorithm for optimization. Supported options: " +
+      s"${supportedSolvers.mkString(", ")}. (Default auto)",
+    ParamValidators.inArray[String](supportedSolvers))
+}
 
 /**
  * Linear regression.
@@ -77,6 +93,8 @@ private[regression] trait LinearRegressionParams extends PredictorParams
 class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String)
   extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams with DefaultParamsWritable with Logging {
+
+  import LinearRegression._
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("linReg"))
@@ -175,12 +193,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * @group setParam
    */
   @Since("1.6.0")
-  def setSolver(value: String): this.type = {
-    require(Set("auto", "l-bfgs", "normal").contains(value),
-      s"Solver $value was not supported. Supported options: auto, l-bfgs, normal")
-    set(solver, value)
-  }
-  setDefault(solver -> "auto")
+  def setSolver(value: String): this.type = set(solver, value)
+  setDefault(solver -> AUTO)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -210,8 +224,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
-    if (($(solver) == "auto" &&
-      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
+    if (($(solver) == AUTO &&
+      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == NORMAL) {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 
@@ -444,6 +458,18 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
    */
   @Since("2.1.0")
   val MAX_FEATURES_FOR_NORMAL_SOLVER: Int = WeightedLeastSquares.MAX_NUM_FEATURES
+
+  /** String name for "auto". */
+  private[regression] val AUTO = "auto"
+
+  /** String name for "normal". */
+  private[regression] val NORMAL = "normal"
+
+  /** String name for "l-bfgs". */
+  private[regression] val LBFGS = "l-bfgs"
+
+  /** Set of solvers that LinearRegression supports. */
+  private[regression] val supportedSolvers = Array(AUTO, NORMAL, LBFGS)
 }
 
 /**
