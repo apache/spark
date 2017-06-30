@@ -23,8 +23,8 @@ import scala.xml.Node
 
 import org.json4s.JValue
 
-import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
 import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
+import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.{UIUtils, WebUIPage}
