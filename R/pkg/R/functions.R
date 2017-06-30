@@ -3011,10 +3011,10 @@ setMethod("rank",
             column(jc)
           })
 
-# Expose rank() in the R base package
-#' @param x a numeric, complex, character or logical vector.
-#' @param ... additional argument(s) passed to the method.
-#' @noRd
+#' @details
+#' \code{rank}: Exposes \code{rank()} in the R base package. In this case, \code{x}
+#' could be a numeric, complex, character or logical vector.
+#' @rdname column_window_functions
 #' @aliases rank,ANY-method
 #' @export
 setMethod("rank",
