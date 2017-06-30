@@ -323,6 +323,7 @@ package object config {
 
   private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
     ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
+      .internal()
       .doc("The blocks of a shuffle request will be fetched to disk when size of the request is " +
         "above this threshold. This is to avoid a giant request takes too much memory.")
       .bytesConf(ByteUnit.BYTE)
