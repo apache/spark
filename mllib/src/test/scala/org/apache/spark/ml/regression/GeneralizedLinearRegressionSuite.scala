@@ -1075,7 +1075,7 @@ class GeneralizedLinearRegressionSuite
     val seCoefR = Array(1.23439, 0.9669, 3.56866)
     val tValsR = Array(0.80297, -0.65737, -0.06017)
     val pValsR = Array(0.42199, 0.51094, 0.95202)
-    val dispersionR = 1
+    val dispersionR = 1.0
     val nullDevianceR = 2.17561
     val residualDevianceR = 0.00018
     val residualDegreeOfFreedomNullR = 3
@@ -1114,7 +1114,7 @@ class GeneralizedLinearRegressionSuite
       assert(x._1 ~== x._2 absTol 1E-3) }
     summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
     summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
-    assert(summary.dispersion ~== dispersionR absTol 1E-3)
+    assert(summary.dispersion === dispersionR)
     assert(summary.nullDeviance ~== nullDevianceR absTol 1E-3)
     assert(summary.deviance ~== residualDevianceR absTol 1E-3)
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
@@ -1190,7 +1190,7 @@ class GeneralizedLinearRegressionSuite
     val seCoefR = Array(1.16826, 0.41703, 1.96249)
     val tValsR = Array(-2.46387, 2.12428, -2.32757)
     val pValsR = Array(0.01374, 0.03365, 0.01993)
-    val dispersionR = 1
+    val dispersionR = 1.0
     val nullDevianceR = 22.55853
     val residualDevianceR = 9.5622
     val residualDegreeOfFreedomNullR = 3
@@ -1229,7 +1229,7 @@ class GeneralizedLinearRegressionSuite
       assert(x._1 ~== x._2 absTol 1E-3) }
     summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
     summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
-    assert(summary.dispersion ~== dispersionR absTol 1E-3)
+    assert(summary.dispersion === dispersionR)
     assert(summary.nullDeviance ~== nullDevianceR absTol 1E-3)
     assert(summary.deviance ~== residualDevianceR absTol 1E-3)
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
