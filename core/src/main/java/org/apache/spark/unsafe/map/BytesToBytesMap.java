@@ -160,13 +160,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   private final boolean enablePerfMetrics;
 
-  private long timeSpentResizingNs = 0;
-
   private long numProbes = 0;
 
   private long numKeyLookups = 0;
-
-  private long numHashCollisions = 0;
 
   private long peakMemoryUsedBytes = 0L;
 
@@ -489,10 +485,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
             );
             if (areEqual) {
               return;
-            } else {
-              if (enablePerfMetrics) {
-                numHashCollisions++;
-              }
             }
           }
         }
@@ -860,16 +852,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Returns the total amount of time spent resizing this map (in nanoseconds).
-   */
-  public long getTimeSpentResizingNs() {
-    if (!enablePerfMetrics) {
-      throw new IllegalStateException();
-    }
-    return timeSpentResizingNs;
-  }
-
-  /**
    * Returns the average number of probes per key lookup.
    */
   public double getAverageProbesPerLookup() {
@@ -877,13 +859,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
       throw new IllegalStateException();
     }
     return (1.0 * numProbes) / numKeyLookups;
-  }
-
-  public long getNumHashCollisions() {
-    if (!enablePerfMetrics) {
-      throw new IllegalStateException();
-    }
-    return numHashCollisions;
   }
 
   @VisibleForTesting
@@ -923,10 +898,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
   void growAndRehash() {
     assert(longArray != null);
 
-    long resizeStartTime = -1;
-    if (enablePerfMetrics) {
-      resizeStartTime = System.nanoTime();
-    }
     // Store references to the old data structures to be used when we re-hash
     final LongArray oldLongArray = longArray;
     final int oldCapacity = (int) oldLongArray.size() / 2;
@@ -951,9 +922,5 @@ public final class BytesToBytesMap extends MemoryConsumer {
       longArray.set(newPos * 2 + 1, hashcode);
     }
     freeArray(oldLongArray);
-
-    if (enablePerfMetrics) {
-      timeSpentResizingNs += System.nanoTime() - resizeStartTime;
-    }
   }
 }

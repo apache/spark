@@ -215,7 +215,7 @@ trait HashJoin {
 
     // At the end of the task, we update the avg hash probe.
     TaskContext.get().addTaskCompletionListener(_ =>
-      avgHashProbe.set(hashed.getAverageProbesPerLookup()))
+      avgHashProbe.set(hashed.getAverageProbesPerLookup))
 
     val resultProj = createResultProjection
     joinedIter.map { r =>
