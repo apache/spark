@@ -86,10 +86,6 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
       s"${supportedSolvers.mkString(", ")}. (Default l-bfgs)",
     ParamValidators.inArray[String](supportedSolvers))
 
-  /** @group expertGetParam */
-  @Since("2.0.0")
-  final def getSolver: String = $(solver)
-
   /**
    * The initial weights of the model.
    *
