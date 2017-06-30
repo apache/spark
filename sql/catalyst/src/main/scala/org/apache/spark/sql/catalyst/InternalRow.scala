@@ -112,17 +112,11 @@ object InternalRow {
   /**
    * Copies the given value if it's string/struct/array/map type.
    */
-  def copyValue(value: Any): Any = {
-    if (value.isInstanceOf[UTF8String]) {
-      value.asInstanceOf[UTF8String].copy()
-    } else if (value.isInstanceOf[InternalRow]) {
-      value.asInstanceOf[InternalRow].copy()
-    } else if (value.isInstanceOf[ArrayData]) {
-      value.asInstanceOf[ArrayData].copy()
-    } else if (value.isInstanceOf[MapData]) {
-      value.asInstanceOf[MapData].copy()
-    } else {
-      value
-    }
+  def copyValue(value: Any): Any = value match {
+    case v: UTF8String => v.copy()
+    case v: InternalRow => v.copy()
+    case v: ArrayData => v.copy()
+    case v: MapData => v.copy()
+    case _ => value
   }
 }
