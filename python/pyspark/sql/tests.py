@@ -2021,6 +2021,11 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
 
+    def test_join_without_on(self):
+        self.assertRaises(
+            AnalysisException,
+            lambda: self.spark.range(1).join(self.spark.range(1), how="inner").collect())
+
     # Regression test for invalid join methods when on is None, Spark-14761
     def test_invalid_join_method(self):
         df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
