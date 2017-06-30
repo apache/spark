@@ -78,7 +78,7 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
    * Supported options: "gd" (minibatch gradient descent) or "l-bfgs".
    * Default: "l-bfgs"
    *
-   * @group expertParam
+   * @group param
    */
   @Since("2.0.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
