@@ -1402,8 +1402,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>10000</td>
   <td>
     Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
-    value (e.g. 20000) if listener events are dropped, because of the rate at which tasks are being
-    started by the scheduler; however, value increase will result in using more memory.
+    value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
+    driver using more memory.
   </td>
 </tr>
 <tr>
