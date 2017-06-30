@@ -352,9 +352,6 @@ case class DataSource(
                 "It must be specified manually")
         }
 
-        SchemaUtils.checkSchemaColumnNameDuplication(
-          dataSchema, "in the datasource", sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
         HadoopFsRelation(
           fileCatalog,
           partitionSchema = fileCatalog.partitionSchema,

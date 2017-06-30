@@ -20,12 +20,16 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, RowOrdering, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
@@ -67,9 +71,10 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 }
 
 /**
- * Preprocess [[CreateTable]], to do some normalization and checking.
+ * Preprocess DDL commands (e.g., [[CreateTable]] and [[AlterTableAddColumnsCommand]]), to do some
+ * normalization and checking.
  */
-case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+case class PreprocessDDLCommands(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   // catalog is a def and not a val/lazy val as the latter would introduce a circular reference
   private def catalog = sparkSession.sessionState.catalog
 
@@ -220,12 +225,120 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
+
+    case a @ AlterTableAddColumnsCommand(table, columns) =>
+      val catalog = sparkSession.sessionState.catalog
+      val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
+      val newSchema = catalogTable.dataSchema ++ columns ++ catalogTable.partitionSchema
+      SchemaUtils.checkColumnNameDuplication(
+        newSchema.map(_.name), s"in the table definition of ${table.identifier}",
+        sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      a
+
+    case a @ AlterTableAddPartitionCommand(tableName, partitionSpecsAndLocs, _) =>
+      partitionSpecsAndLocs.foreach { case (spec, _) =>
+        val partCols = spec.toSeq.map(_._1)
+        SchemaUtils.checkColumnNameDuplication(
+          partCols, s"the table definition of ${tableName.identifier}",
+          sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      }
+      a
+
+    case a @ AlterTableRenamePartitionCommand(tableName, _, newPart) =>
+      val newPartCols = newPart.toSeq.map(_._1)
+      SchemaUtils.checkColumnNameDuplication(
+        newPartCols, s"the table definition of ${tableName.identifier}",
+        sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      a
+
+    case a @ AlterTableDropPartitionCommand(tableName, partitionSpecs, _, _, _) =>
+      partitionSpecs.foreach { spec =>
+        val partCols = spec.toSeq.map(_._1)
+        SchemaUtils.checkColumnNameDuplication(
+          partCols, s"the table definition of ${tableName.identifier}",
+          sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      }
+      a
+
+    case t @ TruncateTableCommand(tableName, Some(partitionSpec)) =>
+      val partCols = partitionSpec.toSeq.map(_._1)
+      SchemaUtils.checkColumnNameDuplication(
+        partCols, s"the table definition of ${tableName.identifier}",
+        sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      t
+
+    case c @ CreateViewCommand(name, _, _, _, _, child, _, replace, viewType) =>
+      // If the plan cannot be analyzed, throw an exception and don't proceed.
+      val qe = sparkSession.sessionState.executePlan(child)
+      qe.assertAnalyzed()
+      val analyzedPlan = qe.analyzed
+      def isTemporary = viewType == LocalTempView || viewType == GlobalTempView
+      if (!isTemporary) {
+        if (catalog.tableExists(name) && replace) {
+          // Detect cyclic view reference on CREATE OR REPLACE VIEW.
+          val tableMetadata = catalog.getTableMetadata(name)
+          val viewIdent = tableMetadata.identifier
+          PreprocessDDLCommands.checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
+        }
+
+        SchemaUtils.checkSchemaColumnNameDuplication(
+          analyzedPlan.schema, s"the view definition of ${name.identifier}",
+          sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
+        // When creating a permanent view, not allowed to reference temporary objects.
+        // This should be called after `qe.assertAnalyzed()` (i.e., `child` can be resolved)
+        verifyTemporaryObjectsNotExists(name, child)
+      }
+      c.copy(child = analyzedPlan)
+
+    case a @ AlterViewAsCommand(name, _, query) =>
+      // If the plan cannot be analyzed, throw an exception and don't proceed.
+      val qe = sparkSession.sessionState.executePlan(query)
+      qe.assertAnalyzed()
+      val analyzedPlan = qe.analyzed
+
+      // First, detect cyclic view reference on ALTER VIEW.
+      val viewMeta = sparkSession.sessionState.catalog.getTempViewOrPermanentTableMetadata(name)
+      val viewIdent = viewMeta.identifier
+      PreprocessDDLCommands.checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
+
+      // Then, check name duplication in the new view table
+      SchemaUtils.checkSchemaColumnNameDuplication(
+        analyzedPlan.schema, s"the view definition of ${name.identifier}",
+        sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
+      a.copy(query = analyzedPlan)
+  }
+
+  /**
+   * Permanent views are not allowed to reference temp objects, including temp function and views
+   */
+  private def verifyTemporaryObjectsNotExists(name: TableIdentifier, plan: LogicalPlan): Unit = {
+    // This func traverses the unresolved plan `child`. Below are the reasons:
+    // 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
+    // logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
+    // added/generated from a temporary view.
+    // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
+    // package (e.g., HiveGenericUDF).
+    plan.collect {
+      // Disallow creating permanent views based on temporary views.
+      case s: UnresolvedRelation
+        if sparkSession.sessionState.catalog.isTemporaryTable(s.tableIdentifier) =>
+        throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+          s"referencing a temporary view ${s.tableIdentifier}")
+      case other if !other.resolved => other.expressions.flatMap(_.collect {
+        // Disallow creating permanent views based on temporary UDFs.
+        case e: UnresolvedFunction
+          if sparkSession.sessionState.catalog.isTemporaryFunction(e.name) =>
+          throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+            s"referencing a temporary function `${e.name}`")
+      })
+    }
   }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
     SchemaUtils.checkSchemaColumnNameDuplication(
-      schema,
-      "in the table definition of " + table.identifier,
+      schema, s"in the table definition of ${table.identifier}",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val normalizedPartCols = normalizePartitionColumns(schema, table)
@@ -253,8 +366,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       resolver = sparkSession.sessionState.conf.resolver)
 
     SchemaUtils.checkColumnNameDuplication(
-      normalizedPartitionCols,
-      "in the partition",
+      normalizedPartitionCols, s"in the partition columns of ${table.identifier}",
       sparkSession.sessionState.conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
@@ -288,11 +400,11 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.bucketColumnNames,
-          "in the bucket",
+          s"in the bucket column names of ${table.identifier}",
           sparkSession.sessionState.conf.resolver)
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.sortColumnNames,
-          "in the sort",
+          s"in the sort column names of ${table.identifier}",
           sparkSession.sessionState.conf.resolver)
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
@@ -309,6 +421,58 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
   private def failAnalysis(msg: String) = throw new AnalysisException(msg)
 }
 
+object PreprocessDDLCommands {
+
+  /**
+   * Recursively search the logical plan to detect cyclic view references, throw an
+   * AnalysisException if cycle detected.
+   *
+   * A cyclic view reference is a cycle of reference dependencies, for example, if the following
+   * statements are executed:
+   * CREATE VIEW testView AS SELECT id FROM tbl
+   * CREATE VIEW testView2 AS SELECT id FROM testView
+   * ALTER VIEW testView AS SELECT * FROM testView2
+   * The view `testView` references `testView2`, and `testView2` also references `testView`,
+   * therefore a reference cycle (testView -> testView2 -> testView) exists.
+   *
+   * @param plan the logical plan we detect cyclic view references from.
+   * @param path the path between the altered view and current node.
+   * @param viewIdent the table identifier of the altered view, we compare two views by the
+   *                  `desc.identifier`.
+   */
+  def checkCyclicViewReference(
+      plan: LogicalPlan,
+      path: Seq[TableIdentifier],
+      viewIdent: TableIdentifier): Unit = {
+    plan match {
+      case v: View =>
+        val ident = v.desc.identifier
+        val newPath = path :+ ident
+        // If the table identifier equals to the `viewIdent`, current view node is the same with
+        // the altered view. We detect a view reference cycle, should throw an AnalysisException.
+        if (ident == viewIdent) {
+          throw new AnalysisException(s"Recursive view $viewIdent detected " +
+            s"(cycle: ${newPath.mkString(" -> ")})")
+        } else {
+          v.children.foreach { child =>
+            checkCyclicViewReference(child, newPath, viewIdent)
+          }
+        }
+      case _ =>
+        plan.children.foreach(child => checkCyclicViewReference(child, path, viewIdent))
+    }
+
+    // Detect cyclic references from subqueries.
+    plan.expressions.foreach { expr =>
+      expr match {
+        case s: SubqueryExpression =>
+          checkCyclicViewReference(s.plan, path, viewIdent)
+        case _ => // Do nothing.
+      }
+    }
+  }
+}
+
 /**
  * Preprocess the [[InsertIntoTable]] plan. Throws exception if the number of columns mismatch, or
  * specified partition columns are different from the existing partition columns in the target
@@ -320,6 +484,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
       insert: InsertIntoTable,
       tblName: String,
       partColNames: Seq[String]): InsertIntoTable = {
+    SchemaUtils.checkColumnNameDuplication(
+      insert.partition.toSeq.map(_._1), s"when inserting into $tblName", conf.caseSensitiveAnalysis)
 
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
       insert.partition, partColNames, tblName, conf.resolver)
@@ -393,6 +559,12 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
           preprocess(i, tblName, Nil)
         case _ => i
       }
+
+    case i @ InsertIntoHadoopFsRelationCommand(outputPath, _, _, _, _, _, _, query, _, _, _) =>
+      // Most formats don't do well with duplicate columns, so lets not allow that
+      SchemaUtils.checkSchemaColumnNameDuplication(
+        query.schema, s"when inserting into $outputPath", conf.caseSensitiveAnalysis)
+      i
   }
 }
 

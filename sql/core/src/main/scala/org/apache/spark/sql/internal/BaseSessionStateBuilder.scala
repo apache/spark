@@ -161,7 +161,7 @@ abstract class BaseSessionStateBuilder(
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      PreprocessTableCreation(session) +:
+      PreprocessDDLCommands(session) +:
         PreprocessTableInsertion(conf) +:
         DataSourceAnalysis(conf) +:
         customPostHocResolutionRules

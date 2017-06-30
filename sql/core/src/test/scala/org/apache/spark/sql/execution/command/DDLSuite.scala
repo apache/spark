@@ -469,14 +469,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) USING json PARTITIONED BY (a, a)")
     }
-    assert(e.message == "Found duplicate column(s) in the partition: `a`")
+    assert(e.message == "Found duplicate column(s) in the partition columns of `tbl`: `a`")
   }
 
   test("create table - column repeated in bucket columns") {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) USING json CLUSTERED BY (a, a) INTO 4 BUCKETS")
     }
-    assert(e.message == "Found duplicate column(s) in the bucket: `a`")
+    assert(e.message == "Found duplicate column(s) in the bucket column names of `tbl`: `a`")
   }
 
   test("Refresh table after changing the data source table partitioning") {

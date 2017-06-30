@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, 
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.SchemaUtils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
@@ -341,10 +340,6 @@ class SessionCatalog(
     val tableIdentifier = TableIdentifier(table, Some(db))
     requireDbExists(db)
     requireTableExists(tableIdentifier)
-
-    SchemaUtils.checkSchemaColumnNameDuplication(
-      newSchema, "in the table definition of " + tableIdentifier.identifier,
-      conf.caseSensitiveAnalysis)
 
     val catalogTable = externalCatalog.getTable(db, table)
     val oldSchema = catalogTable.schema
