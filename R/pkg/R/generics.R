@@ -913,8 +913,9 @@ setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
 #' @name NULL
 setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
 
-#' @rdname array_contains
+#' @rdname column_collection_functions
 #' @export
+#' @name NULL
 setGeneric("array_contains", function(x, value) { standardGeneric("array_contains") })
 
 #' @rdname column_string_functions
@@ -1062,12 +1063,14 @@ setGeneric("dense_rank", function(x = "missing") { standardGeneric("dense_rank")
 #' @name NULL
 setGeneric("encode", function(x, charset) { standardGeneric("encode") })
 
-#' @rdname explode
+#' @rdname column_collection_functions
 #' @export
+#' @name NULL
 setGeneric("explode", function(x) { standardGeneric("explode") })
 
-#' @rdname explode_outer
+#' @rdname column_collection_functions
 #' @export
+#' @name NULL
 setGeneric("explode_outer", function(x) { standardGeneric("explode_outer") })
 
 #' @rdname column_nonaggregate_functions
@@ -1090,8 +1093,9 @@ setGeneric("format_number", function(y, x) { standardGeneric("format_number") })
 #' @name NULL
 setGeneric("format_string", function(format, x, ...) { standardGeneric("format_string") })
 
-#' @rdname from_json
+#' @rdname column_collection_functions
 #' @export
+#' @name NULL
 setGeneric("from_json", function(x, schema, ...) { standardGeneric("from_json") })
 
 #' @rdname column_datetime_functions
@@ -1275,12 +1279,14 @@ setGeneric("percent_rank", function(x = "missing") { standardGeneric("percent_ra
 #' @name NULL
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
 
-#' @rdname posexplode
+#' @rdname column_collection_functions
 #' @export
+#' @name NULL
 setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
 
-#' @rdname posexplode_outer
+#' @rdname column_collection_functions
 #' @export
+#' @name NULL
 setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer") })
 
 #' @rdname column_datetime_functions
@@ -1383,8 +1389,9 @@ setGeneric("shiftRightUnsigned", function(y, x) { standardGeneric("shiftRightUns
 #' @name NULL
 setGeneric("signum", function(x) { standardGeneric("signum") })
 
-#' @rdname size
+#' @rdname column_collection_functions
 #' @export
+#' @name NULL
 setGeneric("size", function(x) { standardGeneric("size") })
 
 #' @rdname column_aggregate_functions
@@ -1392,8 +1399,9 @@ setGeneric("size", function(x) { standardGeneric("size") })
 #' @name NULL
 setGeneric("skewness", function(x) { standardGeneric("skewness") })
 
-#' @rdname sort_array
+#' @rdname column_collection_functions
 #' @export
+#' @name NULL
 setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array") })
 
 #' @rdname column_string_functions
@@ -1456,8 +1464,9 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 #' @name NULL
 setGeneric("to_date", function(x, format) { standardGeneric("to_date") })
 
-#' @rdname to_json
+#' @rdname column_collection_functions
 #' @export
+#' @name NULL
 setGeneric("to_json", function(x, ...) { standardGeneric("to_json") })
 
 #' @rdname column_datetime_functions
