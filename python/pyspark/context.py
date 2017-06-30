@@ -956,6 +956,12 @@ class SparkContext(object):
         """
         return self._jsc.getLocalProperty(key)
 
+    def setJobDescription(self, value):
+        """
+        Set a human readable description of the current job.
+        """
+        self._jsc.setJobDescription(value)
+
     def sparkUser(self):
         """
         Get SPARK_USER for user who is running SparkContext.

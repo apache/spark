@@ -22,10 +22,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
-abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
-  extends TreeNode[PlanType]
-  with QueryPlanConstraints[PlanType] {
-
+abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
   def conf: SQLConf = SQLConf.get
@@ -191,35 +188,30 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * Plans where `this.canonicalized == other.canonicalized` will always evaluate to the same
    * result.
    *
-   * Some nodes should overwrite this to provide proper canonicalize logic.
+   * Some nodes should overwrite this to provide proper canonicalize logic, but they should remove
+   * expressions cosmetic variations themselves.
    */
   lazy val canonicalized: PlanType = {
     val canonicalizedChildren = children.map(_.canonicalized)
     var id = -1
-    preCanonicalized.mapExpressions {
+    mapExpressions {
       case a: Alias =>
         id += 1
         // As the root of the expression, Alias will always take an arbitrary exprId, we need to
         // normalize that for equality testing, by assigning expr id from 0 incrementally. The
         // alias name doesn't matter and should be erased.
         val normalizedChild = QueryPlan.normalizeExprId(a.child, allAttributes)
-        Alias(normalizedChild, "")(ExprId(id), a.qualifier, isGenerated = a.isGenerated)
+        Alias(normalizedChild, "")(ExprId(id), a.qualifier)
 
       case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
         // normalize the epxrId too.
         id += 1
-        ar.withExprId(ExprId(id))
+        ar.withExprId(ExprId(id)).canonicalized
 
       case other => QueryPlan.normalizeExprId(other, allAttributes)
     }.withNewChildren(canonicalizedChildren)
   }
-
-  /**
-   * Do some simple transformation on this plan before canonicalizing. Implementations can override
-   * this method to provide customized canonicalize logic without rewriting the whole logic.
-   */
-  protected def preCanonicalized: PlanType = this
 
 
   /**

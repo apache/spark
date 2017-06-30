@@ -35,6 +35,7 @@ import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.deploy.kubernetes.{ConfigurationUtils, SparkPodInitContainerBootstrap}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
+import org.apache.spark.internal.config
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.kubernetes.KubernetesExternalShuffleClient
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointAddress, RpcEnv}
@@ -209,7 +210,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     new KubernetesExternalShuffleClient(
       SparkTransportConf.fromSparkConf(conf, "shuffle"),
       sc.env.securityManager,
-      sc.env.securityManager.isAuthenticationEnabled())
+      sc.env.securityManager.isAuthenticationEnabled(),
+      conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
   }
 
   private def getInitialTargetExecutorNumber(defaultNumExecutors: Int = 1): Int = {
@@ -548,12 +550,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
     extends DriverEndpoint(rpcEnv, sparkProperties) {
     private val externalShufflePort = conf.getInt("spark.shuffle.service.port", 7337)
 
-    override def receiveAndReply(
-      context: RpcCallContext): PartialFunction[Any, Unit] = {
+    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       new PartialFunction[Any, Unit]() {
         override def isDefinedAt(msg: Any): Boolean = {
           msg match {
-            case RetrieveSparkAppConfig(executorId) =>
+            case RetrieveSparkAppConfig =>
               Utils.isDynamicAllocationEnabled(sc.conf)
             case _ => false
           }
@@ -561,12 +562,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
         override def apply(msg: Any): Unit = {
           msg match {
-            case RetrieveSparkAppConfig(executorId) =>
+            case RetrieveSparkAppConfig =>
               RUNNING_EXECUTOR_PODS_LOCK.synchronized {
                 var resolvedProperties = sparkProperties
                 val runningExecutorPod = kubernetesClient
                   .pods()
-                  .withName(runningExecutorPods(executorId).getMetadata.getName)
+                  .withName(runningExecutorPods(currentExecutorIdCounter.toString)
+                    .getMetadata.getName)
                   .get()
                 val nodeName = runningExecutorPod.getSpec.getNodeName
                 val shufflePodIp = shufflePodCache.get.getShufflePodForExecutor(nodeName)

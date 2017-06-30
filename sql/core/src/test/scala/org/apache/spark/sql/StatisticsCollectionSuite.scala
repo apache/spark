@@ -40,17 +40,6 @@ import org.apache.spark.sql.types._
 class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSQLContext {
   import testImplicits._
 
-  private def checkTableStats(tableName: String, expectedRowCount: Option[Int])
-    : Option[CatalogStatistics] = {
-    val df = spark.table(tableName)
-    val stats = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-      assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
-      rel.catalogTable.get.stats
-    }
-    assert(stats.size == 1)
-    stats.head
-  }
-
   test("estimates the size of a limit 0 on outer join") {
     withTempView("test") {
       Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4)).toDF("k", "v")
@@ -60,7 +49,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val df = df1.join(df2, Seq("k"), "left")
 
       val sizes = df.queryExecution.analyzed.collect { case g: Join =>
-        g.stats(conf).sizeInBytes
+        g.stats.sizeInBytes
       }
 
       assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
@@ -96,20 +85,20 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
-      checkTableStats(tableName, expectedRowCount = None)
+      checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
-      checkTableStats(tableName, expectedRowCount = Some(2))
+      checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = Some(2))
     }
   }
 
   test("SPARK-15392: DataFrame created from RDD should not be broadcasted") {
     val rdd = sparkContext.range(1, 100).map(i => Row(i, i))
     val df = spark.createDataFrame(rdd, new StructType().add("a", LongType).add("b", LongType))
-    assert(df.queryExecution.analyzed.stats(conf).sizeInBytes >
+    assert(df.queryExecution.analyzed.stats.sizeInBytes >
       spark.sessionState.conf.autoBroadcastJoinThreshold)
-    assert(df.selectExpr("a").queryExecution.analyzed.stats(conf).sizeInBytes >
+    assert(df.selectExpr("a").queryExecution.analyzed.stats.sizeInBytes >
       spark.sessionState.conf.autoBroadcastJoinThreshold)
   }
 
@@ -168,6 +157,60 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(stats.simpleString == expectedString)
     }
   }
+
+  test("change stats after truncate command") {
+    val table = "change_stats_truncate_table"
+    withTable(table) {
+      spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
+      // analyze to get initial stats
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
+      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(100))
+      assert(fetched1.get.sizeInBytes > 0)
+      assert(fetched1.get.colStats.size == 2)
+
+      // truncate table command
+      sql(s"TRUNCATE TABLE $table")
+      val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+      assert(fetched2.get.sizeInBytes == 0)
+      assert(fetched2.get.colStats.isEmpty)
+    }
+  }
+
+  test("change stats after set location command") {
+    val table = "change_stats_set_location_table"
+    withTable(table) {
+      spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
+      // analyze to get initial stats
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
+      val fetched1 = checkTableStats(
+        table, hasSizeInBytes = true, expectedRowCounts = Some(100))
+      assert(fetched1.get.sizeInBytes > 0)
+      assert(fetched1.get.colStats.size == 2)
+
+      // set location command
+      withTempDir { newLocation =>
+        sql(s"ALTER TABLE $table SET LOCATION '${newLocation.toURI.toString}'")
+        checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+      }
+    }
+  }
+
+  test("change stats after insert command for datasource table") {
+    val table = "change_stats_insert_datasource_table"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
+      // analyze to get initial stats
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
+      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+      assert(fetched1.get.sizeInBytes == 0)
+      assert(fetched1.get.colStats.size == 2)
+
+      // insert into command
+      sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
+      checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+    }
+  }
+
 }
 
 
@@ -219,6 +262,22 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   private val randomName = new Random(31)
 
+  def checkTableStats(
+      tableName: String,
+      hasSizeInBytes: Boolean,
+      expectedRowCounts: Option[Int]): Option[CatalogStatistics] = {
+    val stats = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).stats
+    if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
+      assert(stats.isDefined)
+      assert(stats.get.sizeInBytes >= 0)
+      assert(stats.get.rowCount === expectedRowCounts)
+    } else {
+      assert(stats.isEmpty)
+    }
+
+    stats
+  }
+
   /**
    * Compute column stats for the given DataFrame and compare it with colStats.
    */
@@ -250,13 +309,13 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   test("SPARK-18856: non-empty partitioned table should not report zero size") {
     withTable("ds_tbl", "hive_tbl") {
       spark.range(100).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("ds_tbl")
-      val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats(conf)
+      val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats
       assert(stats.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
 
       if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
         sql("CREATE TABLE hive_tbl(i int) PARTITIONED BY (j int)")
         sql("INSERT INTO hive_tbl PARTITION(j=1) SELECT 1")
-        val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.stats(conf)
+        val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.stats
         assert(stats2.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
       }
     }
@@ -296,10 +355,10 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
 
     // Check relation statistics
-    assert(relation.stats(conf).sizeInBytes == 0)
-    assert(relation.stats(conf).rowCount == Some(0))
-    assert(relation.stats(conf).attributeStats.size == 1)
-    val (attribute, colStat) = relation.stats(conf).attributeStats.head
+    assert(relation.stats.sizeInBytes == 0)
+    assert(relation.stats.rowCount == Some(0))
+    assert(relation.stats.attributeStats.size == 1)
+    val (attribute, colStat) = relation.stats.attributeStats.head
     assert(attribute.name == "c1")
     assert(colStat == emptyColStat)
   }

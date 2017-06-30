@@ -47,8 +47,9 @@ public class KubernetesExternalShuffleClient extends ExternalShuffleClient {
   public KubernetesExternalShuffleClient(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
-      boolean authEnabled) {
-    super(conf, secretKeyHolder, authEnabled);
+      boolean authEnabled,
+      long registrationTimeoutMs) {
+    super(conf, secretKeyHolder, authEnabled, registrationTimeoutMs);
   }
 
   public void registerDriverWithShuffleService(String host, int port)

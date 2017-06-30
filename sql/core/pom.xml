@@ -161,7 +161,7 @@
             so that the tests classes of external modules can use them. The two execution profiles
             are necessary - first one for 'mvn package', second one for 'mvn test-compile'. Ideally,
             'mvn compile' should not compile test classes and therefore should not need this.
-            However, an open Maven bug (http://jira.codehaus.org/browse/MNG-3559)
+            However, a closed due to "Cannot Reproduce" Maven bug (https://issues.apache.org/jira/browse/MNG-3559)
             causes the compilation to fail if catalyst test-jar is not generated. Hence, the
             second execution profile for 'mvn test-compile'.
       -->
