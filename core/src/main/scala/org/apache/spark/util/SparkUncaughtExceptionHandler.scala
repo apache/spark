@@ -20,40 +20,33 @@ package org.apache.spark.util
 import org.apache.spark.internal.Logging
 
 /**
- * The default uncaught exception handler for Executors terminates the whole process, to avoid
- * getting into a bad state indefinitely. Since Executors are relatively lightweight, it's better
- * to fail fast when things go wrong.
+ * The default uncaught exception handler for Spark daemons. It terminates the whole process for
+ * any Errors, and also terminates the process for Exceptions when the exitOnException flag is true.
  */
-private[spark] object SparkUncaughtExceptionHandler
+private[spark] class SparkUncaughtExceptionHandler(val exitOnException: Boolean = true)
   extends Thread.UncaughtExceptionHandler with Logging {
-  private[this] var exitOnException = true
-
-  def apply(exitOnException: Boolean): Thread.UncaughtExceptionHandler = {
-    this.exitOnException = exitOnException
-    this
-  }
 
   override def uncaughtException(thread: Thread, exception: Throwable) {
-    // Make it explicit that uncaught exceptions are thrown when process is shutting down.
-    // It will help users when they analyze the executor logs
-    val errMsg = "Uncaught exception in thread " + thread
-    if (ShutdownHookManager.inShutdown()) {
-      logError("[Process in shutdown] " + errMsg, exception)
-    } else if (exception.isInstanceOf[Error] ||
-      (!exception.isInstanceOf[Error] && exitOnException)) {
-      try {
+    try {
+      // Make it explicit that uncaught exceptions are thrown when process is shutting down.
+      // It will help users when they analyze the executor logs
+      val errMsg = "Uncaught exception in thread " + thread
+      if (ShutdownHookManager.inShutdown()) {
+        logError("[Process in shutdown] " + errMsg, exception)
+      } else if (exception.isInstanceOf[Error] ||
+        (!exception.isInstanceOf[Error] && exitOnException)) {
         logError(errMsg + ". Shutting down now..", exception)
         if (exception.isInstanceOf[OutOfMemoryError]) {
           System.exit(SparkExitCode.OOM)
         } else {
           System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
         }
-      } catch {
-        case oom: OutOfMemoryError => Runtime.getRuntime.halt(SparkExitCode.OOM)
-        case t: Throwable => Runtime.getRuntime.halt(SparkExitCode.UNCAUGHT_EXCEPTION_TWICE)
+      } else {
+        logError(errMsg, exception)
       }
-    } else {
-      logError(errMsg, exception)
+    } catch {
+      case oom: OutOfMemoryError => Runtime.getRuntime.halt(SparkExitCode.OOM)
+      case t: Throwable => Runtime.getRuntime.halt(SparkExitCode.UNCAUGHT_EXCEPTION_TWICE)
     }
   }
 

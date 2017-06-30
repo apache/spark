@@ -76,6 +76,8 @@ private[spark] object CallSite {
 private[spark] object Utils extends Logging {
   val random = new Random()
 
+  private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
+
   /**
    * Define a default value for driver memory here since this value is referenced across the code
    * base and nearly all files already use Utils.scala
@@ -1265,7 +1267,7 @@ private[spark] object Utils extends Logging {
       block
     } catch {
       case e: ControlThrowable => throw e
-      case t: Throwable => SparkUncaughtExceptionHandler.uncaughtException(t)
+      case t: Throwable => sparkUncaughtExceptionHandler.uncaughtException(t)
     }
   }
 
