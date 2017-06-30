@@ -223,6 +223,12 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
       GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b), table("d"),
         Seq('a, 'b, 'sum.function('c).as("c"))))
+
+    val m = intercept[ParseException] {
+      parsePlan("SELECT a, b, count(distinct a, distinct b) as c FROM d GROUP BY a, b")
+    }.getMessage
+    assert(m.contains("extraneous input 'b'"))
+
   }
 
   test("limit") {
