@@ -91,7 +91,9 @@ object CommandUtils extends Logging {
       size
     }
 
-    locationUri.map { p =>
+    val startTime = System.nanoTime()
+    logInfo(s"Starting to calculate the total file size under path $locationUri.")
+    val size = locationUri.map { p =>
       val path = new Path(p)
       try {
         val fs = path.getFileSystem(sessionState.newHadoopConf())
@@ -104,6 +106,10 @@ object CommandUtils extends Logging {
           0L
       }
     }.getOrElse(0L)
+    val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
+    logInfo(s"It took $durationInMs ms to calculate the total file size under path $locationUri.")
+
+    size
   }
 
 }

@@ -776,7 +776,9 @@ object SQLConf {
 
   val AUTO_UPDATE_SIZE =
     buildConf("spark.sql.statistics.autoUpdate.size")
-      .doc("Enables automatic update for table size once table's data is changed.")
+      .doc("Enables automatic update for table size once table's data is changed. Note that if " +
+        "the total number of files of the table is very large, this can be expensive and slow " +
+        "down data change commands.")
       .booleanConf
       .createWithDefault(false)
 
