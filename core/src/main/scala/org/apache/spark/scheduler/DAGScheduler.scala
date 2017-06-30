@@ -817,7 +817,6 @@ class DAGScheduler(
   }
 
   private[scheduler] def handleSpeculativeTaskAdded(task: Task[_]): Unit = {
-    // jane: do we need to handle attempid for the speculative task
     listenerBus.post(SparkListenerSpeculativeTaskAdd(task.stageId))
   }
 

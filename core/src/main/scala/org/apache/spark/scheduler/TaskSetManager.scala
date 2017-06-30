@@ -966,7 +966,6 @@ private[spark] class TaskSetManager(
         }
       }
     }
-
     foundTasks
   }
 
