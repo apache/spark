@@ -15,7 +15,7 @@ In this guide, we are going to walk you through the programming model and the AP
 # Quick Example
 Let’s say you want to maintain a running word count of text data received from a data server listening on a TCP socket. Let’s see how you can express this using Structured Streaming. You can see the full code in
 [Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredNetworkWordCount.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredNetworkWordCount.java)/[Python]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/sql/streaming/structured_network_wordcount.py)/[R]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/r/streaming/structured_network_wordcount.R).
-And if you [download Spark](http://spark.apache.org/downloads.html), you can directly run the example. In any case, let’s walk through the example step-by-step and understand how it works. First, we have to import the necessary classes and create a local SparkSession, the starting point of all functionalities related to Spark.
+And if you [download Spark](http://spark.apache.org/downloads.html), you can directly [run the example](index.html#running-the-examples-and-shell). In any case, let’s walk through the example step-by-step and understand how it works. First, we have to import the necessary classes and create a local SparkSession, the starting point of all functionalities related to Spark.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -450,7 +450,12 @@ running counts with the new data to compute updated counts, as shown below.
 
 ![Model](img/structured-streaming-example-model.png)
 
-This model is significantly different from many other stream processing 
+**Note that Structured Streaming does not materialize the entire table**. It reads the latest
+available data from the streaming data source, processes it incrementally to update the result,
+and then discards the source data. It only keeps around the minimal intermediate *state* data as
+required to update the result (e.g. intermediate counts in the earlier example).
+
+This model is significantly different from many other stream processing
 engines. Many streaming systems require the user to maintain running 
 aggregations themselves, thus having to reason about fault-tolerance, and 
 data consistency (at-least-once, or at-most-once, or exactly-once). In this 
@@ -490,7 +495,7 @@ In Spark 2.0, there are a few built-in sources.
 
   - **File source** - Reads files written in a directory as a stream of data. Supported file formats are text, csv, json, parquet. See the docs of the DataStreamReader interface for a more up-to-date list, and supported options for each file format. Note that the files must be atomically placed in the given directory, which in most file systems, can be achieved by file move operations.
 
-  - **Kafka source** - Poll data from Kafka. It's compatible with Kafka broker versions 0.10.0 or higher. See the [Kafka Integration Guide](structured-streaming-kafka-integration.html) for more details.
+  - **Kafka source** - Reads data from Kafka. It's compatible with Kafka broker versions 0.10.0 or higher. See the [Kafka Integration Guide](structured-streaming-kafka-integration.html) for more details.
 
   - **Socket source (for testing)** - Reads UTF8 text data from a socket connection. The listening server socket is at the driver. Note that this should be used only for testing as this does not provide end-to-end fault-tolerance guarantees. 
 
@@ -754,9 +759,21 @@ select(where(df, "signal > 10"), "device")
 
 # Running count of the number of updates for each device type
 count(groupBy(df, "deviceType"))
+writeStream
+    .format("console")</div>
 {% endhighlight %}
 </div>
 </div>
+
+You can also register a streaming DataFrame/Dataset as a temporary view and then apply SQL commands on it.
+{% highlight scala %}
+
+df.createOrReplaceTempView("updates")
+spark.sql("select count(*) from updates")  // returns another streaming DF
+{% endhighlight %}
+
+Note, you can identify whether a DataFrame/Dataset has streaming data or not by using
+`df.isStreaming()`.
 
 ### Window Operations on Event Time
 Aggregations over a sliding event-time window are straightforward with Structured Streaming and are very similar to grouped aggregations. In a grouped aggregation, aggregate values (e.g. counts) are maintained for each unique value in the user-specified grouping column. In case of window-based aggregations, aggregate values are maintained for each window the event-time of a row falls into. Let's understand this with an illustration. 
@@ -1043,7 +1060,7 @@ streamingDf \
 </div>
 
 ### Arbitrary Stateful Operations
-Many uscases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)). 
+Many usecases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)).
 
 ### Unsupported Operations
 There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
@@ -1201,6 +1218,16 @@ writeStream
     .start()
 {% endhighlight %}
 
+- **Kafka sink** - Stores the output to one or more topics in Kafka.
+
+{% highlight scala %}
+writeStream
+    .format("kafka")
+    .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+    .option("topic", "updates")
+    .start()
+{% endhighlight %}
+
 - **Foreach sink** - Runs arbitrary computation on the records in the output. See later in the section for more details.
 
 {% highlight scala %}
@@ -1253,12 +1280,19 @@ Here are the details of all the sinks in Spark.
         href="api/R/write.stream.html">R</a>).
         E.g. for "parquet" format options see <code>DataFrameWriter.parquet()</code>
     </td>
-    <td>Yes</td>
+    <td>Yes (exactly-once)</td>
     <td>Supports writes to partitioned tables. Partitioning by time may be useful.</td>
   </tr>
   <tr>
+    <td><b>Kafka Sink</b></td>
+    <td>Append, Update, Complete</td>
+    <td>See the <a href="structured-streaming-kafka-integration.html">Kafka Integration Guide</a></td>
+    <td>Yes (at-least-once)</td>
+    <td>More details in the <a href="structured-streaming-kafka-integration.html">Kafka Integration Guide</a></td>
+  </tr>
+  <tr>
     <td><b>Foreach Sink</b></td>
-    <td>Append, Update, Compelete</td>
+    <td>Append, Update, Complete</td>
     <td>None</td>
     <td>Depends on ForeachWriter implementation</td>
     <td>More details in the <a href="#using-foreach">next section</a></td>
@@ -1971,8 +2005,23 @@ write.stream(aggDF, "memory", outputMode = "complete", checkpointLocation = "pat
 </div>
 </div>
 
-# Where to go from here
-- Examples: See and run the
-[Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/sql/streaming)/[Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/sql/streaming)/[Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/sql/streaming)/[R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r/streaming)
-examples.
+# Additional Information
+
+**Further Reading**
+
+- See and run the
+  [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/sql/streaming)/[Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/sql/streaming)/[Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/sql/streaming)/[R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r/streaming)
+  examples.
+    - [Instructions](index.html#running-the-examples-and-shell) on how to run Spark examples
+- Read about integrating with Kafka in the [Structured Streaming Kafka Integration Guide](structured-streaming-kafka-integration.html)
+- Read more details about using DataFrames/Datasets in the [Spark SQL Programming Guide](sql-programming-guide.html)
+- Third-party Blog Posts
+    - [Real-time Streaming ETL with Structured Streaming in Apache Spark 2.1 (Databricks Blog)](https://databricks.com/blog/2017/01/19/real-time-streaming-etl-structured-streaming-apache-spark-2-1.html)
+    - [Real-Time End-to-End Integration with Apache Kafka in Apache Spark’s Structured Streaming (Databricks Blog)](https://databricks.com/blog/2017/04/04/real-time-end-to-end-integration-with-apache-kafka-in-apache-sparks-structured-streaming.html)
+    - [Event-time Aggregation and Watermarking in Apache Spark’s Structured Streaming (Databricks Blog)](https://databricks.com/blog/2017/05/08/event-time-aggregation-watermarking-apache-sparks-structured-streaming.html)
+
+**Talks**
+
+- Spark Summit 2017 Talk - [Easy, Scalable, Fault-tolerant Stream Processing with Structured Streaming in Apache Spark](https://spark-summit.org/2017/events/easy-scalable-fault-tolerant-stream-processing-with-structured-streaming-in-apache-spark/)
 - Spark Summit 2016 Talk - [A Deep Dive into Structured Streaming](https://spark-summit.org/2016/events/a-deep-dive-into-structured-streaming/)
+

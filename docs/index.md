@@ -8,7 +8,8 @@ description: Apache Spark SPARK_VERSION_SHORT documentation homepage
 Apache Spark is a fast and general-purpose cluster computing system.
 It provides high-level APIs in Java, Scala, Python and R,
 and an optimized engine that supports general execution graphs.
-It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
+
+It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [Structured Streaming](structured-streaming-programming-guide.html) for streaming, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing.
 
 # Downloading
 
@@ -88,13 +89,13 @@ options for deployment:
 **Programming Guides:**
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [Spark Programming Guide](programming-guide.html): detailed overview of Spark
-  in all supported languages (Scala, Java, Python, R)
-* Modules built on Spark:
-  * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
-  * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): support for structured data and relational queries
-  * [MLlib](ml-guide.html): built-in machine learning library
-  * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
+* [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): processing structured data
+* [Structured Streaming](structured-streaming-programming-guide.html): processing structured data streams
+* [Spark RDD Programming Guide](rdd-programming-guide.html): processing using RDDs (old API)
+    * Contains additional features (accumulator, broacast vars, etc.) that can be used with Datasets and DataFrames
+* [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams/RDDs (old API)
+* [MLlib](ml-guide.html): applying machine learning
+* [GraphX](graphx-programming-guide.html): processing graphs
 
 **API Docs:**
 
