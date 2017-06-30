@@ -292,15 +292,16 @@ class KMeans private (
       }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
         axpy(1.0, sum2, sum1)
         (sum1, count1 + count2)
-      }.collectAsMap()
+      }
 
       bcCenters.destroy(blocking = false)
 
       // Update the cluster centers and costs
       converged = true
-      totalContribs.foreach { case (j, (sum, count)) =>
+      totalContribs.map { case (j, (sum, count)) =>
         scal(1.0 / count, sum)
-        val newCenter = new VectorWithNorm(sum)
+        (j, new VectorWithNorm(sum))
+      }.collectAsMap().foreach { case (j, newCenter) =>
         if (converged && KMeans.fastSquaredDistance(newCenter, centers(j)) > epsilon * epsilon) {
           converged = false
         }
