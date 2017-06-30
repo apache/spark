@@ -148,7 +148,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * Supported options: "irls" (iteratively reweighted least squares).
    * Default: "irls"
    *
-   * @group expertParam
+   * @group param
    */
   @Since("2.3.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
