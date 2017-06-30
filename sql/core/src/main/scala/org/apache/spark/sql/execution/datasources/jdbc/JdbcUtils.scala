@@ -273,7 +273,7 @@ object JdbcUtils extends Logging {
   def getSchema(
       resultSet: ResultSet,
       dialect: JdbcDialect,
-      alwaysNullable: Boolean = true): StructType = {
+      alwaysNullable: Boolean = false): StructType = {
     val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)

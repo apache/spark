@@ -61,7 +61,7 @@ object JDBCRDD extends Logging {
       try {
         val rs = statement.executeQuery()
         try {
-          JdbcUtils.getSchema(rs, dialect)
+          JdbcUtils.getSchema(rs, dialect, true)
         } finally {
           rs.close()
         }
