@@ -280,9 +280,10 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val linearSVC = new LinearSVC()
       .setLoss("squared_hinge")
       .setSolver("L-BFGS")
-      .setRegParam(3.0 / 10 / 1000)
+      .setRegParam(2.0 / 10 / 1000)
       .setMaxIter(100)
       .setTol(1e-4)
+      .setFitIntercept(false)
     val model = linearSVC.fit(binaryDataset.limit(1000))
 
     /*
@@ -293,18 +294,18 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       data = np.loadtxt(f,  delimiter=",")[:1000]
       X = data[:, 1:]  # select columns 1 through end
       y = data[:, 0]   # select column 0 as label
-      clf = svm.LinearSVC(fit_intercept=True, C=10, loss='squared_hinge', tol=1e-4, random_state=42)
+      clf = svm.LinearSVC(fit_intercept=False, C=10,
+                          loss='squared_hinge', tol=1e-4, random_state=42)
       m = clf.fit(X, y)
       print m.coef_
       print m.intercept_
-      [[  2.85136074   6.25310456   9.00668415  12.17750981]]
-      [ 2.93419973]
+      [[ 0.62836794  1.24577698  1.70704463  2.38387201]]
+      0.0
      */
 
-    val coefficientsSK = Vectors.dense(2.85136074, 6.25310456, 9.00668415, 12.17750981)
-    val interceptSK = 2.93419973
-    assert(model.intercept ~== interceptSK relTol 3E-2)
-    assert(model.coefficients ~== coefficientsSK relTol 3E-2)
+    val coefficientsSK = Vectors.dense(0.62836794, 1.24577698, 1.70704463, 2.38387201)
+    assert(model.intercept === 0)
+    assert(model.coefficients ~== coefficientsSK relTol 1E-2)
   }
 
   test("linearSVC L-BFGS and OWLQN get similar model for squared_hinge loss") {
