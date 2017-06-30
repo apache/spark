@@ -321,11 +321,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // scan for modified applications, replay and merge them
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
-          var prevFileSize = 0L
           val fileInfo = fileToAppInfo.get(entry.getPath())
-          if (fileInfo != null) {
-            prevFileSize = fileInfo.fileSize
-          }
+          val prevFileSize = if (fileInfo != null) fileInfo.fileSize else 0L
           !entry.isDirectory() &&
             // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
             // reading a garbage file is safe, but we would log an error which can be scary to
