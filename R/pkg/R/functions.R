@@ -190,7 +190,6 @@ NULL
 #' \dontrun{
 #' # Dataframe used throughout this doc
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
-#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
