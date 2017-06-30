@@ -56,7 +56,6 @@ public class OneForOneBlockFetcher {
   private final OpenBlocks openMessage;
   private final String[] blockIds;
   private final BlockFetchingListener listener;
-  private final ChunkReceivedCallback chunkCallback;
   private TransportConf transportConf = null;
   private File[] shuffleFiles = null;
 
@@ -74,7 +73,6 @@ public class OneForOneBlockFetcher {
     this.openMessage = new OpenBlocks(appId, execId, blockIds);
     this.blockIds = blockIds;
     this.listener = listener;
-    this.chunkCallback = new ChunkCallback();
     this.transportConf = transportConf;
     if (shuffleFiles != null) {
       this.shuffleFiles = shuffleFiles;
@@ -85,10 +83,28 @@ public class OneForOneBlockFetcher {
 
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */
   private class ChunkCallback implements ChunkReceivedCallback {
+
+    private boolean toDisk;
+    private File file;
+
+    public ChunkCallback(boolean toDisk, File file) {
+      this.toDisk = toDisk;
+      this.file = file;
+    }
+
     @Override
     public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
       // On receipt of a chunk, pass it upwards as a block.
-      listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
+      if (!(buffer instanceof FileSegmentManagedBuffer) && toDisk) {
+        try {
+          listener.onBlockFetchSuccess(blockIds[chunkIndex],
+            FileSegmentManagedBuffer.fromManagedBuffer(buffer, transportConf, file));
+        } catch (Exception e) {
+          listener.onBlockFetchFailure(blockIds[chunkIndex], e);
+        }
+      } else {
+        listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
+      }
     }
 
     @Override
@@ -120,10 +136,9 @@ public class OneForOneBlockFetcher {
           // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
           for (int i = 0; i < streamHandle.numChunks; i++) {
             if (shuffleFiles != null) {
-              client.stream(OneForOneStreamManager.genStreamChunkId(streamHandle.streamId, i),
-                new DownloadCallback(shuffleFiles[i], i));
+              client.fetchChunk(streamHandle.streamId, i, new ChunkCallback(true, shuffleFiles[i]));
             } else {
-              client.fetchChunk(streamHandle.streamId, i, chunkCallback);
+              client.fetchChunk(streamHandle.streamId, i, new ChunkCallback(false, null));
             }
           }
         } catch (Exception e) {
@@ -148,40 +163,6 @@ public class OneForOneBlockFetcher {
       } catch (Exception e2) {
         logger.error("Error in block fetch failure callback", e2);
       }
-    }
-  }
-
-  private class DownloadCallback implements StreamCallback {
-
-    private WritableByteChannel channel = null;
-    private File targetFile = null;
-    private int chunkIndex;
-
-    DownloadCallback(File targetFile, int chunkIndex) throws IOException {
-      this.targetFile = targetFile;
-      this.channel = Channels.newChannel(new FileOutputStream(targetFile));
-      this.chunkIndex = chunkIndex;
-    }
-
-    @Override
-    public void onData(String streamId, ByteBuffer buf) throws IOException {
-      channel.write(buf);
-    }
-
-    @Override
-    public void onComplete(String streamId) throws IOException {
-      channel.close();
-      ManagedBuffer buffer = new FileSegmentManagedBuffer(transportConf, targetFile, 0,
-        targetFile.length());
-      listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
-    }
-
-    @Override
-    public void onFailure(String streamId, Throwable cause) throws IOException {
-      channel.close();
-      // On receipt of a failure, fail every block from chunkIndex onwards.
-      String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
-      failRemainingBlocks(remainingBlockIds, cause);
     }
   }
 }

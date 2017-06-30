@@ -28,6 +28,7 @@ import java.nio.channels.FileChannel;
 import com.google.common.base.Objects;
 import com.google.common.io.ByteStreams;
 import io.netty.channel.DefaultFileRegion;
+import org.apache.commons.io.FileUtils;
 
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.LimitedInputStream;
@@ -150,5 +151,13 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
       .add("offset", offset)
       .add("length", length)
       .toString();
+  }
+
+  public static FileSegmentManagedBuffer fromManagedBuffer(
+      ManagedBuffer buffer,
+      TransportConf conf,
+      File file) throws IOException {
+    FileUtils.copyInputStreamToFile(buffer.createInputStream(), file);
+    return new FileSegmentManagedBuffer(conf, file, 0, file.length());
   }
 }

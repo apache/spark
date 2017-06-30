@@ -61,6 +61,11 @@
       <artifactId>jackson-annotations</artifactId>
     </dependency>
 
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+    </dependency>
+
     <!-- Provided dependencies -->
     <dependency>
       <groupId>org.slf4j</groupId>
