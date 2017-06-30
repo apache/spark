@@ -1658,10 +1658,9 @@ Not available in R.
 
 
 ## Monitoring Streaming Queries
-There are two APIs for monitoring and debugging active queries - 
-interactively and asynchronously.
+There are multiple ways to monitor active streaming queries. You can either push metrics to external systems using Spark's Dropwizard Metrics support, or access them programmatically.
 
-### Interactive APIs
+### Reading Metrics Interactively
 
 You can directly get the current status and metrics of an active query using 
 `streamingQuery.lastProgress()` and `streamingQuery.status()`. 
@@ -1891,7 +1890,7 @@ Will print something like the following.
 </div>
 </div>
 
-### Asynchronous API
+### Reporting Metrics programmatically using Asynchronous APIs
 
 You can also asynchronously monitor all queries associated with a
 `SparkSession` by attaching a `StreamingQueryListener`
@@ -1955,6 +1954,15 @@ Not available in R.
 
 </div>
 </div>
+
+### Reporting Metrics using Dropwizard 
+Spark supports reporting metrics using the [Dropwizard Library](monitoring.html#metrics). To enable metrics of Structured Streaming queries to be reported as well, you have to explicitly enable the configuration `spark.sql.streaming.metricsEnabled` in the SparkSession. 
+
+{% highlight bash %}
+spark.conf().set("spark.sql.streaming.metricsEnabled", "true")
+{% endhighlight %}
+
+All queries started in the SparkSession after this configuration has been enabled will report metrics through Dropwizard to whatever [sinks](monitoring.html#metrics) have been configured (e.g. Ganglia, Graphite, JMX, etc.).
 
 ## Recovering from Failures with Checkpointing 
 In case of a failure or intentional shutdown, you can recover the previous progress and state of a previous query, and continue where it left off. This is done using checkpointing and write ahead logs. You can configure a query with a checkpoint location, and the query will save all the progress information (i.e. range of offsets processed in each trigger) and the running aggregates (e.g. word counts in the [quick example](#quick-example)) to the checkpoint location. This checkpoint location has to be a path in an HDFS compatible file system, and can be set as an option in the DataStreamWriter when [starting a query](#starting-streaming-queries).
