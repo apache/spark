@@ -848,7 +848,8 @@ object SQLConf {
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
 
   val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
-    .doc("When true, a SELECT statement can take regex-based column specification.")
+    .doc("When true, quoted Identifiers (using backticks) in SELECT statement are interpreted" +
+      " as regular expressions.")
     .booleanConf
     .createWithDefault(false)
 
