@@ -60,7 +60,8 @@ case class InsertIntoHadoopFsRelationCommand(
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
-  override def metrics(sparkContext: SparkContext): Map[String, SQLMetric] =
+  override private[sql] lazy val metrics: Map[String, SQLMetric] = {
+    val sparkContext = SparkContext.getActive.get
     Map(
       "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
@@ -68,11 +69,9 @@ case class InsertIntoHadoopFsRelationCommand(
       "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
     )
+  }
 
-  override def run(
-      sparkSession: SparkSession,
-      children: Seq[SparkPlan],
-      metricsUpdater: (Seq[ExecutedWriteSummary] => Unit)): Seq[Row] = {
+  override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
     assert(children.length == 1)
 
     // Most formats don't do well with duplicate columns, so lets not allow that
@@ -144,7 +143,7 @@ case class InsertIntoHadoopFsRelationCommand(
           .distinct.map(PartitioningUtils.parsePathFragment)
 
         // Updating metrics.
-        metricsUpdater(summary)
+        callbackMetricsUpdater(summary)
 
         // Updating metastore partition metadata.
         if (partitionsTrackedByCatalog) {
@@ -183,6 +182,11 @@ case class InsertIntoHadoopFsRelationCommand(
       fileIndex.foreach(_.refresh())
       // refresh data cache if table is cached
       sparkSession.catalog.refreshByPath(outputPath.toString)
+
+      if (catalogTable.nonEmpty) {
+        CommandUtils.updateTableStats(sparkSession, catalogTable.get)
+      }
+
     } else {
       logInfo("Skipping insertion into a relation that already exists.")
     }

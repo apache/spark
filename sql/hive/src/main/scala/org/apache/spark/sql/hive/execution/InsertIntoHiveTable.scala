@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.command.{CommandUtils, RunnableCommand}
 import org.apache.spark.sql.execution.datasources.{ExecutedWriteSummary, FileFormatWriter}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.hive._
@@ -86,7 +86,8 @@ case class InsertIntoHiveTable(
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
-  override def metrics(sparkContext: SparkContext): Map[String, SQLMetric] =
+  override private[sql] lazy val metrics: Map[String, SQLMetric] = {
+    val sparkContext = SparkContext.getActive.get
     Map(
       "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
@@ -94,6 +95,7 @@ case class InsertIntoHiveTable(
       "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
     )
+  }
 
   var createdTempDir: Option[Path] = None
 
@@ -242,10 +244,7 @@ case class InsertIntoHiveTable(
    * `org.apache.hadoop.hive.serde2.SerDe` and the
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
    */
-  override def run(
-      sparkSession: SparkSession,
-      children: Seq[SparkPlan],
-      metricsUpdater: (Seq[ExecutedWriteSummary] => Unit)): Seq[Row] = {
+  override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
     assert(children.length == 1)
 
     val sessionState = sparkSession.sessionState
@@ -368,7 +367,7 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
-      refreshFunction = metricsUpdater,
+      refreshFunction = callbackMetricsUpdater,
       options = Map.empty)
 
     if (partition.nonEmpty) {
@@ -447,6 +446,8 @@ case class InsertIntoHiveTable(
     // un-cache this table.
     sparkSession.catalog.uncacheTable(table.identifier.quotedString)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
+
+    CommandUtils.updateTableStats(sparkSession, table)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

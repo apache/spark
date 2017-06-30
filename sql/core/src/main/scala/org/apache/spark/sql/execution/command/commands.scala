@@ -42,47 +42,43 @@ import org.apache.spark.util.Utils
  */
 trait RunnableCommand extends logical.Command {
 
-  def metrics(sparkContext: SparkContext): Map[String, SQLMetric] = Map.empty
+  // The map used to record the metrics of running the command. This will be passed to
+  // `ExecutedCommand` during query planning.
+  private[sql] lazy val metrics: Map[String, SQLMetric] = Map.empty
 
   /**
    * Callback function that update metrics collected from the writing operation.
    */
-  private[sql] def prepareMetricsUpdater(
-      metrics: Map[String, SQLMetric],
-      sparkContext: SparkContext): (Seq[ExecutedWriteSummary] => Unit) = {
-    (writeSummaries) => {
-      var numPartitions = 0
-      var numFiles = 0
-      var totalNumBytes: Long = 0L
-      var totalNumOutput: Long = 0L
+  protected def callbackMetricsUpdater(writeSummaries: Seq[ExecutedWriteSummary]): Unit = {
+    val sparkContext = SparkContext.getActive.get
+    var numPartitions = 0
+    var numFiles = 0
+    var totalNumBytes: Long = 0L
+    var totalNumOutput: Long = 0L
 
-      writeSummaries.foreach { summary =>
-        numPartitions += summary.updatedPartitions.size
-        numFiles += summary.numOutputFile
-        totalNumBytes += summary.numOutputBytes
-        totalNumOutput += summary.numOutputRows
-      }
-
-      // The time for writing individual file can be zero if it's less than 1 ms. Zero values can
-      // lower actual time of writing to zero when calculating average, so excluding them.
-      val avgWritingTime =
-        Utils.average(writeSummaries.flatMap(_.writingTimePerFile.filter(_ > 0))).toLong
-
-      metrics("avgTime").add(avgWritingTime)
-      metrics("numFiles").add(numFiles)
-      metrics("numOutputBytes").add(totalNumBytes)
-      metrics("numOutputRows").add(totalNumOutput)
-      metrics("numParts").add(numPartitions)
-
-      val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-      SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
+    writeSummaries.foreach { summary =>
+      numPartitions += summary.updatedPartitions.size
+      numFiles += summary.numOutputFile
+      totalNumBytes += summary.numOutputBytes
+      totalNumOutput += summary.numOutputRows
     }
+
+    // The time for writing individual file can be zero if it's less than 1 ms. Zero values can
+    // lower actual time of writing to zero when calculating average, so excluding them.
+    val avgWritingTime =
+      Utils.average(writeSummaries.flatMap(_.writingTimePerFile.filter(_ > 0))).toLong
+
+    metrics("avgTime").add(avgWritingTime)
+    metrics("numFiles").add(numFiles)
+    metrics("numOutputBytes").add(totalNumBytes)
+    metrics("numOutputRows").add(totalNumOutput)
+    metrics("numParts").add(numPartitions)
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
   }
 
-  def run(
-      sparkSession: SparkSession,
-      children: Seq[SparkPlan],
-      metricsUpdater: (Seq[ExecutedWriteSummary] => Unit)): Seq[Row] = {
+  def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
     throw new NotImplementedError
   }
 
@@ -100,9 +96,7 @@ trait RunnableCommand extends logical.Command {
  */
 case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) extends SparkPlan {
 
-  override lazy val metrics: Map[String, SQLMetric] = cmd.metrics(sparkContext)
-
-  private lazy val metricsUpdater = cmd.prepareMetricsUpdater(metrics, sparkContext)
+  override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
 
   /**
    * A concrete command should override this lazy field to wrap up any side effects caused by the
@@ -118,7 +112,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) e
     val rows = if (children.isEmpty) {
       cmd.run(sqlContext.sparkSession)
     } else {
-      cmd.run(sqlContext.sparkSession, children, metricsUpdater)
+      cmd.run(sqlContext.sparkSession, children)
     }
     rows.map(converter(_).asInstanceOf[InternalRow])
   }
