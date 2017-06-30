@@ -725,7 +725,6 @@ private[spark] class TaskSetManager(
         attemptInfo.executorId,
         interruptThread = true,
         reason = "another attempt succeeded")
-      // jane: remove it from pending jobs if the killed job is speculative job?
     }
     if (!successful(index)) {
       tasksSuccessful += 1
@@ -840,7 +839,6 @@ private[spark] class TaskSetManager(
         s" has already succeeded).")
     } else {
       addPendingTask(index)
-      // jane: for speculative jobs, maybe needs to notify the job count++?
     }
 
     if (!isZombie && reason.countTowardsTaskFailures) {
@@ -912,7 +910,6 @@ private[spark] class TaskSetManager(
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
           addPendingTask(index)
-          // jane: need to add the speculative job to append job?
           // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
           // stage finishes when a total of tasks.size tasks finish.
           sched.dagScheduler.taskEnded(
