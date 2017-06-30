@@ -122,7 +122,7 @@ NULL
 #'           format to. See 'Details'.
 #'      }
 #' @param y Column to compute on.
-#' @param ... additional columns.
+#' @param ... additional Columns.
 #' @name column_string_functions
 #' @rdname column_string_functions
 #' @family string functions
@@ -1436,20 +1436,18 @@ setMethod("soundex",
             column(jc)
           })
 
-#' Return the partition ID as a column
-#'
-#' Return the partition ID as a SparkDataFrame column.
+#' @details
+#' \code{spark_partition_id}: Returns the partition ID as a SparkDataFrame column.
 #' Note that this is nondeterministic because it depends on data partitioning and
 #' task scheduling.
+#' This is equivalent to the \code{SPARK_PARTITION_ID} function in SQL.
 #'
-#' This is equivalent to the SPARK_PARTITION_ID function in SQL.
-#'
-#' @rdname spark_partition_id
-#' @name spark_partition_id
-#' @aliases spark_partition_id,missing-method
+#' @rdname column_nonaggregate_functions
+#' @aliases spark_partition_id spark_partition_id,missing-method
 #' @export
 #' @examples
-#' \dontrun{select(df, spark_partition_id())}
+#'
+#' \dontrun{head(select(df, spark_partition_id()))}
 #' @note spark_partition_id since 2.0.0
 setMethod("spark_partition_id",
           signature("missing"),
