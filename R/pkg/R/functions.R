@@ -150,6 +150,56 @@ NULL
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
 NULL
 
+#' Miscellaneous functions for Column operations
+#'
+#' Miscellaneous functions defined for \code{Column}.
+#'
+#' @param x Column to compute on. In \code{sha2}, it is one of 224, 256, 384, or 512.
+#' @param y Column to compute on.
+#' @param ... additional Columns.
+#' @name column_misc_functions
+#' @rdname column_misc_functions
+#' @family misc functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars)[, 1:2])
+#' tmp <- mutate(df, v1 = crc32(df$model), v2 = hash(df$model),
+#'                   v3 = hash(df$model, df$mpg), v4 = md5(df$model),
+#'                   v5 = sha1(df$model), v6 = sha2(df$model, 256))
+#' head(tmp)
+#' }
+NULL
+
+#' Collection functions for Column operations
+#'
+#' Collection functions defined for \code{Column}.
+#'
+#' @param x Column to compute on. Note the difference in the following methods:
+#'          \itemize{
+#'          \item \code{to_json}: it is the column containing the struct or array of the structs.
+#'          \item \code{from_json}: it is the column containing the JSON string.
+#'          }
+#' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
+#'            additional named properties to control how it is converted, accepts the same
+#'            options as the JSON data source.
+#' @name column_collection_functions
+#' @rdname column_collection_functions
+#' @family collection functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
+#' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
+#' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
+#' head(tmp2)
+#' head(select(tmp, posexplode(tmp$v1)))
+#' head(select(tmp, sort_array(tmp$v1)))
+#' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))}
+NULL
+
 #' @details
 #' \code{lit}: A new Column is created to represent the literal value.
 #' If the parameter is a Column, it is returned unchanged.
@@ -569,19 +619,13 @@ setMethod("count",
             column(jc)
           })
 
-#' crc32
+#' @details
+#' \code{crc32}: Calculates the cyclic redundancy check value  (CRC32) of a binary column
+#' and returns the value as a bigint.
 #'
-#' Calculates the cyclic redundancy check value  (CRC32) of a binary column and
-#' returns the value as a bigint.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname crc32
-#' @name crc32
-#' @family misc functions
-#' @aliases crc32,Column-method
+#' @rdname column_misc_functions
+#' @aliases crc32 crc32,Column-method
 #' @export
-#' @examples \dontrun{crc32(df$c)}
 #' @note crc32 since 1.5.0
 setMethod("crc32",
           signature(x = "Column"),
@@ -590,19 +634,13 @@ setMethod("crc32",
             column(jc)
           })
 
-#' hash
+#' @details
+#' \code{hash}: Calculates the hash code of given columns, and returns the result
+#' as an int column.
 #'
-#' Calculates the hash code of given columns, and returns the result as a int column.
-#'
-#' @param x Column to compute on.
-#' @param ... additional Column(s) to be included.
-#'
-#' @rdname hash
-#' @name hash
-#' @family misc functions
-#' @aliases hash,Column-method
+#' @rdname column_misc_functions
+#' @aliases hash hash,Column-method
 #' @export
-#' @examples \dontrun{hash(df$c)}
 #' @note hash since 2.0.0
 setMethod("hash",
           signature(x = "Column"),
@@ -1055,19 +1093,13 @@ setMethod("max",
             column(jc)
           })
 
-#' md5
-#'
-#' Calculates the MD5 digest of a binary column and returns the value
+#' @details
+#' \code{md5}: Calculates the MD5 digest of a binary column and returns the value
 #' as a 32 character hex string.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname md5
-#' @name md5
-#' @family misc functions
-#' @aliases md5,Column-method
+#' @rdname column_misc_functions
+#' @aliases md5 md5,Column-method
 #' @export
-#' @examples \dontrun{md5(df$c)}
 #' @note md5 since 1.5.0
 setMethod("md5",
           signature(x = "Column"),
@@ -1307,19 +1339,13 @@ setMethod("second",
             column(jc)
           })
 
-#' sha1
-#'
-#' Calculates the SHA-1 digest of a binary column and returns the value
+#' @details
+#' \code{sha1}: Calculates the SHA-1 digest of a binary column and returns the value
 #' as a 40 character hex string.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname sha1
-#' @name sha1
-#' @family misc functions
-#' @aliases sha1,Column-method
+#' @rdname column_misc_functions
+#' @aliases sha1 sha1,Column-method
 #' @export
-#' @examples \dontrun{sha1(df$c)}
 #' @note sha1 since 1.5.0
 setMethod("sha1",
           signature(x = "Column"),
@@ -1645,30 +1671,23 @@ setMethod("to_date",
             column(jc)
           })
 
-#' to_json
+#' @details
+#' \code{to_json}: Converts a column containing a \code{structType} or array of \code{structType}
+#' into a Column of JSON string. Resolving the Column can fail if an unsupported type is encountered.
 #'
-#' Converts a column containing a \code{structType} or array of \code{structType} into a Column
-#' of JSON string. Resolving the Column can fail if an unsupported type is encountered.
-#'
-#' @param x Column containing the struct or array of the structs
-#' @param ... additional named properties to control how it is converted, accepts the same options
-#'            as the JSON data source.
-#'
-#' @family non-aggregate functions
-#' @rdname to_json
-#' @name to_json
-#' @aliases to_json,Column-method
+#' @rdname column_collection_functions
+#' @aliases to_json to_json,Column-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
 #' # Converts a struct into a JSON object
-#' df <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
-#' select(df, to_json(df$d, dateFormat = 'dd/MM/yyyy'))
+#' df2 <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' select(df2, to_json(df2$d, dateFormat = 'dd/MM/yyyy'))
 #'
 #' # Converts an array of structs into a JSON array
-#' df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
-#' select(df, to_json(df$people))
-#'}
+#' df2 <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people))}
 #' @note to_json since 2.2.0
 setMethod("to_json", signature(x = "Column"),
           function(x, ...) {
@@ -2123,28 +2142,28 @@ setMethod("date_format", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' from_json
+#' @details
+#' \code{from_json}: Parses a column containing a JSON string into a Column of \code{structType}
+#' with the specified \code{schema} or array of \code{structType} if \code{as.json.array} is set
+#' to \code{TRUE}. If the string is unparseable, the Column will contain the value NA.
 #'
-#' Parses a column containing a JSON string into a Column of \code{structType} with the specified
-#' \code{schema} or array of \code{structType} if \code{as.json.array} is set to \code{TRUE}.
-#' If the string is unparseable, the Column will contains the value NA.
-#'
-#' @param x Column containing the JSON string.
+#' @rdname column_collection_functions
 #' @param schema a structType object to use as the schema to use when parsing the JSON string.
 #' @param as.json.array indicating if input string is JSON array of objects or a single object.
-#' @param ... additional named properties to control how the json is parsed, accepts the same
-#'            options as the JSON data source.
-#'
-#' @family non-aggregate functions
-#' @rdname from_json
-#' @name from_json
-#' @aliases from_json,Column,structType-method
+#' @aliases from_json from_json,Column,structType-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' schema <- structType(structField("name", "string"),
-#' select(df, from_json(df$value, schema, dateFormat = "dd/MM/yyyy"))
-#'}
+#' df2 <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' df2 <- mutate(df2, d2 = to_json(df2$d, dateFormat = 'dd/MM/yyyy'))
+#' schema <- structType(structField("date", "string"))
+#' head(select(df2, from_json(df2$d2, schema, dateFormat = 'dd/MM/yyyy')))
+
+#' df2 <- sql("SELECT named_struct('name', 'Bob') as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people))
+#' schema <- structType(structField("name", "string"))
+#' head(select(df2, from_json(df2$people_json, schema)))}
 #' @note from_json since 2.2.0
 setMethod("from_json", signature(x = "Column", schema = "structType"),
           function(x, schema, as.json.array = FALSE, ...) {
@@ -2309,19 +2328,14 @@ setMethod("format_number", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' sha2
+#' @details
+#' \code{sha2}: Calculates the SHA-2 family of hash functions of a binary column and
+#' returns the value as a hex string. The second argument \code{x} specifies the number
+#' of bits, and is one of 224, 256, 384, or 512.
 #'
-#' Calculates the SHA-2 family of hash functions of a binary column and
-#' returns the value as a hex string.
-#'
-#' @param y column to compute SHA-2 on.
-#' @param x one of 224, 256, 384, or 512.
-#' @family misc functions
-#' @rdname sha2
-#' @name sha2
-#' @aliases sha2,Column,numeric-method
+#' @rdname column_misc_functions
+#' @aliases sha2 sha2,Column,numeric-method
 #' @export
-#' @examples \dontrun{sha2(df$c, 256)}
 #' @note sha2 since 1.5.0
 setMethod("sha2", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -3109,18 +3123,14 @@ setMethod("row_number",
 
 ###################### Collection functions######################
 
-#' array_contains
+#' @details
+#' \code{array_contains}: Returns null if the array is null, true if the array contains
+#' the value, and false otherwise.
 #'
-#' Returns null if the array is null, true if the array contains the value, and false otherwise.
-#'
-#' @param x A Column
 #' @param value A value to be checked if contained in the column
-#' @rdname array_contains
-#' @aliases array_contains,Column-method
-#' @name array_contains
-#' @family collection functions
+#' @rdname column_collection_functions
+#' @aliases array_contains array_contains,Column-method
 #' @export
-#' @examples \dontrun{array_contains(df$c, 1)}
 #' @note array_contains since 1.6.0
 setMethod("array_contains",
           signature(x = "Column", value = "ANY"),
@@ -3129,18 +3139,12 @@ setMethod("array_contains",
             column(jc)
           })
 
-#' explode
+#' @details
+#' \code{explode}: Creates a new row for each element in the given array or map column.
 #'
-#' Creates a new row for each element in the given array or map column.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname explode
-#' @name explode
-#' @family collection functions
-#' @aliases explode,Column-method
+#' @rdname column_collection_functions
+#' @aliases explode explode,Column-method
 #' @export
-#' @examples \dontrun{explode(df$c)}
 #' @note explode since 1.5.0
 setMethod("explode",
           signature(x = "Column"),
@@ -3149,18 +3153,12 @@ setMethod("explode",
             column(jc)
           })
 
-#' size
+#' @details
+#' \code{size}: Returns length of array or map.
 #'
-#' Returns length of array or map.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname size
-#' @name size
-#' @aliases size,Column-method
-#' @family collection functions
+#' @rdname column_collection_functions
+#' @aliases size size,Column-method
 #' @export
-#' @examples \dontrun{size(df$c)}
 #' @note size since 1.5.0
 setMethod("size",
           signature(x = "Column"),
@@ -3169,25 +3167,16 @@ setMethod("size",
             column(jc)
           })
 
-#' sort_array
-#'
-#' Sorts the input array in ascending or descending order according
+#' @details
+#' \code{sort_array}: Sorts the input array in ascending or descending order according
 #' to the natural ordering of the array elements.
 #'
-#' @param x A Column to sort
+#' @rdname column_collection_functions
 #' @param asc A logical flag indicating the sorting order.
 #'            TRUE, sorting is in ascending order.
 #'            FALSE, sorting is in descending order.
-#' @rdname sort_array
-#' @name sort_array
-#' @aliases sort_array,Column-method
-#' @family collection functions
+#' @aliases sort_array sort_array,Column-method
 #' @export
-#' @examples
-#' \dontrun{
-#' sort_array(df$c)
-#' sort_array(df$c, FALSE)
-#' }
 #' @note sort_array since 1.6.0
 setMethod("sort_array",
           signature(x = "Column"),
@@ -3196,18 +3185,13 @@ setMethod("sort_array",
             column(jc)
           })
 
-#' posexplode
+#' @details
+#' \code{posexplode}: Creates a new row for each element with position in the given array
+#' or map column.
 #'
-#' Creates a new row for each element with position in the given array or map column.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname posexplode
-#' @name posexplode
-#' @family collection functions
-#' @aliases posexplode,Column-method
+#' @rdname column_collection_functions
+#' @aliases posexplode posexplode,Column-method
 #' @export
-#' @examples \dontrun{posexplode(df$c)}
 #' @note posexplode since 2.1.0
 setMethod("posexplode",
           signature(x = "Column"),
@@ -3333,27 +3317,24 @@ setMethod("repeat_string",
             column(jc)
           })
 
-#' explode_outer
-#'
-#' Creates a new row for each element in the given array or map column.
+#' @details
+#' \code{explode}: Creates a new row for each element in the given array or map column.
 #' Unlike \code{explode}, if the array/map is \code{null} or empty
 #' then \code{null} is produced.
 #'
-#' @param x Column to compute on
 #'
-#' @rdname explode_outer
-#' @name explode_outer
-#' @family collection functions
-#' @aliases explode_outer,Column-method
+#' @rdname column_collection_functions
+#' @aliases explode_outer explode_outer,Column-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' df <- createDataFrame(data.frame(
+#' df2 <- createDataFrame(data.frame(
 #'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
 #' ))
 #'
-#' head(select(df, df$id, explode_outer(split_string(df$text, ","))))
-#' }
+#' head(select(df2, df2$id, explode_outer(split_string(df2$text, ","))))
+#' head(select(df2, df2$id, posexplode_outer(split_string(df2$text, ","))))}
 #' @note explode_outer since 2.3.0
 setMethod("explode_outer",
           signature(x = "Column"),
@@ -3362,27 +3343,14 @@ setMethod("explode_outer",
             column(jc)
           })
 
-#' posexplode_outer
-#'
-#' Creates a new row for each element with position in the given array or map column.
-#' Unlike \code{posexplode}, if the array/map is \code{null} or empty
+#' @details
+#' \code{posexplode_outer}: Creates a new row for each element with position in the given
+#' array or map column. Unlike \code{posexplode}, if the array/map is \code{null} or empty
 #' then the row (\code{null}, \code{null}) is produced.
 #'
-#' @param x Column to compute on
-#'
-#' @rdname posexplode_outer
-#' @name posexplode_outer
-#' @family collection functions
-#' @aliases posexplode_outer,Column-method
+#' @rdname column_collection_functions
+#' @aliases posexplode_outer posexplode_outer,Column-method
 #' @export
-#' @examples
-#' \dontrun{
-#' df <- createDataFrame(data.frame(
-#'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
-#' ))
-#'
-#' head(select(df, df$id, posexplode_outer(split_string(df$text, ","))))
-#' }
 #' @note posexplode_outer since 2.3.0
 setMethod("posexplode_outer",
           signature(x = "Column"),
