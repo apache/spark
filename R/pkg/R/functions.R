@@ -150,6 +150,27 @@ NULL
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
 NULL
 
+#' Miscellaneous functions for Column operations
+#'
+#' Miscellaneous functions defined for \code{Column}.
+#'
+#' @param x Column to compute on. In \code{sha2}, it is one of 224, 256, 384, or 512.
+#' @param y Column to compute on.
+#' @param ... additional Columns.
+#' @name column_misc_functions
+#' @rdname column_misc_functions
+#' @family misc functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars)[, 1:2])
+#' tmp <- mutate(df, v1 = crc32(df$model), v2 = hash(df$model),
+#'                   v3 = hash(df$model, df$mpg), v4 = md5(df$model),
+#'                   v5 = sha1(df$model), v6 = sha2(df$model, 256))
+#' head(tmp)
+#' }
+NULL
+
 #' Collection functions for Column operations
 #'
 #' Collection functions defined for \code{Column}.
@@ -598,19 +619,13 @@ setMethod("count",
             column(jc)
           })
 
-#' crc32
+#' @details
+#' \code{crc32}: Calculates the cyclic redundancy check value  (CRC32) of a binary column
+#' and returns the value as a bigint.
 #'
-#' Calculates the cyclic redundancy check value  (CRC32) of a binary column and
-#' returns the value as a bigint.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname crc32
-#' @name crc32
-#' @family misc functions
-#' @aliases crc32,Column-method
+#' @rdname column_misc_functions
+#' @aliases crc32 crc32,Column-method
 #' @export
-#' @examples \dontrun{crc32(df$c)}
 #' @note crc32 since 1.5.0
 setMethod("crc32",
           signature(x = "Column"),
@@ -619,19 +634,13 @@ setMethod("crc32",
             column(jc)
           })
 
-#' hash
+#' @details
+#' \code{hash}: Calculates the hash code of given columns, and returns the result
+#' as an int column.
 #'
-#' Calculates the hash code of given columns, and returns the result as a int column.
-#'
-#' @param x Column to compute on.
-#' @param ... additional Column(s) to be included.
-#'
-#' @rdname hash
-#' @name hash
-#' @family misc functions
-#' @aliases hash,Column-method
+#' @rdname column_misc_functions
+#' @aliases hash hash,Column-method
 #' @export
-#' @examples \dontrun{hash(df$c)}
 #' @note hash since 2.0.0
 setMethod("hash",
           signature(x = "Column"),
@@ -1084,19 +1093,13 @@ setMethod("max",
             column(jc)
           })
 
-#' md5
-#'
-#' Calculates the MD5 digest of a binary column and returns the value
+#' @details
+#' \code{md5}: Calculates the MD5 digest of a binary column and returns the value
 #' as a 32 character hex string.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname md5
-#' @name md5
-#' @family misc functions
-#' @aliases md5,Column-method
+#' @rdname column_misc_functions
+#' @aliases md5 md5,Column-method
 #' @export
-#' @examples \dontrun{md5(df$c)}
 #' @note md5 since 1.5.0
 setMethod("md5",
           signature(x = "Column"),
@@ -1336,19 +1339,13 @@ setMethod("second",
             column(jc)
           })
 
-#' sha1
-#'
-#' Calculates the SHA-1 digest of a binary column and returns the value
+#' @details
+#' \code{sha1}: Calculates the SHA-1 digest of a binary column and returns the value
 #' as a 40 character hex string.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname sha1
-#' @name sha1
-#' @family misc functions
-#' @aliases sha1,Column-method
+#' @rdname column_misc_functions
+#' @aliases sha1 sha1,Column-method
 #' @export
-#' @examples \dontrun{sha1(df$c)}
 #' @note sha1 since 1.5.0
 setMethod("sha1",
           signature(x = "Column"),
@@ -2331,19 +2328,14 @@ setMethod("format_number", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' sha2
+#' @details
+#' \code{sha2}: Calculates the SHA-2 family of hash functions of a binary column and
+#' returns the value as a hex string. The second argument \code{x} specifies the number
+#' of bits, and is one of 224, 256, 384, or 512.
 #'
-#' Calculates the SHA-2 family of hash functions of a binary column and
-#' returns the value as a hex string.
-#'
-#' @param y column to compute SHA-2 on.
-#' @param x one of 224, 256, 384, or 512.
-#' @family misc functions
-#' @rdname sha2
-#' @name sha2
-#' @aliases sha2,Column,numeric-method
+#' @rdname column_misc_functions
+#' @aliases sha2 sha2,Column,numeric-method
 #' @export
-#' @examples \dontrun{sha2(df$c, 256)}
 #' @note sha2 since 1.5.0
 setMethod("sha2", signature(y = "Column", x = "numeric"),
           function(y, x) {
