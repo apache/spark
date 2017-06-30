@@ -46,6 +46,8 @@ schema <- structType(structField("name", "string"),
                      structField("age", "integer"),
                      structField("count", "double"))
 
+stringSchema <- "name STRING, age INTEGER, count DOUBLE"
+
 test_that("read.stream, write.stream, awaitTermination, stopQuery", {
   df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
   expect_true(isStreaming(df))
@@ -107,6 +109,27 @@ test_that("Stream other format", {
   stopQuery(q)
   expect_true(awaitTermination(q, 1))
   expect_false(isActive(q))
+
+  unlink(parquetPath)
+})
+
+test_that("Specify a schema by using a DDL-formatted string when reading", {
+  # Test read.stream with a user defined schema in a DDL-formatted string.
+  parquetPath <- tempfile(pattern = "sparkr-test", fileext = ".parquet")
+  df <- read.df(jsonPath, "json", schema)
+  write.df(df, parquetPath, "parquet", "overwrite")
+
+  df <- read.stream(path = parquetPath, schema = stringSchema)
+  expect_true(isStreaming(df))
+  counts <- count(group_by(df, "name"))
+  q <- write.stream(counts, "memory", queryName = "people3", outputMode = "complete")
+
+  expect_false(awaitTermination(q, 5 * 1000))
+  callJMethod(q@ssq, "processAllAvailable")
+  expect_equal(head(sql("SELECT count(*) FROM people3"))[[1]], 3)
+
+  expect_error(read.stream(path = parquetPath, schema = "name stri"),
+               "DataType stri is not supported.")
 
   unlink(parquetPath)
 })

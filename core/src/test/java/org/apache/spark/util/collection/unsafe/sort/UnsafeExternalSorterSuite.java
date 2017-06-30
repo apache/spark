@@ -406,6 +406,31 @@ public class UnsafeExternalSorterSuite {
   }
 
   @Test
+  public void testDiskSpilledBytes() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    long[] record = new long[100];
+    int recordSize = record.length * 8;
+    int n = (int) pageSizeBytes / recordSize * 3;
+    for (int i = 0; i < n; i++) {
+      record[0] = (long) i;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, false);
+    }
+    // We will have at-least 2 memory pages allocated because of rounding happening due to
+    // integer division of pageSizeBytes and recordSize.
+    assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
+    assertTrue(taskContext.taskMetrics().diskBytesSpilled() == 0);
+    UnsafeExternalSorter.SpillableIterator iter =
+            (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
+    assertTrue(iter.spill() > 0);
+    assertTrue(taskContext.taskMetrics().diskBytesSpilled() > 0);
+    assertEquals(0, iter.spill());
+    // Even if we did not spill second time, the disk spilled bytes should still be non-zero
+    assertTrue(taskContext.taskMetrics().diskBytesSpilled() > 0);
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
   public void testPeakMemoryUsed() throws Exception {
     final long recordLengthBytes = 8;
     final long pageSizeBytes = 256;
