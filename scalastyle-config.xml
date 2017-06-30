@@ -46,7 +46,7 @@ This file is divided into 3 sections:
 
   <check level="error" class="org.scalastyle.file.FileTabChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.file.HeaderMatchesChecker" enabled="false">
+  <check level="error" class="org.scalastyle.file.HeaderMatchesChecker" enabled="true">
     <parameters>
        <parameter name="header"><![CDATA[/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
