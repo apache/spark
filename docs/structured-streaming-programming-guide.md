@@ -759,15 +759,13 @@ select(where(df, "signal > 10"), "device")
 
 # Running count of the number of updates for each device type
 count(groupBy(df, "deviceType"))
-writeStream
-    .format("console")</div>
 {% endhighlight %}
 </div>
 </div>
 
 You can also register a streaming DataFrame/Dataset as a temporary view and then apply SQL commands on it.
-{% highlight scala %}
 
+{% highlight scala %}
 df.createOrReplaceTempView("updates")
 spark.sql("select count(*) from updates")  // returns another streaming DF
 {% endhighlight %}
