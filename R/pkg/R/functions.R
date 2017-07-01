@@ -86,23 +86,135 @@ NULL
 #' df <- createDataFrame(data.frame(time = as.POSIXct(dts), y = y))}
 NULL
 
-#' lit
+#' Math functions for Column operations
 #'
-#' A new \linkS4class{Column} is created to represent the literal value.
-#' If the parameter is a \linkS4class{Column}, it is returned unchanged.
+#' Math functions defined for \code{Column}.
 #'
-#' @param x a literal value or a Column.
-#' @family non-aggregate functions
-#' @rdname lit
-#' @name lit
-#' @export
-#' @aliases lit,ANY-method
+#' @param x Column to compute on. In \code{shiftLeft}, \code{shiftRight} and \code{shiftRightUnsigned},
+#'          this is the number of bits to shift.
+#' @param y Column to compute on.
+#' @param ... additional argument(s).
+#' @name column_math_functions
+#' @rdname column_math_functions
+#' @family math functions
 #' @examples
 #' \dontrun{
-#' lit(df$name)
-#' select(df, lit("x"))
-#' select(df, lit("2015-01-01"))
-#'}
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' tmp <- mutate(df, v1 = log(df$mpg), v2 = cbrt(df$disp),
+#'                   v3 = bround(df$wt, 1), v4 = bin(df$cyl),
+#'                   v5 = hex(df$wt), v6 = toDegrees(df$gear),
+#'                   v7 = atan2(df$cyl, df$am), v8 = hypot(df$cyl, df$am),
+#'                   v9 = pmod(df$hp, df$cyl), v10 = shiftLeft(df$disp, 1),
+#'                   v11 = conv(df$hp, 10, 16), v12 = sign(df$vs - 0.5),
+#'                   v13 = sqrt(df$disp), v14 = ceil(df$wt))
+#' head(tmp)}
+NULL
+
+#' String functions for Column operations
+#'
+#' String functions defined for \code{Column}.
+#'
+#' @param x Column to compute on except in the following methods:
+#'      \itemize{
+#'      \item \code{instr}: \code{character}, the substring to check. See 'Details'.
+#'      \item \code{format_number}: \code{numeric}, the number of decimal place to
+#'           format to. See 'Details'.
+#'      }
+#' @param y Column to compute on.
+#' @param ... additional columns.
+#' @name column_string_functions
+#' @rdname column_string_functions
+#' @family string functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(as.data.frame(Titanic, stringsAsFactors = FALSE))}
+NULL
+
+#' Non-aggregate functions for Column operations
+#'
+#' Non-aggregate functions defined for \code{Column}.
+#'
+#' @param x Column to compute on. In \code{lit}, it is a literal value or a Column.
+#'          In \code{expr}, it contains an expression character object to be parsed.
+#' @param y Column to compute on.
+#' @param ... additional Columns.
+#' @name column_nonaggregate_functions
+#' @rdname column_nonaggregate_functions
+#' @seealso coalesce,SparkDataFrame-method
+#' @family non-aggregate functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
+NULL
+
+#' Miscellaneous functions for Column operations
+#'
+#' Miscellaneous functions defined for \code{Column}.
+#'
+#' @param x Column to compute on. In \code{sha2}, it is one of 224, 256, 384, or 512.
+#' @param y Column to compute on.
+#' @param ... additional Columns.
+#' @name column_misc_functions
+#' @rdname column_misc_functions
+#' @family misc functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars)[, 1:2])
+#' tmp <- mutate(df, v1 = crc32(df$model), v2 = hash(df$model),
+#'                   v3 = hash(df$model, df$mpg), v4 = md5(df$model),
+#'                   v5 = sha1(df$model), v6 = sha2(df$model, 256))
+#' head(tmp)
+#' }
+NULL
+
+#' Collection functions for Column operations
+#'
+#' Collection functions defined for \code{Column}.
+#'
+#' @param x Column to compute on. Note the difference in the following methods:
+#'          \itemize{
+#'          \item \code{to_json}: it is the column containing the struct or array of the structs.
+#'          \item \code{from_json}: it is the column containing the JSON string.
+#'          }
+#' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
+#'            additional named properties to control how it is converted, accepts the same
+#'            options as the JSON data source.
+#' @name column_collection_functions
+#' @rdname column_collection_functions
+#' @family collection functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
+#' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
+#' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
+#' head(tmp2)
+#' head(select(tmp, posexplode(tmp$v1)))
+#' head(select(tmp, sort_array(tmp$v1)))
+#' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))}
+NULL
+
+#' @details
+#' \code{lit}: A new Column is created to represent the literal value.
+#' If the parameter is a Column, it is returned unchanged.
+#'
+#' @rdname column_nonaggregate_functions
+#' @export
+#' @aliases lit lit,ANY-method
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, v1 = lit(df$mpg), v2 = lit("x"), v3 = lit("2015-01-01"),
+#'                   v4 = negate(df$mpg), v5 = expr('length(model)'),
+#'                   v6 = greatest(df$vs, df$am), v7 = least(df$vs, df$am),
+#'                   v8 = column("mpg"))
+#' head(tmp)}
 #' @note lit since 1.5.0
 setMethod("lit", signature("ANY"),
           function(x) {
@@ -112,18 +224,12 @@ setMethod("lit", signature("ANY"),
             column(jc)
           })
 
-#' abs
+#' @details
+#' \code{abs}: Computes the absolute value.
 #'
-#' Computes the absolute value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname abs
-#' @name abs
-#' @family non-aggregate functions
+#' @rdname column_math_functions
 #' @export
-#' @examples \dontrun{abs(df$c)}
-#' @aliases abs,Column-method
+#' @aliases abs abs,Column-method
 #' @note abs since 1.5.0
 setMethod("abs",
           signature(x = "Column"),
@@ -132,19 +238,13 @@ setMethod("abs",
             column(jc)
           })
 
-#' acos
+#' @details
+#' \code{acos}: Computes the cosine inverse of the given value; the returned angle is in
+#' the range 0.0 through pi.
 #'
-#' Computes the cosine inverse of the given value; the returned angle is in the range
-#' 0.0 through pi.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname acos
-#' @name acos
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @examples \dontrun{acos(df$c)}
-#' @aliases acos,Column-method
+#' @aliases acos acos,Column-method
 #' @note acos since 1.5.0
 setMethod("acos",
           signature(x = "Column"),
@@ -175,19 +275,17 @@ setMethod("approxCountDistinct",
             column(jc)
           })
 
-#' ascii
+#' @details
+#' \code{ascii}: Computes the numeric value of the first character of the string column,
+#' and returns the result as an int column.
 #'
-#' Computes the numeric value of the first character of the string column, and returns the
-#' result as a int column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname ascii
-#' @name ascii
-#' @family string functions
+#' @rdname column_string_functions
 #' @export
-#' @aliases ascii,Column-method
-#' @examples \dontrun{\dontrun{ascii(df$c)}}
+#' @aliases ascii ascii,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, ascii(df$Class), ascii(df$Sex)))}
 #' @note ascii since 1.5.0
 setMethod("ascii",
           signature(x = "Column"),
@@ -196,19 +294,13 @@ setMethod("ascii",
             column(jc)
           })
 
-#' asin
+#' @details
+#' \code{asin}: Computes the sine inverse of the given value; the returned angle is in
+#' the range -pi/2 through pi/2.
 #'
-#' Computes the sine inverse of the given value; the returned angle is in the range
-#' -pi/2 through pi/2.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname asin
-#' @name asin
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases asin,Column-method
-#' @examples \dontrun{asin(df$c)}
+#' @aliases asin asin,Column-method
 #' @note asin since 1.5.0
 setMethod("asin",
           signature(x = "Column"),
@@ -217,18 +309,12 @@ setMethod("asin",
             column(jc)
           })
 
-#' atan
+#' @details
+#' \code{atan}: Computes the tangent inverse of the given value.
 #'
-#' Computes the tangent inverse of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname atan
-#' @name atan
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases atan,Column-method
-#' @examples \dontrun{atan(df$c)}
+#' @aliases atan atan,Column-method
 #' @note atan since 1.5.0
 setMethod("atan",
           signature(x = "Column"),
@@ -255,19 +341,22 @@ setMethod("avg",
             column(jc)
           })
 
-#' base64
+#' @details
+#' \code{base64}: Computes the BASE64 encoding of a binary column and returns it as
+#' a string column. This is the reverse of unbase64.
 #'
-#' Computes the BASE64 encoding of a binary column and returns it as a string column.
-#' This is the reverse of unbase64.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname base64
-#' @name base64
-#' @family string functions
+#' @rdname column_string_functions
 #' @export
-#' @aliases base64,Column-method
-#' @examples \dontrun{base64(df$c)}
+#' @aliases base64 base64,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, s1 = encode(df$Class, "UTF-8"))
+#' str(tmp)
+#' tmp2 <- mutate(tmp, s2 = base64(tmp$s1), s3 = decode(tmp$s1, "UTF-8"),
+#'                     s4 = soundex(tmp$Sex))
+#' head(tmp2)
+#' head(select(tmp2, unbase64(tmp2$s2)))}
 #' @note base64 since 1.5.0
 setMethod("base64",
           signature(x = "Column"),
@@ -276,19 +365,13 @@ setMethod("base64",
             column(jc)
           })
 
-#' bin
+#' @details
+#' \code{bin}: An expression that returns the string representation of the binary value
+#' of the given long column. For example, bin("12") returns "1100".
 #'
-#' An expression that returns the string representation of the binary value of the given long
-#' column. For example, bin("12") returns "1100".
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname bin
-#' @name bin
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases bin,Column-method
-#' @examples \dontrun{bin(df$c)}
+#' @aliases bin bin,Column-method
 #' @note bin since 1.5.0
 setMethod("bin",
           signature(x = "Column"),
@@ -297,18 +380,16 @@ setMethod("bin",
             column(jc)
           })
 
-#' bitwiseNOT
+#' @details
+#' \code{bitwiseNOT}: Computes bitwise NOT.
 #'
-#' Computes bitwise NOT.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname bitwiseNOT
-#' @name bitwiseNOT
-#' @family non-aggregate functions
+#' @rdname column_nonaggregate_functions
 #' @export
-#' @aliases bitwiseNOT,Column-method
-#' @examples \dontrun{bitwiseNOT(df$c)}
+#' @aliases bitwiseNOT bitwiseNOT,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, bitwiseNOT(cast(df$vs, "int"))))}
 #' @note bitwiseNOT since 1.5.0
 setMethod("bitwiseNOT",
           signature(x = "Column"),
@@ -317,18 +398,12 @@ setMethod("bitwiseNOT",
             column(jc)
           })
 
-#' cbrt
+#' @details
+#' \code{cbrt}: Computes the cube-root of the given value.
 #'
-#' Computes the cube-root of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname cbrt
-#' @name cbrt
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases cbrt,Column-method
-#' @examples \dontrun{cbrt(df$c)}
+#' @aliases cbrt cbrt,Column-method
 #' @note cbrt since 1.4.0
 setMethod("cbrt",
           signature(x = "Column"),
@@ -337,18 +412,12 @@ setMethod("cbrt",
             column(jc)
           })
 
-#' Computes the ceiling of the given value
+#' @details
+#' \code{ceil}: Computes the ceiling of the given value.
 #'
-#' Computes the ceiling of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname ceil
-#' @name ceil
-#' @family math functions
+#' @rdname column_math_functions
 #' @export
-#' @aliases ceil,Column-method
-#' @examples \dontrun{ceil(df$c)}
+#' @aliases ceil ceil,Column-method
 #' @note ceil since 1.5.0
 setMethod("ceil",
           signature(x = "Column"),
@@ -357,16 +426,25 @@ setMethod("ceil",
             column(jc)
           })
 
-#' Returns the first column that is not NA
+#' @details
+#' \code{ceiling}: Alias for \code{ceil}.
 #'
-#' Returns the first column that is not NA, or NA if all inputs are.
+#' @rdname column_math_functions
+#' @aliases ceiling ceiling,Column-method
+#' @export
+#' @note ceiling since 1.5.0
+setMethod("ceiling",
+          signature(x = "Column"),
+          function(x) {
+            ceil(x)
+          })
+
+#' @details
+#' \code{coalesce}: Returns the first column that is not NA, or NA if all inputs are.
 #'
-#' @rdname coalesce
-#' @name coalesce
-#' @family non-aggregate functions
+#' @rdname column_nonaggregate_functions
 #' @export
 #' @aliases coalesce,Column-method
-#' @examples \dontrun{coalesce(df$c, df$d, df$e)}
 #' @note coalesce(Column) since 2.1.1
 setMethod("coalesce",
           signature(x = "Column"),
@@ -405,6 +483,7 @@ setMethod("column",
           function(x) {
             col(x)
           })
+
 #' corr
 #'
 #' Computes the Pearson Correlation Coefficient for two Columns.
@@ -493,18 +572,12 @@ setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOr
             column(jc)
           })
 
-#' cos
+#' @details
+#' \code{cos}: Computes the cosine of the given value.
 #'
-#' Computes the cosine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname cos
-#' @name cos
-#' @family math functions
-#' @aliases cos,Column-method
+#' @rdname column_math_functions
+#' @aliases cos cos,Column-method
 #' @export
-#' @examples \dontrun{cos(df$c)}
 #' @note cos since 1.5.0
 setMethod("cos",
           signature(x = "Column"),
@@ -513,18 +586,12 @@ setMethod("cos",
             column(jc)
           })
 
-#' cosh
+#' @details
+#' \code{cosh}: Computes the hyperbolic cosine of the given value.
 #'
-#' Computes the hyperbolic cosine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname cosh
-#' @name cosh
-#' @family math functions
-#' @aliases cosh,Column-method
+#' @rdname column_math_functions
+#' @aliases cosh cosh,Column-method
 #' @export
-#' @examples \dontrun{cosh(df$c)}
 #' @note cosh since 1.5.0
 setMethod("cosh",
           signature(x = "Column"),
@@ -552,19 +619,13 @@ setMethod("count",
             column(jc)
           })
 
-#' crc32
+#' @details
+#' \code{crc32}: Calculates the cyclic redundancy check value  (CRC32) of a binary column
+#' and returns the value as a bigint.
 #'
-#' Calculates the cyclic redundancy check value  (CRC32) of a binary column and
-#' returns the value as a bigint.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname crc32
-#' @name crc32
-#' @family misc functions
-#' @aliases crc32,Column-method
+#' @rdname column_misc_functions
+#' @aliases crc32 crc32,Column-method
 #' @export
-#' @examples \dontrun{crc32(df$c)}
 #' @note crc32 since 1.5.0
 setMethod("crc32",
           signature(x = "Column"),
@@ -573,19 +634,13 @@ setMethod("crc32",
             column(jc)
           })
 
-#' hash
+#' @details
+#' \code{hash}: Calculates the hash code of given columns, and returns the result
+#' as an int column.
 #'
-#' Calculates the hash code of given columns, and returns the result as a int column.
-#'
-#' @param x Column to compute on.
-#' @param ... additional Column(s) to be included.
-#'
-#' @rdname hash
-#' @name hash
-#' @family misc functions
-#' @aliases hash,Column-method
+#' @rdname column_misc_functions
+#' @aliases hash hash,Column-method
 #' @export
-#' @examples \dontrun{hash(df$c)}
 #' @note hash since 2.0.0
 setMethod("hash",
           signature(x = "Column"),
@@ -635,20 +690,16 @@ setMethod("dayofyear",
             column(jc)
           })
 
-#' decode
+#' @details
+#' \code{decode}: Computes the first argument into a string from a binary using the provided
+#' character set.
 #'
-#' Computes the first argument into a string from a binary using the provided character set
-#' (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+#' @param charset Character set to use (one of "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE",
+#'                "UTF-16LE", "UTF-16").
 #'
-#' @param x Column to compute on.
-#' @param charset Character set to use
-#'
-#' @rdname decode
-#' @name decode
-#' @family string functions
-#' @aliases decode,Column,character-method
+#' @rdname column_string_functions
+#' @aliases decode decode,Column,character-method
 #' @export
-#' @examples \dontrun{decode(df$c, "UTF-8")}
 #' @note decode since 1.6.0
 setMethod("decode",
           signature(x = "Column", charset = "character"),
@@ -657,20 +708,13 @@ setMethod("decode",
             column(jc)
           })
 
-#' encode
+#' @details
+#' \code{encode}: Computes the first argument into a binary from a string using the provided
+#' character set.
 #'
-#' Computes the first argument into a binary from a string using the provided character set
-#' (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
-#'
-#' @param x Column to compute on.
-#' @param charset Character set to use
-#'
-#' @rdname encode
-#' @name encode
-#' @family string functions
-#' @aliases encode,Column,character-method
+#' @rdname column_string_functions
+#' @aliases encode encode,Column,character-method
 #' @export
-#' @examples \dontrun{encode(df$c, "UTF-8")}
 #' @note encode since 1.6.0
 setMethod("encode",
           signature(x = "Column", charset = "character"),
@@ -679,18 +723,12 @@ setMethod("encode",
             column(jc)
           })
 
-#' exp
+#' @details
+#' \code{exp}: Computes the exponential of the given value.
 #'
-#' Computes the exponential of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname exp
-#' @name exp
-#' @family math functions
-#' @aliases exp,Column-method
+#' @rdname column_math_functions
+#' @aliases exp exp,Column-method
 #' @export
-#' @examples \dontrun{exp(df$c)}
 #' @note exp since 1.5.0
 setMethod("exp",
           signature(x = "Column"),
@@ -699,18 +737,12 @@ setMethod("exp",
             column(jc)
           })
 
-#' expm1
+#' @details
+#' \code{expm1}: Computes the exponential of the given value minus one.
 #'
-#' Computes the exponential of the given value minus one.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname expm1
-#' @name expm1
-#' @aliases expm1,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases expm1 expm1,Column-method
 #' @export
-#' @examples \dontrun{expm1(df$c)}
 #' @note expm1 since 1.5.0
 setMethod("expm1",
           signature(x = "Column"),
@@ -719,18 +751,12 @@ setMethod("expm1",
             column(jc)
           })
 
-#' factorial
+#' @details
+#' \code{factorial}: Computes the factorial of the given value.
 #'
-#' Computes the factorial of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname factorial
-#' @name factorial
-#' @aliases factorial,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases factorial factorial,Column-method
 #' @export
-#' @examples \dontrun{factorial(df$c)}
 #' @note factorial since 1.5.0
 setMethod("factorial",
           signature(x = "Column"),
@@ -772,18 +798,12 @@ setMethod("first",
             column(jc)
           })
 
-#' floor
+#' @details
+#' \code{floor}: Computes the floor of the given value.
 #'
-#' Computes the floor of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname floor
-#' @name floor
-#' @aliases floor,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases floor floor,Column-method
 #' @export
-#' @examples \dontrun{floor(df$c)}
 #' @note floor since 1.5.0
 setMethod("floor",
           signature(x = "Column"),
@@ -792,18 +812,12 @@ setMethod("floor",
             column(jc)
           })
 
-#' hex
+#' @details
+#' \code{hex}: Computes hex value of the given column.
 #'
-#' Computes hex value of the given column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname hex
-#' @name hex
-#' @family math functions
-#' @aliases hex,Column-method
+#' @rdname column_math_functions
+#' @aliases hex hex,Column-method
 #' @export
-#' @examples \dontrun{hex(df$c)}
 #' @note hex since 1.5.0
 setMethod("hex",
           signature(x = "Column"),
@@ -833,21 +847,23 @@ setMethod("hour",
             column(jc)
           })
 
-#' initcap
+#' @details
+#' \code{initcap}: Returns a new string column by converting the first letter of
+#' each word to uppercase. Words are delimited by whitespace. For example, "hello world"
+#' will become "Hello World".
 #'
-#' Returns a new string column by converting the first letter of each word to uppercase.
-#' Words are delimited by whitespace.
-#'
-#' For example, "hello world" will become "Hello World".
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname initcap
-#' @name initcap
-#' @family string functions
-#' @aliases initcap,Column-method
+#' @rdname column_string_functions
+#' @aliases initcap initcap,Column-method
 #' @export
-#' @examples \dontrun{initcap(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, sex_lower = lower(df$Sex), age_upper = upper(df$age),
+#'                   sex_age = concat_ws(" ", lower(df$sex), lower(df$age)))
+#' head(tmp)
+#' tmp2 <- mutate(tmp, s1 = initcap(tmp$sex_lower), s2 = initcap(tmp$sex_age),
+#'                     s3 = reverse(df$Sex))
+#' head(tmp2)}
 #' @note initcap since 1.5.0
 setMethod("initcap",
           signature(x = "Column"),
@@ -856,38 +872,29 @@ setMethod("initcap",
             column(jc)
           })
 
-#' is.nan
-#'
-#' Return true if the column is NaN, alias for \link{isnan}
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname is.nan
-#' @name is.nan
-#' @family non-aggregate functions
-#' @aliases is.nan,Column-method
-#' @export
-#' @examples
-#' \dontrun{
-#' is.nan(df$c)
-#' isnan(df$c)
-#' }
-#' @note is.nan since 2.0.0
-setMethod("is.nan",
-          signature(x = "Column"),
-          function(x) {
-            isnan(x)
-          })
-
-#' @rdname is.nan
-#' @name isnan
-#' @aliases isnan,Column-method
+#' @details
+#' \code{isnan}: Returns true if the column is NaN.
+#' @rdname column_nonaggregate_functions
+#' @aliases isnan isnan,Column-method
 #' @note isnan since 2.0.0
 setMethod("isnan",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "isnan", x@jc)
             column(jc)
+          })
+
+#' @details
+#' \code{is.nan}: Alias for \link{isnan}.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases is.nan is.nan,Column-method
+#' @export
+#' @note is.nan since 2.0.0
+setMethod("is.nan",
+          signature(x = "Column"),
+          function(x) {
+            isnan(x)
           })
 
 #' @details
@@ -963,18 +970,12 @@ setMethod("last_day",
             column(jc)
           })
 
-#' length
+#' @details
+#' \code{length}: Computes the length of a given string or binary column.
 #'
-#' Computes the length of a given string or binary column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname length
-#' @name length
-#' @aliases length,Column-method
-#' @family string functions
+#' @rdname column_string_functions
+#' @aliases length length,Column-method
 #' @export
-#' @examples \dontrun{length(df$c)}
 #' @note length since 1.5.0
 setMethod("length",
           signature(x = "Column"),
@@ -983,18 +984,12 @@ setMethod("length",
             column(jc)
           })
 
-#' log
+#' @details
+#' \code{log}: Computes the natural logarithm of the given value.
 #'
-#' Computes the natural logarithm of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log
-#' @name log
-#' @aliases log,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases log log,Column-method
 #' @export
-#' @examples \dontrun{log(df$c)}
 #' @note log since 1.5.0
 setMethod("log",
           signature(x = "Column"),
@@ -1003,18 +998,12 @@ setMethod("log",
             column(jc)
           })
 
-#' log10
+#' @details
+#' \code{log10}: Computes the logarithm of the given value in base 10.
 #'
-#' Computes the logarithm of the given value in base 10.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log10
-#' @name log10
-#' @family math functions
-#' @aliases log10,Column-method
+#' @rdname column_math_functions
+#' @aliases log10 log10,Column-method
 #' @export
-#' @examples \dontrun{log10(df$c)}
 #' @note log10 since 1.5.0
 setMethod("log10",
           signature(x = "Column"),
@@ -1023,18 +1012,12 @@ setMethod("log10",
             column(jc)
           })
 
-#' log1p
+#' @details
+#' \code{log1p}: Computes the natural logarithm of the given value plus one.
 #'
-#' Computes the natural logarithm of the given value plus one.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log1p
-#' @name log1p
-#' @family math functions
-#' @aliases log1p,Column-method
+#' @rdname column_math_functions
+#' @aliases log1p log1p,Column-method
 #' @export
-#' @examples \dontrun{log1p(df$c)}
 #' @note log1p since 1.5.0
 setMethod("log1p",
           signature(x = "Column"),
@@ -1043,18 +1026,12 @@ setMethod("log1p",
             column(jc)
           })
 
-#' log2
+#' @details
+#' \code{log2}: Computes the logarithm of the given column in base 2.
 #'
-#' Computes the logarithm of the given column in base 2.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname log2
-#' @name log2
-#' @family math functions
-#' @aliases log2,Column-method
+#' @rdname column_math_functions
+#' @aliases log2 log2,Column-method
 #' @export
-#' @examples \dontrun{log2(df$c)}
 #' @note log2 since 1.5.0
 setMethod("log2",
           signature(x = "Column"),
@@ -1063,18 +1040,12 @@ setMethod("log2",
             column(jc)
           })
 
-#' lower
+#' @details
+#' \code{lower}: Converts a string column to lower case.
 #'
-#' Converts a string column to lower case.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname lower
-#' @name lower
-#' @family string functions
-#' @aliases lower,Column-method
+#' @rdname column_string_functions
+#' @aliases lower lower,Column-method
 #' @export
-#' @examples \dontrun{lower(df$c)}
 #' @note lower since 1.4.0
 setMethod("lower",
           signature(x = "Column"),
@@ -1083,18 +1054,24 @@ setMethod("lower",
             column(jc)
           })
 
-#' ltrim
+#' @details
+#' \code{ltrim}: Trims the spaces from left end for the specified string value.
 #'
-#' Trim the spaces from left end for the specified string value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname ltrim
-#' @name ltrim
-#' @family string functions
-#' @aliases ltrim,Column-method
+#' @rdname column_string_functions
+#' @aliases ltrim ltrim,Column-method
 #' @export
-#' @examples \dontrun{ltrim(df$c)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, SexLpad = lpad(df$Sex, 6, " "), SexRpad = rpad(df$Sex, 7, " "))
+#' head(select(tmp, length(tmp$Sex), length(tmp$SexLpad), length(tmp$SexRpad)))
+#' tmp2 <- mutate(tmp, SexLtrim = ltrim(tmp$SexLpad), SexRtrim = rtrim(tmp$SexRpad),
+#'                     SexTrim = trim(tmp$SexLpad))
+#' head(select(tmp2, length(tmp2$Sex), length(tmp2$SexLtrim),
+#'                   length(tmp2$SexRtrim), length(tmp2$SexTrim)))
+#'
+#' tmp <- mutate(df, SexLpad = lpad(df$Sex, 6, "xx"), SexRpad = rpad(df$Sex, 7, "xx"))
+#' head(tmp)}
 #' @note ltrim since 1.5.0
 setMethod("ltrim",
           signature(x = "Column"),
@@ -1116,19 +1093,13 @@ setMethod("max",
             column(jc)
           })
 
-#' md5
-#'
-#' Calculates the MD5 digest of a binary column and returns the value
+#' @details
+#' \code{md5}: Calculates the MD5 digest of a binary column and returns the value
 #' as a 32 character hex string.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname md5
-#' @name md5
-#' @family misc functions
-#' @aliases md5,Column-method
+#' @rdname column_misc_functions
+#' @aliases md5 md5,Column-method
 #' @export
-#' @examples \dontrun{md5(df$c)}
 #' @note md5 since 1.5.0
 setMethod("md5",
           signature(x = "Column"),
@@ -1191,27 +1162,24 @@ setMethod("minute",
             column(jc)
           })
 
-#' monotonically_increasing_id
-#'
-#' Return a column that generates monotonically increasing 64-bit integers.
-#'
-#' The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
-#' The current implementation puts the partition ID in the upper 31 bits, and the record number
-#' within each partition in the lower 33 bits. The assumption is that the SparkDataFrame has
-#' less than 1 billion partitions, and each partition has less than 8 billion records.
-#'
-#' As an example, consider a SparkDataFrame with two partitions, each with 3 records.
+#' @details
+#' \code{monotonically_increasing_id}: Returns a column that generates monotonically increasing
+#' 64-bit integers. The generated ID is guaranteed to be monotonically increasing and unique,
+#' but not consecutive. The current implementation puts the partition ID in the upper 31 bits,
+#' and the record number within each partition in the lower 33 bits. The assumption is that the
+#' SparkDataFrame has less than 1 billion partitions, and each partition has less than 8 billion
+#' records. As an example, consider a SparkDataFrame with two partitions, each with 3 records.
 #' This expression would return the following IDs:
 #' 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
-#'
 #' This is equivalent to the MONOTONICALLY_INCREASING_ID function in SQL.
+#' The method should be used with no argument.
 #'
-#' @rdname monotonically_increasing_id
-#' @aliases monotonically_increasing_id,missing-method
-#' @name monotonically_increasing_id
-#' @family misc functions
+#' @rdname column_nonaggregate_functions
+#' @aliases monotonically_increasing_id monotonically_increasing_id,missing-method
 #' @export
-#' @examples \dontrun{select(df, monotonically_increasing_id())}
+#' @examples
+#'
+#' \dontrun{head(select(df, monotonically_increasing_id()))}
 setMethod("monotonically_increasing_id",
           signature("missing"),
           function() {
@@ -1233,18 +1201,12 @@ setMethod("month",
             column(jc)
           })
 
-#' negate
+#' @details
+#' \code{negate}: Unary minus, i.e. negate the expression.
 #'
-#' Unary minus, i.e. negate the expression.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname negate
-#' @name negate
-#' @family non-aggregate functions
-#' @aliases negate,Column-method
+#' @rdname column_nonaggregate_functions
+#' @aliases negate negate,Column-method
 #' @export
-#' @examples \dontrun{negate(df$c)}
 #' @note negate since 1.5.0
 setMethod("negate",
           signature(x = "Column"),
@@ -1267,18 +1229,12 @@ setMethod("quarter",
             column(jc)
           })
 
-#' reverse
+#' @details
+#' \code{reverse}: Reverses the string column and returns it as a new string column.
 #'
-#' Reverses the string column and returns it as a new string column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname reverse
-#' @name reverse
-#' @family string functions
-#' @aliases reverse,Column-method
+#' @rdname column_string_functions
+#' @aliases reverse reverse,Column-method
 #' @export
-#' @examples \dontrun{reverse(df$c)}
 #' @note reverse since 1.5.0
 setMethod("reverse",
           signature(x = "Column"),
@@ -1287,19 +1243,13 @@ setMethod("reverse",
             column(jc)
           })
 
-#' rint
-#'
-#' Returns the double value that is closest in value to the argument and
+#' @details
+#' \code{rint}: Returns the double value that is closest in value to the argument and
 #' is equal to a mathematical integer.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname rint
-#' @name rint
-#' @family math functions
-#' @aliases rint,Column-method
+#' @rdname column_math_functions
+#' @aliases rint rint,Column-method
 #' @export
-#' @examples \dontrun{rint(df$c)}
 #' @note rint since 1.5.0
 setMethod("rint",
           signature(x = "Column"),
@@ -1308,18 +1258,13 @@ setMethod("rint",
             column(jc)
           })
 
-#' round
+#' @details
+#' \code{round}: Returns the value of the column rounded to 0 decimal places
+#' using HALF_UP rounding mode.
 #'
-#' Returns the value of the column \code{e} rounded to 0 decimal places using HALF_UP rounding mode.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname round
-#' @name round
-#' @family math functions
-#' @aliases round,Column-method
+#' @rdname column_math_functions
+#' @aliases round round,Column-method
 #' @export
-#' @examples \dontrun{round(df$c)}
 #' @note round since 1.5.0
 setMethod("round",
           signature(x = "Column"),
@@ -1328,24 +1273,18 @@ setMethod("round",
             column(jc)
           })
 
-#' bround
-#'
-#' Returns the value of the column \code{e} rounded to \code{scale} decimal places using HALF_EVEN rounding
-#' mode if \code{scale} >= 0 or at integer part when \code{scale} < 0.
+#' @details
+#' \code{bround}: Returns the value of the column \code{e} rounded to \code{scale} decimal places
+#' using HALF_EVEN rounding mode if \code{scale} >= 0 or at integer part when \code{scale} < 0.
 #' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
 #' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
 #'
-#' @param x Column to compute on.
 #' @param scale round to \code{scale} digits to the right of the decimal point when \code{scale} > 0,
 #'        the nearest even number when \code{scale} = 0, and \code{scale} digits to the left
 #'        of the decimal point when \code{scale} < 0.
-#' @param ... further arguments to be passed to or from other methods.
-#' @rdname bround
-#' @name bround
-#' @family math functions
-#' @aliases bround,Column-method
+#' @rdname column_math_functions
+#' @aliases bround bround,Column-method
 #' @export
-#' @examples \dontrun{bround(df$c, 0)}
 #' @note bround since 2.0.0
 setMethod("bround",
           signature(x = "Column"),
@@ -1354,19 +1293,12 @@ setMethod("bround",
             column(jc)
           })
 
-
-#' rtrim
+#' @details
+#' \code{rtrim}: Trims the spaces from right end for the specified string value.
 #'
-#' Trim the spaces from right end for the specified string value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname rtrim
-#' @name rtrim
-#' @family string functions
-#' @aliases rtrim,Column-method
+#' @rdname column_string_functions
+#' @aliases rtrim rtrim,Column-method
 #' @export
-#' @examples \dontrun{rtrim(df$c)}
 #' @note rtrim since 1.5.0
 setMethod("rtrim",
           signature(x = "Column"),
@@ -1374,7 +1306,6 @@ setMethod("rtrim",
             jc <- callJStatic("org.apache.spark.sql.functions", "rtrim", x@jc)
             column(jc)
           })
-
 
 #' @details
 #' \code{sd}: Alias for \code{stddev_samp}.
@@ -1408,19 +1339,13 @@ setMethod("second",
             column(jc)
           })
 
-#' sha1
-#'
-#' Calculates the SHA-1 digest of a binary column and returns the value
+#' @details
+#' \code{sha1}: Calculates the SHA-1 digest of a binary column and returns the value
 #' as a 40 character hex string.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname sha1
-#' @name sha1
-#' @family misc functions
-#' @aliases sha1,Column-method
+#' @rdname column_misc_functions
+#' @aliases sha1 sha1,Column-method
 #' @export
-#' @examples \dontrun{sha1(df$c)}
 #' @note sha1 since 1.5.0
 setMethod("sha1",
           signature(x = "Column"),
@@ -1429,18 +1354,12 @@ setMethod("sha1",
             column(jc)
           })
 
-#' signum
+#' @details
+#' \code{signum}: Computes the signum of the given value.
 #'
-#' Computes the signum of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sign
-#' @name signum
-#' @aliases signum,Column-method
-#' @family math functions
+#' @rdname column_math_functions
+#' @aliases signum signum,Column-method
 #' @export
-#' @examples \dontrun{signum(df$c)}
 #' @note signum since 1.5.0
 setMethod("signum",
           signature(x = "Column"),
@@ -1449,18 +1368,24 @@ setMethod("signum",
             column(jc)
           })
 
-#' sin
+#' @details
+#' \code{sign}: Alias for \code{signum}.
 #'
-#' Computes the sine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sin
-#' @name sin
-#' @family math functions
-#' @aliases sin,Column-method
+#' @rdname column_math_functions
+#' @aliases sign sign,Column-method
 #' @export
-#' @examples \dontrun{sin(df$c)}
+#' @note sign since 1.5.0
+setMethod("sign", signature(x = "Column"),
+          function(x) {
+            signum(x)
+          })
+
+#' @details
+#' \code{sin}: Computes the sine of the given value.
+#'
+#' @rdname column_math_functions
+#' @aliases sin sin,Column-method
+#' @export
 #' @note sin since 1.5.0
 setMethod("sin",
           signature(x = "Column"),
@@ -1469,18 +1394,12 @@ setMethod("sin",
             column(jc)
           })
 
-#' sinh
+#' @details
+#' \code{sinh}: Computes the hyperbolic sine of the given value.
 #'
-#' Computes the hyperbolic sine of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sinh
-#' @name sinh
-#' @family math functions
-#' @aliases sinh,Column-method
+#' @rdname column_math_functions
+#' @aliases sinh sinh,Column-method
 #' @export
-#' @examples \dontrun{sinh(df$c)}
 #' @note sinh since 1.5.0
 setMethod("sinh",
           signature(x = "Column"),
@@ -1503,18 +1422,12 @@ setMethod("skewness",
             column(jc)
           })
 
-#' soundex
+#' @details
+#' \code{soundex}: Returns the soundex code for the specified expression.
 #'
-#' Return the soundex code for the specified expression.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname soundex
-#' @name soundex
-#' @family string functions
-#' @aliases soundex,Column-method
+#' @rdname column_string_functions
+#' @aliases soundex soundex,Column-method
 #' @export
-#' @examples \dontrun{soundex(df$c)}
 #' @note soundex since 1.5.0
 setMethod("soundex",
           signature(x = "Column"),
@@ -1586,23 +1499,19 @@ setMethod("stddev_samp",
             column(jc)
           })
 
-#' struct
+#' @details
+#' \code{struct}: Creates a new struct column that composes multiple input columns.
 #'
-#' Creates a new struct column that composes multiple input columns.
-#'
-#' @param x a column to compute on.
-#' @param ... optional column(s) to be included.
-#'
-#' @rdname struct
-#' @name struct
-#' @family non-aggregate functions
-#' @aliases struct,characterOrColumn-method
+#' @rdname column_nonaggregate_functions
+#' @aliases struct struct,characterOrColumn-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' struct(df$c, df$d)
-#' struct("col1", "col2")
-#' }
+#' tmp <- mutate(df, v1 = struct(df$mpg, df$cyl), v2 = struct("hp", "wt", "vs"),
+#'                   v3 = create_array(df$mpg, df$cyl, df$hp),
+#'                   v4 = create_map(lit("x"), lit(1.0), lit("y"), lit(-1.0)))
+#' head(tmp)}
 #' @note struct since 1.6.0
 setMethod("struct",
           signature(x = "characterOrColumn"),
@@ -1616,18 +1525,12 @@ setMethod("struct",
             column(jc)
           })
 
-#' sqrt
+#' @details
+#' \code{sqrt}: Computes the square root of the specified float value.
 #'
-#' Computes the square root of the specified float value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname sqrt
-#' @name sqrt
-#' @family math functions
-#' @aliases sqrt,Column-method
+#' @rdname column_math_functions
+#' @aliases sqrt sqrt,Column-method
 #' @export
-#' @examples \dontrun{sqrt(df$c)}
 #' @note sqrt since 1.5.0
 setMethod("sqrt",
           signature(x = "Column"),
@@ -1669,18 +1572,12 @@ setMethod("sumDistinct",
             column(jc)
           })
 
-#' tan
+#' @details
+#' \code{tan}: Computes the tangent of the given value.
 #'
-#' Computes the tangent of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname tan
-#' @name tan
-#' @family math functions
-#' @aliases tan,Column-method
+#' @rdname column_math_functions
+#' @aliases tan tan,Column-method
 #' @export
-#' @examples \dontrun{tan(df$c)}
 #' @note tan since 1.5.0
 setMethod("tan",
           signature(x = "Column"),
@@ -1689,18 +1586,12 @@ setMethod("tan",
             column(jc)
           })
 
-#' tanh
+#' @details
+#' \code{tanh}: Computes the hyperbolic tangent of the given value.
 #'
-#' Computes the hyperbolic tangent of the given value.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname tanh
-#' @name tanh
-#' @family math functions
-#' @aliases tanh,Column-method
+#' @rdname column_math_functions
+#' @aliases tanh tanh,Column-method
 #' @export
-#' @examples \dontrun{tanh(df$c)}
 #' @note tanh since 1.5.0
 setMethod("tanh",
           signature(x = "Column"),
@@ -1709,18 +1600,13 @@ setMethod("tanh",
             column(jc)
           })
 
-#' toDegrees
+#' @details
+#' \code{toDegrees}: Converts an angle measured in radians to an approximately equivalent angle
+#' measured in degrees.
 #'
-#' Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname toDegrees
-#' @name toDegrees
-#' @family math functions
-#' @aliases toDegrees,Column-method
+#' @rdname column_math_functions
+#' @aliases toDegrees toDegrees,Column-method
 #' @export
-#' @examples \dontrun{toDegrees(df$c)}
 #' @note toDegrees since 1.4.0
 setMethod("toDegrees",
           signature(x = "Column"),
@@ -1729,18 +1615,13 @@ setMethod("toDegrees",
             column(jc)
           })
 
-#' toRadians
+#' @details
+#' \code{toRadians}: Converts an angle measured in degrees to an approximately equivalent angle
+#' measured in radians.
 #'
-#' Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname toRadians
-#' @name toRadians
-#' @family math functions
-#' @aliases toRadians,Column-method
+#' @rdname column_math_functions
+#' @aliases toRadians toRadians,Column-method
 #' @export
-#' @examples \dontrun{toRadians(df$c)}
 #' @note toRadians since 1.4.0
 setMethod("toRadians",
           signature(x = "Column"),
@@ -1790,30 +1671,23 @@ setMethod("to_date",
             column(jc)
           })
 
-#' to_json
+#' @details
+#' \code{to_json}: Converts a column containing a \code{structType} or array of \code{structType}
+#' into a Column of JSON string. Resolving the Column can fail if an unsupported type is encountered.
 #'
-#' Converts a column containing a \code{structType} or array of \code{structType} into a Column
-#' of JSON string. Resolving the Column can fail if an unsupported type is encountered.
-#'
-#' @param x Column containing the struct or array of the structs
-#' @param ... additional named properties to control how it is converted, accepts the same options
-#'            as the JSON data source.
-#'
-#' @family non-aggregate functions
-#' @rdname to_json
-#' @name to_json
-#' @aliases to_json,Column-method
+#' @rdname column_collection_functions
+#' @aliases to_json to_json,Column-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
 #' # Converts a struct into a JSON object
-#' df <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
-#' select(df, to_json(df$d, dateFormat = 'dd/MM/yyyy'))
+#' df2 <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' select(df2, to_json(df2$d, dateFormat = 'dd/MM/yyyy'))
 #'
 #' # Converts an array of structs into a JSON array
-#' df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
-#' select(df, to_json(df$people))
-#'}
+#' df2 <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people))}
 #' @note to_json since 2.2.0
 setMethod("to_json", signature(x = "Column"),
           function(x, ...) {
@@ -1853,18 +1727,12 @@ setMethod("to_timestamp",
             column(jc)
           })
 
-#' trim
+#' @details
+#' \code{trim}: Trims the spaces from both ends for the specified string column.
 #'
-#' Trim the spaces from both ends for the specified string column.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname trim
-#' @name trim
-#' @family string functions
-#' @aliases trim,Column-method
+#' @rdname column_string_functions
+#' @aliases trim trim,Column-method
 #' @export
-#' @examples \dontrun{trim(df$c)}
 #' @note trim since 1.5.0
 setMethod("trim",
           signature(x = "Column"),
@@ -1873,19 +1741,13 @@ setMethod("trim",
             column(jc)
           })
 
-#' unbase64
-#'
-#' Decodes a BASE64 encoded string column and returns it as a binary column.
+#' @details
+#' \code{unbase64}: Decodes a BASE64 encoded string column and returns it as a binary column.
 #' This is the reverse of base64.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname unbase64
-#' @name unbase64
-#' @family string functions
-#' @aliases unbase64,Column-method
+#' @rdname column_string_functions
+#' @aliases unbase64 unbase64,Column-method
 #' @export
-#' @examples \dontrun{unbase64(df$c)}
 #' @note unbase64 since 1.5.0
 setMethod("unbase64",
           signature(x = "Column"),
@@ -1894,19 +1756,13 @@ setMethod("unbase64",
             column(jc)
           })
 
-#' unhex
-#'
-#' Inverse of hex. Interprets each pair of characters as a hexadecimal number
+#' @details
+#' \code{unhex}: Inverse of hex. Interprets each pair of characters as a hexadecimal number
 #' and converts to the byte representation of number.
 #'
-#' @param x Column to compute on.
-#'
-#' @rdname unhex
-#' @name unhex
-#' @family math functions
-#' @aliases unhex,Column-method
+#' @rdname column_math_functions
+#' @aliases unhex unhex,Column-method
 #' @export
-#' @examples \dontrun{unhex(df$c)}
 #' @note unhex since 1.5.0
 setMethod("unhex",
           signature(x = "Column"),
@@ -1915,18 +1771,12 @@ setMethod("unhex",
             column(jc)
           })
 
-#' upper
+#' @details
+#' \code{upper}: Converts a string column to upper case.
 #'
-#' Converts a string column to upper case.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname upper
-#' @name upper
-#' @family string functions
-#' @aliases upper,Column-method
+#' @rdname column_string_functions
+#' @aliases upper upper,Column-method
 #' @export
-#' @examples \dontrun{upper(df$c)}
 #' @note upper since 1.4.0
 setMethod("upper",
           signature(x = "Column"),
@@ -2020,20 +1870,13 @@ setMethod("year",
             column(jc)
           })
 
-#' atan2
+#' @details
+#' \code{atan2}: Returns the angle theta from the conversion of rectangular coordinates
+#' (x, y) to polar coordinates (r, theta).
 #'
-#' Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-#' polar coordinates (r, theta).
-#
-#' @param x Column to compute on.
-#' @param y Column to compute on.
-#'
-#' @rdname atan2
-#' @name atan2
-#' @family math functions
-#' @aliases atan2,Column-method
+#' @rdname column_math_functions
+#' @aliases atan2 atan2,Column-method
 #' @export
-#' @examples \dontrun{atan2(df$c, x)}
 #' @note atan2 since 1.5.0
 setMethod("atan2", signature(y = "Column"),
           function(y, x) {
@@ -2068,19 +1911,12 @@ setMethod("datediff", signature(y = "Column"),
             column(jc)
           })
 
-#' hypot
+#' @details
+#' \code{hypot}: Computes "sqrt(a^2 + b^2)" without intermediate overflow or underflow.
 #'
-#' Computes "sqrt(a^2 + b^2)" without intermediate overflow or underflow.
-#
-#' @param x Column to compute on.
-#' @param y Column to compute on.
-#'
-#' @rdname hypot
-#' @name hypot
-#' @family math functions
-#' @aliases hypot,Column-method
+#' @rdname column_math_functions
+#' @aliases hypot hypot,Column-method
 #' @export
-#' @examples \dontrun{hypot(df$c, x)}
 #' @note hypot since 1.4.0
 setMethod("hypot", signature(y = "Column"),
           function(y, x) {
@@ -2091,19 +1927,19 @@ setMethod("hypot", signature(y = "Column"),
             column(jc)
           })
 
-#' levenshtein
+#' @details
+#' \code{levenshtein}: Computes the Levenshtein distance of the two given string columns.
 #'
-#' Computes the Levenshtein distance of the two given string columns.
-#'
-#' @param x Column to compute on.
-#' @param y Column to compute on.
-#'
-#' @rdname levenshtein
-#' @name levenshtein
-#' @family string functions
-#' @aliases levenshtein,Column-method
+#' @rdname column_string_functions
+#' @aliases levenshtein levenshtein,Column-method
 #' @export
-#' @examples \dontrun{levenshtein(df$c, x)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, d1 = levenshtein(df$Class, df$Sex),
+#'                   d2 = levenshtein(df$Age, df$Sex),
+#'                   d3 = levenshtein(df$Age, df$Age))
+#' head(tmp)}
 #' @note levenshtein since 1.5.0
 setMethod("levenshtein", signature(y = "Column"),
           function(y, x) {
@@ -2130,20 +1966,13 @@ setMethod("months_between", signature(y = "Column"),
             column(jc)
           })
 
-#' nanvl
+#' @details
+#' \code{nanvl}: Returns the first column (\code{y}) if it is not NaN, or the second column (\code{x}) if
+#' the first column is NaN. Both inputs should be floating point columns (DoubleType or FloatType).
 #'
-#' Returns col1 if it is not NaN, or col2 if col1 is NaN.
-#' Both inputs should be floating point columns (DoubleType or FloatType).
-#'
-#' @param x first Column.
-#' @param y second Column.
-#'
-#' @rdname nanvl
-#' @name nanvl
-#' @family non-aggregate functions
-#' @aliases nanvl,Column-method
+#' @rdname column_nonaggregate_functions
+#' @aliases nanvl nanvl,Column-method
 #' @export
-#' @examples \dontrun{nanvl(df$c, x)}
 #' @note nanvl since 1.5.0
 setMethod("nanvl", signature(y = "Column"),
           function(y, x) {
@@ -2154,20 +1983,13 @@ setMethod("nanvl", signature(y = "Column"),
             column(jc)
           })
 
-#' pmod
+#' @details
+#' \code{pmod}: Returns the positive value of dividend mod divisor.
+#' Column \code{x} is divisor column, and column \code{y} is the dividend column.
 #'
-#' Returns the positive value of dividend mod divisor.
-#'
-#' @param x divisor Column.
-#' @param y dividend Column.
-#'
-#' @rdname pmod
-#' @name pmod
-#' @docType methods
-#' @family math functions
-#' @aliases pmod,Column-method
+#' @rdname column_math_functions
+#' @aliases pmod pmod,Column-method
 #' @export
-#' @examples \dontrun{pmod(df$c, x)}
 #' @note pmod since 1.5.0
 setMethod("pmod", signature(y = "Column"),
           function(y, x) {
@@ -2210,20 +2032,22 @@ setMethod("countDistinct",
             column(jc)
           })
 
-
-#' concat
+#' @details
+#' \code{concat}: Concatenates multiple input string columns together into a single string column.
 #'
-#' Concatenates multiple input string columns together into a single string column.
-#'
-#' @param x Column to compute on
-#' @param ... other columns
-#'
-#' @family string functions
-#' @rdname concat
-#' @name concat
-#' @aliases concat,Column-method
+#' @rdname column_string_functions
+#' @aliases concat concat,Column-method
 #' @export
-#' @examples \dontrun{concat(df$strings, df$strings2)}
+#' @examples
+#'
+#' \dontrun{
+#' # concatenate strings
+#' tmp <- mutate(df, s1 = concat(df$Class, df$Sex),
+#'                   s2 = concat(df$Class, df$Sex, df$Age),
+#'                   s3 = concat(df$Class, df$Sex, df$Age, df$Class),
+#'                   s4 = concat_ws("_", df$Class, df$Sex),
+#'                   s5 = concat_ws("+", df$Class, df$Sex, df$Age, df$Survived))
+#' head(tmp)}
 #' @note concat since 1.5.0
 setMethod("concat",
           signature(x = "Column"),
@@ -2236,20 +2060,13 @@ setMethod("concat",
             column(jc)
           })
 
-#' greatest
-#'
-#' Returns the greatest value of the list of column names, skipping null values.
+#' @details
+#' \code{greatest}: Returns the greatest value of the list of column names, skipping null values.
 #' This function takes at least 2 parameters. It will return null if all parameters are null.
 #'
-#' @param x Column to compute on
-#' @param ... other columns
-#'
-#' @family non-aggregate functions
-#' @rdname greatest
-#' @name greatest
-#' @aliases greatest,Column-method
+#' @rdname column_nonaggregate_functions
+#' @aliases greatest greatest,Column-method
 #' @export
-#' @examples \dontrun{greatest(df$c, df$d)}
 #' @note greatest since 1.5.0
 setMethod("greatest",
           signature(x = "Column"),
@@ -2263,20 +2080,13 @@ setMethod("greatest",
             column(jc)
           })
 
-#' least
-#'
-#' Returns the least value of the list of column names, skipping null values.
+#' @details
+#' \code{least}: Returns the least value of the list of column names, skipping null values.
 #' This function takes at least 2 parameters. It will return null if all parameters are null.
 #'
-#' @param x Column to compute on
-#' @param ... other columns
-#'
-#' @family non-aggregate functions
-#' @rdname least
-#' @aliases least,Column-method
-#' @name least
+#' @rdname column_nonaggregate_functions
+#' @aliases least least,Column-method
 #' @export
-#' @examples \dontrun{least(df$c, df$d)}
 #' @note least since 1.5.0
 setMethod("least",
           signature(x = "Column"),
@@ -2288,31 +2098,6 @@ setMethod("least",
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "least", jcols)
             column(jc)
-          })
-
-#' @rdname ceil
-#'
-#' @name ceiling
-#' @aliases ceiling,Column-method
-#' @export
-#' @examples \dontrun{ceiling(df$c)}
-#' @note ceiling since 1.5.0
-setMethod("ceiling",
-          signature(x = "Column"),
-          function(x) {
-            ceil(x)
-          })
-
-#' @rdname sign
-#'
-#' @name sign
-#' @aliases sign,Column-method
-#' @export
-#' @examples \dontrun{sign(df$c)}
-#' @note sign since 1.5.0
-setMethod("sign", signature(x = "Column"),
-          function(x) {
-            signum(x)
           })
 
 #' @details
@@ -2357,28 +2142,28 @@ setMethod("date_format", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' from_json
+#' @details
+#' \code{from_json}: Parses a column containing a JSON string into a Column of \code{structType}
+#' with the specified \code{schema} or array of \code{structType} if \code{as.json.array} is set
+#' to \code{TRUE}. If the string is unparseable, the Column will contain the value NA.
 #'
-#' Parses a column containing a JSON string into a Column of \code{structType} with the specified
-#' \code{schema} or array of \code{structType} if \code{as.json.array} is set to \code{TRUE}.
-#' If the string is unparseable, the Column will contains the value NA.
-#'
-#' @param x Column containing the JSON string.
+#' @rdname column_collection_functions
 #' @param schema a structType object to use as the schema to use when parsing the JSON string.
 #' @param as.json.array indicating if input string is JSON array of objects or a single object.
-#' @param ... additional named properties to control how the json is parsed, accepts the same
-#'            options as the JSON data source.
-#'
-#' @family non-aggregate functions
-#' @rdname from_json
-#' @name from_json
-#' @aliases from_json,Column,structType-method
+#' @aliases from_json from_json,Column,structType-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' schema <- structType(structField("name", "string"),
-#' select(df, from_json(df$value, schema, dateFormat = "dd/MM/yyyy"))
-#'}
+#' df2 <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' df2 <- mutate(df2, d2 = to_json(df2$d, dateFormat = 'dd/MM/yyyy'))
+#' schema <- structType(structField("date", "string"))
+#' head(select(df2, from_json(df2$d2, schema, dateFormat = 'dd/MM/yyyy')))
+
+#' df2 <- sql("SELECT named_struct('name', 'Bob') as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people))
+#' schema <- structType(structField("name", "string"))
+#' head(select(df2, from_json(df2$people_json, schema)))}
 #' @note from_json since 2.2.0
 setMethod("from_json", signature(x = "Column", schema = "structType"),
           function(x, schema, as.json.array = FALSE, ...) {
@@ -2417,22 +2202,21 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-#' instr
+#' @details
+#' \code{instr}: Locates the position of the first occurrence of a substring (\code{x})
+#' in the given string column (\code{y}). Returns null if either of the arguments are null.
+#' Note: The position is not zero based, but 1 based index. Returns 0 if the substring
+#' could not be found in the string column.
 #'
-#' Locate the position of the first occurrence of substr column in the given string.
-#' Returns null if either of the arguments are null.
-#'
-#' Note: The position is not zero based, but 1 based index. Returns 0 if substr
-#' could not be found in str.
-#'
-#' @param y column to check
-#' @param x substring to check
-#' @family string functions
-#' @aliases instr,Column,character-method
-#' @rdname instr
-#' @name instr
+#' @rdname column_string_functions
+#' @aliases instr instr,Column,character-method
 #' @export
-#' @examples \dontrun{instr(df$c, 'b')}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, s1 = instr(df$Sex, "m"), s2 = instr(df$Sex, "M"),
+#'                   s3 = locate("m", df$Sex), s4 = locate("m", df$Sex, pos = 4))
+#' head(tmp)}
 #' @note instr since 1.5.0
 setMethod("instr", signature(y = "Column", x = "character"),
           function(y, x) {
@@ -2519,22 +2303,22 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' format_number
+#' @details
+#' \code{format_number}: Formats numeric column \code{y} to a format like '#,###,###.##',
+#' rounded to \code{x} decimal places with HALF_EVEN round mode, and returns the result
+#' as a string column.
+#' If \code{x} is 0, the result has no decimal point or fractional part.
+#' If \code{x} < 0, the result will be null.
 #'
-#' Formats numeric column y to a format like '#,###,###.##', rounded to x decimal places
-#' with HALF_EVEN round mode, and returns the result as a string column.
-#'
-#' If x is 0, the result has no decimal point or fractional part.
-#' If x < 0, the result will be null.
-#'
-#' @param y column to format
-#' @param x number of decimal place to format to
-#' @family string functions
-#' @rdname format_number
-#' @name format_number
-#' @aliases format_number,Column,numeric-method
+#' @rdname column_string_functions
+#' @aliases format_number format_number,Column,numeric-method
 #' @export
-#' @examples \dontrun{format_number(df$n, 4)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, v1 = df$Freq/3)
+#' head(select(tmp, format_number(tmp$v1, 0), format_number(tmp$v1, 2),
+#'                  format_string("%4.2f %s", tmp$v1, tmp$Sex)), 10)}
 #' @note format_number since 1.5.0
 setMethod("format_number", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2544,19 +2328,14 @@ setMethod("format_number", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' sha2
+#' @details
+#' \code{sha2}: Calculates the SHA-2 family of hash functions of a binary column and
+#' returns the value as a hex string. The second argument \code{x} specifies the number
+#' of bits, and is one of 224, 256, 384, or 512.
 #'
-#' Calculates the SHA-2 family of hash functions of a binary column and
-#' returns the value as a hex string.
-#'
-#' @param y column to compute SHA-2 on.
-#' @param x one of 224, 256, 384, or 512.
-#' @family misc functions
-#' @rdname sha2
-#' @name sha2
-#' @aliases sha2,Column,numeric-method
+#' @rdname column_misc_functions
+#' @aliases sha2 sha2,Column,numeric-method
 #' @export
-#' @examples \dontrun{sha2(df$c, 256)}
 #' @note sha2 since 1.5.0
 setMethod("sha2", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2564,20 +2343,13 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' shiftLeft
+#' @details
+#' \code{shiftLeft}: Shifts the given value numBits left. If the given value is a long value,
+#' this function will return a long value else it will return an integer value.
 #'
-#' Shift the given value numBits left. If the given value is a long value, this function
-#' will return a long value else it will return an integer value.
-#'
-#' @param y column to compute on.
-#' @param x number of bits to shift.
-#'
-#' @family math functions
-#' @rdname shiftLeft
-#' @name shiftLeft
-#' @aliases shiftLeft,Column,numeric-method
+#' @rdname column_math_functions
+#' @aliases shiftLeft shiftLeft,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftLeft(df$c, 1)}
 #' @note shiftLeft since 1.5.0
 setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2587,20 +2359,13 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' shiftRight
+#' @details
+#' \code{shiftRight}: (Signed) shifts the given value numBits right. If the given value is a long value,
+#' it will return a long value else it will return an integer value.
 #'
-#' (Signed) shift the given value numBits right. If the given value is a long value, it will return
-#' a long value else it will return an integer value.
-#'
-#' @param y column to compute on.
-#' @param x number of bits to shift.
-#'
-#' @family math functions
-#' @rdname shiftRight
-#' @name shiftRight
-#' @aliases shiftRight,Column,numeric-method
+#' @rdname column_math_functions
+#' @aliases shiftRight shiftRight,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftRight(df$c, 1)}
 #' @note shiftRight since 1.5.0
 setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2610,20 +2375,13 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' shiftRightUnsigned
-#'
-#' Unsigned shift the given value numBits right. If the given value is a long value,
+#' @details
+#' \code{shiftRight}: (Unigned) shifts the given value numBits right. If the given value is a long value,
 #' it will return a long value else it will return an integer value.
 #'
-#' @param y column to compute on.
-#' @param x number of bits to shift.
-#'
-#' @family math functions
-#' @rdname shiftRightUnsigned
-#' @name shiftRightUnsigned
-#' @aliases shiftRightUnsigned,Column,numeric-method
+#' @rdname column_math_functions
+#' @aliases shiftRightUnsigned shiftRightUnsigned,Column,numeric-method
 #' @export
-#' @examples \dontrun{shiftRightUnsigned(df$c, 1)}
 #' @note shiftRightUnsigned since 1.5.0
 setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -2633,21 +2391,14 @@ setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
             column(jc)
           })
 
-#' concat_ws
+#' @details
+#' \code{concat_ws}: Concatenates multiple input string columns together into a single
+#' string column, using the given separator.
 #'
-#' Concatenates multiple input string columns together into a single string column,
-#' using the given separator.
-#'
-#' @param x column to concatenate.
 #' @param sep separator to use.
-#' @param ... other columns to concatenate.
-#'
-#' @family string functions
-#' @rdname concat_ws
-#' @name concat_ws
-#' @aliases concat_ws,character,Column-method
+#' @rdname column_string_functions
+#' @aliases concat_ws concat_ws,character,Column-method
 #' @export
-#' @examples \dontrun{concat_ws('-', df$s, df$d)}
 #' @note concat_ws since 1.5.0
 setMethod("concat_ws", signature(sep = "character", x = "Column"),
           function(sep, x, ...) {
@@ -2656,20 +2407,14 @@ setMethod("concat_ws", signature(sep = "character", x = "Column"),
             column(jc)
           })
 
-#' conv
+#' @details
+#' \code{conv}: Converts a number in a string column from one base to another.
 #'
-#' Convert a number in a string column from one base to another.
-#'
-#' @param x column to convert.
 #' @param fromBase base to convert from.
 #' @param toBase base to convert to.
-#'
-#' @family math functions
-#' @rdname conv
-#' @aliases conv,Column,numeric,numeric-method
-#' @name conv
+#' @rdname column_math_functions
+#' @aliases conv conv,Column,numeric,numeric-method
 #' @export
-#' @examples \dontrun{conv(df$n, 2, 16)}
 #' @note conv since 1.5.0
 setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeric"),
           function(x, fromBase, toBase) {
@@ -2681,18 +2426,13 @@ setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeri
             column(jc)
           })
 
-#' expr
+#' @details
+#' \code{expr}: Parses the expression string into the column that it represents, similar to
+#' \code{SparkDataFrame.selectExpr}
 #'
-#' Parses the expression string into the column that it represents, similar to
-#' SparkDataFrame.selectExpr
-#'
-#' @param x an expression character object to be parsed.
-#' @family non-aggregate functions
-#' @rdname expr
-#' @aliases expr,character-method
-#' @name expr
+#' @rdname column_nonaggregate_functions
+#' @aliases expr expr,character-method
 #' @export
-#' @examples \dontrun{expr('length(name)')}
 #' @note expr since 1.5.0
 setMethod("expr", signature(x = "character"),
           function(x) {
@@ -2700,19 +2440,14 @@ setMethod("expr", signature(x = "character"),
             column(jc)
           })
 
-#' format_string
-#'
-#' Formats the arguments in printf-style and returns the result as a string column.
+#' @details
+#' \code{format_string}: Formats the arguments in printf-style and returns the result
+#' as a string column.
 #'
 #' @param format a character object of format strings.
-#' @param x a Column.
-#' @param ... additional Column(s).
-#' @family string functions
-#' @rdname format_string
-#' @name format_string
-#' @aliases format_string,character,Column-method
+#' @rdname column_string_functions
+#' @aliases format_string format_string,character,Column-method
 #' @export
-#' @examples \dontrun{format_string('%d %s', df$a, df$b)}
 #' @note format_string since 1.5.0
 setMethod("format_string", signature(format = "character", x = "Column"),
           function(format, x, ...) {
@@ -2821,23 +2556,17 @@ setMethod("window", signature(x = "Column"),
             column(jc)
           })
 
-#' locate
-#'
-#' Locate the position of the first occurrence of substr.
-#'
+#' @details
+#' \code{locate}: Locates the position of the first occurrence of substr.
 #' Note: The position is not zero based, but 1 based index. Returns 0 if substr
 #' could not be found in str.
 #'
 #' @param substr a character string to be matched.
 #' @param str a Column where matches are sought for each entry.
 #' @param pos start position of search.
-#' @param ... further arguments to be passed to or from other methods.
-#' @family string functions
-#' @rdname locate
-#' @aliases locate,character,Column-method
-#' @name locate
+#' @rdname column_string_functions
+#' @aliases locate locate,character,Column-method
 #' @export
-#' @examples \dontrun{locate('b', df$c, 1)}
 #' @note locate since 1.5.0
 setMethod("locate", signature(substr = "character", str = "Column"),
           function(substr, str, pos = 1) {
@@ -2847,19 +2576,14 @@ setMethod("locate", signature(substr = "character", str = "Column"),
             column(jc)
           })
 
-#' lpad
+#' @details
+#' \code{lpad}: Left-padded with pad to a length of len.
 #'
-#' Left-pad the string column with
-#'
-#' @param x the string Column to be left-padded.
 #' @param len maximum length of each output result.
 #' @param pad a character string to be padded with.
-#' @family string functions
-#' @rdname lpad
-#' @aliases lpad,Column,numeric,character-method
-#' @name lpad
+#' @rdname column_string_functions
+#' @aliases lpad lpad,Column,numeric,character-method
 #' @export
-#' @examples \dontrun{lpad(df$c, 6, '#')}
 #' @note lpad since 1.5.0
 setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
           function(x, len, pad) {
@@ -2869,18 +2593,19 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
             column(jc)
           })
 
-#' rand
-#'
-#' Generate a random column with independent and identically distributed (i.i.d.) samples
+#' @details
+#' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.) samples
 #' from U[0.0, 1.0].
 #'
+#' @rdname column_nonaggregate_functions
 #' @param seed a random seed. Can be missing.
-#' @family non-aggregate functions
-#' @rdname rand
-#' @name rand
-#' @aliases rand,missing-method
+#' @aliases rand rand,missing-method
 #' @export
-#' @examples \dontrun{rand()}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, r1 = rand(), r2 = rand(10), r3 = randn(), r4 = randn(10))
+#' head(tmp)}
 #' @note rand since 1.5.0
 setMethod("rand", signature(seed = "missing"),
           function(seed) {
@@ -2888,8 +2613,7 @@ setMethod("rand", signature(seed = "missing"),
             column(jc)
           })
 
-#' @rdname rand
-#' @name rand
+#' @rdname column_nonaggregate_functions
 #' @aliases rand,numeric-method
 #' @export
 #' @note rand(numeric) since 1.5.0
@@ -2899,18 +2623,13 @@ setMethod("rand", signature(seed = "numeric"),
             column(jc)
           })
 
-#' randn
-#'
-#' Generate a column with independent and identically distributed (i.i.d.) samples from
+#' @details
+#' \code{randn}: Generates a column with independent and identically distributed (i.i.d.) samples from
 #' the standard normal distribution.
 #'
-#' @param seed a random seed. Can be missing.
-#' @family non-aggregate functions
-#' @rdname randn
-#' @name randn
-#' @aliases randn,missing-method
+#' @rdname column_nonaggregate_functions
+#' @aliases randn randn,missing-method
 #' @export
-#' @examples \dontrun{randn()}
 #' @note randn since 1.5.0
 setMethod("randn", signature(seed = "missing"),
           function(seed) {
@@ -2918,8 +2637,7 @@ setMethod("randn", signature(seed = "missing"),
             column(jc)
           })
 
-#' @rdname randn
-#' @name randn
+#' @rdname column_nonaggregate_functions
 #' @aliases randn,numeric-method
 #' @export
 #' @note randn(numeric) since 1.5.0
@@ -2929,20 +2647,27 @@ setMethod("randn", signature(seed = "numeric"),
             column(jc)
           })
 
-#' regexp_extract
+#' @details
+#' \code{regexp_extract}: Extracts a specific \code{idx} group identified by a Java regex,
+#' from the specified string column. If the regex did not match, or the specified group did
+#' not match, an empty string is returned.
 #'
-#' Extract a specific \code{idx} group identified by a Java regex, from the specified string column.
-#' If the regex did not match, or the specified group did not match, an empty string is returned.
-#'
-#' @param x a string Column.
 #' @param pattern a regular expression.
 #' @param idx a group index.
-#' @family string functions
-#' @rdname regexp_extract
-#' @name regexp_extract
-#' @aliases regexp_extract,Column,character,numeric-method
+#' @rdname column_string_functions
+#' @aliases regexp_extract regexp_extract,Column,character,numeric-method
 #' @export
-#' @examples \dontrun{regexp_extract(df$c, '(\d+)-(\d+)', 1)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, s1 = regexp_extract(df$Class, "(\\d+)\\w+", 1),
+#'                   s2 = regexp_extract(df$Sex, "^(\\w)\\w+", 1),
+#'                   s3 = regexp_replace(df$Class, "\\D+", ""),
+#'                   s4 = substring_index(df$Sex, "a", 1),
+#'                   s5 = substring_index(df$Sex, "a", -1),
+#'                   s6 = translate(df$Sex, "ale", ""),
+#'                   s7 = translate(df$Sex, "a", "-"))
+#' head(tmp)}
 #' @note regexp_extract since 1.5.0
 setMethod("regexp_extract",
           signature(x = "Column", pattern = "character", idx = "numeric"),
@@ -2953,19 +2678,14 @@ setMethod("regexp_extract",
             column(jc)
           })
 
-#' regexp_replace
+#' @details
+#' \code{regexp_replace}: Replaces all substrings of the specified string value that
+#' match regexp with rep.
 #'
-#' Replace all substrings of the specified string value that match regexp with rep.
-#'
-#' @param x a string Column.
-#' @param pattern a regular expression.
 #' @param replacement a character string that a matched \code{pattern} is replaced with.
-#' @family string functions
-#' @rdname regexp_replace
-#' @name regexp_replace
-#' @aliases regexp_replace,Column,character,character-method
+#' @rdname column_string_functions
+#' @aliases regexp_replace regexp_replace,Column,character,character-method
 #' @export
-#' @examples \dontrun{regexp_replace(df$c, '(\\d+)', '--')}
 #' @note regexp_replace since 1.5.0
 setMethod("regexp_replace",
           signature(x = "Column", pattern = "character", replacement = "character"),
@@ -2976,19 +2696,12 @@ setMethod("regexp_replace",
             column(jc)
           })
 
-#' rpad
+#' @details
+#' \code{rpad}: Right-padded with pad to a length of len.
 #'
-#' Right-padded with pad to a length of len.
-#'
-#' @param x the string Column to be right-padded.
-#' @param len maximum length of each output result.
-#' @param pad a character string to be padded with.
-#' @family string functions
-#' @rdname rpad
-#' @name rpad
-#' @aliases rpad,Column,numeric,character-method
+#' @rdname column_string_functions
+#' @aliases rpad rpad,Column,numeric,character-method
 #' @export
-#' @examples \dontrun{rpad(df$c, 6, '#')}
 #' @note rpad since 1.5.0
 setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
           function(x, len, pad) {
@@ -2998,28 +2711,20 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
             column(jc)
           })
 
-#' substring_index
+#' @details
+#' \code{substring_index}: Returns the substring from string str before count occurrences of
+#' the delimiter delim. If count is positive, everything the left of the final delimiter
+#' (counting from left) is returned. If count is negative, every to the right of the final
+#' delimiter (counting from the right) is returned. substring_index performs a case-sensitive
+#' match when searching for delim.
 #'
-#' Returns the substring from string str before count occurrences of the delimiter delim.
-#' If count is positive, everything the left of the final delimiter (counting from left) is
-#' returned. If count is negative, every to the right of the final delimiter (counting from the
-#' right) is returned. substring_index performs a case-sensitive match when searching for delim.
-#'
-#' @param x a Column.
 #' @param delim a delimiter string.
 #' @param count number of occurrences of \code{delim} before the substring is returned.
 #'              A positive number means counting from the left, while negative means
 #'              counting from the right.
-#' @family string functions
-#' @rdname substring_index
-#' @aliases substring_index,Column,character,numeric-method
-#' @name substring_index
+#' @rdname column_string_functions
+#' @aliases substring_index substring_index,Column,character,numeric-method
 #' @export
-#' @examples
-#'\dontrun{
-#'substring_index(df$c, '.', 2)
-#'substring_index(df$c, '.', -1)
-#'}
 #' @note substring_index since 1.5.0
 setMethod("substring_index",
           signature(x = "Column", delim = "character", count = "numeric"),
@@ -3030,24 +2735,19 @@ setMethod("substring_index",
             column(jc)
           })
 
-#' translate
-#'
-#' Translate any character in the src by a character in replaceString.
+#' @details
+#' \code{translate}: Translates any character in the src by a character in replaceString.
 #' The characters in replaceString is corresponding to the characters in matchingString.
 #' The translate will happen when any character in the string matching with the character
 #' in the matchingString.
 #'
-#' @param x a string Column.
 #' @param matchingString a source string where each character will be translated.
 #' @param replaceString a target string where each \code{matchingString} character will
 #'                      be replaced by the character in \code{replaceString}
 #'                      at the same location, if any.
-#' @family string functions
-#' @rdname translate
-#' @name translate
-#' @aliases translate,Column,character,character-method
+#' @rdname column_string_functions
+#' @aliases translate translate,Column,character,character-method
 #' @export
-#' @examples \dontrun{translate(df$c, 'rnlt', '123')}
 #' @note translate since 1.5.0
 setMethod("translate",
           signature(x = "Column", matchingString = "character", replaceString = "character"),
@@ -3089,20 +2789,26 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
             jc <- callJStatic("org.apache.spark.sql.functions", "unix_timestamp", x@jc, format)
             column(jc)
           })
-#' when
-#'
-#' Evaluates a list of conditions and returns one of multiple possible result expressions.
+
+#' @details
+#' \code{when}: Evaluates a list of conditions and returns one of multiple possible result expressions.
 #' For unmatched expressions null is returned.
 #'
+#' @rdname column_nonaggregate_functions
 #' @param condition the condition to test on. Must be a Column expression.
 #' @param value result expression.
-#' @family non-aggregate functions
-#' @rdname when
-#' @name when
-#' @aliases when,Column-method
-#' @seealso \link{ifelse}
+#' @aliases when when,Column-method
 #' @export
-#' @examples \dontrun{when(df$age == 2, df$age + 1)}
+#' @examples
+#'
+#' \dontrun{
+#' tmp <- mutate(df, mpg_na = otherwise(when(df$mpg > 20, df$mpg), lit(NaN)),
+#'                   mpg2 = ifelse(df$mpg > 20 & df$am > 0, 0, 1),
+#'                   mpg3 = ifelse(df$mpg > 20, df$mpg, 20.0))
+#' head(tmp)
+#' tmp <- mutate(tmp, ind_na1 = is.nan(tmp$mpg_na), ind_na2 = isnan(tmp$mpg_na))
+#' head(select(tmp, coalesce(tmp$mpg_na, tmp$mpg)))
+#' head(select(tmp, nanvl(tmp$mpg_na, tmp$hp)))}
 #' @note when since 1.5.0
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
@@ -3112,25 +2818,16 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
               column(jc)
           })
 
-#' ifelse
-#'
-#' Evaluates a list of conditions and returns \code{yes} if the conditions are satisfied.
+#' @details
+#' \code{ifelse}: Evaluates a list of conditions and returns \code{yes} if the conditions are satisfied.
 #' Otherwise \code{no} is returned for unmatched conditions.
 #'
+#' @rdname column_nonaggregate_functions
 #' @param test a Column expression that describes the condition.
 #' @param yes return values for \code{TRUE} elements of test.
 #' @param no return values for \code{FALSE} elements of test.
-#' @family non-aggregate functions
-#' @rdname ifelse
-#' @name ifelse
-#' @aliases ifelse,Column-method
-#' @seealso \link{when}
+#' @aliases ifelse ifelse,Column-method
 #' @export
-#' @examples
-#' \dontrun{
-#' ifelse(df$a > 1 & df$b > 2, 0, 1)
-#' ifelse(df$a > 1, df$a, 1)
-#' }
 #' @note ifelse since 1.5.0
 setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
@@ -3426,18 +3123,14 @@ setMethod("row_number",
 
 ###################### Collection functions######################
 
-#' array_contains
+#' @details
+#' \code{array_contains}: Returns null if the array is null, true if the array contains
+#' the value, and false otherwise.
 #'
-#' Returns null if the array is null, true if the array contains the value, and false otherwise.
-#'
-#' @param x A Column
 #' @param value A value to be checked if contained in the column
-#' @rdname array_contains
-#' @aliases array_contains,Column-method
-#' @name array_contains
-#' @family collection functions
+#' @rdname column_collection_functions
+#' @aliases array_contains array_contains,Column-method
 #' @export
-#' @examples \dontrun{array_contains(df$c, 1)}
 #' @note array_contains since 1.6.0
 setMethod("array_contains",
           signature(x = "Column", value = "ANY"),
@@ -3446,18 +3139,12 @@ setMethod("array_contains",
             column(jc)
           })
 
-#' explode
+#' @details
+#' \code{explode}: Creates a new row for each element in the given array or map column.
 #'
-#' Creates a new row for each element in the given array or map column.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname explode
-#' @name explode
-#' @family collection functions
-#' @aliases explode,Column-method
+#' @rdname column_collection_functions
+#' @aliases explode explode,Column-method
 #' @export
-#' @examples \dontrun{explode(df$c)}
 #' @note explode since 1.5.0
 setMethod("explode",
           signature(x = "Column"),
@@ -3466,18 +3153,12 @@ setMethod("explode",
             column(jc)
           })
 
-#' size
+#' @details
+#' \code{size}: Returns length of array or map.
 #'
-#' Returns length of array or map.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname size
-#' @name size
-#' @aliases size,Column-method
-#' @family collection functions
+#' @rdname column_collection_functions
+#' @aliases size size,Column-method
 #' @export
-#' @examples \dontrun{size(df$c)}
 #' @note size since 1.5.0
 setMethod("size",
           signature(x = "Column"),
@@ -3486,25 +3167,16 @@ setMethod("size",
             column(jc)
           })
 
-#' sort_array
-#'
-#' Sorts the input array in ascending or descending order according
+#' @details
+#' \code{sort_array}: Sorts the input array in ascending or descending order according
 #' to the natural ordering of the array elements.
 #'
-#' @param x A Column to sort
+#' @rdname column_collection_functions
 #' @param asc A logical flag indicating the sorting order.
 #'            TRUE, sorting is in ascending order.
 #'            FALSE, sorting is in descending order.
-#' @rdname sort_array
-#' @name sort_array
-#' @aliases sort_array,Column-method
-#' @family collection functions
+#' @aliases sort_array sort_array,Column-method
 #' @export
-#' @examples
-#' \dontrun{
-#' sort_array(df$c)
-#' sort_array(df$c, FALSE)
-#' }
 #' @note sort_array since 1.6.0
 setMethod("sort_array",
           signature(x = "Column"),
@@ -3513,18 +3185,13 @@ setMethod("sort_array",
             column(jc)
           })
 
-#' posexplode
+#' @details
+#' \code{posexplode}: Creates a new row for each element with position in the given array
+#' or map column.
 #'
-#' Creates a new row for each element with position in the given array or map column.
-#'
-#' @param x Column to compute on
-#'
-#' @rdname posexplode
-#' @name posexplode
-#' @family collection functions
-#' @aliases posexplode,Column-method
+#' @rdname column_collection_functions
+#' @aliases posexplode posexplode,Column-method
 #' @export
-#' @examples \dontrun{posexplode(df$c)}
 #' @note posexplode since 2.1.0
 setMethod("posexplode",
           signature(x = "Column"),
@@ -3533,19 +3200,12 @@ setMethod("posexplode",
             column(jc)
           })
 
-#' create_array
+#' @details
+#' \code{create_array}: Creates a new array column. The input columns must all have the same data type.
 #'
-#' Creates a new array column. The input columns must all have the same data type.
-#'
-#' @param x Column to compute on
-#' @param ... additional Column(s).
-#'
-#' @family non-aggregate functions
-#' @rdname create_array
-#' @name create_array
-#' @aliases create_array,Column-method
+#' @rdname column_nonaggregate_functions
+#' @aliases create_array create_array,Column-method
 #' @export
-#' @examples \dontrun{create_array(df$x, df$y, df$z)}
 #' @note create_array since 2.3.0
 setMethod("create_array",
           signature(x = "Column"),
@@ -3558,22 +3218,15 @@ setMethod("create_array",
             column(jc)
           })
 
-#' create_map
-#'
-#' Creates a new map column. The input columns must be grouped as key-value pairs,
+#' @details
+#' \code{create_map}: Creates a new map column. The input columns must be grouped as key-value pairs,
 #' e.g. (key1, value1, key2, value2, ...).
 #' The key columns must all have the same data type, and can't be null.
 #' The value columns must all have the same data type.
 #'
-#' @param x Column to compute on
-#' @param ... additional Column(s).
-#'
-#' @family non-aggregate functions
-#' @rdname create_map
-#' @name create_map
-#' @aliases create_map,Column-method
+#' @rdname column_nonaggregate_functions
+#' @aliases create_map create_map,Column-method
 #' @export
-#' @examples \dontrun{create_map(lit("x"), lit(1.0), lit("y"), lit(-1.0))}
 #' @note create_map since 2.3.0
 setMethod("create_map",
           signature(x = "Column"),
@@ -3620,28 +3273,20 @@ setMethod("collect_set",
             column(jc)
           })
 
-#' split_string
+#' @details
+#' \code{split_string}: Splits string on regular expression.
+#' Equivalent to \code{split} SQL function.
 #'
-#' Splits string on regular expression.
-#'
-#' Equivalent to \code{split} SQL function
-#'
-#' @param x Column to compute on
-#' @param pattern Java regular expression
-#'
-#' @rdname split_string
-#' @family string functions
-#' @aliases split_string,Column-method
+#' @rdname column_string_functions
+#' @aliases split_string split_string,Column-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' df <- read.text("README.md")
-#'
-#' head(select(df, split_string(df$value, "\\s+")))
-#'
+#' head(select(df, split_string(df$Sex, "a")))
+#' head(select(df, split_string(df$Class, "\\d")))
 #' # This is equivalent to the following SQL expression
-#' head(selectExpr(df, "split(value, '\\\\s+')"))
-#' }
+#' head(selectExpr(df, "split(Class, '\\\\d')"))}
 #' @note split_string 2.3.0
 setMethod("split_string",
           signature(x = "Column", pattern = "character"),
@@ -3650,28 +3295,20 @@ setMethod("split_string",
             column(jc)
           })
 
-#' repeat_string
+#' @details
+#' \code{repeat_string}: Repeats string n times.
+#' Equivalent to \code{repeat} SQL function.
 #'
-#' Repeats string n times.
-#'
-#' Equivalent to \code{repeat} SQL function
-#'
-#' @param x Column to compute on
 #' @param n Number of repetitions
-#'
-#' @rdname repeat_string
-#' @family string functions
-#' @aliases repeat_string,Column-method
+#' @rdname column_string_functions
+#' @aliases repeat_string repeat_string,Column-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' df <- read.text("README.md")
-#'
-#' first(select(df, repeat_string(df$value, 3)))
-#'
+#' head(select(df, repeat_string(df$Class, 3)))
 #' # This is equivalent to the following SQL expression
-#' first(selectExpr(df, "repeat(value, 3)"))
-#' }
+#' head(selectExpr(df, "repeat(Class, 3)"))}
 #' @note repeat_string since 2.3.0
 setMethod("repeat_string",
           signature(x = "Column", n = "numeric"),
@@ -3680,27 +3317,24 @@ setMethod("repeat_string",
             column(jc)
           })
 
-#' explode_outer
-#'
-#' Creates a new row for each element in the given array or map column.
+#' @details
+#' \code{explode}: Creates a new row for each element in the given array or map column.
 #' Unlike \code{explode}, if the array/map is \code{null} or empty
 #' then \code{null} is produced.
 #'
-#' @param x Column to compute on
 #'
-#' @rdname explode_outer
-#' @name explode_outer
-#' @family collection functions
-#' @aliases explode_outer,Column-method
+#' @rdname column_collection_functions
+#' @aliases explode_outer explode_outer,Column-method
 #' @export
 #' @examples
+#'
 #' \dontrun{
-#' df <- createDataFrame(data.frame(
+#' df2 <- createDataFrame(data.frame(
 #'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
 #' ))
 #'
-#' head(select(df, df$id, explode_outer(split_string(df$text, ","))))
-#' }
+#' head(select(df2, df2$id, explode_outer(split_string(df2$text, ","))))
+#' head(select(df2, df2$id, posexplode_outer(split_string(df2$text, ","))))}
 #' @note explode_outer since 2.3.0
 setMethod("explode_outer",
           signature(x = "Column"),
@@ -3709,27 +3343,14 @@ setMethod("explode_outer",
             column(jc)
           })
 
-#' posexplode_outer
-#'
-#' Creates a new row for each element with position in the given array or map column.
-#' Unlike \code{posexplode}, if the array/map is \code{null} or empty
+#' @details
+#' \code{posexplode_outer}: Creates a new row for each element with position in the given
+#' array or map column. Unlike \code{posexplode}, if the array/map is \code{null} or empty
 #' then the row (\code{null}, \code{null}) is produced.
 #'
-#' @param x Column to compute on
-#'
-#' @rdname posexplode_outer
-#' @name posexplode_outer
-#' @family collection functions
-#' @aliases posexplode_outer,Column-method
+#' @rdname column_collection_functions
+#' @aliases posexplode_outer posexplode_outer,Column-method
 #' @export
-#' @examples
-#' \dontrun{
-#' df <- createDataFrame(data.frame(
-#'   id = c(1, 2, 3), text = c("a,b,c", NA, "d,e")
-#' ))
-#'
-#' head(select(df, df$id, posexplode_outer(split_string(df$text, ","))))
-#' }
 #' @note posexplode_outer since 2.3.0
 setMethod("posexplode_outer",
           signature(x = "Column"),
@@ -3840,21 +3461,18 @@ setMethod("grouping_id",
             column(jc)
           })
 
-#' input_file_name
+#' @details
+#' \code{input_file_name}: Creates a string column with the input file name for a given row.
+#' The method should be used with no argument.
 #'
-#' Creates a string column with the input file name for a given row
-#'
-#' @rdname input_file_name
-#' @name input_file_name
-#' @family non-aggregate functions
-#' @aliases input_file_name,missing-method
+#' @rdname column_nonaggregate_functions
+#' @aliases input_file_name input_file_name,missing-method
 #' @export
 #' @examples
-#' \dontrun{
-#' df <- read.text("README.md")
 #'
-#' head(select(df, input_file_name()))
-#' }
+#' \dontrun{
+#' tmp <- read.text("README.md")
+#' head(select(tmp, input_file_name()))}
 #' @note input_file_name since 2.3.0
 setMethod("input_file_name", signature("missing"),
           function() {

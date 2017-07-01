@@ -454,7 +454,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val oldTableStats = catalog.getTableMetadata(tableId).stats
       assert(oldTableStats.isEmpty)
       val newStats = CatalogStatistics(sizeInBytes = 1)
-      catalog.alterTableStats(tableId, newStats)
+      catalog.alterTableStats(tableId, Some(newStats))
       val newTableStats = catalog.getTableMetadata(tableId).stats
       assert(newTableStats.get == newStats)
     }
