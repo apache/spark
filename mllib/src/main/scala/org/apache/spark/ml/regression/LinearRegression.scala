@@ -62,7 +62,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
    * Supported options: "l-bfgs", "normal" and "auto".
    * Default: "auto"
    *
-   * @group expertParam
+   * @group param
    */
   @Since("2.3.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
