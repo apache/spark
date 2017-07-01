@@ -131,8 +131,6 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     case s: StructType => createCodeForStruct(ctx, input, s)
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
-    // UTF8String act as a pointer if it's inside UnsafeRow, so copy it to make it safe.
-    case StringType => ExprCode("", "false", s"$input.clone()")
     case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
     case _ => ExprCode("", "false", input)
   }
