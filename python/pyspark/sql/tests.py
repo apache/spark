@@ -33,8 +33,7 @@ import datetime
 import array
 import math
 import ctypes
-from pyspark.sql import Row
-from pyspark.sql.types import _array_int_typecode_ctype_mappings, _array_type_mappings
+
 
 import py4j
 try:
@@ -63,6 +62,7 @@ from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
+from pyspark.sql.types import _array_int_typecode_ctype_mappings, _array_type_mappings
 from pyspark.tests import QuietTest, ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
@@ -2291,12 +2291,12 @@ class SQLTests(ReusedPySparkTestCase):
 
         # test float and double, assuming IEEE 754 floating-point format
         supported_types += ['f', 'd']
-        assertCollectSuccess('f',ctypes.c_float(1e+38).value)
-        assertCollectSuccess('f',ctypes.c_float(1e-38).value)
-        assertCollectSuccess('f',ctypes.c_float(1.123456).value)
-        assertCollectSuccess('d',ctypes.c_double(1e+308).value)
-        assertCollectSuccess('d',ctypes.c_double(1e+308).value)
-        assertCollectSuccess('d',ctypes.c_double(1.123456789012345).value)
+        assertCollectSuccess('f', ctypes.c_float(1e+38).value)
+        assertCollectSuccess('f', ctypes.c_float(1e-38).value)
+        assertCollectSuccess('f', ctypes.c_float(1.123456).value)
+        assertCollectSuccess('d', ctypes.c_double(1e+308).value)
+        assertCollectSuccess('d', ctypes.c_double(1e+308).value)
+        assertCollectSuccess('d', ctypes.c_double(1.123456789012345).value)
 
         # test int types
         supported_int = list(set(_array_int_typecode_ctype_mappings.keys()).
@@ -2325,7 +2325,6 @@ class SQLTests(ReusedPySparkTestCase):
             with self.assertRaises(TypeError):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
-
 
     def test_bucketed_write(self):
         data = [

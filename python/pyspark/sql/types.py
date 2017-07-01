@@ -966,6 +966,7 @@ _array_int_typecode_ctype_mappings = {
 #         'Q': ctypes.c_ulonglong
 #     })
 
+
 def _int_size_to_type(size):
     """
     Return the Scala type from the size of integers.
@@ -993,7 +994,7 @@ _array_type_mappings = {
 # compute array typecode mappings for integer types
 for _typecode in _array_int_typecode_ctype_mappings.keys():
     size = ctypes.sizeof(_array_int_typecode_ctype_mappings[_typecode]) * 8
-    if _typecode.isupper(): # 1 extra bit is required to store unsigned types
+    if _typecode.isupper():  # 1 extra bit is required to store unsigned types
         size += 1
     try:
         _array_type_mappings.update({
