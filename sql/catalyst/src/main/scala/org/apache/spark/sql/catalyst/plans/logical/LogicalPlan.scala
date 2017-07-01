@@ -22,11 +22,16 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types.StructType
 
 
-abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstraints with Logging {
+abstract class LogicalPlan
+  extends QueryPlan[LogicalPlan]
+  with LogicalPlanStats
+  with QueryPlanConstraints
+  with Logging {
 
   private var _analyzed: Boolean = false
 
@@ -78,40 +83,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstrai
     this resolveOperators  {
       case p => p.transformExpressions(r)
     }
-  }
-
-  /** A cache for the estimated statistics, such that it will only be computed once. */
-  private var statsCache: Option[Statistics] = None
-
-  /**
-   * Returns the estimated statistics for the current logical plan node. Under the hood, this
-   * method caches the return value, which is computed based on the configuration passed in the
-   * first time. If the configuration changes, the cache can be invalidated by calling
-   * [[invalidateStatsCache()]].
-   */
-  final def stats: Statistics = statsCache.getOrElse {
-    statsCache = Some(computeStats)
-    statsCache.get
-  }
-
-  /** Invalidates the stats cache. See [[stats]] for more information. */
-  final def invalidateStatsCache(): Unit = {
-    statsCache = None
-    children.foreach(_.invalidateStatsCache())
-  }
-
-  /**
-   * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of all child plan's cardinality, i.e. applies in the case
-   * of cartesian joins.
-   *
-   * [[LeafNode]]s must override this.
-   */
-  protected def computeStats: Statistics = {
-    if (children.isEmpty) {
-      throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
-    }
-    Statistics(sizeInBytes = children.map(_.stats.sizeInBytes).product)
   }
 
   override def verboseStringWithSuffix: String = {
@@ -300,6 +271,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with QueryPlanConstrai
 abstract class LeafNode extends LogicalPlan {
   override final def children: Seq[LogicalPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
+
+  /** Leaf nodes that can survive analysis must define their own statistics. */
+  def computeStats(): Statistics = throw new UnsupportedOperationException
 }
 
 /**
@@ -331,23 +305,6 @@ abstract class UnaryNode extends LogicalPlan {
   }
 
   override protected def validConstraints: Set[Expression] = child.constraints
-
-  override def computeStats: Statistics = {
-    // There should be some overhead in Row object, the size should not be zero when there is
-    // no columns, this help to prevent divide-by-zero error.
-    val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
-    val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
-    // Assume there will be the same number of rows as child has.
-    var sizeInBytes = (child.stats.sizeInBytes * outputRowSize) / childRowSize
-    if (sizeInBytes == 0) {
-      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
-      // (product of children).
-      sizeInBytes = 1
-    }
-
-    // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes, hints = child.stats.hints)
-  }
 }
 
 /**
