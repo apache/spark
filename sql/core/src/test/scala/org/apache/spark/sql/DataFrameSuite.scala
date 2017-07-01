@@ -774,7 +774,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val parseE = intercept[IllegalArgumentException] {
       person2.summary("foo%")
     }
-    assert(parseE.getMessage === "Unable to parse foo% as a double")
+    assert(parseE.getMessage === "Unable to parse foo% as a percentile")
   }
 
   test("apply on query results (SPARK-5462)") {
