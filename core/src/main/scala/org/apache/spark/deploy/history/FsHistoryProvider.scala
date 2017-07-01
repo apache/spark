@@ -117,15 +117,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // used for logging msgs (logs are re-scanned based on file size, rather than modtime)
   private val lastScanTime = new java.util.concurrent.atomic.AtomicLong(-1)
 
-  // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
-  // into the map in order, so the LinkedHashMap maintains the correct ordering.
-  @volatile private var applications: mutable.LinkedHashMap[String, FsApplicationHistoryInfo]
-    = new mutable.LinkedHashMap()
+  // Mapping of application IDs to their metadata, in descending end time order.
+  @volatile private var applications = Map.empty[String, FsApplicationHistoryInfo]
 
   val fileToAppInfo = new mutable.HashMap[Path, FsApplicationAttemptInfo]()
 
   // List of application logs to be deleted by event log cleaner.
-  private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
+  private var attemptsToClean = List.empty[FsApplicationAttemptInfo]
 
   private val pendingReplayTasksCount = new java.util.concurrent.atomic.AtomicInteger(0)
 
@@ -501,47 +499,46 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // map. If an attempt has been updated, it replaces the old attempt in the list.
     val newAppMap = new mutable.HashMap[String, FsApplicationHistoryInfo]()
 
-    applications.synchronized {
-      newAttempts.foreach { attempt =>
-        val appInfo = newAppMap.get(attempt.appId)
-          .orElse(applications.get(attempt.appId))
-          .map { app =>
-            val attempts =
-              app.attempts.filter(_.attemptId != attempt.attemptId) ++ List(attempt)
-            new FsApplicationHistoryInfo(attempt.appId, attempt.name,
-              attempts.sortWith(compareAttemptInfo))
-          }
-          .getOrElse(new FsApplicationHistoryInfo(attempt.appId, attempt.name, List(attempt)))
-        newAppMap(attempt.appId) = appInfo
-      }
-
-      // Merge the new app list with the existing one, maintaining the expected ordering (descending
-      // end time). Maintaining the order is important to avoid having to sort the list every time
-      // there is a request for the log list.
-      val newApps = newAppMap.values.toSeq.sortWith(compareAppInfo)
-      val mergedApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
-      def addIfAbsent(info: FsApplicationHistoryInfo): Unit = {
-        if (!mergedApps.contains(info.id)) {
-          mergedApps += (info.id -> info)
+    newAttempts.foreach { attempt =>
+      val appInfo = newAppMap.get(attempt.appId)
+        .orElse(applications.get(attempt.appId))
+        .map { app =>
+          val attempts =
+            app.attempts.filter(_.attemptId != attempt.attemptId) ++ List(attempt)
+          new FsApplicationHistoryInfo(attempt.appId, attempt.name,
+            attempts.sortWith(compareAttemptInfo))
         }
-      }
-
-      val newIterator = newApps.iterator.buffered
-      val oldIterator = applications.values.iterator.buffered
-      while (newIterator.hasNext && oldIterator.hasNext) {
-        if (newAppMap.contains(oldIterator.head.id)) {
-          oldIterator.next()
-        } else if (compareAppInfo(newIterator.head, oldIterator.head)) {
-          addIfAbsent(newIterator.next())
-        } else {
-          addIfAbsent(oldIterator.next())
-        }
-      }
-      newIterator.foreach(addIfAbsent)
-      oldIterator.foreach(addIfAbsent)
-
-      applications = mergedApps
+        .getOrElse(new FsApplicationHistoryInfo(attempt.appId, attempt.name, List(attempt)))
+      newAppMap(attempt.appId) = appInfo
     }
+
+    // Merge the new app list with the existing one, maintaining the expected ordering (descending
+    // end time). Maintaining the order is important to avoid having to sort the list every time
+    // there is a request for the log list. Apps are inserted
+    // into the map in order, so the LinkedHashMap maintains the correct ordering.
+    val newApps = newAppMap.values.toSeq.sortWith(compareAppInfo)
+    val mergedApps = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
+    def addIfAbsent(info: FsApplicationHistoryInfo): Unit = {
+      if (!mergedApps.contains(info.id)) {
+        mergedApps(info.id) = info
+      }
+    }
+
+    val newIterator = newApps.iterator.buffered
+    val oldIterator = applications.values.iterator.buffered
+    while (newIterator.hasNext && oldIterator.hasNext) {
+      if (newAppMap.contains(oldIterator.head.id)) {
+        oldIterator.next()
+      } else if (compareAppInfo(newIterator.head, oldIterator.head)) {
+        addIfAbsent(newIterator.next())
+      } else {
+        addIfAbsent(oldIterator.next())
+      }
+    }
+    newIterator.foreach(addIfAbsent)
+    oldIterator.foreach(addIfAbsent)
+
+    applications = mergedApps.toMap
   }
 
   /**
@@ -553,29 +550,27 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       val now = clock.getTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
-
-      def shouldClean(attempt: FsApplicationAttemptInfo): Boolean = {
-        now - attempt.lastUpdated > maxAge
-      }
+      val leftToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]()
+      leftToClean ++= attemptsToClean
 
       // Scan all logs from the log directory.
       // Only completed applications older than the specified max age will be deleted.
       applications.values.foreach { app =>
-        val (toClean, toRetain) = app.attempts.partition(shouldClean)
-        attemptsToClean ++= toClean
+        val (toClean, toRetain) =
+          app.attempts.partition(attempt => now - attempt.lastUpdated > maxAge)
+        leftToClean ++= toClean
 
         if (toClean.isEmpty) {
-          appsToRetain += (app.id -> app)
+          appsToRetain(app.id) = app
         } else if (toRetain.nonEmpty) {
-          appsToRetain += (app.id ->
-            new FsApplicationHistoryInfo(app.id, app.name, toRetain.toList))
+          appsToRetain(app.id) = new FsApplicationHistoryInfo(app.id, app.name, toRetain)
         }
       }
 
-      applications = appsToRetain
+      applications = appsToRetain.toMap
 
-      val leftToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
-      attemptsToClean.foreach { attempt =>
+      // Remove any attempts that are successfully cleaned
+      leftToClean --= leftToClean.filter { attempt =>
         try {
           fs.delete(new Path(logDir, attempt.logPath), true)
         } catch {
@@ -583,11 +578,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             logInfo(s"No permission to delete ${attempt.logPath}, ignoring.")
           case t: IOException =>
             logError(s"IOException in cleaning ${attempt.logPath}", t)
-            leftToClean += attempt
+            false
         }
+        true
       }
 
-      attemptsToClean = leftToClean
+      attemptsToClean = leftToClean.toList
     } catch {
       case t: Exception => logError("Exception in cleaning logs", t)
     }
