@@ -68,6 +68,29 @@ structType.structField <- function(x, ...) {
   structType(stObj)
 }
 
+#' Create \code{structType} for a given DDL-formatted string.
+#'
+#' Create \code{structType} for a given DDL-formatted string, which is a comma separated list
+#' of field definitions, e.g., a INT, b STRING.
+#'
+#' @param x The data schema defined in a DDL-formatted string.
+#' @param ... further arguments passed to or from other methods
+#' @examples
+#'\dontrun{
+#' structType.fromDDL("a INT, b STRING")
+#' }
+#' @note structType.fromDDL since 2.3.0
+structType.fromDDL <- function(x, ...) {
+  if (!is.character(x)) {
+    stop("schema name must be a DDL-formatted string.")
+  }
+
+  stObj <- handledCallJStatic("org.apache.spark.sql.types.StructType",
+                              "fromDDL",
+                              x)
+  structType(stObj)
+}
+
 #' Print a Spark StructType.
 #'
 #' This function prints the contents of a StructType returned from the
