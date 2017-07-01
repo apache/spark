@@ -961,6 +961,7 @@ if sys.version < "3":
         'c': StringType
     })
 
+
 def _infer_type(obj):
     """Infer the DataType from obj
     """

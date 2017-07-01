@@ -2326,7 +2326,7 @@ class SQLTests(ReusedPySparkTestCase):
 
         all_type_codes = set()
         if sys.version < "3":
-            all_type_codes += set([ 'c','b','B','u','h','H','i','I','l','L','f','d' ])
+            all_type_codes += set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
         else:
             all_type_codes += set(array.typecodes)
         unsupported_types = all_type_codes - supported_types
