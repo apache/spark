@@ -69,8 +69,8 @@ private case object OracleDialect extends JdbcDialect {
   }
 
   override def compileValue(value: Any): Any = value match {
-    // Special treatment for the literal representations of 
-    // Oracle's Timestamp/Date types. 
+    // Special treatment for the literal representations of
+    // Oracle's Timestamp/Date types.
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
     case dateValue: Date => "{d '" + dateValue + "'}"
