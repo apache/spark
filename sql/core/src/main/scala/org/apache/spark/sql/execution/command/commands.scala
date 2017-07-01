@@ -44,7 +44,23 @@ trait RunnableCommand extends logical.Command {
 
   // The map used to record the metrics of running the command. This will be passed to
   // `ExecutedCommand` during query planning.
-  private[sql] lazy val metrics: Map[String, SQLMetric] = Map.empty
+  lazy val metrics: Map[String, SQLMetric] = Map.empty
+
+  def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
+    throw new NotImplementedError
+  }
+
+  def run(sparkSession: SparkSession): Seq[Row] = {
+    throw new NotImplementedError
+  }
+}
+
+/**
+ * A trait for classes that can update its metrics of data writing operation.
+ */
+trait MetricUpdater {
+
+  val metrics: Map[String, SQLMetric]
 
   /**
    * Callback function that update metrics collected from the writing operation.
@@ -76,14 +92,6 @@ trait RunnableCommand extends logical.Command {
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
-  }
-
-  def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
-    throw new NotImplementedError
-  }
-
-  def run(sparkSession: SparkSession): Seq[Row] = {
-    throw new NotImplementedError
   }
 }
 

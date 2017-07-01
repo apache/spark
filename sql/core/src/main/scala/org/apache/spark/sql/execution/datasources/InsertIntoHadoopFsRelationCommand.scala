@@ -55,12 +55,12 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex])
-  extends RunnableCommand {
+  extends RunnableCommand with MetricUpdater {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
-  override private[sql] lazy val metrics: Map[String, SQLMetric] = {
+  override lazy val metrics: Map[String, SQLMetric] = {
     val sparkContext = SparkContext.getActive.get
     Map(
       "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),

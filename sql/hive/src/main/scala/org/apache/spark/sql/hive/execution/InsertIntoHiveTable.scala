@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.{CommandUtils, RunnableCommand}
+import org.apache.spark.sql.execution.command.{CommandUtils, MetricUpdater, RunnableCommand}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.hive._
@@ -82,11 +82,11 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends RunnableCommand {
+    ifPartitionNotExists: Boolean) extends RunnableCommand with MetricUpdater {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
-  override private[sql] lazy val metrics: Map[String, SQLMetric] = {
+  override lazy val metrics: Map[String, SQLMetric] = {
     val sparkContext = SparkContext.getActive.get
     Map(
       "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
