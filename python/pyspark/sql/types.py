@@ -24,6 +24,7 @@ import json
 import re
 import base64
 from array import array
+import ctypes
 
 if sys.version >= "3":
     long = int
@@ -936,26 +937,64 @@ if sys.version < "3":
     })
 
 # Mapping Python array types to Spark SQL DataType
-# We should be careful here. The size of these types in python depends on
-# C implementation (See: https://docs.python.org/2/library/array.html).
-# We need to make sure that this conversion does not lose any precision. And
-# this should be considered in test cases.
+# We should be careful here. The size of these types in python depends on C
+# implementation. We need to make sure that this conversion does not lose any
+# precision.
+#
+# Reference for C integer size, see:
+# ISO/IEC 9899:201x specification, § 5.2.4.2.1 Sizes of integer types <limits.h>.
+# Reference for python array typecode, see:
+# https://docs.python.org/2/library/array.html
+# https://docs.python.org/3.6/library/array.html
+
+_array_int_typecode_ctype_mappings = {
+    'b': ctypes.c_byte,
+    'B': ctypes.c_ubyte,
+    'h': ctypes.c_short,
+    'H': ctypes.c_ushort,
+    'i': ctypes.c_int,
+    'I': ctypes.c_uint,
+    'l': ctypes.c_long,
+    'L': ctypes.c_ulong,
+    'q': ctypes.c_longlong,
+    'Q': ctypes.c_ulonglong
+}
+
+def _int_size_to_type(size):
+    """
+    Return the Scala type from the size of integers.
+    """
+    if size <= 8:
+        return ByteType
+    if size <= 16:
+        return ShortType
+    if size <= 32:
+        return IntegerType
+    if size <= 64:
+        return LongType
+    raise TypeError("Not supported type: integer size too large.")
+
 _array_type_mappings = {
-    'b': ByteType,
-    'B': ShortType,
-    'h': ShortType,
-    'H': IntegerType,
-    'i': IntegerType,
-    'I': LongType,
-    'l': LongType,
-     #'L': not supported
-     #'q': not supported
-     #'Q': not supported
+    # Warning: Actual properties for float and double in C is not unspecified.
+    # On most systems, they are IEEE 754 single-precision binary floating-point
+    # format and IEEE 754 double-precision binary floating-point. And we do
+    # do assume the same thing here. This means, in some rare case, the following
+    # conversion might fail.
     'f': FloatType,
     'd': DoubleType
 }
 
-
+# compute array typecode mappings for integer types
+for _typecode in _array_int_typecode_ctype_mappings.keys():
+    size = ctypes.sizeof(_array_int_typecode_ctype_mappings[_typecode])
+    if _typecode.isupper(): # 1 extra bit is required to store unsigned types
+        size += 1
+    try:
+        _array_type_mappings.update({
+            _typecode: _int_size_to_type(size)
+        })
+    except:
+        pass
 
 # Type code 'u' in Python's array is deprecated since version 3.3, and will be
 # removed in version 4.0. See: https://docs.python.org/3/library/array.html
