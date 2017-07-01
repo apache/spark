@@ -2077,7 +2077,8 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, JavaMLReadable,
+                    JavaMLWritable):
     """
     A label indexer that maps a string column of labels to an ML column of label indices.
     If the input column is numeric, we cast it to string and index the string values.
@@ -2178,20 +2179,6 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
         Gets the value of :py:attr:`stringOrderType` or its default value 'frequencyDesc'.
         """
         return self.getOrDefault(self.stringOrderType)
-
-    @since("2.3.0")
-    def setHandleInvalid(self, value):
-        """
-        Sets the value of :py:attr:`handleInvalid`.
-        """
-        return self._set(handleInvalid=value)
-
-    @since("2.3.0")
-    def getHandleInvalid(self):
-        """
-        Gets the value of :py:attr:`handleInvalid` or its default value.
-        """
-        return self.getOrDefault(self.handleInvalid)
 
 
 class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
