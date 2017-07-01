@@ -1398,7 +1398,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.scheduler.listenerbus.eventqueue.size</code></td>
+  <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
   <td>10000</td>
   <td>
     Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
