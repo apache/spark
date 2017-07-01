@@ -444,88 +444,133 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("change stats after insert command for hive table") {
     val table = s"change_stats_insert_hive_table"
-    withTable(table) {
-      sql(s"CREATE TABLE $table (i int, j string)")
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched1.get.sizeInBytes == 0)
-      assert(fetched1.get.colStats.size == 2)
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (i int, j string)")
+          // analyze to get initial stats
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
+          val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+          assert(fetched1.get.sizeInBytes == 0)
+          assert(fetched1.get.colStats.size == 2)
 
-      // insert into command
-      sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
-      assert(getStatsProperties(table).isEmpty)
+          // insert into command
+          sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
+          if (autoUpdate) {
+            val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+            assert(fetched2.get.sizeInBytes > 0)
+            assert(fetched2.get.colStats.isEmpty)
+            val statsProp = getStatsProperties(table)
+            assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched2.get.sizeInBytes)
+          } else {
+            assert(getStatsProperties(table).isEmpty)
+          }
+        }
+      }
     }
   }
 
   test("change stats after load data command") {
     val table = "change_stats_load_table"
-    withTable(table) {
-      sql(s"CREATE TABLE $table (i INT, j STRING) STORED AS PARQUET")
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched1.get.sizeInBytes == 0)
-      assert(fetched1.get.colStats.size == 2)
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (i INT, j STRING) STORED AS PARQUET")
+          // analyze to get initial stats
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
+          val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+          assert(fetched1.get.sizeInBytes == 0)
+          assert(fetched1.get.colStats.size == 2)
 
-      withTempDir { loadPath =>
-        // load data command
-        val file = new File(loadPath + "/data")
-        val writer = new PrintWriter(file)
-        writer.write("2,xyz")
-        writer.close()
-        sql(s"LOAD DATA INPATH '${loadPath.toURI.toString}' INTO TABLE $table")
-        assert(getStatsProperties(table).isEmpty)
+          withTempDir { loadPath =>
+            // load data command
+            val file = new File(loadPath + "/data")
+            val writer = new PrintWriter(file)
+            writer.write("2,xyz")
+            writer.close()
+            sql(s"LOAD DATA INPATH '${loadPath.toURI.toString}' INTO TABLE $table")
+            if (autoUpdate) {
+              val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+              assert(fetched2.get.sizeInBytes > 0)
+              assert(fetched2.get.colStats.isEmpty)
+              val statsProp = getStatsProperties(table)
+              assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched2.get.sizeInBytes)
+            } else {
+              assert(getStatsProperties(table).isEmpty)
+            }
+          }
+        }
       }
     }
   }
 
   test("change stats after add/drop partition command") {
     val table = "change_stats_part_table"
-    withTable(table) {
-      sql(s"CREATE TABLE $table (i INT, j STRING) PARTITIONED BY (ds STRING, hr STRING)")
-      // table has two partitions initially
-      for (ds <- Seq("2008-04-08"); hr <- Seq("11", "12")) {
-        sql(s"INSERT OVERWRITE TABLE $table PARTITION (ds='$ds',hr='$hr') SELECT 1, 'a'")
-      }
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2))
-      assert(fetched1.get.sizeInBytes > 0)
-      assert(fetched1.get.colStats.size == 2)
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (i INT, j STRING) PARTITIONED BY (ds STRING, hr STRING)")
+          // table has two partitions initially
+          for (ds <- Seq("2008-04-08"); hr <- Seq("11", "12")) {
+            sql(s"INSERT OVERWRITE TABLE $table PARTITION (ds='$ds',hr='$hr') SELECT 1, 'a'")
+          }
+          // analyze to get initial stats
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
+          val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2))
+          assert(fetched1.get.sizeInBytes > 0)
+          assert(fetched1.get.colStats.size == 2)
 
-      withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
-        val file1 = new File(dir1 + "/data")
-        val writer1 = new PrintWriter(file1)
-        writer1.write("1,a")
-        writer1.close()
+          withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
+            val file1 = new File(dir1 + "/data")
+            val writer1 = new PrintWriter(file1)
+            writer1.write("1,a")
+            writer1.close()
 
-        val file2 = new File(dir2 + "/data")
-        val writer2 = new PrintWriter(file2)
-        writer2.write("1,a")
-        writer2.close()
+            val file2 = new File(dir2 + "/data")
+            val writer2 = new PrintWriter(file2)
+            writer2.write("1,a")
+            writer2.close()
 
-        // add partition command
-        sql(
-          s"""
-             |ALTER TABLE $table ADD
-             |PARTITION (ds='2008-04-09', hr='11') LOCATION '${dir1.toURI.toString}'
-             |PARTITION (ds='2008-04-09', hr='12') LOCATION '${dir2.toURI.toString}'
-        """.stripMargin)
-        assert(getStatsProperties(table).isEmpty)
+            // add partition command
+            sql(
+              s"""
+                 |ALTER TABLE $table ADD
+                 |PARTITION (ds='2008-04-09', hr='11') LOCATION '${dir1.toURI.toString}'
+                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${dir2.toURI.toString}'
+            """.stripMargin)
+            if (autoUpdate) {
+              val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+              assert(fetched2.get.sizeInBytes > fetched1.get.sizeInBytes)
+              assert(fetched2.get.colStats.isEmpty)
+              val statsProp = getStatsProperties(table)
+              assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched2.get.sizeInBytes)
+            } else {
+              assert(getStatsProperties(table).isEmpty)
+            }
 
-        // generate stats again
-        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
-        val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(4))
-        assert(fetched2.get.sizeInBytes > 0)
-        assert(fetched2.get.colStats.size == 2)
+            // now the table has four partitions, generate stats again
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
+            val fetched3 = checkTableStats(
+              table, hasSizeInBytes = true, expectedRowCounts = Some(4))
+            assert(fetched3.get.sizeInBytes > 0)
+            assert(fetched3.get.colStats.size == 2)
 
-        // drop partition command
-        sql(s"ALTER TABLE $table DROP PARTITION (ds='2008-04-08'), PARTITION (hr='12')")
-        // only one partition left
-        assert(spark.sessionState.catalog.listPartitions(TableIdentifier(table))
-          .map(_.spec).toSet == Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
-        assert(getStatsProperties(table).isEmpty)
+            // drop partition command
+            sql(s"ALTER TABLE $table DROP PARTITION (ds='2008-04-08'), PARTITION (hr='12')")
+            assert(spark.sessionState.catalog.listPartitions(TableIdentifier(table))
+              .map(_.spec).toSet == Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
+            // only one partition left
+            if (autoUpdate) {
+              val fetched4 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+              assert(fetched4.get.sizeInBytes < fetched1.get.sizeInBytes)
+              assert(fetched4.get.colStats.isEmpty)
+              val statsProp = getStatsProperties(table)
+              assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched4.get.sizeInBytes)
+            } else {
+              assert(getStatsProperties(table).isEmpty)
+            }
+          }
+        }
       }
     }
   }
