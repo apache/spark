@@ -125,12 +125,21 @@ abstract class JdbcDialect extends Serializable {
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
   }
 
-  protected def escapeSql(value: String): String =
+  /**
+   * Make string literal in SQL valid.
+   * @param value The string to be escaped.
+   * @return Escaped string.
+   */
+  @Since("2.3.0")
+  protected[jdbc] def escapeSql(value: String): String =
     if (value == null) null else StringUtils.replace(value, "'", "''")
 
   /**
    * Converts value to SQL expression.
+   * @param value The value to be converted.
+   * @return Converted value.
    */
+  @Since("2.3.0")
   def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "'" + timestampValue + "'"
