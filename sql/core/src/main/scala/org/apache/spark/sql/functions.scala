@@ -2113,7 +2113,7 @@ object functions {
    * Calculates the hash code of given columns, and returns the result as an int column.
    *
    * @group misc_funcs
-   * @since 2.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
   def hash(cols: Column*): Column = withExpr {
@@ -3073,9 +3073,8 @@ object functions {
    * string.
    *
    * @param e a string column containing JSON data.
-   * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
-   *               the user-provided schema has to be in JSON format. Since Spark 2.2, the DDL
-   *               format is also supported for the schema.
+   * @param schema the schema to use when parsing the json string as a json string
+   *               or a DDL-formatted string.
    *
    * @group collection_funcs
    * @since 2.3.0
