@@ -56,7 +56,6 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalR
   // all other methods inherited from GenericMutableRow are not need
   override protected def genericGet(ordinal: Int): Any = throw new UnsupportedOperationException
   override def numFields: Int = throw new UnsupportedOperationException
-  override def copy(): InternalRow = throw new UnsupportedOperationException
 }
 
 /**

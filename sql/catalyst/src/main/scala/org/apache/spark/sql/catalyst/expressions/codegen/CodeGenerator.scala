@@ -408,9 +408,11 @@ class CodegenContext {
     dataType match {
       case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
-      // The UTF8String may came from UnsafeRow, otherwise clone is cheap (re-use the bytes)
-      case StringType => s"$row.update($ordinal, $value.clone())"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
+      // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
+      // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
+      case StringType | _: StructType | _: ArrayType | _: MapType =>
+        s"$row.update($ordinal, $value.copy())"
       case _ => s"$row.update($ordinal, $value)"
     }
   }
