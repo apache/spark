@@ -38,7 +38,7 @@ object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A : Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
+  def apply[A: Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
 }
 
@@ -47,7 +47,7 @@ object MemoryStream {
  * is primarily intended for use in unit tests as it can only replay data when the object is still
  * available.
  */
-case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
+case class MemoryStream[A: Encoder](id: Int, sqlContext: SQLContext)
     extends Source with Logging {
   protected val encoder = encoderFor[A]
   protected val logicalPlan = StreamingExecutionRelation(this)
@@ -68,7 +68,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
    * -1 is used in calculations below and isn't just an arbitrary constant.
    */
   @GuardedBy("this")
-  protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
+  protected var lastOffsetCommitted: LongOffset = new LongOffset(-1)
 
   def schema: StructType = encoder.schema
 

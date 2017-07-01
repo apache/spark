@@ -1077,7 +1077,7 @@ class DAGScheduler(
             s"(available: ${stage.isAvailable}," +
             s"available outputs: ${stage.numAvailableOutputs}," +
             s"partitions: ${stage.numPartitions})"
-        case stage : ResultStage =>
+        case stage: ResultStage =>
           s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})"
       }
       logDebug(debugString)

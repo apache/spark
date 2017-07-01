@@ -125,8 +125,8 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     case DecimalType() => PrimitiveObjectInspectorFactory.writableHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
-        java.util.Arrays.asList(fields.map(f => f.name) : _*),
-        java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)) : _*))
+        java.util.Arrays.asList(fields.map(f => f.name): _*),
+        java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)): _*))
   }
 
   def checkDataType(dt1: Seq[DataType], dt2: Seq[DataType]): Unit = {

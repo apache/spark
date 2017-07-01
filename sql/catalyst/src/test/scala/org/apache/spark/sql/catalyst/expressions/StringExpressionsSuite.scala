@@ -251,7 +251,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       SubstringIndex(Literal("大千世界大千世界"), Literal( "千"), Literal(2)), "大千世界大")
     // scalastyle:on
     checkEvaluation(
-      SubstringIndex(Literal("www||apache||org"), Literal( "||"), Literal(2)), "www||apache")
+      SubstringIndex(Literal("www||apache||org"), Literal("||"), Literal(2)), "www||apache")
   }
 
   test("ascii for string") {

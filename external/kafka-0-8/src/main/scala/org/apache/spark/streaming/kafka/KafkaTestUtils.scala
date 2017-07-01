@@ -188,7 +188,7 @@ private[kafka] class KafkaTestUtils extends Logging {
   /** Send the array of messages to the Kafka broker */
   def sendMessages(topic: String, messages: Array[String]): Unit = {
     producer = new Producer[String, String](new ProducerConfig(producerConfiguration))
-    producer.send(messages.map { new KeyedMessage[String, String](topic, _ ) }: _*)
+    producer.send(messages.map { new KeyedMessage[String, String](topic, _) }: _*)
     producer.close()
     producer = null
   }

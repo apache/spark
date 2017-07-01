@@ -246,7 +246,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Average)
+    aggregateNumericColumns(colNames: _*)(Average)
   }
 
   /**
@@ -258,7 +258,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def max(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Max)
+    aggregateNumericColumns(colNames: _*)(Max)
   }
 
   /**
@@ -270,7 +270,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Average)
+    aggregateNumericColumns(colNames: _*)(Average)
   }
 
   /**
@@ -282,7 +282,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def min(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Min)
+    aggregateNumericColumns(colNames: _*)(Min)
   }
 
   /**
@@ -294,7 +294,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Sum)
+    aggregateNumericColumns(colNames: _*)(Sum)
   }
 
   /**
@@ -419,7 +419,7 @@ class RelationalGroupedDataset protected[sql](
       outputSchema: StructType): DataFrame = {
       val groupingNamedExpressions = groupingExprs.map(alias)
       val groupingCols = groupingNamedExpressions.map(Column(_))
-      val groupingDataFrame = df.select(groupingCols : _*)
+      val groupingDataFrame = df.select(groupingCols: _*)
       val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
       Dataset.ofRows(
         df.sparkSession,

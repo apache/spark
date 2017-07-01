@@ -102,7 +102,7 @@ object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[(Int, Int)]] {
 }
 
 
-class ParameterizedTypeSum[IN, OUT : Numeric : Encoder](f: IN => OUT)
+class ParameterizedTypeSum[IN, OUT: Numeric: Encoder](f: IN => OUT)
   extends Aggregator[IN, OUT, OUT] {
 
   private val numeric = implicitly[Numeric[OUT]]

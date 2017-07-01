@@ -590,7 +590,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[java.util.ArrayList[java.util.ArrayList[Any]]],
       minSupport: Double,
       maxPatternLength: Int,
-      localProjDBSize: Int ): PrefixSpanModelWrapper = {
+      localProjDBSize: Int): PrefixSpanModelWrapper = {
     val prefixSpan = new PrefixSpan()
       .setMinSupport(minSupport)
       .setMaxPatternLength(maxPatternLength)

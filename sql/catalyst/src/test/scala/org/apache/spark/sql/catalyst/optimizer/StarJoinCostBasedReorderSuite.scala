@@ -418,7 +418,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
     assertEqualPlans(query, expected)
   }
 
-  private def assertEqualPlans( plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
+  private def assertEqualPlans(plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
     val optimized = Optimize.execute(plan1.analyze)
     val expected = plan2.analyze
     compareJoinOrder(optimized, expected)

@@ -29,7 +29,7 @@ import org.apache.spark.metrics.source.Source
 private[spark]
 class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends Source {
 
-  private def fileStats(scheme: String) : Option[FileSystem.Statistics] =
+  private def fileStats(scheme: String): Option[FileSystem.Statistics] =
     FileSystem.getAllStatistics.asScala.find(s => s.getScheme.equals(scheme))
 
   private def registerFileSystemStat[T](

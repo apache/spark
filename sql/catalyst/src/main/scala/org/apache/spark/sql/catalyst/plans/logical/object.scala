@@ -31,16 +31,16 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 object CatalystSerde {
-  def deserialize[T : Encoder](child: LogicalPlan): DeserializeToObject = {
+  def deserialize[T: Encoder](child: LogicalPlan): DeserializeToObject = {
     val deserializer = UnresolvedDeserializer(encoderFor[T].deserializer)
     DeserializeToObject(deserializer, generateObjAttr[T], child)
   }
 
-  def serialize[T : Encoder](child: LogicalPlan): SerializeFromObject = {
+  def serialize[T: Encoder](child: LogicalPlan): SerializeFromObject = {
     SerializeFromObject(encoderFor[T].namedExpressions, child)
   }
 
-  def generateObjAttr[T : Encoder]: Attribute = {
+  def generateObjAttr[T: Encoder]: Attribute = {
     val enc = encoderFor[T]
     val dataType = enc.deserializer.dataType
     val nullable = !enc.clsTag.runtimeClass.isPrimitive
@@ -94,7 +94,7 @@ case class SerializeFromObject(
 }
 
 object MapPartitions {
-  def apply[T : Encoder, U : Encoder](
+  def apply[T: Encoder, U: Encoder](
       func: Iterator[T] => Iterator[U],
       child: LogicalPlan): LogicalPlan = {
     val deserialized = CatalystSerde.deserialize[T](child)
@@ -154,7 +154,7 @@ case class MapPartitionsInR(
 }
 
 object MapElements {
-  def apply[T : Encoder, U : Encoder](
+  def apply[T: Encoder, U: Encoder](
       func: AnyRef,
       child: LogicalPlan): LogicalPlan = {
     val deserialized = CatalystSerde.deserialize[T](child)
@@ -179,7 +179,7 @@ case class MapElements(
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer
 
 object TypedFilter {
-  def apply[T : Encoder](func: AnyRef, child: LogicalPlan): TypedFilter = {
+  def apply[T: Encoder](func: AnyRef, child: LogicalPlan): TypedFilter = {
     TypedFilter(
       func,
       implicitly[Encoder[T]].clsTag.runtimeClass,
@@ -259,7 +259,7 @@ object FunctionUtils {
 
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
-  def apply[T : Encoder, U : Encoder](
+  def apply[T: Encoder, U: Encoder](
       func: T => U,
       child: LogicalPlan): AppendColumns = {
     new AppendColumns(
@@ -271,7 +271,7 @@ object AppendColumns {
       child)
   }
 
-  def apply[T : Encoder, U : Encoder](
+  def apply[T: Encoder, U: Encoder](
       func: T => U,
       inputAttributes: Seq[Attribute],
       child: LogicalPlan): AppendColumns = {
@@ -319,7 +319,7 @@ case class AppendColumnsWithObject(
 
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroups {
-  def apply[K : Encoder, T : Encoder, U : Encoder](
+  def apply[K: Encoder, T: Encoder, U: Encoder](
       func: (K, Iterator[T]) => TraversableOnce[U],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
@@ -475,7 +475,7 @@ case class FlatMapGroupsInR(
 
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
-  def apply[K : Encoder, L : Encoder, R : Encoder, OUT : Encoder](
+  def apply[K: Encoder, L: Encoder, R: Encoder, OUT: Encoder](
       func: (K, Iterator[L], Iterator[R]) => TraversableOnce[OUT],
       leftGroup: Seq[Attribute],
       rightGroup: Seq[Attribute],

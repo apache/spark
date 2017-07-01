@@ -116,36 +116,36 @@ class WindowOperationsSuite extends TestSuiteBase {
 
   testWindow(
     "basic window",
-    Seq( Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5)),
-    Seq( Seq(0), Seq(0, 1), Seq(1, 2), Seq(2, 3), Seq(3, 4), Seq(4, 5))
+    Seq(Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5)),
+    Seq(Seq(0), Seq(0, 1), Seq(1, 2), Seq(2, 3), Seq(3, 4), Seq(4, 5))
   )
 
   testWindow(
     "tumbling window",
-    Seq( Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5)),
-    Seq( Seq(0, 1), Seq(2, 3), Seq(4, 5)),
+    Seq(Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5)),
+    Seq(Seq(0, 1), Seq(2, 3), Seq(4, 5)),
     Seconds(2),
     Seconds(2)
   )
 
   testWindow(
     "larger window",
-    Seq( Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5)),
-    Seq( Seq(0, 1), Seq(0, 1, 2, 3), Seq(2, 3, 4, 5), Seq(4, 5)),
+    Seq(Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5)),
+    Seq(Seq(0, 1), Seq(0, 1, 2, 3), Seq(2, 3, 4, 5), Seq(4, 5)),
     Seconds(4),
     Seconds(2)
   )
 
   testWindow(
     "non-overlapping window",
-    Seq( Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5)),
-    Seq( Seq(1, 2), Seq(4, 5)),
+    Seq(Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5)),
+    Seq(Seq(1, 2), Seq(4, 5)),
     Seconds(2),
     Seconds(3)
   )
 
   test("window - persistence level") {
-    val input = Seq( Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5))
+    val input = Seq(Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5))
     val ssc = new StreamingContext(conf, batchDuration)
     val inputStream = new TestInputStream[Int](ssc, input, 1)
     val windowStream1 = inputStream.window(batchDuration * 2)
@@ -161,26 +161,26 @@ class WindowOperationsSuite extends TestSuiteBase {
 
   testReduceByKeyAndWindow(
     "basic reduction",
-    Seq( Seq(("a", 1), ("a", 3)) ),
-    Seq( Seq(("a", 4)) )
+    Seq(Seq(("a", 1), ("a", 3))),
+    Seq(Seq(("a", 4)))
   )
 
   testReduceByKeyAndWindow(
     "key already in window and new value added into window",
-    Seq( Seq(("a", 1)), Seq(("a", 1)) ),
-    Seq( Seq(("a", 1)), Seq(("a", 2)) )
+    Seq(Seq(("a", 1)), Seq(("a", 1))),
+    Seq(Seq(("a", 1)), Seq(("a", 2)))
   )
 
   testReduceByKeyAndWindow(
     "new key added into window",
-    Seq( Seq(("a", 1)), Seq(("a", 1), ("b", 1)) ),
-    Seq( Seq(("a", 1)), Seq(("a", 2), ("b", 1)) )
+    Seq(Seq(("a", 1)), Seq(("a", 1), ("b", 1))),
+    Seq(Seq(("a", 1)), Seq(("a", 2), ("b", 1)))
   )
 
   testReduceByKeyAndWindow(
     "key removed from window",
-    Seq( Seq(("a", 1)), Seq(("a", 1)), Seq(), Seq() ),
-    Seq( Seq(("a", 1)), Seq(("a", 2)), Seq(("a", 1)), Seq() )
+    Seq(Seq(("a", 1)), Seq(("a", 1)), Seq(), Seq()),
+    Seq(Seq(("a", 1)), Seq(("a", 2)), Seq(("a", 1)), Seq())
   )
 
   testReduceByKeyAndWindow(
@@ -197,26 +197,26 @@ class WindowOperationsSuite extends TestSuiteBase {
 
   testReduceByKeyAndWindowWithInverse(
     "basic reduction",
-    Seq(Seq(("a", 1), ("a", 3)) ),
-    Seq(Seq(("a", 4)) )
+    Seq(Seq(("a", 1), ("a", 3))),
+    Seq(Seq(("a", 4)))
   )
 
   testReduceByKeyAndWindowWithInverse(
     "key already in window and new value added into window",
-    Seq( Seq(("a", 1)), Seq(("a", 1)) ),
-    Seq( Seq(("a", 1)), Seq(("a", 2)) )
+    Seq(Seq(("a", 1)), Seq(("a", 1))),
+    Seq(Seq(("a", 1)), Seq(("a", 2)))
   )
 
   testReduceByKeyAndWindowWithInverse(
     "new key added into window",
-    Seq( Seq(("a", 1)), Seq(("a", 1), ("b", 1)) ),
-    Seq( Seq(("a", 1)), Seq(("a", 2), ("b", 1)) )
+    Seq(Seq(("a", 1)), Seq(("a", 1), ("b", 1))),
+    Seq(Seq(("a", 1)), Seq(("a", 2), ("b", 1)))
   )
 
   testReduceByKeyAndWindowWithInverse(
     "key removed from window",
-    Seq( Seq(("a", 1)), Seq(("a", 1)), Seq(), Seq() ),
-    Seq( Seq(("a", 1)), Seq(("a", 2)), Seq(("a", 1)), Seq(("a", 0)) )
+    Seq(Seq(("a", 1)), Seq(("a", 1)), Seq(), Seq()),
+    Seq(Seq(("a", 1)), Seq(("a", 2)), Seq(("a", 1)), Seq(("a", 0)))
   )
 
   testReduceByKeyAndWindowWithInverse(
@@ -245,7 +245,7 @@ class WindowOperationsSuite extends TestSuiteBase {
 
   test("countByWindow") {
     val input = Seq(Seq(1), Seq(1), Seq(1, 2), Seq(0), Seq(), Seq() )
-    val expectedOutput = Seq( Seq(1), Seq(2), Seq(3), Seq(3), Seq(1), Seq(0))
+    val expectedOutput = Seq(Seq(1), Seq(2), Seq(3), Seq(3), Seq(1), Seq(0))
     val windowDuration = Seconds(2)
     val slideDuration = Seconds(1)
     val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt
@@ -257,7 +257,7 @@ class WindowOperationsSuite extends TestSuiteBase {
 
   test("countByValueAndWindow") {
     val input = Seq(Seq("a"), Seq("b", "b"), Seq("a", "b"))
-    val expectedOutput = Seq( Seq(("a", 1)), Seq(("a", 1), ("b", 2)), Seq(("a", 1), ("b", 3)))
+    val expectedOutput = Seq(Seq(("a", 1)), Seq(("a", 1), ("b", 2)), Seq(("a", 1), ("b", 3)))
     val windowDuration = Seconds(2)
     val slideDuration = Seconds(1)
     val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt

@@ -114,7 +114,7 @@ private[deploy] class Worker(
    */
   private var masterAddressToConnect: Option[RpcAddress] = None
   private var activeMasterUrl: String = ""
-  private[worker] var activeMasterWebUiUrl : String = ""
+  private[worker] var activeMasterWebUiUrl: String = ""
   private var workerWebUiUrl: String = ""
   private val workerUri = RpcEndpointAddress(rpcEnv.address, endpointName).toString
   private var registered = false
@@ -178,7 +178,7 @@ private[deploy] class Worker(
       // This sporadically fails - not sure why ... !workDir.exists() && !workDir.mkdirs()
       // So attempting to create and then check if directory was created or not.
       workDir.mkdirs()
-      if ( !workDir.exists() || !workDir.isDirectory) {
+      if (!workDir.exists() || !workDir.isDirectory) {
         logError("Failed to create work directory " + workDir)
         System.exit(1)
       }

@@ -174,7 +174,7 @@ trait JobSubmitter {
  * jobs.
  */
 @DeveloperApi
-class ComplexFutureAction[T](run : JobSubmitter => Future[T])
+class ComplexFutureAction[T](run: JobSubmitter => Future[T])
   extends FutureAction[T] { self =>
 
   @volatile private var _cancelled = false

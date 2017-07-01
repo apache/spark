@@ -406,7 +406,7 @@ private object SparkDocker {
     new TestWorkerInfo(ip, id, outFile)
   }
 
-  private def startNode(dockerCmd: ProcessBuilder) : (String, DockerId, File) = {
+  private def startNode(dockerCmd: ProcessBuilder): (String, DockerId, File) = {
     val ipPromise = Promise[String]()
     val outFile = File.createTempFile("fault-tolerance-test", "", Utils.createTempDir())
     val outStream: FileWriter = new FileWriter(outFile)
@@ -440,7 +440,7 @@ private object Docker extends Logging {
     cmd
   }
 
-  def kill(dockerId: DockerId) : Unit = {
+  def kill(dockerId: DockerId): Unit = {
     "docker kill %s".format(dockerId.id).!
   }
 

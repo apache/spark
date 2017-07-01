@@ -103,7 +103,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       (part, (e.srcId, e.dstId, e.attr))
     }
       .partitionBy(new HashPartitioner(numPartitions))
-      .mapPartitionsWithIndex( { (pid, iter) =>
+      .mapPartitionsWithIndex({ (pid, iter) =>
         val builder = new EdgePartitionBuilder[ED, VD]()(edTag, vdTag)
         iter.foreach { message =>
           val data = message._2

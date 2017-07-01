@@ -275,7 +275,7 @@ private[spark] class TaskSchedulerImpl(
       maxLocality: TaskLocality,
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
-      tasks: IndexedSeq[ArrayBuffer[TaskDescription]]) : Boolean = {
+      tasks: IndexedSeq[ArrayBuffer[TaskDescription]]): Boolean = {
     var launchedTask = false
     // nodes and executors that are blacklisted for the entire application have already been
     // filtered out by this point

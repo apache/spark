@@ -34,7 +34,7 @@ import org.apache.spark.util.Benchmark
  */
 class UnsafeArrayDataBenchmark extends BenchmarkBase {
 
-  def calculateHeaderPortionInBytes(count: Int) : Int = {
+  def calculateHeaderPortionInBytes(count: Int): Int = {
     /* 4 + 4 * count // Use this expression for SPARK-15962 */
     UnsafeArrayData.calculateHeaderPortionInBytes(count)
   }

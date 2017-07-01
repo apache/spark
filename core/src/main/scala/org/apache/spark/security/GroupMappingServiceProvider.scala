@@ -33,6 +33,6 @@ trait GroupMappingServiceProvider {
    * @param userName User's Name
    * @return set of groups that the user belongs to. Empty in case of an invalid user.
    */
-  def getGroups(userName : String) : Set[String]
+  def getGroups(userName: String): Set[String]
 
 }

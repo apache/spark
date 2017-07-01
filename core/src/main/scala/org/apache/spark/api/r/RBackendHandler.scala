@@ -164,7 +164,7 @@ private[r] class RBackendHandler(server: RBackend)
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
 
-        val ret = selectedMethods(index.get).invoke(obj, args : _*)
+        val ret = selectedMethods(index.get).invoke(obj, args: _*)
 
         // Write status bit
         writeInt(dos, 0)
@@ -185,7 +185,7 @@ private[r] class RBackendHandler(server: RBackend)
           throw new Exception(s"No matched constructor found for $cls")
         }
 
-        val obj = ctors(index.get).newInstance(args : _*)
+        val obj = ctors(index.get).newInstance(args: _*)
 
         writeInt(dos, 0)
         writeObject(dos, obj.asInstanceOf[AnyRef], server.jvmObjectTracker)

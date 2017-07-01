@@ -89,7 +89,7 @@ abstract class QueryTest extends PlanTest {
    * Evaluates a dataset to make sure that the result of calling collect matches the given
    * expected answer, after sort.
    */
-  protected def checkDatasetUnorderly[T : Ordering](
+  protected def checkDatasetUnorderly[T: Ordering](
       ds: => Dataset[T],
       expectedAnswer: T*): Unit = {
     val result = getResult(ds)

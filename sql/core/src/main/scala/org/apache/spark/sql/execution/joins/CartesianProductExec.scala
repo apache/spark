@@ -32,8 +32,8 @@ import org.apache.spark.util.CompletionIterator
  * materialize the right RDD (in case of the right RDD is nondeterministic).
  */
 class UnsafeCartesianRDD(
-    left : RDD[UnsafeRow],
-    right : RDD[UnsafeRow],
+    left: RDD[UnsafeRow],
+    right: RDD[UnsafeRow],
     numFieldsOfRight: Int,
     spillThreshold: Int)
   extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {

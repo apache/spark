@@ -46,15 +46,15 @@ class ApplicationAttemptInfo private[spark](
 }
 
 class ExecutorStageSummary private[spark](
-    val taskTime : Long,
-    val failedTasks : Int,
-    val succeededTasks : Int,
-    val inputBytes : Long,
-    val outputBytes : Long,
-    val shuffleRead : Long,
-    val shuffleWrite : Long,
-    val memoryBytesSpilled : Long,
-    val diskBytesSpilled : Long)
+    val taskTime: Long,
+    val failedTasks: Int,
+    val succeededTasks: Int,
+    val inputBytes: Long,
+    val outputBytes: Long,
+    val shuffleRead: Long,
+    val shuffleWrite: Long,
+    val memoryBytesSpilled: Long,
+    val diskBytesSpilled: Long)
 
 class ExecutorSummary private[spark](
     val id: String,

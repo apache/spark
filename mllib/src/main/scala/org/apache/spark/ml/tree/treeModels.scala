@@ -198,7 +198,7 @@ private[ml] object TreeEnsembleModel {
    *                     If -1, then numFeatures is set based on the max feature index in all trees.
    * @return  Feature importance values, of length numFeatures.
    */
-  def featureImportances[M <: DecisionTreeModel : ClassTag](tree: M, numFeatures: Int): Vector = {
+  def featureImportances[M <: DecisionTreeModel: ClassTag](tree: M, numFeatures: Int): Vector = {
     featureImportances(Array(tree), numFeatures)
   }
 

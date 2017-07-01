@@ -92,7 +92,7 @@ case class CallMethodViaReflection(children: Seq[Expression])
       }
       i += 1
     }
-    val ret = method.invoke(null, buffer : _*)
+    val ret = method.invoke(null, buffer: _*)
     UTF8String.fromString(String.valueOf(ret))
   }
 

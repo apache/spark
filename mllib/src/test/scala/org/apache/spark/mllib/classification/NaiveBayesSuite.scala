@@ -60,7 +60,7 @@ object NaiveBayesSuite {
       val y = calcLabel(rnd.nextDouble(), _pi)
       val xi = modelType match {
         case Bernoulli => Array.tabulate[Double] (D) { j =>
-            if (rnd.nextDouble () < _theta(y)(j) ) 1 else 0
+            if (rnd.nextDouble () < _theta(y)(j)) 1 else 0
         }
         case Multinomial =>
           val mult = BrzMultinomial(BDV(_theta(y)))

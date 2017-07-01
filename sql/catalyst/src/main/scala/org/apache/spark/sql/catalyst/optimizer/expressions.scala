@@ -361,7 +361,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         // a branc with a TRue condition eliminates all following branches,
         // these branches can be pruned away
         val (h, t) = branches.span(_._1 != TrueLiteral)
-        CaseWhen( h :+ t.head, None)
+        CaseWhen(h :+ t.head, None)
     }
   }
 }

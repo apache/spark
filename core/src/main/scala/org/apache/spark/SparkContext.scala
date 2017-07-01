@@ -2869,7 +2869,7 @@ private[spark] class WritableFactory[T](
 
 object WritableFactory {
 
-  private[spark] def simpleWritableFactory[T: ClassTag, W <: Writable : ClassTag](convert: T => W)
+  private[spark] def simpleWritableFactory[T: ClassTag, W <: Writable: ClassTag](convert: T => W)
     : WritableFactory[T] = {
     val writableClass = implicitly[ClassTag[W]].runtimeClass.asInstanceOf[Class[W]]
     new WritableFactory[T](_ => writableClass, convert)

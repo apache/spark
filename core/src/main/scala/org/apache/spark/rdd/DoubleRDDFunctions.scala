@@ -134,7 +134,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     }.reduce { (maxmin1, maxmin2) =>
       (maxmin1._1.max(maxmin2._1), maxmin1._2.min(maxmin2._2))
     }
-    if (min.isNaN || max.isNaN || max.isInfinity || min.isInfinity ) {
+    if (min.isNaN || max.isNaN || max.isInfinity || min.isInfinity) {
       throw new UnsupportedOperationException(
         "Histogram on either an empty RDD or RDD containing +/-infinity or NaN")
     }

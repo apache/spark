@@ -956,7 +956,7 @@ class HiveDDLSuite
     }
   }
 
-  private def withCreateTableLikeTempView(location : Option[String]): Unit = {
+  private def withCreateTableLikeTempView(location: Option[String]): Unit = {
     val sourceViewName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -988,7 +988,7 @@ class HiveDDLSuite
     }
   }
 
-  private def withCreateTableLikeDSTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeDSTable(location: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -1023,7 +1023,7 @@ class HiveDDLSuite
     }
   }
 
-  private def withCreateTableLikeExtDSTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeExtDSTable(location: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -1061,7 +1061,7 @@ class HiveDDLSuite
     }
   }
 
-  private def withCreateTableLikeManagedHiveTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeManagedHiveTable(location: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -1093,7 +1093,7 @@ class HiveDDLSuite
     }
   }
 
-  private def withCreateTableLikeExtHiveTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeExtHiveTable(location: Option[String]): Unit = {
     val catalog = spark.sessionState.catalog
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTempDir { tmpDir =>
@@ -1143,7 +1143,7 @@ class HiveDDLSuite
     }
   }
 
-  private def withCreateTableLikeView(location : Option[String]): Unit = {
+  private def withCreateTableLikeView(location: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val sourceViewName = "view"
     val targetTabName = "tab2"

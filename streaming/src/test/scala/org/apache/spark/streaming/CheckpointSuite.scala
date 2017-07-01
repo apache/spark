@@ -415,7 +415,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
   // source - TestInputDStream.
   test("recovery with map and reduceByKey operations") {
     testCheckpointedOperation(
-      Seq( Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq() ),
+      Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
       (s: DStream[String]) => s.map(x => (x, 1)).reduceByKey(_ + _),
       Seq(
         Seq(("a", 2), ("b", 1)),

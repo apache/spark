@@ -44,7 +44,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   properties.setProperty("rowId", "false")
 
   val testH2Dialect = new JdbcDialect {
-    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
     override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
   }
 

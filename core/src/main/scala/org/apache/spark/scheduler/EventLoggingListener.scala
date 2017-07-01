@@ -49,7 +49,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  */
 private[spark] class EventLoggingListener(
     appId: String,
-    appAttemptId : Option[String],
+    appAttemptId: Option[String],
     logBaseDir: URI,
     sparkConf: SparkConf,
     hadoopConf: Configuration)
@@ -57,7 +57,7 @@ private[spark] class EventLoggingListener(
 
   import EventLoggingListener._
 
-  def this(appId: String, appAttemptId : Option[String], logBaseDir: URI, sparkConf: SparkConf) =
+  def this(appId: String, appAttemptId: Option[String], logBaseDir: URI, sparkConf: SparkConf) =
     this(appId, appAttemptId, logBaseDir, sparkConf,
       SparkHadoopUtil.get.newConfiguration(sparkConf))
 

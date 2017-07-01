@@ -114,7 +114,7 @@ object ReferenceValueClass {
 class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
 
-  implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
+  implicit def encoder[T: TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
 
   // test flat encoders
   encodeDecodeTest(false, "primitive boolean")
@@ -189,7 +189,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     encoderFor(Encoders.javaSerialization[JavaSerializable]))
 
   // test product encoders
-  private def productTest[T <: Product : ExpressionEncoder](input: T): Unit = {
+  private def productTest[T <: Product: ExpressionEncoder](input: T): Unit = {
     encodeDecodeTest(input, input.getClass.getSimpleName)
   }
 
@@ -361,7 +361,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 
-  private def encodeDecodeTest[T : ExpressionEncoder](
+  private def encodeDecodeTest[T: ExpressionEncoder](
       input: T,
       testName: String): Unit = {
     test(s"encode/decode for $testName: $input") {

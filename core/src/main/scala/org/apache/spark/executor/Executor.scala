@@ -205,7 +205,7 @@ private[spark] class Executor(
    * tasks instead of taking the JVM down.
    * @param interruptThread whether to interrupt the task thread
    */
-  def killAllTasks(interruptThread: Boolean, reason: String) : Unit = {
+  def killAllTasks(interruptThread: Boolean, reason: String): Unit = {
     runningTasks.keys().asScala.foreach(t =>
       killTask(t, interruptThread = interruptThread, reason = reason))
   }

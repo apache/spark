@@ -379,7 +379,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     }
   }
 
-  def getPartitions: Array[PartitionGroup] = groupArr.filter( pg => pg.numPartitions > 0).toArray
+  def getPartitions: Array[PartitionGroup] = groupArr.filter(pg => pg.numPartitions > 0).toArray
 
   /**
    * Runs the packing algorithm and returns an array of PartitionGroups that if possible are

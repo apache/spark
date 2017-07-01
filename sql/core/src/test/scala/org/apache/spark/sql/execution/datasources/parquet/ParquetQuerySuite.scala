@@ -756,7 +756,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")}: _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
@@ -767,10 +767,10 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
         // return batch
         val columns = Seq.tabulate(9) {i => s"c$i"}
-        val df3 = df2.selectExpr(columns : _*)
+        val df3 = df2.selectExpr(columns: _*)
         val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
         assert(fileScan3.asInstanceOf[FileSourceScanExec].supportsBatch)
-        checkAnswer(df3, df.selectExpr(columns : _*))
+        checkAnswer(df3, df.selectExpr(columns: _*))
       }
     }
   }

@@ -525,7 +525,7 @@ object FunctionRegistry {
         val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
           throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
+        Try(f.newInstance(expressions: _*).asInstanceOf[Expression]) match {
           case Success(e) => e
           case Failure(e) =>
             // the exception is an invocation exception. To get a meaningful message, we need the
@@ -561,7 +561,7 @@ object FunctionRegistry {
   /**
    * Creates an [[ExpressionInfo]] for the function as defined by expression T using the given name.
    */
-  private def expressionInfo[T <: Expression : ClassTag](name: String): ExpressionInfo = {
+  private def expressionInfo[T <: Expression: ClassTag](name: String): ExpressionInfo = {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
@@ -571,7 +571,7 @@ object FunctionRegistry {
     }
   }
 
-  private def expressionGeneratorOuter[T <: Generator : ClassTag](name: String)
+  private def expressionGeneratorOuter[T <: Generator: ClassTag](name: String)
     : (String, (ExpressionInfo, FunctionBuilder)) = {
     val (_, (info, generatorBuilder)) = expression[T](name)
     val outerBuilder = (args: Seq[Expression]) => {

@@ -307,7 +307,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         )
         (_taskTable, _taskTable.table(page))
       } catch {
-        case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
+        case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
           val errorMessage =
             <div class="alert alert-error">
               <p>Error while rendering stage table:</p>

@@ -595,7 +595,7 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.executor.port", "2.0.0", "Not used any more")
     )
 
-    Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
+    Map(configs.map { cfg => (cfg.key -> cfg) }: _*)
   }
 
   /**

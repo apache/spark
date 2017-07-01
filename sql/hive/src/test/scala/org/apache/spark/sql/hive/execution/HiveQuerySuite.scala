@@ -265,7 +265,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   // Jdk version leads to different query output for double, so not use createQueryTest here
   test("division") {
     val res = sql("SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1").collect().head
-    Seq(2.0, 0.5, 0.3333333333333333, 0.002).zip(res.toSeq).foreach( x =>
+    Seq(2.0, 0.5, 0.3333333333333333, 0.002).zip(res.toSeq).foreach(x =>
       assert(x._1 == x._2.asInstanceOf[Double]))
   }
 

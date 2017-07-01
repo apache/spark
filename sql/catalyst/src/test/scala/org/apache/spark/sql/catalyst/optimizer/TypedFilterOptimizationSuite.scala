@@ -36,7 +36,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
         CombineTypedFilters) :: Nil
   }
 
-  implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
+  implicit private def productEncoder[T <: Product: TypeTag] = ExpressionEncoder[T]()
 
   test("filter after serialize with the same object type") {
     val input = LocalRelation('_1.int, '_2.int)

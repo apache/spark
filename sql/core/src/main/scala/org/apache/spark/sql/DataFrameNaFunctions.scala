@@ -391,7 +391,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
         df.col(f.name)
       }
     }
-    df.select(projections : _*)
+    df.select(projections: _*)
   }
 
   private def fillMap(values: Seq[(String, Any)]): DataFrame = {
@@ -422,7 +422,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
         }
       }.getOrElse(df.col(f.name))
     }
-    df.select(projections : _*)
+    df.select(projections: _*)
   }
 
   /**
@@ -495,6 +495,6 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
         df.col(f.name)
       }
     }
-    df.select(projections : _*)
+    df.select(projections: _*)
   }
 }

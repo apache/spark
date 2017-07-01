@@ -23,7 +23,7 @@ import org.apache.spark.sql.types.{BooleanType, DataType, LongType, MetadataBuil
 
 private case object MySQLDialect extends JdbcDialect {
 
-  override def canHandle(url : String): Boolean = url.startsWith("jdbc:mysql")
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:mysql")
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {

@@ -100,7 +100,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   private[sql] lazy val interpretedOrdering: Ordering[ArrayData] = new Ordering[ArrayData] {
     private[this] val elementOrdering: Ordering[Any] = elementType match {
       case dt: AtomicType => dt.ordering.asInstanceOf[Ordering[Any]]
-      case a : ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case other =>
         throw new IllegalArgumentException(s"Type $other does not support ordered operations")

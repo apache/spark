@@ -58,7 +58,7 @@ object FlumePollingEventCount {
     val stream = FlumeUtils.createPollingStream(ssc, host, port)
 
     // Print out the count of events received from this server in each batch
-    stream.count().map(cnt => "Received " + cnt + " flume events." ).print()
+    stream.count().map(cnt => "Received " + cnt + " flume events.").print()
 
     ssc.start()
     ssc.awaitTermination()

@@ -52,7 +52,7 @@ class DummyClass7 {
 }
 
 object DummyString {
-  def apply(str: String) : DummyString = new DummyString(str.toArray)
+  def apply(str: String): DummyString = new DummyString(str.toArray)
 }
 class DummyString(val arr: Array[Char]) {
   override val hashCode: Int = 0

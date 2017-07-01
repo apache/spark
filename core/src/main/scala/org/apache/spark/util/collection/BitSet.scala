@@ -75,7 +75,7 @@ class BitSet(numBits: Int) extends Serializable {
     assert(newBS.numWords >= numWords)
     assert(newBS.numWords >= other.numWords)
     var ind = 0
-    while( ind < smaller ) {
+    while(ind < smaller) {
       newBS.words(ind) = words(ind) & other.words(ind)
       ind += 1
     }
@@ -92,15 +92,15 @@ class BitSet(numBits: Int) extends Serializable {
     assert(newBS.numWords >= other.numWords)
     val smaller = math.min(numWords, other.numWords)
     var ind = 0
-    while( ind < smaller ) {
+    while(ind < smaller) {
       newBS.words(ind) = words(ind) | other.words(ind)
       ind += 1
     }
-    while( ind < numWords ) {
+    while(ind < numWords) {
       newBS.words(ind) = words(ind)
       ind += 1
     }
-    while( ind < other.numWords ) {
+    while(ind < other.numWords) {
       newBS.words(ind) = other.words(ind)
       ind += 1
     }
@@ -120,10 +120,10 @@ class BitSet(numBits: Int) extends Serializable {
       ind += 1
     }
     if (ind < numWords) {
-      Array.copy( words, ind, newBS.words, ind, numWords - ind )
+      Array.copy(words, ind, newBS.words, ind, numWords - ind)
     }
     if (ind < other.numWords) {
-      Array.copy( other.words, ind, newBS.words, ind, other.numWords - ind )
+      Array.copy(other.words, ind, newBS.words, ind, other.numWords - ind)
     }
     newBS
   }
@@ -141,7 +141,7 @@ class BitSet(numBits: Int) extends Serializable {
       ind += 1
     }
     if (ind < numWords) {
-      Array.copy( words, ind, newBS.words, ind, numWords - ind )
+      Array.copy(words, ind, newBS.words, ind, numWords - ind)
     }
     newBS
   }

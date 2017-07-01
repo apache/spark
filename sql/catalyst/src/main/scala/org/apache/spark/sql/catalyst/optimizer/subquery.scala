@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
 object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   private def getValueExpression(e: Expression): Seq[Expression] = {
     e match {
-      case cns : CreateNamedStruct => cns.valExprs
+      case cns: CreateNamedStruct => cns.valExprs
       case expr => Seq(expr)
     }
   }
@@ -268,7 +268,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    * Statically evaluate an expression containing zero or more placeholders, given a set
    * of bindings for placeholder values.
    */
-  private def evalExpr(expr: Expression, bindings: Map[ExprId, Option[Any]]) : Option[Any] = {
+  private def evalExpr(expr: Expression, bindings: Map[ExprId, Option[Any]]): Option[Any] = {
     val rewrittenExpr = expr transform {
       case r: AttributeReference =>
         bindings(r.exprId) match {
@@ -282,7 +282,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
   /**
    * Statically evaluate an expression containing one or more aggregates on an empty input.
    */
-  private def evalAggOnZeroTups(expr: Expression) : Option[Any] = {
+  private def evalAggOnZeroTups(expr: Expression): Option[Any] = {
     // AggregateExpressions are Unevaluable, so we need to replace all aggregates
     // in the expression with the value they would return for zero input tuples.
     // Also replace attribute refs (for example, for grouping columns) with NULL.
@@ -302,11 +302,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    * [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]. If the checks in
    * CheckAnalysis become less restrictive, this method will need to change.
    */
-  private def evalSubqueryOnZeroTups(plan: LogicalPlan) : Option[Any] = {
+  private def evalSubqueryOnZeroTups(plan: LogicalPlan): Option[Any] = {
     // Inputs to this method will start with a chain of zero or more SubqueryAlias
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
-    def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = lp match {
+    def evalPlan(lp: LogicalPlan): Map[ExprId, Option[Any]] = lp match {
       case SubqueryAlias(_, child) => evalPlan(child)
       case Filter(condition, child) =>
         val bindings = evalPlan(child)
@@ -349,7 +349,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    * (first part of returned value), the HAVING clause of the innermost query block
    * (optional second part) and the parts below the HAVING CLAUSE (third part).
    */
-  private def splitSubquery(plan: LogicalPlan) : (Seq[LogicalPlan], Option[Filter], Aggregate) = {
+  private def splitSubquery(plan: LogicalPlan): (Seq[LogicalPlan], Option[Filter], Aggregate) = {
     val topPart = ArrayBuffer.empty[LogicalPlan]
     var bottomPart: LogicalPlan = plan
     while (true) {

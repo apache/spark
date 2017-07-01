@@ -155,7 +155,7 @@ object Literal {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
 
-  def create[T : TypeTag](v: T): Literal = Try {
+  def create[T: TypeTag](v: T): Literal = Try {
     val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
     val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
     Literal(convert(v), dataType)

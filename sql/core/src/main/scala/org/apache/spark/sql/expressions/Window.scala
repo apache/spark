@@ -44,7 +44,7 @@ object Window {
    */
   @scala.annotation.varargs
   def partitionBy(colName: String, colNames: String*): WindowSpec = {
-    spec.partitionBy(colName, colNames : _*)
+    spec.partitionBy(colName, colNames: _*)
   }
 
   /**
@@ -53,7 +53,7 @@ object Window {
    */
   @scala.annotation.varargs
   def partitionBy(cols: Column*): WindowSpec = {
-    spec.partitionBy(cols : _*)
+    spec.partitionBy(cols: _*)
   }
 
   /**
@@ -62,7 +62,7 @@ object Window {
    */
   @scala.annotation.varargs
   def orderBy(colName: String, colNames: String*): WindowSpec = {
-    spec.orderBy(colName, colNames : _*)
+    spec.orderBy(colName, colNames: _*)
   }
 
   /**
@@ -71,7 +71,7 @@ object Window {
    */
   @scala.annotation.varargs
   def orderBy(cols: Column*): WindowSpec = {
-    spec.orderBy(cols : _*)
+    spec.orderBy(cols: _*)
   }
 
   /**

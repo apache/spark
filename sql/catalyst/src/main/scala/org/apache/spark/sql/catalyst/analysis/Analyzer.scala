@@ -151,7 +151,7 @@ class Analyzer(
       ResolveInlineTables(conf) ::
       ResolveTimeZone(conf) ::
       TypeCoercion.typeCoercionRules ++
-      extendedResolutionRules : _*),
+      extendedResolutionRules: _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("View", Once,
       AliasViewChild(conf)),
@@ -182,7 +182,7 @@ class Analyzer(
 
     def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
       plan transformDown {
-        case u : UnresolvedRelation =>
+        case u: UnresolvedRelation =>
           cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
             .map(_._2).getOrElse(u)
         case other =>
@@ -917,7 +917,7 @@ class Analyzer(
           })
         case c: CreateNamedStruct if containsStar(c.valExprs) =>
           val newChildren = c.children.grouped(2).flatMap {
-            case Seq(k, s : Star) => CreateStruct(s.expand(child, resolver)).children
+            case Seq(k, s: Star) => CreateStruct(s.expand(child, resolver)).children
             case kv => kv
           }
           c.copy(children = newChildren.toList )
@@ -2061,7 +2061,7 @@ class Analyzer(
         joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true))
-      case _ : InnerLike =>
+      case _: InnerLike =>
         leftKeys ++ lUniqueOutput ++ rUniqueOutput
       case _ =>
         sys.error("Unsupported natural join type " + joinType)

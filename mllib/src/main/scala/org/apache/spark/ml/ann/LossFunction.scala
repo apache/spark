@@ -119,6 +119,6 @@ private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with
 
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
     ApplyInPlace(output, target, delta, (o: Double, t: Double) => o - t)
-    -Bsum( target *:* brzlog(output)) / output.cols
+    -Bsum(target *:* brzlog(output)) / output.cols
   }
 }

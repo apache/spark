@@ -202,7 +202,7 @@ private[spark] class SecurityManager(
     stringToSet(sparkConf.get("spark.admin.acls", ""))
 
   // admin group acls should be set before view or modify group acls
-  private var adminAclsGroups : Set[String] =
+  private var adminAclsGroups: Set[String] =
     stringToSet(sparkConf.get("spark.admin.acls.groups", ""))
 
   private var viewAcls: Set[String] = _

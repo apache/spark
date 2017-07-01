@@ -106,7 +106,7 @@ object functions {
    * @group normal_funcs
    * @since 2.2.0
    */
-  def typedLit[T : TypeTag](literal: T): Column = literal match {
+  def typedLit[T: TypeTag](literal: T): Column = literal match {
     case c: Column => c
     case s: Symbol => new ColumnName(s.name)
     case _ => Column(Literal.create(literal))
@@ -373,7 +373,7 @@ object functions {
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
-    countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
+    countDistinct(Column(columnName), columnNames.map(Column.apply): _*)
 
   /**
    * Aggregate function: returns the population covariance for two columns.
@@ -509,7 +509,7 @@ object functions {
    * @since 2.0.0
    */
   def grouping_id(colName: String, colNames: String*): Column = {
-    grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
+    grouping_id((Seq(colName) ++ colNames).map(n => Column(n)): _*)
   }
 
   /**
@@ -992,7 +992,7 @@ object functions {
    */
   @scala.annotation.varargs
   def array(colName: String, colNames: String*): Column = {
-    array((colName +: colNames).map(col) : _*)
+    array((colName +: colNames).map(col): _*)
   }
 
   /**
@@ -1228,7 +1228,7 @@ object functions {
    */
   @scala.annotation.varargs
   def struct(colName: String, colNames: String*): Column = {
-    struct((colName +: colNames).map(col) : _*)
+    struct((colName +: colNames).map(col): _*)
   }
 
   /**

@@ -77,7 +77,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.
    */
-  protected def checkParquetFile[T <: Product : ClassTag: TypeTag](data: Seq[T]): Unit = {
+  protected def checkParquetFile[T <: Product: ClassTag: TypeTag](data: Seq[T]): Unit = {
     withParquetDataFrame(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
   }
 

@@ -397,7 +397,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * that all random walks are started relative to the source vertices
    */
   def staticParallelPersonalizedPageRank(sources: Array[VertexId], numIter: Int,
-    resetProb: Double = 0.15) : Graph[Vector, Double] = {
+    resetProb: Double = 0.15): Graph[Vector, Double] = {
     PageRank.runParallelPersonalizedPageRank(graph, numIter, resetProb, sources)
   }
 

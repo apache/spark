@@ -138,7 +138,9 @@ case class InsertIntoHadoopFsRelationCommand(
               AlterTableDropPartitionCommand(
                 catalogTable.get.identifier, deletedPartitions.toSeq,
                 ifExists = true, purge = false,
+                // scalastyle:off
                 retainData = true /* already deleted */).run(sparkSession)
+                // scalastyle:on
             }
           }
         }

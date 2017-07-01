@@ -46,7 +46,7 @@ object AggregateMessagesExample {
     // Create a graph with "age" as the vertex property.
     // Here we use a random graph for simplicity.
     val graph: Graph[Double, Int] =
-      GraphGenerators.logNormalGraph(sc, numVertices = 100).mapVertices( (id, _) => id.toDouble )
+      GraphGenerators.logNormalGraph(sc, numVertices = 100).mapVertices((id, _) => id.toDouble )
     // Compute the number of older followers and their total age
     val olderFollowers: VertexRDD[(Int, Double)] = graph.aggregateMessages[(Int, Double)](
       triplet => { // Map Function
@@ -60,7 +60,7 @@ object AggregateMessagesExample {
     )
     // Divide total age by number of older followers to get average age of older followers
     val avgAgeOfOlderFollowers: VertexRDD[Double] =
-      olderFollowers.mapValues( (id, value) =>
+      olderFollowers.mapValues((id, value) =>
         value match { case (count, totalAge) => totalAge / count } )
     // Display the results
     avgAgeOfOlderFollowers.collect.foreach(println(_))

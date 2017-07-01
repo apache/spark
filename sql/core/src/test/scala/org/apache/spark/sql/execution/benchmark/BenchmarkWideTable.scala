@@ -35,7 +35,7 @@ class BenchmarkWideTable extends BenchmarkBase {
     val columns = (0 until 400).map{ i => s"id as id$i"}
     val benchmark = new Benchmark("projection on wide table", N)
     benchmark.addCase("wide table", numIters = 5) { iter =>
-      df.selectExpr(columns : _*).queryExecution.toRdd.count()
+      df.selectExpr(columns: _*).queryExecution.toRdd.count()
     }
     benchmark.run()
 

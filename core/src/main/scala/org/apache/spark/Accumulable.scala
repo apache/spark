@@ -68,7 +68,9 @@ class Accumulable[R, T] private (
   }
 
   private[spark] def this(initialValue: R, param: AccumulableParam[R, T], name: Option[String]) = {
+    // scalastyle:off
     this(initialValue, param, name, false /* countFailedValues */)
+    // scalastyle:on
   }
 
   def this(initialValue: R, param: AccumulableParam[R, T]) = this(initialValue, param, None)

@@ -95,7 +95,7 @@ private[ui] class StageTableBase(
       parameterOtherTable
     ).table(page)
   } catch {
-    case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
+    case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
       <div class="alert alert-error">
         <p>Error while rendering stage table:</p>
         <pre>

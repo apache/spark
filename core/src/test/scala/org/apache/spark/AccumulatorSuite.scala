@@ -47,15 +47,15 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   implicit def setAccum[A]: AccumulableParam[mutable.Set[A], A] =
     new AccumulableParam[mutable.Set[A], A] {
-      def addInPlace(t1: mutable.Set[A], t2: mutable.Set[A]) : mutable.Set[A] = {
+      def addInPlace(t1: mutable.Set[A], t2: mutable.Set[A]): mutable.Set[A] = {
         t1 ++= t2
         t1
       }
-      def addAccumulator(t1: mutable.Set[A], t2: A) : mutable.Set[A] = {
+      def addAccumulator(t1: mutable.Set[A], t2: A): mutable.Set[A] = {
         t1 += t2
         t1
       }
-      def zero(t: mutable.Set[A]) : mutable.Set[A] = {
+      def zero(t: mutable.Set[A]): mutable.Set[A] = {
         new mutable.HashSet[A]()
       }
     }

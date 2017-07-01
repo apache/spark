@@ -189,7 +189,7 @@ private[joins] class UnsafeHashedRelation(
   private def write(
       writeInt: (Int) => Unit,
       writeLong: (Long) => Unit,
-      writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
+      writeBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
     writeInt(numFields)
     // TODO: move these into BytesToBytesMap
     writeLong(binaryMap.numKeys())

@@ -182,7 +182,7 @@ case class Invoke(
     dataType: DataType,
     arguments: Seq[Expression] = Nil,
     propagateNull: Boolean = true,
-    returnNullable : Boolean = true) extends InvokeLike {
+    returnNullable: Boolean = true) extends InvokeLike {
 
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments

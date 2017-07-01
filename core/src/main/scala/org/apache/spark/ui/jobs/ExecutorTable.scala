@@ -106,7 +106,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
     </script>
   }
 
-  private def createExecutorTable() : Seq[Node] = {
+  private def createExecutorTable(): Seq[Node] = {
     // Make an executor-id -> address map
     val executorIdToAddress = mutable.HashMap[String, String]()
     listener.blockManagerIds.foreach { blockManagerId =>

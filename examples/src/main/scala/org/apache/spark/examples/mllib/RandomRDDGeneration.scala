@@ -44,13 +44,13 @@ object RandomRDDGeneration {
     println(s"Generated RDD of ${normalRDD.count()}" +
       " examples sampled from the standard normal distribution")
     println("  First 5 samples:")
-    normalRDD.take(5).foreach( x => println(s"    $x") )
+    normalRDD.take(5).foreach(x => println(s"    $x") )
 
     // Example: RandomRDDs.normalVectorRDD
     val normalVectorRDD = RandomRDDs.normalVectorRDD(sc, numRows = numExamples, numCols = 2)
     println(s"Generated RDD of ${normalVectorRDD.count()} examples of length-2 vectors.")
     println("  First 5 samples:")
-    normalVectorRDD.take(5).foreach( x => println(s"    $x") )
+    normalVectorRDD.take(5).foreach(x => println(s"    $x") )
 
     println()
 

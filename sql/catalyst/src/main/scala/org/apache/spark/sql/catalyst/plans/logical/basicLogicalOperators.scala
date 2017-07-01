@@ -51,7 +51,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
   override def maxRows: Option[Long] = child.maxRows
 
   override lazy val resolved: Boolean = {
-    val hasSpecialExpressions = projectList.exists ( _.collect {
+    val hasSpecialExpressions = projectList.exists (_.collect {
         case agg: AggregateExpression => agg
         case generator: Generator => generator
         case window: WindowExpression => window
@@ -237,7 +237,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
     def allChildrenCompatible: Boolean =
-      children.tail.forall( child =>
+      children.tail.forall(child =>
         // compare the attribute number with the first child
         child.output.length == children.head.output.length &&
         // compare the data types with the first child
@@ -524,7 +524,7 @@ case class Range(
 
   override def computeStats: Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
-    Statistics( sizeInBytes = sizeInBytes )
+    Statistics(sizeInBytes = sizeInBytes)
   }
 
   override def simpleString: String = {
@@ -539,7 +539,7 @@ case class Aggregate(
   extends UnaryNode {
 
   override lazy val resolved: Boolean = {
-    val hasWindowExpressions = aggregateExpressions.exists ( _.collect {
+    val hasWindowExpressions = aggregateExpressions.exists (_.collect {
         case window: WindowExpression => window
       }.nonEmpty
     )

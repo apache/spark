@@ -67,7 +67,7 @@ private class PairwiseRRDD[T: ClassTag](
     parent, numPartitions, hashFunc, deserializer,
     SerializationFormats.BYTE, packageNames,
     broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
-  lazy val asJavaPairRDD : JavaPairRDD[Int, Array[Byte]] = JavaPairRDD.fromRDD(this)
+  lazy val asJavaPairRDD: JavaPairRDD[Int, Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
 
 /**
@@ -83,7 +83,7 @@ private class RRDD[T: ClassTag](
   extends BaseRRDD[T, Array[Byte]](
     parent, -1, func, deserializer, serializer, packageNames,
     broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
-  lazy val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
+  lazy val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 }
 
 /**
@@ -98,7 +98,7 @@ private class StringRRDD[T: ClassTag](
   extends BaseRRDD[T, String](
     parent, -1, func, deserializer, SerializationFormats.STRING, packageNames,
     broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
-  lazy val asJavaRDD : JavaRDD[String] = JavaRDD.fromRDD(this)
+  lazy val asJavaRDD: JavaRDD[String] = JavaRDD.fromRDD(this)
 }
 
 private[r] object RRDD {

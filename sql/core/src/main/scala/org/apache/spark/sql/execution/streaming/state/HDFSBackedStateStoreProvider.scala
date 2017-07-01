@@ -205,7 +205,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       indexOrdinal: Option[Int], // for sorting the data
       storeConf: StateStoreConf,
       hadoopConf: Configuration): Unit = {
-    this.stateStoreId_ = stateStoreId
+    this._stateStoreId = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
     this.storeConf = storeConf
@@ -213,7 +213,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     fs.mkdirs(baseDir)
   }
 
-  override def stateStoreId: StateStoreId = stateStoreId_
+  override def stateStoreId: StateStoreId = _stateStoreId
 
   /** Do maintenance backing data files, including creating snapshots and cleaning up old files */
   override def doMaintenance(): Unit = {
@@ -237,7 +237,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
   /* Internal fields and methods */
 
-  @volatile private var stateStoreId_ : StateStoreId = _
+  @volatile private var _stateStoreId: StateStoreId = _
   @volatile private var keySchema: StructType = _
   @volatile private var valueSchema: StructType = _
   @volatile private var storeConf: StateStoreConf = _

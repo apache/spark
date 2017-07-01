@@ -248,10 +248,10 @@ private[spark] object JettyUtils extends Logging {
   def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
     val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
     filters.foreach {
-      case filter : String =>
+      case filter: String =>
         if (!filter.isEmpty) {
           logInfo("Adding filter: " + filter)
-          val holder : FilterHolder = new FilterHolder()
+          val holder: FilterHolder = new FilterHolder()
           holder.setClassName(filter)
           // Get any parameters for each filter
           conf.get("spark." + filter + ".params", "").split(',').map(_.trim()).toSet.foreach {

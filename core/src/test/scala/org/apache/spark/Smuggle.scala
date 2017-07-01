@@ -62,7 +62,7 @@ object Smuggle {
   private val lock = new ReentrantReadWriteLock
   private val smuggledObjects = mutable.WeakHashMap.empty[Symbol, Any]
 
-  private def get[T](key: Symbol) : T = {
+  private def get[T](key: Symbol): T = {
     lock.readLock().lock()
     try {
       smuggledObjects(key).asInstanceOf[T]
@@ -78,6 +78,6 @@ object Smuggle {
    * @tparam T
    * @return the smuggled object represented by the wrapper.
    */
-  implicit def unpackSmuggledObject[T](smuggle : Smuggle[T]): T = smuggle.smuggledObject
+  implicit def unpackSmuggledObject[T](smuggle: Smuggle[T]): T = smuggle.smuggledObject
 
 }

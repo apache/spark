@@ -243,10 +243,26 @@ This file is divided into 3 sections:
     </parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.DisallowSpaceBeforeTokenChecker" enabled="true">
+  <check customId="spaceBeforeToken" level="error" class="org.scalastyle.scalariform.DisallowSpaceBeforeTokenChecker" enabled="true">
     <parameters>
-      <parameter name="tokens">COMMA</parameter>
+      <parameter name="tokens">COLON, COMMA, RPAREN</parameter>
     </parameters>
+    <customMessage><![CDATA[Are you sure you want to have space before COLON/COMMA/RPAREN?
+    If yes, wrap the code block with
+    // scalastyle:off spaceBeforeToken
+    Your code...
+    // scalastyle:on spaceBeforeToken]]></customMessage>
+  </check>
+
+  <check customId="spaceAfterToken" level="error" class="org.scalastyle.scalariform.DisallowSpaceAfterTokenChecker" enabled="true">
+    <parameters>
+      <parameter name="tokens">LPAREN</parameter>
+    </parameters>
+    <customMessage><![CDATA[Are you sure you want to have space after LPAREN?
+    If yes, wrap the code block with
+    // scalastyle:off spaceAfterToken
+    Your code...
+    // scalastyle:on spaceAfterToken]]></customMessage>
   </check>
 
   <!-- SPARK-3854: Single Space between ')' and '{' -->

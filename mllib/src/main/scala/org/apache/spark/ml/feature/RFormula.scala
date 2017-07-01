@@ -507,7 +507,7 @@ private class VectorAttributeRewriter(
     }
     val otherCols = dataset.columns.filter(_ != vectorCol).map(dataset.col)
     val rewrittenCol = dataset.col(vectorCol).as(vectorCol, metadata)
-    dataset.select(otherCols :+ rewrittenCol : _*)
+    dataset.select(otherCols:+ rewrittenCol: _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {
