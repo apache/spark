@@ -929,6 +929,12 @@ _type_mappings = {
     datetime.time: TimestampType,
 }
 
+if sys.version < "3":
+    _type_mappings.update({
+        unicode: StringType,
+        long: LongType,
+    })
+
 # Mapping Python array types to Spark SQL DataType
 # We should be careful here. The size of these types in python depends on
 # C implementation (See: https://docs.python.org/2/library/array.html).
@@ -936,18 +942,20 @@ _type_mappings = {
 # this should be considered in test cases.
 _array_type_mappings = {
     'b': ByteType,
+    'B': ShortType,
     'h': ShortType,
+    'H': IntegerType,
     'i': IntegerType,
+    'I': LongType,
     'l': LongType,
+     #'L': not supported
+     #'q': not supported
+     #'Q': not supported
     'f': FloatType,
     'd': DoubleType
 }
 
-if sys.version < "3":
-    _type_mappings.update({
-        unicode: StringType,
-        long: LongType,
-    })
+
 
 # Type code 'u' in Python's array is deprecated since version 3.3, and will be
 # removed in version 4.0. See: https://docs.python.org/3/library/array.html
@@ -956,6 +964,7 @@ if sys.version < "4":
         'u': StringType
     })
 
+# Type code 'c' are only available at python 2
 if sys.version < "3":
     _array_type_mappings.update({
         'c': StringType

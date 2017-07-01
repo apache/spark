@@ -32,6 +32,7 @@ import time
 import datetime
 import array
 import math
+import types
 
 import py4j
 try:
@@ -2277,17 +2278,18 @@ class SQLTests(ReusedPySparkTestCase):
             return df.collect()[0]["myarray"][0]
 
         # test whether pyspark can correctly handle string types
-        string_types = set()
+        string_types = []
         if sys.version < "4":
-            string_types += set(['u'])
+            string_types += ['u']
             self.assertEqual(collected(array.array('u', ["a"])), "a")
         if sys.version < "3":
-            string_types += set(['c'])
+            string_types += ['c']
             self.assertEqual(collected(array.array('c', ["a"])), "a")
 
         # test whether pyspark can correctly handle int types
-        int_types = set(['b', 'h', 'i', 'l'])
-        for t in int_types:
+        int_types = ['b', 'h', 'i', 'l']
+        unsigned_types = ['B', 'H', 'I']
+        for t in int_types + unsigned_types:
             # Start from 1 and keep doubling the number until overflow.
             a = array.array(t, [1])
             while True:
@@ -2296,6 +2298,7 @@ class SQLTests(ReusedPySparkTestCase):
                     a[0] *= 2
                 except OverflowError:
                     break
+        for t in int_types:
             # Start from -1 and keep doubling the number until overflow
             a = array.array(t, [-1])
             while True:
@@ -2306,7 +2309,7 @@ class SQLTests(ReusedPySparkTestCase):
                     break
 
         # test whether pyspark can correctly handle float types
-        float_types = set(['f', 'd'])
+        float_types = ['f', 'd']
         for t in float_types:
             # test upper bound and precision
             a = array.array(t, [1.0])
@@ -2321,14 +2324,13 @@ class SQLTests(ReusedPySparkTestCase):
                 a[0] /= 2
 
         # make sure that the test case cover all supported types
-        supported_types = int_types + float_types + string_types
-        self.assertEqual(supported_types, _array_type_mappings.keys)
+        supported_types = int_types + unsigned_types + float_types + string_types
+        self.assertEqual(supported_types, types._array_type_mappings.keys)
 
-        all_type_codes = set()
         if sys.version < "3":
-            all_type_codes += set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
+            all_type_codes = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
         else:
-            all_type_codes += set(array.typecodes)
+            all_type_codes = set(array.typecodes)
         unsupported_types = all_type_codes - supported_types
 
         # test whether pyspark can correctly handle unsupported types
