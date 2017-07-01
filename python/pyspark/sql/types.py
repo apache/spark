@@ -949,6 +949,17 @@ if sys.version < "3":
         long: LongType,
     })
 
+# Type code 'u' in Python's array is deprecated since version 3.3, and will be
+# removed in version 4.0. See: https://docs.python.org/3/library/array.html
+if sys.version < "4":
+    _array_type_mappings.update({
+        'u': StringType
+    })
+
+if sys.version < "3":
+    _array_type_mappings.update({
+        'c': StringType
+    })
 
 def _infer_type(obj):
     """Infer the DataType from obj
