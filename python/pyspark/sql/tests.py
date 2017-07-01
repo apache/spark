@@ -32,7 +32,9 @@ import time
 import datetime
 import array
 import math
-import types
+import ctypes
+from pyspark.sql import Row
+from pyspark.sql.types import _array_int_typecode_ctype_mappings, _array_type_mappings
 
 import py4j
 try:
@@ -2271,61 +2273,47 @@ class SQLTests(ReusedPySparkTestCase):
         # and Scala types.
         # See: https://docs.python.org/2/library/array.html
 
-        def collected(a):
+        def assertCollectSuccess(typecode, value):
+            a = array.array(typecode, [value])
             row = Row(myarray=a)
-            rdd = self.sc.parallelize([row])
-            df = self.spark.createDataFrame(rdd)
-            return df.collect()[0]["myarray"][0]
+            df = self.spark.createDataFrame([row])
+            self.assertEqual(df.collect()[0]["myarray"][0], value)
 
-        # test whether pyspark can correctly handle string types
+        supported_types = []
+
+        # test string types
         string_types = []
         if sys.version < "4":
-            string_types += ['u']
-            self.assertEqual(collected(array.array('u', ["a"])), "a")
+            supported_types += ['u']
+            assertCollectSuccess('u', "a")
         if sys.version < "3":
-            string_types += ['c']
-            self.assertEqual(collected(array.array('c', ["a"])), "a")
+            supported_types += ['c']
+            assertCollectSuccess('c', "a")
 
-        # test whether pyspark can correctly handle int types
-        int_types = ['b', 'h', 'i', 'l']
-        unsigned_types = ['B', 'H', 'I']
-        for t in int_types + unsigned_types:
-            # Start from 1 and keep doubling the number until overflow.
-            a = array.array(t, [1])
-            while True:
-                try:
-                    self.assertEqual(collected(a), a[0])
-                    a[0] *= 2
-                except OverflowError:
-                    break
-        for t in int_types:
-            # Start from -1 and keep doubling the number until overflow
-            a = array.array(t, [-1])
-            while True:
-                try:
-                    self.assertEqual(collected(a), a[0])
-                    a[0] *= 2
-                except OverflowError:
-                    break
+        # test float and double, assuming IEEE 754 floating-point format
+        supported_types += ['f', 'd']
+        assertCollectSuccess('f',ctypes.c_float(1e+38).value)
+        assertCollectSuccess('f',ctypes.c_float(1e-38).value)
+        assertCollectSuccess('f',ctypes.c_float(1.123456).value)
+        assertCollectSuccess('d',ctypes.c_double(1e+308).value)
+        assertCollectSuccess('d',ctypes.c_double(1e+308).value)
+        assertCollectSuccess('d',ctypes.c_double(1.123456789012345).value)
 
-        # test whether pyspark can correctly handle float types
-        float_types = ['f', 'd']
-        for t in float_types:
-            # test upper bound and precision
-            a = array.array(t, [1.0])
-            while not math.isinf(a[0]):
-                self.assertEqual(collected(a), a[0])
-                a[0] *= 2
-                a[0] += 1
-            # test lower bound
-            a = array.array(t, [1.0])
-            while a[0] != 0:
-                self.assertEqual(collected(a), a[0])
-                a[0] /= 2
+        # test int types
+        supported_int = list(set(_array_int_typecode_ctype_mappings.keys()).
+                             intersection(set(_array_type_mappings.keys())))
+        supported_types += supported_int
+        for i in supported_int:
+            ctype = _array_int_typecode_ctype_mappings[i]
+            if i.isupper():
+                assertCollectSuccess(i, 2 ** (ctypes.sizeof(ctype)) - 1)
+            else:
+                max_val = 2 ** (ctypes.sizeof(ctype) - 1) - 1
+                assertCollectSuccess(i, max_val)
+                assertCollectSuccess(i, -max_val)
 
-        # make sure that the test case cover all supported types
-        supported_types = int_types + unsigned_types + float_types + string_types
-        self.assertEqual(supported_types, types._array_type_mappings.keys)
+        # # make sure that the test case cover all supported types
+        self.assertEqual(set(supported_types), set(_array_type_mappings.keys))
 
         if sys.version < "3":
             all_type_codes = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
@@ -2335,15 +2323,10 @@ class SQLTests(ReusedPySparkTestCase):
 
         # test whether pyspark can correctly handle unsupported types
         for t in unsupported_types:
-            try:
+            with self.assertRaises(SomeException):
                 a = array.array(t)
-                c = collected(a)
-                self.assertTrue(False)  # if no exception thrown, fail the test
-            except TypeError:
-                pass  # catch the expected exception and do nothing
-            except:
-                # if incorrect exception thrown, fail the test
-                self.assertTrue(False)
+                self.spark.createDataFrame([Row(myarray=a)]).collect()
+
 
     def test_bucketed_write(self):
         data = [

@@ -977,8 +977,8 @@ def _int_size_to_type(size):
 _array_type_mappings = {
     # Warning: Actual properties for float and double in C is not unspecified.
     # On most systems, they are IEEE 754 single-precision binary floating-point
-    # format and IEEE 754 double-precision binary floating-point. And we do
-    # do assume the same thing here. This means, in some rare case, the following
+    # format and IEEE 754 double-precision binary floating-point format. And we
+    # do assume the same thing here. This means in some rare case the following
     # conversion might fail.
     'f': FloatType,
     'd': DoubleType
