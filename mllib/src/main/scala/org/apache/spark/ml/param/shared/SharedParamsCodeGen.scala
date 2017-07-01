@@ -80,8 +80,7 @@ private[shared] object SharedParamsCodeGen {
         " 0)", isValid = "ParamValidators.gt(0)"),
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
         "all instance weights as 1.0"),
-      ParamDesc[String]("solver", "the solver algorithm for optimization. If this is not set or " +
-        "empty, default value is 'auto'", Some("\"auto\"")),
+      ParamDesc[String]("solver", "the solver algorithm for optimization", finalFields = false),
       ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
         isValid = "ParamValidators.gtEq(2)", isExpertParam = true))
 
@@ -99,6 +98,7 @@ private[shared] object SharedParamsCodeGen {
       defaultValueStr: Option[String] = None,
       isValid: String = "",
       finalMethods: Boolean = true,
+      finalFields: Boolean = true,
       isExpertParam: Boolean = false) {
 
     require(name.matches("[a-z][a-zA-Z0-9]*"), s"Param name $name is invalid.")
@@ -167,6 +167,11 @@ private[shared] object SharedParamsCodeGen {
     } else {
       "def"
     }
+    val fieldStr = if (param.finalFields) {
+      "final val"
+    } else {
+      "val"
+    }
 
     val htmlCompliantDoc = Utility.escape(doc)
 
@@ -180,7 +185,7 @@ private[shared] object SharedParamsCodeGen {
       |   * Param for $htmlCompliantDoc.
       |   * @group ${groupStr(0)}
       |   */
-      |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
+      |  $fieldStr $name: $Param = new $Param(this, "$name", "$doc"$isValid)
       |$setDefault
       |  /** @group ${groupStr(1)} */
       |  $methodStr get$Name: $T = $$($name)

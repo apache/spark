@@ -164,7 +164,18 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
     isDefined(linkPredictionCol) && $(linkPredictionCol).nonEmpty
   }
 
-  import GeneralizedLinearRegression._
+  /**
+   * The solver algorithm for optimization.
+   * Supported options: "irls" (iteratively reweighted least squares).
+   * Default: "irls"
+   *
+   * @group param
+   */
+  @Since("2.3.0")
+  final override val solver: Param[String] = new Param[String](this, "solver",
+    "The solver algorithm for optimization. Supported options: " +
+      s"${supportedSolvers.mkString(", ")}. (Default irls)",
+    ParamValidators.inArray[String](supportedSolvers))
 
   @Since("2.0.0")
   override def validateAndTransformSchema(
@@ -350,7 +361,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> "irls")
+  setDefault(solver -> IRLS)
 
   /**
    * Sets the link prediction (linear predictor) column name.
@@ -441,6 +452,12 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     Poisson -> Log, Poisson -> Identity, Poisson -> Sqrt,
     Gamma -> Inverse, Gamma -> Identity, Gamma -> Log
   )
+
+  /** String name for "irls" (iteratively reweighted least squares) solver. */
+  private[regression] val IRLS = "irls"
+
+  /** Set of solvers that GeneralizedLinearRegression supports. */
+  private[regression] val supportedSolvers = Array(IRLS)
 
   /** Set of family names that GeneralizedLinearRegression supports. */
   private[regression] lazy val supportedFamilyNames =
