@@ -2195,7 +2195,7 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 setMethod("from_json", signature(x = "Column", schema = "characterOrstructType"),
           function(x, schema, as.json.array = FALSE, ...) {
             if (is.character(schema)) {
-              schema <- structType.fromDDL(schema)
+              schema <- structTypeFromDDL(schema)
             }
 
             if (as.json.array) {

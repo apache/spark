@@ -1392,7 +1392,7 @@ setMethod("summarize",
 
 dapplyInternal <- function(x, func, schema) {
   if (is.character(schema)) {
-    schema <- structType.fromDDL(schema)
+    schema <- structTypeFromDDL(schema)
   }
 
   packageNamesArr <- serialize(.sparkREnv[[".packages"]],

@@ -77,10 +77,10 @@ structType.structField <- function(x, ...) {
 #' @param ... further arguments passed to or from other methods
 #' @examples
 #'\dontrun{
-#' structType.fromDDL("a INT, b STRING")
+#' structTypeFromDDL("a INT, b STRING")
 #' }
-#' @note structType.fromDDL since 2.3.0
-structType.fromDDL <- function(x, ...) {
+#' @note structTypeFromDDL since 2.3.0
+structTypeFromDDL <- function(x, ...) {
   if (!is.character(x)) {
     stop("schema name must be a DDL-formatted string.")
   }

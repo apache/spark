@@ -238,7 +238,7 @@ gapplyInternal <- function(x, func, schema) {
   broadcastArr <- lapply(ls(.broadcastNames),
                     function(name) { get(name, .broadcastNames) })
   if (is.character(schema)) {
-    schema <- structType.fromDDL(schema)
+    schema <- structTypeFromDDL(schema)
   }
 
   sdf <- callJStatic(
