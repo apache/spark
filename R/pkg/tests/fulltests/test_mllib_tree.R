@@ -212,6 +212,22 @@ test_that("spark.randomForest", {
   expect_equal(length(grep("1.0", predictions)), 50)
   expect_equal(length(grep("2.0", predictions)), 50)
 
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+                    someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                    stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.randomForest(traindf, clicked ~ ., type = "classification",
+                          maxDepth = 10, maxBins = 10, numTrees = 10)
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.randomForest(traindf, clicked ~ ., type = "classification",
+                             maxDepth = 10, maxBins = 10, numTrees = 10,
+                             handleInvalid = "skip")
+  expect_equal(collect(predictions)$clicked, c("1", "0", "0"))
+
   # spark.randomForest classification can work on libsvm data
   if (windows_with_hadoop()) {
     data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
