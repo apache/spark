@@ -955,10 +955,16 @@ _array_int_typecode_ctype_mappings = {
     'i': ctypes.c_int,
     'I': ctypes.c_uint,
     'l': ctypes.c_long,
-    'L': ctypes.c_ulong,
-    'q': ctypes.c_longlong,
-    'Q': ctypes.c_ulonglong
+    'L': ctypes.c_ulong
 }
+
+# TODO: Uncomment this when 'q' and 'Q' are supported by net.razorvine.pickle
+# Type code 'q' and 'Q' are not available at python 2
+# if sys.version > "2":
+#     _array_int_typecode_ctype_mappings.update({
+#         'q': ctypes.c_longlong,
+#         'Q': ctypes.c_ulonglong
+#     })
 
 def _int_size_to_type(size):
     """
@@ -972,7 +978,7 @@ def _int_size_to_type(size):
         return IntegerType
     if size <= 64:
         return LongType
-    raise TypeError("Not supported type: integer size too large.")
+    raise TypeError("not supported type: integer size too large.")
 
 _array_type_mappings = {
     # Warning: Actual properties for float and double in C is not unspecified.
@@ -986,14 +992,14 @@ _array_type_mappings = {
 
 # compute array typecode mappings for integer types
 for _typecode in _array_int_typecode_ctype_mappings.keys():
-    size = ctypes.sizeof(_array_int_typecode_ctype_mappings[_typecode])
+    size = ctypes.sizeof(_array_int_typecode_ctype_mappings[_typecode]) * 8
     if _typecode.isupper(): # 1 extra bit is required to store unsigned types
         size += 1
     try:
         _array_type_mappings.update({
             _typecode: _int_size_to_type(size)
         })
-    except:
+    except TypeError:
         pass
 
 # Type code 'u' in Python's array is deprecated since version 3.3, and will be

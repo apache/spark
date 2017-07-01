@@ -2282,7 +2282,6 @@ class SQLTests(ReusedPySparkTestCase):
         supported_types = []
 
         # test string types
-        string_types = []
         if sys.version < "4":
             supported_types += ['u']
             assertCollectSuccess('u', "a")
@@ -2306,24 +2305,24 @@ class SQLTests(ReusedPySparkTestCase):
         for i in supported_int:
             ctype = _array_int_typecode_ctype_mappings[i]
             if i.isupper():
-                assertCollectSuccess(i, 2 ** (ctypes.sizeof(ctype)) - 1)
+                assertCollectSuccess(i, 2 ** (ctypes.sizeof(ctype) * 8) - 1)
             else:
-                max_val = 2 ** (ctypes.sizeof(ctype) - 1) - 1
+                max_val = 2 ** (ctypes.sizeof(ctype) * 8 - 1) - 1
                 assertCollectSuccess(i, max_val)
                 assertCollectSuccess(i, -max_val)
 
         # # make sure that the test case cover all supported types
-        self.assertEqual(set(supported_types), set(_array_type_mappings.keys))
+        self.assertEqual(set(supported_types), set(_array_type_mappings.keys()))
 
         if sys.version < "3":
             all_type_codes = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
         else:
             all_type_codes = set(array.typecodes)
-        unsupported_types = all_type_codes - supported_types
+        unsupported_types = all_type_codes - set(supported_types)
 
         # test whether pyspark can correctly handle unsupported types
         for t in unsupported_types:
-            with self.assertRaises(SomeException):
+            with self.assertRaises(TypeError):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
 
