@@ -226,7 +226,8 @@ test_that("spark.randomForest", {
   model <- spark.randomForest(traindf, clicked ~ ., type = "classification",
                              maxDepth = 10, maxBins = 10, numTrees = 10,
                              handleInvalid = "skip")
-  expect_equal(collect(predictions)$clicked, c("1", "0", "0"))
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "character")
 
   # spark.randomForest classification can work on libsvm data
   if (windows_with_hadoop()) {
