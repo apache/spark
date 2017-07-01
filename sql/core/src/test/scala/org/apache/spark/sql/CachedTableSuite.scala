@@ -102,6 +102,14 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(evalCount === 1)
   }
 
+  test("cache with table name") {
+    testData.cache("test_data")
+    testData.unpersist()
+    testData.persist("test_data", StorageLevel.MEMORY_ONLY)
+    testData.unpersist()
+  }
+
+
   test("cache temp table") {
     withTempView("tempTable") {
       testData.select('key).createOrReplaceTempView("tempTable")
