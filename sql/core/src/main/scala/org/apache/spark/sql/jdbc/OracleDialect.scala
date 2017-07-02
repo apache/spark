@@ -69,8 +69,11 @@ private case object OracleDialect extends JdbcDialect {
   }
 
   override def compileValue(value: Any): Any = value match {
-    // Special treatment for the literal representations of
-    // Oracle's Timestamp/Date types.
+    // The JDBC drivers support date literals in SQL statements written in the
+    // format: {d 'yyyy-mm-dd'} and timestamp literals in SQL statements written
+    // in the format: {ts 'yyyy-mm-dd hh:mm:ss.f...'}. For details, see
+    // 'Oracle Database JDBC Developer’s Guide and Reference, 11g Release 1 (11.1)'
+    // Appendix A Reference Information.
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
     case dateValue: Date => "{d '" + dateValue + "'}"

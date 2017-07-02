@@ -126,7 +126,7 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
-   * Make string literal in SQL valid.
+   * Escape special characters in SQL string literals.
    * @param value The string to be escaped.
    * @return Escaped string.
    */
