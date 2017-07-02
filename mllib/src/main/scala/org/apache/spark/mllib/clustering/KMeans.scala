@@ -292,9 +292,9 @@ class KMeans private (
       }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
         axpy(1.0, sum2, sum1)
         (sum1, count1 + count2)
-      }.map { case (j, (sum, count)) =>
+      }.mapValues { case (sum, count) =>
         scal(1.0 / count, sum)
-        (j, new VectorWithNorm(sum))
+        new VectorWithNorm(sum)
       }.collectAsMap()
 
       bcCenters.destroy(blocking = false)
