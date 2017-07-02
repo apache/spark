@@ -243,9 +243,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       unquotedPath != null && !unquotedPath.isEmpty,
       "Resource paths cannot be empty in REFRESH statements. Use / to match everything",
       ctx)
+    val forbiddenSymbols = Seq(" ", "\n", "\r", "\t")
     validate(
-      !unquotedPath.contains(' '),
-      "It is not allowed to use spaces inside unquoted resource paths in REFRESH statements",
+      !forbiddenSymbols.exists(unquotedPath.contains(_)),
+      "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths",
       ctx)
     unquotedPath
   }

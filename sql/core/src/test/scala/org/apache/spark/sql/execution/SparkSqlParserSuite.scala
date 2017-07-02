@@ -75,18 +75,14 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("REFRESH path-with-dash", RefreshResource("path-with-dash"))
     assertEqual("REFRESH \'path with space\'", RefreshResource("path with space"))
     assertEqual("REFRESH \"path with space 2\"", RefreshResource("path with space 2"))
-    intercept(
-      "REFRESH a b",
-      "It is not allowed to use spaces inside unquoted resource paths in REFRESH statements")
-    intercept(
-      "REFRESH @ $a$",
-      "It is not allowed to use spaces inside unquoted resource paths in REFRESH statements")
-    intercept(
-      "REFRESH  ",
-      "Resource paths cannot be empty in REFRESH statements. Use / to match everything")
-    intercept(
-      "REFRESH",
-      "Resource paths cannot be empty in REFRESH statements. Use / to match everything")
+    intercept("REFRESH a b", "REFRESH statements cannot contain")
+    intercept("REFRESH a\tb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\nb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\rb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\r\nb", "REFRESH statements cannot contain")
+    intercept("REFRESH @ $a$", "REFRESH statements cannot contain")
+    intercept("REFRESH  ", "Resource paths cannot be empty in REFRESH statements")
+    intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
   }
 
   test("show functions") {
