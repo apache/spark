@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -325,7 +326,14 @@ class ParamTests(PySparkTestCase):
         testParams = TestParams()
         self.assertEqual(testParams._resolveParam(testParams.maxIter), testParams.maxIter)
         self.assertEqual(testParams._resolveParam("maxIter"), testParams.maxIter)
+
         self.assertEqual(testParams._resolveParam(u"maxIter"), testParams.maxIter)
+        if sys.version_info[0] >= 3:
+            # In Python 3, it is allowed to get/set attributes with non-ascii characters.
+            e_cls = AttributeError
+        else:
+            e_cls = UnicodeEncodeError
+        self.assertRaises(e_cls, lambda: testParams._resolveParam(u"아"))
 
     def test_params(self):
         testParams = TestParams()
