@@ -122,7 +122,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * (Scala-specific) Adds an input option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def option(key: String, value: Seq[String]): DataFrameReader = {
     option(key, compact(render(value)))
@@ -131,7 +131,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def option(key: String, value: Array[String]): DataFrameReader = option(key, value.toSeq)
 
@@ -170,7 +170,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Un-sets an input option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def unsetOption(key: String): DataFrameReader = {
     this.extraOptions.remove(key)

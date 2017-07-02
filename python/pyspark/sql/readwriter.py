@@ -142,7 +142,7 @@ class DataFrameReader(OptionUtils):
             self.option(k, options[k])
         return self
 
-    @since(2.2)
+    @since(2.3)
     def unsetOption(self, key):
         """Un-sets the option given to the key for the underlying data source.
         """
@@ -583,7 +583,7 @@ class DataFrameWriter(OptionUtils):
             self.option(k, options[k])
         return self
 
-    @since(2.2)
+    @since(2.3)
     def unsetOption(self, key):
         """Un-sets the option given to the key for the underlying data source.
         """

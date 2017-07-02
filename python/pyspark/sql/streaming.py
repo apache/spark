@@ -374,11 +374,11 @@ class DataStreamReader(OptionUtils):
             self.option(k, options[k])
         return self
 
-    @since(2.2)
+    @since(2.3)
     def unsetOption(self, key):
         """Un-sets the option given to the key for the underlying data source.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
         """
         self._jreader = self._jreader.unsetOption(key)
         return self
@@ -748,11 +748,11 @@ class DataStreamWriter(object):
             self.option(k, options[k])
         return self
 
-    @since(2.2)
+    @since(2.3)
     def unsetOption(self, key):
         """Un-sets the option given to the key for the underlying data source.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
         """
         self._jwrite = self._jwrite.unsetOption(key)
         return self

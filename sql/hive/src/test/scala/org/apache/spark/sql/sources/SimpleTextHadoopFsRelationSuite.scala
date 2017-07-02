@@ -65,8 +65,9 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
 
   test("test hadoop conf option propagation") {
     withTempPath { file =>
-      // Test write side
       val nullVal: String = null
+
+      // Test write side
       val df = spark.range(10).selectExpr("cast(id as string)")
       df.write
         .option("some-random-write-option", "hahah-WRITE")

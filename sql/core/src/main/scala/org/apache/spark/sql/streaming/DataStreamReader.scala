@@ -114,7 +114,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * (Scala-specific) Adds an input option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def option(key: String, value: Seq[String]): DataStreamReader = {
     option(key, compact(render(value)))
@@ -123,7 +123,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Adds an input option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def option(key: String, value: Array[String]): DataStreamReader = option(key, value.toSeq)
 
@@ -162,7 +162,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Un-sets an input option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def unsetOption(key: String): DataStreamReader = {
     this.extraOptions.remove(key)

@@ -186,7 +186,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * (Scala-specific) Adds an output option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def option(key: String, value: Seq[String]): DataStreamWriter[T] = {
     option(key, compact(render(value)))
@@ -195,7 +195,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def option(key: String, value: Array[String]): DataStreamWriter[T] = option(key, value.toSeq)
 
@@ -234,7 +234,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Un-sets an option option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def unsetOption(key: String): DataStreamWriter[T] = {
     this.extraOptions.remove(key)

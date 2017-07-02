@@ -131,7 +131,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * (Scala-specific) Adds an output option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def option(key: String, value: Seq[String]): DataFrameWriter[T] = {
     option(key, compact(render(value)))
@@ -140,7 +140,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def option(key: String, value: Array[String]): DataFrameWriter[T] = option(key, value.toSeq)
 
@@ -179,7 +179,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Un-sets an output option for the underlying data source.
    *
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def unsetOption(key: String): DataFrameWriter[T] = {
     this.extraOptions.remove(key)
