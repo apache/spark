@@ -435,7 +435,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                      new("RandomForestRegressionModel", jobj = jobj)
                    },
                    classification = {
-                     handleInvalid <- match.arg(handleInvalid, "error")
+                     handleInvalid <- match.arg(handleInvalid)
                      if (is.null(impurity)) impurity <- "gini"
                      impurity <- match.arg(impurity, c("gini", "entropy"))
                      jobj <- callJStatic("org.apache.spark.ml.r.RandomForestClassifierWrapper",
