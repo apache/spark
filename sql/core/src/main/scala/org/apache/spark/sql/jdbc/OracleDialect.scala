@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.Connection
 import java.sql.Types
 
 import org.apache.spark.sql.types._
@@ -62,6 +63,14 @@ private case object OracleDialect extends JdbcDialect {
     case ShortType => Some(JdbcType("NUMBER(5)", java.sql.Types.SMALLINT))
     case StringType => Some(JdbcType("VARCHAR2(255)", java.sql.Types.VARCHAR))
     case _ => None
+  }
+
+  override def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+    // Set general date and timestamp format before query.
+    val stmt = connection.createStatement()
+    stmt.execute("alter session set NLS_DATE_FORMAT = 'YYYY-MM-DD'")
+    stmt.execute("alter session set NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS.FF'")
+    stmt.close()
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
