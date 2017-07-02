@@ -435,7 +435,7 @@ private[spark] class ExecutorAllocationManager(
         val hasCachedBlocks = SparkEnv.get.blockManager.master.hasCachedBlocks(removedExecutorId)
         val timeout = if (hasCachedBlocks) cachedExecutorIdleTimeoutS else executorIdleTimeoutS
         logInfo(s"Removing executor $removedExecutorId because it has been idle for " +
-          s"$timeout seconds (new desired total will be $newExecutorTotal)")
+          s"${if (SparkEnv.get.blockManager.master.hasCachedBlocks(executorId)) cachedExecutorIdleTimeoutS else executorIdleTimeoutS} seconds (new desired total will be $newExecutorTotal)")
         executorsPendingToRemove.add(removedExecutorId)
       }
       executorsRemoved
