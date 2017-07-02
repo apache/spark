@@ -208,9 +208,10 @@ public final class UnsafeExternalRowSorter {
 
     @Override
     public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
-      // TODO: Why are the sizes -1?
-      row1.pointTo(baseObj1, baseOff1, -1);
-      row2.pointTo(baseObj2, baseOff2, -1);
+      // Note that since ordering doesn't need the total length of the record, we just pass 0
+      // into the row.
+      row1.pointTo(baseObj1, baseOff1, 0);
+      row2.pointTo(baseObj2, baseOff2, 0);
       return ordering.compare(row1, row2);
     }
   }
