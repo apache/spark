@@ -896,13 +896,13 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
   override def load(path: String): LogisticRegression = super.load(path)
 
   /** String name for "auto". */
-  private[regression] val Auto = "auto"
+  private[classification] val Auto = "auto"
 
   /** String name for "binomial". */
-  private[regression] val Binomial = "binomial"
+  private[classification] val Binomial = "binomial"
 
   /** String name for "Multinomial". */
-  private[regression] val Multinomial = "multinomial"
+  private[classification] val Multinomial = "multinomial"
 
   /** Set of solvers that LogisticRegression supports. */
   private[classification] val supportedFamilyNames =
