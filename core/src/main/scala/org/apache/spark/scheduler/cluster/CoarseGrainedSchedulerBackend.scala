@@ -102,16 +102,7 @@ class CoarseGrainedSchedulerBackend(
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
-  private val hadoopCreds = if (UserGroupInformation.isSecurityEnabled) {
-    hadoopDelegationTokenManager.map { manager =>
-      val creds = UserGroupInformation.getCurrentUser.getCredentials
-      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-      manager.obtainDelegationTokens(hadoopConf, creds)
-      new CredentialsSerializer().serialize(creds)
-    }
-  } else {
-    None
-  }
+  private val hadoopDelegationCreds = getHadoopDelegationCreds()
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -244,7 +235,7 @@ class CoarseGrainedSchedulerBackend(
         val reply = SparkAppConfig(
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
-          hadoopCreds)
+          hadoopDelegationCreds)
         context.reply(reply)
     }
 
@@ -272,6 +263,7 @@ class CoarseGrainedSchedulerBackend(
           "containers exceeding thresholds, or network issues. Check driver logs for WARN " +
           "messages.")))
     }
+
 
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
@@ -517,6 +509,7 @@ class CoarseGrainedSchedulerBackend(
 
   /**
    * Request an additional number of executors from the cluster manager.
+   *
    * @return whether the request is acknowledged.
    */
   final override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
@@ -551,6 +544,7 @@ class CoarseGrainedSchedulerBackend(
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
+   *
    * @param numExecutors The total number of executors we'd like to have. The cluster manager
    *                     shouldn't kill any running executor to reach this number, but,
    *                     if all existing executors were to die, this is the number of executors
@@ -675,6 +669,7 @@ class CoarseGrainedSchedulerBackend(
 
   /**
    * Kill the given list of executors through the cluster manager.
+   *
    * @return whether the kill request is acknowledged.
    */
   protected def doKillExecutors(executorIds: Seq[String]): Future[Boolean] =
@@ -682,6 +677,7 @@ class CoarseGrainedSchedulerBackend(
 
   /**
    * Request that the cluster manager kill all executors on a given host.
+   *
    * @return whether the kill request is acknowledged.
    */
   final override def killExecutorsOnHost(host: String): Boolean = {
@@ -694,6 +690,19 @@ class CoarseGrainedSchedulerBackend(
     // Kill all the executors on this host in an event loop to ensure serialization.
     driverEndpoint.send(KillExecutorsOnHost(host))
     true
+  }
+
+  private def getHadoopDelegationCreds(): Option[Array[Byte]] = {
+    if (UserGroupInformation.isSecurityEnabled) {
+      hadoopDelegationTokenManager.map { manager =>
+        val creds = UserGroupInformation.getCurrentUser.getCredentials
+        val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+        manager.obtainDelegationTokens(hadoopConf, creds)
+        new CredentialsSerializer().serialize(creds)
+      }
+    } else {
+      None
+    }
   }
 }
 
