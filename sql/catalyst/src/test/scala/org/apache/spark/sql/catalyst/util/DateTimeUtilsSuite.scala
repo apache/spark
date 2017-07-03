@@ -25,7 +25,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
 
-class DateTimeUtilsSuite extends SparkFunSuite with CatalystTestUtils {
+class DateTimeUtilsSuite extends SparkFunSuite {
 
   val TimeZonePST = TimeZone.getTimeZone("PST")
 
@@ -195,7 +195,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with CatalystTestUtils {
   }
 
   test("string to timestamp") {
-    for (tz <- ALL_TIMEZONES) {
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
       def checkStringToTimestamp(str: String, expected: Option[Long]): Unit = {
         assert(stringToTimestamp(UTF8String.fromString(str), tz) === expected)
       }
@@ -515,8 +515,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with CatalystTestUtils {
       assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
         === expected)
     }
-    for (tz <- ALL_TIMEZONES) {
-      withDefaultTimeZone(tz) {
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
         test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
         test("2011-12-25 09:00:00.123456", "JST", "2011-12-25 18:00:00.123456")
         test("2011-12-25 09:00:00.123456", "PST", "2011-12-25 01:00:00.123456")
@@ -524,7 +524,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with CatalystTestUtils {
       }
     }
 
-    withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
       // Daylight Saving Time
       test("2016-03-13 09:59:59.0", "PST", "2016-03-13 01:59:59.0")
       test("2016-03-13 10:00:00.0", "PST", "2016-03-13 03:00:00.0")
@@ -540,8 +540,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with CatalystTestUtils {
         === expected)
     }
 
-    for (tz <- ALL_TIMEZONES) {
-      withDefaultTimeZone(tz) {
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
         test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
         test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
         test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
@@ -549,7 +549,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with CatalystTestUtils {
       }
     }
 
-    withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
       // Daylight Saving Time
       test("2016-03-13 01:59:59", "PST", "2016-03-13 09:59:59.0")
       // 2016-03-13 02:00:00 PST does not exists
@@ -588,7 +588,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with CatalystTestUtils {
       "Pacific/Kiritimati" -> 9131,
       "Pacific/Kwajalein" -> 8632,
       "MIT" -> 15338)
-    for (tz <- ALL_TIMEZONES) {
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
       val skipped = skipped_days.getOrElse(tz.getID, Int.MinValue)
       (-20000 to 20000).foreach { d =>
         if (d != skipped) {

@@ -24,10 +24,9 @@ import org.apache.spark.sql.catalyst.expressions.{Coalesce, IsNotNull}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.util.CatalystTestUtils
 import org.apache.spark.sql.internal.SQLConf
 
-class OuterJoinEliminationSuite extends PlanTest with CatalystTestUtils {
+class OuterJoinEliminationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,

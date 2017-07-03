@@ -25,11 +25,10 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.CatalystTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType}
 
-class ConstraintPropagationSuite extends SparkFunSuite with CatalystTestUtils {
+class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
 
   private def resolveColumn(tr: LocalRelation, columnName: String): Expression =
     resolveColumn(tr.analyze, columnName)
