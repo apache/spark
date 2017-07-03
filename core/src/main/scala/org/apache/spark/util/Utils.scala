@@ -2668,21 +2668,6 @@ private[spark] object Utils extends Logging {
     redact(redactionPattern, kvs.toArray)
   }
 
-  /**
-   * Computes the average of all elements in an `Iterable`. If there is no element, returns 0.
-   */
-  def average[T](ts: Iterable[T])(implicit num: Numeric[T]): Double = {
-    if (ts.isEmpty) {
-      0.0
-    } else {
-      var count = 0
-      val sum = ts.reduce { (sum, ele) =>
-        count += 1
-        num.plus(sum, ele)
-      }
-      num.toDouble(sum) / (count + 1)
-    }
-  }
 }
 
 private[util] object CallerContext extends Logging {
