@@ -93,9 +93,7 @@ private[sql] trait SQLTestUtils
   }
 
   protected override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    // ensure spark's session has been initialized and set to the current SQLConf.confGetter
-    // TODO: fix the multi-session supports for SQLConf.confGetter
-    SQLConf.setSQLConfGetter(() => spark.sessionState.conf)
+    SparkSession.setActiveSession(spark)
     super.withSQLConf(pairs: _*)(f)
   }
 
