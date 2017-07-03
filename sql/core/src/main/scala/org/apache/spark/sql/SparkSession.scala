@@ -940,6 +940,7 @@ object SparkSession {
         }
 
         session = new SparkSession(sparkContext, None, None, extensions)
+        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
         defaultSession.set(session)
 
         // Register a successfully instantiated context to the singleton. This should be at the
