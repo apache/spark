@@ -220,8 +220,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
-      cfg.ugiTokens.foreach { ugiTokens =>
-        val creds = new CredentialsSerializer().deserializeTokens(ugiTokens)
+      cfg.hadoopCreds.foreach { hadoopCreds =>
+        val creds = new CredentialsSerializer().deserialize(hadoopCreds)
         addCredentials(creds)
       }
 

@@ -102,12 +102,12 @@ class CoarseGrainedSchedulerBackend(
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
-  private val userTokens = if (UserGroupInformation.isSecurityEnabled) {
+  private val hadoopCreds = if (UserGroupInformation.isSecurityEnabled) {
     hadoopDelegationTokenManager.map { manager =>
       val creds = UserGroupInformation.getCurrentUser.getCredentials
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
       manager.obtainDelegationTokens(hadoopConf, creds)
-      new CredentialsSerializer().serializeTokens(creds)
+      new CredentialsSerializer().serialize(creds)
     }
   } else {
     None
@@ -244,7 +244,7 @@ class CoarseGrainedSchedulerBackend(
         val reply = SparkAppConfig(
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
-          userTokens)
+          hadoopCreds)
         context.reply(reply)
     }
 
