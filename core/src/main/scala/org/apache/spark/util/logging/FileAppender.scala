@@ -76,7 +76,11 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
           }
         }
       } {
-        closeFile()
+        try {
+          inputStream.close()
+        } finally {
+          closeFile()
+        }
       }
     } catch {
       case e: Exception =>
