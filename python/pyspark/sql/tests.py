@@ -70,7 +70,7 @@ except:
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
-from pyspark.sql.types import UserDefinedType, _infer_type, _verify_type
+from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
 from pyspark.tests import ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
@@ -865,7 +865,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1.0, row.asDict()['d']['key'].c)
 
     def test_udt(self):
-        from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _verify_type
+        from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
         from pyspark.sql.tests import ExamplePointUDT, ExamplePoint
 
         def check_datatype(datatype):
@@ -881,8 +881,8 @@ class SQLTests(ReusedPySparkTestCase):
         check_datatype(structtype_with_udt)
         p = ExamplePoint(1.0, 2.0)
         self.assertEqual(_infer_type(p), ExamplePointUDT())
-        _verify_type(ExamplePoint(1.0, 2.0), ExamplePointUDT())
-        self.assertRaises(ValueError, lambda: _verify_type([1.0, 2.0], ExamplePointUDT()))
+        _make_type_verifier(ExamplePointUDT())(ExamplePoint(1.0, 2.0))
+        self.assertRaises(ValueError, lambda: _make_type_verifier(ExamplePointUDT())([1.0, 2.0]))
 
         check_datatype(PythonOnlyUDT())
         structtype_with_udt = StructType([StructField("label", DoubleType(), False),
@@ -890,8 +890,10 @@ class SQLTests(ReusedPySparkTestCase):
         check_datatype(structtype_with_udt)
         p = PythonOnlyPoint(1.0, 2.0)
         self.assertEqual(_infer_type(p), PythonOnlyUDT())
-        _verify_type(PythonOnlyPoint(1.0, 2.0), PythonOnlyUDT())
-        self.assertRaises(ValueError, lambda: _verify_type([1.0, 2.0], PythonOnlyUDT()))
+        _make_type_verifier(PythonOnlyUDT())(PythonOnlyPoint(1.0, 2.0))
+        self.assertRaises(
+            ValueError,
+            lambda: _make_type_verifier(PythonOnlyUDT())([1.0, 2.0]))
 
     def test_simple_udt_in_df(self):
         schema = StructType().add("key", LongType()).add("val", PythonOnlyUDT())
@@ -2637,31 +2639,40 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 class TypesTest(unittest.TestCase):
 
     def test_verify_type_exception_msg(self):
+        def verify_type(obj, dataType, nullable=True, name=None):
+            _make_type_verifier(dataType, nullable, name)(obj)
+
         name = "test_name"
         try:
-            _verify_type(None, StringType(), nullable=False, name=name)
-            self.fail('Expected _verify_type() to throw so test can check exception message')
+            verify_type(None, StringType(), nullable=False, name=name)
+            self.fail('Expected verify_type() to throw so test can check exception message')
         except Exception as e:
             self.assertTrue(str(e).startswith(name))
 
         schema = StructType([StructField('a', StructType([StructField('b', IntegerType())]))])
         try:
-            _verify_type([["data"]], schema)
-            self.fail('Expected _verify_type() to throw so test can check exception message')
+            verify_type([["data"]], schema)
+            self.fail('Expected verify_type() to throw so test can check exception message')
         except Exception as e:
-            self.assertTrue(str(e).startswith("a.b:"))
+            self.assertTrue(str(e).startswith("field b in field a"))
 
     def test_verify_type_ok_nullable(self):
+        def verify_type(obj, dataType, nullable=True, name=None):
+            _make_type_verifier(dataType, nullable, name)(obj)
+
         obj = None
         for data_type in [IntegerType(), FloatType(), StringType(), StructType([])]:
-            msg = "_verify_type(%s, %s, nullable=True)" % (obj, data_type)
+            msg = "verify_type(%s, %s, nullable=True)" % (obj, data_type)
             try:
-                _verify_type(obj, data_type, nullable=True)
+                verify_type(obj, data_type, nullable=True)
             except Exception as e:
                 traceback.print_exc()
                 self.fail(msg)
 
     def test_verify_type_not_nullable(self):
+        def verify_type(obj, dataType, nullable=True, name=None):
+            _make_type_verifier(dataType, nullable, name)(obj)
+
         import array
         import datetime
         import decimal
@@ -2784,16 +2795,16 @@ class TypesTest(unittest.TestCase):
         ]
 
         for obj, data_type, exp in spec:
-            msg = "_verify_type(%s, %s, nullable=False) == %s" % (obj, data_type, exp)
+            msg = "verify_type(%s, %s, nullable=False) == %s" % (obj, data_type, exp)
             if exp is None:
                 try:
-                    _verify_type(obj, data_type, nullable=False)
+                    verify_type(obj, data_type, nullable=False)
                 except Exception:
                     traceback.print_exc()
                     self.fail(msg)
             else:
                 with self.assertRaises(exp, msg=msg):
-                    _verify_type(obj, data_type, nullable=False)
+                    verify_type(obj, data_type, nullable=False)
 
 
 if __name__ == "__main__":

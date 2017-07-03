@@ -1249,7 +1249,7 @@ _acceptable_types = {
 }
 
 
-def _verify_type(obj, dataType, nullable=True, name=None):
+def _make_type_verifier(dataType, nullable=True, name=None):
     """
     Verify the type of obj against dataType, raise a TypeError if they do not match.
 
@@ -1257,41 +1257,42 @@ def _verify_type(obj, dataType, nullable=True, name=None):
     range, e.g. using 128 as ByteType will overflow. Note that, Python float is not checked, so it
     will become infinity when cast to Java float if it overflows.
 
-    >>> _verify_type(None, StructType([]))
-    >>> _verify_type("", StringType())
-    >>> _verify_type(0, LongType())
-    >>> _verify_type(list(range(3)), ArrayType(ShortType()))
-    >>> _verify_type(set(), ArrayType(StringType())) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(StructType([]))(None)
+    >>> _make_type_verifier(StringType())("")
+    >>> _make_type_verifier(LongType())(0)
+    >>> _make_type_verifier(ArrayType(ShortType()))(list(range(3)))
+    >>> _make_type_verifier(ArrayType(StringType()))(set()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     TypeError:...
-    >>> _verify_type({}, MapType(StringType(), IntegerType()))
-    >>> _verify_type((), StructType([]))
-    >>> _verify_type([], StructType([]))
-    >>> _verify_type([1], StructType([])) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(MapType(StringType(), IntegerType()))({})
+    >>> _make_type_verifier(StructType([]))(())
+    >>> _make_type_verifier(StructType([]))([])
+    >>> _make_type_verifier(StructType([]))([1]) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
     >>> # Check if numeric values are within the allowed range.
-    >>> _verify_type(12, ByteType())
-    >>> _verify_type(1234, ByteType()) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(ByteType())(12)
+    >>> _make_type_verifier(ByteType())(1234) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
-    >>> _verify_type(None, ByteType(), False) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(ByteType(), False)(None) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
-    >>> _verify_type([1, None], ArrayType(ShortType(), False)) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(
+    ...     ArrayType(ShortType(), False))([1, None]) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
-    >>> _verify_type({None: 1}, MapType(StringType(), IntegerType()))
+    >>> _make_type_verifier(MapType(StringType(), IntegerType()))({None: 1})
     Traceback (most recent call last):
         ...
     ValueError:...
     >>> schema = StructType().add("a", IntegerType()).add("b", StringType(), False)
-    >>> _verify_type((1, None), schema) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(schema)((1, None)) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
@@ -1299,91 +1300,150 @@ def _verify_type(obj, dataType, nullable=True, name=None):
 
     if name is None:
         new_msg = lambda msg: msg
-        new_element_name = lambda idx: "[%d]" % idx
-        new_key_name = lambda key: "[%s](key)" % key
-        new_value_name = lambda key: "[%s]" % key
-        new_name = lambda n: n
+        new_name = lambda n: "field %s" % n
     else:
         new_msg = lambda msg: "%s: %s" % (name, msg)
-        new_element_name = lambda idx: "%s[%d]" % (name, idx)
-        new_key_name = lambda key: "%s[%s](key)" % (name, key)
-        new_value_name = lambda key: "%s[%s]" % (name, key)
-        new_name = lambda n: "%s.%s" % (name, n)
+        new_name = lambda n: "field %s in %s" % (n, name)
 
-    if obj is None:
-        if nullable:
-            return
+    def verify_nullability(obj):
+        if obj is None:
+            if nullable:
+                return True
+            else:
+                raise ValueError(new_msg("This field is not nullable, but got None"))
         else:
-            raise ValueError(new_msg("This field is not nullable, but got None"))
+            return False
 
     # StringType can work with any types
     if isinstance(dataType, StringType):
-        return
+        def verify_string(obj):
+            if verify_nullability(obj):
+                return None
+        return verify_string
 
     if isinstance(dataType, UserDefinedType):
-        if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
-            raise ValueError(new_msg("%r is not an instance of type %r" % (obj, dataType)))
-        _verify_type(dataType.toInternal(obj), dataType.sqlType(), name=name)
-        return
+        verifier = _make_type_verifier(dataType.sqlType(), name=name)
+
+        def verify_udf(obj):
+            if verify_nullability(obj):
+                return None
+            if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
+                raise ValueError(new_msg("%r is not an instance of type %r" % (obj, dataType)))
+            verifier(dataType.toInternal(obj))
+        return verify_udf
 
     _type = type(dataType)
-    assert _type in _acceptable_types, \
-        new_msg("unknown datatype: %s for object %r" % (dataType, obj))
 
-    if _type is StructType:
-        # check the type and fields later
-        pass
-    else:
+    def assert_acceptable_types(obj):
+        assert _type in _acceptable_types, \
+            new_msg("unknown datatype: %s for object %r" % (dataType, obj))
+
+    def verify_acceptable_types(obj):
         # subclass of them can not be fromInternal in JVM
         if type(obj) not in _acceptable_types[_type]:
             raise TypeError(new_msg("%s can not accept object %r in type %s"
                                     % (dataType, obj, type(obj))))
 
     if isinstance(dataType, ByteType):
-        if obj < -128 or obj > 127:
-            raise ValueError(new_msg("object of ByteType out of range, got: %s" % obj))
+        def verify_byte(obj):
+            if verify_nullability(obj):
+                return None
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if obj < -128 or obj > 127:
+                raise ValueError(new_msg("object of ByteType out of range, got: %s" % obj))
+        return verify_byte
 
     elif isinstance(dataType, ShortType):
-        if obj < -32768 or obj > 32767:
-            raise ValueError(new_msg("object of ShortType out of range, got: %s" % obj))
+        def verify_short(obj):
+            if verify_nullability(obj):
+                return None
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if obj < -32768 or obj > 32767:
+                raise ValueError(new_msg("object of ShortType out of range, got: %s" % obj))
+        return verify_short
 
     elif isinstance(dataType, IntegerType):
-        if obj < -2147483648 or obj > 2147483647:
-            raise ValueError(new_msg("object of IntegerType out of range, got: %s" % obj))
+        def verify_integer(obj):
+            if verify_nullability(obj):
+                return None
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if obj < -2147483648 or obj > 2147483647:
+                raise ValueError(
+                    new_msg("object of IntegerType out of range, got: %s" % obj))
+        return verify_integer
 
     elif isinstance(dataType, ArrayType):
-        for i, value in enumerate(obj):
-            _verify_type(
-                value, dataType.elementType, dataType.containsNull, name=new_element_name(i))
+        element_verifier = _make_type_verifier(
+            dataType.elementType, dataType.containsNull, name="element in array %s" % name)
+
+        def verify_array(obj):
+            if verify_nullability(obj):
+                return None
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            for i in obj:
+                element_verifier(i)
+        return verify_array
 
     elif isinstance(dataType, MapType):
-        for k, v in obj.items():
-            _verify_type(k, dataType.keyType, False, name=new_key_name(k))
-            _verify_type(
-                v, dataType.valueType, dataType.valueContainsNull, name=new_value_name(k))
+        key_verifier = _make_type_verifier(dataType.keyType, False, name="key of map %s" % name)
+        value_verifier = _make_type_verifier(
+            dataType.valueType, dataType.valueContainsNull, name="value of map %s" % name)
+
+        def verify_map(obj):
+            if verify_nullability(obj):
+                return None
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            for k, v in obj.items():
+                key_verifier(k)
+                value_verifier(v)
+        return verify_map
 
     elif isinstance(dataType, StructType):
-        if isinstance(obj, dict):
-            for f in dataType.fields:
-                _verify_type(obj.get(f.name), f.dataType, f.nullable, name=new_name(f.name))
-        elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
-            # the order in obj could be different than dataType.fields
-            for f in dataType.fields:
-                _verify_type(obj[f.name], f.dataType, f.nullable, name=new_name(f.name))
-        elif isinstance(obj, (tuple, list)):
-            if len(obj) != len(dataType.fields):
-                raise ValueError(
-                    new_msg("Length of object (%d) does not match with "
-                            "length of fields (%d)" % (len(obj), len(dataType.fields))))
-            for v, f in zip(obj, dataType.fields):
-                _verify_type(v, f.dataType, f.nullable, name=new_name(f.name))
-        elif hasattr(obj, "__dict__"):
-            d = obj.__dict__
-            for f in dataType.fields:
-                _verify_type(d.get(f.name), f.dataType, f.nullable, name=new_name(f.name))
-        else:
-            raise TypeError(new_msg("StructType can not accept object %r in type %s"
-                                    % (obj, type(obj))))
+        verifiers = []
+        for f in dataType.fields:
+            verifier = _make_type_verifier(f.dataType, f.nullable, name=new_name(f.name))
+            verifiers.append((f.name, verifier))
+
+        def verify_struct(obj):
+            if verify_nullability(obj):
+                return None
+            assert_acceptable_types(obj)
+
+            if isinstance(obj, dict):
+                for f, verifier in verifiers:
+                    verifier(obj.get(f))
+            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
+                # the order in obj could be different than dataType.fields
+                for f, verifier in verifiers:
+                    verifier(obj[f])
+            elif isinstance(obj, (tuple, list)):
+                if len(obj) != len(verifiers):
+                    raise ValueError(
+                        new_msg("Length of object (%d) does not match with "
+                                "length of fields (%d)" % (len(obj), len(verifiers))))
+                for v, (_, verifier) in zip(obj, verifiers):
+                    verifier(v)
+            elif hasattr(obj, "__dict__"):
+                d = obj.__dict__
+                for f, verifier in verifiers:
+                    verifier(d.get(f))
+            else:
+                raise TypeError(new_msg("StructType can not accept object %r in type %s"
+                                        % (obj, type(obj))))
+        return verify_struct
+
+    else:
+        def verify_default(obj):
+            if verify_nullability(obj):
+                return None
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+        return verify_default
 
 
 # This is used to unpickle a Row from JVM
