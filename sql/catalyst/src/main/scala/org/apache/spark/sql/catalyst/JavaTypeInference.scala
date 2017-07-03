@@ -369,7 +369,7 @@ object JavaTypeInference {
             StringType,
             "fromString",
             inputObject :: Nil,
-            returnNullable = true)
+            returnNullable = false)
 
         case c if c == classOf[java.sql.Timestamp] =>
           StaticInvoke(

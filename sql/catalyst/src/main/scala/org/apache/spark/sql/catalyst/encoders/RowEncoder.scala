@@ -121,7 +121,7 @@ object RowEncoder {
         StringType,
         "fromString",
         inputObject :: Nil,
-        returnNullable = true)
+        returnNullable = false)
 
     case t @ ArrayType(et, cn) =>
       et match {

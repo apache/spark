@@ -507,7 +507,7 @@ object ScalaReflection extends ScalaReflection {
           StringType,
           "fromString",
           inputObject :: Nil,
-          returnNullable = true)
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.sql.Timestamp] =>
         StaticInvoke(
