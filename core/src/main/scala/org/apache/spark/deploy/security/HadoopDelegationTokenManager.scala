@@ -55,6 +55,7 @@ private[spark] class HadoopDelegationTokenManager(
   logDebug(s"Using the following delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
+  /** Construct a [[HadoopDelegationTokenManager]] for the default Hadoop filesystem */
   def this(sparkConf: SparkConf, hadoopConf: Configuration) = {
     this(
       sparkConf,

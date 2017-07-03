@@ -102,6 +102,7 @@ class CoarseGrainedSchedulerBackend(
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
+  // Hadoop delegation tokens to be sent to the executors.
   private val hadoopDelegationCreds = getHadoopDelegationCreds()
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
