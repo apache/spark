@@ -448,6 +448,43 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       rand(Random.nextLong()), randn(Random.nextLong())
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
   }
+
+  test("SPARK-21281 fails if functions have no argument") {
+    var errMsg = intercept[AnalysisException] {
+      spark.range(1).select(array())
+    }.getMessage
+    assert(errMsg.contains("due to data type mismatch: input to function coalesce cannot be empty"))
+
+    errMsg = intercept[AnalysisException] {
+      spark.range(1).select(map())
+    }.getMessage
+    assert(errMsg.contains("due to data type mismatch: input to function coalesce cannot be empty"))
+
+    // spark.range(1).select(coalesce())
+    errMsg = intercept[AnalysisException] {
+      spark.range(1).select(coalesce())
+    }.getMessage
+    assert(errMsg.contains("due to data type mismatch: input to function coalesce cannot be empty"))
+
+    // This hits java.lang.AssertionError
+    // spark.range(1).select(struct())
+
+    errMsg = intercept[IllegalArgumentException] {
+      spark.range(1).select(greatest())
+    }.getMessage
+    assert(errMsg.contains("requirement failed: greatest requires at least 2 arguments"))
+
+    errMsg = intercept[IllegalArgumentException] {
+      spark.range(1).select(least())
+    }.getMessage
+    assert(errMsg.contains("requirement failed: least requires at least 2 arguments"))
+
+    errMsg = intercept[AnalysisException] {
+      spark.range(1).select(hash())
+    }.getMessage
+    assert(errMsg.contains(
+      "due to data type mismatch: function hash requires at least one argument"))
+  }
 }
 
 object DataFrameFunctionsSuite {

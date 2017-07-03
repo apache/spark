@@ -41,8 +41,13 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children == Nil) {
+      TypeCheckResult.TypeCheckFailure("input to function coalesce cannot be empty")
+    } else {
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
+    }
+  }
 
   override def dataType: ArrayType = {
     ArrayType(
@@ -168,7 +173,9 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.size % 2 != 0) {
+    if (children == Nil) {
+      TypeCheckResult.TypeCheckFailure("input to function coalesce cannot be empty")
+    } else if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName expects a positive even number of arguments.")
     } else if (keys.map(_.dataType).distinct.length > 1) {
       TypeCheckResult.TypeCheckFailure("The given keys of function map should all be the same " +
