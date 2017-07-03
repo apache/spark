@@ -449,6 +449,8 @@ private[hive] class TestHiveSparkSession(
 
   private val loadedTables = new collection.mutable.HashSet[String]
 
+  def getLoadedTables: collection.mutable.HashSet[String] = loadedTables
+
   def loadTestTable(name: String) {
     if (!(loadedTables contains name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
@@ -553,7 +555,10 @@ private[hive] class TestHiveQueryExecution(
     val referencedTables =
       describedTables ++
         logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
-    val referencedTestTables = referencedTables.filter(sparkSession.testTables.contains)
+    val resolver = sparkSession.sessionState.conf.resolver
+    val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
+      referencedTables.exists(resolver(_, testTable))
+    }
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.
