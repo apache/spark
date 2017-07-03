@@ -58,8 +58,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   @Since("2.0.0")
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the error distribution to be used in the " +
-      s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
-    (value: String) => supportedFamilyNames.contains(value.toLowerCase(Locale.ROOT)))
+      s"model. Supported options: ${supportedFamilyNames.mkString("(", ",", ")")}.",
+    ParamValidators.inStringArray(supportedFamilyNames))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -100,8 +100,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   @Since("2.0.0")
   final val link: Param[String] = new Param(this, "link", "The name of link function " +
     "which provides the relationship between the linear predictor and the mean of the " +
-    s"distribution function. Supported options: ${supportedLinkNames.mkString(", ")}",
-    (value: String) => supportedLinkNames.contains(value.toLowerCase(Locale.ROOT)))
+    s"distribution function. Supported options: ${supportedLinkNames.mkString("(", ",", ")")}",
+    ParamValidators.inStringArray(supportedLinkNames))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -171,18 +171,18 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    *
    * @group param
    */
-  @Since("2.3.0")
+  @Since("2.0.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
       s"${supportedSolvers.mkString(", ")}. (Default irls)",
-    ParamValidators.inArray[String](supportedSolvers))
+    ParamValidators.inStringArray(supportedSolvers))
 
   @Since("2.0.0")
   override def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    if ($(family).toLowerCase(Locale.ROOT) == "tweedie") {
+    if (getFamily.toLowerCase(Locale.ROOT) == "tweedie") {
       if (isSet(link)) {
         logWarning("When family is tweedie, use param linkPower to specify link function. " +
           "Setting param link will take no effect.")
@@ -199,7 +199,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
         require(supportedFamilyAndLinkPairs.contains(
           Family.fromParams(this) -> Link.fromParams(this)),
           s"Generalized Linear Regression with ${$(family)} family " +
-            s"does not support ${$(link)} link function.")
+            s"does not support ${getLink.toLowerCase(Locale.ROOT)} link function.")
       }
     }
 
@@ -407,7 +407,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
       val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-        wlsModel.diagInvAtWA.toArray, 1, getSolver)
+        wlsModel.diagInvAtWA.toArray, 1, getSolver.toLowerCase(Locale.ROOT))
       model.setSummary(Some(trainingSummary))
     } else {
       val instances: RDD[OffsetInstance] =
@@ -424,7 +424,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
           .setParent(this))
       val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-        irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
+        irlsModel.diagInvAtWA.toArray, irlsModel.numIterations,
+        getSolver.toLowerCase(Locale.ROOT))
       model.setSummary(Some(trainingSummary))
     }
 

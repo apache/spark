@@ -1608,6 +1608,13 @@ class GeneralizedLinearRegressionSuite
         assert(model.getFamily === family)
         assert(model.getLink === link)
     }
+
+    Seq("IRlS").foreach { solver =>
+      glr.setSolver(solver)
+      assert(glr.getSolver === solver)
+      val model = glr.fit(df)
+      assert(model.getSolver === solver)
+    }
   }
 }
 

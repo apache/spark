@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
@@ -83,8 +85,8 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
   @Since("2.0.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
-      s"${supportedSolvers.mkString(", ")}. (Default l-bfgs)",
-    ParamValidators.inArray[String](supportedSolvers))
+      s"${supportedSolvers.mkString("(", ",", ")")}. (Default l-bfgs)",
+    ParamValidators.inStringArray(supportedSolvers))
 
   /**
    * The initial weights of the model.
@@ -249,19 +251,22 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     } else {
       trainer.setSeed($(seed))
     }
-    if ($(solver) == MultilayerPerceptronClassifier.LBFGS) {
-      trainer.LBFGSOptimizer
-        .setConvergenceTol($(tol))
-        .setNumIterations($(maxIter))
-    } else if ($(solver) == MultilayerPerceptronClassifier.GD) {
-      trainer.SGDOptimizer
-        .setNumIterations($(maxIter))
-        .setConvergenceTol($(tol))
-        .setStepSize($(stepSize))
-    } else {
-      throw new IllegalArgumentException(
-        s"The solver $solver is not supported by MultilayerPerceptronClassifier.")
+
+    getSolver.toLowerCase(Locale.ROOT) match {
+      case MultilayerPerceptronClassifier.LBFGS =>
+        trainer.LBFGSOptimizer
+          .setConvergenceTol($(tol))
+          .setNumIterations($(maxIter))
+      case MultilayerPerceptronClassifier.GD =>
+        trainer.SGDOptimizer
+          .setNumIterations($(maxIter))
+          .setConvergenceTol($(tol))
+          .setStepSize($(stepSize))
+      case _ =>
+        throw new IllegalArgumentException(
+          s"The solver $getSolver is not supported by MultilayerPerceptronClassifier.")
     }
+
     trainer.setStackSize($(blockSize))
     val mlpModel = trainer.train(data)
     val model = new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)

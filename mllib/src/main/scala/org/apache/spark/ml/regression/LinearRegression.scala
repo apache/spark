@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -64,11 +66,11 @@ private[regression] trait LinearRegressionParams extends PredictorParams
    *
    * @group param
    */
-  @Since("2.3.0")
+  @Since("1.6.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
-      s"${supportedSolvers.mkString(", ")}. (Default auto)",
-    ParamValidators.inArray[String](supportedSolvers))
+      s"${supportedSolvers.mkString("(", ",", ")")}. (Default auto)",
+    ParamValidators.inStringArray(supportedSolvers))
 }
 
 /**
@@ -224,8 +226,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
-    if (($(solver) == AUTO &&
-      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == NORMAL) {
+    if ((getSolver.toLowerCase(Locale.ROOT) == AUTO &&
+      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) ||
+      getSolver.toLowerCase(Locale.ROOT) == NORMAL) {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 
