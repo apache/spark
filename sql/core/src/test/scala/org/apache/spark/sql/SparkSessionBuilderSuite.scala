@@ -98,8 +98,27 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     val session = SparkSession.builder().config("key2", "value2").getOrCreate()
     assert(session.conf.get("key1") == "value1")
     assert(session.conf.get("key2") == "value2")
+    assert(session.sparkContext == sparkContext2)
     assert(session.sparkContext.conf.get("key1") == "value1")
+    // If the created sparkContext is not passed through the Builder's API sparkContext,
+    // the conf of this sparkContext will also contain the conf set through the API config.
     assert(session.sparkContext.conf.get("key2") == "value2")
+    assert(session.sparkContext.conf.get("spark.app.name") == "test")
+    session.stop()
+  }
+
+  test("create SparkContext first then pass context to SparkSession") {
+    sparkContext.stop()
+    val conf = new SparkConf().setAppName("test").setMaster("local").set("key1", "value1")
+    val newSC = new SparkContext(conf)
+    val session = SparkSession.builder().sparkContext(newSC).config("key2", "value2").getOrCreate()
+    assert(session.conf.get("key1") == "value1")
+    assert(session.conf.get("key2") == "value2")
+    assert(session.sparkContext == newSC)
+    assert(session.sparkContext.conf.get("key1") == "value1")
+    // If the created sparkContext is passed through the Builder's API sparkContext,
+    // the conf of this sparkContext will not contain the conf set through the API config.
+    assert(!session.sparkContext.conf.contains("key2"))
     assert(session.sparkContext.conf.get("spark.app.name") == "test")
     session.stop()
   }
