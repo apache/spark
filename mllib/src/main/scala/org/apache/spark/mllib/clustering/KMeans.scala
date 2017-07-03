@@ -273,7 +273,7 @@ class KMeans private (
       val bcCenters = sc.broadcast(centers)
 
       // Find the new centers
-      val totalContribs = data.mapPartitions { points =>
+      val newCenters = data.mapPartitions { points =>
         val thisCenters = bcCenters.value
         val dims = thisCenters.head.vector.size
 
@@ -301,7 +301,7 @@ class KMeans private (
 
       // Update the cluster centers and costs
       converged = true
-      totalContribs.foreach { case (j, newCenter) =>
+      newCenters.foreach { case (j, newCenter) =>
         if (converged && KMeans.fastSquaredDistance(newCenter, centers(j)) > epsilon * epsilon) {
           converged = false
         }
