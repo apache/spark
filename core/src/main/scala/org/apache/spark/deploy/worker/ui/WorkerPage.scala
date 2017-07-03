@@ -114,7 +114,7 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
           <li><strong>ID:</strong> {executor.appId}</li>
           <li><strong>Name:</strong>
           {
-            if ({executor.state == ExecutorState.RUNNING}) {
+            if ({executor.state == ExecutorState.RUNNING} && executor.appDesc.appUiUrl.nonEmpty) {
               <a href={executor.appDesc.appUiUrl}> {executor.appDesc.name}</a>
             } else {
               {executor.appDesc.name}
