@@ -904,7 +904,7 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
   /** String name for "Multinomial". */
   private[regression] val Multinomial = "multinomial"
 
-  /** Set of solvers that LinearRegression supports. */
+  /** Set of solvers that LogisticRegression supports. */
   private[classification] val supportedFamilyNames =
     Array(Auto, Binomial, Multinomial).map(_.toLowerCase(Locale.ROOT))
 }
