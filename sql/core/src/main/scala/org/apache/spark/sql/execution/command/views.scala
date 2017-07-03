@@ -21,11 +21,13 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.util.SchemaUtils
 
 
 /**
@@ -122,19 +124,28 @@ case class CreateViewCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    // If the plan cannot be analyzed, throw an exception and don't proceed.
+    val qe = sparkSession.sessionState.executePlan(child)
+    qe.assertAnalyzed()
+    val analyzedPlan = qe.analyzed
+
     if (userSpecifiedColumns.nonEmpty &&
-        userSpecifiedColumns.length != child.output.length) {
+        userSpecifiedColumns.length != analyzedPlan.output.length) {
       throw new AnalysisException(s"The number of columns produced by the SELECT clause " +
-        s"(num: `${child.output.length}`) does not match the number of column names " +
+        s"(num: `${analyzedPlan.output.length}`) does not match the number of column names " +
         s"specified by CREATE VIEW (num: `${userSpecifiedColumns.length}`).")
     }
 
+    // When creating a permanent view, not allowed to reference temporary objects.
+    // This should be called after `qe.assertAnalyzed()` (i.e., `child` can be resolved)
+    verifyTemporaryObjectsNotExists(sparkSession)
+
     val catalog = sparkSession.sessionState.catalog
     if (viewType == LocalTempView) {
-      val aliasedPlan = aliasPlan(sparkSession, child)
+      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createTempView(name.table, aliasedPlan, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
-      val aliasedPlan = aliasPlan(sparkSession, child)
+      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       catalog.createGlobalTempView(name.table, aliasedPlan, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
       val tableMetadata = catalog.getTableMetadata(name)
@@ -144,11 +155,14 @@ case class CreateViewCommand(
       } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
         throw new AnalysisException(s"$name is not a view")
       } else if (replace) {
+        // Detect cyclic view reference on CREATE OR REPLACE VIEW.
+        val viewIdent = tableMetadata.identifier
+        checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
+
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
         // Nothing we need to retain from the old view, so just drop and create a new one
-        val viewIdent = tableMetadata.identifier
         catalog.dropTable(viewIdent, ignoreIfNotExists = false, purge = false)
-        catalog.createTable(prepareTable(sparkSession, child), ignoreIfExists = false)
+        catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
@@ -158,9 +172,37 @@ case class CreateViewCommand(
       }
     } else {
       // Create the view if it doesn't exist.
-      catalog.createTable(prepareTable(sparkSession, child), ignoreIfExists = false)
+      catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
     }
     Seq.empty[Row]
+  }
+
+  /**
+   * Permanent views are not allowed to reference temp objects, including temp function and views
+   */
+  private def verifyTemporaryObjectsNotExists(sparkSession: SparkSession): Unit = {
+    if (!isTemporary) {
+      // This func traverses the unresolved plan `child`. Below are the reasons:
+      // 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
+      // logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
+      // added/generated from a temporary view.
+      // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
+      // package (e.g., HiveGenericUDF).
+      child.collect {
+        // Disallow creating permanent views based on temporary views.
+        case s: UnresolvedRelation
+          if sparkSession.sessionState.catalog.isTemporaryTable(s.tableIdentifier) =>
+          throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+            s"referencing a temporary view ${s.tableIdentifier}")
+        case other if !other.resolved => other.expressions.flatMap(_.collect {
+          // Disallow creating permanent views based on temporary UDFs.
+          case e: UnresolvedFunction
+            if sparkSession.sessionState.catalog.isTemporaryFunction(e.name) =>
+            throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+              s"referencing a temporary function `${e.name}`")
+        })
+      }
+    }
   }
 
   /**
@@ -228,10 +270,15 @@ case class AlterViewAsCommand(
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(session: SparkSession): Seq[Row] = {
-    if (session.sessionState.catalog.alterTempViewDefinition(name, query)) {
+    // If the plan cannot be analyzed, throw an exception and don't proceed.
+    val qe = session.sessionState.executePlan(query)
+    qe.assertAnalyzed()
+    val analyzedPlan = qe.analyzed
+
+    if (session.sessionState.catalog.alterTempViewDefinition(name, analyzedPlan)) {
       // a local/global temp view has been altered, we are done.
     } else {
-      alterPermanentView(session, query)
+      alterPermanentView(session, analyzedPlan)
     }
 
     Seq.empty[Row]
@@ -242,6 +289,10 @@ case class AlterViewAsCommand(
     if (viewMeta.tableType != CatalogTableType.VIEW) {
       throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
     }
+
+    // Detect cyclic view reference on ALTER VIEW.
+    val viewIdent = viewMeta.identifier
+    checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
     val newProperties = generateViewProperties(viewMeta.properties, session, analyzedPlan)
 
@@ -305,12 +356,66 @@ object ViewHelper {
       properties: Map[String, String],
       session: SparkSession,
       analyzedPlan: LogicalPlan): Map[String, String] = {
-    // Generate the view default database name.
     val queryOutput = analyzedPlan.schema.fieldNames
-    val viewDefaultDatabase = session.sessionState.catalog.getCurrentDatabase
 
+    // Generate the query column names, throw an AnalysisException if there exists duplicate column
+    // names.
+    SchemaUtils.checkColumnNameDuplication(
+      queryOutput, "the view", session.sessionState.conf.resolver)
+
+    // Generate the view default database name.
+    val viewDefaultDatabase = session.sessionState.catalog.getCurrentDatabase
     removeQueryColumnNames(properties) ++
       generateViewDefaultDatabase(viewDefaultDatabase) ++
       generateQueryColumnNames(queryOutput)
+  }
+
+  /**
+   * Recursively search the logical plan to detect cyclic view references, throw an
+   * AnalysisException if cycle detected.
+   *
+   * A cyclic view reference is a cycle of reference dependencies, for example, if the following
+   * statements are executed:
+   * CREATE VIEW testView AS SELECT id FROM tbl
+   * CREATE VIEW testView2 AS SELECT id FROM testView
+   * ALTER VIEW testView AS SELECT * FROM testView2
+   * The view `testView` references `testView2`, and `testView2` also references `testView`,
+   * therefore a reference cycle (testView -> testView2 -> testView) exists.
+   *
+   * @param plan the logical plan we detect cyclic view references from.
+   * @param path the path between the altered view and current node.
+   * @param viewIdent the table identifier of the altered view, we compare two views by the
+   *                  `desc.identifier`.
+   */
+  def checkCyclicViewReference(
+      plan: LogicalPlan,
+      path: Seq[TableIdentifier],
+      viewIdent: TableIdentifier): Unit = {
+    plan match {
+      case v: View =>
+        val ident = v.desc.identifier
+        val newPath = path :+ ident
+        // If the table identifier equals to the `viewIdent`, current view node is the same with
+        // the altered view. We detect a view reference cycle, should throw an AnalysisException.
+        if (ident == viewIdent) {
+          throw new AnalysisException(s"Recursive view $viewIdent detected " +
+            s"(cycle: ${newPath.mkString(" -> ")})")
+        } else {
+          v.children.foreach { child =>
+            checkCyclicViewReference(child, newPath, viewIdent)
+          }
+        }
+      case _ =>
+        plan.children.foreach(child => checkCyclicViewReference(child, path, viewIdent))
+    }
+
+    // Detect cyclic references from subqueries.
+    plan.expressions.foreach { expr =>
+      expr match {
+        case s: SubqueryExpression =>
+          checkCyclicViewReference(s.plan, path, viewIdent)
+        case _ => // Do nothing.
+      }
+    }
   }
 }

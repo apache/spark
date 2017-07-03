@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 // TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
@@ -300,6 +301,9 @@ object PartitioningUtils {
       }
       normalizedKey -> value
     }
+
+    SchemaUtils.checkColumnNameDuplication(
+      normalizedPartSpec.map(_._1), "in the partition specification", resolver)
 
     normalizedPartSpec.toMap
   }
