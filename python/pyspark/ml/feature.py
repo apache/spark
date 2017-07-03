@@ -2132,6 +2132,12 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
                             "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
                             typeConverter=TypeConverters.toString)
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
+                          "labels or NULL values). Options are 'skip' (filter out rows with " +
+                          "invalid data), error (throw an error), or 'keep' (put invalid data " +
+                          "in a special additional bucket, at index numLabels).",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
                  stringOrderType="frequencyDesc"):

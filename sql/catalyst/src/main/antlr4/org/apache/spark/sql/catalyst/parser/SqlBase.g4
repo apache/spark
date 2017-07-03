@@ -561,6 +561,7 @@ primaryExpression
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
+    | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
     | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
     | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
     | POSITION '(' substr=valueExpression IN str=valueExpression ')'                           #position
@@ -569,7 +570,7 @@ primaryExpression
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
-    | qualifiedName '(' (setQuantifier? namedExpression (',' namedExpression)*)? ')'
+    | qualifiedName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
        (OVER windowSpec)?                                                                      #functionCall
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
