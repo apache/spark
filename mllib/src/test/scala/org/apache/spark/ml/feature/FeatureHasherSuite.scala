@@ -33,6 +33,8 @@ class FeatureHasherSuite extends SparkFunSuite
   import testImplicits._
   import HashingTFSuite.murmur3FeatureIdx
 
+  implicit val vectorEncoder = ExpressionEncoder[Vector]()
+
   test("params") {
     ParamsSuite.checkParams(new FeatureHasher)
   }
@@ -47,8 +49,8 @@ class FeatureHasherSuite extends SparkFunSuite
 
   test("feature hashing") {
     val df = Seq(
-      (2, 2.0, 2.0f, "2", "foo"),
-      (3, 3.0, 3.0f, "3", "bar")
+      (3, 4.0, 5.0f, "1", "foo"),
+      (6, 7.0, 8.0f, "2", "bar")
     ).toDF("int", "double", "float", "stringNum", "string")
 
     val n = 100
@@ -60,17 +62,70 @@ class FeatureHasherSuite extends SparkFunSuite
     val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
     require(attrGroup.numAttributes === Some(n))
 
-    implicit val vectorEncoder = ExpressionEncoder[Vector]()
     val features = output.select("features").as[Vector].collect()
-
     // Assume perfect hash on field names
     def idx: Any => Int = murmur3FeatureIdx(n)
     // check expected indices
     val expected = Seq(
-      Vectors.sparse(n, Seq((idx("int"), 2.0), (idx("double"), 2.0), (idx("float"), 2.0),
-        (idx("stringNum=2"), 1.0), (idx("string=foo"), 1.0))),
-      Vectors.sparse(n, Seq((idx("int"), 3.0), (idx("double"), 3.0), (idx("float"), 3.0),
-        (idx("stringNum=3"), 1.0), (idx("string=bar"), 1.0)))
+      Vectors.sparse(n, Seq((idx("int"), 3.0), (idx("double"), 4.0), (idx("float"), 5.0),
+        (idx("stringNum=1"), 1.0), (idx("string=foo"), 1.0))),
+      Vectors.sparse(n, Seq((idx("int"), 6.0), (idx("double"), 7.0), (idx("float"), 8.0),
+        (idx("stringNum=2"), 1.0), (idx("string=bar"), 1.0)))
+    )
+    assert(features.zip(expected).forall { case (e, a) => e ~== a absTol 1e-14 })
+  }
+
+  test("hash collisions sum feature values") {
+    val df = Seq(
+      (1.0, "foo", "foo"),
+      (2.0, "bar", "baz")
+    ).toDF("double", "string1", "string2")
+
+    val n = 1
+    val featureHasher = new FeatureHasher()
+      .setInputCols("double", "string1", "string2")
+      .setOutputCol("features")
+      .setNumFeatures(n)
+    val output = featureHasher.transform(df)
+
+    val features = output.select("features").as[Vector].collect()
+    def idx: Any => Int = murmur3FeatureIdx(n)
+    // everything should hash into one field
+    assert(idx("double") === idx("string1=foo"))
+    assert(idx("string1=foo") === idx("string2=foo"))
+    assert(idx("string2=foo") === idx("string1=bar"))
+    assert(idx("string1=bar") === idx("string2=baz"))
+    val expected = Seq(
+      Vectors.sparse(n, Seq((idx("string1=foo"), 3.0))),
+      Vectors.sparse(n, Seq((idx("string2=bar"), 4.0)))
+    )
+    assert(features.zip(expected).forall { case (e, a) => e ~== a absTol 1e-14 })
+  }
+
+  test("ignores null values in feature hashing") {
+    import org.apache.spark.sql.functions._
+
+    val df = Seq(
+      (2.0, "foo", null),
+      (3.0, "bar", "baz")
+    ).toDF("double", "string1", "string2").select(
+      when(col("double") === 3.0, null).otherwise(col("double")).alias("double"),
+      col("string1"),
+      col("string2")
+    )
+
+    val n = 100
+    val featureHasher = new FeatureHasher()
+      .setInputCols("double", "string1", "string2")
+      .setOutputCol("features")
+      .setNumFeatures(n)
+    val output = featureHasher.transform(df)
+
+    val features = output.select("features").as[Vector].collect()
+    def idx: Any => Int = murmur3FeatureIdx(n)
+    val expected = Seq(
+      Vectors.sparse(n, Seq((idx("double"), 2.0), (idx("string1=foo"), 1.0))),
+      Vectors.sparse(n, Seq((idx("string1=bar"), 1.0), (idx("string2=baz"), 1.0)))
     )
     assert(features.zip(expected).forall { case (e, a) => e ~== a absTol 1e-14 })
   }

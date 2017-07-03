@@ -75,19 +75,20 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
       val map = new OpenHashMap[Int, Double]()
       $(inputCols).foreach { case colName =>
         val fieldIndex = row.fieldIndex(colName)
-        val (rawIdx, value) = if (realFields(colName)) {
-          val value = row.getDouble(fieldIndex)
-          val hash = hashFunc(colName)
-          (hash, value)
-        } else {
-          val value = row.getString(fieldIndex)
-          val fieldName = s"$colName=$value"
-          val hash = hashFunc(fieldName)
-          (hash, 1.0)
+        if (!row.isNullAt(fieldIndex)) {
+          val (rawIdx, value) = if (realFields(colName)) {
+            val value = row.getDouble(fieldIndex)
+            val hash = hashFunc(colName)
+            (hash, value)
+          } else {
+            val value = row.getString(fieldIndex)
+            val fieldName = s"$colName=$value"
+            val hash = hashFunc(fieldName)
+            (hash, 1.0)
+          }
+          val idx = Utils.nonNegativeMod(rawIdx, n)
+          map.changeValue(idx, value, v => v + value)
         }
-        val idx = Utils.nonNegativeMod(rawIdx, n)
-        map.changeValue(idx, value, v => v + value)
-        (idx, value)
       }
       Vectors.sparse(n, map.toSeq)
     }
