@@ -216,7 +216,6 @@ object JavaTypeInference {
           ObjectType(c),
           "valueOf",
           getPath :: Nil,
-          propagateNull = true,
           returnNullable = false)
 
       case c if c == classOf[java.sql.Date] =>
@@ -225,7 +224,6 @@ object JavaTypeInference {
           ObjectType(c),
           "toJavaDate",
           getPath :: Nil,
-          propagateNull = true,
           returnNullable = false)
 
       case c if c == classOf[java.sql.Timestamp] =>
@@ -234,7 +232,6 @@ object JavaTypeInference {
           ObjectType(c),
           "toJavaTimestamp",
           getPath :: Nil,
-          propagateNull = true,
           returnNullable = false)
 
       case c if c == classOf[java.lang.String] =>
