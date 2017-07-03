@@ -60,13 +60,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     sc.env.rpcEnv,
     Some(new HadoopDelegationTokenManager(
       sc.conf,
-      SparkHadoopUtil.get.newConfiguration(sc.conf),
-      Set(FileSystem.get(
-        SparkHadoopUtil.get.newConfiguration(sc.conf))
-        .getHomeDirectory
-        .getFileSystem(
-          SparkHadoopUtil.get.newConfiguration(sc.conf)))
-    )))
+      SparkHadoopUtil.get.newConfiguration(sc.conf))))
     with org.apache.mesos.Scheduler
     with MesosSchedulerUtils {
 

@@ -55,6 +55,13 @@ private[spark] class HadoopDelegationTokenManager(
   logDebug(s"Using the following delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
+  def this(sparkConf: SparkConf, hadoopConf: Configuration) = {
+    this(
+      sparkConf,
+      hadoopConf,
+      Set(FileSystem.get(hadoopConf).getHomeDirectory.getFileSystem(hadoopConf)))
+  }
+
   private def getDelegationTokenProviders: Map[String, HadoopDelegationTokenProvider] = {
     val providers = List(new HadoopFSDelegationTokenProvider(fileSystems),
       new HiveDelegationTokenProvider,
