@@ -510,7 +510,6 @@ class CoarseGrainedSchedulerBackend(
 
   /**
    * Request an additional number of executors from the cluster manager.
-   *
    * @return whether the request is acknowledged.
    */
   final override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
@@ -545,7 +544,6 @@ class CoarseGrainedSchedulerBackend(
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
-   *
    * @param numExecutors The total number of executors we'd like to have. The cluster manager
    *                     shouldn't kill any running executor to reach this number, but,
    *                     if all existing executors were to die, this is the number of executors
@@ -591,7 +589,6 @@ class CoarseGrainedSchedulerBackend(
    * of requesting a delta of executors risks double counting new executors when there are
    * insufficient resources to satisfy the first request. We make the assumption here that the
    * cluster manager will eventually fulfill all requests when resources free up.
-   *
    * @return a future whose evaluation indicates whether the request is acknowledged.
    */
   protected def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] =
@@ -603,7 +600,6 @@ class CoarseGrainedSchedulerBackend(
    * When asking the executor to be replaced, the executor loss is considered a failure, and
    * killed tasks that are running on the executor will count towards the failure limits. If no
    * replacement is being requested, then the tasks will not count towards the limit.
-   *
    * @param executorIds identifiers of executors to kill
    * @param replace whether to replace the killed executors with new ones, default false
    * @param force whether to force kill busy executors, default false
@@ -670,7 +666,6 @@ class CoarseGrainedSchedulerBackend(
 
   /**
    * Kill the given list of executors through the cluster manager.
-   *
    * @return whether the kill request is acknowledged.
    */
   protected def doKillExecutors(executorIds: Seq[String]): Future[Boolean] =
@@ -678,7 +673,6 @@ class CoarseGrainedSchedulerBackend(
 
   /**
    * Request that the cluster manager kill all executors on a given host.
-   *
    * @return whether the kill request is acknowledged.
    */
   final override def killExecutorsOnHost(host: String): Boolean = {
