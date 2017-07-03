@@ -583,14 +583,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }
     }
 
-    // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
-    // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos mode, we
-    // must trick it into thinking we're YARN.
     if (clusterManager == MESOS && UserGroupInformation.isSecurityEnabled) {
-      val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
-      val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
-      logDebug(s"Setting ${key} to ${shortUserName}")
-      sysProps.put(key, shortUserName)
+      setRMPrincipal(sysProps)
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
@@ -675,6 +669,16 @@ object SparkSubmit extends CommandLineUtils with Logging {
     }
 
     (childArgs, childClasspath, sysProps, childMainClass)
+  }
+
+  // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
+  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos mode, we
+  // must trick it into thinking we're YARN.
+  private def setRMPrincipal(sysProps: HashMap[String, String]): Unit = {
+    val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
+    val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
+    logDebug(s"Setting ${key} to ${shortUserName}")
+    sysProps.put(key, shortUserName)
   }
 
   /**
