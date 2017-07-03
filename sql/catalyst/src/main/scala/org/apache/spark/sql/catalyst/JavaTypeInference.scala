@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * Type-inference utilities for POJOs and Java collections.
@@ -127,13 +128,17 @@ object JavaTypeInference {
 
         // TODO: we should only collect properties that have getter and setter. However, some tests
         // pass in scala case class as java bean class which doesn't have getter and setter.
-        val properties = getJavaBeanReadableProperties(other)
-        val fields = properties.map { property =>
-          val returnType = typeToken.method(property.getReadMethod).getReturnType
-          val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
-          new StructField(property.getName, dataType, nullable)
+        if (typeToken.getRawType.isEnum) {
+          (StructType(Seq(new StructField("value", IntegerType, false))), true)
+        } else {
+          val properties = getJavaBeanReadableProperties(other)
+          val fields = properties.map { property =>
+            val returnType = typeToken.method(property.getReadMethod).getReturnType
+            val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
+            new StructField(property.getName, dataType, nullable)
+          }
+          (new StructType(fields), true)
         }
-        (new StructType(fields), true)
     }
   }
 
@@ -303,6 +308,10 @@ object JavaTypeInference {
           "toJavaMap",
           keyData :: valueData :: Nil)
 
+      case other if other.isEnum =>
+        StaticInvoke(JavaTypeInference.getClass, ObjectType(classOf[Object]), "deserializeEnumName",
+          expressions.Literal.create(other.getName, StringType) :: getPath :: Nil)
+
       case other =>
         val properties = getJavaBeanReadableAndWritableProperties(other)
         val setters = properties.map { p =>
@@ -343,6 +352,36 @@ object JavaTypeInference {
       case expressions.If(_, _, s: CreateNamedStruct) => s
       case other => CreateNamedStruct(expressions.Literal("value") :: other :: Nil)
     }
+  }
+
+  /**
+    * Returns a mapping from enum value to int for given enum type
+    */
+  def enumSerializer[T](enum: Class[T]): T => Int = {
+    assert(enum.isEnum)
+    enum.getEnumConstants.toList.zipWithIndex.toMap
+  }
+
+  /**
+    * Returns value index for given enum type and value
+    */
+  def serializeEnumName[T](enum: UTF8String, inputObject: T): Int = {
+    enumSerializer(Utils.classForName(enum.toString).asInstanceOf[Class[T]])(inputObject)
+  }
+
+  /**
+    * Returns a mapping from int to enum value for given enum type
+    */
+  def enumDeserializer[T](enum: Class[T]): Int => T = {
+    assert(enum.isEnum)
+    enum.getEnumConstants.toList.zipWithIndex.toMap.map(_.swap)
+  }
+
+  /**
+    * Returns enum value for given enum type and value index
+    */
+  def deserializeEnumName[T](enum: UTF8String, inputObject: Int): Any = {
+    enumDeserializer(Utils.classForName(enum.toString).asInstanceOf[Class[T]])(inputObject)
   }
 
   private def serializerFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
@@ -423,6 +462,10 @@ object JavaTypeInference {
             serializerFor(_, valueType),
             valueNullable = true
           )
+
+        case other if other.isEnum =>
+          StaticInvoke(JavaTypeInference.getClass, IntegerType, "serializeEnumName",
+          expressions.Literal.create(other.getName, StringType) :: inputObject :: Nil)
 
         case other =>
           val properties = getJavaBeanReadableAndWritableProperties(other)

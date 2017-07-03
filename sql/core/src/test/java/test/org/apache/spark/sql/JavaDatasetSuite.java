@@ -1284,6 +1284,7 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   public enum EnumBean {
+    A("www.elgoog.com"),
     B("www.google.com");
 
     private String url;
@@ -1302,11 +1303,10 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
-  public void testEnum() throws Exception {
+  public void testEnum() {
     List<EnumBean> data = Arrays.asList(EnumBean.B);
     Dataset<EnumBean> ds = spark.createDataset(data, Encoders.bean(EnumBean.class));
-
-    Assert.assertEquals(ds.collectAsList().size(), 1);
+    Assert.assertEquals(ds.collectAsList(), data);
   }
 
   public static class EmptyBean implements Serializable {}
