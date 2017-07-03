@@ -2644,6 +2644,13 @@ class TypesTest(unittest.TestCase):
         except Exception as e:
             self.assertTrue(str(e).startswith(name))
 
+        schema = StructType([StructField('a', StructType([StructField('b', IntegerType())]))])
+        try:
+            _verify_type([["data"]], schema)
+            self.fail('Expected _verify_type() to throw so test can check exception message')
+        except Exception as e:
+            self.assertTrue(str(e).startswith("a.b:"))
+
     def test_verify_type_ok_nullable(self):
         obj = None
         for data_type in [IntegerType(), FloatType(), StringType(), StructType([])]:
@@ -2659,7 +2666,7 @@ class TypesTest(unittest.TestCase):
         import datetime
         import decimal
 
-        MyStructType = StructType([
+        schema = StructType([
             StructField('s', StringType(), nullable=False),
             StructField('i', IntegerType(), nullable=True)])
 
@@ -2754,26 +2761,26 @@ class TypesTest(unittest.TestCase):
              ValueError),
 
             # Struct
-            ({"s": "a", "i": 1}, MyStructType, None),
-            ({"s": "a", "i": None}, MyStructType, None),
-            ({"s": "a"}, MyStructType, None),
-            ({"s": "a", "f": 1.0}, MyStructType, None),     # Extra fields OK
-            ({"s": "a", "i": "1"}, MyStructType, TypeError),
-            (Row(s="a", i=1), MyStructType, None),
-            (Row(s="a", i=None), MyStructType, None),
-            (Row(s="a", i=1, f=1.0), MyStructType, None),   # Extra fields OK
-            (Row(s="a"), MyStructType, ValueError),     # Row can't have missing field
-            (Row(s="a", i="1"), MyStructType, TypeError),
-            (["a", 1], MyStructType, None),
-            (["a", None], MyStructType, None),
-            (["a"], MyStructType, ValueError),
-            (["a", "1"], MyStructType, TypeError),
-            (("a", 1), MyStructType, None),
-            (MyObj(s="a", i=1), MyStructType, None),
-            (MyObj(s="a", i=None), MyStructType, None),
-            (MyObj(s="a"), MyStructType, None),
-            (MyObj(s="a", i="1"), MyStructType, TypeError),
-            (MyObj(s=None, i="1"), MyStructType, ValueError),
+            ({"s": "a", "i": 1}, schema, None),
+            ({"s": "a", "i": None}, schema, None),
+            ({"s": "a"}, schema, None),
+            ({"s": "a", "f": 1.0}, schema, None),     # Extra fields OK
+            ({"s": "a", "i": "1"}, schema, TypeError),
+            (Row(s="a", i=1), schema, None),
+            (Row(s="a", i=None), schema, None),
+            (Row(s="a", i=1, f=1.0), schema, None),   # Extra fields OK
+            (Row(s="a"), schema, ValueError),     # Row can't have missing field
+            (Row(s="a", i="1"), schema, TypeError),
+            (["a", 1], schema, None),
+            (["a", None], schema, None),
+            (["a"], schema, ValueError),
+            (["a", "1"], schema, TypeError),
+            (("a", 1), schema, None),
+            (MyObj(s="a", i=1), schema, None),
+            (MyObj(s="a", i=None), schema, None),
+            (MyObj(s="a"), schema, None),
+            (MyObj(s="a", i="1"), schema, TypeError),
+            (MyObj(s=None, i="1"), schema, ValueError),
         ]
 
         for obj, data_type, exp in spec:
