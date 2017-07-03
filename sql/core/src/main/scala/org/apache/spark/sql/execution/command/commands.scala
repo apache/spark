@@ -80,18 +80,26 @@ trait DataWritingCommand extends RunnableCommand {
     var numFiles = 0
     var totalNumBytes: Long = 0L
     var totalNumOutput: Long = 0L
+    var totalWritingTime: Long = 0L
+    var numFilesNonZeroWritingTime = 0
 
     writeSummaries.foreach { summary =>
       numPartitions += summary.updatedPartitions.size
       numFiles += summary.numOutputFile
       totalNumBytes += summary.numOutputBytes
       totalNumOutput += summary.numOutputRows
+      totalWritingTime += summary.totalWritingTime
+      numFilesNonZeroWritingTime += summary.numFilesWithNonZeroWritingTime
     }
 
+    // We only count non-zero writing time when averaging total writing time.
     // The time for writing individual file can be zero if it's less than 1 ms. Zero values can
     // lower actual time of writing to zero when calculating average, so excluding them.
-    val avgWritingTime =
-      Utils.average(writeSummaries.flatMap(_.writingTimePerFile.filter(_ > 0))).toLong
+    val avgWritingTime = if (numFilesNonZeroWritingTime > 0) {
+      (totalWritingTime / numFilesNonZeroWritingTime).toLong
+    } else {
+      0L
+    }
 
     metrics("avgTime").add(avgWritingTime)
     metrics("numFiles").add(numFiles)

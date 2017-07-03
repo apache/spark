@@ -275,7 +275,8 @@ object FileFormatWriter extends Logging {
     /**
      * The data structures used to measure metrics during writing.
      */
-    protected val writingTimePerFile: mutable.ArrayBuffer[Long] = mutable.ArrayBuffer.empty
+    protected var totalWritingTime: Long = 0L
+    protected var numFilesWithNonZeroWritingTime = 0
     protected var timeOnCurrentFile: Long = 0L
     protected var numOutputRows: Long = 0L
     protected var numOutputBytes: Long = 0L
@@ -356,7 +357,8 @@ object FileFormatWriter extends Logging {
         numOutputFile = fileCounter + 1,
         numOutputBytes = numOutputBytes,
         numOutputRows = numOutputRows,
-        writingTimePerFile = writingTimePerFile)
+        numFilesWithNonZeroWritingTime = numFilesWithNonZeroWritingTime,
+        totalWritingTime = totalWritingTime)
     }
 
     override def releaseResources(): Unit = {
@@ -364,7 +366,11 @@ object FileFormatWriter extends Logging {
         try {
           val startTime = System.nanoTime()
           currentWriter.close()
-          writingTimePerFile += (timeOnCurrentFile + System.nanoTime() - startTime) / 1000 / 1000
+          val writingTime = (timeOnCurrentFile + System.nanoTime() - startTime) / 1000 / 1000
+          if (writingTime > 0) {
+            numFilesWithNonZeroWritingTime += 1
+            totalWritingTime += writingTime
+          }
           timeOnCurrentFile = 0
           numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
         } finally {
@@ -520,7 +526,8 @@ object FileFormatWriter extends Logging {
         numOutputFile = totalFileCounter,
         numOutputBytes = numOutputBytes,
         numOutputRows = numOutputRows,
-        writingTimePerFile = writingTimePerFile)
+        numFilesWithNonZeroWritingTime = numFilesWithNonZeroWritingTime,
+        totalWritingTime = totalWritingTime)
     }
 
     override def releaseResources(): Unit = {
@@ -528,7 +535,11 @@ object FileFormatWriter extends Logging {
         try {
           val startTime = System.nanoTime()
           currentWriter.close()
-          writingTimePerFile += (timeOnCurrentFile + System.nanoTime() - startTime) / 1000 / 1000
+          val writingTime = (timeOnCurrentFile + System.nanoTime() - startTime) / 1000 / 1000
+          if (writingTime > 0) {
+            numFilesWithNonZeroWritingTime += 1
+            totalWritingTime += writingTime
+          }
           timeOnCurrentFile = 0
           numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
         } finally {
@@ -547,11 +558,13 @@ object FileFormatWriter extends Logging {
  * @param numOutputFile the total number of files.
  * @param numOutputRows the number of output rows.
  * @param numOutputBytes the bytes of output data.
- * @param writingTimePerFile the writing time in ms per file.
+ * @param numFilesWithNonZeroWritingTime the number of files with non zero writing time.
+ * @param totalWritingTime the total writing time in ms.
  */
 case class ExecutedWriteSummary(
   updatedPartitions: Set[String],
   numOutputFile: Int,
   numOutputRows: Long,
   numOutputBytes: Long,
-  writingTimePerFile: Seq[Long])
+  numFilesWithNonZeroWritingTime: Int,
+  totalWritingTime: Long)
