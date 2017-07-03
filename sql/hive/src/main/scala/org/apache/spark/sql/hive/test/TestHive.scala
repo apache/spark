@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.test
 
 import java.io.File
-import java.util.{Locale, Set => JavaSet}
+import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -555,10 +555,10 @@ private[hive] class TestHiveQueryExecution(
     val referencedTables =
       describedTables ++
         logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
-    val formattedRefTables = referencedTables.map { t =>
-      if (sparkSession.sessionState.conf.caseSensitiveAnalysis) t else t.toLowerCase(Locale.ROOT)
+    val resolver = sparkSession.sessionState.conf.resolver
+    val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
+      referencedTables.exists(resolver(_, testTable))
     }
-    val referencedTestTables = formattedRefTables.filter(sparkSession.testTables.contains)
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.

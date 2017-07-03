@@ -25,12 +25,14 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
   test("load test table based on case sensitivity") {
+    val testHiveSparkSession = spark.asInstanceOf[TestHiveSparkSession]
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       sql("SELECT * FROM SRC").queryExecution.analyzed
-      assert(spark.asInstanceOf[TestHiveSparkSession].getLoadedTables.contains("src"))
+      assert(testHiveSparkSession.getLoadedTables.contains("src"))
+      assert(testHiveSparkSession.getLoadedTables.size == 1)
     }
-    spark.asInstanceOf[TestHiveSparkSession].reset()
+    testHiveSparkSession.reset()
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val err = intercept[AnalysisException] {
@@ -38,6 +40,6 @@ class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
       }
       assert(err.message.contains("Table or view not found"))
     }
-    spark.asInstanceOf[TestHiveSparkSession].reset()
+    testHiveSparkSession.reset()
   }
 }
