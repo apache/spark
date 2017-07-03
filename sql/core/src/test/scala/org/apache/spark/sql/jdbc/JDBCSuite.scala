@@ -883,7 +883,9 @@ class JDBCSuite extends SparkFunSuite
 
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
-    val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
+    val caseSensitiveAnalysis = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val schema = JdbcUtils.schemaString(
+      df.schema, caseSensitiveAnalysis, "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
   }
 

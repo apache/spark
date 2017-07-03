@@ -486,7 +486,13 @@ case class DataSource(
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
 
-    providingClass.newInstance() match {
+    val resolvedRelation = providingClass.newInstance() match {
+      case relationToCheck: DataSourceValidator =>
+        relationToCheck.validateSchema(data.schema, partitionColumns, equality, options)
+        relationToCheck
+      case r => r
+    }
+    resolvedRelation match {
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
