@@ -56,16 +56,25 @@ trait RunnableCommand extends logical.Command {
 }
 
 /**
- * A trait for classes that can update its metrics of data writing operation.
+ * A special `RunnableCommand` which writes data out and updates metrics.
  */
-trait MetricUpdater {
+trait DataWritingCommand extends RunnableCommand {
 
-  val metrics: Map[String, SQLMetric]
+  override lazy val metrics: Map[String, SQLMetric] = {
+    val sparkContext = SparkContext.getActive.get
+    Map(
+      "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
+      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
+      "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
+      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
+    )
+  }
 
   /**
    * Callback function that update metrics collected from the writing operation.
    */
-  protected def callbackMetricsUpdater(writeSummaries: Seq[ExecutedWriteSummary]): Unit = {
+  protected def updateWritingMetrics(writeSummaries: Seq[ExecutedWriteSummary]): Unit = {
     val sparkContext = SparkContext.getActive.get
     var numPartitions = 0
     var numFiles = 0

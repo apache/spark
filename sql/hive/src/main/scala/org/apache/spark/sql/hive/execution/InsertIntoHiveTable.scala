@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.{CommandUtils, MetricUpdater, RunnableCommand}
+import org.apache.spark.sql.execution.command.{CommandUtils, DataWritingCommand}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.hive._
@@ -82,20 +82,9 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends RunnableCommand with MetricUpdater {
+    ifPartitionNotExists: Boolean) extends DataWritingCommand {
 
   override def children: Seq[LogicalPlan] = query :: Nil
-
-  override lazy val metrics: Map[String, SQLMetric] = {
-    val sparkContext = SparkContext.getActive.get
-    Map(
-      "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
-      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
-      "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
-      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
-    )
-  }
 
   var createdTempDir: Option[Path] = None
 
@@ -367,7 +356,7 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
-      refreshFunction = callbackMetricsUpdater,
+      refreshFunction = updateWritingMetrics,
       options = Map.empty)
 
     if (partition.nonEmpty) {

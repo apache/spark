@@ -55,21 +55,10 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex])
-  extends RunnableCommand with MetricUpdater {
+  extends DataWritingCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
   override def children: Seq[LogicalPlan] = query :: Nil
-
-  override lazy val metrics: Map[String, SQLMetric] = {
-    val sparkContext = SparkContext.getActive.get
-    Map(
-      "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
-      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
-      "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
-      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
-    )
-  }
 
   override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
     assert(children.length == 1)
@@ -143,7 +132,7 @@ case class InsertIntoHadoopFsRelationCommand(
           .distinct.map(PartitioningUtils.parsePathFragment)
 
         // Updating metrics.
-        callbackMetricsUpdater(summary)
+        updateWritingMetrics(summary)
 
         // Updating metastore partition metadata.
         if (partitionsTrackedByCatalog) {
