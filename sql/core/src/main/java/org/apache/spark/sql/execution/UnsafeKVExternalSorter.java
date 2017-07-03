@@ -92,6 +92,7 @@ public final class UnsafeKVExternalSorter {
         prefixComparator,
         SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
                                      UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
+        SparkEnv.get().conf().getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024,
         pageSizeBytes,
         numElementsForSpillThreshold,
         canUseRadixSort);
@@ -141,6 +142,7 @@ public final class UnsafeKVExternalSorter {
         prefixComparator,
         SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
                                      UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
+        SparkEnv.get().conf().getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024,
         pageSizeBytes,
         numElementsForSpillThreshold,
         inMemSorter);
