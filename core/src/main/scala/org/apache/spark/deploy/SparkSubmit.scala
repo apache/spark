@@ -32,6 +32,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
 import org.apache.ivy.core.module.descriptor._
@@ -47,6 +48,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBibl
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util._
 
@@ -65,7 +67,7 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit extends CommandLineUtils {
+object SparkSubmit extends CommandLineUtils with Logging {
 
   // Cluster managers
   private val YARN = 1
@@ -563,7 +565,7 @@ object SparkSubmit extends CommandLineUtils {
     }
 
     // assure a keytab is available from any place in a JVM
-    if (clusterManager == YARN || clusterManager == LOCAL) {
+    if (clusterManager == YARN || clusterManager == LOCAL || clusterManager == MESOS) {
       if (args.principal != null) {
         require(args.keytab != null, "Keytab must be specified when principal is specified")
         if (!new File(args.keytab).exists()) {
@@ -579,6 +581,16 @@ object SparkSubmit extends CommandLineUtils {
           UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
         }
       }
+    }
+
+    // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
+    // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos mode, we
+    // must trick it into thinking we're YARN.
+    if (clusterManager == MESOS && UserGroupInformation.isSecurityEnabled) {
+      val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
+      val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
+      logDebug(s"Setting ${key} to ${shortUserName}")
+      sysProps.put(key, shortUserName)
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class

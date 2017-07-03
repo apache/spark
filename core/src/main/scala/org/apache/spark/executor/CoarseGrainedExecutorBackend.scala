@@ -26,9 +26,12 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.CredentialsSerializer
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
@@ -219,6 +222,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
+      cfg.ugiTokens.foreach(addDelegationTokens(_, driverConf))
+
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, isLocal = false)
 
@@ -230,6 +235,15 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       env.rpcEnv.awaitTermination()
       SparkHadoopUtil.get.stopCredentialUpdater()
     }
+  }
+
+  private def addDelegationTokens(tokenBytes: Array[Byte], driverConf: SparkConf): Unit = {
+    val creds = new CredentialsSerializer().deserializeTokens(tokenBytes)
+
+    logInfo(s"Adding ${creds.numberOfTokens()} tokens and ${creds.numberOfSecretKeys()} secret" +
+      s"keys to the current user's credentials.")
+
+    UserGroupInformation.getCurrentUser().addCredentials(creds)
   }
 
   def main(args: Array[String]) {
