@@ -342,9 +342,7 @@ object JavaTypeInference {
     }
   }
 
-  /**
-   * Returns an expression for serializing an object of the given type to an internal row.
-   */
+  /** Returns an expression for serializing an object of the given type to an internal row. */
   def serializerFor(beanClass: Class[_]): CreateNamedStruct = {
     val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
     val nullSafeInput = AssertNotNull(inputObject, Seq("top level input bean"))
@@ -354,32 +352,24 @@ object JavaTypeInference {
     }
   }
 
-  /**
-    * Returns a mapping from enum value to int for given enum type
-    */
+  /** Returns a mapping from enum value to int for given enum type */
   def enumSerializer[T](enum: Class[T]): T => Int = {
     assert(enum.isEnum)
     enum.getEnumConstants.toList.zipWithIndex.toMap
   }
 
-  /**
-    * Returns value index for given enum type and value
-    */
+  /** Returns value index for given enum type and value */
   def serializeEnumName[T](enum: UTF8String, inputObject: T): Int = {
     enumSerializer(Utils.classForName(enum.toString).asInstanceOf[Class[T]])(inputObject)
   }
 
-  /**
-    * Returns a mapping from int to enum value for given enum type
-    */
+  /** Returns a mapping from int to enum value for given enum type */
   def enumDeserializer[T](enum: Class[T]): Int => T = {
     assert(enum.isEnum)
     enum.getEnumConstants.toList.zipWithIndex.toMap.map(_.swap)
   }
 
-  /**
-    * Returns enum value for given enum type and value index
-    */
+  /** Returns enum value for given enum type and value index */
   def deserializeEnumName[T](enum: UTF8String, inputObject: Int): Any = {
     enumDeserializer(Utils.classForName(enum.toString).asInstanceOf[Class[T]])(inputObject)
   }
