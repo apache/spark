@@ -58,9 +58,8 @@ case class CreateFunctionCommand(
           s"is not allowed: '${databaseName.get}'")
       }
       // We first load resources and then put the builder in the function registry.
-      // Please note that it is allowed to overwrite an existing temp function.
       catalog.loadFunctionResources(resources)
-      catalog.registerFunction(func, ignoreIfExists = false)
+      catalog.registerFunction(func, overrideIfExists = false)
     } else {
       // For a permanent, we will store the metadata into underlying external catalog.
       // This function will be loaded into the FunctionRegistry when a query uses it.

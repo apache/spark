@@ -161,7 +161,7 @@ private[sql] class HiveSessionCatalog(
             FunctionIdentifier(functionName.toLowerCase(Locale.ROOT), database)
           val func = CatalogFunction(functionIdentifier, className, Nil)
           // Put this Hive built-in function to our function registry.
-          registerFunction(func, ignoreIfExists = false)
+          registerFunction(func, overrideIfExists = false)
           // Now, we need to create the Expression.
           functionRegistry.lookupFunction(functionIdentifier, children)
         }
