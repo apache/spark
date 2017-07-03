@@ -93,8 +93,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   @Since("2.1.0")
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the label distribution to be used in the " +
-      s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
-    (value: String) => supportedFamilyNames.contains(value.toLowerCase(Locale.ROOT)))
+      s"model. Supported options: ${supportedFamilyNames.mkString("(", ",", ")")}.",
+    ParamValidators.inStringArray(supportedFamilyNames))
 
   /** @group getParam */
   @Since("2.1.0")
@@ -280,6 +280,8 @@ class LogisticRegression @Since("1.2.0") (
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams with DefaultParamsWritable with Logging {
 
+  import LogisticRegression._
+
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("logreg"))
 
@@ -348,7 +350,7 @@ class LogisticRegression @Since("1.2.0") (
    */
   @Since("2.1.0")
   def setFamily(value: String): this.type = set(family, value)
-  setDefault(family -> "auto")
+  setDefault(family -> Auto)
 
   /**
    * Whether to standardize the training features before fitting the model.
@@ -531,12 +533,12 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     val isMultinomial = getFamily.toLowerCase(Locale.ROOT) match {
-      case "binomial" =>
+      case Binomial =>
         require(numClasses == 1 || numClasses == 2, s"Binomial family only supports 1 or 2 " +
         s"outcome classes but found $numClasses.")
         false
-      case "multinomial" => true
-      case "auto" => numClasses > 2
+      case Multinomial => true
+      case Auto => numClasses > 2
       case other => throw new IllegalArgumentException(s"Unsupported family: $other")
     }
     val numCoefficientSets = if (isMultinomial) numClasses else 1
@@ -893,8 +895,18 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
   @Since("1.6.0")
   override def load(path: String): LogisticRegression = super.load(path)
 
+  /** String name for "auto". */
+  private[regression] val Auto = "auto"
+
+  /** String name for "binomial". */
+  private[regression] val Binomial = "binomial"
+
+  /** String name for "Multinomial". */
+  private[regression] val Multinomial = "multinomial"
+
+  /** Set of solvers that LinearRegression supports. */
   private[classification] val supportedFamilyNames =
-    Array("auto", "binomial", "multinomial").map(_.toLowerCase(Locale.ROOT))
+    Array(Auto, Binomial, Multinomial).map(_.toLowerCase(Locale.ROOT))
 }
 
 /**
