@@ -103,10 +103,11 @@ class JDBCOptions(
       s" and '$JDBC_NUM_PARTITIONS' are required.")
   val fetchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
-    require(size >= 0,
+    require(size >= 0 || size == Integer.MIN_VALUE,
       s"Invalid value `${size.toString}` for parameter " +
-        s"`$JDBC_BATCH_FETCH_SIZE`. The minimum value is 0. When the value is 0, " +
-        "the JDBC driver ignores the value and does the estimates.")
+        s"`$JDBC_BATCH_FETCH_SIZE`. The value should be >= 0 or equal Integer.MIN_VALUE. " +
+        "When the value is 0, the JDBC driver ignores the value and does the estimates. " +
+        "When the value is Integer.MIN_VALUE then result will be retrieved row-by-row.")
     size
   }
 
