@@ -2875,7 +2875,7 @@ setMethod("ifelse",
 #' @details
 #' \code{cume_dist}: Returns the cumulative distribution of values within a window partition,
 #' i.e. the fraction of rows that are below the current row:
-#' (number of values before and including x) / (total number of rows in the partition)
+#' (number of values before and including x) / (total number of rows in the partition).
 #' This is equivalent to the \code{CUME_DIST} function in SQL.
 #' The method should be used with no argument.
 #'
