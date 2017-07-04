@@ -2695,6 +2695,11 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     ...
     >>> model.findSynonymsArray("a", 2)
     [(u'b', 0.25053444504737854), (u'c', -0.6980510950088501)]
+    >>> from pyspark.ml.linalg import Vectors
+    >>> vec = Vectors.dense([0.267, -0.2691, 0.058, -0.0801, 0.1821, 0.4162,
+    ...                      0.0259, -0.2163, 0.1787, 0.0764])
+    >>> model.findSynonymsArray(vec, 2)
+    [(u'a', 0.8014056086540222), (u'b', 0.6454408764839172)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
