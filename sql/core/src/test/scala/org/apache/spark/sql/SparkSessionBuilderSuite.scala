@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -67,6 +68,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(activeSession != defaultSession)
     assert(session == activeSession)
     assert(session.conf.get("spark-config2") == "a")
+    assert(session.sessionState.conf == SQLConf.get)
+    assert(SQLConf.get.getConfString("spark-config2") == "a")
     SparkSession.clearActiveSession()
 
     assert(SparkSession.builder().getOrCreate() == defaultSession)
