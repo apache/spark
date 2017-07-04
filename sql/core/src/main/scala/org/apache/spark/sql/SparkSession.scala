@@ -121,7 +121,7 @@ class SparkSession private(
    * Initial options for session. This options are applied once when sessionState is created.
    */
   @transient
-  lazy val initialSessionOptions = new scala.collection.mutable.HashMap[String, String]
+  private[sql] val initialSessionOptions = new scala.collection.mutable.HashMap[String, String]
 
   /**
    * State isolated across sessions, including SQL configurations, temporary tables, registered
