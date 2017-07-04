@@ -2636,7 +2636,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         importlib.reload(window)
 
 
-class TypesTest(unittest.TestCase):
+class DataTypeVerificationTests(unittest.TestCase):
 
     def test_verify_type_exception_msg(self):
         msg = "Expected verify_type() to throw so test can check exception message."
