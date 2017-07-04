@@ -167,12 +167,12 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
-    val conf = new SQLConf()
-    conf.setConfString(SQLConf.ESCAPED_STRING_LITERALS.key, "true")
-    val parser = new CatalystSqlParser(conf)
-    assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
-    assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
-    assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
+    val parser = new CatalystSqlParser
+    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+      assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
+      assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
+      assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
+    }
   }
 
   test("is null expressions") {
@@ -435,86 +435,85 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("strings") {
+    val parser = new CatalystSqlParser
     Seq(true, false).foreach { escape =>
-      val conf = new SQLConf()
-      conf.setConfString(SQLConf.ESCAPED_STRING_LITERALS.key, escape.toString)
-      val parser = new CatalystSqlParser(conf)
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escape.toString) {
+        // tests that have same result whatever the conf is
+        // Single Strings.
+        assertEqual("\"hello\"", "hello", parser)
+        assertEqual("'hello'", "hello", parser)
 
-      // tests that have same result whatever the conf is
-      // Single Strings.
-      assertEqual("\"hello\"", "hello", parser)
-      assertEqual("'hello'", "hello", parser)
+        // Multi-Strings.
+        assertEqual("\"hello\" 'world'", "helloworld", parser)
+        assertEqual("'hello' \" \" 'world'", "hello world", parser)
 
-      // Multi-Strings.
-      assertEqual("\"hello\" 'world'", "helloworld", parser)
-      assertEqual("'hello' \" \" 'world'", "hello world", parser)
+        // 'LIKE' string literals. Notice that an escaped '%' is the same as an escaped '\' and a
+        // regular '%'; to get the correct result you need to add another escaped '\'.
+        // TODO figure out if we shouldn't change the ParseUtils.unescapeSQLString method?
+        assertEqual("'pattern%'", "pattern%", parser)
+        assertEqual("'no-pattern\\%'", "no-pattern\\%", parser)
 
-      // 'LIKE' string literals. Notice that an escaped '%' is the same as an escaped '\' and a
-      // regular '%'; to get the correct result you need to add another escaped '\'.
-      // TODO figure out if we shouldn't change the ParseUtils.unescapeSQLString method?
-      assertEqual("'pattern%'", "pattern%", parser)
-      assertEqual("'no-pattern\\%'", "no-pattern\\%", parser)
+        // tests that have different result regarding the conf
+        if (escape) {
+          // When SQLConf.ESCAPED_STRING_LITERALS is enabled, string literal parsing fallbacks to
+          // Spark 1.6 behavior.
 
-      // tests that have different result regarding the conf
-      if (escape) {
-        // When SQLConf.ESCAPED_STRING_LITERALS is enabled, string literal parsing fallbacks to
-        // Spark 1.6 behavior.
+          // 'LIKE' string literals.
+          assertEqual("'pattern\\\\%'", "pattern\\\\%", parser)
+          assertEqual("'pattern\\\\\\%'", "pattern\\\\\\%", parser)
 
-        // 'LIKE' string literals.
-        assertEqual("'pattern\\\\%'", "pattern\\\\%", parser)
-        assertEqual("'pattern\\\\\\%'", "pattern\\\\\\%", parser)
+          // Escaped characters.
+          // Unescape string literal "'\\0'" for ASCII NUL (X'00') doesn't work
+          // when ESCAPED_STRING_LITERALS is enabled.
+          // It is parsed literally.
+          assertEqual("'\\0'", "\\0", parser)
 
-        // Escaped characters.
-        // Unescape string literal "'\\0'" for ASCII NUL (X'00') doesn't work
-        // when ESCAPED_STRING_LITERALS is enabled.
-        // It is parsed literally.
-        assertEqual("'\\0'", "\\0", parser)
+          // Note: Single quote follows 1.6 parsing behavior when ESCAPED_STRING_LITERALS is
+          // enabled.
+          val e = intercept[ParseException](parser.parseExpression("'\''"))
+          assert(e.message.contains("extraneous input '''"))
 
-        // Note: Single quote follows 1.6 parsing behavior when ESCAPED_STRING_LITERALS is enabled.
-        val e = intercept[ParseException](parser.parseExpression("'\''"))
-        assert(e.message.contains("extraneous input '''"))
+          // The unescape special characters (e.g., "\\t") for 2.0+ don't work
+          // when ESCAPED_STRING_LITERALS is enabled. They are parsed literally.
+          assertEqual("'\\\"'", "\\\"", parser)   // Double quote
+          assertEqual("'\\b'", "\\b", parser)     // Backspace
+          assertEqual("'\\n'", "\\n", parser)     // Newline
+          assertEqual("'\\r'", "\\r", parser)     // Carriage return
+          assertEqual("'\\t'", "\\t", parser)     // Tab character
 
-        // The unescape special characters (e.g., "\\t") for 2.0+ don't work
-        // when ESCAPED_STRING_LITERALS is enabled. They are parsed literally.
-        assertEqual("'\\\"'", "\\\"", parser)   // Double quote
-        assertEqual("'\\b'", "\\b", parser)     // Backspace
-        assertEqual("'\\n'", "\\n", parser)     // Newline
-        assertEqual("'\\r'", "\\r", parser)     // Carriage return
-        assertEqual("'\\t'", "\\t", parser)     // Tab character
+          // The unescape Octals for 2.0+ don't work when ESCAPED_STRING_LITERALS is enabled.
+          // They are parsed literally.
+          assertEqual("'\\110\\145\\154\\154\\157\\041'", "\\110\\145\\154\\154\\157\\041", parser)
+          // The unescape Unicode for 2.0+ doesn't work when ESCAPED_STRING_LITERALS is enabled.
+          // They are parsed literally.
+          assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'",
+            "\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029", parser)
+        } else {
+          // Default behavior
 
-        // The unescape Octals for 2.0+ don't work when ESCAPED_STRING_LITERALS is enabled.
-        // They are parsed literally.
-        assertEqual("'\\110\\145\\154\\154\\157\\041'", "\\110\\145\\154\\154\\157\\041", parser)
-        // The unescape Unicode for 2.0+ doesn't work when ESCAPED_STRING_LITERALS is enabled.
-        // They are parsed literally.
-        assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'",
-          "\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029", parser)
-      } else {
-        // Default behavior
+          // 'LIKE' string literals.
+          assertEqual("'pattern\\\\%'", "pattern\\%", parser)
+          assertEqual("'pattern\\\\\\%'", "pattern\\\\%", parser)
 
-        // 'LIKE' string literals.
-        assertEqual("'pattern\\\\%'", "pattern\\%", parser)
-        assertEqual("'pattern\\\\\\%'", "pattern\\\\%", parser)
+          // Escaped characters.
+          // See: http://dev.mysql.com/doc/refman/5.7/en/string-literals.html
+          assertEqual("'\\0'", "\u0000", parser) // ASCII NUL (X'00')
+          assertEqual("'\\''", "\'", parser)     // Single quote
+          assertEqual("'\\\"'", "\"", parser)    // Double quote
+          assertEqual("'\\b'", "\b", parser)     // Backspace
+          assertEqual("'\\n'", "\n", parser)     // Newline
+          assertEqual("'\\r'", "\r", parser)     // Carriage return
+          assertEqual("'\\t'", "\t", parser)     // Tab character
+          assertEqual("'\\Z'", "\u001A", parser) // ASCII 26 - CTRL + Z (EOF on windows)
 
-        // Escaped characters.
-        // See: http://dev.mysql.com/doc/refman/5.7/en/string-literals.html
-        assertEqual("'\\0'", "\u0000", parser) // ASCII NUL (X'00')
-        assertEqual("'\\''", "\'", parser)     // Single quote
-        assertEqual("'\\\"'", "\"", parser)    // Double quote
-        assertEqual("'\\b'", "\b", parser)     // Backspace
-        assertEqual("'\\n'", "\n", parser)     // Newline
-        assertEqual("'\\r'", "\r", parser)     // Carriage return
-        assertEqual("'\\t'", "\t", parser)     // Tab character
-        assertEqual("'\\Z'", "\u001A", parser) // ASCII 26 - CTRL + Z (EOF on windows)
+          // Octals
+          assertEqual("'\\110\\145\\154\\154\\157\\041'", "Hello!", parser)
 
-        // Octals
-        assertEqual("'\\110\\145\\154\\154\\157\\041'", "Hello!", parser)
-
-        // Unicode
-        assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'", "World :)",
-          parser)
+          // Unicode
+          assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'", "World :)",
+            parser)
+        }
       }
-
     }
   }
 

@@ -39,10 +39,11 @@ import org.apache.spark.sql.types.StructType
 /**
  * Concrete parser for Spark SQL statements.
  */
-class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
-  val astBuilder = new SparkSqlAstBuilder(conf)
+class SparkSqlParser extends AbstractSqlParser {
 
-  private val substitutor = new VariableSubstitution(conf)
+  val astBuilder = new SparkSqlAstBuilder
+
+  private val substitutor = new VariableSubstitution
 
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     super.parse(substitutor.substitute(command))(toResult)
@@ -52,8 +53,10 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
+class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
+
+  val conf = SQLConf.get
 
   /**
    * Create a [[SetCommand]] logical plan.

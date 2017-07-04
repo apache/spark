@@ -1276,7 +1276,7 @@ object functions {
    */
   def expr(expr: String): Column = {
     val parser = SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
-      new SparkSqlParser(new SQLConf)
+      new SparkSqlParser
     }
     Column(parser.parseExpression(expr))
   }
