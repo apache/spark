@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import java.util.UUID
 
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -27,14 +26,12 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.datasources.ExecutedWriteSummary
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -52,63 +49,6 @@ trait RunnableCommand extends logical.Command {
 
   def run(sparkSession: SparkSession): Seq[Row] = {
     throw new NotImplementedError
-  }
-}
-
-/**
- * A special `RunnableCommand` which writes data out and updates metrics.
- */
-trait DataWritingCommand extends RunnableCommand {
-
-  override lazy val metrics: Map[String, SQLMetric] = {
-    val sparkContext = SparkContext.getActive.get
-    Map(
-      "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
-      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
-      "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
-      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
-    )
-  }
-
-  /**
-   * Callback function that update metrics collected from the writing operation.
-   */
-  protected def updateWritingMetrics(writeSummaries: Seq[ExecutedWriteSummary]): Unit = {
-    val sparkContext = SparkContext.getActive.get
-    var numPartitions = 0
-    var numFiles = 0
-    var totalNumBytes: Long = 0L
-    var totalNumOutput: Long = 0L
-    var totalWritingTime: Long = 0L
-    var numFilesNonZeroWritingTime = 0
-
-    writeSummaries.foreach { summary =>
-      numPartitions += summary.updatedPartitions.size
-      numFiles += summary.numOutputFile
-      totalNumBytes += summary.numOutputBytes
-      totalNumOutput += summary.numOutputRows
-      totalWritingTime += summary.totalWritingTime
-      numFilesNonZeroWritingTime += summary.numFilesWithNonZeroWritingTime
-    }
-
-    // We only count non-zero writing time when averaging total writing time.
-    // The time for writing individual file can be zero if it's less than 1 ms. Zero values can
-    // lower actual time of writing to zero when calculating average, so excluding them.
-    val avgWritingTime = if (numFilesNonZeroWritingTime > 0) {
-      (totalWritingTime / numFilesNonZeroWritingTime).toLong
-    } else {
-      0L
-    }
-
-    metrics("avgTime").add(avgWritingTime)
-    metrics("numFiles").add(numFiles)
-    metrics("numOutputBytes").add(totalNumBytes)
-    metrics("numOutputRows").add(totalNumOutput)
-    metrics("numParts").add(numPartitions)
-
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
   }
 }
 
