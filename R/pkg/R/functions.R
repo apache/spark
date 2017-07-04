@@ -200,6 +200,34 @@ NULL
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))}
 NULL
 
+#' Window functions for Column operations
+#'
+#' Window functions defined for \code{Column}.
+#'
+#' @param x In \code{lag} and \code{lead}, it is the column as a character string or a Column
+#'          to compute on. In \code{ntile}, it is the number of ntile groups.
+#' @param offset In \code{lag}, the number of rows back from the current row from which to obtain
+#'               a value. In \code{lead}, the number of rows after the current row from which to
+#'               obtain a value. If not specified, the default is 1.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
+#' @param ... additional argument(s).
+#' @name column_window_functions
+#' @rdname column_window_functions
+#' @family window functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' ws <- orderBy(windowPartitionBy("am"), "hp")
+#' tmp <- mutate(df, dist = over(cume_dist(), ws), dense_rank = over(dense_rank(), ws),
+#'               lag = over(lag(df$mpg), ws), lead = over(lead(df$mpg, 1), ws),
+#'               percent_rank = over(percent_rank(), ws),
+#'               rank = over(rank(), ws), row_number = over(row_number(), ws))
+#' # Get ntile group id (1-4) for hp
+#' tmp <- mutate(tmp, ntile = over(ntile(4), ws))
+#' head(tmp)}
+NULL
+
 #' @details
 #' \code{lit}: A new Column is created to represent the literal value.
 #' If the parameter is a Column, it is returned unchanged.
@@ -2844,27 +2872,16 @@ setMethod("ifelse",
 
 ###################### Window functions######################
 
-#' cume_dist
-#'
-#' Window function: returns the cumulative distribution of values within a window partition,
-#' i.e. the fraction of rows that are below the current row.
-#'
-#'   N = total number of rows in the partition
-#'   cume_dist(x) = number of values before (and including) x / N
-#'
+#' @details
+#' \code{cume_dist}: Returns the cumulative distribution of values within a window partition,
+#' i.e. the fraction of rows that are below the current row:
+#' (number of values before and including x) / (total number of rows in the partition).
 #' This is equivalent to the \code{CUME_DIST} function in SQL.
+#' The method should be used with no argument.
 #'
-#' @rdname cume_dist
-#' @name cume_dist
-#' @family window functions
-#' @aliases cume_dist,missing-method
+#' @rdname column_window_functions
+#' @aliases cume_dist cume_dist,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'   out <- select(df, over(cume_dist(), ws), df$hp, df$am)
-#' }
 #' @note cume_dist since 1.6.0
 setMethod("cume_dist",
           signature("missing"),
@@ -2873,28 +2890,19 @@ setMethod("cume_dist",
             column(jc)
           })
 
-#' dense_rank
-#'
-#' Window function: returns the rank of rows within a window partition, without any gaps.
+#' @details
+#' \code{dense_rank}: Returns the rank of rows within a window partition, without any gaps.
 #' The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
 #' sequence when there are ties. That is, if you were ranking a competition using dense_rank
 #' and had three people tie for second place, you would say that all three were in second
 #' place and that the next person came in third. Rank would give me sequential numbers, making
 #' the person that came in third place (after the ties) would register as coming in fifth.
-#'
 #' This is equivalent to the \code{DENSE_RANK} function in SQL.
+#' The method should be used with no argument.
 #'
-#' @rdname dense_rank
-#' @name dense_rank
-#' @family window functions
-#' @aliases dense_rank,missing-method
+#' @rdname column_window_functions
+#' @aliases dense_rank dense_rank,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'   out <- select(df, over(dense_rank(), ws), df$hp, df$am)
-#' }
 #' @note dense_rank since 1.6.0
 setMethod("dense_rank",
           signature("missing"),
@@ -2903,34 +2911,15 @@ setMethod("dense_rank",
             column(jc)
           })
 
-#' lag
-#'
-#' Window function: returns the value that is \code{offset} rows before the current row, and
+#' @details
+#' \code{lag}: Returns the value that is \code{offset} rows before the current row, and
 #' \code{defaultValue} if there is less than \code{offset} rows before the current row. For example,
 #' an \code{offset} of one will return the previous row at any given point in the window partition.
-#'
 #' This is equivalent to the \code{LAG} function in SQL.
 #'
-#' @param x the column as a character string or a Column to compute on.
-#' @param offset the number of rows back from the current row from which to obtain a value.
-#'               If not specified, the default is 1.
-#' @param defaultValue (optional) default to use when the offset row does not exist.
-#' @param ... further arguments to be passed to or from other methods.
-#' @rdname lag
-#' @name lag
-#' @aliases lag,characterOrColumn-method
-#' @family window functions
+#' @rdname column_window_functions
+#' @aliases lag lag,characterOrColumn-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'
-#'   # Partition by am (transmission) and order by hp (horsepower)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'
-#'   # Lag mpg values by 1 row on the partition-and-ordered table
-#'   out <- select(df, over(lag(df$mpg), ws), df$mpg, df$hp, df$am)
-#' }
 #' @note lag since 1.6.0
 setMethod("lag",
           signature(x = "characterOrColumn"),
@@ -2946,35 +2935,16 @@ setMethod("lag",
             column(jc)
           })
 
-#' lead
-#'
-#' Window function: returns the value that is \code{offset} rows after the current row, and
+#' @details
+#' \code{lead}: Returns the value that is \code{offset} rows after the current row, and
 #' \code{defaultValue} if there is less than \code{offset} rows after the current row.
 #' For example, an \code{offset} of one will return the next row at any given point
 #' in the window partition.
-#'
 #' This is equivalent to the \code{LEAD} function in SQL.
 #'
-#' @param x the column as a character string or a Column to compute on.
-#' @param offset the number of rows after the current row from which to obtain a value.
-#'               If not specified, the default is 1.
-#' @param defaultValue (optional) default to use when the offset row does not exist.
-#'
-#' @rdname lead
-#' @name lead
-#' @family window functions
-#' @aliases lead,characterOrColumn,numeric-method
+#' @rdname column_window_functions
+#' @aliases lead lead,characterOrColumn,numeric-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'
-#'   # Partition by am (transmission) and order by hp (horsepower)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'
-#'   # Lead mpg values by 1 row on the partition-and-ordered table
-#'   out <- select(df, over(lead(df$mpg), ws), df$mpg, df$hp, df$am)
-#' }
 #' @note lead since 1.6.0
 setMethod("lead",
           signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
@@ -2990,31 +2960,15 @@ setMethod("lead",
             column(jc)
           })
 
-#' ntile
-#'
-#' Window function: returns the ntile group id (from 1 to n inclusive) in an ordered window
+#' @details
+#' \code{ntile}: Returns the ntile group id (from 1 to n inclusive) in an ordered window
 #' partition. For example, if n is 4, the first quarter of the rows will get value 1, the second
 #' quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
-#'
 #' This is equivalent to the \code{NTILE} function in SQL.
 #'
-#' @param x Number of ntile groups
-#'
-#' @rdname ntile
-#' @name ntile
-#' @aliases ntile,numeric-method
-#' @family window functions
+#' @rdname column_window_functions
+#' @aliases ntile ntile,numeric-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'
-#'   # Partition by am (transmission) and order by hp (horsepower)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'
-#'   # Get ntile group id (1-4) for hp
-#'   out <- select(df, over(ntile(4), ws), df$hp, df$am)
-#' }
 #' @note ntile since 1.6.0
 setMethod("ntile",
           signature(x = "numeric"),
@@ -3023,27 +2977,15 @@ setMethod("ntile",
             column(jc)
           })
 
-#' percent_rank
+#' @details
+#' \code{percent_rank}: Returns the relative rank (i.e. percentile) of rows within a window partition.
+#' This is computed by: (rank of row in its partition - 1) / (number of rows in the partition - 1).
+#' This is equivalent to the \code{PERCENT_RANK} function in SQL.
+#' The method should be used with no argument.
 #'
-#' Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
-#'
-#' This is computed by:
-#'
-#'   (rank of row in its partition - 1) / (number of rows in the partition - 1)
-#'
-#' This is equivalent to the PERCENT_RANK function in SQL.
-#'
-#' @rdname percent_rank
-#' @name percent_rank
-#' @family window functions
-#' @aliases percent_rank,missing-method
+#' @rdname column_window_functions
+#' @aliases percent_rank percent_rank,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'   out <- select(df, over(percent_rank(), ws), df$hp, df$am)
-#' }
 #' @note percent_rank since 1.6.0
 setMethod("percent_rank",
           signature("missing"),
@@ -3052,29 +2994,19 @@ setMethod("percent_rank",
             column(jc)
           })
 
-#' rank
-#'
-#' Window function: returns the rank of rows within a window partition.
-#'
+#' @details
+#' \code{rank}: Returns the rank of rows within a window partition.
 #' The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
 #' sequence when there are ties. That is, if you were ranking a competition using dense_rank
 #' and had three people tie for second place, you would say that all three were in second
 #' place and that the next person came in third. Rank would give me sequential numbers, making
 #' the person that came in third place (after the ties) would register as coming in fifth.
+#' This is equivalent to the \code{RANK} function in SQL.
+#' The method should be used with no argument.
 #'
-#' This is equivalent to the RANK function in SQL.
-#'
-#' @rdname rank
-#' @name rank
-#' @family window functions
-#' @aliases rank,missing-method
+#' @rdname column_window_functions
+#' @aliases rank rank,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'   out <- select(df, over(rank(), ws), df$hp, df$am)
-#' }
 #' @note rank since 1.6.0
 setMethod("rank",
           signature(x = "missing"),
@@ -3083,11 +3015,7 @@ setMethod("rank",
             column(jc)
           })
 
-# Expose rank() in the R base package
-#' @param x a numeric, complex, character or logical vector.
-#' @param ... additional argument(s) passed to the method.
-#' @name rank
-#' @rdname rank
+#' @rdname column_window_functions
 #' @aliases rank,ANY-method
 #' @export
 setMethod("rank",
@@ -3096,23 +3024,14 @@ setMethod("rank",
             base::rank(x, ...)
           })
 
-#' row_number
+#' @details
+#' \code{row_number}: Returns a sequential number starting at 1 within a window partition.
+#' This is equivalent to the \code{ROW_NUMBER} function in SQL.
+#' The method should be used with no argument.
 #'
-#' Window function: returns a sequential number starting at 1 within a window partition.
-#'
-#' This is equivalent to the ROW_NUMBER function in SQL.
-#'
-#' @rdname row_number
-#' @name row_number
-#' @aliases row_number,missing-method
-#' @family window functions
+#' @rdname column_window_functions
+#' @aliases row_number row_number,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'   out <- select(df, over(row_number(), ws), df$hp, df$am)
-#' }
 #' @note row_number since 1.6.0
 setMethod("row_number",
           signature("missing"),
