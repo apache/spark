@@ -99,6 +99,14 @@ private[sql] class HiveSessionCatalog(
           throw new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}'")
         }
       } catch {
+        case ise: IllegalStateException =>
+          val analysisException =
+            new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}': $ise. \n" +
+              s"If you create a UDTF, please make sure your function override " +
+              s"`public StructObjectInspector initialize(ObjectInspector[] args)`, " +
+              s"per: SPARK-21101")
+          analysisException.setStackTrace(ise.getStackTrace)
+          throw analysisException
         case ae: AnalysisException =>
           throw ae
         case NonFatal(e) =>
