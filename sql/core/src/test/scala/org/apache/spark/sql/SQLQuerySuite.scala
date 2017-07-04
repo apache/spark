@@ -186,6 +186,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("better error message when the missing columns in the given input columns") {
+    Seq(1).toDF("a").createTempView("left")
+    Seq((1, "b")).toDF("c", "d").createTempView("right")
+    val e = intercept[AnalysisException] {
+      sql("SELECT left.a, right.d from left JOIN right ON right.a == right.c")
+    }.getMessage
+    assert(e.contains("cannot resolve '`right.a`' given input columns: [left.a, right.c, right.d]"))
+  }
+
   test("SPARK-7158 collect and take return different results") {
     import java.util.UUID
 
