@@ -950,6 +950,16 @@ case class ExternalMapToCatalyst private(
         defineEntries -> defineKeyValue
     }
 
+    val keyNullCheck = if (ctx.isPrimitiveType(keyType)) {
+      ""
+    } else {
+      s"""
+        if ($key == null) {
+          throw new RuntimeException("Cannot use null as map key!");
+        }
+      """
+    }
+
     val valueNullCheck = if (ctx.isPrimitiveType(valueType)) {
       s"$valueIsNull = false;"
     } else {
@@ -972,6 +982,7 @@ case class ExternalMapToCatalyst private(
           $defineEntries
           while($entries.hasNext()) {
             $defineKeyValue
+            $keyNullCheck
             $valueNullCheck
 
             ${genKeyConverter.code}
