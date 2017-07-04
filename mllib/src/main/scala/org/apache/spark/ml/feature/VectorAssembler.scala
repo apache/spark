@@ -116,7 +116,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val inputDataTypes = inputColNames.map(name => (name, schema(name).dataType))
     inputDataTypes.foreach {
       case (_, _: NumericType | BooleanType) =>
-      case (_, t) if t.isInstanceOf[VectorUDT] =>
+      case (_, _: VectorUDT) =>
       case (name, other) =>
         throw new IllegalArgumentException(s"Data type $other of column $name is not supported.")
     }
