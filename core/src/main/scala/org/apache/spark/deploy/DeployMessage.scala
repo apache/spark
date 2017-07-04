@@ -158,6 +158,8 @@ private[deploy] object DeployMessages {
 
   case class ApplicationRemoved(message: String)
 
+  case class WorkerRemoved(id: String, host: String, message: String)
+
   // DriverClient <-> Master
 
   case class RequestSubmitDriver(driverDescription: DriverDescription) extends DeployMessage

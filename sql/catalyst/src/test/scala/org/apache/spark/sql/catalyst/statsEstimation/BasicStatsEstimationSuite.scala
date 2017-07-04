@@ -45,11 +45,11 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
       expectedStatsCboOn = filterStatsCboOn,
       expectedStatsCboOff = filterStatsCboOff)
 
-    val broadcastHint = ResolvedHint(filter, HintInfo(isBroadcastable = Option(true)))
+    val broadcastHint = ResolvedHint(filter, HintInfo(broadcast = true))
     checkStats(
       broadcastHint,
-      expectedStatsCboOn = filterStatsCboOn.copy(hints = HintInfo(isBroadcastable = Option(true))),
-      expectedStatsCboOff = filterStatsCboOff.copy(hints = HintInfo(isBroadcastable = Option(true)))
+      expectedStatsCboOn = filterStatsCboOn.copy(hints = HintInfo(broadcast = true)),
+      expectedStatsCboOff = filterStatsCboOff.copy(hints = HintInfo(broadcast = true))
     )
   }
 
@@ -57,16 +57,16 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
     val localLimit = LocalLimit(Literal(2), plan)
     val globalLimit = GlobalLimit(Literal(2), plan)
     // LocalLimit's stats is just its child's stats except column stats
-    checkStats(localLimit, plan.stats(conf).copy(attributeStats = AttributeMap(Nil)))
+    checkStats(localLimit, plan.stats.copy(attributeStats = AttributeMap(Nil)))
     checkStats(globalLimit, Statistics(sizeInBytes = 24, rowCount = Some(2)))
   }
 
   test("limit estimation: limit > child's rowCount") {
     val localLimit = LocalLimit(Literal(20), plan)
     val globalLimit = GlobalLimit(Literal(20), plan)
-    checkStats(localLimit, plan.stats(conf).copy(attributeStats = AttributeMap(Nil)))
+    checkStats(localLimit, plan.stats.copy(attributeStats = AttributeMap(Nil)))
     // Limit is larger than child's rowCount, so GlobalLimit's stats is equal to its child's stats.
-    checkStats(globalLimit, plan.stats(conf).copy(attributeStats = AttributeMap(Nil)))
+    checkStats(globalLimit, plan.stats.copy(attributeStats = AttributeMap(Nil)))
   }
 
   test("limit estimation: limit = 0") {
@@ -77,64 +77,27 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
     checkStats(globalLimit, stats)
   }
 
-  test("sample estimation") {
-    val sample = Sample(0.0, 0.5, withReplacement = false, (math.random * 1000).toLong, plan)()
-    checkStats(sample, Statistics(sizeInBytes = 60, rowCount = Some(5)))
-
-    // Child doesn't have rowCount in stats
-    val childStats = Statistics(sizeInBytes = 120)
-    val childPlan = DummyLogicalPlan(childStats, childStats)
-    val sample2 =
-      Sample(0.0, 0.11, withReplacement = false, (math.random * 1000).toLong, childPlan)()
-    checkStats(sample2, Statistics(sizeInBytes = 14))
-  }
-
-  test("estimate statistics when the conf changes") {
-    val expectedDefaultStats =
-      Statistics(
-        sizeInBytes = 40,
-        rowCount = Some(10),
-        attributeStats = AttributeMap(Seq(
-          AttributeReference("c1", IntegerType)() -> ColumnStat(10, Some(1), Some(10), 0, 4, 4))))
-    val expectedCboStats =
-      Statistics(
-        sizeInBytes = 4,
-        rowCount = Some(1),
-        attributeStats = AttributeMap(Seq(
-          AttributeReference("c1", IntegerType)() -> ColumnStat(1, Some(5), Some(5), 0, 4, 4))))
-
-    val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
-    checkStats(
-      plan, expectedStatsCboOn = expectedCboStats, expectedStatsCboOff = expectedDefaultStats)
-  }
-
   /** Check estimated stats when cbo is turned on/off. */
   private def checkStats(
       plan: LogicalPlan,
       expectedStatsCboOn: Statistics,
       expectedStatsCboOff: Statistics): Unit = {
-    // Invalidate statistics
-    plan.invalidateStatsCache()
-    assert(plan.stats(conf.copy(SQLConf.CBO_ENABLED -> true)) == expectedStatsCboOn)
+    val originalValue = SQLConf.get.getConf(SQLConf.CBO_ENABLED)
+    try {
+      // Invalidate statistics
+      plan.invalidateStatsCache()
+      SQLConf.get.setConf(SQLConf.CBO_ENABLED, true)
+      assert(plan.stats == expectedStatsCboOn)
 
-    plan.invalidateStatsCache()
-    assert(plan.stats(conf.copy(SQLConf.CBO_ENABLED -> false)) == expectedStatsCboOff)
+      plan.invalidateStatsCache()
+      SQLConf.get.setConf(SQLConf.CBO_ENABLED, false)
+      assert(plan.stats == expectedStatsCboOff)
+    } finally {
+      SQLConf.get.setConf(SQLConf.CBO_ENABLED, originalValue)
+    }
   }
 
   /** Check estimated stats when it's the same whether cbo is turned on or off. */
   private def checkStats(plan: LogicalPlan, expectedStats: Statistics): Unit =
     checkStats(plan, expectedStats, expectedStats)
-}
-
-/**
- * This class is used for unit-testing the cbo switch, it mimics a logical plan which computes
- * a simple statistics or a cbo estimated statistics based on the conf.
- */
-private case class DummyLogicalPlan(
-    defaultStats: Statistics,
-    cboStats: Statistics) extends LogicalPlan {
-  override def output: Seq[Attribute] = Nil
-  override def children: Seq[LogicalPlan] = Nil
-  override def computeStats(conf: SQLConf): Statistics =
-    if (conf.cboEnabled) cboStats else defaultStats
 }

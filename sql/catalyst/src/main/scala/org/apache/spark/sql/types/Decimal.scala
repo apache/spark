@@ -126,7 +126,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def set(decimal: BigDecimal): Decimal = {
     this.decimalVal = decimal
     this.longVal = 0L
-    this._precision = decimal.precision
+    if (decimal.precision <= decimal.scale) {
+      // For Decimal, we expect the precision is equal to or large than the scale, however,
+      // in BigDecimal, the digit count starts from the leftmost nonzero digit of the exact
+      // result. For example, the precision of 0.01 equals to 1 based on the definition, but
+      // the scale is 2. The expected precision should be 3.
+      this._precision = decimal.scale + 1
+    } else {
+      this._precision = decimal.precision
+    }
     this._scale = decimal.scale
     this
   }

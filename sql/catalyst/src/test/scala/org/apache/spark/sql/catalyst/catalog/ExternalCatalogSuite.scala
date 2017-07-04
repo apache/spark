@@ -245,7 +245,6 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("alter table schema") {
     val catalog = newBasicCatalog()
-    val tbl1 = catalog.getTable("db2", "tbl1")
     val newSchema = StructType(Seq(
       StructField("col1", IntegerType),
       StructField("new_field_2", StringType),
@@ -254,6 +253,16 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     catalog.alterTableSchema("db2", "tbl1", newSchema)
     val newTbl1 = catalog.getTable("db2", "tbl1")
     assert(newTbl1.schema == newSchema)
+  }
+
+  test("alter table stats") {
+    val catalog = newBasicCatalog()
+    val oldTableStats = catalog.getTable("db2", "tbl1").stats
+    assert(oldTableStats.isEmpty)
+    val newStats = CatalogStatistics(sizeInBytes = 1)
+    catalog.alterTableStats("db2", "tbl1", Some(newStats))
+    val newTableStats = catalog.getTable("db2", "tbl1").stats
+    assert(newTableStats.get == newStats)
   }
 
   test("get table") {

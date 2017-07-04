@@ -160,7 +160,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   test("drop table") {
     testDropTable(isDatasourceTable = false)
   }
-
 }
 
 class HiveDDLSuite
@@ -806,7 +805,7 @@ class HiveDDLSuite
 
       checkAnswer(
         sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
-        Row("# col_name", "data_type", "comment") :: Row("a", "int", "test") :: Nil
+        Row("a", "int", "test") :: Nil
       )
     }
   }
@@ -1954,6 +1953,46 @@ class HiveDDLSuite
           }
         }
       }
+    }
+  }
+
+  test("SPARK-21216: join with a streaming DataFrame") {
+    import org.apache.spark.sql.execution.streaming.MemoryStream
+    import testImplicits._
+
+    implicit val _sqlContext = spark.sqlContext
+
+    Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word").createOrReplaceTempView("t1")
+    // Make a table and ensure it will be broadcast.
+    sql("""CREATE TABLE smallTable(word string, number int)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |STORED AS TEXTFILE
+        """.stripMargin)
+
+    sql(
+      """INSERT INTO smallTable
+        |SELECT word, number from t1
+      """.stripMargin)
+
+    val inputData = MemoryStream[Int]
+    val joined = inputData.toDS().toDF()
+      .join(spark.table("smallTable"), $"value" === $"number")
+
+    val sq = joined.writeStream
+      .format("memory")
+      .queryName("t2")
+      .start()
+    try {
+      inputData.addData(1, 2)
+
+      sq.processAllAvailable()
+
+      checkAnswer(
+        spark.table("t2"),
+        Seq(Row(1, "one", 1), Row(2, "two", 2))
+      )
+    } finally {
+      sq.stop()
     }
   }
 }

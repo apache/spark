@@ -160,6 +160,9 @@ abstract class ExternalCatalog
    */
   def alterTableSchema(db: String, table: String, schema: StructType): Unit
 
+  /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
+  def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
+
   def getTable(db: String, table: String): CatalogTable
 
   def getTableOption(db: String, table: String): Option[CatalogTable]

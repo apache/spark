@@ -94,7 +94,7 @@ private[spark] class FileAppender(inputStream: InputStream, file: File, bufferSi
 
   /** Open the file output stream */
   protected def openFile() {
-    outputStream = new FileOutputStream(file, false)
+    outputStream = new FileOutputStream(file, true)
     logDebug(s"Opened file $file")
   }
 
