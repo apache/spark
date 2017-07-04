@@ -232,7 +232,7 @@ def approxCountDistinct(col, rsd=None):
 
 @since(2.1)
 def approx_count_distinct(col, rsd=None):
-    """Aggregate function. Returns a new :class:`Column` for approximate distinct count of column `col`.
+    """Aggregate function: returns a new :class:`Column` for approximate distinct count of column `col`.
 
     :param rsd: maximum estimation error allowed (default = 0.05). For rsd < 0.01, it is more
         efficient to use :func:`countDistinct`
@@ -309,7 +309,7 @@ def corr(col1, col2):
 
 @since(2.0)
 def covar_pop(col1, col2):
-    """Returns a new :class:`Column` for the population covariance of `col1` and `col2`.
+    """Returns a new :class:`Column` for the population covariance of ``col1`` and ``col2``.
 
     >>> a = [1] * 10
     >>> b = [1] * 10
@@ -509,7 +509,7 @@ def randn(seed=None):
     """Generates a column with independent and identically distributed (i.i.d.) samples from
     the standard normal distribution.
 
-    >>> df.withColumn('randn', randn(seed=42) ).collect()
+    >>> df.withColumn('randn', randn(seed=42)).collect()
     [Row(age=2, name=u'Alice', randn=-0.7556247885860078),
     Row(age=5, name=u'Bob', randn=-0.0861619008451133)]
     """
@@ -1116,7 +1116,7 @@ def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     representing the timestamp of that moment in the current system time zone in the given
     format.
 
-    >>> time_df = spark.createDataFrame([(1428476400, )], ['unix_time'])
+    >>> time_df = spark.createDataFrame([(1428476400,)], ['unix_time'])
     >>> time_df.select(from_unixtime('unix_time').alias('ts')).collect()
     [Row(ts=u'2015-04-08 00:00:00')]
     """
@@ -1160,7 +1160,7 @@ def from_utc_timestamp(timestamp, tz):
 @since(1.5)
 def to_utc_timestamp(timestamp, tz):
     """
-    Given a `timestamp`, which corresponds to a time of day in the timezone `tz`,
+    Given a timestamp, which corresponds to a time of day in the timezone `tz`,
     returns another timestamp that corresponds to the same time of day in UTC.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
@@ -1302,7 +1302,7 @@ _string_functions = {
                'uppercase. Words are delimited by whitespace.',
     'lower': 'Converts a string column to lower case.',
     'upper': 'Converts a string column to upper case.',
-    'reverse': 'Reverses a string column and returns it as a new string column.',
+    'reverse': 'Reverses the string column and returns it as a new string column.',
     'ltrim': 'Trim the spaces from left end for the specified string value.',
     'rtrim': 'Trim the spaces from right end for the specified string value.',
     'trim': 'Trim the spaces from both ends for the specified string column.',

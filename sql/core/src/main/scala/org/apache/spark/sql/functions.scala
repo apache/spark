@@ -1322,7 +1322,8 @@ object functions {
   def asin(columnName: String): Column = asin(Column(columnName))
 
   /**
-   * Computes the tangent inverse of the given value.
+   * Computes the tangent inverse of the given column; the returned angle is in the range
+   * -pi/2 through pi/2
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1330,7 +1331,8 @@ object functions {
   def atan(e: Column): Column = withExpr { Atan(e.expr) }
 
   /**
-   * Computes the tangent inverse of the given column.
+   * Computes the tangent inverse of the given column; the returned angle is in the range
+   * -pi/2 through pi/2
    *
    * @group math_funcs
    * @since 1.4.0

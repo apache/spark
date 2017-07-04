@@ -337,8 +337,12 @@ setMethod("asin",
             column(jc)
           })
 
-#' @details
-#' \code{atan}: Computes the tangent inverse of the given value.
+#' atan
+#'
+#' Computes the tangent inverse of the given value; the returned angle is in the range
+#' -pi/2 through pi/2
+#'
+#' @param x Column to compute on.
 #'
 #' @rdname column_math_functions
 #' @export
