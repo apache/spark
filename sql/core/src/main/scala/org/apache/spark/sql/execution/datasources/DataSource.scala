@@ -329,7 +329,13 @@ case class DataSource(
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
         dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions, schema)
       case (dataSource: RelationProvider, None) =>
-        dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
+        val baseRelation =
+          dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
+        SchemaUtils.checkColumnNameDuplication(
+          baseRelation.schema.map(_.name),
+          "in the relation schema",
+          equality)
+        baseRelation
       case (_: SchemaRelationProvider, None) =>
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
       case (dataSource: RelationProvider, Some(schema)) =>
