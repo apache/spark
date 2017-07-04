@@ -1602,16 +1602,10 @@ setMethod("sumDistinct",
           })
 
 #' @details
-#' \code{tan}: Computes the tangent of the given value.
+#' \code{tan}: Computes the tangent of the given value. Units in radians.
 #'
-#' Computes the tangent of the given value. Units in radians.
-#'
-#' @param x Column to compute on.
-#'
-#' @rdname tan
-#' @name tan
-#' @family math functions
-#' @aliases tan,Column-method
+#' @rdname column_math_functions
+#' @aliases tan tan,Column-method
 #' @export
 #' @note tan since 1.5.0
 setMethod("tan",
