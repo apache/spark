@@ -52,11 +52,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children == Nil) {
-      TypeCheckResult.TypeCheckFailure("input to function coalesce cannot be empty")
-    } else {
-      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function coalesce")
-    }
+    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
   }
 
   override def dataType: DataType = children.head.dataType

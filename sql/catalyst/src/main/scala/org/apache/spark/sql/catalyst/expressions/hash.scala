@@ -28,7 +28,7 @@ import org.apache.commons.codec.digest.DigestUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -247,11 +247,8 @@ abstract class HashExpression[E] extends Expression {
   override def nullable: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.isEmpty) {
-      TypeCheckResult.TypeCheckFailure("function hash requires at least one argument")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
+    TypeUtils.checkTypeInputDimension(
+      children.map(_.dataType), s"function $prettyName", requiredMinDimension = 1)
   }
 
   override def eval(input: InternalRow = null): Any = {

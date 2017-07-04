@@ -42,11 +42,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children == Nil) {
-      TypeCheckResult.TypeCheckFailure("input to function coalesce cannot be empty")
-    } else {
-      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
-    }
+    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
   }
 
   override def dataType: ArrayType = {
@@ -173,18 +169,25 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children == Nil) {
-      TypeCheckResult.TypeCheckFailure("input to function coalesce cannot be empty")
-    } else if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects a positive even number of arguments.")
-    } else if (keys.map(_.dataType).distinct.length > 1) {
-      TypeCheckResult.TypeCheckFailure("The given keys of function map should all be the same " +
-        "type, but they are " + keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
-    } else if (values.map(_.dataType).distinct.length > 1) {
-      TypeCheckResult.TypeCheckFailure("The given values of function map should all be the same " +
-        "type, but they are " + values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
-    } else {
-      TypeCheckResult.TypeCheckSuccess
+    TypeUtils.checkTypeInputDimension(
+        children.map(_.dataType), s"function $prettyName", requiredMinDimension = 1) match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        if (children.size % 2 != 0) {
+          TypeCheckResult.TypeCheckFailure(
+            s"$prettyName expects a positive even number of arguments.")
+        } else if (keys.map(_.dataType).distinct.length > 1) {
+          TypeCheckResult.TypeCheckFailure(
+            "The given keys of function map should all be the same type, but they are " +
+              keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+        } else if (values.map(_.dataType).distinct.length > 1) {
+          TypeCheckResult.TypeCheckFailure(
+            "The given values of function map should all be the same type, but they are " +
+              values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
+      case typeCheckFailure =>
+        typeCheckFailure
     }
   }
 
@@ -299,19 +302,25 @@ trait CreateNamedStructLike extends Expression {
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
-    } else {
-      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
-      if (invalidNames.nonEmpty) {
-        TypeCheckResult.TypeCheckFailure(
-          "Only foldable StringType expressions are allowed to appear at odd position, got:" +
-          s" ${invalidNames.mkString(",")}")
-      } else if (!names.contains(null)) {
-        TypeCheckResult.TypeCheckSuccess
-      } else {
-        TypeCheckResult.TypeCheckFailure("Field name should not be null")
-      }
+    TypeUtils.checkTypeInputDimension(
+        children.map(_.dataType), s"function $prettyName", requiredMinDimension = 1) match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        if (children.size % 2 != 0) {
+          TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
+        } else {
+          val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
+          if (invalidNames.nonEmpty) {
+            TypeCheckResult.TypeCheckFailure(
+              "Only foldable StringType expressions are allowed to appear at odd position, got:" +
+                s" ${invalidNames.mkString(",")}")
+          } else if (!names.contains(null)) {
+            TypeCheckResult.TypeCheckSuccess
+          } else {
+            TypeCheckResult.TypeCheckFailure("Field name should not be null")
+          }
+        }
+      case typeCheckFailure =>
+        typeCheckFailure
     }
   }
 

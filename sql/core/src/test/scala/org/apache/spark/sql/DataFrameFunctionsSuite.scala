@@ -450,40 +450,33 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-21281 fails if functions have no argument") {
-    var errMsg = intercept[AnalysisException] {
-      spark.range(1).select(array())
-    }.getMessage
-    assert(errMsg.contains("due to data type mismatch: input to function coalesce cannot be empty"))
+    val df = Seq(1).toDF("a")
 
-    errMsg = intercept[AnalysisException] {
-      spark.range(1).select(map())
-    }.getMessage
-    assert(errMsg.contains("due to data type mismatch: input to function coalesce cannot be empty"))
+    val funcsMustHaveAtLeastOneArg =
+      ("array", (df: DataFrame) => df.select(array())) ::
+      ("array", (df: DataFrame) => df.selectExpr("array()")) ::
+      ("map", (df: DataFrame) => df.select(map())) ::
+      ("map", (df: DataFrame) => df.selectExpr("map()")) ::
+      ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
+      ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
+      ("named_struct", (df: DataFrame) => df.select(struct())) ::
+      ("named_struct", (df: DataFrame) => df.selectExpr("named_struct()")) ::
+      ("hash", (df: DataFrame) => df.select(hash())) ::
+      ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
+    funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
+      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
+      assert(errMsg.contains(s"input to function $name requires at least 1 argument"))
+    }
 
-    // spark.range(1).select(coalesce())
-    errMsg = intercept[AnalysisException] {
-      spark.range(1).select(coalesce())
-    }.getMessage
-    assert(errMsg.contains("due to data type mismatch: input to function coalesce cannot be empty"))
-
-    // This hits java.lang.AssertionError
-    // spark.range(1).select(struct())
-
-    errMsg = intercept[IllegalArgumentException] {
-      spark.range(1).select(greatest())
-    }.getMessage
-    assert(errMsg.contains("requirement failed: greatest requires at least 2 arguments"))
-
-    errMsg = intercept[IllegalArgumentException] {
-      spark.range(1).select(least())
-    }.getMessage
-    assert(errMsg.contains("requirement failed: least requires at least 2 arguments"))
-
-    errMsg = intercept[AnalysisException] {
-      spark.range(1).select(hash())
-    }.getMessage
-    assert(errMsg.contains(
-      "due to data type mismatch: function hash requires at least one argument"))
+    val funcsMustHaveAtLeastTwoArgs =
+      ("greatest", (df: DataFrame) => df.select(greatest())) ::
+      ("greatest", (df: DataFrame) => df.selectExpr("greatest()")) ::
+      ("least", (df: DataFrame) => df.select(least())) ::
+      ("least", (df: DataFrame) => df.selectExpr("least()")) :: Nil
+    funcsMustHaveAtLeastTwoArgs.foreach { case (name, func) =>
+      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
+      assert(errMsg.contains(s"input to function $name requires at least 2 arguments"))
+    }
   }
 }
 

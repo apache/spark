@@ -42,18 +42,34 @@ object TypeUtils {
   }
 
   def checkForSameTypeInputExpr(types: Seq[DataType], caller: String): TypeCheckResult = {
-    if (types.size <= 1) {
+    checkTypeInputDimension(types, caller, requiredMinDimension = 1) match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        if (types.size == 1) {
+          TypeCheckResult.TypeCheckSuccess
+        } else {
+          val firstType = types.head
+          types.foreach { t =>
+            if (!t.sameType(firstType)) {
+              return TypeCheckResult.TypeCheckFailure(
+                s"input to $caller should all be the same type, but it's " +
+                  types.map(_.simpleString).mkString("[", ", ", "]"))
+            }
+          }
+          TypeCheckResult.TypeCheckSuccess
+        }
+      case typeCheckFailure =>
+        typeCheckFailure
+    }
+  }
+
+  def checkTypeInputDimension(types: Seq[DataType], caller: String, requiredMinDimension: Int)
+    : TypeCheckResult = {
+    if (types.size >= requiredMinDimension) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      val firstType = types.head
-      types.foreach { t =>
-        if (!t.sameType(firstType)) {
-          return TypeCheckResult.TypeCheckFailure(
-            s"input to $caller should all be the same type, but it's " +
-              types.map(_.simpleString).mkString("[", ", ", "]"))
-        }
-      }
-      TypeCheckResult.TypeCheckSuccess
+      TypeCheckResult.TypeCheckFailure(
+        s"input to $caller requires at least $requiredMinDimension " +
+          s"argument${if (requiredMinDimension > 1) "s"}")
     }
   }
 

@@ -1566,10 +1566,7 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def greatest(exprs: Column*): Column = withExpr {
-    require(exprs.length > 1, "greatest requires at least 2 arguments.")
-    Greatest(exprs.map(_.expr))
-  }
+  def greatest(exprs: Column*): Column = withExpr { Greatest(exprs.map(_.expr)) }
 
   /**
    * Returns the greatest value of the list of column names, skipping null values.
@@ -1673,10 +1670,7 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def least(exprs: Column*): Column = withExpr {
-    require(exprs.length > 1, "least requires at least 2 arguments.")
-    Least(exprs.map(_.expr))
-  }
+  def least(exprs: Column*): Column = withExpr { Least(exprs.map(_.expr)) }
 
   /**
    * Returns the least value of the list of column names, skipping null values.
