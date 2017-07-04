@@ -254,7 +254,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
     SchemaUtils.checkColumnNameDuplication(
       normalizedPartitionCols,
-      "in the partition",
+      "in the partition column(s)",
       sparkSession.sessionState.conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
@@ -288,11 +288,11 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.bucketColumnNames,
-          "in the bucket",
+          "in the bucket column(s)",
           sparkSession.sessionState.conf.resolver)
         SchemaUtils.checkColumnNameDuplication(
           normalizedBucketSpec.sortColumnNames,
-          "in the sort",
+          "in the sort column(s)",
           sparkSession.sessionState.conf.resolver)
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {

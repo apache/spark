@@ -94,7 +94,13 @@ case class DataSource(
       dataSchema.map(_.name), "in the data schema", equality)
   }
   SchemaUtils.checkColumnNameDuplication(
-    partitionColumns, "in the partition schema", equality)
+    partitionColumns, "in the partition column(s)", equality)
+  bucketSpec.map { bucket =>
+    SchemaUtils.checkColumnNameDuplication(
+      bucket.bucketColumnNames, "in the bucket column(s)", equality)
+    SchemaUtils.checkColumnNameDuplication(
+      bucket.sortColumnNames, "in the sort column(s)", equality)
+  }
 
   /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
@@ -192,7 +198,7 @@ case class DataSource(
     SchemaUtils.checkColumnNameDuplication(
       dataSchema.map(_.name), "in the data schema", equality)
     SchemaUtils.checkColumnNameDuplication(
-      partitionSchema.map(_.name), "in the partition schema", equality)
+      partitionSchema.map(_.name), "in the partition column(s)", equality)
 
     // We just print a waring message if the data schema and partition schema have the duplicate
     // columns. This is because we allow users to do so in the previous Spark releases and
@@ -200,7 +206,8 @@ case class DataSource(
     // See SPARK-18108 and SPARK-21144 for related discussions.
     try {
       SchemaUtils.checkColumnNameDuplication(
-        (dataSchema ++ partitionSchema).map(_.name), "in the data schema and the partition schema",
+        (dataSchema ++ partitionSchema).map(_.name),
+        "in the data schema and the partition column(s)",
         equality)
     } catch {
       case e: AnalysisException => logWarning(e.getMessage)
@@ -351,9 +358,6 @@ case class DataSource(
             s"Unable to infer schema for $format at ${fileCatalog.allFiles().mkString(",")}. " +
                 "It must be specified manually")
         }
-
-        SchemaUtils.checkSchemaColumnNameDuplication(
-          dataSchema, "in the datasource", sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
         HadoopFsRelation(
           fileCatalog,
