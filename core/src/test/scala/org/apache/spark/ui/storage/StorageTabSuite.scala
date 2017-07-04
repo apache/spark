@@ -59,6 +59,8 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
     assert(storageListener._rddInfoMap.size === 2)
     assert(storageListener.rddInfoList.isEmpty)
+    assert(storageListener._rddInfoMap(0).name === "freedom")
+    assert(storageListener._rddInfoMap(1).name === "hostage")
 
     // 4 RDDs are known, but only 2 are cached
     val rddInfo2Cached = rddInfo2
@@ -70,19 +72,27 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     bus.postToAll(SparkListenerStageSubmitted(stageInfo1))
     assert(storageListener._rddInfoMap.size === 4)
     assert(storageListener.rddInfoList.size === 2)
+    assert(storageListener._rddInfoMap(2).name === "sanity")
+    assert(storageListener._rddInfoMap(3).name === "grace")
 
     // Submitting RDDInfos with duplicate IDs does nothing
-    val rddInfo0Cached = new RDDInfo(0, "freedom", 100, StorageLevel.MEMORY_ONLY, Seq(10))
+    val rddInfo0Cached = new RDDInfo(0, "nofreedom", 100, StorageLevel.MEMORY_ONLY, Seq(10))
     rddInfo0Cached.numCachedPartitions = 1
     val stageInfo0Cached = new StageInfo(0, 0, "0", 100, Seq(rddInfo0), Seq.empty, "details")
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0Cached))
     assert(storageListener._rddInfoMap.size === 4)
     assert(storageListener.rddInfoList.size === 2)
+    assert(storageListener._rddInfoMap(0).name === "freedom")
+    assert(storageListener._rddInfoMap(1).name === "hostage")
+    assert(storageListener._rddInfoMap(2).name === "sanity")
+    assert(storageListener._rddInfoMap(3).name === "grace")
 
     // We only keep around the RDDs that are cached
     bus.postToAll(SparkListenerStageCompleted(stageInfo0))
     assert(storageListener._rddInfoMap.size === 2)
     assert(storageListener.rddInfoList.size === 2)
+    assert(storageListener._rddInfoMap(2).name === "sanity")
+    assert(storageListener._rddInfoMap(3).name === "grace")
   }
 
   test("unpersist") {
@@ -179,7 +189,7 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     assert(storageListener.rddInfoList.size === 2)
   }
 
-  test("verify StorageTab still contains a renamed RDD") {
+  test("verify StorageTab not contains a renamed RDD") {
     val rddInfo = new RDDInfo(0, "original_name", 1, memOnly, Seq(4))
     val stageInfo0 = new StageInfo(0, 0, "stage0", 1, Seq(rddInfo), Seq.empty, "details")
     bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
@@ -193,7 +203,7 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     val stageInfo1 = new StageInfo(1, 0, "stage1", 1, Seq(rddInfoRenamed), Seq.empty, "details")
     bus.postToAll(SparkListenerStageSubmitted(stageInfo1))
     assert(storageListener.rddInfoList.size == 1)
-    assert(storageListener.rddInfoList.head.name == newName)
+    assert(storageListener.rddInfoList.head.name == "original_name")
   }
 
   private def postUpdateBlocks(
