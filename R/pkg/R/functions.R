@@ -1398,7 +1398,7 @@ setMethod("signum",
           })
 
 #' @details
-#' \code{sign}: Alias for \code{signum}. 
+#' \code{sign}: Alias for \code{signum}.
 #'
 #' @rdname column_math_functions
 #' @aliases sign sign,Column-method
