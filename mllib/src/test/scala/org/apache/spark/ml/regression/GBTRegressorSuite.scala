@@ -189,6 +189,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(importances.toArray.sum === 1.0)
     assert(importances.toArray.forall(_ >= 0.0))
 
+    // GBT with different featureSubsetStrategy
     val gbtWithFeatureSubset = gbt.setFeatureSubsetStrategy("1")
     val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
     val mostIF = importanceFeatures.argmax
