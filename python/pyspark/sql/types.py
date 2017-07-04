@@ -1251,11 +1251,12 @@ _acceptable_types = {
 
 def _make_type_verifier(dataType, nullable=True, name=None):
     """
-    Verify the type of obj against dataType, raise a TypeError if they do not match.
+    Make a verifier that checks the type of obj against dataType and raises a TypeError if they do
+    not match.
 
-    Also verify the value of obj against datatype, raise a ValueError if it's not within the allowed
-    range, e.g. using 128 as ByteType will overflow. Note that, Python float is not checked, so it
-    will become infinity when cast to Java float if it overflows.
+    This verifier also checks the value of obj against datatype and raises a ValueError if it's not
+    within the allowed range, e.g. using 128 as ByteType will overflow. Note that, Python float is
+    not checked, so it will become infinity when cast to Java float if it overflows.
 
     >>> _make_type_verifier(StructType([]))(None)
     >>> _make_type_verifier(StringType())("")
