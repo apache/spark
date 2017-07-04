@@ -295,7 +295,7 @@ object JdbcUtils extends Logging {
         }
       }
       val nullable = if (alwaysNullable) {
-        alwaysNullable
+        true
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
