@@ -40,9 +40,6 @@ if sys.version_info[:2] <= (2, 6):
         sys.exit(1)
 else:
     import unittest
-    if sys.version_info[0] >= 3:
-        xrange = range
-        basestring = str
 
 import py4j
 try:
