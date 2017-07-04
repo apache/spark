@@ -380,14 +380,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(importances.toArray.sum === 1.0)
     assert(importances.toArray.forall(_ >= 0.0))
 
-    val gbtWithFeatureSubset = new GBTClassifier()
-      .setImpurity("Gini")
-      .setMaxDepth(3)
-      .setMaxIter(5)
-      .setSubsamplingRate(1.0)
-      .setStepSize(0.5)
-      .setSeed(123)
-      .setFeatureSubsetStrategy("1")
+    val gbtWithFeatureSubset = gbt.setFeatureSubsetStrategy("1")
     val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
     val mostIF = importanceFeatures.argmax
     assert(!(mostImportantFeature === mostIF))
