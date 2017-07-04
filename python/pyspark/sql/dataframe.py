@@ -833,6 +833,8 @@ class DataFrame(object):
         else:
             if how is None:
                 how = "inner"
+            if on is None:
+                on = self._jseq([])
             assert isinstance(how, basestring), "how should be basestring"
             jdf = self._jdf.join(other._jdf, on, how)
         return DataFrame(jdf, self.sql_ctx)
