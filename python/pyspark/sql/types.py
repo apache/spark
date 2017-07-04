@@ -1314,24 +1314,6 @@ def _make_type_verifier(dataType, nullable=True, name=None):
         else:
             return False
 
-    # StringType can work with any types
-    if isinstance(dataType, StringType):
-        def verify_string(obj):
-            if verify_nullability(obj):
-                return None
-        return verify_string
-
-    if isinstance(dataType, UserDefinedType):
-        verifier = _make_type_verifier(dataType.sqlType(), name=name)
-
-        def verify_udf(obj):
-            if verify_nullability(obj):
-                return None
-            if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
-                raise ValueError(new_msg("%r is not an instance of type %r" % (obj, dataType)))
-            verifier(dataType.toInternal(obj))
-        return verify_udf
-
     _type = type(dataType)
 
     def assert_acceptable_types(obj):
@@ -1344,49 +1326,59 @@ def _make_type_verifier(dataType, nullable=True, name=None):
             raise TypeError(new_msg("%s can not accept object %r in type %s"
                                     % (dataType, obj, type(obj))))
 
-    if isinstance(dataType, ByteType):
+    if isinstance(dataType, StringType):
+        # StringType can work with any types
+        verify_value = lambda _: _
+
+    elif isinstance(dataType, UserDefinedType):
+        verifier = _make_type_verifier(dataType.sqlType(), name=name)
+
+        def verify_udf(obj):
+            if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
+                raise ValueError(new_msg("%r is not an instance of type %r" % (obj, dataType)))
+            verifier(dataType.toInternal(obj))
+
+        verify_value = verify_udf
+
+    elif isinstance(dataType, ByteType):
         def verify_byte(obj):
-            if verify_nullability(obj):
-                return None
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             if obj < -128 or obj > 127:
                 raise ValueError(new_msg("object of ByteType out of range, got: %s" % obj))
-        return verify_byte
+
+        verify_value = verify_byte
 
     elif isinstance(dataType, ShortType):
         def verify_short(obj):
-            if verify_nullability(obj):
-                return None
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             if obj < -32768 or obj > 32767:
                 raise ValueError(new_msg("object of ShortType out of range, got: %s" % obj))
-        return verify_short
+
+        verify_value = verify_short
 
     elif isinstance(dataType, IntegerType):
         def verify_integer(obj):
-            if verify_nullability(obj):
-                return None
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             if obj < -2147483648 or obj > 2147483647:
                 raise ValueError(
                     new_msg("object of IntegerType out of range, got: %s" % obj))
-        return verify_integer
+
+        verify_value = verify_integer
 
     elif isinstance(dataType, ArrayType):
         element_verifier = _make_type_verifier(
             dataType.elementType, dataType.containsNull, name="element in array %s" % name)
 
         def verify_array(obj):
-            if verify_nullability(obj):
-                return None
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             for i in obj:
                 element_verifier(i)
-        return verify_array
+
+        verify_value = verify_array
 
     elif isinstance(dataType, MapType):
         key_verifier = _make_type_verifier(dataType.keyType, False, name="key of map %s" % name)
@@ -1394,14 +1386,13 @@ def _make_type_verifier(dataType, nullable=True, name=None):
             dataType.valueType, dataType.valueContainsNull, name="value of map %s" % name)
 
         def verify_map(obj):
-            if verify_nullability(obj):
-                return None
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             for k, v in obj.items():
                 key_verifier(k)
                 value_verifier(v)
-        return verify_map
+
+        verify_value = verify_map
 
     elif isinstance(dataType, StructType):
         verifiers = []
@@ -1410,8 +1401,6 @@ def _make_type_verifier(dataType, nullable=True, name=None):
             verifiers.append((f.name, verifier))
 
         def verify_struct(obj):
-            if verify_nullability(obj):
-                return None
             assert_acceptable_types(obj)
 
             if isinstance(obj, dict):
@@ -1435,15 +1424,20 @@ def _make_type_verifier(dataType, nullable=True, name=None):
             else:
                 raise TypeError(new_msg("StructType can not accept object %r in type %s"
                                         % (obj, type(obj))))
-        return verify_struct
+        verify_value = verify_struct
 
     else:
         def verify_default(obj):
-            if verify_nullability(obj):
-                return None
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
-        return verify_default
+
+        verify_value = verify_default
+
+    def verify(obj):
+        if not verify_nullability(obj):
+            verify_value(obj)
+
+    return verify
 
 
 # This is used to unpickle a Row from JVM
