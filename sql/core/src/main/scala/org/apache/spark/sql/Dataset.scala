@@ -1007,6 +1007,10 @@ class Dataset[T] private[sql](
         JoinType(joinType),
         Some(condition.expr))).analyzed.asInstanceOf[Join]
 
+    if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
+      throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType)
+    }
+
     // For both join side, combine all outputs into a single column and alias it with "_1" or "_2",
     // to match the schema for the encoder of the join result.
     // Note that we do this before joining them, to enable the join operator to return null for one
