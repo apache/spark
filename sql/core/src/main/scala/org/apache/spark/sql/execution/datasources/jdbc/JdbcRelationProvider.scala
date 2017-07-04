@@ -18,40 +18,13 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
-import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.execution.datasources.DataSourceValidator
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.SchemaUtils
 
 class JdbcRelationProvider extends CreatableRelationProvider
-    with RelationProvider with DataSourceValidator with DataSourceRegister {
+  with RelationProvider with DataSourceRegister {
 
   override def shortName(): String = "jdbc"
-
-  override def validateSchema(
-      schema: StructType, partCols: Seq[String], resolver: Resolver, options: Map[String, String])
-    : Unit = {
-    val jdbcOptions = new JDBCOptions(options)
-    jdbcOptions.createTableColumnTypes.foreach { createTableColumnTypes =>
-      val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
-
-      // Checks duplicate columns in the user specified column types
-      SchemaUtils.checkColumnNameDuplication(
-        userSchema.map(_.name), "in the createTableColumnTypes option value", resolver)
-
-      // Checks if user specified column names exist in the DataFrame schema
-      userSchema.fieldNames.foreach { col =>
-        schema.find(f => resolver(f.name, col)).getOrElse {
-          throw new AnalysisException(
-            s"createTableColumnTypes option column $col not found in schema " +
-              schema.catalogString)
-        }
-      }
-    }
-  }
 
   override def createRelation(
       sqlContext: SQLContext,
@@ -96,8 +69,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, options.table)
-              val caseSensitiveAnalysis = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
-              createTable(conn, df.schema, caseSensitiveAnalysis, options)
+              createTable(conn, df, options)
               saveTable(df, Some(df.schema), isCaseSensitive, options)
             }
 
@@ -115,8 +87,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             // Therefore, it is okay to do nothing here and then just return the relation below.
         }
       } else {
-        val caseSensitiveAnalysis = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
-        createTable(conn, df.schema, caseSensitiveAnalysis, options)
+        createTable(conn, df, options)
         saveTable(df, Some(df.schema), isCaseSensitive, options)
       }
     } finally {

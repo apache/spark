@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
@@ -377,10 +377,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       val expectedSchemaStr =
         colTypes.map { case (col, dataType) => s""""$col" $dataType """ }.mkString(", ")
 
-      val caseSensitiveAnalysis = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
-      val schemaStr = JdbcUtils.schemaString(
-        df.schema, caseSensitiveAnalysis, url1, Option(createTableColTypes))
-      assert(schemaStr == expectedSchemaStr)
+      assert(JdbcUtils.schemaString(df, url1, Option(createTableColTypes)) == expectedSchemaStr)
     }
 
     testCreateTableColDataTypes(Seq("boolean"))
@@ -482,7 +479,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       }.getMessage()
       assert(msg.contains(
-        "Found duplicate column(s) in the createTableColumnTypes option value: `name`;"))
+        "Found duplicate column(s) in createTableColumnTypes option value: name, NaMe"))
     }
   }
 

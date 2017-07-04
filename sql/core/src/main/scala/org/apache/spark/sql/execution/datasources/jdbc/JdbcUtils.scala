@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
@@ -116,12 +117,12 @@ object JdbcUtils extends Logging {
       table: String,
       rddSchema: StructType,
       tableSchema: Option[StructType],
-      caseSensitiveAnalysis: Boolean,
+      isCaseSensitive: Boolean,
       dialect: JdbcDialect): String = {
     val columns = if (tableSchema.isEmpty) {
       rddSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
     } else {
-      val columnNameEquality = if (caseSensitiveAnalysis) {
+      val columnNameEquality = if (isCaseSensitive) {
         org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
       } else {
         org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
@@ -709,16 +710,15 @@ object JdbcUtils extends Logging {
    * Compute the schema string for this RDD.
    */
   def schemaString(
-      schema: StructType,
-      caseSensitiveAnalysis: Boolean,
+      df: DataFrame,
       url: String,
       createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     val userSpecifiedColTypesMap = createTableColumnTypes
-      .map(parseUserSpecifiedCreateTableColumnTypes(schema, caseSensitiveAnalysis, _))
+      .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
       .getOrElse(Map.empty[String, String])
-    schema.fields.foreach { field =>
+    df.schema.fields.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
@@ -734,8 +734,8 @@ object JdbcUtils extends Logging {
    * use in-place of the default data type.
    */
   private def parseUserSpecifiedCreateTableColumnTypes(
-      schema: StructType, caseSensitiveAnalysis: Boolean, createTableColumnTypes: String)
-    : Map[String, String] = {
+      df: DataFrame,
+      createTableColumnTypes: String): Map[String, String] = {
     def typeName(f: StructField): String = {
       // char/varchar gets translated to string type. Real data type specified by the user
       // is available in the field metadata as HIVE_TYPE_STRING
@@ -747,8 +747,24 @@ object JdbcUtils extends Logging {
     }
 
     val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
+    val nameEquality = df.sparkSession.sessionState.conf.resolver
+
+    // checks duplicate columns in the user specified column types.
+    SchemaUtils.checkColumnNameDuplication(
+      userSchema.map(_.name), "in the createTableColumnTypes option value", nameEquality)
+
+    // checks if user specified column names exist in the DataFrame schema
+    userSchema.fieldNames.foreach { col =>
+      df.schema.find(f => nameEquality(f.name, col)).getOrElse {
+        throw new AnalysisException(
+          s"createTableColumnTypes option column $col not found in schema " +
+            df.schema.catalogString)
+      }
+    }
+
     val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
-    if (caseSensitiveAnalysis) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
+    val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
   /**
@@ -757,7 +773,7 @@ object JdbcUtils extends Logging {
   def saveTable(
       df: DataFrame,
       tableSchema: Option[StructType],
-      caseSensitiveAnalysis: Boolean,
+      isCaseSensitive: Boolean,
       options: JDBCOptions): Unit = {
     val url = options.url
     val table = options.table
@@ -767,8 +783,7 @@ object JdbcUtils extends Logging {
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 
-    val insertStmt = getInsertStatement(
-      table, rddSchema, tableSchema, caseSensitiveAnalysis, dialect)
+    val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
     val repartitionedDF = options.numPartitions match {
       case Some(n) if n <= 0 => throw new IllegalArgumentException(
         s"Invalid value `$n` for parameter `${JDBCOptions.JDBC_NUM_PARTITIONS}` in table writing " +
@@ -786,11 +801,10 @@ object JdbcUtils extends Logging {
    */
   def createTable(
       conn: Connection,
-      schema: StructType,
-      caseSensitiveAnalysis: Boolean,
+      df: DataFrame,
       options: JDBCOptions): Unit = {
     val strSchema = schemaString(
-      schema, caseSensitiveAnalysis, options.url, options.createTableColumnTypes)
+      df, options.url, options.createTableColumnTypes)
     val table = options.table
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
