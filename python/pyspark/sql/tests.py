@@ -2021,6 +2021,22 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
 
+    def test_join_without_on(self):
+        df1 = self.spark.range(1).toDF("a")
+        df2 = self.spark.range(1).toDF("b")
+
+        try:
+            self.spark.conf.set("spark.sql.crossJoin.enabled", "false")
+            self.assertRaises(AnalysisException, lambda: df1.join(df2, how="inner").collect())
+
+            self.spark.conf.set("spark.sql.crossJoin.enabled", "true")
+            actual = df1.join(df2, how="inner").collect()
+            expected = [Row(a=0, b=0)]
+            self.assertEqual(actual, expected)
+        finally:
+            # We should unset this. Otherwise, other tests are affected.
+            self.spark.conf.unset("spark.sql.crossJoin.enabled")
+
     # Regression test for invalid join methods when on is None, Spark-14761
     def test_invalid_join_method(self):
         df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
