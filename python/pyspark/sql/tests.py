@@ -2639,15 +2639,16 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 class DataTypeVerificationTests(unittest.TestCase):
 
     def test_verify_type_exception_msg(self):
-        msg = "Expected verify_type() to throw so test can check exception message."
-        with self.assertRaises(Exception, msg=msg) as cm:
-            _make_type_verifier(StringType(), nullable=False, name="test_name")(None)
-        self.assertTrue(str(cm.exception).startswith("test_name"))
+        self.assertRaisesRegexp(
+            ValueError,
+            "test_name",
+            lambda: _make_type_verifier(StringType(), nullable=False, name="test_name")(None))
 
         schema = StructType([StructField('a', StructType([StructField('b', IntegerType())]))])
-        with self.assertRaises(Exception, msg=msg) as cm:
-            _make_type_verifier(schema)([["data"]])
-        self.assertTrue(str(cm.exception).startswith("field b in field a"))
+        self.assertRaisesRegexp(
+            TypeError,
+            "field b in field a",
+            lambda: _make_type_verifier(schema)([["data"]]))
 
     def test_verify_type_ok_nullable(self):
         obj = None
