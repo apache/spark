@@ -201,7 +201,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     this.extraOptions ++= properties.asScala
     // explicit url and dbtable should override all
     this.extraOptions += (JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)
-    if (!userSpecifiedSchema.isEmpty) {
+    if (userSpecifiedSchema.isDefined) {
       this.extraOptions += (JDBCOptions.JDBC_CUSTOM_SCHEMA -> userSpecifiedSchema.get.json)
     }
     format("jdbc").load()

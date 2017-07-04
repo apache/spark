@@ -110,10 +110,21 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = if (!jdbcOptions.customSchema.isEmpty) {
-    StructType.fromString(jdbcOptions.customSchema.get)
-  } else {
-    JDBCRDD.resolveTable(jdbcOptions)
+  override val schema: StructType = {
+    val schema = JDBCRDD.resolveTable(jdbcOptions)
+    val customSchema = jdbcOptions.customSchema
+    if (customSchema.isDefined) {
+      val schemaFieldNames = schema.fieldNames.mkString(",")
+      val customSchemaFieldNames = customSchema.get.fieldNames.mkString(",")
+      if(schemaFieldNames.equals(customSchemaFieldNames)) {
+        customSchema.get
+      } else {
+        throw new IllegalArgumentException(
+          s"Field ${customSchemaFieldNames} does not match ${schemaFieldNames}.")
+      }
+    } else {
+      schema
+    }
   }
 
   // Check if JDBCRDD.compileFilter can accept input filters

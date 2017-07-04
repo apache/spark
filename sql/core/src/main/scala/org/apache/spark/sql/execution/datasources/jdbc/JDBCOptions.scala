@@ -21,6 +21,7 @@ import java.sql.{Connection, DriverManager}
 import java.util.{Locale, Properties}
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.types.StructType
 
 /**
  * Options for the JDBC data source.
@@ -120,7 +121,11 @@ class JDBCOptions(
   // TODO: to reuse the existing partition parameters for those partition specific options
   val createTableOptions = parameters.getOrElse(JDBC_CREATE_TABLE_OPTIONS, "")
   val createTableColumnTypes = parameters.get(JDBC_CREATE_TABLE_COLUMN_TYPES)
-  val customSchema = parameters.get(JDBC_CUSTOM_SCHEMA)
+  val customSchema = parameters.get(JDBC_CUSTOM_SCHEMA) match {
+    case Some(value) => Some(StructType.fromString(value))
+    case _ => None
+  }
+
   val batchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_INSERT_SIZE, "1000").toInt
     require(size >= 1,

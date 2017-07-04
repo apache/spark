@@ -235,6 +235,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(values.getDecimal(0).equals(new java.math.BigDecimal("12312321321321312312312312123")))
     assert(values.getInt(1).equals(1))
     assert(values.getBoolean(2).equals(false))
+
+    // throw exception if custom schema field names does not match table column names
+    val wrongSchema = StructType(Seq(
+      StructField("ID", DecimalType(DecimalType.MAX_PRECISION, 0)),
+      StructField("N2", BooleanType, true)))
+
+    intercept[IllegalArgumentException] {
+      spark.read.schema(wrongSchema).jdbc(jdbcUrl, "CUSTOM_COLUMN_TYPES", new Properties()).count()
+    }.getMessage.contains("Field ID,N2 does not match ID,N1,N2.")
   }
 
 }
