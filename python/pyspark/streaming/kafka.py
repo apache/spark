@@ -144,7 +144,7 @@ class KafkaUtils(object):
         """
         .. note:: Experimental
 
-        Create a RDD from Kafka using offset ranges for each topic and partition.
+        Create an RDD from Kafka using offset ranges for each topic and partition.
 
         :param sc:  SparkContext object
         :param kafkaParams: Additional params for Kafka
@@ -155,7 +155,7 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
                                meta using messageHandler (default is None).
-        :return: A RDD object
+        :return: An RDD object
         """
         if leaders is None:
             leaders = dict()
@@ -208,13 +208,13 @@ ________________________________________________________________________________
   1. Include the Kafka library and its dependencies with in the
      spark-submit command as
 
-     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka:%s ...
+     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka-0-8:%s ...
 
   2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
-     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-assembly, Version = %s.
+     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-0-8-assembly, Version = %s.
      Then, include the jar in the spark-submit command as
 
-     $ bin/spark-submit --jars <spark-streaming-kafka-assembly.jar> ...
+     $ bin/spark-submit --jars <spark-streaming-kafka-0-8-assembly.jar> ...
 
 ________________________________________________________________________________________________
 
@@ -228,7 +228,7 @@ class OffsetRange(object):
 
     def __init__(self, topic, partition, fromOffset, untilOffset):
         """
-        Create a OffsetRange to represent  range of offsets
+        Create an OffsetRange to represent range of offsets
         :param topic: Kafka topic name.
         :param partition: Kafka partition id.
         :param fromOffset: Inclusive starting offset.
@@ -262,7 +262,7 @@ class OffsetRange(object):
 
 class TopicAndPartition(object):
     """
-    Represents a specific top and partition for Kafka.
+    Represents a specific topic and partition for Kafka.
     """
 
     def __init__(self, topic, partition):
@@ -286,6 +286,9 @@ class TopicAndPartition(object):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def __hash__(self):
+        return (self._topic, self._partition).__hash__()
 
 
 class Broker(object):

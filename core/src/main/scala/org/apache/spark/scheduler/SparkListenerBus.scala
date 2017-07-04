@@ -22,9 +22,12 @@ import org.apache.spark.util.ListenerBus
 /**
  * A [[SparkListenerEvent]] bus that relays [[SparkListenerEvent]]s to its listeners
  */
-private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkListenerEvent] {
+private[spark] trait SparkListenerBus
+  extends ListenerBus[SparkListenerInterface, SparkListenerEvent] {
 
-  protected override def doPostEvent(listener: SparkListener, event: SparkListenerEvent): Unit = {
+  protected override def doPostEvent(
+      listener: SparkListenerInterface,
+      event: SparkListenerEvent): Unit = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         listener.onStageSubmitted(stageSubmitted)
@@ -58,9 +61,16 @@ private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkLi
         listener.onExecutorAdded(executorAdded)
       case executorRemoved: SparkListenerExecutorRemoved =>
         listener.onExecutorRemoved(executorRemoved)
+      case executorBlacklisted: SparkListenerExecutorBlacklisted =>
+        listener.onExecutorBlacklisted(executorBlacklisted)
+      case executorUnblacklisted: SparkListenerExecutorUnblacklisted =>
+        listener.onExecutorUnblacklisted(executorUnblacklisted)
+      case nodeBlacklisted: SparkListenerNodeBlacklisted =>
+        listener.onNodeBlacklisted(nodeBlacklisted)
+      case nodeUnblacklisted: SparkListenerNodeUnblacklisted =>
+        listener.onNodeUnblacklisted(nodeUnblacklisted)
       case blockUpdated: SparkListenerBlockUpdated =>
         listener.onBlockUpdated(blockUpdated)
-      case logStart: SparkListenerLogStart => // ignore event log metadata
       case _ => listener.onOtherEvent(event)
     }
   }

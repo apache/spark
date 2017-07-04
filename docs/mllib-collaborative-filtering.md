@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Collaborative Filtering - spark.mllib
-displayTitle: Collaborative Filtering - spark.mllib
+title: Collaborative Filtering - RDD-based API
+displayTitle: Collaborative Filtering - RDD-based API
 ---
 
 * Table of contents
@@ -20,7 +20,7 @@ algorithm to learn these latent factors. The implementation in `spark.mllib` has
 following parameters:
 
 * *numBlocks* is the number of blocks used to parallelize computation (set to -1 to auto-configure).
-* *rank* is the number of latent factors in the model.
+* *rank* is the number of features to use (also referred to as the number of latent factors).
 * *iterations* is the number of iterations of ALS to run. ALS typically converges to a reasonable
   solution in 20 iterations or less.
 * *lambda* specifies the regularization parameter in ALS.

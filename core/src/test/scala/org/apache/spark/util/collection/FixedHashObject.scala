@@ -22,4 +22,8 @@ package org.apache.spark.util.collection
  */
 case class FixedHashObject(v: Int, h: Int) extends Serializable {
   override def hashCode(): Int = h
+  override def equals(other: Any): Boolean = other match {
+    case that: FixedHashObject => v == that.v && h == that.h
+    case _ => false
+  }
 }

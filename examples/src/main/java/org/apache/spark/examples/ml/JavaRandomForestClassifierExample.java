@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
@@ -29,19 +27,19 @@ import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.feature.*;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 // $example off$
 
 public class JavaRandomForestClassifierExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaRandomForestClassifierExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaRandomForestClassifierExample")
+      .getOrCreate();
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
-    Dataset<Row> data =
-        sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> data = spark.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
     // Index labels, adding metadata to the label column.
     // Fit on whole dataset to include all labels in index.
@@ -90,7 +88,7 @@ public class JavaRandomForestClassifierExample {
     MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
       .setLabelCol("indexedLabel")
       .setPredictionCol("prediction")
-      .setMetricName("precision");
+      .setMetricName("accuracy");
     double accuracy = evaluator.evaluate(predictions);
     System.out.println("Test Error = " + (1.0 - accuracy));
 
@@ -98,6 +96,6 @@ public class JavaRandomForestClassifierExample {
     System.out.println("Learned classification forest model:\n" + rfModel.toDebugString());
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }

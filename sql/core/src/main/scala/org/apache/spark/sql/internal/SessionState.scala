@@ -17,98 +17,143 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{ContinuousQueryManager, ExperimentalMethods, SQLContext, UDFRegistration}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, Catalog, FunctionRegistry, SimpleCatalog}
+import java.io.File
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.SparkContext
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, PreInsertCastAndRename, ResolveDataSource}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
-import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.streaming.StreamingQueryManager
+import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
 
 /**
- * A class that holds all session-specific state in a given [[SQLContext]].
+ * A class that holds all session-specific state in a given [[SparkSession]].
+ *
+ * @param sharedState The state shared across sessions, e.g. global view manager, external catalog.
+ * @param conf SQL-specific key-value configurations.
+ * @param experimentalMethods Interface to add custom planning strategies and optimizers.
+ * @param functionRegistry Internal catalog for managing functions registered by the user.
+ * @param udfRegistration Interface exposed to the user for registering user-defined functions.
+ * @param catalog Internal catalog for managing table and database states.
+ * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
+ * @param analyzer Logical query plan analyzer for resolving unresolved attributes and relations.
+ * @param optimizer Logical query plan optimizer.
+ * @param planner Planner that converts optimized logical plans to physical plans.
+ * @param streamingQueryManager Interface to start and stop streaming queries.
+ * @param listenerManager Interface to register custom [[QueryExecutionListener]]s.
+ * @param resourceLoader Session shared resource loader to load JARs, files, etc.
+ * @param createQueryExecution Function used to create QueryExecution objects.
+ * @param createClone Function used to create clones of the session state.
  */
-private[sql] class SessionState(ctx: SQLContext) {
+private[sql] class SessionState(
+    sharedState: SharedState,
+    val conf: SQLConf,
+    val experimentalMethods: ExperimentalMethods,
+    val functionRegistry: FunctionRegistry,
+    val udfRegistration: UDFRegistration,
+    val catalog: SessionCatalog,
+    val sqlParser: ParserInterface,
+    val analyzer: Analyzer,
+    val optimizer: Optimizer,
+    val planner: SparkPlanner,
+    val streamingQueryManager: StreamingQueryManager,
+    val listenerManager: ExecutionListenerManager,
+    val resourceLoader: SessionResourceLoader,
+    createQueryExecution: LogicalPlan => QueryExecution,
+    createClone: (SparkSession, SessionState) => SessionState) {
 
-  // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
-  // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
+  def newHadoopConf(): Configuration = SessionState.newHadoopConf(
+    sharedState.sparkContext.hadoopConfiguration,
+    conf)
+
+  def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {
+    val hadoopConf = newHadoopConf()
+    options.foreach { case (k, v) =>
+      if ((v ne null) && k != "path" && k != "paths") {
+        hadoopConf.set(k, v)
+      }
+    }
+    hadoopConf
+  }
 
   /**
-   * SQL-specific key-value configurations.
+   * Get an identical copy of the `SessionState` and associate it with the given `SparkSession`
    */
-  lazy val conf = new SQLConf
+  def clone(newSparkSession: SparkSession): SessionState = createClone(newSparkSession, this)
 
-  lazy val experimentalMethods = new ExperimentalMethods
+  // ------------------------------------------------------
+  //  Helper methods, partially leftover from pre-2.0 days
+  // ------------------------------------------------------
 
-  /**
-   * Internal catalog for managing table and database states.
-   */
-  lazy val catalog: Catalog = new SimpleCatalog(conf)
+  def executePlan(plan: LogicalPlan): QueryExecution = createQueryExecution(plan)
 
-  /**
-   * Internal catalog for managing functions registered by the user.
-   */
-  lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
+  def refreshTable(tableName: String): Unit = {
+    catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
+  }
+}
 
-  /**
-   * Interface exposed to the user for registering user-defined functions.
-   */
-  lazy val udf: UDFRegistration = new UDFRegistration(functionRegistry)
+private[sql] object SessionState {
+  def newHadoopConf(hadoopConf: Configuration, sqlConf: SQLConf): Configuration = {
+    val newHadoopConf = new Configuration(hadoopConf)
+    sqlConf.getAllConfs.foreach { case (k, v) => if (v ne null) newHadoopConf.set(k, v) }
+    newHadoopConf
+  }
+}
 
-  /**
-   * Logical query plan analyzer for resolving unresolved attributes and relations.
-   */
-  lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, functionRegistry, conf) {
-      override val extendedResolutionRules =
-        python.ExtractPythonUDFs ::
-        PreInsertCastAndRename ::
-        DataSourceAnalysis ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
+/**
+ * Concrete implementation of a [[BaseSessionStateBuilder]].
+ */
+@Experimental
+@InterfaceStability.Unstable
+class SessionStateBuilder(
+    session: SparkSession,
+    parentState: Option[SessionState] = None)
+  extends BaseSessionStateBuilder(session, parentState) {
+  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
+}
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(catalog))
+/**
+ * Session shared [[FunctionResourceLoader]].
+ */
+@InterfaceStability.Unstable
+class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoader {
+  override def loadResource(resource: FunctionResource): Unit = {
+    resource.resourceType match {
+      case JarResource => addJar(resource.uri)
+      case FileResource => session.sparkContext.addFile(resource.uri)
+      case ArchiveResource =>
+        throw new AnalysisException(
+          "Archive is not allowed to be loaded. If YARN mode is used, " +
+            "please use --archives options while calling spark-submit.")
     }
   }
 
   /**
-   * Logical query plan optimizer.
+   * Add a jar path to [[SparkContext]] and the classloader.
+   *
+   * Note: this method seems not access any session state, but a Hive based `SessionState` needs
+   * to add the jar to its hive client for the current session. Hence, it still needs to be in
+   * [[SessionState]].
    */
-  lazy val optimizer: Optimizer = new SparkOptimizer(experimentalMethods)
-
-  /**
-   * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
-   */
-  lazy val sqlParser: ParserInterface = new SparkQl(conf)
-
-  /**
-   * Planner that converts optimized logical plans to physical plans.
-   */
-  lazy val planner: SparkPlanner = new SparkPlanner(ctx.sparkContext, conf, experimentalMethods)
-
-  /**
-   * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
-   * row format conversions as needed.
-   */
-  lazy val prepareForExecution = new RuleExecutor[SparkPlan] {
-    override val batches: Seq[Batch] = Seq(
-      Batch("Subquery", Once, PlanSubqueries(SessionState.this)),
-      Batch("Add exchange", Once, EnsureRequirements(conf)),
-      Batch("Whole stage codegen", Once, CollapseCodegenStages(conf)),
-      Batch("Reuse duplicated exchanges", Once, ReuseExchange(conf))
-    )
+  def addJar(path: String): Unit = {
+    session.sparkContext.addJar(path)
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    session.sharedState.jarClassLoader.addURL(jarURL)
+    Thread.currentThread().setContextClassLoader(session.sharedState.jarClassLoader)
   }
-
-  /**
-   * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
-   * that listen for execution metrics.
-   */
-  lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
-
-  /**
-   * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
-   */
-  lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
-
 }

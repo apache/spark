@@ -1,62 +1,88 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.metric
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.File
 
-import scala.collection.mutable
-
-import org.apache.xbean.asm5._
-import org.apache.xbean.asm5.Opcodes._
+import scala.collection.mutable.HashMap
+import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.{JsonProtocol, Utils}
-
+import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
 
 class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
-  test("LongSQLMetric should not box Long") {
-    val l = SQLMetrics.createLongMetric(sparkContext, "long")
-    val f = () => {
-      l += 1L
-      l.add(1L)
-    }
-    val cl = BoxingFinder.getClassReader(f.getClass)
-    val boxingFinder = new BoxingFinder()
-    cl.accept(boxingFinder, 0)
-    assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
-  }
 
-  test("Normal accumulator should do boxing") {
-    // We need this test to make sure BoxingFinder works.
-    val l = sparkContext.accumulator(0L)
-    val f = () => { l += 1L }
-    val cl = BoxingFinder.getClassReader(f.getClass)
-    val boxingFinder = new BoxingFinder()
-    cl.accept(boxingFinder, 0)
-    assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
+  /**
+   * Call `df.collect()` and collect necessary metrics from execution data.
+   *
+   * @param df `DataFrame` to run
+   * @param expectedNumOfJobs number of jobs that will run
+   * @param expectedNodeIds the node ids of the metrics to collect from execution data.
+   */
+  private def getSparkPlanMetrics(
+      df: DataFrame,
+      expectedNumOfJobs: Int,
+      expectedNodeIds: Set[Long],
+      enableWholeStage: Boolean = false): Option[Map[Long, (String, Map[String, Any])]] = {
+    val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
+    withSQLConf("spark.sql.codegen.wholeStage" -> enableWholeStage.toString) {
+      df.collect()
+    }
+    sparkContext.listenerBus.waitUntilEmpty(10000)
+    val executionIds =
+      spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)
+    assert(executionIds.size === 1)
+    val executionId = executionIds.head
+    val jobs = spark.sharedState.listener.getExecution(executionId).get.jobs
+    // Use "<=" because there is a race condition that we may miss some jobs
+    // TODO Change it to "=" once we fix the race condition that missing the JobStarted event.
+    assert(jobs.size <= expectedNumOfJobs)
+    if (jobs.size == expectedNumOfJobs) {
+      // If we can track all jobs, check the metric values
+      val metricValues = spark.sharedState.listener.getExecutionMetrics(executionId)
+      val metrics = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(
+        df.queryExecution.executedPlan)).allNodes.filter { node =>
+        expectedNodeIds.contains(node.id)
+      }.map { node =>
+        val nodeMetrics = node.metrics.map { metric =>
+          val metricValue = metricValues(metric.accumulatorId)
+          (metric.name, metricValue)
+        }.toMap
+        (node.id, node.name -> nodeMetrics)
+      }.toMap
+      Some(metrics)
+    } else {
+      // TODO Remove this "else" once we fix the race condition that missing the JobStarted event.
+      // Since we cannot track all jobs, the metric values could be wrong and we should not check
+      // them.
+      logWarning("Due to a race condition, we miss some jobs and cannot verify the metric values")
+      None
+    }
   }
 
   /**
@@ -71,32 +97,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       df: DataFrame,
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
-    val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
-    withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
-      df.collect()
-    }
-    sparkContext.listenerBus.waitUntilEmpty(10000)
-    val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
-    assert(executionIds.size === 1)
-    val executionId = executionIds.head
-    val jobs = sqlContext.listener.getExecution(executionId).get.jobs
-    // Use "<=" because there is a race condition that we may miss some jobs
-    // TODO Change it to "=" once we fix the race condition that missing the JobStarted event.
-    assert(jobs.size <= expectedNumOfJobs)
-    if (jobs.size == expectedNumOfJobs) {
-      // If we can track all jobs, check the metric values
-      val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
-      val actualMetrics = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(
-        df.queryExecution.executedPlan)).allNodes.filter { node =>
-        expectedMetrics.contains(node.id)
-      }.map { node =>
-        val nodeMetrics = node.metrics.map { metric =>
-          val metricValue = metricValues(metric.accumulatorId)
-          (metric.name, metricValue)
-        }.toMap
-        (node.id, node.name -> nodeMetrics)
-      }.toMap
-
+    val optActualMetrics = getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetrics.keySet)
+    optActualMetrics.map { actualMetrics =>
       assert(expectedMetrics.keySet === actualMetrics.keySet)
       for (nodeId <- expectedMetrics.keySet) {
         val (expectedNodeName, expectedMetricsMap) = expectedMetrics(nodeId)
@@ -106,12 +108,37 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
           assert(expectedMetricsMap(metricName).toString === actualMetricsMap(metricName))
         }
       }
-    } else {
-      // TODO Remove this "else" once we fix the race condition that missing the JobStarted event.
-      // Since we cannot track all jobs, the metric values could be wrong and we should not check
-      // them.
-      logWarning("Due to a race condition, we miss some jobs and cannot verify the metric values")
     }
+  }
+
+  /**
+   * Generates a `DataFrame` by filling randomly generated bytes for hash collision.
+   */
+  private def generateRandomBytesDF(numRows: Int = 65535): DataFrame = {
+    val random = new Random()
+    val manyBytes = (0 until numRows).map { _ =>
+      val byteArrSize = random.nextInt(100)
+      val bytes = new Array[Byte](byteArrSize)
+      random.nextBytes(bytes)
+      (bytes, random.nextInt(100))
+    }
+    manyBytes.toSeq.toDF("a", "b")
+  }
+
+  test("LocalTableScanExec computes metrics in collect and take") {
+    val df1 = spark.createDataset(Seq(1, 2, 3))
+    val logical = df1.queryExecution.logical
+    require(logical.isInstanceOf[LocalRelation])
+    df1.collect()
+    val metrics1 = df1.queryExecution.executedPlan.collectLeaves().head.metrics
+    assert(metrics1.contains("numOutputRows"))
+    assert(metrics1("numOutputRows").value === 3)
+
+    val df2 = spark.createDataset(Seq(1, 2, 3)).limit(2)
+    df2.collect()
+    val metrics2 = df2.queryExecution.executedPlan.collectLeaves().head.metrics
+    assert(metrics2.contains("numOutputRows"))
+    assert(metrics2("numOutputRows").value === 2)
   }
 
   test("Filter metrics") {
@@ -128,36 +155,101 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
     // TODO: update metrics in generated operators
-    val ds = sqlContext.range(10).filter('id < 5)
+    val ds = spark.range(10).filter('id < 5)
     testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
   }
 
-  test("TungstenAggregate metrics") {
+  test("Aggregate metrics") {
     // Assume the execution plan is
-    // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
-    // -> TungstenAggregate(nodeId = 0)
+    // ... -> HashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
+    // -> HashAggregate(nodeId = 0)
     val df = testData2.groupBy().count() // 2 partitions
+    val expected1 = Seq(
+      Map("number of output rows" -> 2L,
+        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
+      Map("number of output rows" -> 1L,
+        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
     testSparkPlanMetrics(df, 1, Map(
-      2L -> ("TungstenAggregate", Map(
-        "number of output rows" -> 2L)),
-      0L -> ("TungstenAggregate", Map(
-        "number of output rows" -> 1L)))
+      2L -> ("HashAggregate", expected1(0)),
+      0L -> ("HashAggregate", expected1(1)))
     )
 
     // 2 partitions and each partition contains 2 keys
     val df2 = testData2.groupBy('a).count()
+    val expected2 = Seq(
+      Map("number of output rows" -> 4L,
+        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
+      Map("number of output rows" -> 3L,
+        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
     testSparkPlanMetrics(df2, 1, Map(
-      2L -> ("TungstenAggregate", Map(
-        "number of output rows" -> 4L)),
-      0L -> ("TungstenAggregate", Map(
-        "number of output rows" -> 3L)))
+      2L -> ("HashAggregate", expected2(0)),
+      0L -> ("HashAggregate", expected2(1)))
+    )
+  }
+
+  test("Aggregate metrics: track avg probe") {
+    // The executed plan looks like:
+    // HashAggregate(keys=[a#61], functions=[count(1)], output=[a#61, count#71L])
+    // +- Exchange hashpartitioning(a#61, 5)
+    //    +- HashAggregate(keys=[a#61], functions=[partial_count(1)], output=[a#61, count#76L])
+    //       +- Exchange RoundRobinPartitioning(1)
+    //          +- LocalTableScan [a#61]
+    //
+    // Assume the execution plan with node id is:
+    // Wholestage disabled:
+    // HashAggregate(nodeId = 0)
+    //   Exchange(nodeId = 1)
+    //     HashAggregate(nodeId = 2)
+    //       Exchange (nodeId = 3)
+    //         LocalTableScan(nodeId = 4)
+    //
+    // Wholestage enabled:
+    // WholeStageCodegen(nodeId = 0)
+    //   HashAggregate(nodeId = 1)
+    //     Exchange(nodeId = 2)
+    //       WholeStageCodegen(nodeId = 3)
+    //         HashAggregate(nodeId = 4)
+    //           Exchange(nodeId = 5)
+    //             LocalTableScan(nodeId = 6)
+    Seq(true, false).foreach { enableWholeStage =>
+      val df = generateRandomBytesDF().repartition(1).groupBy('a).count()
+      val nodeIds = if (enableWholeStage) {
+        Set(4L, 1L)
+      } else {
+        Set(2L, 0L)
+      }
+      val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
+      nodeIds.foreach { nodeId =>
+        val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
+        probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
+          assert(probe.toDouble > 1.0)
+        }
+      }
+    }
+  }
+
+  test("ObjectHashAggregate metrics") {
+    // Assume the execution plan is
+    // ... -> ObjectHashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
+    // -> ObjectHashAggregate(nodeId = 0)
+    val df = testData2.groupBy().agg(collect_set('a)) // 2 partitions
+    testSparkPlanMetrics(df, 1, Map(
+      2L -> ("ObjectHashAggregate", Map("number of output rows" -> 2L)),
+      0L -> ("ObjectHashAggregate", Map("number of output rows" -> 1L)))
+    )
+
+    // 2 partitions and each partition contains 2 keys
+    val df2 = testData2.groupBy('a).agg(collect_set('a))
+    testSparkPlanMetrics(df2, 1, Map(
+      2L -> ("ObjectHashAggregate", Map("number of output rows" -> 4L)),
+      0L -> ("ObjectHashAggregate", Map("number of output rows" -> 3L)))
     )
   }
 
   test("Sort metrics") {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
-    val ds = sqlContext.range(10).sort('id)
+    val ds = spark.range(10).sort('id)
     testSparkPlanMetrics(ds.toDF(), 2, Map.empty)
   }
 
@@ -165,11 +257,11 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
-    withTempTable("testDataForJoin") {
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
+    withTempView("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = sqlContext.sql(
+      val df = spark.sql(
         "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
         0L -> ("SortMergeJoin", Map(
@@ -183,11 +275,11 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Because SortMergeJoin may skip different rows if the number of partitions is different,
     // this test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
-    withTempTable("testDataForJoin") {
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
+    withTempView("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = sqlContext.sql(
+      val df = spark.sql(
         "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
         0L -> ("SortMergeJoin", Map(
@@ -195,7 +287,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
           "number of output rows" -> 8L)))
       )
 
-      val df2 = sqlContext.sql(
+      val df2 = spark.sql(
         "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df2, 1, Map(
         0L -> ("SortMergeJoin", Map(
@@ -213,8 +305,118 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df = df1.join(broadcast(df2), "key")
     testSparkPlanMetrics(df, 2, Map(
       1L -> ("BroadcastHashJoin", Map(
-        "number of output rows" -> 2L)))
+        "number of output rows" -> 2L,
+        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)")))
     )
+  }
+
+  test("BroadcastHashJoin metrics: track avg probe") {
+    // The executed plan looks like:
+    // Project [a#210, b#211, b#221]
+    // +- BroadcastHashJoin [a#210], [a#220], Inner, BuildRight
+    //    :- Project [_1#207 AS a#210, _2#208 AS b#211]
+    //    :  +- Filter isnotnull(_1#207)
+    //    :     +- LocalTableScan [_1#207, _2#208]
+    //    +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, binary, true]))
+    //       +- Project [_1#217 AS a#220, _2#218 AS b#221]
+    //          +- Filter isnotnull(_1#217)
+    //             +- LocalTableScan [_1#217, _2#218]
+    //
+    // Assume the execution plan with node id is
+    // WholeStageCodegen disabled:
+    // Project(nodeId = 0)
+    //   BroadcastHashJoin(nodeId = 1)
+    //     ...(ignored)
+    //
+    // WholeStageCodegen enabled:
+    // WholeStageCodegen(nodeId = 0)
+    //   Project(nodeId = 1)
+    //     BroadcastHashJoin(nodeId = 2)
+    //       Project(nodeId = 3)
+    //         Filter(nodeId = 4)
+    //           ...(ignored)
+    Seq(true, false).foreach { enableWholeStage =>
+      val df1 = generateRandomBytesDF()
+      val df2 = generateRandomBytesDF()
+      val df = df1.join(broadcast(df2), "a")
+      val nodeIds = if (enableWholeStage) {
+        Set(2L)
+      } else {
+        Set(1L)
+      }
+      val metrics = getSparkPlanMetrics(df, 2, nodeIds, enableWholeStage).get
+      nodeIds.foreach { nodeId =>
+        val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
+        probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
+          assert(probe.toDouble > 1.0)
+        }
+      }
+    }
+  }
+
+  test("ShuffledHashJoin metrics") {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "40",
+        "spark.sql.shuffle.partitions" -> "2",
+        "spark.sql.join.preferSortMergeJoin" -> "false") {
+      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+      val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key", "value")
+      // Assume the execution plan is
+      // ... -> ShuffledHashJoin(nodeId = 1) -> Project(nodeId = 0)
+      val df = df1.join(df2, "key")
+      val metrics = getSparkPlanMetrics(df, 1, Set(1L))
+      testSparkPlanMetrics(df, 1, Map(
+        1L -> ("ShuffledHashJoin", Map(
+          "number of output rows" -> 2L,
+          "avg hash probe (min, med, max)" -> "\n(1, 1, 1)")))
+      )
+    }
+  }
+
+  test("ShuffledHashJoin metrics: track avg probe") {
+    // The executed plan looks like:
+    // Project [a#308, b#309, b#319]
+    // +- ShuffledHashJoin [a#308], [a#318], Inner, BuildRight
+    //    :- Exchange hashpartitioning(a#308, 2)
+    //    :  +- Project [_1#305 AS a#308, _2#306 AS b#309]
+    //    :     +- Filter isnotnull(_1#305)
+    //    :        +- LocalTableScan [_1#305, _2#306]
+    //    +- Exchange hashpartitioning(a#318, 2)
+    //       +- Project [_1#315 AS a#318, _2#316 AS b#319]
+    //          +- Filter isnotnull(_1#315)
+    //             +- LocalTableScan [_1#315, _2#316]
+    //
+    // Assume the execution plan with node id is
+    // WholeStageCodegen disabled:
+    // Project(nodeId = 0)
+    //   ShuffledHashJoin(nodeId = 1)
+    //     ...(ignored)
+    //
+    // WholeStageCodegen enabled:
+    // WholeStageCodegen(nodeId = 0)
+    //   Project(nodeId = 1)
+    //     ShuffledHashJoin(nodeId = 2)
+    //       ...(ignored)
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "5000000",
+        "spark.sql.shuffle.partitions" -> "2",
+        "spark.sql.join.preferSortMergeJoin" -> "false") {
+      Seq(true, false).foreach { enableWholeStage =>
+        val df1 = generateRandomBytesDF(65535 * 5)
+        val df2 = generateRandomBytesDF(65535)
+        val df = df1.join(df2, "a")
+        val nodeIds = if (enableWholeStage) {
+          Set(2L)
+        } else {
+          Set(1L)
+        }
+        val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
+        nodeIds.foreach { nodeId =>
+          val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
+          probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
+            assert(probe.toDouble > 1.0)
+          }
+        }
+      }
+    }
   }
 
   test("BroadcastHashJoin(outer) metrics") {
@@ -237,17 +439,19 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("BroadcastNestedLoopJoin metrics") {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
-    withTempTable("testDataForJoin") {
-      // Assume the execution plan is
-      // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = sqlContext.sql(
-        "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
-          "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
-      testSparkPlanMetrics(df, 3, Map(
-        1L -> ("BroadcastNestedLoopJoin", Map(
-          "number of output rows" -> 12L)))
-      )
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      withTempView("testDataForJoin") {
+        // Assume the execution plan is
+        // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+        val df = spark.sql(
+          "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
+            "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
+        testSparkPlanMetrics(df, 3, Map(
+          1L -> ("BroadcastNestedLoopJoin", Map(
+            "number of output rows" -> 12L)))
+        )
+      }
     }
   }
 
@@ -255,74 +459,65 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
     // Assume the execution plan is
-    // ... -> BroadcastLeftSemiJoinHash(nodeId = 0)
+    // ... -> BroadcastHashJoin(nodeId = 0)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> ("BroadcastLeftSemiJoinHash", Map(
+      0L -> ("BroadcastHashJoin", Map(
         "number of output rows" -> 2L)))
     )
   }
 
-  test("ShuffledHashJoin metrics") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
-      // Assume the execution plan is
-      // ... -> ShuffledHashJoin(nodeId = 0)
-      val df = df1.join(df2, $"key" === $"key2", "leftsemi")
-      testSparkPlanMetrics(df, 1, Map(
-        0L -> ("ShuffledHashJoin", Map(
-          "number of output rows" -> 2L)))
-      )
-    }
-  }
-
   test("CartesianProduct metrics") {
-    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
-    withTempTable("testDataForJoin") {
-      // Assume the execution plan is
-      // ... -> CartesianProduct(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = sqlContext.sql(
-        "SELECT * FROM testData2 JOIN testDataForJoin")
-      testSparkPlanMetrics(df, 1, Map(
-        0L -> ("CartesianProduct", Map(
-          "number of output rows" -> 12L)))
-      )
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+      testDataForJoin.createOrReplaceTempView("testDataForJoin")
+      withTempView("testDataForJoin") {
+        // Assume the execution plan is
+        // ... -> CartesianProduct(nodeId = 1) -> TungstenProject(nodeId = 0)
+        val df = spark.sql(
+          "SELECT * FROM testData2 JOIN testDataForJoin")
+        testSparkPlanMetrics(df, 1, Map(
+          0L -> ("CartesianProduct", Map("number of output rows" -> 12L)))
+        )
+      }
     }
   }
 
   test("save metrics") {
     withTempPath { file =>
-      val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
+      // person creates a temporary view. get the DF before listing previous execution IDs
+      val data = person.select('name)
+      sparkContext.listenerBus.waitUntilEmpty(10000)
+      val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
-      person.select('name).write.format("json").save(file.getAbsolutePath)
+      data.write.format("json").save(file.getAbsolutePath)
       sparkContext.listenerBus.waitUntilEmpty(10000)
-      val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
+      val executionIds =
+        spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)
       assert(executionIds.size === 1)
       val executionId = executionIds.head
-      val jobs = sqlContext.listener.getExecution(executionId).get.jobs
+      val jobs = spark.sharedState.listener.getExecution(executionId).get.jobs
       // Use "<=" because there is a race condition that we may miss some jobs
       // TODO Change "<=" to "=" once we fix the race condition that missing the JobStarted event.
       assert(jobs.size <= 1)
-      val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
+      val metricValues = spark.sharedState.listener.getExecutionMetrics(executionId)
       // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
       // However, we still can check the value.
-      assert(metricValues.values.toSeq === Seq("2"))
+      assert(metricValues.values.toSeq.exists(_ === "2"))
     }
   }
 
   test("metrics can be loaded by history server") {
-    val metric = new LongSQLMetric("zanzibar", LongSQLMetricParam)
+    val metric = SQLMetrics.createMetric(sparkContext, "zanzibar")
     metric += 10L
-    val metricInfo = metric.toInfo(Some(metric.localValue), None)
+    val metricInfo = metric.toInfo(Some(metric.value), None)
     metricInfo.update match {
-      case Some(v: LongSQLMetricValue) => assert(v.value === 10L)
-      case Some(v) => fail(s"metric value was not a LongSQLMetricValue: ${v.getClass.getName}")
+      case Some(v: Long) => assert(v === 10L)
+      case Some(v) => fail(s"metric value was not a Long: ${v.getClass.getName}")
       case _ => fail("metric update is missing")
     }
-    assert(metricInfo.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
+    assert(metricInfo.metadata === Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
     // After serializing to JSON, the original value type is lost, but we can still
     // identify that it's a SQL metric from the metadata
     val metricInfoJson = JsonProtocol.accumulableInfoToJson(metricInfo)
@@ -332,80 +527,106 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       case Some(v) => fail(s"deserialized metric value was not a string: ${v.getClass.getName}")
       case _ => fail("deserialized metric update is missing")
     }
-    assert(metricInfoDeser.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
+    assert(metricInfoDeser.metadata === Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
   }
 
+  test("range metrics") {
+    val res1 = InputOutputMetricsHelper.run(
+      spark.range(30).filter(x => x % 3 == 0).toDF()
+    )
+    assert(res1 === (30L, 0L, 30L) :: Nil)
+
+    val res2 = InputOutputMetricsHelper.run(
+      spark.range(150).repartition(4).filter(x => x < 10).toDF()
+    )
+    assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
+
+    withTempDir { tempDir =>
+      val dir = new File(tempDir, "pqS").getCanonicalPath
+
+      spark.range(10).write.parquet(dir)
+      spark.read.parquet(dir).createOrReplaceTempView("pqS")
+
+      val res3 = InputOutputMetricsHelper.run(
+        spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
+      )
+      // The query above is executed in the following stages:
+      //   1. sql("select * from pqS")    => (10, 0, 10)
+      //   2. range(30)                   => (30, 0, 30)
+      //   3. crossJoin(...) of 1. and 2. => (0, 30, 300)
+      //   4. shuffle & return results    => (0, 300, 0)
+      assert(res3 === (10L, 0L, 10L) :: (30L, 0L, 30L) :: (0L, 30L, 300L) :: (0L, 300L, 0L) :: Nil)
+    }
+  }
 }
 
-private case class MethodIdentifier[T](cls: Class[T], name: String, desc: String)
+object InputOutputMetricsHelper {
+  private class InputOutputMetricsListener extends SparkListener {
+    private case class MetricsResult(
+        var recordsRead: Long = 0L,
+        var shuffleRecordsRead: Long = 0L,
+        var sumMaxOutputRows: Long = 0L)
 
-/**
- * If `method` is null, search all methods of this class recursively to find if they do some boxing.
- * If `method` is specified, only search this method of the class to speed up the searching.
- *
- * This method will skip the methods in `visitedMethods` to avoid potential infinite cycles.
- */
-private class BoxingFinder(
-    method: MethodIdentifier[_] = null,
-    val boxingInvokes: mutable.Set[String] = mutable.Set.empty,
-    visitedMethods: mutable.Set[MethodIdentifier[_]] = mutable.Set.empty)
-  extends ClassVisitor(ASM5) {
+    private[this] val stageIdToMetricsResult = HashMap.empty[Int, MetricsResult]
 
-  private val primitiveBoxingClassName =
-    Set("java/lang/Long",
-      "java/lang/Double",
-      "java/lang/Integer",
-      "java/lang/Float",
-      "java/lang/Short",
-      "java/lang/Character",
-      "java/lang/Byte",
-      "java/lang/Boolean")
-
-  override def visitMethod(
-      access: Int, name: String, desc: String, sig: String, exceptions: Array[String]):
-    MethodVisitor = {
-    if (method != null && (method.name != name || method.desc != desc)) {
-      // If method is specified, skip other methods.
-      return new MethodVisitor(ASM5) {}
+    def reset(): Unit = {
+      stageIdToMetricsResult.clear()
     }
 
-    new MethodVisitor(ASM5) {
-      override def visitMethodInsn(
-          op: Int, owner: String, name: String, desc: String, itf: Boolean) {
-        if (op == INVOKESPECIAL && name == "<init>" || op == INVOKESTATIC && name == "valueOf") {
-          if (primitiveBoxingClassName.contains(owner)) {
-            // Find boxing methods, e.g, new java.lang.Long(l) or java.lang.Long.valueOf(l)
-            boxingInvokes.add(s"$owner.$name")
-          }
-        } else {
-          // scalastyle:off classforname
-          val classOfMethodOwner = Class.forName(owner.replace('/', '.'), false,
-            Thread.currentThread.getContextClassLoader)
-          // scalastyle:on classforname
-          val m = MethodIdentifier(classOfMethodOwner, name, desc)
-          if (!visitedMethods.contains(m)) {
-            // Keep track of visited methods to avoid potential infinite cycles
-            visitedMethods += m
-            val cl = BoxingFinder.getClassReader(classOfMethodOwner)
-            visitedMethods += m
-            cl.accept(new BoxingFinder(m, boxingInvokes, visitedMethods), 0)
+    /**
+     * Return a list of recorded metrics aggregated per stage.
+     *
+     * The list is sorted in the ascending order on the stageId.
+     * For each recorded stage, the following tuple is returned:
+     *  - sum of inputMetrics.recordsRead for all the tasks in the stage
+     *  - sum of shuffleReadMetrics.recordsRead for all the tasks in the stage
+     *  - sum of the highest values of "number of output rows" metric for all the tasks in the stage
+     */
+    def getResults(): List[(Long, Long, Long)] = {
+      stageIdToMetricsResult.keySet.toList.sorted.map { stageId =>
+        val res = stageIdToMetricsResult(stageId)
+        (res.recordsRead, res.shuffleRecordsRead, res.sumMaxOutputRows)
+      }
+    }
+
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
+      val res = stageIdToMetricsResult.getOrElseUpdate(taskEnd.stageId, MetricsResult())
+
+      res.recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
+      res.shuffleRecordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
+
+      var maxOutputRows = 0L
+      for (accum <- taskEnd.taskMetrics.externalAccums) {
+        val info = accum.toInfo(Some(accum.value), None)
+        if (info.name.toString.contains("number of output rows")) {
+          info.update match {
+            case Some(n: Number) =>
+              if (n.longValue() > maxOutputRows) {
+                maxOutputRows = n.longValue()
+              }
+            case _ => // Ignore.
           }
         }
       }
+      res.sumMaxOutputRows += maxOutputRows
     }
   }
-}
 
-private object BoxingFinder {
+  // Run df.collect() and return aggregated metrics for each stage.
+  def run(df: DataFrame): List[(Long, Long, Long)] = {
+    val spark = df.sparkSession
+    val sparkContext = spark.sparkContext
+    val listener = new InputOutputMetricsListener()
+    sparkContext.addSparkListener(listener)
 
-  def getClassReader(cls: Class[_]): ClassReader = {
-    val className = cls.getName.replaceFirst("^.*\\.", "") + ".class"
-    val resourceStream = cls.getResourceAsStream(className)
-    val baos = new ByteArrayOutputStream(128)
-    // Copy data over, before delegating to ClassReader -
-    // else we can run out of open file handles.
-    Utils.copyStream(resourceStream, baos, true)
-    new ClassReader(new ByteArrayInputStream(baos.toByteArray))
+    try {
+      sparkContext.listenerBus.waitUntilEmpty(5000)
+      listener.reset()
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty(5000)
+    } finally {
+      sparkContext.removeSparkListener(listener)
+    }
+    listener.getResults()
   }
-
 }

@@ -137,12 +137,7 @@ class LauncherServer implements Closeable {
       this.server = server;
       this.running = true;
 
-      this.serverThread = factory.newThread(new Runnable() {
-        @Override
-        public void run() {
-          acceptConnections();
-        }
-      });
+      this.serverThread = factory.newThread(this::acceptConnections);
       serverThread.start();
     } catch (IOException ioe) {
       close();
@@ -298,8 +293,8 @@ class LauncherServer implements Closeable {
           Hello hello = (Hello) msg;
           ChildProcAppHandle handle = pending.remove(hello.secret);
           if (handle != null) {
-            handle.setState(SparkAppHandle.State.CONNECTED);
             handle.setConnection(this);
+            handle.setState(SparkAppHandle.State.CONNECTED);
             this.handle = handle;
           } else {
             throw new IllegalArgumentException("Received Hello for unknown client.");
@@ -337,6 +332,10 @@ class LauncherServer implements Closeable {
       }
       super.close();
       if (handle != null) {
+        if (!handle.getState().isFinal()) {
+          LOG.log(Level.WARNING, "Lost connection to spark application.");
+          handle.setState(SparkAppHandle.State.LOST);
+        }
         handle.disconnect();
       }
     }

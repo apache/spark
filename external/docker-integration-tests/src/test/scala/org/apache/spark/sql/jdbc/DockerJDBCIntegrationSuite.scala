@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import com.spotify.docker.client._
+import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -45,6 +46,11 @@ abstract class DatabaseOnDocker {
   val env: Map[String, String]
 
   /**
+   * Wheather or not to use ipc mode for shared memory when starting docker image
+   */
+  val usesIpc: Boolean
+
+  /**
    * The container-internal JDBC port that the database listens on.
    */
   val jdbcPort: Int
@@ -53,6 +59,11 @@ abstract class DatabaseOnDocker {
    * Return a JDBC URL that connects to the database running at the given IP address and port.
    */
   def getJdbcUrl(ip: String, port: Int): String
+
+  /**
+   * Optional process to run when container starts
+   */
+  def getStartupProcessName: Option[String]
 }
 
 abstract class DockerJDBCIntegrationSuite
@@ -97,17 +108,23 @@ abstract class DockerJDBCIntegrationSuite
       val dockerIp = DockerUtils.getDockerIp()
       val hostConfig: HostConfig = HostConfig.builder()
         .networkMode("bridge")
+        .ipcMode(if (db.usesIpc) "host" else "")
         .portBindings(
           Map(s"${db.jdbcPort}/tcp" -> List(PortBinding.of(dockerIp, externalPort)).asJava).asJava)
         .build()
       // Create the database container:
-      val config = ContainerConfig.builder()
+      val containerConfigBuilder = ContainerConfig.builder()
         .image(db.imageName)
         .networkDisabled(false)
         .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
         .hostConfig(hostConfig)
         .exposedPorts(s"${db.jdbcPort}/tcp")
-        .build()
+      if(db.getStartupProcessName.isDefined) {
+        containerConfigBuilder
+        .cmd(db.getStartupProcessName.get)
+      }
+      val config = containerConfigBuilder.build()
+      // Create the database container:
       containerId = docker.createContainer(config).id
       // Start the container and wait until the database can accept JDBC connections:
       docker.startContainer(containerId)

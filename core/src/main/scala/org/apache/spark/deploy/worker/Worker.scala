@@ -20,13 +20,13 @@ package org.apache.spark.deploy.worker
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
-import java.util.{Date, UUID}
+import java.util.{Date, Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Random, Success}
+import scala.util.Random
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -55,20 +55,20 @@ private[deploy] class Worker(
   private val host = rpcEnv.address.host
   private val port = rpcEnv.address.port
 
-  Utils.checkHost(host, "Expected hostname")
+  Utils.checkHost(host)
   assert (port > 0)
 
   // A scheduled executor used to send messages at the specified time.
   private val forwordMessageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
 
-  // A separated thread to clean up the workDir. Used to provide the implicit parameter of `Future`
-  // methods.
+  // A separated thread to clean up the workDir and the directories of finished applications.
+  // Used to provide the implicit parameter of `Future` methods.
   private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
 
   // For worker and executor IDs
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
   private val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
 
@@ -99,6 +99,20 @@ private[deploy] class Worker(
 
   private val testing: Boolean = sys.props.contains("spark.testing")
   private var master: Option[RpcEndpointRef] = None
+
+  /**
+   * Whether to use the master address in `masterRpcAddresses` if possible. If it's disabled, Worker
+   * will just use the address received from Master.
+   */
+  private val preferConfiguredMasterAddress =
+    conf.getBoolean("spark.worker.preferConfiguredMasterAddress", false)
+  /**
+   * The master address to connect in case of failure. When the connection is broken, worker will
+   * use this address to connect. This is usually just one of `masterRpcAddresses`. However, when
+   * a master is restarted or takes over leadership, it will be an address sent from master, which
+   * may not be in `masterRpcAddresses`.
+   */
+  private var masterAddressToConnect: Option[RpcAddress] = None
   private var activeMasterUrl: String = ""
   private[worker] var activeMasterWebUiUrl : String = ""
   private var workerWebUiUrl: String = ""
@@ -187,8 +201,7 @@ private[deploy] class Worker(
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
 
-    val scheme = if (webUi.sslOptions.enabled) "https" else "http"
-    workerWebUiUrl = s"$scheme://$publicAddress:${webUi.boundPort}"
+    workerWebUiUrl = s"http://$publicAddress:${webUi.boundPort}"
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)
@@ -197,12 +210,24 @@ private[deploy] class Worker(
     metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
   }
 
-  private def changeMaster(masterRef: RpcEndpointRef, uiUrl: String) {
+  /**
+   * Change to use the new master.
+   *
+   * @param masterRef the new master ref
+   * @param uiUrl the new master Web UI address
+   * @param masterAddress the new master address which the worker should use to connect in case of
+   *                      failure
+   */
+  private def changeMaster(masterRef: RpcEndpointRef, uiUrl: String, masterAddress: RpcAddress) {
     // activeMasterUrl it's a valid Spark url since we receive it from master.
     activeMasterUrl = masterRef.address.toSparkURL
     activeMasterWebUiUrl = uiUrl
+    masterAddressToConnect = Some(masterAddress)
     master = Some(masterRef)
     connected = true
+    if (conf.getBoolean("spark.ui.reverseProxy", false)) {
+      logInfo(s"WorkerWebUI is available at $activeMasterWebUiUrl/proxy/$workerId")
+    }
     // Cancel any outstanding re-registration attempts because we found a new master
     cancelLastRegistrationRetry()
   }
@@ -214,7 +239,7 @@ private[deploy] class Worker(
           try {
             logInfo("Connecting to master " + masterAddress + "...")
             val masterEndpoint = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
-            registerWithMaster(masterEndpoint)
+            sendRegisterMessageToMaster(masterEndpoint)
           } catch {
             case ie: InterruptedException => // Cancelled
             case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
@@ -264,13 +289,14 @@ private[deploy] class Worker(
             if (registerMasterFutures != null) {
               registerMasterFutures.foreach(_.cancel(true))
             }
-            val masterAddress = masterRef.address
+            val masterAddress =
+              if (preferConfiguredMasterAddress) masterAddressToConnect.get else masterRef.address
             registerMasterFutures = Array(registerMasterThreadPool.submit(new Runnable {
               override def run(): Unit = {
                 try {
                   logInfo("Connecting to master " + masterAddress + "...")
                   val masterEndpoint = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
-                  registerWithMaster(masterEndpoint)
+                  sendRegisterMessageToMaster(masterEndpoint)
                 } catch {
                   case ie: InterruptedException => // Cancelled
                   case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
@@ -339,27 +365,28 @@ private[deploy] class Worker(
     }
   }
 
-  private def registerWithMaster(masterEndpoint: RpcEndpointRef): Unit = {
-    masterEndpoint.ask[RegisterWorkerResponse](RegisterWorker(
-      workerId, host, port, self, cores, memory, workerWebUiUrl))
-      .onComplete {
-        // This is a very fast action so we can use "ThreadUtils.sameThread"
-        case Success(msg) =>
-          Utils.tryLogNonFatalError {
-            handleRegisterResponse(msg)
-          }
-        case Failure(e) =>
-          logError(s"Cannot register with master: ${masterEndpoint.address}", e)
-          System.exit(1)
-      }(ThreadUtils.sameThread)
+  private def sendRegisterMessageToMaster(masterEndpoint: RpcEndpointRef): Unit = {
+    masterEndpoint.send(RegisterWorker(
+      workerId,
+      host,
+      port,
+      self,
+      cores,
+      memory,
+      workerWebUiUrl,
+      masterEndpoint.address))
   }
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
-      case RegisteredWorker(masterRef, masterWebUiUrl) =>
-        logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
+      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress) =>
+        if (preferConfiguredMasterAddress) {
+          logInfo("Successfully registered with master " + masterAddress.toSparkURL)
+        } else {
+          logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
+        }
         registered = true
-        changeMaster(masterRef, masterWebUiUrl)
+        changeMaster(masterRef, masterWebUiUrl, masterAddress)
         forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             self.send(SendHeartbeat)
@@ -392,6 +419,9 @@ private[deploy] class Worker(
   }
 
   override def receive: PartialFunction[Any, Unit] = synchronized {
+    case msg: RegisterWorkerResponse =>
+      handleRegisterResponse(msg)
+
     case SendHeartbeat =>
       if (connected) { sendToMaster(Heartbeat(workerId, self)) }
 
@@ -425,7 +455,7 @@ private[deploy] class Worker(
 
     case MasterChanged(masterRef, masterWebUiUrl) =>
       logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
-      changeMaster(masterRef, masterWebUiUrl)
+      changeMaster(masterRef, masterWebUiUrl, masterRef.address)
 
       val execs = executors.values.
         map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
@@ -451,12 +481,25 @@ private[deploy] class Worker(
           // Create local dirs for the executor. These are passed to the executor via the
           // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
-          val appLocalDirs = appDirectories.getOrElse(appId,
-            Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-              val appDir = Utils.createDirectory(dir, namePrefix = "executor")
-              Utils.chmod700(appDir)
-              appDir.getAbsolutePath()
-            }.toSeq)
+          val appLocalDirs = appDirectories.getOrElse(appId, {
+            val localRootDirs = Utils.getOrCreateLocalRootDirs(conf)
+            val dirs = localRootDirs.flatMap { dir =>
+              try {
+                val appDir = Utils.createDirectory(dir, namePrefix = "executor")
+                Utils.chmod700(appDir)
+                Some(appDir.getAbsolutePath())
+              } catch {
+                case e: IOException =>
+                  logWarning(s"${e.getMessage}. Ignoring this directory.")
+                  None
+              }
+            }.toSeq
+            if (dirs.isEmpty) {
+              throw new IOException("No subfolder can be created in " +
+                s"${localRootDirs.mkString(",")}.")
+            }
+            dirs
+          })
           appDirectories(appId) = appLocalDirs
           val manager = new ExecutorRunner(
             appId,
@@ -480,7 +523,7 @@ private[deploy] class Worker(
           memoryUsed += memory_
           sendToMaster(ExecutorStateChanged(appId, execId, manager.state, None, None))
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             logError(s"Failed to launch executor $appId/$execId for ${appDesc.name}.", e)
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
@@ -488,7 +531,6 @@ private[deploy] class Worker(
             }
             sendToMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
               Some(e.toString), None))
-          }
         }
       }
 
@@ -497,7 +539,7 @@ private[deploy] class Worker(
 
     case KillExecutor(masterUrl, appId, execId) =>
       if (masterUrl != activeMasterUrl) {
-        logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor " + execId)
+        logWarning("Invalid Master (" + masterUrl + ") attempted to kill executor " + execId)
       } else {
         val fullId = appId + "/" + execId
         executors.get(fullId) match {
@@ -509,7 +551,7 @@ private[deploy] class Worker(
         }
       }
 
-    case LaunchDriver(driverId, driverDesc) => {
+    case LaunchDriver(driverId, driverDesc) =>
       logInfo(s"Asked to launch driver $driverId")
       val driver = new DriverRunner(
         conf,
@@ -525,9 +567,8 @@ private[deploy] class Worker(
 
       coresUsed += driverDesc.cores
       memoryUsed += driverDesc.mem
-    }
 
-    case KillDriver(driverId) => {
+    case KillDriver(driverId) =>
       logInfo(s"Asked to kill driver $driverId")
       drivers.get(driverId) match {
         case Some(runner) =>
@@ -535,11 +576,9 @@ private[deploy] class Worker(
         case None =>
           logError(s"Asked to kill unknown driver $driverId")
       }
-    }
 
-    case driverStateChanged @ DriverStateChanged(driverId, state, exception) => {
+    case driverStateChanged @ DriverStateChanged(driverId, state, exception) =>
       handleDriverStateChanged(driverStateChanged)
-    }
 
     case ReregisterWithMaster =>
       reregisterWithMaster()
@@ -558,7 +597,8 @@ private[deploy] class Worker(
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-    if (master.exists(_.address == remoteAddress)) {
+    if (master.exists(_.address == remoteAddress) ||
+      masterAddressToConnect.exists(_ == remoteAddress)) {
       logInfo(s"$remoteAddress Disassociated !")
       masterDisconnected()
     }
@@ -575,10 +615,15 @@ private[deploy] class Worker(
     if (shouldCleanup) {
       finishedApps -= id
       appDirectories.remove(id).foreach { dirList =>
-        logInfo(s"Cleaning up local directories for application $id")
-        dirList.foreach { dir =>
-          Utils.deleteRecursively(new File(dir))
-        }
+        concurrent.Future {
+          logInfo(s"Cleaning up local directories for application $id")
+          dirList.foreach { dir =>
+            Utils.deleteRecursively(new File(dir))
+          }
+        }(cleanupThreadExecutor).onFailure {
+          case e: Throwable =>
+            logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
+        }(cleanupThreadExecutor)
       }
       shuffleService.applicationRemoved(id)
     }
@@ -697,6 +742,17 @@ private[deploy] object Worker extends Logging {
     val args = new WorkerArguments(argStrings, conf)
     val rpcEnv = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir, conf = conf)
+    // With external shuffle service enabled, if we request to launch multiple workers on one host,
+    // we can only successfully launch the first worker and the rest fails, because with the port
+    // bound, we may launch no more than one external shuffle service on each host.
+    // When this happens, we should give explicit reason of failure instead of fail silently. For
+    // more detail see SPARK-20989.
+    val externalShuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
+    val sparkWorkerInstances = scala.sys.env.getOrElse("SPARK_WORKER_INSTANCES", "1").toInt
+    require(externalShuffleServiceEnabled == false || sparkWorkerInstances <= 1,
+      "Starting multiple workers on one host is failed because we may launch no more than one " +
+        "external shuffle service on each host, please set spark.shuffle.service.enabled to " +
+        "false or set SPARK_WORKER_INSTANCES to 1 to resolve the conflict.")
     rpcEnv.awaitTermination()
   }
 

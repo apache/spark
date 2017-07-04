@@ -27,7 +27,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{LongAccumulator, ThreadUtils, Utils}
 
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
@@ -48,6 +48,12 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     }
   }
 
+  protected val taskResultSerializer = new ThreadLocal[SerializerInstance] {
+    override def initialValue(): SerializerInstance = {
+      sparkEnv.serializer.newInstance()
+    }
+  }
+
   def enqueueSuccessfulTask(
       taskSetManager: TaskSetManager,
       tid: Long,
@@ -63,7 +69,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               // deserialize "value" without holding any lock so that it won't block other threads.
               // We should call it here, so that when it's called again in
               // "TaskSetManager.handleSuccessfulTask", it does not need to deserialize the value.
-              directResult.value()
+              directResult.value(taskResultSerializer.get())
               (directResult, serializedData.limit())
             case IndirectTaskResult(blockId, size) =>
               if (!taskSetManager.canFetchMoreResults(size)) {
@@ -84,6 +90,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               }
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
                 serializedTaskResult.get.toByteBuffer)
+              // force deserialization of referenced value
+              deserializedResult.value(taskResultSerializer.get())
               sparkEnv.blockManager.master.removeBlock(blockId)
               (deserializedResult, size)
           }
@@ -93,9 +101,10 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           // we would have to serialize the result again after updating the size.
           result.accumUpdates = result.accumUpdates.map { a =>
             if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
-              assert(a.update == Some(0L),
-                "task result size should not have been set on the executors")
-              a.copy(update = Some(size.toLong))
+              val acc = a.asInstanceOf[LongAccumulator]
+              assert(acc.sum == 0L, "task result size should not have been set on the executors")
+              acc.setValue(size.toLong)
+              acc
             } else {
               a
             }
@@ -117,14 +126,14 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
 
   def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
     serializedData: ByteBuffer) {
-    var reason : TaskEndReason = UnknownReason
+    var reason : TaskFailedReason = UnknownReason
     try {
       getTaskResultExecutor.execute(new Runnable {
         override def run(): Unit = Utils.logUncaughtExceptions {
           val loader = Utils.getContextOrSparkClassLoader
           try {
             if (serializedData != null && serializedData.limit() > 0) {
-              reason = serializer.get().deserialize[TaskEndReason](
+              reason = serializer.get().deserialize[TaskFailedReason](
                 serializedData, loader)
             }
           } catch {
@@ -133,9 +142,13 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               // if we can't deserialize the reason.
               logError(
                 "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
-            case ex: Exception => {}
+            case ex: Exception => // No-op
+          } finally {
+            // If there's an error while deserializing the TaskEndReason, this Runnable
+            // will die. Still tell the scheduler about the task failure, to avoid a hang
+            // where the scheduler thinks the task is still running.
+            scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
           }
-          scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
         }
       })
     } catch {

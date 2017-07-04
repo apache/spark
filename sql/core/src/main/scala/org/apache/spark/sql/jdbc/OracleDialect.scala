@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{Date, Timestamp, Types}
 
 import org.apache.spark.sql.types._
 
@@ -28,23 +28,54 @@ private case object OracleDialect extends JdbcDialect {
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    // Handle NUMBER fields that have no precision/scale in special way
-    // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
-    // For more details, please see
-    // https://github.com/apache/spark/pull/8780#issuecomment-145598968
-    // and
-    // https://github.com/apache/spark/pull/8780#issuecomment-144541760
-    if (sqlType == Types.NUMERIC && size == 0) {
-      // This is sub-optimal as we have to pick a precision/scale in advance whereas the data
-      //  in Oracle is allowed to have different precision/scale for each value.
-      Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+    if (sqlType == Types.NUMERIC) {
+      val scale = if (null != md) md.build().getLong("scale") else 0L
+      size match {
+        // Handle NUMBER fields that have no precision/scale in special way
+        // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
+        // For more details, please see
+        // https://github.com/apache/spark/pull/8780#issuecomment-145598968
+        // and
+        // https://github.com/apache/spark/pull/8780#issuecomment-144541760
+        case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+        // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
+        // this to NUMERIC with -127 scale
+        // Not sure if there is a more robust way to identify the field as a float (or other
+        // numeric types that do not specify a scale.
+        case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+        case _ => None
+      }
     } else {
       None
     }
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    // For more details, please see
+    // https://docs.oracle.com/cd/E19501-01/819-3659/gcmaz/
+    case BooleanType => Some(JdbcType("NUMBER(1)", java.sql.Types.BOOLEAN))
+    case IntegerType => Some(JdbcType("NUMBER(10)", java.sql.Types.INTEGER))
+    case LongType => Some(JdbcType("NUMBER(19)", java.sql.Types.BIGINT))
+    case FloatType => Some(JdbcType("NUMBER(19, 4)", java.sql.Types.FLOAT))
+    case DoubleType => Some(JdbcType("NUMBER(19, 4)", java.sql.Types.DOUBLE))
+    case ByteType => Some(JdbcType("NUMBER(3)", java.sql.Types.SMALLINT))
+    case ShortType => Some(JdbcType("NUMBER(5)", java.sql.Types.SMALLINT))
     case StringType => Some(JdbcType("VARCHAR2(255)", java.sql.Types.VARCHAR))
     case _ => None
   }
+
+  override def compileValue(value: Any): Any = value match {
+    // The JDBC drivers support date literals in SQL statements written in the
+    // format: {d 'yyyy-mm-dd'} and timestamp literals in SQL statements written
+    // in the format: {ts 'yyyy-mm-dd hh:mm:ss.f...'}. For details, see
+    // 'Oracle Database JDBC Developer’s Guide and Reference, 11g Release 1 (11.1)'
+    // Appendix A Reference Information.
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
+    case dateValue: Date => "{d '" + dateValue + "'}"
+    case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case _ => value
+  }
+
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 }

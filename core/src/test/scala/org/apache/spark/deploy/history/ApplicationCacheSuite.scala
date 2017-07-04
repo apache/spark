@@ -23,7 +23,6 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.language.postfixOps
 
 import com.codahale.metrics.Counter
 import com.google.common.cache.LoadingCache
@@ -178,7 +177,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       ended: Long): SparkUI = {
     val info = new ApplicationInfo(name, name, Some(1), Some(1), Some(1), Some(64),
       Seq(new AttemptInfo(attemptId, new Date(started), new Date(ended),
-        new Date(ended), ended - started, "user", completed)))
+        new Date(ended), ended - started, "user", completed, org.apache.spark.SPARK_VERSION)))
     val ui = mock[SparkUI]
     when(ui.getApplicationInfoList).thenReturn(List(info).iterator)
     when(ui.getAppName).thenReturn(name)
@@ -254,7 +253,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assertNotFound(appId, None)
   }
 
-  test("Test that if an attempt ID is is set, it must be used in lookups") {
+  test("Test that if an attempt ID is set, it must be used in lookups") {
     val operations = new StubCacheOperations()
     val clock = new ManualClock(1)
     implicit val cache = new ApplicationCache(operations, retainedApplications = 10, clock = clock)

@@ -20,9 +20,12 @@ package org.apache.spark.sql.util
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, QueryTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
-import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegen}
+import org.apache.spark.sql.{functions, AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoTable, LogicalPlan, Project}
+import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
@@ -39,7 +42,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
         metrics += ((funcName, qe, duration))
       }
     }
-    sqlContext.listenerManager.register(listener)
+    spark.listenerManager.register(listener)
 
     val df = Seq(1 -> "a").toDF("i", "j")
     df.select("i").collect()
@@ -55,10 +58,10 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(1)._2.analyzed.isInstanceOf[Aggregate])
     assert(metrics(1)._3 > 0)
 
-    sqlContext.listenerManager.unregister(listener)
+    spark.listenerManager.unregister(listener)
   }
 
-  test("execute callback functions when a DataFrame action failed") {
+  testQuietly("execute callback functions when a DataFrame action failed") {
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Exception)]
     val listener = new QueryExecutionListener {
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
@@ -68,13 +71,11 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       // Only test failed case here, so no need to implement `onSuccess`
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {}
     }
-    sqlContext.listenerManager.register(listener)
+    spark.listenerManager.register(listener)
 
     val errorUdf = udf[Int, Int] { _ => throw new RuntimeException("udf error") }
     val df = sparkContext.makeRDD(Seq(1 -> "a")).toDF("i", "j")
 
-    // Ignore the log when we are expecting an exception.
-    sparkContext.setLogLevel("FATAL")
     val e = intercept[SparkException](df.select(errorUdf($"i")).collect())
 
     assert(metrics.length == 1)
@@ -82,7 +83,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(0)._2.analyzed.isInstanceOf[Project])
     assert(metrics(0)._3.getMessage == e.getMessage)
 
-    sqlContext.listenerManager.unregister(listener)
+    spark.listenerManager.unregister(listener)
   }
 
   test("get numRows metrics by callback") {
@@ -93,13 +94,13 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         val metric = qe.executedPlan match {
-          case w: WholeStageCodegen => w.child.longMetric("numOutputRows")
+          case w: WholeStageCodegenExec => w.child.longMetric("numOutputRows")
           case other => other.longMetric("numOutputRows")
         }
-        metrics += metric.value.value
+        metrics += metric.value
       }
     }
-    sqlContext.listenerManager.register(listener)
+    spark.listenerManager.register(listener)
 
     val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
     df.collect()
@@ -111,7 +112,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(1) === 1)
     assert(metrics(2) === 2)
 
-    sqlContext.listenerManager.unregister(listener)
+    spark.listenerManager.unregister(listener)
   }
 
   // TODO: Currently some LongSQLMetric use -1 as initial value, so if the accumulator is never
@@ -126,15 +127,15 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
-        metrics += qe.executedPlan.longMetric("dataSize").value.value
+        metrics += qe.executedPlan.longMetric("dataSize").value
         val bottomAgg = qe.executedPlan.children(0).children(0)
-        metrics += bottomAgg.longMetric("dataSize").value.value
+        metrics += bottomAgg.longMetric("dataSize").value
       }
     }
-    sqlContext.listenerManager.register(listener)
+    spark.listenerManager.register(listener)
 
     val sparkListener = new SaveInfoListener
-    sqlContext.sparkContext.addSparkListener(sparkListener)
+    spark.sparkContext.addSparkListener(sparkListener)
 
     val df = (1 to 100).map(i => i -> i.toString).toDF("i", "j")
     df.groupBy("i").count().collect()
@@ -157,6 +158,59 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(0) == topAggDataSize)
     assert(metrics(1) == bottomAggDataSize)
 
-    sqlContext.listenerManager.unregister(listener)
+    spark.listenerManager.unregister(listener)
+  }
+
+  test("execute callback functions for DataFrameWriter") {
+    val commands = ArrayBuffer.empty[(String, LogicalPlan)]
+    val exceptions = ArrayBuffer.empty[(String, Exception)]
+    val listener = new QueryExecutionListener {
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        exceptions += funcName -> exception
+      }
+
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        commands += funcName -> qe.logical
+      }
+    }
+    spark.listenerManager.register(listener)
+
+    withTempPath { path =>
+      spark.range(10).write.format("json").save(path.getCanonicalPath)
+      assert(commands.length == 1)
+      assert(commands.head._1 == "save")
+      assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
+      assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+        .fileFormat.isInstanceOf[JsonFileFormat])
+    }
+
+    withTable("tab") {
+      sql("CREATE TABLE tab(i long) using parquet") // adds commands(1) via onSuccess
+      spark.range(10).write.insertInto("tab")
+      assert(commands.length == 3)
+      assert(commands(2)._1 == "insertInto")
+      assert(commands(2)._2.isInstanceOf[InsertIntoTable])
+      assert(commands(2)._2.asInstanceOf[InsertIntoTable].table
+        .asInstanceOf[UnresolvedRelation].tableIdentifier.table == "tab")
+    }
+    // exiting withTable adds commands(3) via onSuccess (drops tab)
+
+    withTable("tab") {
+      spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
+      assert(commands.length == 5)
+      assert(commands(4)._1 == "saveAsTable")
+      assert(commands(4)._2.isInstanceOf[CreateTable])
+      assert(commands(4)._2.asInstanceOf[CreateTable].tableDesc.partitionColumnNames == Seq("p"))
+    }
+
+    withTable("tab") {
+      sql("CREATE TABLE tab(i long) using parquet")
+      val e = intercept[AnalysisException] {
+        spark.range(10).select($"id", $"id").write.insertInto("tab")
+      }
+      assert(exceptions.length == 1)
+      assert(exceptions.head._1 == "insertInto")
+      assert(exceptions.head._2 == e)
+    }
   }
 }

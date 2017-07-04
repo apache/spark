@@ -17,19 +17,20 @@
 
 package org.apache.spark.ml.source.libsvm
 
-import java.io.File
+import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.Files
 
-import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.util.Utils
 
+
 class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
-  var tempDir: File = _
+  // Path for dataset
   var path: String = _
 
   override def beforeAll(): Unit = {
@@ -40,22 +41,22 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
         |0
         |0 2:4.0 4:5.0 6:6.0
       """.stripMargin
-    tempDir = Utils.createTempDir()
-    val file = new File(tempDir, "part-00000")
+    val dir = Utils.createDirectory(tempDir.getCanonicalPath, "data")
+    val file = new File(dir, "part-00000")
     Files.write(lines, file, StandardCharsets.UTF_8)
-    path = tempDir.toURI.toString
+    path = dir.toURI.toString
   }
 
   override def afterAll(): Unit = {
     try {
-      Utils.deleteRecursively(tempDir)
+      Utils.deleteRecursively(new File(path))
     } finally {
       super.afterAll()
     }
   }
 
   test("select as sparse vector") {
-    val df = sqlContext.read.format("libsvm").load(path)
+    val df = spark.read.format("libsvm").load(path)
     assert(df.columns(0) == "label")
     assert(df.columns(1) == "features")
     val row1 = df.first()
@@ -65,7 +66,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("select as dense vector") {
-    val df = sqlContext.read.format("libsvm").options(Map("vectorType" -> "dense"))
+    val df = spark.read.format("libsvm").options(Map("vectorType" -> "dense"))
       .load(path)
     assert(df.columns(0) == "label")
     assert(df.columns(1) == "features")
@@ -76,31 +77,78 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(v == Vectors.dense(1.0, 0.0, 2.0, 0.0, 3.0, 0.0))
   }
 
+  test("illegal vector types") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read.format("libsvm").options(Map("VectorType" -> "sparser")).load(path)
+    }.getMessage
+    assert(e.contains("Invalid value `sparser` for parameter `vectorType`. Expected " +
+      "types are `sparse` and `dense`."))
+  }
+
   test("select a vector with specifying the longer dimension") {
-    val df = sqlContext.read.option("numFeatures", "100").format("libsvm")
+    val df = spark.read.option("numFeatures", "100").format("libsvm")
       .load(path)
     val row1 = df.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(100, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
   }
 
+  test("case insensitive option") {
+    val df = spark.read.option("NuMfEaTuReS", "100").format("libsvm").load(path)
+    assert(df.first().getAs[SparseVector](1) ==
+      Vectors.sparse(100, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+  }
+
   test("write libsvm data and read it again") {
-    val df = sqlContext.read.format("libsvm").load(path)
-    val tempDir2 = Utils.createTempDir()
+    val df = spark.read.format("libsvm").load(path)
+    val tempDir2 = new File(tempDir, "read_write_test")
     val writepath = tempDir2.toURI.toString
     // TODO: Remove requirement to coalesce by supporting multiple reads.
     df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writepath)
 
-    val df2 = sqlContext.read.format("libsvm").load(writepath)
+    val df2 = spark.read.format("libsvm").load(writepath)
     val row1 = df2.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
   }
 
   test("write libsvm data failed due to invalid schema") {
-    val df = sqlContext.read.format("text").load(path)
-    val e = intercept[SparkException] {
+    val df = spark.read.format("text").load(path)
+    intercept[IOException] {
       df.write.format("libsvm").save(path + "_2")
+    }
+  }
+
+  test("select features from libsvm relation") {
+    val df = spark.read.format("libsvm").load(path)
+    df.select("features").rdd.map { case Row(d: Vector) => d }.first
+    df.select("features").collect
+  }
+
+  test("create libsvmTable table without schema") {
+    try {
+      spark.sql(
+        s"""
+           |CREATE TABLE libsvmTable
+           |USING libsvm
+           |OPTIONS (
+           |  path '$path'
+           |)
+         """.stripMargin)
+      val df = spark.table("libsvmTable")
+      assert(df.columns(0) == "label")
+      assert(df.columns(1) == "features")
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS libsvmTable")
+    }
+  }
+
+  test("create libsvmTable table without schema and path") {
+    try {
+      val e = intercept[IOException](spark.sql("CREATE TABLE libsvmTable USING libsvm"))
+      assert(e.getMessage.contains("No input path specified for libsvm data"))
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS libsvmTable")
     }
   }
 }

@@ -33,17 +33,17 @@ import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
-private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: HiveContext)
+private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLContext)
   extends CLIService(hiveServer)
   with ReflectedCompositeService {
 
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
 
-    val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, hiveContext)
+    val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, sqlContext)
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
     var sparkServiceUGI: UserGroupInformation = null
@@ -66,7 +66,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
     getInfoType match {
       case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
-      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(hiveContext.sparkContext.version)
+      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(sqlContext.sparkContext.version)
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
   }

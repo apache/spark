@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.File
+import java.io.{File, ObjectInputStream}
 import java.net.URL
 import java.nio.ByteBuffer
 
@@ -171,7 +171,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     val tempDir = Utils.createTempDir()
     val srcDir = new File(tempDir, "repro/")
     srcDir.mkdirs()
-    val excSource = new JavaSourceFromString(new File(srcDir, "MyException").getAbsolutePath,
+    val excSource = new JavaSourceFromString(new File(srcDir, "MyException").toURI.getPath,
       """package repro;
         |
         |public class MyException extends Exception {
@@ -183,9 +183,9 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
 
     // ensure we reset the classloader after the test completes
     val originalClassLoader = Thread.currentThread.getContextClassLoader
-    try {
+    val loader = new MutableURLClassLoader(new Array[URL](0), originalClassLoader)
+    Utils.tryWithSafeFinally {
       // load the exception from the jar
-      val loader = new MutableURLClassLoader(new Array[URL](0), originalClassLoader)
       loader.addURL(jarFile.toURI.toURL)
       Thread.currentThread().setContextClassLoader(loader)
       val excClass: Class[_] = Utils.classForName("repro.MyException")
@@ -209,8 +209,9 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
 
       assert(expectedFailure.findFirstMatchIn(exceptionMessage).isDefined)
       assert(unknownFailure.findFirstMatchIn(exceptionMessage).isEmpty)
-    } finally {
+    } {
       Thread.currentThread.setContextClassLoader(originalClassLoader)
+      loader.close()
     }
   }
 
@@ -241,11 +242,30 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     assert(resultGetter.taskResults.size === 1)
     val resBefore = resultGetter.taskResults.head
     val resAfter = captor.getValue
-    val resSizeBefore = resBefore.accumUpdates.find(_.name == Some(RESULT_SIZE)).flatMap(_.update)
-    val resSizeAfter = resAfter.accumUpdates.find(_.name == Some(RESULT_SIZE)).flatMap(_.update)
+    val resSizeBefore = resBefore.accumUpdates.find(_.name == Some(RESULT_SIZE)).map(_.value)
+    val resSizeAfter = resAfter.accumUpdates.find(_.name == Some(RESULT_SIZE)).map(_.value)
     assert(resSizeBefore.exists(_ == 0L))
     assert(resSizeAfter.exists(_.toString.toLong > 0L))
   }
 
+  test("failed task is handled when error occurs deserializing the reason") {
+    sc = new SparkContext("local", "test", conf)
+    val rdd = sc.parallelize(Seq(1), 1).map { _ =>
+      throw new UndeserializableException
+    }
+    val message = intercept[SparkException] {
+      rdd.collect()
+    }.getMessage
+    // Job failed, even though the failure reason is unknown.
+    val unknownFailure = """(?s).*Lost task.*: UnknownReason.*""".r
+    assert(unknownFailure.findFirstMatchIn(message).isDefined)
+  }
+
+}
+
+private class UndeserializableException extends Exception {
+  private def readObject(in: ObjectInputStream): Unit = {
+    throw new NoClassDefFoundError()
+  }
 }
 

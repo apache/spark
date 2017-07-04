@@ -22,14 +22,14 @@ import java.util.Random
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.MutablePair
 
 /**
@@ -40,13 +40,17 @@ case class ShuffleExchange(
     child: SparkPlan,
     @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
 
+  // NOTE: coordinator can be null after serialization/deserialization,
+  //       e.g. it can be null on the Executor side
+
+  override lazy val metrics = Map(
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"))
+
   override def nodeName: String = {
     val extraInfo = coordinator match {
-      case Some(exchangeCoordinator) if exchangeCoordinator.isEstimated =>
-        s"(coordinator id: ${System.identityHashCode(coordinator)})"
-      case Some(exchangeCoordinator) if !exchangeCoordinator.isEstimated =>
-        s"(coordinator id: ${System.identityHashCode(coordinator)})"
-      case None => ""
+      case Some(exchangeCoordinator) =>
+        s"(coordinator id: ${System.identityHashCode(exchangeCoordinator)})"
+      case _ => ""
     }
 
     val simpleNodeName = "Exchange"
@@ -55,7 +59,8 @@ case class ShuffleExchange(
 
   override def outputPartitioning: Partitioning = newPartitioning
 
-  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+  private val serializer: Serializer =
+    new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
   override protected def doPrepare(): Unit = {
     // If an ExchangeCoordinator is needed, we register this Exchange operator
@@ -68,7 +73,7 @@ case class ShuffleExchange(
     // the plan.
     coordinator match {
       case Some(exchangeCoordinator) => exchangeCoordinator.registerExchange(this)
-      case None =>
+      case _ =>
     }
   }
 
@@ -77,7 +82,8 @@ case class ShuffleExchange(
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
    * the returned ShuffleDependency will be the input of shuffle.
    */
-  private[sql] def prepareShuffleDependency(): ShuffleDependency[Int, InternalRow, InternalRow] = {
+  private[exchange] def prepareShuffleDependency()
+    : ShuffleDependency[Int, InternalRow, InternalRow] = {
     ShuffleExchange.prepareShuffleDependency(
       child.execute(), child.output, newPartitioning, serializer)
   }
@@ -88,7 +94,7 @@ case class ShuffleExchange(
    * partition start indices array. If this optional array is defined, the returned
    * [[ShuffledRowRDD]] will fetch pre-shuffle partitions based on indices of this array.
    */
-  private[sql] def preparePostShuffleRDD(
+  private[exchange] def preparePostShuffleRDD(
       shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
       specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
     // If an array of partition start indices is provided, we need to use this array
@@ -114,7 +120,7 @@ case class ShuffleExchange(
           val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
           assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
           shuffleRDD
-        case None =>
+        case _ =>
           val shuffleDependency = prepareShuffleDependency()
           preparePostShuffleRDD(shuffleDependency)
       }
@@ -125,7 +131,7 @@ case class ShuffleExchange(
 
 object ShuffleExchange {
   def apply(newPartitioning: Partitioning, child: SparkPlan): ShuffleExchange = {
-    ShuffleExchange(newPartitioning, child, coordinator = None: Option[ExchangeCoordinator])
+    ShuffleExchange(newPartitioning, child, coordinator = Option.empty[ExchangeCoordinator])
   }
 
   /**
@@ -179,9 +185,6 @@ object ShuffleExchange {
         // copy.
         true
       }
-    } else if (shuffleManager.isInstanceOf[HashShuffleManager]) {
-      // We're using hash-based shuffle, so we don't need to copy.
-      false
     } else {
       // Catch-all case to safely handle any future ShuffleManager implementations.
       true
@@ -193,7 +196,7 @@ object ShuffleExchange {
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
    * the returned ShuffleDependency will be the input of shuffle.
    */
-  private[sql] def prepareShuffleDependency(
+  def prepareShuffleDependency(
       rdd: RDD[InternalRow],
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,

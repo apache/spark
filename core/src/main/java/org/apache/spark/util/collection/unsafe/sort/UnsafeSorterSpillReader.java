@@ -22,15 +22,23 @@ import java.io.*;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 
+import org.apache.spark.SparkEnv;
+import org.apache.spark.TaskContext;
+import org.apache.spark.io.NioBufferedFileInputStream;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
-import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reads spill files written by {@link UnsafeSorterSpillWriter} (see that class for a description
  * of the file format).
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
+  private static final Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
+  private static final int DEFAULT_BUFFER_SIZE_BYTES = 1024 * 1024; // 1 MB
+  private static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;
   private DataInputStream din;
@@ -44,15 +52,30 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   private byte[] arr = new byte[1024 * 1024];
   private Object baseObject = arr;
   private final long baseOffset = Platform.BYTE_ARRAY_OFFSET;
+  private final TaskContext taskContext = TaskContext.get();
 
   public UnsafeSorterSpillReader(
-      BlockManager blockManager,
+      SerializerManager serializerManager,
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
-    final BufferedInputStream bs = new BufferedInputStream(new FileInputStream(file));
+    long bufferSizeBytes =
+        SparkEnv.get() == null ?
+            DEFAULT_BUFFER_SIZE_BYTES:
+            SparkEnv.get().conf().getSizeAsBytes("spark.unsafe.sorter.spill.reader.buffer.size",
+                                                 DEFAULT_BUFFER_SIZE_BYTES);
+    if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
+      // fall back to a sane default value
+      logger.warn("Value of config \"spark.unsafe.sorter.spill.reader.buffer.size\" = {} not in " +
+        "allowed range [{}, {}). Falling back to default value : {} bytes", bufferSizeBytes,
+        DEFAULT_BUFFER_SIZE_BYTES, MAX_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES);
+      bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
+    }
+
+    final InputStream bs =
+        new NioBufferedFileInputStream(file, (int) bufferSizeBytes);
     try {
-      this.in = blockManager.wrapForCompression(blockId, bs);
+      this.in = serializerManager.wrapStream(blockId, bs);
       this.din = new DataInputStream(this.in);
       numRecords = numRecordsRemaining = din.readInt();
     } catch (IOException e) {
@@ -73,6 +96,14 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
 
   @Override
   public void loadNext() throws IOException {
+    // Kill the task in case it has been marked as killed. This logic is from
+    // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
+    // to avoid performance overhead. This check is added here in `loadNext()` instead of in
+    // `hasNext()` because it's technically possible for the caller to be relying on
+    // `getNumRecords()` instead of `hasNext()` to know when to stop.
+    if (taskContext != null) {
+      taskContext.killTaskIfInterrupted();
+    }
     recordLength = din.readInt();
     keyPrefix = din.readLong();
     if (recordLength > arr.length) {

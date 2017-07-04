@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.spark.mllib.linalg.VectorUDT
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types._
 
 /**
@@ -62,6 +62,9 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
     }
     ResolvedRFormula(label.value, includedTerms.distinct, hasIntercept)
   }
+
+  /** Whether this formula specifies fitting with response variable. */
+  def hasLabel: Boolean = label.value.nonEmpty
 
   /** Whether this formula specifies fitting with an intercept term. */
   def hasIntercept: Boolean = {
@@ -123,7 +126,19 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
  * @param hasIntercept whether the formula specifies fitting with an intercept.
  */
 private[ml] case class ResolvedRFormula(
-  label: String, terms: Seq[Seq[String]], hasIntercept: Boolean)
+  label: String, terms: Seq[Seq[String]], hasIntercept: Boolean) {
+
+  override def toString: String = {
+    val ts = terms.map {
+      case t if t.length > 1 =>
+        s"${t.mkString("{", ",", "}")}"
+      case t =>
+        t.mkString
+    }
+    val termStr = ts.mkString("[", ",", "]")
+    s"ResolvedRFormula(label=$label, terms=$termStr, hasIntercept=$hasIntercept)"
+  }
+}
 
 /**
  * R formula terms. See the R formula docs here for more information:
@@ -159,6 +174,10 @@ private[ml] object RFormulaParser extends RegexParsers {
   private val columnRef: Parser[ColumnRef] =
     "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r ^^ { case a => ColumnRef(a) }
 
+  private val empty: Parser[ColumnRef] = "" ^^ { case a => ColumnRef("") }
+
+  private val label: Parser[ColumnRef] = columnRef | empty
+
   private val dot: Parser[InteractableTerm] = "\\.".r ^^ { case _ => Dot }
 
   private val interaction: Parser[List[InteractableTerm]] = rep1sep(columnRef | dot, ":")
@@ -174,7 +193,7 @@ private[ml] object RFormulaParser extends RegexParsers {
   }
 
   private val formula: Parser[ParsedRFormula] =
-    (columnRef ~ "~" ~ terms) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t) }
+    (label ~ "~" ~ terms) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t) }
 
   def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
     case Success(result, _) => result

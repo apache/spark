@@ -19,8 +19,11 @@ package org.apache.spark.launcher;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
@@ -83,13 +86,13 @@ public class LauncherServerSuite extends BaseSuite {
 
       client = new TestClient(s);
       client.send(new Hello(handle.getSecret(), "1.4.0"));
-      assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
 
       // Make sure the server matched the client to the handle.
       assertNotNull(handle.getConnection());
 
       client.send(new SetAppId("app-id"));
-      assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
       assertEquals("app-id", handle.getAppId());
 
       client.send(new SetState(SparkAppHandle.State.RUNNING));
@@ -97,7 +100,7 @@ public class LauncherServerSuite extends BaseSuite {
       assertEquals(SparkAppHandle.State.RUNNING, handle.getState());
 
       handle.stop();
-      Message stopMsg = client.inbound.poll(10, TimeUnit.SECONDS);
+      Message stopMsg = client.inbound.poll(30, TimeUnit.SECONDS);
       assertTrue(stopMsg instanceof Stop);
     } finally {
       kill(handle);
@@ -120,35 +123,61 @@ public class LauncherServerSuite extends BaseSuite {
       Socket s = new Socket(InetAddress.getLoopbackAddress(),
         LauncherServer.getServerInstance().getPort());
       client = new TestClient(s);
-
-      // Try a few times since the client-side socket may not reflect the server-side close
-      // immediately.
-      boolean helloSent = false;
-      int maxTries = 10;
-      for (int i = 0; i < maxTries; i++) {
-        try {
-          if (!helloSent) {
-            client.send(new Hello(handle.getSecret(), "1.4.0"));
-            helloSent = true;
-          } else {
-            client.send(new SetAppId("appId"));
-          }
-          fail("Expected exception caused by connection timeout.");
-        } catch (IllegalStateException | IOException e) {
-          // Expected.
-          break;
-        } catch (AssertionError e) {
-          if (i < maxTries - 1) {
-            Thread.sleep(100);
-          } else {
-            throw new AssertionError("Test failed after " + maxTries + " attempts.", e);
-          }
-        }
-      }
+      waitForError(client, handle.getSecret());
     } finally {
       SparkLauncher.launcherConfig.remove(SparkLauncher.CHILD_CONNECTION_TIMEOUT);
       kill(handle);
       close(client);
+    }
+  }
+
+  @Test
+  public void testSparkSubmitVmShutsDown() throws Exception {
+    ChildProcAppHandle handle = LauncherServer.newAppHandle();
+    TestClient client = null;
+    final Semaphore semaphore = new Semaphore(0);
+    try {
+      Socket s = new Socket(InetAddress.getLoopbackAddress(),
+        LauncherServer.getServerInstance().getPort());
+      handle.addListener(new SparkAppHandle.Listener() {
+        public void stateChanged(SparkAppHandle handle) {
+          semaphore.release();
+        }
+        public void infoChanged(SparkAppHandle handle) {
+          semaphore.release();
+        }
+      });
+      client = new TestClient(s);
+      client.send(new Hello(handle.getSecret(), "1.4.0"));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
+      // Make sure the server matched the client to the handle.
+      assertNotNull(handle.getConnection());
+      close(client);
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
+      assertEquals(SparkAppHandle.State.LOST, handle.getState());
+    } finally {
+      kill(handle);
+      close(client);
+      client.clientThread.join();
+    }
+  }
+
+  @Test
+  public void testStreamFiltering() throws Exception {
+    ChildProcAppHandle handle = LauncherServer.newAppHandle();
+    TestClient client = null;
+    try {
+      Socket s = new Socket(InetAddress.getLoopbackAddress(),
+        LauncherServer.getServerInstance().getPort());
+
+      client = new TestClient(s);
+      client.send(new EvilPayload());
+      waitForError(client, handle.getSecret());
+      assertEquals(0, EvilPayload.EVIL_BIT);
+    } finally {
+      kill(handle);
+      close(client);
+      client.clientThread.join();
     }
   }
 
@@ -168,6 +197,35 @@ public class LauncherServerSuite extends BaseSuite {
     }
   }
 
+  /**
+   * Try a few times to get a client-side error, since the client-side socket may not reflect the
+   * server-side close immediately.
+   */
+  private void waitForError(TestClient client, String secret) throws Exception {
+    boolean helloSent = false;
+    int maxTries = 10;
+    for (int i = 0; i < maxTries; i++) {
+      try {
+        if (!helloSent) {
+          client.send(new Hello(secret, "1.4.0"));
+          helloSent = true;
+        } else {
+          client.send(new SetAppId("appId"));
+        }
+        fail("Expected error but message went through.");
+      } catch (IllegalStateException | IOException e) {
+        // Expected.
+        break;
+      } catch (AssertionError e) {
+        if (i < maxTries - 1) {
+          Thread.sleep(100);
+        } else {
+          throw new AssertionError("Test failed after " + maxTries + " attempts.", e);
+        }
+      }
+    }
+  }
+
   private static class TestClient extends LauncherConnection {
 
     final BlockingQueue<Message> inbound;
@@ -175,7 +233,7 @@ public class LauncherServerSuite extends BaseSuite {
 
     TestClient(Socket s) throws IOException {
       super(s);
-      this.inbound = new LinkedBlockingQueue<Message>();
+      this.inbound = new LinkedBlockingQueue<>();
       this.clientThread = new Thread(this);
       clientThread.setName("TestClient");
       clientThread.setDaemon(true);
@@ -185,6 +243,21 @@ public class LauncherServerSuite extends BaseSuite {
     @Override
     protected void handle(Message msg) throws IOException {
       inbound.offer(msg);
+    }
+
+  }
+
+  private static class EvilPayload extends LauncherProtocol.Message {
+
+    static int EVIL_BIT = 0;
+
+    // This field should cause the launcher server to throw an error and not deserialize the
+    // message.
+    private List<String> notAllowedField = Arrays.asList("disallowed");
+
+    private void readObject(ObjectInputStream stream) throws IOException, ClassNotFoundException {
+      stream.defaultReadObject();
+      EVIL_BIT = 1;
     }
 
   }

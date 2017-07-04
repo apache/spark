@@ -22,11 +22,10 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>2.3.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-catalyst_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Catalyst</name>
@@ -55,11 +54,28 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
+
+    <!--
+      This spark-tags test-dep is needed even though it isn't used in this module, otherwise testing-cmds that exclude
+      them will yield errors.
+    -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-unsafe_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sketch_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -72,8 +88,12 @@
       <artifactId>janino</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.codehaus.janino</groupId>
+      <artifactId>commons-compiler</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.antlr</groupId>
-      <artifactId>antlr-runtime</artifactId>
+      <artifactId>antlr4-runtime</artifactId>
     </dependency>
     <dependency>
       <groupId>commons-codec</groupId>
@@ -89,7 +109,7 @@
            so that the tests classes of external modules can use them. The two execution profiles
            are necessary - first one for 'mvn package', second one for 'mvn test-compile'. Ideally,
            'mvn compile' should not compile test classes and therefore should not need this.
-           However, an open Maven bug (http://jira.codehaus.org/browse/MNG-3559)
+           However, a closed due to "Cannot Reproduce" Maven bug (https://issues.apache.org/jira/browse/MNG-3559)
            causes the compilation to fail if catalyst test-jar is not generated. Hence, the
            second execution profile for 'mvn test-compile'.
       -->
@@ -112,21 +132,25 @@
         </executions>
       </plugin>
       <plugin>
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
+        <configuration>
+          <argLine>-Xmx4g -Xss4096k -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+        </configuration>
+      </plugin>
+      <plugin>
         <groupId>org.antlr</groupId>
-        <artifactId>antlr3-maven-plugin</artifactId>
+        <artifactId>antlr4-maven-plugin</artifactId>
         <executions>
           <execution>
             <goals>
-              <goal>antlr</goal>
+              <goal>antlr4</goal>
             </goals>
           </execution>
         </executions>
         <configuration>
-          <sourceDirectory>../catalyst/src/main/antlr3</sourceDirectory>
-          <includes>
-            <include>**/SparkSqlLexer.g</include>
-            <include>**/SparkSqlParser.g</include>
-          </includes>
+          <visitor>true</visitor>
+          <sourceDirectory>../catalyst/src/main/antlr4</sourceDirectory>
         </configuration>
       </plugin>
     </plugins>

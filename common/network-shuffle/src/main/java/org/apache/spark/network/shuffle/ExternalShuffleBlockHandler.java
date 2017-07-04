@@ -20,10 +20,16 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.Metric;
+import com.codahale.metrics.MetricSet;
+import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,8 +41,8 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.apache.spark.network.shuffle.protocol.*;
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
-
 
 /**
  * RPC Handler for a server which can serve shuffle blocks from outside of an Executor process.
@@ -46,11 +52,12 @@ import org.apache.spark.network.util.TransportConf;
  * level shuffle block.
  */
 public class ExternalShuffleBlockHandler extends RpcHandler {
-  private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
 
   @VisibleForTesting
   final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
+  private final ShuffleMetrics metrics;
 
   public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
@@ -63,6 +70,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   public ExternalShuffleBlockHandler(
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
+    this.metrics = new ShuffleMetrics();
     this.streamManager = streamManager;
     this.blockManager = blockManager;
   }
@@ -78,26 +86,43 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       TransportClient client,
       RpcResponseCallback callback) {
     if (msgObj instanceof OpenBlocks) {
-      OpenBlocks msg = (OpenBlocks) msgObj;
-      checkAuth(client, msg.appId);
-
-      List<ManagedBuffer> blocks = Lists.newArrayList();
-      for (String blockId : msg.blockIds) {
-        blocks.add(blockManager.getBlockData(msg.appId, msg.execId, blockId));
+      final Timer.Context responseDelayContext = metrics.openBlockRequestLatencyMillis.time();
+      try {
+        OpenBlocks msg = (OpenBlocks) msgObj;
+        checkAuth(client, msg.appId);
+        long streamId = streamManager.registerStream(client.getClientId(),
+          new ManagedBufferIterator(msg.appId, msg.execId, msg.blockIds));
+        if (logger.isTraceEnabled()) {
+          logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
+                       streamId,
+                       msg.blockIds.length,
+                       client.getClientId(),
+                       getRemoteAddress(client.getChannel()));
+        }
+        callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
+      } finally {
+        responseDelayContext.stop();
       }
-      long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
-      logger.trace("Registered streamId {} with {} buffers", streamId, msg.blockIds.length);
-      callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
 
     } else if (msgObj instanceof RegisterExecutor) {
-      RegisterExecutor msg = (RegisterExecutor) msgObj;
-      checkAuth(client, msg.appId);
-      blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
-      callback.onSuccess(ByteBuffer.wrap(new byte[0]));
+      final Timer.Context responseDelayContext =
+        metrics.registerExecutorRequestLatencyMillis.time();
+      try {
+        RegisterExecutor msg = (RegisterExecutor) msgObj;
+        checkAuth(client, msg.appId);
+        blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
+        callback.onSuccess(ByteBuffer.wrap(new byte[0]));
+      } finally {
+        responseDelayContext.stop();
+      }
 
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
+  }
+
+  public MetricSet getAllMetrics() {
+    return metrics;
   }
 
   @Override
@@ -135,6 +160,80 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     if (client.getClientId() != null && !client.getClientId().equals(appId)) {
       throw new SecurityException(String.format(
         "Client for %s not authorized for application %s.", client.getClientId(), appId));
+    }
+  }
+
+  /**
+   * A simple class to wrap all shuffle service wrapper metrics
+   */
+  private class ShuffleMetrics implements MetricSet {
+    private final Map<String, Metric> allMetrics;
+    // Time latency for open block request in ms
+    private final Timer openBlockRequestLatencyMillis = new Timer();
+    // Time latency for executor registration latency in ms
+    private final Timer registerExecutorRequestLatencyMillis = new Timer();
+    // Block transfer rate in byte per second
+    private final Meter blockTransferRateBytes = new Meter();
+
+    private ShuffleMetrics() {
+      allMetrics = new HashMap<>();
+      allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatencyMillis);
+      allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
+      allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
+      allMetrics.put("registeredExecutorsSize",
+                     (Gauge<Integer>) () -> blockManager.getRegisteredExecutorsSize());
+    }
+
+    @Override
+    public Map<String, Metric> getMetrics() {
+      return allMetrics;
+    }
+  }
+
+  private class ManagedBufferIterator implements Iterator<ManagedBuffer> {
+
+    private int index = 0;
+    private final String appId;
+    private final String execId;
+    private final int shuffleId;
+    // An array containing mapId and reduceId pairs.
+    private final int[] mapIdAndReduceIds;
+
+    ManagedBufferIterator(String appId, String execId, String[] blockIds) {
+      this.appId = appId;
+      this.execId = execId;
+      String[] blockId0Parts = blockIds[0].split("_");
+      if (blockId0Parts.length != 4 || !blockId0Parts[0].equals("shuffle")) {
+        throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[0]);
+      }
+      this.shuffleId = Integer.parseInt(blockId0Parts[1]);
+      mapIdAndReduceIds = new int[2 * blockIds.length];
+      for (int i = 0; i < blockIds.length; i++) {
+        String[] blockIdParts = blockIds[i].split("_");
+        if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {
+          throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[i]);
+        }
+        if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
+          throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
+            ", got:" + blockIds[i]);
+        }
+        mapIdAndReduceIds[2 * i] = Integer.parseInt(blockIdParts[2]);
+        mapIdAndReduceIds[2 * i + 1] = Integer.parseInt(blockIdParts[3]);
+      }
+    }
+
+    @Override
+    public boolean hasNext() {
+      return index < mapIdAndReduceIds.length;
+    }
+
+    @Override
+    public ManagedBuffer next() {
+      final ManagedBuffer block = blockManager.getBlockData(appId, execId, shuffleId,
+        mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
+      index += 2;
+      metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
+      return block;
     }
   }
 

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Collaborative Filtering - spark.ml
-displayTitle: Collaborative Filtering - spark.ml
+title: Collaborative Filtering
+displayTitle: Collaborative Filtering
 ---
 
 * Table of contents
@@ -29,6 +29,10 @@ following parameters:
   *baseline* confidence in preference observations (defaults to 1.0).
 * *nonnegative* specifies whether or not to use nonnegative constraints for least squares (defaults to `false`).
 
+**Note:** The DataFrame-based API for ALS currently only supports integers for user and item ids.
+Other numeric types are supported for the user and item id columns, 
+but the ids must be within the integer value range. 
+
 ### Explicit vs. implicit feedback
 
 The standard approach to matrix factorization based collaborative filtering treats 
@@ -36,7 +40,7 @@ the entries in the user-item matrix as *explicit* preferences given by the user 
 for example, users giving ratings to movies.
 
 It is common in many real-world use cases to only have access to *implicit feedback* (e.g. views,
-clicks, purchases, likes, shares etc.). The approach used in `spark.mllib` to deal with such data is taken
+clicks, purchases, likes, shares etc.). The approach used in `spark.ml` to deal with such data is taken
 from [Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
 Essentially, instead of trying to model the matrix of ratings directly, this approach treats the data
 as numbers representing the *strength* in observations of user actions (such as the number of clicks,
@@ -55,12 +59,40 @@ This approach is named "ALS-WR" and discussed in the paper
 It makes `regParam` less dependent on the scale of the dataset, so we can apply the
 best parameter learned from a sampled subset to the full dataset and expect similar performance.
 
-## Examples
+### Cold-start strategy
+
+When making predictions using an `ALSModel`, it is common to encounter users and/or items in the 
+test dataset that were not present during training the model. This typically occurs in two 
+scenarios:
+
+1. In production, for new users or items that have no rating history and on which the model has not 
+been trained (this is the "cold start problem").
+2. During cross-validation, the data is split between training and evaluation sets. When using 
+simple random splits as in Spark's `CrossValidator` or `TrainValidationSplit`, it is actually 
+very common to encounter users and/or items in the evaluation set that are not in the training set
+
+By default, Spark assigns `NaN` predictions during `ALSModel.transform` when a user and/or item 
+factor is not present in the model. This can be useful in a production system, since it indicates 
+a new user or item, and so the system can make a decision on some fallback to use as the prediction.
+
+However, this is undesirable during cross-validation, since any `NaN` predicted values will result
+in `NaN` results for the evaluation metric (for example when using `RegressionEvaluator`).
+This makes model selection impossible.
+
+Spark allows users to set the `coldStartStrategy` parameter
+to "drop" in order to drop any rows in the `DataFrame` of predictions that contain `NaN` values. 
+The evaluation metric will then be computed over the non-`NaN` data and will be valid. 
+Usage of this parameter is illustrated in the example below.
+
+**Note:** currently the supported cold start strategies are "nan" (the default behavior mentioned 
+above) and "drop". Further strategies may be supported in future.
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-In the following example, we load rating data from the
+In the following example, we load ratings data from the
 [MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
 consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
@@ -91,7 +123,7 @@ val als = new ALS()
 
 <div data-lang="java" markdown="1">
 
-In the following example, we load rating data from the
+In the following example, we load ratings data from the
 [MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
 consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
@@ -122,7 +154,7 @@ ALS als = new ALS()
 
 <div data-lang="python" markdown="1">
 
-In the following example, we load rating data from the
+In the following example, we load ratings data from the
 [MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
 consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
@@ -145,4 +177,12 @@ als = ALS(maxIter=5, regParam=0.01, implicitPrefs=True,
 {% endhighlight %}
 
 </div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.als.html) for more details.
+
+{% include_example r/ml/als.R %}
+</div>
+
 </div>

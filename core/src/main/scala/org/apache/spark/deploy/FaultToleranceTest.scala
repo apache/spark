@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -35,7 +35,7 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * This suite tests the fault tolerance of the Spark standalone scheduler, mainly the Master.
@@ -43,8 +43,7 @@ import org.apache.spark.util.Utils
  * Execute using
  * ./bin/spark-class org.apache.spark.deploy.FaultToleranceTest
  *
- * Make sure that that the environment includes the following properties in SPARK_DAEMON_JAVA_OPTS
- * *and* SPARK_JAVA_OPTS:
+ * Make sure that the environment includes the following properties in SPARK_DAEMON_JAVA_OPTS:
  *   - spark.deploy.recoveryMode=ZOOKEEPER
  *   - spark.deploy.zookeeper.url=172.17.42.1:2181
  * Note that 172.17.42.1 is the default docker ip for the host and 2181 is the default ZK port.
@@ -265,7 +264,7 @@ private object FaultToleranceTest extends App with Logging {
     }
 
     // Avoid waiting indefinitely (e.g., we could register but get no executors).
-    assertTrue(Await.result(f, 120 seconds))
+    assertTrue(ThreadUtils.awaitResult(f, 120 seconds))
   }
 
   /**
@@ -318,7 +317,7 @@ private object FaultToleranceTest extends App with Logging {
     }
 
     try {
-      assertTrue(Await.result(f, 120 seconds))
+      assertTrue(ThreadUtils.awaitResult(f, 120 seconds))
     } catch {
       case e: TimeoutException =>
         logError("Master states: " + masters.map(_.state))
@@ -422,7 +421,7 @@ private object SparkDocker {
     }
 
     dockerCmd.run(ProcessLogger(findIpAndLog _))
-    val ip = Await.result(ipPromise.future, 30 seconds)
+    val ip = ThreadUtils.awaitResult(ipPromise.future, 30 seconds)
     val dockerId = Docker.getLastProcessId
     (ip, dockerId, outFile)
   }

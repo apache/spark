@@ -44,7 +44,7 @@ class StorageLevel(object):
         result = ""
         result += "Disk " if self.useDisk else ""
         result += "Memory " if self.useMemory else ""
-        result += "Tachyon " if self.useOffHeap else ""
+        result += "OffHeap " if self.useOffHeap else ""
         result += "Deserialized " if self.deserialized else "Serialized "
         result += "%sx Replicated" % self.replication
         return result
@@ -55,7 +55,7 @@ StorageLevel.MEMORY_ONLY = StorageLevel(False, True, False, False)
 StorageLevel.MEMORY_ONLY_2 = StorageLevel(False, True, False, False, 2)
 StorageLevel.MEMORY_AND_DISK = StorageLevel(True, True, False, False)
 StorageLevel.MEMORY_AND_DISK_2 = StorageLevel(True, True, False, False, 2)
-StorageLevel.OFF_HEAP = StorageLevel(False, False, True, False, 1)
+StorageLevel.OFF_HEAP = StorageLevel(True, True, True, False, 1)
 
 """
 .. note:: The following four storage level constants are deprecated in 2.0, since the records \

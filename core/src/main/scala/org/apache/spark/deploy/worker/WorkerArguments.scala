@@ -68,12 +68,12 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   @tailrec
   private def parse(args: List[String]): Unit = args match {
     case ("--ip" | "-i") :: value :: tail =>
-      Utils.checkHost(value, "ip no longer supported, please use hostname " + value)
+      Utils.checkHost(value)
       host = value
       parse(tail)
 
     case ("--host" | "-h") :: value :: tail =>
-      Utils.checkHost(value, "Please use hostname " + value)
+      Utils.checkHost(value)
       host = value
       parse(tail)
 
@@ -165,12 +165,11 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       }
       // scalastyle:on classforname
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         totalMb = 2*1024
         // scalastyle:off println
         System.out.println("Failed to get total physical memory. Using " + totalMb + " MB")
         // scalastyle:on println
-      }
     }
     // Leave out 1 GB for the operating system, but don't return a negative memory size
     math.max(totalMb - 1024, Utils.DEFAULT_DRIVER_MEM_MB)

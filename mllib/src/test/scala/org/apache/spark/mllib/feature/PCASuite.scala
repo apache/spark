@@ -18,9 +18,10 @@
 package org.apache.spark.mllib.feature
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 
 class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -42,7 +43,9 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     val pca_transform = pca.transform(dataRDD).collect()
     val mat_multiply = mat.multiply(pc).rows.collect()
 
-    assert(pca_transform.toSet === mat_multiply.toSet)
-    assert(pca.explainedVariance === explainedVariance)
+    pca_transform.zip(mat_multiply).foreach { case (calculated, expected) =>
+      assert(calculated ~== expected relTol 1e-8)
+    }
+    assert(pca.explainedVariance ~== explainedVariance relTol 1e-8)
   }
 }

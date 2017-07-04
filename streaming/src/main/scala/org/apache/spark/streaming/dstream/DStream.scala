@@ -27,7 +27,8 @@ import scala.util.matching.Regex
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
+import org.apache.spark.internal.io.SparkHadoopWriterUtils
+import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
@@ -52,7 +53,7 @@ import org.apache.spark.util.{CallSite, Utils}
  * `join`. These operations are automatically available on any DStream of pairs
  * (e.g., DStream[(Int, Int)] through implicit conversions.
  *
- * DStreams internally is characterized by a few basic properties:
+ * A DStream internally is characterized by a few basic properties:
  *  - A list of other DStreams that the DStream depends on
  *  - A time interval at which the DStream generates an RDD
  *  - A function that is used to generate an RDD after each time interval
@@ -68,13 +69,13 @@ abstract class DStream[T: ClassTag] (
   // Methods that should be implemented by subclasses of DStream
   // =======================================================================
 
-  /** Time interval after which the DStream generates a RDD */
+  /** Time interval after which the DStream generates an RDD */
   def slideDuration: Duration
 
   /** List of parent DStreams on which this DStream depends on */
   def dependencies: List[DStream[_]]
 
-  /** Method that generates a RDD for the given time */
+  /** Method that generates an RDD for the given time */
   def compute(validTime: Time): Option[RDD[T]]
 
   // =======================================================================
@@ -83,7 +84,7 @@ abstract class DStream[T: ClassTag] (
 
   // RDDs generated, marked as private[streaming] so that testsuites can access it
   @transient
-  private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]] ()
+  private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]]()
 
   // Time zero for the DStream
   private[streaming] var zeroTime: Time = null
@@ -157,7 +158,7 @@ abstract class DStream[T: ClassTag] (
   def persist(level: StorageLevel): DStream[T] = {
     if (this.isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change storage level of an DStream after streaming context has started")
+        "Cannot change storage level of a DStream after streaming context has started")
     }
     this.storageLevel = level
     this
@@ -176,7 +177,7 @@ abstract class DStream[T: ClassTag] (
   def checkpoint(interval: Duration): DStream[T] = {
     if (isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change checkpoint interval of an DStream after streaming context has started")
+        "Cannot change checkpoint interval of a DStream after streaming context has started")
     }
     persist()
     checkpointDuration = interval
@@ -269,7 +270,7 @@ abstract class DStream[T: ClassTag] (
       checkpointDuration == null || rememberDuration > checkpointDuration,
       s"The remember duration for ${this.getClass.getSimpleName} has been set to " +
         s" $rememberDuration which is not more than the checkpoint interval" +
-        s" ($checkpointDuration). Please set it to higher than $checkpointDuration."
+        s" ($checkpointDuration). Please set it to a value higher than $checkpointDuration."
     )
 
     dependencies.foreach(_.validateAtStart())
@@ -277,7 +278,7 @@ abstract class DStream[T: ClassTag] (
     logInfo(s"Slide time = $slideDuration")
     logInfo(s"Storage level = ${storageLevel.description}")
     logInfo(s"Checkpoint interval = $checkpointDuration")
-    logInfo(s"Remember duration = $rememberDuration")
+    logInfo(s"Remember interval = $rememberDuration")
     logInfo(s"Initialized and validated $this")
   }
 
@@ -337,7 +338,7 @@ abstract class DStream[T: ClassTag] (
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details. We need to have this call here because
           // compute() might cause Spark jobs to be launched.
-          PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
+          SparkHadoopWriterUtils.disableOutputSpecValidation.withValue(true) {
             compute(time)
           }
         }
@@ -429,13 +430,12 @@ abstract class DStream[T: ClassTag] (
    */
   private[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
-      case Some(rdd) => {
+      case Some(rdd) =>
         val jobFunc = () => {
           val emptyFunc = { (iterator: Iterator[T]) => {} }
           context.sparkContext.runJob(rdd, emptyFunc)
         }
         Some(new Job(time, jobFunc))
-      }
       case None => None
     }
   }
@@ -535,7 +535,7 @@ abstract class DStream[T: ClassTag] (
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(s"${this.getClass().getSimpleName}.readObject used")
     ois.defaultReadObject()
-    generatedRDDs = new HashMap[Time, RDD[T]] ()
+    generatedRDDs = new HashMap[Time, RDD[T]]()
   }
 
   // =======================================================================
@@ -594,7 +594,7 @@ abstract class DStream[T: ClassTag] (
    * of this DStream.
    */
   def reduce(reduceFunc: (T, T) => T): DStream[T] = ssc.withScope {
-    this.map(x => (null, x)).reduceByKey(reduceFunc, 1).map(_._2)
+    this.map((null, _)).reduceByKey(reduceFunc, 1).map(_._2)
   }
 
   /**
@@ -616,7 +616,7 @@ abstract class DStream[T: ClassTag] (
    */
   def countByValue(numPartitions: Int = ssc.sc.defaultParallelism)(implicit ord: Ordering[T] = null)
       : DStream[(T, Long)] = ssc.withScope {
-    this.map(x => (x, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
+    this.map((_, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
   }
 
   /**
@@ -625,7 +625,7 @@ abstract class DStream[T: ClassTag] (
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
     val cleanedF = context.sparkContext.clean(foreachFunc, false)
-    foreachRDD((r: RDD[T], t: Time) => cleanedF(r), displayInnerRDDOps = true)
+    foreachRDD((r: RDD[T], _: Time) => cleanedF(r), displayInnerRDDOps = true)
   }
 
   /**
@@ -664,7 +664,7 @@ abstract class DStream[T: ClassTag] (
     // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = context.sparkContext.clean(transformFunc, false)
-    transform((r: RDD[T], t: Time) => cleanedF(r))
+    transform((r: RDD[T], _: Time) => cleanedF(r))
   }
 
   /**
@@ -794,7 +794,8 @@ abstract class DStream[T: ClassTag] (
    *  This is more efficient than reduceByWindow without "inverse reduce" function.
    *  However, it is applicable to only "invertible reduce functions".
    * @param reduceFunc associative and commutative reduce function
-   * @param invReduceFunc inverse reduce function
+   * @param invReduceFunc inverse reduce function; such that for all y, invertible x:
+   *                      `invReduceFunc(reduceFunc(x, y), x) = y`
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -807,7 +808,7 @@ abstract class DStream[T: ClassTag] (
       windowDuration: Duration,
       slideDuration: Duration
     ): DStream[T] = ssc.withScope {
-      this.map(x => (1, x))
+      this.map((1, _))
           .reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowDuration, slideDuration, 1)
           .map(_._2)
   }
@@ -846,7 +847,7 @@ abstract class DStream[T: ClassTag] (
       numPartitions: Int = ssc.sc.defaultParallelism)
       (implicit ord: Ordering[T] = null)
       : DStream[(T, Long)] = ssc.withScope {
-    this.map(x => (x, 1L)).reduceByKeyAndWindow(
+    this.map((_, 1L)).reduceByKeyAndWindow(
       (x: Long, y: Long) => x + y,
       (x: Long, y: Long) => x - y,
       windowDuration,
@@ -896,9 +897,9 @@ abstract class DStream[T: ClassTag] (
     logInfo(s"Slicing from $fromTime to $toTime" +
       s" (aligned to $alignedFromTime and $alignedToTime)")
 
-    alignedFromTime.to(alignedToTime, slideDuration).flatMap(time => {
+    alignedFromTime.to(alignedToTime, slideDuration).flatMap { time =>
       if (time >= zeroTime) getOrCompute(time) else None
-    })
+    }
   }
 
   /**

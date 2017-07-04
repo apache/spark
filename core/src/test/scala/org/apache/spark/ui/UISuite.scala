@@ -18,15 +18,20 @@
 package org.apache.spark.ui
 
 import java.net.{BindException, ServerSocket}
+import java.net.{URI, URL}
+import java.util.Locale
+import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.util.Utils
 
 class UISuite extends SparkFunSuite {
 
@@ -49,12 +54,16 @@ class UISuite extends SparkFunSuite {
     (conf, new SecurityManager(conf).getSSLOptions("ui"))
   }
 
-  private def sslEnabledConf(): (SparkConf, SSLOptions) = {
+  private def sslEnabledConf(sslPort: Option[Int] = None): (SparkConf, SSLOptions) = {
+    val keyStoreFilePath = getTestResourcePath("spark.keystore")
     val conf = new SparkConf()
       .set("spark.ssl.ui.enabled", "true")
-      .set("spark.ssl.ui.keyStore", "./src/test/resources/spark.keystore")
+      .set("spark.ssl.ui.keyStore", keyStoreFilePath)
       .set("spark.ssl.ui.keyStorePassword", "123456")
       .set("spark.ssl.ui.keyPassword", "123456")
+    sslPort.foreach { p =>
+      conf.set("spark.ssl.ui.port", p.toString)
+    }
     (conf, new SecurityManager(conf).getSSLOptions("ui"))
   }
 
@@ -62,12 +71,12 @@ class UISuite extends SparkFunSuite {
     withSpark(newSparkContext()) { sc =>
       // test if the ui is visible, and all the expected tabs are visible
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        val html = Source.fromURL(sc.ui.get.appUIAddress).mkString
+        val html = Source.fromURL(sc.ui.get.webUrl).mkString
         assert(!html.contains("random data that should not be present"))
-        assert(html.toLowerCase.contains("stages"))
-        assert(html.toLowerCase.contains("storage"))
-        assert(html.toLowerCase.contains("environment"))
-        assert(html.toLowerCase.contains("executors"))
+        assert(html.toLowerCase(Locale.ROOT).contains("stages"))
+        assert(html.toLowerCase(Locale.ROOT).contains("storage"))
+        assert(html.toLowerCase(Locale.ROOT).contains("environment"))
+        assert(html.toLowerCase(Locale.ROOT).contains("executors"))
       }
     }
   }
@@ -77,7 +86,7 @@ class UISuite extends SparkFunSuite {
       // test if visible from http://localhost:4040
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         val html = Source.fromURL("http://localhost:4040").mkString
-        assert(html.toLowerCase.contains("stages"))
+        assert(html.toLowerCase(Locale.ROOT).contains("stages"))
       }
     }
   }
@@ -163,6 +172,7 @@ class UISuite extends SparkFunSuite {
       val boundPort = serverInfo.boundPort
       assert(server.getState === "STARTED")
       assert(boundPort != 0)
+      assert(serverInfo.securePort.isDefined)
       intercept[BindException] {
         socket = new ServerSocket(boundPort)
       }
@@ -172,26 +182,128 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("verify appUIAddress contains the scheme") {
+  test("verify webUrl contains the scheme") {
     withSpark(newSparkContext()) { sc =>
       val ui = sc.ui.get
-      val uiAddress = ui.appUIAddress
-      val uiHostPort = ui.appUIHostPort
-      assert(uiAddress.equals("http://" + uiHostPort))
+      val uiAddress = ui.webUrl
+      assert(uiAddress.startsWith("http://") || uiAddress.startsWith("https://"))
     }
   }
 
-  test("verify appUIAddress contains the port") {
+  test("verify webUrl contains the port") {
     withSpark(newSparkContext()) { sc =>
       val ui = sc.ui.get
-      val splitUIAddress = ui.appUIAddress.split(':')
+      val splitUIAddress = ui.webUrl.split(':')
       val boundPort = ui.boundPort
       assert(splitUIAddress(2).toInt == boundPort)
     }
   }
 
+  test("verify proxy rewrittenURI") {
+    val prefix = "/proxy/worker-id"
+    val target = "http://localhost:8081"
+    val path = "/proxy/worker-id/json"
+    var rewrittenURI = JettyUtils.createProxyURI(prefix, target, path, null)
+    assert(rewrittenURI.toString() === "http://localhost:8081/json")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, path, "test=done")
+    assert(rewrittenURI.toString() === "http://localhost:8081/json?test=done")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-id", null)
+    assert(rewrittenURI.toString() === "http://localhost:8081")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-id/test%2F", null)
+    assert(rewrittenURI.toString() === "http://localhost:8081/test%2F")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-id/%F0%9F%98%84", null)
+    assert(rewrittenURI.toString() === "http://localhost:8081/%F0%9F%98%84")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-noid/json", null)
+    assert(rewrittenURI === null)
+  }
+
+  test("verify rewriting location header for reverse proxy") {
+    val clientRequest = mock(classOf[HttpServletRequest])
+    var headerValue = "http://localhost:4040/jobs"
+    val prefix = "/proxy/worker-id"
+    val targetUri = URI.create("http://localhost:4040")
+    when(clientRequest.getScheme()).thenReturn("http")
+    when(clientRequest.getHeader("host")).thenReturn("localhost:8080")
+    var newHeader = JettyUtils.createProxyLocationHeader(
+      prefix, headerValue, clientRequest, targetUri)
+    assert(newHeader.toString() === "http://localhost:8080/proxy/worker-id/jobs")
+    headerValue = "http://localhost:4041/jobs"
+    newHeader = JettyUtils.createProxyLocationHeader(
+      prefix, headerValue, clientRequest, targetUri)
+    assert(newHeader === null)
+  }
+
+  test("http -> https redirect applies to all URIs") {
+    var serverInfo: ServerInfo = null
+    try {
+      val servlet = new HttpServlet() {
+        override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+          res.sendError(HttpServletResponse.SC_OK)
+        }
+      }
+
+      def newContext(path: String): ServletContextHandler = {
+        val ctx = new ServletContextHandler()
+        ctx.setContextPath(path)
+        ctx.addServlet(new ServletHolder(servlet), "/root")
+        ctx
+      }
+
+      val (conf, sslOptions) = sslEnabledConf()
+      serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions,
+        Seq[ServletContextHandler](newContext("/"), newContext("/test1")),
+        conf)
+      assert(serverInfo.server.getState === "STARTED")
+
+      val testContext = newContext("/test2")
+      serverInfo.addHandler(testContext)
+      testContext.start()
+
+      val httpPort = serverInfo.boundPort
+
+      val tests = Seq(
+        ("http", serverInfo.boundPort, HttpServletResponse.SC_FOUND),
+        ("https", serverInfo.securePort.get, HttpServletResponse.SC_OK))
+
+      tests.foreach { case (scheme, port, expected) =>
+        val urls = Seq(
+          s"$scheme://localhost:$port/root",
+          s"$scheme://localhost:$port/test1/root",
+          s"$scheme://localhost:$port/test2/root")
+        urls.foreach { url =>
+          val rc = TestUtils.httpResponseCode(new URL(url))
+          assert(rc === expected, s"Unexpected status $rc for $url")
+        }
+      }
+    } finally {
+      stopServer(serverInfo)
+    }
+  }
+
+  test("specify both http and https ports separately") {
+    var socket: ServerSocket = null
+    var serverInfo: ServerInfo = null
+    try {
+      socket = new ServerSocket(0)
+
+      // Make sure the SSL port lies way outside the "http + 400" range used as the default.
+      val baseSslPort = Utils.userPort(socket.getLocalPort(), 10000)
+      val (conf, sslOptions) = sslEnabledConf(sslPort = Some(baseSslPort))
+
+      serverInfo = JettyUtils.startJettyServer("0.0.0.0", socket.getLocalPort() + 1,
+        sslOptions, Seq[ServletContextHandler](), conf, "server1")
+
+      val notAllowed = Utils.userPort(serverInfo.boundPort, 400)
+      assert(serverInfo.securePort.isDefined)
+      assert(serverInfo.securePort.get != Utils.userPort(serverInfo.boundPort, 400))
+    } finally {
+      stopServer(serverInfo)
+      closeSocket(socket)
+    }
+  }
+
   def stopServer(info: ServerInfo): Unit = {
-    if (info != null && info.server != null) info.server.stop
+    if (info != null) info.stop()
   }
 
   def closeSocket(socket: ServerSocket): Unit = {

@@ -16,13 +16,12 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.math.BigDecimal;
 import java.util.*;
-
-import org.apache.commons.lang.NotImplementedException;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
@@ -33,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * This class is the in memory representation of rows as they are streamed through operators. It
  * is designed to maximize CPU efficiency and not storage footprint. Since it is expected that
- * each operator allocates one of thee objects, the storage footprint on the task is negligible.
+ * each operator allocates one of these objects, the storage footprint on the task is negligible.
  *
  * The layout is a columnar with values encoded in their native format. Each RowBatch contains
  * a horizontal partitioning of the data, split into columns.
@@ -79,7 +78,7 @@ public final class ColumnarBatch {
 
   /**
    * Called to close all the columns in this batch. It is not valid to access the data after
-   * calling this. This must be called at the end to clean up memory allcoations.
+   * calling this. This must be called at the end to clean up memory allocations.
    */
   public void close() {
     for (ColumnVector c: columns) {
@@ -129,7 +128,7 @@ public final class ColumnarBatch {
      * Revisit this. This is expensive. This is currently only used in test paths.
      */
     public InternalRow copy() {
-      GenericMutableRow row = new GenericMutableRow(columns.length);
+      GenericInternalRow row = new GenericInternalRow(columns.length);
       for (int i = 0; i < numFields(); i++) {
         if (isNullAt(i)) {
           row.setNullAt(i);
@@ -137,6 +136,10 @@ public final class ColumnarBatch {
           DataType dt = columns[i].dataType();
           if (dt instanceof BooleanType) {
             row.setBoolean(i, getBoolean(i));
+          } else if (dt instanceof ByteType) {
+            row.setByte(i, getByte(i));
+          } else if (dt instanceof ShortType) {
+            row.setShort(i, getShort(i));
           } else if (dt instanceof IntegerType) {
             row.setInt(i, getInt(i));
           } else if (dt instanceof LongType) {
@@ -146,7 +149,7 @@ public final class ColumnarBatch {
           } else if (dt instanceof DoubleType) {
             row.setDouble(i, getDouble(i));
           } else if (dt instanceof StringType) {
-            row.update(i, getUTF8String(i));
+            row.update(i, getUTF8String(i).copy());
           } else if (dt instanceof BinaryType) {
             row.update(i, getBinary(i));
           } else if (dt instanceof DecimalType) {
@@ -154,6 +157,8 @@ public final class ColumnarBatch {
             row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
           } else if (dt instanceof DateType) {
             row.setInt(i, getInt(i));
+          } else if (dt instanceof TimestampType) {
+            row.setLong(i, getLong(i));
           } else {
             throw new RuntimeException("Not implemented. " + dt);
           }
@@ -164,11 +169,11 @@ public final class ColumnarBatch {
 
     @Override
     public boolean anyNull() {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
-    public boolean isNullAt(int ordinal) { return columns[ordinal].getIsNull(rowId); }
+    public boolean isNullAt(int ordinal) { return columns[ordinal].isNullAt(rowId); }
 
     @Override
     public boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
@@ -193,21 +198,25 @@ public final class ColumnarBatch {
 
     @Override
     public Decimal getDecimal(int ordinal, int precision, int scale) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getDecimal(rowId, precision, scale);
     }
 
     @Override
     public UTF8String getUTF8String(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getUTF8String(rowId);
     }
 
     @Override
     public byte[] getBinary(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getBinary(rowId);
     }
 
     @Override
     public CalendarInterval getInterval(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       final int months = columns[ordinal].getChildColumn(0).getInt(rowId);
       final long microseconds = columns[ordinal].getChildColumn(1).getLong(rowId);
       return new CalendarInterval(months, microseconds);
@@ -215,22 +224,147 @@ public final class ColumnarBatch {
 
     @Override
     public InternalRow getStruct(int ordinal, int numFields) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getStruct(rowId);
     }
 
     @Override
     public ArrayData getArray(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getArray(rowId);
     }
 
     @Override
     public MapData getMap(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
     public Object get(int ordinal, DataType dataType) {
-      throw new NotImplementedException();
+      if (dataType instanceof BooleanType) {
+        return getBoolean(ordinal);
+      } else if (dataType instanceof ByteType) {
+        return getByte(ordinal);
+      } else if (dataType instanceof ShortType) {
+        return getShort(ordinal);
+      } else if (dataType instanceof IntegerType) {
+        return getInt(ordinal);
+      } else if (dataType instanceof LongType) {
+        return getLong(ordinal);
+      } else if (dataType instanceof FloatType) {
+        return getFloat(ordinal);
+      } else if (dataType instanceof DoubleType) {
+        return getDouble(ordinal);
+      } else if (dataType instanceof StringType) {
+        return getUTF8String(ordinal);
+      } else if (dataType instanceof BinaryType) {
+        return getBinary(ordinal);
+      } else if (dataType instanceof DecimalType) {
+        DecimalType t = (DecimalType) dataType;
+        return getDecimal(ordinal, t.precision(), t.scale());
+      } else if (dataType instanceof DateType) {
+        return getInt(ordinal);
+      } else if (dataType instanceof TimestampType) {
+        return getLong(ordinal);
+      } else if (dataType instanceof ArrayType) {
+        return getArray(ordinal);
+      } else if (dataType instanceof StructType) {
+        return getStruct(ordinal, ((StructType)dataType).fields().length);
+      } else if (dataType instanceof MapType) {
+        return getMap(ordinal);
+      } else {
+        throw new UnsupportedOperationException("Datatype not supported " + dataType);
+      }
+    }
+
+    @Override
+    public void update(int ordinal, Object value) {
+      if (value == null) {
+        setNullAt(ordinal);
+      } else {
+        DataType dt = columns[ordinal].dataType();
+        if (dt instanceof BooleanType) {
+          setBoolean(ordinal, (boolean) value);
+        } else if (dt instanceof IntegerType) {
+          setInt(ordinal, (int) value);
+        } else if (dt instanceof ShortType) {
+          setShort(ordinal, (short) value);
+        } else if (dt instanceof LongType) {
+          setLong(ordinal, (long) value);
+        } else if (dt instanceof FloatType) {
+          setFloat(ordinal, (float) value);
+        } else if (dt instanceof DoubleType) {
+          setDouble(ordinal, (double) value);
+        } else if (dt instanceof DecimalType) {
+          DecimalType t = (DecimalType) dt;
+          setDecimal(ordinal, Decimal.apply((BigDecimal) value, t.precision(), t.scale()),
+              t.precision());
+        } else {
+          throw new UnsupportedOperationException("Datatype not supported " + dt);
+        }
+      }
+    }
+
+    @Override
+    public void setNullAt(int ordinal) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNull(rowId);
+    }
+
+    @Override
+    public void setBoolean(int ordinal, boolean value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putBoolean(rowId, value);
+    }
+
+    @Override
+    public void setByte(int ordinal, byte value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putByte(rowId, value);
+    }
+
+    @Override
+    public void setShort(int ordinal, short value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putShort(rowId, value);
+    }
+
+    @Override
+    public void setInt(int ordinal, int value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putInt(rowId, value);
+    }
+
+    @Override
+    public void setLong(int ordinal, long value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putLong(rowId, value);
+    }
+
+    @Override
+    public void setFloat(int ordinal, float value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putFloat(rowId, value);
+    }
+
+    @Override
+    public void setDouble(int ordinal, double value) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putDouble(rowId, value);
+    }
+
+    @Override
+    public void setDecimal(int ordinal, Decimal value, int precision) {
+      assert (!columns[ordinal].isConstant);
+      columns[ordinal].putNotNull(rowId);
+      columns[ordinal].putDecimal(rowId, value, precision);
     }
   }
 
@@ -295,7 +429,7 @@ public final class ColumnarBatch {
     for (int ordinal : nullFilteredColumns) {
       if (columns[ordinal].numNulls != 0) {
         for (int rowId = 0; rowId < numRows; rowId++) {
-          if (!filteredRows[rowId] && columns[ordinal].getIsNull(rowId)) {
+          if (!filteredRows[rowId] && columns[ordinal].isNullAt(rowId)) {
             filteredRows[rowId] = true;
             ++numRowsFiltered;
           }
@@ -315,7 +449,7 @@ public final class ColumnarBatch {
   public int numRows() { return numRows; }
 
   /**
-   * Returns the number of valid rowss.
+   * Returns the number of valid rows.
    */
   public int numValidRows() {
     assert(numRowsFiltered <= numRows);
@@ -338,7 +472,7 @@ public final class ColumnarBatch {
    */
   public void setColumn(int ordinal, ColumnVector column) {
     if (column instanceof OffHeapColumnVector) {
-      throw new NotImplementedException("Need to ref count columns.");
+      throw new UnsupportedOperationException("Need to ref count columns.");
     }
     columns[ordinal] = column;
   }

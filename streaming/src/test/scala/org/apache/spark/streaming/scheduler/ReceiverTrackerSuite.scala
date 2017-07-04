@@ -26,7 +26,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart, TaskLo
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.dstream.{ConstantInputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.receiver._
 
 /** Testsuite for receiver scheduling */
@@ -56,6 +56,8 @@ class ReceiverTrackerSuite extends TestSuiteBase {
             "other block generator did not receive rate update")
         }
       } finally {
+        tracker.stop(false)
+        // Make sure it is idempotent.
         tracker.stop(false)
       }
     }
@@ -100,6 +102,27 @@ class ReceiverTrackerSuite extends TestSuiteBase {
         // If preferredLocations is set correctly, receiverTaskLocality should be PROCESS_LOCAL
         assert(receiverTaskLocality === TaskLocality.PROCESS_LOCAL)
       }
+    }
+  }
+
+  test("get allocated executors") {
+    // Test get allocated executors when 1 receiver is registered
+    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+      val input = ssc.receiverStream(new TestReceiver)
+      val output = new TestOutputStream(input)
+      output.register()
+      ssc.start()
+      assert(ssc.scheduler.receiverTracker.allocatedExecutors().size === 1)
+    }
+
+    // Test get allocated executors when there's no receiver registered
+    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+      val rdd = ssc.sc.parallelize(1 to 10)
+      val input = new ConstantInputDStream(ssc, rdd)
+      val output = new TestOutputStream(input)
+      output.register()
+      ssc.start()
+      assert(ssc.scheduler.receiverTracker.allocatedExecutors() === Map.empty)
     }
   }
 }

@@ -78,7 +78,8 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    * Returns the receiver operating characteristic (ROC) curve,
    * which is an RDD of (false positive rate, true positive rate)
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
-   * @see http://en.wikipedia.org/wiki/Receiver_operating_characteristic
+   * @see <a href="http://en.wikipedia.org/wiki/Receiver_operating_characteristic">
+   * Receiver operating characteristic (Wikipedia)</a>
    */
   @Since("1.0.0")
   def roc(): RDD[(Double, Double)] = {
@@ -98,7 +99,8 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   /**
    * Returns the precision-recall curve, which is an RDD of (recall, precision),
    * NOT (precision, recall), with (0.0, 1.0) prepended to it.
-   * @see http://en.wikipedia.org/wiki/Precision_and_recall
+   * @see <a href="http://en.wikipedia.org/wiki/Precision_and_recall">
+   * Precision and recall (Wikipedia)</a>
    */
   @Since("1.0.0")
   def pr(): RDD[(Double, Double)] = {
@@ -118,7 +120,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    * Returns the (threshold, F-Measure) curve.
    * @param beta the beta factor in F-Measure computation.
    * @return an RDD of (threshold, F-Measure) pairs.
-   * @see http://en.wikipedia.org/wiki/F1_score
+   * @see <a href="http://en.wikipedia.org/wiki/F1_score">F1 score (Wikipedia)</a>
    */
   @Since("1.0.0")
   def fMeasureByThreshold(beta: Double): RDD[(Double, Double)] = createCurve(FMeasure(beta))
@@ -189,8 +191,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
       Iterator(agg)
     }.collect()
     val partitionwiseCumulativeCounts =
-      agg.scanLeft(new BinaryLabelCounter())(
-        (agg: BinaryLabelCounter, c: BinaryLabelCounter) => agg.clone() += c)
+      agg.scanLeft(new BinaryLabelCounter())((agg, c) => agg.clone() += c)
     val totalCount = partitionwiseCumulativeCounts.last
     logInfo(s"Total counts: $totalCount")
     val cumulativeCounts = binnedCounts.mapPartitionsWithIndex(

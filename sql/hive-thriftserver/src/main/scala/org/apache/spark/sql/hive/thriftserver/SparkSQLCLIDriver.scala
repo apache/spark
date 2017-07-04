@@ -32,14 +32,14 @@ import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, CommandProcessor,
-  CommandProcessorFactory, SetProcessor}
+import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.log4j.{Level, Logger}
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -47,8 +47,8 @@ import org.apache.spark.util.ShutdownHookManager
  * has dropped its support.
  */
 private[hive] object SparkSQLCLIDriver extends Logging {
-  private var prompt = "spark-sql"
-  private var continuedPrompt = "".padTo(prompt.length, ' ')
+  private val prompt = "spark-sql"
+  private val continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport: TSocket = _
 
   installSignalHandler()
@@ -82,7 +82,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cliConf = new HiveConf(classOf[SessionState])
     // Override the location of the metastore since this is only used for local execution.
-    HiveContext.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
+    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
       case (key, value) => cliConf.set(key, value)
     }
     val sessionState = new CliSessionState(cliConf)
@@ -150,11 +150,20 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     if (sessionState.database != null) {
-      SparkSQLEnv.hiveContext.runSqlHive(s"USE ${sessionState.database}")
+      SparkSQLEnv.sqlContext.sessionState.catalog.setCurrentDatabase(
+        s"${sessionState.database}")
     }
 
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
+
+    // Respect the configurations set by --hiveconf from the command line
+    // (based on Hive's CliDriver).
+    val it = sessionState.getOverriddenConfigurations.entrySet().iterator()
+    while (it.hasNext) {
+      val kv = it.next()
+      SparkSQLEnv.sqlContext.setConf(kv.getKey, kv.getValue)
+    }
 
     if (sessionState.execString != null) {
       System.exit(cli.processLine(sessionState.execString))
@@ -267,6 +276,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   private val console = new SessionState.LogHelper(LOG)
 
+  if (sessionState.getIsSilent) {
+    Logger.getRootLogger.setLevel(Level.WARN)
+  }
+
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)
   }
@@ -283,9 +296,13 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     throw new RuntimeException("Remote operations not supported")
   }
 
+  override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {
+    hiveVariables.asScala.foreach(kv => SparkSQLEnv.sqlContext.conf.setConfString(kv._1, kv._2))
+  }
+
   override def processCmd(cmd: String): Int = {
     val cmd_trimmed: String = cmd.trim()
-    val cmd_lower = cmd_trimmed.toLowerCase(Locale.ENGLISH)
+    val cmd_lower = cmd_trimmed.toLowerCase(Locale.ROOT)
     val tokens: Array[String] = cmd_trimmed.split("\\s+")
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
     if (cmd_lower.equals("quit") ||
@@ -293,10 +310,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       sessionState.close()
       System.exit(0)
     }
-    if (tokens(0).toLowerCase(Locale.ENGLISH).equals("source") ||
-      cmd_trimmed.startsWith("!") ||
-      tokens(0).toLowerCase.equals("list") ||
-      isRemoteMode) {
+    if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||
+      cmd_trimmed.startsWith("!") || isRemoteMode) {
       val start = System.currentTimeMillis()
       super.processCmd(cmd)
       val end = System.currentTimeMillis()
@@ -311,7 +326,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       if (proc != null) {
         // scalastyle:off println
         if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
-          proc.isInstanceOf[AddResourceProcessor]) {
+          proc.isInstanceOf[AddResourceProcessor] || proc.isInstanceOf[ListResourceProcessor] ||
+          proc.isInstanceOf[ResetProcessor] ) {
           val driver = new SparkSQLDriver
 
           driver.init()

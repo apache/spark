@@ -20,6 +20,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.File;
 import java.io.IOException;
 
+import org.apache.spark.serializer.SerializerManager;
 import scala.Tuple2;
 
 import org.apache.spark.executor.ShuffleWriteMetrics;
@@ -135,7 +136,8 @@ public final class UnsafeSorterSpillWriter {
   }
 
   public void close() throws IOException {
-    writer.commitAndClose();
+    writer.commitAndGet();
+    writer.close();
     writer = null;
     writeBuffer = null;
   }
@@ -144,7 +146,7 @@ public final class UnsafeSorterSpillWriter {
     return file;
   }
 
-  public UnsafeSorterSpillReader getReader(BlockManager blockManager) throws IOException {
-    return new UnsafeSorterSpillReader(blockManager, file, blockId);
+  public UnsafeSorterSpillReader getReader(SerializerManager serializerManager) throws IOException {
+    return new UnsafeSorterSpillReader(serializerManager, file, blockId);
   }
 }

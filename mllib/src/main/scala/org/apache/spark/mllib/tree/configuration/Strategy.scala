@@ -28,8 +28,8 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
 /**
  * Stores all the configuration options for tree construction
  * @param algo  Learning goal.  Supported:
- *              [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
- *              [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
+ *              `org.apache.spark.mllib.tree.configuration.Algo.Classification`,
+ *              `org.apache.spark.mllib.tree.configuration.Algo.Regression`
  * @param impurity Criterion used for information gain calculation.
  *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
  *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
@@ -43,9 +43,9 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  *                for choosing how to split on features at each node.
  *                More bins give higher granularity.
  * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
- *                             [[org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort]]
+ *                             `org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort`
  * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
- *                                number of discrete values they take. An entry (n -> k)
+ *                                number of discrete values they take. An entry (n to k)
  *                                indicates that feature n is categorical with k categories
  *                                indexed from 0: {0, 1, ..., k-1}.
  * @param minInstancesPerNode Minimum number of instances each child must have after split.
@@ -56,7 +56,8 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  *                    If a split has less information gain than minInfoGain,
  *                    this split will not be considered as a valid split.
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
- *                      256 MB.
+ *                      256 MB.  If too small, then 1 node will be split per iteration, and
+ *                      its aggregates may exceed this size.
  * @param subsamplingRate Fraction of the training data used for learning decision tree.
  * @param useNodeIdCache If this is true, instead of passing trees to executors, the algorithm will
  *                       maintain a separate RDD of node Id cache for each row.
@@ -200,9 +201,5 @@ object Strategy {
       new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
         numClasses = 0)
   }
-
-  @deprecated("Use Strategy.defaultStrategy instead.", "1.5.0")
-  @Since("1.2.0")
-  def defaultStategy(algo: Algo): Strategy = defaultStrategy(algo)
 
 }

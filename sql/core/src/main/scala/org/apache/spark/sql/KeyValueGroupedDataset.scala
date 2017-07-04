@@ -19,50 +19,39 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.expressions.ReduceAggregator
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
 
 /**
  * :: Experimental ::
  * A [[Dataset]] has been logically grouped by a user specified grouping key.  Users should not
- * construct a [[KeyValueGroupedDataset]] directly, but should instead call `groupBy` on an existing
- * [[Dataset]].
+ * construct a [[KeyValueGroupedDataset]] directly, but should instead call `groupByKey` on
+ * an existing [[Dataset]].
  *
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 class KeyValueGroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
     vEncoder: Encoder[V],
-    val queryExecution: QueryExecution,
+    @transient val queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute]) extends Serializable {
 
-  // Similar to [[Dataset]], we use unresolved encoders for later composition and resolved encoders
-  // when constructing new logical plans that will operate on the output of the current
-  // queryexecution.
-
-  private implicit val unresolvedKEncoder = encoderFor(kEncoder)
-  private implicit val unresolvedVEncoder = encoderFor(vEncoder)
-
-  private val resolvedKEncoder =
-    unresolvedKEncoder.resolve(groupingAttributes, OuterScopes.outerScopes)
-  private val resolvedVEncoder =
-    unresolvedVEncoder.resolve(dataAttributes, OuterScopes.outerScopes)
+  // Similar to [[Dataset]], we turn the passed in encoder to `ExpressionEncoder` explicitly.
+  private implicit val kExprEnc = encoderFor(kEncoder)
+  private implicit val vExprEnc = encoderFor(vEncoder)
 
   private def logicalPlan = queryExecution.analyzed
-  private def sqlContext = queryExecution.sqlContext
-
-  private def groupedData = {
-    new RelationalGroupedDataset(
-      Dataset.newDataFrame(sqlContext, logicalPlan),
-      groupingAttributes,
-      RelationalGroupedDataset.GroupByType)
-  }
+  private def sparkSession = queryExecution.sparkSession
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
@@ -74,24 +63,68 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def keyAs[L : Encoder]: KeyValueGroupedDataset[L, V] =
     new KeyValueGroupedDataset(
       encoderFor[L],
-      unresolvedVEncoder,
+      vExprEnc,
       queryExecution,
       dataAttributes,
       groupingAttributes)
 
   /**
-   * Returns a [[Dataset]] that contains each unique key.
+   * Returns a new [[KeyValueGroupedDataset]] where the given function `func` has been applied
+   * to the data. The grouping key is unchanged by this.
+   *
+   * {{{
+   *   // Create values grouped by key from a Dataset[(K, V)]
+   *   ds.groupByKey(_._1).mapValues(_._2) // Scala
+   * }}}
+   *
+   * @since 2.1.0
+   */
+  def mapValues[W : Encoder](func: V => W): KeyValueGroupedDataset[K, W] = {
+    val withNewData = AppendColumns(func, dataAttributes, logicalPlan)
+    val projected = Project(withNewData.newColumns ++ groupingAttributes, withNewData)
+    val executed = sparkSession.sessionState.executePlan(projected)
+
+    new KeyValueGroupedDataset(
+      encoderFor[K],
+      encoderFor[W],
+      executed,
+      withNewData.newColumns,
+      groupingAttributes)
+  }
+
+  /**
+   * Returns a new [[KeyValueGroupedDataset]] where the given function `func` has been applied
+   * to the data. The grouping key is unchanged by this.
+   *
+   * {{{
+   *   // Create Integer values grouped by String key from a Dataset<Tuple2<String, Integer>>
+   *   Dataset<Tuple2<String, Integer>> ds = ...;
+   *   KeyValueGroupedDataset<String, Integer> grouped =
+   *     ds.groupByKey(t -> t._1, Encoders.STRING()).mapValues(t -> t._2, Encoders.INT());
+   * }}}
+   *
+   * @since 2.1.0
+   */
+  def mapValues[W](func: MapFunction[V, W], encoder: Encoder[W]): KeyValueGroupedDataset[K, W] = {
+    implicit val uEnc = encoder
+    mapValues { (v: V) => func.call(v) }
+  }
+
+  /**
+   * Returns a [[Dataset]] that contains each unique key. This is equivalent to doing mapping
+   * over the Dataset to extract the keys and then running a distinct operation on those.
    *
    * @since 1.6.0
    */
   def keys: Dataset[K] = {
     Dataset[K](
-      sqlContext,
+      sparkSession,
       Distinct(
         Project(groupingAttributes, logicalPlan)))
   }
 
   /**
+   * (Scala-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
@@ -100,7 +133,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
    * key, it is best to use the reduce function or an
-   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
+   * `org.apache.spark.sql.expressions#Aggregator`.
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -111,7 +144,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
     Dataset[U](
-      sqlContext,
+      sparkSession,
       MapGroups(
         f,
         groupingAttributes,
@@ -120,6 +153,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Java-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
@@ -128,7 +162,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
    * key, it is best to use the reduce function or an
-   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
+   * `org.apache.spark.sql.expressions#Aggregator`.
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -142,6 +176,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Scala-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
@@ -149,7 +184,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
    * key, it is best to use the reduce function or an
-   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
+   * `org.apache.spark.sql.expressions#Aggregator`.
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -164,6 +199,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Java-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
@@ -171,7 +207,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
    * key, it is best to use the reduce function or an
-   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
+   * `org.apache.spark.sql.expressions#Aggregator`.
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -185,63 +221,256 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
-   * Reduces the elements of each group of data using the specified binary function.
-   * The given function must be commutative and associative or the result may be non-deterministic.
+   * ::Experimental::
+   * (Scala-specific)
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See [[org.apache.spark.sql.streaming.GroupState]] for more details.
    *
-   * @since 1.6.0
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func Function to be called on every group.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 2.2.0
    */
-  def reduce(f: (V, V) => V): Dataset[(K, V)] = {
-    val func = (key: K, it: Iterator[V]) => Iterator((key, it.reduce(f)))
-
-    implicit val resultEncoder = ExpressionEncoder.tuple(unresolvedKEncoder, unresolvedVEncoder)
-    flatMapGroups(func)
+  @Experimental
+  @InterfaceStability.Evolving
+  def mapGroupsWithState[S: Encoder, U: Encoder](
+      func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
+    val flatMapFunc = (key: K, it: Iterator[V], s: GroupState[S]) => Iterator(func(key, it, s))
+    Dataset[U](
+      sparkSession,
+      FlatMapGroupsWithState[K, V, S, U](
+        flatMapFunc.asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
+        groupingAttributes,
+        dataAttributes,
+        OutputMode.Update,
+        isMapGroupsWithState = true,
+        GroupStateTimeout.NoTimeout,
+        child = logicalPlan))
   }
 
   /**
+   * ::Experimental::
+   * (Scala-specific)
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See [[org.apache.spark.sql.streaming.GroupState]] for more details.
+   *
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func Function to be called on every group.
+   * @param timeoutConf Timeout configuration for groups that do not receive data for a while.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def mapGroupsWithState[S: Encoder, U: Encoder](
+      timeoutConf: GroupStateTimeout)(
+      func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
+    val flatMapFunc = (key: K, it: Iterator[V], s: GroupState[S]) => Iterator(func(key, it, s))
+    Dataset[U](
+      sparkSession,
+      FlatMapGroupsWithState[K, V, S, U](
+        flatMapFunc.asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
+        groupingAttributes,
+        dataAttributes,
+        OutputMode.Update,
+        isMapGroupsWithState = true,
+        timeoutConf,
+        child = logicalPlan))
+  }
+
+  /**
+   * ::Experimental::
+   * (Java-specific)
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See `GroupState` for more details.
+   *
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func          Function to be called on every group.
+   * @param stateEncoder  Encoder for the state type.
+   * @param outputEncoder Encoder for the output type.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def mapGroupsWithState[S, U](
+      func: MapGroupsWithStateFunction[K, V, S, U],
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U]): Dataset[U] = {
+    mapGroupsWithState[S, U](
+      (key: K, it: Iterator[V], s: GroupState[S]) => func.call(key, it.asJava, s)
+    )(stateEncoder, outputEncoder)
+  }
+
+  /**
+   * ::Experimental::
+   * (Java-specific)
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See `GroupState` for more details.
+   *
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func          Function to be called on every group.
+   * @param stateEncoder  Encoder for the state type.
+   * @param outputEncoder Encoder for the output type.
+   * @param timeoutConf   Timeout configuration for groups that do not receive data for a while.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def mapGroupsWithState[S, U](
+      func: MapGroupsWithStateFunction[K, V, S, U],
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U],
+      timeoutConf: GroupStateTimeout): Dataset[U] = {
+    mapGroupsWithState[S, U](timeoutConf)(
+      (key: K, it: Iterator[V], s: GroupState[S]) => func.call(key, it.asJava, s)
+    )(stateEncoder, outputEncoder)
+  }
+
+  /**
+   * ::Experimental::
+   * (Scala-specific)
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See `GroupState` for more details.
+   *
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func Function to be called on every group.
+   * @param outputMode The output mode of the function.
+   * @param timeoutConf Timeout configuration for groups that do not receive data for a while.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def flatMapGroupsWithState[S: Encoder, U: Encoder](
+      outputMode: OutputMode,
+      timeoutConf: GroupStateTimeout)(
+      func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
+    if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
+      throw new IllegalArgumentException("The output mode of function should be append or update")
+    }
+    Dataset[U](
+      sparkSession,
+      FlatMapGroupsWithState[K, V, S, U](
+        func.asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
+        groupingAttributes,
+        dataAttributes,
+        outputMode,
+        isMapGroupsWithState = false,
+        timeoutConf,
+        child = logicalPlan))
+  }
+
+  /**
+   * ::Experimental::
+   * (Java-specific)
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See `GroupState` for more details.
+   *
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func          Function to be called on every group.
+   * @param outputMode    The output mode of the function.
+   * @param stateEncoder  Encoder for the state type.
+   * @param outputEncoder Encoder for the output type.
+   * @param timeoutConf   Timeout configuration for groups that do not receive data for a while.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def flatMapGroupsWithState[S, U](
+      func: FlatMapGroupsWithStateFunction[K, V, S, U],
+      outputMode: OutputMode,
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U],
+      timeoutConf: GroupStateTimeout): Dataset[U] = {
+    val f = (key: K, it: Iterator[V], s: GroupState[S]) => func.call(key, it.asJava, s).asScala
+    flatMapGroupsWithState[S, U](outputMode, timeoutConf)(f)(stateEncoder, outputEncoder)
+  }
+
+  /**
+   * (Scala-specific)
    * Reduces the elements of each group of data using the specified binary function.
    * The given function must be commutative and associative or the result may be non-deterministic.
    *
    * @since 1.6.0
    */
-  def reduce(f: ReduceFunction[V]): Dataset[(K, V)] = {
-    reduce(f.call _)
+  def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
+    val vEncoder = encoderFor[V]
+    val aggregator: TypedColumn[V, V] = new ReduceAggregator[V](f)(vEncoder).toColumn
+    agg(aggregator)
   }
 
-  // This is here to prevent us from adding overloads that would be ambiguous.
-  @scala.annotation.varargs
-  private def agg(exprs: Column*): DataFrame =
-    groupedData.agg(withEncoder(exprs.head), exprs.tail.map(withEncoder): _*)
-
-  private def withEncoder(c: Column): Column = c match {
-    case tc: TypedColumn[_, _] =>
-      tc.withInputType(resolvedVEncoder.bind(dataAttributes), dataAttributes)
-    case _ => c
+  /**
+   * (Java-specific)
+   * Reduces the elements of each group of data using the specified binary function.
+   * The given function must be commutative and associative or the result may be non-deterministic.
+   *
+   * @since 1.6.0
+   */
+  def reduceGroups(f: ReduceFunction[V]): Dataset[(K, V)] = {
+    reduceGroups(f.call _)
   }
 
   /**
    * Internal helper function for building typed aggregations that return tuples.  For simplicity
    * and code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
-   * TODO: does not handle aggregations that return nonflat results,
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(
-        _.withInputType(resolvedVEncoder, dataAttributes).named)
-    val keyColumn = if (resolvedKEncoder.flat) {
+      columns.map(_.withInputType(vExprEnc, dataAttributes).named)
+    val keyColumn = if (kExprEnc.flat) {
       assert(groupingAttributes.length == 1)
       groupingAttributes.head
     } else {
       Alias(CreateStruct(groupingAttributes), "key")()
     }
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
-    val execution = new QueryExecution(sqlContext, aggregate)
+    val execution = new QueryExecution(sparkSession, aggregate)
 
     new Dataset(
-      sqlContext,
+      sparkSession,
       execution,
-      ExpressionEncoder.tuple(unresolvedKEncoder +: encoders))
+      ExpressionEncoder.tuple(kExprEnc +: encoders))
   }
 
   /**
@@ -296,6 +525,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def count(): Dataset[(K, Long)] = agg(functions.count("*").as(ExpressionEncoder[Long]()))
 
   /**
+   * (Scala-specific)
    * Applies the given function to each cogrouped data.  For each unique group, the function will
    * be passed the grouping key and 2 iterators containing all elements in the group from
    * [[Dataset]] `this` and `other`.  The function can return an iterator containing elements of an
@@ -306,9 +536,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def cogroup[U, R : Encoder](
       other: KeyValueGroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
-    implicit val uEncoder = other.unresolvedVEncoder
+    implicit val uEncoder = other.vExprEnc
     Dataset[R](
-      sqlContext,
+      sparkSession,
       CoGroup(
         f,
         this.groupingAttributes,
@@ -320,6 +550,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Java-specific)
    * Applies the given function to each cogrouped data.  For each unique group, the function will
    * be passed the grouping key and 2 iterators containing all elements in the group from
    * [[Dataset]] `this` and `other`.  The function can return an iterator containing elements of an

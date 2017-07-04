@@ -31,15 +31,16 @@ import org.apache.spark.storage.StorageUtils
  * Read-only byte buffer which is physically stored as multiple chunks rather than a single
  * contiguous array.
  *
- * @param chunks an array of [[ByteBuffer]]s. Each buffer in this array must be non-empty and have
- *               position == 0. Ownership of these buffers is transferred to the ChunkedByteBuffer,
- *               so if these buffers may also be used elsewhere then the caller is responsible for
- *               copying them as needed.
+ * @param chunks an array of [[ByteBuffer]]s. Each buffer in this array must have position == 0.
+ *               Ownership of these buffers is transferred to the ChunkedByteBuffer, so if these
+ *               buffers may also be used elsewhere then the caller is responsible for copying
+ *               them as needed.
  */
 private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   require(chunks != null, "chunks must not be null")
-  require(chunks.forall(_.limit() > 0), "chunks must be non-empty")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
+
+  private[this] var disposed: Boolean = false
 
   /**
    * This size of this buffer, in bytes.
@@ -85,7 +86,11 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   }
 
   /**
-   * Copy this buffer into a new ByteBuffer.
+   * Convert this buffer to a ByteBuffer. If this buffer is backed by a single chunk, its underlying
+   * data will not be copied. Instead, it will be duplicated. If this buffer is backed by multiple
+   * chunks, the data underlying this buffer will be copied into a new byte buffer. As a result, it
+   * is suggested to use this method only if the caller does not need to manage the memory
+   * underlying this buffer.
    *
    * @throws UnsupportedOperationException if this buffer's size exceeds the max ByteBuffer size.
    */
@@ -117,11 +122,12 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   /**
    * Make a copy of this ChunkedByteBuffer, copying all of the backing data into new buffers.
    * The new buffer will share no resources with the original buffer.
+   *
+   * @param allocator a method for allocating byte buffers
    */
-  def copy(): ChunkedByteBuffer = {
+  def copy(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     val copiedChunks = getChunks().map { chunk =>
-      // TODO: accept an allocator in this copy method to integrate with mem. accounting systems
-      val newChunk = ByteBuffer.allocate(chunk.limit())
+      val newChunk = allocator(chunk.limit())
       newChunk.put(chunk)
       newChunk.flip()
       newChunk
@@ -130,23 +136,25 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   }
 
   /**
-   * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
-   * might cause errors if one attempts to read from the unmapped buffer, but it's better than
-   * waiting for the GC to find it because that could lead to huge numbers of open files. There's
-   * unfortunately no standard API to do this.
+   * Attempt to clean up any ByteBuffer in this ChunkedByteBuffer which is direct or memory-mapped.
+   * See [[StorageUtils.dispose]] for more information.
    */
   def dispose(): Unit = {
-    chunks.foreach(StorageUtils.dispose)
+    if (!disposed) {
+      chunks.foreach(StorageUtils.dispose)
+      disposed = true
+    }
   }
+
 }
 
 /**
  * Reads data from a ChunkedByteBuffer.
  *
- * @param dispose if true, [[ChunkedByteBuffer.dispose()]] will be called at the end of the stream
+ * @param dispose if true, `ChunkedByteBuffer.dispose()` will be called at the end of the stream
  *                in order to close any memory-mapped files which back the buffer.
  */
-private class ChunkedByteBufferInputStream(
+private[spark] class ChunkedByteBufferInputStream(
     var chunkedByteBuffer: ChunkedByteBuffer,
     dispose: Boolean)
   extends InputStream {

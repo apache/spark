@@ -26,7 +26,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
@@ -35,8 +34,7 @@ import org.apache.spark.sql.hive.test.TestHive$;
 import org.apache.spark.sql.hive.aggregate.MyDoubleSum;
 
 public class JavaDataFrameSuite {
-  private transient JavaSparkContext sc;
-  private transient HiveContext hc;
+  private transient SQLContext hc;
 
   Dataset<Row> df;
 
@@ -50,14 +48,12 @@ public class JavaDataFrameSuite {
   @Before
   public void setUp() throws IOException {
     hc = TestHive$.MODULE$;
-    sc = new JavaSparkContext(hc.sparkContext());
-
     List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
     }
-    df = hc.read().json(sc.parallelize(jsonObjects));
-    df.registerTempTable("window_table");
+    df = hc.read().json(hc.createDataset(jsonObjects, Encoders.STRING()));
+    df.createOrReplaceTempView("window_table");
   }
 
   @After
@@ -82,7 +78,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testUDAF() {
-    Dataset<Row> df = hc.range(0, 100).unionAll(hc.range(0, 100)).select(col("id").as("value"));
+    Dataset<Row> df = hc.range(0, 100).union(hc.range(0, 100)).select(col("id").as("value"));
     UserDefinedAggregateFunction udaf = new MyDoubleSum();
     UserDefinedAggregateFunction registeredUDAF = hc.udf().register("mydoublesum", udaf);
     // Create Columns for the UDAF. For now, callUDF does not take an argument to specific if

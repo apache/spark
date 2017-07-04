@@ -21,16 +21,20 @@ import java.io.{DataInput, DataOutput, File, PrintWriter}
 import java.util.{ArrayList, Arrays, Properties}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.udf.UDAFPercentile
+import org.apache.hadoop.hive.ql.exec.UDF
+import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.hadoop.io.Writable
+import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
@@ -47,8 +51,8 @@ case class ListStringCaseClass(l: Seq[String])
  */
 class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
-  import hiveContext.{udf, sql}
-  import hiveContext.implicits._
+  import spark.udf
+  import spark.implicits._
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
@@ -72,7 +76,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("hive struct udf") {
     sql(
       """
-      |CREATE EXTERNAL TABLE hiveUDFTestTable (
+      |CREATE TABLE hiveUDFTestTable (
       |   pair STRUCT<id: INT, value: INT>
       |)
       |PARTITIONED BY (partition STRING)
@@ -142,18 +146,60 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql("SELECT array(max(key), max(key)) FROM src").collect().toSeq)
   }
 
+  test("SPARK-16228 Percentile needs explicit cast to double") {
+    sql("select percentile(value, cast(0.5 as double)) from values 1,2,3 T(value)")
+    sql("select percentile_approx(value, cast(0.5 as double)) from values 1.0,2.0,3.0 T(value)")
+    sql("select percentile(value, 0.5) from values 1,2,3 T(value)")
+    sql("select percentile_approx(value, 0.5) from values 1.0,2.0,3.0 T(value)")
+  }
+
   test("Generic UDAF aggregates") {
+
+    checkAnswer(sql(
+     """
+       |SELECT percentile_approx(2, 0.99999),
+       |       sum(distinct 1),
+       |       count(distinct 1,2,3,4) FROM src LIMIT 1
+     """.stripMargin), sql("SELECT 2, 1, 1 FROM src LIMIT 1").collect().toSeq)
+
+    checkAnswer(sql(
+      """
+        |SELECT ceiling(percentile_approx(distinct key, 0.99999)),
+        |       count(distinct key),
+        |       sum(distinct key),
+        |       count(distinct 1),
+        |       sum(distinct 1),
+        |       sum(1) FROM src LIMIT 1
+      """.stripMargin),
+      sql(
+        """
+          |SELECT max(key),
+          |       count(distinct key),
+          |       sum(distinct key),
+          |       1, 1, sum(1) FROM src LIMIT 1
+        """.stripMargin).collect().toSeq)
+
+    checkAnswer(sql(
+      """
+        |SELECT ceiling(percentile_approx(distinct key, 0.9 + 0.09999)),
+        |       count(distinct key), sum(distinct key),
+        |       count(distinct 1), sum(distinct 1),
+        |       sum(1) FROM src LIMIT 1
+      """.stripMargin),
+      sql("SELECT max(key), count(distinct key), sum(distinct key), 1, 1, sum(1) FROM src LIMIT 1")
+        .collect().toSeq)
+
     checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999D)) FROM src LIMIT 1"),
       sql("SELECT max(key) FROM src LIMIT 1").collect().toSeq)
 
     checkAnswer(sql("SELECT percentile_approx(100.0D, array(0.9D, 0.9D)) FROM src LIMIT 1"),
       sql("SELECT array(100, 100) FROM src LIMIT 1").collect().toSeq)
-   }
+  }
 
   test("UDFIntegerToString") {
-    val testData = hiveContext.sparkContext.parallelize(
+    val testData = spark.sparkContext.parallelize(
       IntegerCaseClass(1) :: IntegerCaseClass(2) :: Nil).toDF()
-    testData.registerTempTable("integerTable")
+    testData.createOrReplaceTempView("integerTable")
 
     val udfName = classOf[UDFIntegerToString].getName
     sql(s"CREATE TEMPORARY FUNCTION testUDFIntegerToString AS '$udfName'")
@@ -166,73 +212,122 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFToListString") {
-    val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    testData.registerTempTable("inputTable")
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
-    val errMsg = intercept[AnalysisException] {
-      sql("SELECT testUDFToListString(s) FROM inputTable")
-    }
-    assert(errMsg.getMessage contains "List type in java is unsupported because " +
-      "JVM type erasure makes spark fail to catch a component type in List<>;")
+    checkAnswer(
+      sql("SELECT testUDFToListString(s) FROM inputTable"),
+      Seq(Row(Seq("data1", "data2", "data3"))))
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListString")
     hiveContext.reset()
   }
 
   test("UDFToListInt") {
-    val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    testData.registerTempTable("inputTable")
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
-    val errMsg = intercept[AnalysisException] {
-      sql("SELECT testUDFToListInt(s) FROM inputTable")
-    }
-    assert(errMsg.getMessage contains "List type in java is unsupported because " +
-      "JVM type erasure makes spark fail to catch a component type in List<>;")
+    checkAnswer(
+      sql("SELECT testUDFToListInt(s) FROM inputTable"),
+      Seq(Row(Seq(1, 2, 3))))
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListInt")
     hiveContext.reset()
   }
 
   test("UDFToStringIntMap") {
-    val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    testData.registerTempTable("inputTable")
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToStringIntMap " +
       s"AS '${classOf[UDFToStringIntMap].getName}'")
-    val errMsg = intercept[AnalysisException] {
-      sql("SELECT testUDFToStringIntMap(s) FROM inputTable")
-    }
-    assert(errMsg.getMessage contains "Map type in java is unsupported because " +
-      "JVM type erasure makes spark fail to catch key and value types in Map<>;")
+    checkAnswer(
+      sql("SELECT testUDFToStringIntMap(s) FROM inputTable"),
+      Seq(Row(Map("key1" -> 1, "key2" -> 2, "key3" -> 3))))
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToStringIntMap")
     hiveContext.reset()
   }
 
   test("UDFToIntIntMap") {
-    val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    testData.registerTempTable("inputTable")
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToIntIntMap " +
       s"AS '${classOf[UDFToIntIntMap].getName}'")
-    val errMsg = intercept[AnalysisException] {
-      sql("SELECT testUDFToIntIntMap(s) FROM inputTable")
-    }
-    assert(errMsg.getMessage contains "Map type in java is unsupported because " +
-      "JVM type erasure makes spark fail to catch key and value types in Map<>;")
+    checkAnswer(
+      sql("SELECT testUDFToIntIntMap(s) FROM inputTable"),
+      Seq(Row(Map(1 -> 1, 2 -> 1, 3 -> 1))))
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToIntIntMap")
     hiveContext.reset()
   }
 
+  test("UDFToListMapStringListInt") {
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.createOrReplaceTempView("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFToListMapStringListInt " +
+      s"AS '${classOf[UDFToListMapStringListInt].getName}'")
+    checkAnswer(
+      sql("SELECT testUDFToListMapStringListInt(s) FROM inputTable"),
+      Seq(Row(Seq(Map("a" -> Seq(1, 2), "b" -> Seq(3, 4))))))
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFToListMapStringListInt")
+    hiveContext.reset()
+  }
+
+  test("UDFRawList") {
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.createOrReplaceTempView("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFRawList " +
+      s"AS '${classOf[UDFRawList].getName}'")
+    val err = intercept[AnalysisException](sql("SELECT testUDFRawList(s) FROM inputTable"))
+    assert(err.getMessage.contains(
+      "Raw list type in java is unsupported because Spark cannot infer the element type."))
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawList")
+    hiveContext.reset()
+  }
+
+  test("UDFRawMap") {
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.createOrReplaceTempView("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFRawMap " +
+      s"AS '${classOf[UDFRawMap].getName}'")
+    val err = intercept[AnalysisException](sql("SELECT testUDFRawMap(s) FROM inputTable"))
+    assert(err.getMessage.contains(
+      "Raw map type in java is unsupported because Spark cannot infer key and value types."))
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawMap")
+    hiveContext.reset()
+  }
+
+  test("UDFWildcardList") {
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    testData.createOrReplaceTempView("inputTable")
+
+    sql(s"CREATE TEMPORARY FUNCTION testUDFWildcardList " +
+      s"AS '${classOf[UDFWildcardList].getName}'")
+    val err = intercept[AnalysisException](sql("SELECT testUDFWildcardList(s) FROM inputTable"))
+    assert(err.getMessage.contains(
+      "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported " +
+        "because Spark cannot infer the data type for these type parameters."))
+
+    sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFWildcardList")
+    hiveContext.reset()
+  }
+
   test("UDFListListInt") {
-    val testData = hiveContext.sparkContext.parallelize(
+    val testData = spark.sparkContext.parallelize(
       ListListIntCaseClass(Nil) ::
       ListListIntCaseClass(Seq((1, 2, 3))) ::
       ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) :: Nil).toDF()
-    testData.registerTempTable("listListIntTable")
+    testData.createOrReplaceTempView("listListIntTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListListInt AS '${classOf[UDFListListInt].getName}'")
     checkAnswer(
@@ -244,10 +339,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFListString") {
-    val testData = hiveContext.sparkContext.parallelize(
+    val testData = spark.sparkContext.parallelize(
       ListStringCaseClass(Seq("a", "b", "c")) ::
       ListStringCaseClass(Seq("d", "e")) :: Nil).toDF()
-    testData.registerTempTable("listStringTable")
+    testData.createOrReplaceTempView("listStringTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListString AS '${classOf[UDFListString].getName}'")
     checkAnswer(
@@ -259,9 +354,9 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFStringString") {
-    val testData = hiveContext.sparkContext.parallelize(
+    val testData = spark.sparkContext.parallelize(
       StringCaseClass("world") :: StringCaseClass("goodbye") :: Nil).toDF()
-    testData.registerTempTable("stringTable")
+    testData.createOrReplaceTempView("stringTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
     checkAnswer(
@@ -278,12 +373,12 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFTwoListList") {
-    val testData = hiveContext.sparkContext.parallelize(
+    val testData = spark.sparkContext.parallelize(
       ListListIntCaseClass(Nil) ::
       ListListIntCaseClass(Seq((1, 2, 3))) ::
       ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) ::
       Nil).toDF()
-    testData.registerTempTable("TwoListTable")
+    testData.createOrReplaceTempView("TwoListTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFTwoListList AS '${classOf[UDFTwoListList].getName}'")
     checkAnswer(
@@ -294,8 +389,22 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     hiveContext.reset()
   }
 
+  test("non-deterministic children of UDF") {
+    withUserDefinedFunction("testStringStringUDF" -> true, "testGenericUDFHash" -> true) {
+      // HiveSimpleUDF
+      sql(s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
+      val df1 = sql("SELECT testStringStringUDF(rand(), \"hello\")")
+      assert(!df1.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
+
+      // HiveGenericUDF
+      sql(s"CREATE TEMPORARY FUNCTION testGenericUDFHash AS '${classOf[GenericUDFHash].getName}'")
+      val df2 = sql("SELECT testGenericUDFHash(rand())")
+      assert(!df2.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
+    }
+  }
+
   test("Hive UDFs with insufficient number of input arguments should trigger an analysis error") {
-    Seq((1, 2)).toDF("a", "b").registerTempTable("testUDF")
+    Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("testUDF")
 
     {
       // HiveSimpleUDF
@@ -303,7 +412,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SELECT testUDFTwoListList() FROM testUDF")
       }.getMessage
-      assert(message.contains("No handler for Hive udf"))
+      assert(message.contains("No handler for Hive UDF"))
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFTwoListList")
     }
 
@@ -313,7 +422,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SELECT testUDFAnd() FROM testUDF")
       }.getMessage
-      assert(message.contains("No handler for Hive udf"))
+      assert(message.contains("No handler for Hive UDF"))
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFAnd")
     }
 
@@ -323,7 +432,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SELECT testUDAFPercentile(a) FROM testUDF GROUP BY b")
       }.getMessage
-      assert(message.contains("No handler for Hive udf"))
+      assert(message.contains("No handler for Hive UDF"))
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDAFPercentile")
     }
 
@@ -333,7 +442,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SELECT testUDAFAverage() FROM testUDF GROUP BY b")
       }.getMessage
-      assert(message.contains("No handler for Hive udf"))
+      assert(message.contains("No handler for Hive UDF"))
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDAFAverage")
     }
 
@@ -343,16 +452,16 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SELECT testUDTFExplode() FROM testUDF")
       }.getMessage
-      assert(message.contains("No handler for Hive udf"))
+      assert(message.contains("No handler for Hive UDF"))
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDTFExplode")
     }
 
-    sqlContext.dropTempTable("testUDF")
+    spark.catalog.dropTempView("testUDF")
   }
 
   test("Hive UDF in group by") {
-    withTempTable("tab1") {
-      Seq(Tuple1(1451400761)).toDF("test_date").registerTempTable("tab1")
+    withTempView("tab1") {
+      Seq(Tuple1(1451400761)).toDF("test_date").createOrReplaceTempView("tab1")
       sql(s"CREATE TEMPORARY FUNCTION testUDFToDate AS '${classOf[GenericUDFToDate].getName}'")
       val count = sql("select testUDFToDate(cast(test_date as timestamp))" +
         " from tab1 group by testUDFToDate(cast(test_date as timestamp))").count()
@@ -384,7 +493,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           \"separatorChar\" = \",\",
           \"quoteChar\"     = \"\\\"\",
           \"escapeChar\"    = \"\\\\\")
-        LOCATION '$tempDir'
+        LOCATION '${tempDir.toURI}'
       """)
 
       val answer1 =
@@ -400,7 +509,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql(
         s"""CREATE EXTERNAL TABLE external_t5 (c1 int, c2 int)
         ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-        LOCATION '$tempDir'
+        LOCATION '${tempDir.toURI}'
       """)
 
       val answer2 =
@@ -416,7 +525,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
       // External parquet pointing to LOCATION
 
-      val parquetLocation = tempDir + "/external_parquet"
+      val parquetLocation = s"${tempDir.toURI}/external_parquet"
       sql("SELECT 1, 2").write.parquet(parquetLocation)
 
       sql(
@@ -435,10 +544,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
 
     // Non-External parquet pointing to /tmp/...
-
-    sql("CREATE TABLE parquet_tmp(c1 int, c2 int) " +
-      " STORED AS parquet " +
-      " AS SELECT 1, 2")
+    sql("CREATE TABLE parquet_tmp STORED AS parquet AS SELECT 1, 2")
 
     val answer4 =
       sql("SELECT input_file_name() as file FROM parquet_tmp").head().getString(0)
@@ -447,6 +553,73 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count
     assert(count4 == 1)
     sql("DROP TABLE parquet_tmp")
+  }
+
+  test("Hive Stateful UDF") {
+    withUserDefinedFunction("statefulUDF" -> true, "statelessUDF" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION statefulUDF AS '${classOf[StatefulUDF].getName}'")
+      sql(s"CREATE TEMPORARY FUNCTION statelessUDF AS '${classOf[StatelessUDF].getName}'")
+      val testData = spark.range(10).repartition(1)
+
+      // Expected Max(s) is 10 as statefulUDF returns the sequence number starting from 1.
+      checkAnswer(testData.selectExpr("statefulUDF() as s").agg(max($"s")), Row(10))
+
+      // Expected Max(s) is 5 as statefulUDF returns the sequence number starting from 1,
+      // and the data is evenly distributed into 2 partitions.
+      checkAnswer(testData.repartition(2)
+        .selectExpr("statefulUDF() as s").agg(max($"s")), Row(5))
+
+      // Expected Max(s) is 1, as stateless UDF is deterministic and foldable and replaced
+      // by constant 1 by ConstantFolding optimizer.
+      checkAnswer(testData.selectExpr("statelessUDF() as s").agg(max($"s")), Row(1))
+    }
+  }
+
+  test("Show persistent functions") {
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    withTempView("inputTable") {
+      testData.createOrReplaceTempView("inputTable")
+      withUserDefinedFunction("testUDFToListInt" -> false) {
+        val numFunc = spark.catalog.listFunctions().count()
+        sql(s"CREATE FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
+        assert(spark.catalog.listFunctions().count() == numFunc + 1)
+        checkAnswer(
+          sql("SELECT testUDFToListInt(s) FROM inputTable"),
+          Seq(Row(Seq(1, 2, 3))))
+        assert(sql("show functions").count() == numFunc + 1)
+        assert(spark.catalog.listFunctions().count() == numFunc + 1)
+      }
+    }
+  }
+
+  test("Temp function has dots in the names") {
+    withUserDefinedFunction("test_avg" -> false, "`default.test_avg`" -> true) {
+      sql(s"CREATE FUNCTION test_avg AS '${classOf[GenericUDAFAverage].getName}'")
+      checkAnswer(sql("SELECT test_avg(1)"), Row(1.0))
+      // temp function containing dots in the name
+      spark.udf.register("default.test_avg", () => { Math.random() + 2})
+      assert(sql("SELECT `default.test_avg`()").head().getDouble(0) >= 2.0)
+      checkAnswer(sql("SELECT test_avg(1)"), Row(1.0))
+    }
+  }
+
+  test("Call the function registered in the not-current database") {
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        withDatabase("dAtABaSe1") {
+          sql("CREATE DATABASE dAtABaSe1")
+          withUserDefinedFunction("dAtABaSe1.test_avg" -> false) {
+            sql(s"CREATE FUNCTION dAtABaSe1.test_avg AS '${classOf[GenericUDAFAverage].getName}'")
+            checkAnswer(sql("SELECT dAtABaSe1.test_avg(1)"), Row(1.0))
+          }
+          val message = intercept[AnalysisException] {
+            sql("SELECT dAtABaSe1.unknownFunc(1)")
+          }.getMessage
+          assert(message.contains("Undefined function: 'unknownFunc'") &&
+            message.contains("nor a permanent function registered in the database 'dAtABaSe1'"))
+        }
+      }
+    }
   }
 }
 
@@ -511,4 +684,23 @@ class PairUDF extends GenericUDF {
   }
 
   override def getDisplayString(p1: Array[String]): String = ""
+}
+
+@UDFType(stateful = true)
+class StatefulUDF extends UDF {
+  private val result = new LongWritable(0)
+
+  def evaluate(): LongWritable = {
+    result.set(result.get() + 1)
+    result
+  }
+}
+
+class StatelessUDF extends UDF {
+  private val result = new LongWritable(0)
+
+  def evaluate(): LongWritable = {
+    result.set(result.get() + 1)
+    result
+  }
 }

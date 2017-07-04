@@ -86,7 +86,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
 
   /**
    * Generate a row for a Spark Job. Because duplicated output op infos needs to be collapsed into
-   * one cell, we use "rowspan" for the first row of a output op.
+   * one cell, we use "rowspan" for the first row of an output op.
    */
   private def generateNormalJobRow(
       outputOpData: OutputOperationUIData,
@@ -146,6 +146,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
             completed = sparkJob.numCompletedTasks,
             failed = sparkJob.numFailedTasks,
             skipped = sparkJob.numSkippedTasks,
+            reasonToNumKilled = sparkJob.reasonToNumKilled,
             total = sparkJob.numTasks - sparkJob.numSkippedTasks)
         }
       </td>
@@ -303,7 +304,10 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   }
 
   def render(request: HttpServletRequest): Seq[Node] = streamingListener.synchronized {
-    val batchTime = Option(request.getParameter("id")).map(id => Time(id.toLong)).getOrElse {
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val batchTime =
+      Option(SparkUIUtils.stripXSS(request.getParameter("id"))).map(id => Time(id.toLong))
+      .getOrElse {
       throw new IllegalArgumentException(s"Missing id parameter")
     }
     val formattedBatchTime =

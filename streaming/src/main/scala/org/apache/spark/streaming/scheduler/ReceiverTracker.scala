@@ -20,7 +20,7 @@ package org.apache.spark.streaming.scheduler
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.HashMap
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.language.existentials
 import scala.util.{Failure, Success}
 
@@ -91,6 +91,8 @@ private[streaming] case object AllReceiverIds extends ReceiverTrackerLocalMessag
 
 private[streaming] case class UpdateReceiverRateLimit(streamUID: Int, newRate: Long)
   extends ReceiverTrackerLocalMessage
+
+private[streaming] case object GetAllReceiverInfo extends ReceiverTrackerLocalMessage
 
 /**
  * This class manages the execution of the receivers of ReceiverInputDStreams. Instance of
@@ -163,12 +165,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Stop the receiver execution thread. */
   def stop(graceful: Boolean): Unit = synchronized {
-    if (isTrackerStarted) {
-      // First, stop the receivers
-      trackerState = Stopping
+    val isStarted: Boolean = isTrackerStarted
+    trackerState = Stopping
+    if (isStarted) {
       if (!skipReceiverLaunch) {
-        // Send the stop signal to all the receivers
-        endpoint.askWithRetry[Boolean](StopAllReceivers)
+        // First, stop the receivers. Send the stop signal to all the receivers
+        endpoint.askSync[Boolean](StopAllReceivers)
 
         // Wait for the Spark job that runs the receivers to be over
         // That is, for the receivers to quit gracefully.
@@ -181,7 +183,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         }
 
         // Check if all the receivers have been deregistered or not
-        val receivers = endpoint.askWithRetry[Seq[Int]](AllReceiverIds)
+        val receivers = endpoint.askSync[Seq[Int]](AllReceiverIds)
         if (receivers.nonEmpty) {
           logWarning("Not all of the receivers have deregistered, " + receivers)
         } else {
@@ -192,10 +194,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Finally, stop the endpoint
       ssc.env.rpcEnv.stop(endpoint)
       endpoint = null
-      receivedBlockTracker.stop()
-      logInfo("ReceiverTracker stopped")
-      trackerState = Stopped
     }
+
+    // `ReceivedBlockTracker` is open when this instance is created. We should
+    // close this even if this `ReceiverTracker` is not started.
+    receivedBlockTracker.stop()
+    logInfo("ReceiverTracker stopped")
+    trackerState = Stopped
   }
 
   /** Allocate all unallocated blocks to the given batch. */
@@ -232,6 +237,26 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         }
       }
     }
+  }
+
+  /**
+   * Get the executors allocated to each receiver.
+   * @return a map containing receiver ids to optional executor ids.
+   */
+  def allocatedExecutors(): Map[Int, Option[String]] = synchronized {
+    if (isTrackerStarted) {
+      endpoint.askSync[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
+        _.runningExecutor.map {
+          _.executorId
+        }
+      }
+    } else {
+      Map.empty
+    }
+  }
+
+  def numReceivers(): Int = {
+    receiverInputStreams.size
   }
 
   /** Register a receiver */
@@ -412,11 +437,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    * worker nodes as a parallel collection, and runs them.
    */
   private def launchReceivers(): Unit = {
-    val receivers = receiverInputStreams.map(nis => {
+    val receivers = receiverInputStreams.map { nis =>
       val rcvr = nis.getReceiver()
       rcvr.setReceiverId(nis.id)
       rcvr
-    })
+    }
 
     runDummySparkJob()
 
@@ -506,9 +531,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       case DeregisterReceiver(streamId, message, error) =>
         deregisterReceiver(streamId, message, error)
         context.reply(true)
+
       // Local messages
       case AllReceiverIds =>
         context.reply(receiverTrackingInfos.filter(_._2.state != ReceiverState.INACTIVE).keys.toSeq)
+      case GetAllReceiverInfo =>
+        context.reply(receiverTrackingInfos.toMap)
       case StopAllReceivers =>
         assert(isTrackerStopping || isTrackerStopped)
         stopReceivers()

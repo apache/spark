@@ -10,7 +10,7 @@ SELECT key, value FROM rcfileTableLazyDecompress where key > 238 and key < 400 O
 
 SELECT key, count(1) FROM rcfileTableLazyDecompress where key > 238 group by key ORDER BY key ASC;
 
-set mapred.output.compress=true;
+set mapreduce.output.fileoutputformat.compress=true;
 set hive.exec.compress.output=true;
 
 FROM src
@@ -22,6 +22,6 @@ SELECT key, value FROM rcfileTableLazyDecompress where key > 238 and key < 400 O
 
 SELECT key, count(1) FROM rcfileTableLazyDecompress where key > 238 group by key ORDER BY key ASC;
 
-set mapred.output.compress=false;
+set mapreduce.output.fileoutputformat.compress=false;
 set hive.exec.compress.output=false;
 

@@ -20,21 +20,23 @@ Gradient Boosted Tree Classifier Example.
 """
 from __future__ import print_function
 
-from pyspark import SparkContext, SQLContext
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import GBTClassifier
 from pyspark.ml.feature import StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="gradient_boosted_tree_classifier_example")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("GradientBoostedTreeClassifierExample")\
+        .getOrCreate()
 
     # $example on$
     # Load and parse the data file, converting it to a DataFrame.
-    data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Index labels, adding metadata to the label column.
     # Fit on whole dataset to include all labels in index.
@@ -64,7 +66,7 @@ if __name__ == "__main__":
 
     # Select (prediction, true label) and compute test error
     evaluator = MulticlassClassificationEvaluator(
-        labelCol="indexedLabel", predictionCol="prediction", metricName="precision")
+        labelCol="indexedLabel", predictionCol="prediction", metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
     print("Test Error = %g" % (1.0 - accuracy))
 
@@ -72,4 +74,4 @@ if __name__ == "__main__":
     print(gbtModel)  # summary only
     # $example off$
 
-    sc.stop()
+    spark.stop()

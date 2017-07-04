@@ -23,11 +23,10 @@ import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer}
-import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.streaming.Duration
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
@@ -69,11 +68,21 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
   override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
     if (!receiver.isStopped()) {
       try {
-        receiver.addRecords(shardId, batch)
-        logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
+        // Limit the number of processed records from Kinesis stream. This is because the KCL cannot
+        // control the number of aggregated records to be fetched even if we set `MaxRecords`
+        // in `KinesisClientLibConfiguration`. For example, if we set 10 to the number of max
+        // records in a worker and a producer aggregates two records into one message, the worker
+        // possibly 20 records every callback function called.
+        val maxRecords = receiver.getCurrentLimit
+        for (start <- 0 until batch.size by maxRecords) {
+          val miniBatch = batch.subList(start, math.min(start + maxRecords, batch.size))
+          receiver.addRecords(shardId, miniBatch)
+          logDebug(s"Stored: Worker $workerId stored ${miniBatch.size} records " +
+            s"for shardId $shardId")
+        }
         receiver.setCheckpointer(shardId, checkpointer)
       } catch {
-        case NonFatal(e) => {
+        case NonFatal(e) =>
           /*
            *  If there is a failure within the batch, the batch will not be checkpointed.
            *  This will potentially cause records since the last checkpoint to be processed
@@ -84,7 +93,6 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
 
           /* Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor. */
           throw e
-        }
       }
     } else {
       /* RecordProcessor has been stopped. */
@@ -103,27 +111,32 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
    * @param checkpointer used to perform a Kinesis checkpoint for ShutdownReason.TERMINATE
    * @param reason for shutdown (ShutdownReason.TERMINATE or ShutdownReason.ZOMBIE)
    */
-  override def shutdown(checkpointer: IRecordProcessorCheckpointer, reason: ShutdownReason) {
+  override def shutdown(
+      checkpointer: IRecordProcessorCheckpointer,
+      reason: ShutdownReason): Unit = {
     logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason")
-    reason match {
-      /*
-       * TERMINATE Use Case.  Checkpoint.
-       * Checkpoint to indicate that all records from the shard have been drained and processed.
-       * It's now OK to read from the new shards that resulted from a resharding event.
-       */
-      case ShutdownReason.TERMINATE =>
-        receiver.removeCheckpointer(shardId, checkpointer)
+    // null if not initialized before shutdown:
+    if (shardId == null) {
+      logWarning(s"No shardId for workerId $workerId?")
+    } else {
+      reason match {
+        /*
+         * TERMINATE Use Case.  Checkpoint.
+         * Checkpoint to indicate that all records from the shard have been drained and processed.
+         * It's now OK to read from the new shards that resulted from a resharding event.
+         */
+        case ShutdownReason.TERMINATE => receiver.removeCheckpointer(shardId, checkpointer)
 
-      /*
-       * ZOMBIE Use Case or Unknown reason.  NoOp.
-       * No checkpoint because other workers may have taken over and already started processing
-       *    the same records.
-       * This may lead to records being processed more than once.
-       */
-      case _ =>
-        receiver.removeCheckpointer(shardId, null) // return null so that we don't checkpoint
+        /*
+         * ZOMBIE Use Case or Unknown reason.  NoOp.
+         * No checkpoint because other workers may have taken over and already started processing
+         *    the same records.
+         * This may lead to records being processed more than once.
+         * Return null so that we don't checkpoint
+         */
+        case _ => receiver.removeCheckpointer(shardId, null)
+      }
     }
-
   }
 }
 
@@ -148,29 +161,25 @@ private[kinesis] object KinesisRecordProcessor extends Logging {
       /* If the function failed, either retry or throw the exception */
       case util.Failure(e) => e match {
         /* Retry:  Throttling or other Retryable exception has occurred */
-        case _: ThrottlingException | _: KinesisClientLibDependencyException if numRetriesLeft > 1
-          => {
-               val backOffMillis = Random.nextInt(maxBackOffMillis)
-               Thread.sleep(backOffMillis)
-               logError(s"Retryable Exception:  Random backOffMillis=${backOffMillis}", e)
-               retryRandom(expression, numRetriesLeft - 1, maxBackOffMillis)
-             }
+        case _: ThrottlingException | _: KinesisClientLibDependencyException
+            if numRetriesLeft > 1 =>
+          val backOffMillis = Random.nextInt(maxBackOffMillis)
+          Thread.sleep(backOffMillis)
+          logError(s"Retryable Exception:  Random backOffMillis=${backOffMillis}", e)
+          retryRandom(expression, numRetriesLeft - 1, maxBackOffMillis)
         /* Throw:  Shutdown has been requested by the Kinesis Client Library. */
-        case _: ShutdownException => {
+        case _: ShutdownException =>
           logError(s"ShutdownException:  Caught shutdown exception, skipping checkpoint.", e)
           throw e
-        }
         /* Throw:  Non-retryable exception has occurred with the Kinesis Client Library */
-        case _: InvalidStateException => {
+        case _: InvalidStateException =>
           logError(s"InvalidStateException:  Cannot save checkpoint to the DynamoDB table used" +
               s" by the Amazon Kinesis Client Library.  Table likely doesn't exist.", e)
           throw e
-        }
         /* Throw:  Unexpected exception has occurred */
-        case _ => {
+        case _ =>
           logError(s"Unexpected, non-retryable exception.", e)
           throw e
-        }
       }
     }
   }

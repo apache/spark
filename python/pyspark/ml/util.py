@@ -17,13 +17,14 @@
 
 import sys
 import uuid
-from functools import wraps
+import warnings
 
 if sys.version > '3':
     basestring = str
+    unicode = str
 
 from pyspark import SparkContext, since
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 
 def _jvm():
@@ -36,20 +37,6 @@ def _jvm():
         return jvm
     else:
         raise AttributeError("Cannot load _jvm from SparkContext. Is SparkContext initialized?")
-
-
-def keyword_only(func):
-    """
-    A decorator that forces keyword arguments in the wrapped method
-    and saves actual input keyword arguments in `_input_kwargs`.
-    """
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if len(args) > 1:
-            raise TypeError("Method %s forces keyword arguments." % func.__name__)
-        wrapper._input_kwargs = kwargs
-        return func(*args, **kwargs)
-    return wrapper
 
 
 class Identifiable(object):
@@ -67,25 +54,51 @@ class Identifiable(object):
     @classmethod
     def _randomUID(cls):
         """
-        Generate a unique id for the object. The default implementation
+        Generate a unique unicode id for the object. The default implementation
         concatenates the class name, "_", and 12 random hex chars.
         """
-        return cls.__name__ + "_" + uuid.uuid4().hex[12:]
+        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[12:])
 
 
 @inherit_doc
-class JavaMLWriter(object):
+class MLWriter(object):
     """
-    .. note:: Experimental
-
-    Utility class that can save ML instances through their Scala implementation.
+    Utility class that can save ML instances.
 
     .. versionadded:: 2.0.0
     """
 
+    def save(self, path):
+        """Save the ML instance to the input path."""
+        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+
+    def overwrite(self):
+        """Overwrites if the output path already exists."""
+        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+
+    def context(self, sqlContext):
+        """
+        Sets the SQL context to use for saving.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for saving."""
+        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+
+
+@inherit_doc
+class JavaMLWriter(MLWriter):
+    """
+    (Private) Specialization of :py:class:`MLWriter` for :py:class:`JavaParams` types
+    """
+
     def __init__(self, instance):
-        instance._transfer_params_to_java()
-        self._jwrite = instance._java_obj.write()
+        super(JavaMLWriter, self).__init__()
+        _java_obj = instance._to_java()
+        self._jwrite = _java_obj.write()
 
     def save(self, path):
         """Save the ML instance to the input path."""
@@ -99,24 +112,32 @@ class JavaMLWriter(object):
         return self
 
     def context(self, sqlContext):
-        """Sets the SQL context to use for saving."""
+        """
+        Sets the SQL context to use for saving.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
         self._jwrite.context(sqlContext._ssql_ctx)
+        return self
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for saving."""
+        self._jwrite.session(sparkSession._jsparkSession)
         return self
 
 
 @inherit_doc
 class MLWritable(object):
     """
-    .. note:: Experimental
-
-    Mixin for ML instances that provide JavaMLWriter.
+    Mixin for ML instances that provide :py:class:`MLWriter`.
 
     .. versionadded:: 2.0.0
     """
 
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
+        """Returns an MLWriter instance for this ML instance."""
+        raise NotImplementedError("MLWritable is not yet implemented for type: %r" % type(self))
 
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
@@ -124,13 +145,45 @@ class MLWritable(object):
 
 
 @inherit_doc
-class JavaMLReader(object):
+class JavaMLWritable(MLWritable):
     """
-    .. note:: Experimental
+    (Private) Mixin for ML instances that provide :py:class:`JavaMLWriter`.
+    """
 
-    Utility class that can load ML instances through their Scala implementation.
+    def write(self):
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
+
+
+@inherit_doc
+class MLReader(object):
+    """
+    Utility class that can load ML instances.
 
     .. versionadded:: 2.0.0
+    """
+
+    def load(self, path):
+        """Load the ML instance from the input path."""
+        raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
+
+    def context(self, sqlContext):
+        """
+        Sets the SQL context to use for loading.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for loading."""
+        raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
+
+
+@inherit_doc
+class JavaMLReader(MLReader):
+    """
+    (Private) Specialization of :py:class:`MLReader` for :py:class:`JavaParams` types
     """
 
     def __init__(self, clazz):
@@ -142,15 +195,24 @@ class JavaMLReader(object):
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
         java_obj = self._jread.load(path)
-        instance = self._clazz()
-        instance._java_obj = java_obj
-        instance._resetUid(java_obj.uid())
-        instance._transfer_params_from_java()
-        return instance
+        if not hasattr(self._clazz, "_from_java"):
+            raise NotImplementedError("This Java ML type cannot be loaded into Python currently: %r"
+                                      % self._clazz)
+        return self._clazz._from_java(java_obj)
 
     def context(self, sqlContext):
-        """Sets the SQL context to use for loading."""
+        """
+        Sets the SQL context to use for loading.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
         self._jread.context(sqlContext._ssql_ctx)
+        return self
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for loading."""
+        self._jread.session(sparkSession._jsparkSession)
         return self
 
     @classmethod
@@ -164,7 +226,7 @@ class JavaMLReader(object):
         if clazz.__name__ in ("Pipeline", "PipelineModel"):
             # Remove the last package name "pipeline" for Pipeline and PipelineModel.
             java_package = ".".join(java_package.split(".")[0:-1])
-        return ".".join([java_package, clazz.__name__])
+        return java_package + "." + clazz.__name__
 
     @classmethod
     def _load_java_obj(cls, clazz):
@@ -179,19 +241,45 @@ class JavaMLReader(object):
 @inherit_doc
 class MLReadable(object):
     """
-    .. note:: Experimental
-
-    Mixin for instances that provide JavaMLReader.
+    Mixin for instances that provide :py:class:`MLReader`.
 
     .. versionadded:: 2.0.0
     """
 
     @classmethod
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
-        return JavaMLReader(cls)
+        """Returns an MLReader instance for this class."""
+        raise NotImplementedError("MLReadable.read() not implemented for type: %r" % cls)
 
     @classmethod
     def load(cls, path):
         """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
         return cls.read().load(path)
+
+
+@inherit_doc
+class JavaMLReadable(MLReadable):
+    """
+    (Private) Mixin for instances that provide JavaMLReader.
+    """
+
+    @classmethod
+    def read(cls):
+        """Returns an MLReader instance for this class."""
+        return JavaMLReader(cls)
+
+
+@inherit_doc
+class JavaPredictionModel():
+    """
+    (Private) Java Model for prediction tasks (regression and classification).
+    To be mixed in with class:`pyspark.ml.JavaModel`
+    """
+
+    @property
+    @since("2.1.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        return self._call_java("numFeatures")

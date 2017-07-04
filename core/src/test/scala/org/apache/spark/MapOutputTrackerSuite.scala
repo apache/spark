@@ -19,9 +19,11 @@ package org.apache.spark
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.Matchers.{any, isA}
+import org.mockito.Matchers.any
 import org.mockito.Mockito._
 
+import org.apache.spark.broadcast.BroadcastManager
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
@@ -30,6 +32,12 @@ import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
 class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
 
+  private def newTrackerMaster(sparkConf: SparkConf = conf) = {
+    val broadcastManager = new BroadcastManager(true, sparkConf,
+      new SecurityManager(sparkConf))
+    new MapOutputTrackerMaster(sparkConf, broadcastManager, true)
+  }
+
   def createRpcEnv(name: String, host: String = "localhost", port: Int = 0,
       securityManager: SecurityManager = new SecurityManager(conf)): RpcEnv = {
     RpcEnv.create(name, host, port, conf, securityManager)
@@ -37,7 +45,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
 
   test("master start and stop") {
     val rpcEnv = createRpcEnv("test")
-    val tracker = new MapOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
     tracker.stop()
@@ -46,7 +54,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
 
   test("master register shuffle and fetch") {
     val rpcEnv = createRpcEnv("test")
-    val tracker = new MapOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
     tracker.registerShuffle(10, 2)
@@ -62,13 +70,14 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000))),
           (BlockManagerId("b", "hostB", 1000), ArrayBuffer((ShuffleBlockId(10, 1, 0), size10000))))
         .toSet)
+    assert(0 == tracker.getNumCachedSerializedBroadcast)
     tracker.stop()
     rpcEnv.shutdown()
   }
 
   test("master register and unregister shuffle") {
     val rpcEnv = createRpcEnv("test")
-    val tracker = new MapOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
     tracker.registerShuffle(10, 2)
@@ -80,6 +89,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Array(compressedSize10000, compressedSize1000)))
     assert(tracker.containsShuffle(10))
     assert(tracker.getMapSizesByExecutorId(10, 0).nonEmpty)
+    assert(0 == tracker.getNumCachedSerializedBroadcast)
     tracker.unregisterShuffle(10)
     assert(!tracker.containsShuffle(10))
     assert(tracker.getMapSizesByExecutorId(10, 0).isEmpty)
@@ -90,7 +100,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
 
   test("master register shuffle and unregister map output and fetch") {
     val rpcEnv = createRpcEnv("test")
-    val tracker = new MapOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
     tracker.registerShuffle(10, 2)
@@ -101,6 +111,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
         Array(compressedSize10000, compressedSize1000, compressedSize1000)))
 
+    assert(0 == tracker.getNumCachedSerializedBroadcast)
     // As if we had two simultaneous fetch failures
     tracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
     tracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
@@ -118,7 +129,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
 
-    val masterTracker = new MapOutputTrackerMaster(conf)
+    val masterTracker = newTrackerMaster()
     masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
 
@@ -128,25 +139,27 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
     masterTracker.registerShuffle(10, 1)
-    masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
+    // This is expected to fail because no outputs have been registered for the shuffle.
     intercept[FetchFailedException] { slaveTracker.getMapSizesByExecutorId(10, 0) }
 
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("a", "hostA", 1000), Array(1000L)))
-    masterTracker.incrementEpoch()
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     assert(slaveTracker.getMapSizesByExecutorId(10, 0) ===
       Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000)))))
+    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
+    val masterTrackerEpochBeforeLossOfMapOutput = masterTracker.getEpoch
     masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
-    masterTracker.incrementEpoch()
+    assert(masterTracker.getEpoch > masterTrackerEpochBeforeLossOfMapOutput)
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     intercept[FetchFailedException] { slaveTracker.getMapSizesByExecutorId(10, 0) }
 
     // failure should be cached
     intercept[FetchFailedException] { slaveTracker.getMapSizesByExecutorId(10, 0) }
+    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
     masterTracker.stop()
     slaveTracker.stop()
@@ -158,8 +171,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val newConf = new SparkConf
     newConf.set("spark.rpc.message.maxSize", "1")
     newConf.set("spark.rpc.askTimeout", "1") // Fail fast
+    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "1048576")
 
-    val masterTracker = new MapOutputTrackerMaster(conf)
+    val masterTracker = newTrackerMaster(newConf)
     val rpcEnv = createRpcEnv("spark")
     val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
     rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
@@ -172,45 +186,27 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val rpcCallContext = mock(classOf[RpcCallContext])
     when(rpcCallContext.senderAddress).thenReturn(senderAddress)
     masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(10))
-    verify(rpcCallContext).reply(any())
-    verify(rpcCallContext, never()).sendFailure(any())
+    // Default size for broadcast in this testsuite is set to -1 so should not cause broadcast
+    // to be used.
+    verify(rpcCallContext, timeout(30000)).reply(any())
+    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
 //    masterTracker.stop() // this throws an exception
     rpcEnv.shutdown()
   }
 
-  test("remote fetch exceeds max RPC message size") {
+  test("min broadcast size exceeds max RPC message size") {
     val newConf = new SparkConf
     newConf.set("spark.rpc.message.maxSize", "1")
     newConf.set("spark.rpc.askTimeout", "1") // Fail fast
+    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", Int.MaxValue.toString)
 
-    val masterTracker = new MapOutputTrackerMaster(conf)
-    val rpcEnv = createRpcEnv("test")
-    val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
-    rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
-
-    // Message size should be ~1.1MB, and MapOutputTrackerMasterEndpoint should throw exception.
-    // Note that the size is hand-selected here because map output statuses are compressed before
-    // being sent.
-    masterTracker.registerShuffle(20, 100)
-    (0 until 100).foreach { i =>
-      masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-        BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0)))
-    }
-    val senderAddress = RpcAddress("localhost", 12345)
-    val rpcCallContext = mock(classOf[RpcCallContext])
-    when(rpcCallContext.senderAddress).thenReturn(senderAddress)
-    masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(20))
-    verify(rpcCallContext, never()).reply(any())
-    verify(rpcCallContext).sendFailure(isA(classOf[SparkException]))
-
-//    masterTracker.stop() // this throws an exception
-    rpcEnv.shutdown()
+    intercept[IllegalArgumentException] { newTrackerMaster(newConf) }
   }
 
   test("getLocationsWithLargestOutputs with multiple outputs in same machine") {
     val rpcEnv = createRpcEnv("test")
-    val tracker = new MapOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
     // Setup 3 map tasks
@@ -242,4 +238,40 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.stop()
     rpcEnv.shutdown()
   }
+
+  test("remote fetch using broadcast") {
+    val newConf = new SparkConf
+    newConf.set("spark.rpc.message.maxSize", "1")
+    newConf.set("spark.rpc.askTimeout", "1") // Fail fast
+    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "10240") // 10 KB << 1MB framesize
+
+    // needs TorrentBroadcast so need a SparkContext
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val masterTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val rpcEnv = sc.env.rpcEnv
+      val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
+      rpcEnv.stop(masterTracker.trackerEndpoint)
+      rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+
+      // Frame size should be ~1.1MB, and MapOutputTrackerMasterEndpoint should throw exception.
+      // Note that the size is hand-selected here because map output statuses are compressed before
+      // being sent.
+      masterTracker.registerShuffle(20, 100)
+      (0 until 100).foreach { i =>
+        masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
+          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0)))
+      }
+      val senderAddress = RpcAddress("localhost", 12345)
+      val rpcCallContext = mock(classOf[RpcCallContext])
+      when(rpcCallContext.senderAddress).thenReturn(senderAddress)
+      masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(20))
+      // should succeed since majority of data is broadcast and actual serialized
+      // message size is small
+      verify(rpcCallContext, timeout(30000)).reply(any())
+      assert(1 == masterTracker.getNumCachedSerializedBroadcast)
+      masterTracker.unregisterShuffle(20)
+      assert(0 == masterTracker.getNumCachedSerializedBroadcast)
+    }
+  }
+
 }

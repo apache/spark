@@ -17,32 +17,42 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
+import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Pivot}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, FlatMapGroupsInR, Pivot}
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.NumericType
+import org.apache.spark.sql.types.StructType
 
 /**
- * A set of methods for aggregations on a [[DataFrame]], created by [[Dataset.groupBy]].
+ * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
+ * [[Dataset#cube cube]] or [[Dataset#rollup rollup]] (and also `pivot`).
  *
- * The main method is the agg function, which has multiple variants. This class also contains
- * convenience some first order statistics such as mean, sum for convenience.
+ * The main method is the `agg` function, which has multiple variants. This class also contains
+ * some first-order statistics such as `mean`, `sum` for convenience.
+ *
+ * @note This class was named `GroupedData` in Spark 1.x.
  *
  * @since 2.0.0
  */
+@InterfaceStability.Stable
 class RelationalGroupedDataset protected[sql](
     df: DataFrame,
     groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
-    val aggregates = if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
+    val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
       groupingExprs ++ aggExprs
     } else {
       aggExprs
@@ -52,18 +62,18 @@ class RelationalGroupedDataset protected[sql](
 
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
-        Dataset.newDataFrame(
-          df.sqlContext, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
+        Dataset.ofRows(
+          df.sparkSession, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.RollupType =>
-        Dataset.newDataFrame(
-          df.sqlContext, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
+        Dataset.ofRows(
+          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.CubeType =>
-        Dataset.newDataFrame(
-          df.sqlContext, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
+        Dataset.ofRows(
+          df.sparkSession, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
-        Dataset.newDataFrame(
-          df.sqlContext, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
+        Dataset.ofRows(
+          df.sparkSession, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
     }
   }
 
@@ -73,6 +83,8 @@ class RelationalGroupedDataset protected[sql](
   private[this] def alias(expr: Expression): NamedExpression = expr match {
     case u: UnresolvedAttribute => UnresolvedAlias(u)
     case expr: NamedExpression => expr
+    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
+      UnresolvedAlias(a, Some(Column.generateAlias))
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
 
@@ -99,7 +111,7 @@ class RelationalGroupedDataset protected[sql](
 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
     val exprToFunc: (Expression => Expression) = {
-      (inputExpr: Expression) => expr.toLowerCase match {
+      (inputExpr: Expression) => expr.toLowerCase(Locale.ROOT) match {
         // We special handle a few cases that have alias that are not in function registry.
         case "avg" | "average" | "mean" =>
           UnresolvedFunction("avg", inputExpr :: Nil, isDistinct = false)
@@ -119,8 +131,8 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * (Scala-specific) Compute aggregates by specifying a map from column name to
-   * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
+   * (Scala-specific) Compute aggregates by specifying the column names and
+   * aggregate methods. The resulting `DataFrame` will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
    * {{{
@@ -134,12 +146,14 @@ class RelationalGroupedDataset protected[sql](
    * @since 1.3.0
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
-    agg((aggExpr +: aggExprs).toMap)
+    toDF((aggExpr +: aggExprs).map { case (colName, expr) =>
+      strToExpr(expr)(df(colName).expr)
+    })
   }
 
   /**
    * (Scala-specific) Compute aggregates by specifying a map from column name to
-   * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
+   * aggregate methods. The resulting `DataFrame` will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
    * {{{
@@ -160,7 +174,7 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * (Java-specific) Compute aggregates by specifying a map from column name to
-   * aggregate methods. The resulting [[DataFrame]] will also contain the grouping columns.
+   * aggregate methods. The resulting `DataFrame` will also contain the grouping columns.
    *
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
    * {{{
@@ -208,12 +222,16 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = {
-    toDF((expr +: exprs).map(_.expr))
+    toDF((expr +: exprs).map {
+      case typed: TypedColumn[_, _] =>
+        typed.withInputType(df.exprEnc, df.logicalPlan.output).expr
+      case c => c.expr
+    })
   }
 
   /**
    * Count the number of rows for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * The resulting `DataFrame` will also contain the grouping columns.
    *
    * @since 1.3.0
    */
@@ -221,7 +239,7 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the average values for them.
    *
    * @since 1.3.0
@@ -233,7 +251,7 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Compute the max value for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the max values for them.
    *
    * @since 1.3.0
@@ -245,7 +263,7 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Compute the mean value for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the mean values for them.
    *
    * @since 1.3.0
@@ -257,7 +275,7 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Compute the min value for each numeric column for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the min values for them.
    *
    * @since 1.3.0
@@ -269,7 +287,7 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Compute the sum for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
+   * The resulting `DataFrame` will also contain the grouping columns.
    * When specified columns are given, only compute the sum for them.
    *
    * @since 1.3.0
@@ -280,8 +298,9 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
-   * There are two versions of pivot function: one that requires the caller to specify the list
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
+   *
+   * There are two versions of `pivot` function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
    *
@@ -298,7 +317,7 @@ class RelationalGroupedDataset protected[sql](
    */
   def pivot(pivotColumn: String): RelationalGroupedDataset = {
     // This is to prevent unintended OOM errors when the number of distinct values is large
-    val maxValues = df.sqlContext.conf.getConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES)
+    val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
     // Get the distinct values of the column and sort them so its consistent
     val values = df.select(pivotColumn)
       .distinct()
@@ -320,7 +339,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
@@ -352,7 +371,9 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
+   * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
+   * aggregation.
+   *
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
@@ -372,12 +393,50 @@ class RelationalGroupedDataset protected[sql](
   def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset = {
     pivot(pivotColumn, values.asScala)
   }
+
+  /**
+   * Applies the given serialized R function `func` to each group of data. For each unique group,
+   * the function will be passed the group key and an iterator that contains all of the elements in
+   * the group. The function can return an iterator containing elements of an arbitrary type which
+   * will be returned as a new `DataFrame`.
+   *
+   * This function does not support partial aggregation, and as a result requires shuffling all
+   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * key, it is best to use the reduce function or an
+   * `org.apache.spark.sql.expressions#Aggregator`.
+   *
+   * Internally, the implementation will spill to disk if any given group is too large to fit into
+   * memory.  However, users must take care to avoid materializing the whole iterator for a group
+   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
+   * constraints of their cluster.
+   *
+   * @since 2.0.0
+   */
+  private[sql] def flatMapGroupsInR(
+      f: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Broadcast[Object]],
+      outputSchema: StructType): DataFrame = {
+      val groupingNamedExpressions = groupingExprs.map(alias)
+      val groupingCols = groupingNamedExpressions.map(Column(_))
+      val groupingDataFrame = df.select(groupingCols : _*)
+      val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
+      Dataset.ofRows(
+        df.sparkSession,
+        FlatMapGroupsInR(
+          f,
+          packageNames,
+          broadcastVars,
+          outputSchema,
+          groupingDataFrame.exprEnc.deserializer,
+          df.exprEnc.deserializer,
+          df.exprEnc.schema,
+          groupingAttributes,
+          df.logicalPlan.output,
+          df.logicalPlan))
+  }
 }
 
-
-/**
- * Companion object for GroupedData.
- */
 private[sql] object RelationalGroupedDataset {
 
   def apply(
@@ -408,7 +467,7 @@ private[sql] object RelationalGroupedDataset {
   private[sql] object RollupType extends GroupType
 
   /**
-    * To indicate it's the PIVOT
-    */
+   * To indicate it's the PIVOT
+   */
   private[sql] case class PivotType(pivotCol: Expression, values: Seq[Literal]) extends GroupType
 }

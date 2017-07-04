@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import java.util.Locale
+
 import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
@@ -32,13 +34,15 @@ class FilteredScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimpleFilteredScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
+    SimpleFilteredScan(parameters("from").toInt, parameters("to").toInt)(sqlContext.sparkSession)
   }
 }
 
-case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
+case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(
@@ -74,7 +78,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       case "b" => (i: Int) => Seq(i * 2)
       case "c" => (i: Int) =>
         val c = (i - 1 + 'a').toChar.toString
-        Seq(c * 5 + c.toUpperCase * 5)
+        Seq(c * 5 + c.toUpperCase(Locale.ROOT) * 5)
     }
 
     FiltersPushed.list = filters
@@ -111,11 +115,12 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
     }
 
     def eval(a: Int) = {
-      val c = (a - 1 + 'a').toChar.toString * 5 + (a - 1 + 'a').toChar.toString.toUpperCase * 5
+      val c = (a - 1 + 'a').toChar.toString * 5 +
+        (a - 1 + 'a').toChar.toString.toUpperCase(Locale.ROOT) * 5
       filters.forall(translateFilterOnA(_)(a)) && filters.forall(translateFilterOnC(_)(c))
     }
 
-    sqlContext.sparkContext.parallelize(from to to).filter(eval).map(i =>
+    sparkSession.sparkContext.parallelize(from to to).filter(eval).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
 }
@@ -131,13 +136,13 @@ object ColumnsRequired {
 }
 
 class FilteredScanSuite extends DataSourceTest with SharedSQLContext with PredicateHelper {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTenFiltered
+        |CREATE TEMPORARY VIEW oneToTenFiltered
         |USING org.apache.spark.sql.sources.FilteredScanSource
         |OPTIONS (
         |  from '1',
@@ -149,7 +154,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
   sqlTest(
     "SELECT * FROM oneToTenFiltered",
     (1 to 10).map(i => Row(i, i * 2, (i - 1 + 'a').toChar.toString * 5
-      + (i - 1 + 'a').toChar.toString.toUpperCase * 5)).toSeq)
+      + (i - 1 + 'a').toChar.toString.toUpperCase(Locale.ROOT) * 5)).toSeq)
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered",
@@ -308,11 +313,11 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
 
     test(s"PushDown Returns $expectedCount: $sqlString") {
       // These tests check a particular plan, disable whole stage codegen.
-      caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, false)
+      spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, false)
       try {
         val queryExecution = sql(sqlString).queryExecution
         val rawPlan = queryExecution.executedPlan.collect {
-          case p: execution.DataSourceScan => p
+          case p: execution.DataSourceScanExec => p
         } match {
           case Seq(p) => p
           case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
@@ -320,7 +325,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
         val rawCount = rawPlan.execute().count()
         assert(ColumnsRequired.set === requiredColumnNames)
 
-        val table = caseInsensitiveContext.table("oneToTenFiltered")
+        val table = spark.table("oneToTenFiltered")
         val relation = table.queryExecution.logical.collectFirst {
           case LogicalRelation(r, _, _) => r
         }.get
@@ -335,7 +340,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
               queryExecution)
         }
       } finally {
-        caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED,
+        spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }

@@ -18,22 +18,22 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.ElementwiseProduct
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object ElementwiseProductExample {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("ElementwiseProductExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("ElementwiseProductExample")
+      .getOrCreate()
 
     // $example on$
     // Create some vector data; also works for sparse vectors
-    val dataFrame = sqlContext.createDataFrame(Seq(
+    val dataFrame = spark.createDataFrame(Seq(
       ("a", Vectors.dense(1.0, 2.0, 3.0)),
       ("b", Vectors.dense(4.0, 5.0, 6.0)))).toDF("id", "vector")
 
@@ -46,7 +46,8 @@ object ElementwiseProductExample {
     // Batch transform the vectors to create new column:
     transformer.transform(dataFrame).show()
     // $example off$
-    sc.stop()
+
+    spark.stop()
   }
 }
 // scalastyle:on println

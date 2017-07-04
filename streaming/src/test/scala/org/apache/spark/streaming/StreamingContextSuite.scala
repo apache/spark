@@ -18,6 +18,8 @@
 package org.apache.spark.streaming
 
 import java.io.{File, NotSerializableException}
+import java.util.Locale
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
@@ -182,7 +184,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(ssc.scheduler.isStarted === false)
   }
 
-  test("start should set job group and description of streaming jobs correctly") {
+  test("start should set local properties of streaming jobs correctly") {
     ssc = new StreamingContext(conf, batchDuration)
     ssc.sc.setJobGroup("non-streaming", "non-streaming", true)
     val sc = ssc.sc
@@ -190,15 +192,21 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     @volatile var jobGroupFound: String = ""
     @volatile var jobDescFound: String = ""
     @volatile var jobInterruptFound: String = ""
+    @volatile var customPropFound: String = ""
     @volatile var allFound: Boolean = false
 
     addInputStream(ssc).foreachRDD { rdd =>
       jobGroupFound = sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
       jobDescFound = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
       jobInterruptFound = sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)
+      customPropFound = sc.getLocalProperty("customPropKey")
       allFound = true
     }
+    ssc.sc.setLocalProperty("customPropKey", "value1")
     ssc.start()
+
+    // Local props set after start should be ignored
+    ssc.sc.setLocalProperty("customPropKey", "value2")
 
     eventually(timeout(10 seconds), interval(10 milliseconds)) {
       assert(allFound === true)
@@ -208,11 +216,13 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(jobGroupFound === null)
     assert(jobDescFound.contains("Streaming job from"))
     assert(jobInterruptFound === "false")
+    assert(customPropFound === "value1")
 
     // Verify current thread's thread-local properties have not changed
     assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "non-streaming")
     assert(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) === "non-streaming")
     assert(sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL) === "true")
+    assert(sc.getLocalProperty("customPropKey") === "value2")
   }
 
   test("start multiple times") {
@@ -736,7 +746,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
         val ex = intercept[IllegalStateException] {
           body
         }
-        assert(ex.getMessage.toLowerCase().contains(expectedErrorMsg))
+        assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(expectedErrorMsg))
       }
     }
 
@@ -798,6 +808,36 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     ssc.stop()
   }
 
+  test("SPARK-18560 Receiver data should be deserialized properly.") {
+    // Start a two nodes cluster, so receiver will use one node, and Spark jobs will use the
+    // other one. Then Spark jobs need to fetch remote blocks and it will trigger SPARK-18560.
+    val conf = new SparkConf().setMaster("local-cluster[2,1,1024]").setAppName(appName)
+    ssc = new StreamingContext(conf, Milliseconds(100))
+    val input = ssc.receiverStream(new TestReceiver)
+    val latch = new CountDownLatch(1)
+    @volatile var stopping = false
+    input.count().foreachRDD { rdd =>
+      // Make sure we can read from BlockRDD
+      if (rdd.collect().headOption.getOrElse(0L) > 0 && !stopping) {
+        // Stop StreamingContext to unblock "awaitTerminationOrTimeout"
+        stopping = true
+        new Thread() {
+          setDaemon(true)
+          override def run(): Unit = {
+            ssc.stop(stopSparkContext = true, stopGracefully = false)
+            latch.countDown()
+          }
+        }.start()
+      }
+    }
+    ssc.start()
+    ssc.awaitTerminationOrTimeout(60000)
+    // Wait until `ssc.top` returns. Otherwise, we may finish this test too fast and leak an active
+    // SparkContext. Note: the stop codes in `after` will just do nothing if `ssc.stop` in this test
+    // is running.
+    assert(latch.await(60, TimeUnit.SECONDS))
+  }
+
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => 1 to i)
     val inputStream = new TestInputStream(s, input, 1)
@@ -811,10 +851,13 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     ssc.checkpoint(checkpointDirectory)
     ssc.textFileStream(testDirectory).foreachRDD { rdd => rdd.count() }
     ssc.start()
-    eventually(timeout(10000 millis)) {
-      assert(Checkpoint.getCheckpointFiles(checkpointDirectory).size > 1)
+    try {
+      eventually(timeout(30000 millis)) {
+        assert(Checkpoint.getCheckpointFiles(checkpointDirectory).size > 1)
+      }
+    } finally {
+      ssc.stop()
     }
-    ssc.stop()
     checkpointDirectory
   }
 

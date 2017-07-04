@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
 
 /**
-  * A placeholder expression for cube/rollup, which will be replaced by analyzer
-  */
+ * A placeholder expression for cube/rollup, which will be replaced by analyzer
+ */
 trait GroupingSet extends Expression with CodegenFallback {
 
   def groupByExprs: Seq[Expression]
@@ -43,9 +43,9 @@ case class Cube(groupByExprs: Seq[Expression]) extends GroupingSet {}
 case class Rollup(groupByExprs: Seq[Expression]) extends GroupingSet {}
 
 /**
-  * Indicates whether a specified column expression in a GROUP BY list is aggregated or not.
-  * GROUPING returns 1 for aggregated or 0 for not aggregated in the result set.
-  */
+ * Indicates whether a specified column expression in a GROUP BY list is aggregated or not.
+ * GROUPING returns 1 for aggregated or 0 for not aggregated in the result set.
+ */
 case class Grouping(child: Expression) extends Expression with Unevaluable {
   override def references: AttributeSet = AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
   override def children: Seq[Expression] = child :: Nil
@@ -54,10 +54,10 @@ case class Grouping(child: Expression) extends Expression with Unevaluable {
 }
 
 /**
-  * GroupingID is a function that computes the level of grouping.
-  *
-  * If groupByExprs is empty, it means all grouping expressions in GroupingSets.
-  */
+ * GroupingID is a function that computes the level of grouping.
+ *
+ * If groupByExprs is empty, it means all grouping expressions in GroupingSets.
+ */
 case class GroupingID(groupByExprs: Seq[Expression]) extends Expression with Unevaluable {
   override def references: AttributeSet = AttributeSet(VirtualColumn.groupingIdAttribute :: Nil)
   override def children: Seq[Expression] = groupByExprs

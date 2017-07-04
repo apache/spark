@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-/* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.types.{BooleanType, StringType}
 
 class LikeSimplificationSuite extends PlanTest {
 
@@ -61,6 +61,20 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("simplify Like into startsWith and EndsWith") {
+    val originalQuery =
+      testRelation
+        .where(('a like "abc\\%def") || ('a like "abc%def"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(('a like "abc\\%def") ||
+        (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def"))))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("simplify Like into Contains") {
     val originalQuery =
       testRelation
@@ -85,5 +99,11 @@ class LikeSimplificationSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("null pattern") {
+    val originalQuery = testRelation.where('a like Literal(null, StringType)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, testRelation.where(Literal(null, BooleanType)).analyze)
   }
 }

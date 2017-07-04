@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -91,20 +92,17 @@ private[spark] class EventLoggingListener(
    */
   def start() {
     if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
-      throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.")
+      throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
     }
 
     val workingPath = logPath + IN_PROGRESS
-    val uri = new URI(workingPath)
     val path = new Path(workingPath)
+    val uri = path.toUri
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
-    if (shouldOverwrite && fileSystem.exists(path)) {
+    if (shouldOverwrite && fileSystem.delete(path, true)) {
       logWarning(s"Event log $path already exists. Overwriting...")
-      if (!fileSystem.delete(path, true)) {
-        logWarning(s"Error deleting $path")
-      }
     }
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
@@ -121,7 +119,7 @@ private[spark] class EventLoggingListener(
       val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
 
-      EventLoggingListener.initEventLog(bstream)
+      EventLoggingListener.initEventLog(bstream, testing, loggedEvents)
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
       writer = Some(new PrintWriter(bstream))
       logInfo("Logging events to %s".format(logPath))
@@ -156,7 +154,9 @@ private[spark] class EventLoggingListener(
 
   override def onTaskEnd(event: SparkListenerTaskEnd): Unit = logEvent(event)
 
-  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = logEvent(event)
+  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
+    logEvent(redactEvent(event))
+  }
 
   // Events that trigger a flush
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
@@ -191,6 +191,22 @@ private[spark] class EventLoggingListener(
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
+  override def onExecutorBlacklisted(event: SparkListenerExecutorBlacklisted): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
+  override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
+  override def onNodeBlacklisted(event: SparkListenerNodeBlacklisted): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
+  override def onNodeUnblacklisted(event: SparkListenerNodeUnblacklisted): Unit = {
     logEvent(event, flushLogger = true)
   }
 
@@ -234,6 +250,21 @@ private[spark] class EventLoggingListener(
     }
   }
 
+  private[spark] def redactEvent(
+      event: SparkListenerEnvironmentUpdate): SparkListenerEnvironmentUpdate = {
+    // environmentDetails maps a string descriptor to a set of properties
+    // Similar to:
+    // "JVM Information" -> jvmInformation,
+    // "Spark Properties" -> sparkProperties,
+    // ...
+    // where jvmInformation, sparkProperties, etc. are sequence of tuples.
+    // We go through the various  of properties and redact sensitive information from them.
+    val redactedProps = event.environmentDetails.map{ case (name, props) =>
+      name -> Utils.redact(sparkConf, props)
+    }
+    SparkListenerEnvironmentUpdate(redactedProps)
+  }
+
 }
 
 private[spark] object EventLoggingListener extends Logging {
@@ -252,10 +283,17 @@ private[spark] object EventLoggingListener extends Logging {
    *
    * @param logStream Raw output stream to the event log file.
    */
-  def initEventLog(logStream: OutputStream): Unit = {
+  def initEventLog(
+      logStream: OutputStream,
+      testing: Boolean,
+      loggedEvents: ArrayBuffer[JValue]): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
-    val metadataJson = compact(JsonProtocol.logStartToJson(metadata)) + "\n"
+    val eventJson = JsonProtocol.logStartToJson(metadata)
+    val metadataJson = compact(eventJson) + "\n"
     logStream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
+    if (testing && loggedEvents != null) {
+      loggedEvents += eventJson
+    }
   }
 
   /**
@@ -282,7 +320,7 @@ private[spark] object EventLoggingListener extends Logging {
       appId: String,
       appAttemptId: Option[String],
       compressionCodecName: Option[String] = None): String = {
-    val base = logBaseDir.toString.stripSuffix("/") + "/" + sanitize(appId)
+    val base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId)
     val codec = compressionCodecName.map("." + _).getOrElse("")
     if (appAttemptId.isDefined) {
       base + "_" + sanitize(appAttemptId.get) + codec
@@ -292,7 +330,7 @@ private[spark] object EventLoggingListener extends Logging {
   }
 
   private def sanitize(str: String): String = {
-    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase
+    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }
 
   /**
@@ -301,12 +339,6 @@ private[spark] object EventLoggingListener extends Logging {
    * @return input stream that holds one JSON record per line.
    */
   def openEventLog(log: Path, fs: FileSystem): InputStream = {
-    // It's not clear whether FileSystem.open() throws FileNotFoundException or just plain
-    // IOException when a file does not exist, so try our best to throw a proper exception.
-    if (!fs.exists(log)) {
-      throw new FileNotFoundException(s"File $log does not exist.")
-    }
-
     val in = new BufferedInputStream(fs.open(log))
 
     // Compression codec is encoded as an extension, e.g. app_123.lzf

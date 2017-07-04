@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService}
 
 import org.scalatest.Matchers
@@ -27,8 +28,8 @@ import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD
 import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleWriter
-import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId}
-import org.apache.spark.util.MutablePair
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
+import org.apache.spark.util.{MutablePair, Utils}
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
@@ -238,7 +239,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     }
 
     assert(thrown.getClass === classOf[SparkException])
-    assert(thrown.getMessage.toLowerCase.contains("serializable"))
+    assert(thrown.getMessage.toLowerCase(Locale.ROOT).contains("serializable"))
   }
 
   test("shuffle with different compression settings (SPARK-3426)") {
@@ -276,7 +277,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // Delete one of the local shuffle blocks.
     val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0))
     val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0))
-    assert(hashFile.exists() || sortFile.exists())
+    val indexFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleIndexBlockId(0, 0, 0))
+    assert(hashFile.exists() || (sortFile.exists() && indexFile.exists()))
 
     if (hashFile.exists()) {
       hashFile.delete()
@@ -284,9 +286,34 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     if (sortFile.exists()) {
       sortFile.delete()
     }
+    if (indexFile.exists()) {
+      indexFile.delete()
+    }
 
     // This count should retry the execution of the previous stage and rerun shuffle.
     rdd.count()
+  }
+
+  test("cannot find its local shuffle file if no execution of the stage and rerun shuffle") {
+    sc = new SparkContext("local", "test", conf.clone())
+    val rdd = sc.parallelize(1 to 10, 1).map((_, 1)).reduceByKey(_ + _)
+
+    // Cannot find one of the local shuffle blocks.
+    val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0))
+    val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0))
+    val indexFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleIndexBlockId(0, 0, 0))
+    assert(!hashFile.exists() && !sortFile.exists() && !indexFile.exists())
+
+    rdd.count()
+
+    // Can find one of the local shuffle blocks.
+    val hashExistsFile = sc.env.blockManager.diskBlockManager
+      .getFile(new ShuffleBlockId(0, 0, 0))
+    val sortExistsFile = sc.env.blockManager.diskBlockManager
+      .getFile(new ShuffleDataBlockId(0, 0, 0))
+    val indexExistsFile = sc.env.blockManager.diskBlockManager
+      .getFile(new ShuffleIndexBlockId(0, 0, 0))
+    assert(hashExistsFile.exists() || (sortExistsFile.exists() && indexExistsFile.exists()))
   }
 
   test("metrics for shuffle without aggregation") {
@@ -332,19 +359,18 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
     val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+    mapTrackerMaster.registerShuffle(0, 1)
 
     // first attempt -- its successful
     val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0,
-      new TaskContextImpl(0, 0, 0L, 0, taskMemoryManager, metricsSystem,
-        InternalAccumulator.create(sc)))
+      new TaskContextImpl(0, 0, 0L, 0, taskMemoryManager, new Properties, metricsSystem))
     val data1 = (1 to 10).map { x => x -> x}
 
     // second attempt -- also successful.  We'll write out different data,
     // just to simulate the fact that the records may get written differently
     // depending on what gets spilled, what gets combined, etc.
     val writer2 = manager.getWriter[Int, Int](shuffleHandle, 0,
-      new TaskContextImpl(0, 0, 1L, 0, taskMemoryManager, metricsSystem,
-        InternalAccumulator.create(sc)))
+      new TaskContextImpl(0, 0, 1L, 0, taskMemoryManager, new Properties, metricsSystem))
     val data2 = (11 to 20).map { x => x -> x}
 
     // interleave writes of both attempts -- we want to test that both attempts can occur
@@ -368,12 +394,11 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     // register one of the map outputs -- doesn't matter which one
     mapOutput1.foreach { case mapStatus =>
-      mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))
+      mapTrackerMaster.registerMapOutput(0, 0, mapStatus)
     }
 
     val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1,
-      new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, metricsSystem,
-        InternalAccumulator.create(sc)))
+      new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem))
     val readData = reader.read().toIndexedSeq
     assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
 
@@ -449,14 +474,10 @@ object ShuffleSuite {
     @volatile var bytesRead: Long = 0
     val listener = new SparkListener {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-        taskEnd.taskMetrics.shuffleWriteMetrics.foreach { m =>
-          recordsWritten += m.recordsWritten
-          bytesWritten += m.bytesWritten
-        }
-        taskEnd.taskMetrics.shuffleReadMetrics.foreach { m =>
-          recordsRead += m.recordsRead
-          bytesRead += m.totalBytesRead
-        }
+        recordsWritten += taskEnd.taskMetrics.shuffleWriteMetrics.recordsWritten
+        bytesWritten += taskEnd.taskMetrics.shuffleWriteMetrics.bytesWritten
+        recordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
+        bytesRead += taskEnd.taskMetrics.shuffleReadMetrics.totalBytesRead
       }
     }
     sc.addSparkListener(listener)

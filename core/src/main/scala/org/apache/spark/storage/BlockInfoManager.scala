@@ -21,8 +21,9 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
-import com.google.common.collect.ConcurrentHashMultiset
+import com.google.common.collect.{ConcurrentHashMultiset, ImmutableMultiset}
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -37,10 +38,14 @@ import org.apache.spark.internal.Logging
  * @param level the block's storage level. This is the requested persistence level, not the
  *              effective storage level of the block (i.e. if this is MEMORY_AND_DISK, then this
  *              does not imply that the block is actually resident in memory).
+ * @param classTag the block's [[ClassTag]], used to select the serializer
  * @param tellMaster whether state changes for this block should be reported to the master. This
  *                   is true for most blocks, but is false for broadcast blocks.
  */
-private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
+private[storage] class BlockInfo(
+    val level: StorageLevel,
+    val classTag: ClassTag[_],
+    val tellMaster: Boolean) {
 
   /**
    * The size of the block (in bytes)
@@ -206,9 +211,6 @@ private[storage] class BlockInfoManager extends Logging {
    * If another task has already locked this block for either reading or writing, then this call
    * will block until the other locks are released or will return immediately if `blocking = false`.
    *
-   * If this is called by a task which already holds the block's exclusive write lock, then this
-   * method will throw an exception.
-   *
    * @param blockId the block to lock.
    * @param blocking if true (default), this call will block until the lock is acquired. If false,
    *                 this call will return immediately if the lock acquisition fails.
@@ -223,10 +225,7 @@ private[storage] class BlockInfoManager extends Logging {
       infos.get(blockId) match {
         case None => return None
         case Some(info) =>
-          if (info.writerTask == currentTaskAttemptId) {
-            throw new IllegalStateException(
-              s"Task $currentTaskAttemptId has already locked $blockId for writing")
-          } else if (info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0) {
+          if (info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0) {
             info.writerTask = currentTaskAttemptId
             writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
             logTrace(s"Task $currentTaskAttemptId acquired write lock for $blockId")
@@ -282,22 +281,27 @@ private[storage] class BlockInfoManager extends Logging {
 
   /**
    * Release a lock on the given block.
+   * In case a TaskContext is not propagated properly to all child threads for the task, we fail to
+   * get the TID from TaskContext, so we have to explicitly pass the TID value to release the lock.
+   *
+   * See SPARK-18406 for more discussion of this issue.
    */
-  def unlock(blockId: BlockId): Unit = synchronized {
-    logTrace(s"Task $currentTaskAttemptId releasing lock for $blockId")
+  def unlock(blockId: BlockId, taskAttemptId: Option[TaskAttemptId] = None): Unit = synchronized {
+    val taskId = taskAttemptId.getOrElse(currentTaskAttemptId)
+    logTrace(s"Task $taskId releasing lock for $blockId")
     val info = get(blockId).getOrElse {
       throw new IllegalStateException(s"Block $blockId not found")
     }
     if (info.writerTask != BlockInfo.NO_WRITER) {
       info.writerTask = BlockInfo.NO_WRITER
-      writeLocksByTask.removeBinding(currentTaskAttemptId, blockId)
+      writeLocksByTask.removeBinding(taskId, blockId)
     } else {
       assert(info.readerCount > 0, s"Block $blockId is not locked for reading")
       info.readerCount -= 1
-      val countsForTask = readLocksByTask(currentTaskAttemptId)
+      val countsForTask = readLocksByTask(taskId)
       val newPinCountForTask: Int = countsForTask.remove(blockId, 1) - 1
       assert(newPinCountForTask >= 0,
-        s"Task $currentTaskAttemptId release lock on block $blockId more times than it acquired it")
+        s"Task $taskId release lock on block $blockId more times than it acquired it")
     }
     notifyAll()
   }
@@ -337,15 +341,11 @@ private[storage] class BlockInfoManager extends Logging {
    *
    * @return the ids of blocks whose pins were released
    */
-  def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
+  def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = synchronized {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
 
-    val readLocks = synchronized {
-      readLocksByTask.remove(taskAttemptId).get
-    }
-    val writeLocks = synchronized {
-      writeLocksByTask.remove(taskAttemptId).getOrElse(Seq.empty)
-    }
+    val readLocks = readLocksByTask.remove(taskAttemptId).getOrElse(ImmutableMultiset.of[BlockId]())
+    val writeLocks = writeLocksByTask.remove(taskAttemptId).getOrElse(Seq.empty)
 
     for (blockId <- writeLocks) {
       infos.get(blockId).foreach { info =>
@@ -354,22 +354,26 @@ private[storage] class BlockInfoManager extends Logging {
       }
       blocksWithReleasedLocks += blockId
     }
+
     readLocks.entrySet().iterator().asScala.foreach { entry =>
       val blockId = entry.getElement
       val lockCount = entry.getCount
       blocksWithReleasedLocks += blockId
-      synchronized {
-        get(blockId).foreach { info =>
-          info.readerCount -= lockCount
-          assert(info.readerCount >= 0)
-        }
+      get(blockId).foreach { info =>
+        info.readerCount -= lockCount
+        assert(info.readerCount >= 0)
       }
     }
 
-    synchronized {
-      notifyAll()
-    }
+    notifyAll()
+
     blocksWithReleasedLocks
+  }
+
+  /** Returns the number of locks held by the given task.  Used only for testing. */
+  private[storage] def getTaskLockCount(taskAttemptId: TaskAttemptId): Int = {
+    readLocksByTask.get(taskAttemptId).map(_.size()).getOrElse(0) +
+      writeLocksByTask.get(taskAttemptId).map(_.size).getOrElse(0)
   }
 
   /**
@@ -416,6 +420,7 @@ private[storage] class BlockInfoManager extends Logging {
           infos.remove(blockId)
           blockInfo.readerCount = 0
           blockInfo.writerTask = BlockInfo.NO_WRITER
+          writeLocksByTask.removeBinding(currentTaskAttemptId, blockId)
         }
       case None =>
         throw new IllegalArgumentException(

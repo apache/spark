@@ -17,14 +17,18 @@
 
 package org.apache.spark.storage
 
+import java.io.File
 import java.nio.ByteBuffer
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.concurrent.Future
-import scala.language.implicitConversions
-import scala.language.postfixOps
+import scala.language.{implicitConversions, postfixOps}
+import scala.reflect.ClassTag
 
+import org.apache.commons.lang3.RandomUtils
 import org.mockito.{Matchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
@@ -32,22 +36,29 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 
 import org.apache.spark._
+import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.memory.StaticMemoryManager
-import org.apache.spark.network.{BlockDataManager, BlockTransferService}
+import org.apache.spark.internal.config._
+import org.apache.spark.memory.UnifiedMemoryManager
+import org.apache.spark.network.{BlockDataManager, BlockTransferService, TransportContext}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.network.netty.NettyBlockTransferService
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
+import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
+import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.BlockFetchingListener
+import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
-import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
-import org.apache.spark.shuffle.hash.HashShuffleManager
+import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
-  with PrivateMethodTester with ResetSystemProperties {
+  with PrivateMethodTester with LocalSparkContext with ResetSystemProperties
+  with EncryptionFunSuite {
 
   import BlockManagerSuite._
 
@@ -58,8 +69,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
   val securityMgr = new SecurityManager(new SparkConf(false))
-  val mapOutputTracker = new MapOutputTrackerMaster(new SparkConf(false))
-  val shuffleManager = new HashShuffleManager(new SparkConf(false))
+  val bcastManager = new BroadcastManager(true, new SparkConf(false), securityMgr)
+  val mapOutputTracker = new MapOutputTrackerMaster(new SparkConf(false), bcastManager, true)
+  val shuffleManager = new SortShuffleManager(new SparkConf(false))
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   val serializer = new KryoSerializer(new SparkConf(false).set("spark.kryoserializer.buffer", "1m"))
@@ -72,13 +84,24 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER,
       master: BlockManagerMaster = this.master,
-      transferService: Option[BlockTransferService] = Option.empty): BlockManager = {
-    val serializer = new KryoSerializer(conf)
+      transferService: Option[BlockTransferService] = Option.empty,
+      testConf: Option[SparkConf] = None): BlockManager = {
+    val bmConf = testConf.map(_.setAll(conf.getAll)).getOrElse(conf)
+    bmConf.set("spark.testing.memory", maxMem.toString)
+    bmConf.set("spark.memory.offHeap.size", maxMem.toString)
+    val serializer = new KryoSerializer(bmConf)
+    val encryptionKey = if (bmConf.get(IO_ENCRYPTION_ENABLED)) {
+      Some(CryptoStreamUtils.createKey(bmConf))
+    } else {
+      None
+    }
+    val bmSecurityMgr = new SecurityManager(bmConf, encryptionKey)
     val transfer = transferService
-      .getOrElse(new NettyBlockTransferService(conf, securityMgr, numCores = 1))
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
-    val blockManager = new BlockManager(name, rpcEnv, master, serializer, conf,
-      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+      .getOrElse(new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1))
+    val memManager = UnifiedMemoryManager(bmConf, numCores = 1)
+    val serializerManager = new SerializerManager(serializer, bmConf)
+    val blockManager = new BlockManager(name, rpcEnv, master, serializerManager, bmConf,
+      memManager, mapOutputTracker, shuffleManager, transfer, bmSecurityMgr, 0)
     memManager.setMemoryStore(blockManager.memoryStore)
     blockManager.initialize("app-id")
     blockManager
@@ -90,6 +113,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     System.setProperty("os.arch", "amd64")
     conf = new SparkConf(false)
       .set("spark.app.id", "test")
+      .set("spark.testing", "true")
+      .set("spark.memory.fraction", "1")
+      .set("spark.memory.storageFraction", "1")
       .set("spark.kryoserializer.buffer", "1m")
       .set("spark.test.useCompressedOops", "true")
       .set("spark.storage.unrollFraction", "0.4")
@@ -98,8 +124,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set("spark.driver.port", rpcEnv.address.port.toString)
 
+    // Mock SparkContext to reduce the memory usage of tests. It's fine since the only reason we
+    // need to create a SparkContext is to initialize LiveListenerBus.
+    sc = mock(classOf[SparkContext])
+    when(sc.conf).thenReturn(conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
-      new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
+      new BlockManagerMasterEndpoint(rpcEnv, true, conf,
+        new LiveListenerBus(conf))), conf, true)
 
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
@@ -230,8 +261,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Checking whether blocks are in memory and memory size
     val memStatus = master.getMemoryStatus.head._2
-    assert(memStatus._1 == 20000L, "total memory " + memStatus._1 + " should equal 20000")
-    assert(memStatus._2 <= 12000L, "remaining memory " + memStatus._2 + " should <= 12000")
+    assert(memStatus._1 == 40000L, "total memory " + memStatus._1 + " should equal 40000")
+    assert(memStatus._2 <= 32000L, "remaining memory " + memStatus._2 + " should <= 12000")
     assert(store.getSingleAndReleaseLock("a1-to-remove").isDefined, "a1 was not in store")
     assert(store.getSingleAndReleaseLock("a2-to-remove").isDefined, "a2 was not in store")
     assert(store.getSingleAndReleaseLock("a3-to-remove").isDefined, "a3 was not in store")
@@ -260,8 +291,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
       val memStatus = master.getMemoryStatus.head._2
-      memStatus._1 should equal (20000L)
-      memStatus._2 should equal (20000L)
+      memStatus._1 should equal (40000L)
+      memStatus._2 should equal (40000L)
     }
   }
 
@@ -380,7 +411,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    val reregister = !master.driverEndpoint.askWithRetry[Boolean](
+    val reregister = !master.driverEndpoint.askSync[Boolean](
       BlockManagerHeartbeat(store.blockManagerId))
     assert(reregister == true)
   }
@@ -471,8 +502,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(list2DiskGet.get.readMethod === DataReadMethod.Disk)
   }
 
-  test("optimize a location order of blocks") {
-    val localHost = Utils.localHostName()
+  test("optimize a location order of blocks without topology information") {
+    val localHost = "localhost"
     val otherHost = "otherHost"
     val bmMaster = mock(classOf[BlockManagerMaster])
     val bmId1 = BlockManagerId("id1", localHost, 1)
@@ -484,6 +515,31 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val getLocations = PrivateMethod[Seq[BlockManagerId]]('getLocations)
     val locations = blockManager invokePrivate getLocations(BroadcastBlockId(0))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost))
+  }
+
+  test("optimize a location order of blocks with topology information") {
+    val localHost = "localhost"
+    val otherHost = "otherHost"
+    val localRack = "localRack"
+    val otherRack = "otherRack"
+
+    val bmMaster = mock(classOf[BlockManagerMaster])
+    val bmId1 = BlockManagerId("id1", localHost, 1, Some(localRack))
+    val bmId2 = BlockManagerId("id2", localHost, 2, Some(localRack))
+    val bmId3 = BlockManagerId("id3", otherHost, 3, Some(otherRack))
+    val bmId4 = BlockManagerId("id4", otherHost, 4, Some(otherRack))
+    val bmId5 = BlockManagerId("id5", otherHost, 5, Some(localRack))
+    when(bmMaster.getLocations(mc.any[BlockId]))
+      .thenReturn(Seq(bmId1, bmId2, bmId5, bmId3, bmId4))
+
+    val blockManager = makeBlockManager(128, "exec", bmMaster)
+    blockManager.blockManagerId =
+      BlockManagerId(SparkContext.DRIVER_IDENTIFIER, localHost, 1, Some(localRack))
+    val getLocations = PrivateMethod[Seq[BlockManagerId]]('getLocations)
+    val locations = blockManager invokePrivate getLocations(BroadcastBlockId(0))
+    assert(locations.map(_.host) === Seq(localHost, localHost, otherHost, otherHost, otherHost))
+    assert(locations.flatMap(_.topologyInfo)
+      === Seq(localRack, localRack, localRack, otherRack, otherRack))
   }
 
   test("SPARK-9591: getRemoteBytes from another location when Exception throw") {
@@ -502,10 +558,21 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getRemoteBytes("list1").isDefined, "list1Get expected to be fetched")
     store3.stop()
     store3 = null
-    // exception throw because there is no locations
-    intercept[BlockFetchException] {
-      store.getRemoteBytes("list1")
-    }
+    // Should return None instead of throwing an exception:
+    assert(store.getRemoteBytes("list1").isEmpty)
+  }
+
+  test("SPARK-14252: getOrElseUpdate should still read from remote storage") {
+    store = makeBlockManager(8000, "executor1")
+    store2 = makeBlockManager(8000, "executor2")
+    val list1 = List(new Array[Byte](4000))
+    store2.putIterator(
+      "list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(store.getOrElseUpdate(
+      "list1",
+      StorageLevel.MEMORY_ONLY,
+      ClassTag.Any,
+      () => throw new AssertionError("attempted to compute locally")).isLeft)
   }
 
   test("in-memory LRU storage") {
@@ -514,6 +581,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("in-memory LRU storage with serialization") {
     testInMemoryLRUStorage(StorageLevel.MEMORY_ONLY_SER)
+  }
+
+  test("in-memory LRU storage with off-heap") {
+    testInMemoryLRUStorage(StorageLevel(
+      useDisk = false,
+      useMemory = true,
+      useOffHeap = true,
+      deserialized = false, replication = 1))
   }
 
   private def testInMemoryLRUStorage(storageLevel: StorageLevel): Unit = {
@@ -577,8 +652,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.memoryStore.contains(rdd(0, 3)), "rdd_0_3 was not in store")
   }
 
-  test("on-disk storage") {
-    store = makeBlockManager(1200)
+  encryptionTest("on-disk storage") { _conf =>
+    store = makeBlockManager(1200, testConf = Some(_conf))
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
@@ -590,26 +665,35 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getSingleAndReleaseLock("a1").isDefined, "a1 was in store")
   }
 
-  test("disk and memory storage") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, getAsBytes = false)
+  encryptionTest("disk and memory storage") { _conf =>
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, getAsBytes = false, testConf = conf)
   }
 
-  test("disk and memory storage with getLocalBytes") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, getAsBytes = true)
+  encryptionTest("disk and memory storage with getLocalBytes") { _conf =>
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, getAsBytes = true, testConf = conf)
   }
 
-  test("disk and memory storage with serialization") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, getAsBytes = false)
+  encryptionTest("disk and memory storage with serialization") { _conf =>
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, getAsBytes = false, testConf = conf)
   }
 
-  test("disk and memory storage with serialization and getLocalBytes") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, getAsBytes = true)
+  encryptionTest("disk and memory storage with serialization and getLocalBytes") { _conf =>
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, getAsBytes = true, testConf = conf)
+  }
+
+  encryptionTest("disk and off-heap memory storage") { _conf =>
+    testDiskAndMemoryStorage(StorageLevel.OFF_HEAP, getAsBytes = false, testConf = conf)
+  }
+
+  encryptionTest("disk and off-heap memory storage with getLocalBytes") { _conf =>
+    testDiskAndMemoryStorage(StorageLevel.OFF_HEAP, getAsBytes = true, testConf = conf)
   }
 
   def testDiskAndMemoryStorage(
       storageLevel: StorageLevel,
-      getAsBytes: Boolean): Unit = {
-    store = makeBlockManager(12000)
+      getAsBytes: Boolean,
+      testConf: SparkConf): Unit = {
+    store = makeBlockManager(12000, testConf = Some(testConf))
     val accessMethod =
       if (getAsBytes) store.getLocalBytesAndReleaseLock else store.getSingleAndReleaseLock
     val a1 = new Array[Byte](4000)
@@ -637,8 +721,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
-  test("LRU with mixed storage levels") {
-    store = makeBlockManager(12000)
+  encryptionTest("LRU with mixed storage levels") { _conf =>
+    store = makeBlockManager(12000, testConf = Some(_conf))
     val a1 = new Array[Byte](4000)
     val a2 = new Array[Byte](4000)
     val a3 = new Array[Byte](4000)
@@ -659,8 +743,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getSingleAndReleaseLock("a4").isDefined, "a4 was not in store")
   }
 
-  test("in-memory LRU with streams") {
-    store = makeBlockManager(12000)
+  encryptionTest("in-memory LRU with streams") { _conf =>
+    store = makeBlockManager(12000, testConf = Some(_conf))
     val list1 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list2 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list3 = List(new Array[Byte](2000), new Array[Byte](2000))
@@ -687,8 +771,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getAndReleaseLock("list3") === None, "list1 was in store")
   }
 
-  test("LRU with mixed storage levels and streams") {
-    store = makeBlockManager(12000)
+  encryptionTest("LRU with mixed storage levels and streams") { _conf =>
+    store = makeBlockManager(12000, testConf = Some(_conf))
     val list1 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list2 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list3 = List(new Array[Byte](2000), new Array[Byte](2000))
@@ -815,16 +899,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
-    val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
-    val memoryManager = new StaticMemoryManager(
-      conf,
-      maxOnHeapExecutionMemory = Long.MaxValue,
-      maxStorageMemory = 1200,
-      numCores = 1)
+    conf.set("spark.testing.memory", "1200")
+    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
+    val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
-      new JavaSerializer(conf), conf, memoryManager, mapOutputTracker,
+      serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, 0)
     memoryManager.setMemoryStore(store.memoryStore)
+    store.initialize("app-id")
 
     // The put should fail since a1 is not serializable.
     class UnserializableClass
@@ -839,8 +922,38 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
+  test("turn off updated block statuses") {
+    val conf = new SparkConf()
+    conf.set(TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES, false)
+    store = makeBlockManager(12000, testConf = Some(conf))
+
+    store.registerTask(0)
+    val list = List.fill(2)(new Array[Byte](2000))
+
+    def getUpdatedBlocks(task: => Unit): Seq[(BlockId, BlockStatus)] = {
+      val context = TaskContext.empty()
+      try {
+        TaskContext.setTaskContext(context)
+        task
+      } finally {
+        TaskContext.unset()
+      }
+      context.taskMetrics.updatedBlockStatuses
+    }
+
+    // 1 updated block (i.e. list1)
+    val updatedBlocks1 = getUpdatedBlocks {
+      store.putIterator(
+        "list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    }
+    assert(updatedBlocks1.size === 0)
+  }
+
+
   test("updated block statuses") {
-    store = makeBlockManager(12000)
+    val conf = new SparkConf()
+    conf.set(TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES, true)
+    store = makeBlockManager(12000, testConf = Some(conf))
     store.registerTask(0)
     val list = List.fill(2)(new Array[Byte](2000))
     val bigList = List.fill(8)(new Array[Byte](2000))
@@ -925,6 +1038,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!store.diskStore.contains("list3"), "list3 was in disk store")
     assert(!store.diskStore.contains("list4"), "list4 was in disk store")
     assert(!store.diskStore.contains("list5"), "list5 was in disk store")
+
+    // remove block - list2 should be removed from disk
+    val updatedBlocks6 = getUpdatedBlocks {
+      store.removeBlock(
+        "list2", tellMaster = true)
+    }
+    assert(updatedBlocks6.size === 1)
+    assert(updatedBlocks6.head._1 === TestBlockId("list2"))
+    assert(updatedBlocks6.head._2.storageLevel == StorageLevel.NONE)
+    assert(!store.diskStore.contains("list2"), "list2 was in disk store")
   }
 
   test("query block statuses") {
@@ -1030,138 +1153,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!store.memoryStore.contains(rdd(1, 0)), "rdd_1_0 was in store")
   }
 
-  test("reserve/release unroll memory") {
-    store = makeBlockManager(12000)
-    val memoryStore = store.memoryStore
-    assert(memoryStore.currentUnrollMemory === 0)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-
-    def reserveUnrollMemoryForThisTask(memory: Long): Boolean = {
-      memoryStore.reserveUnrollMemoryForThisTask(TestBlockId(""), memory)
-    }
-
-    // Reserve
-    assert(reserveUnrollMemoryForThisTask(100))
-    assert(memoryStore.currentUnrollMemoryForThisTask === 100)
-    assert(reserveUnrollMemoryForThisTask(200))
-    assert(memoryStore.currentUnrollMemoryForThisTask === 300)
-    assert(reserveUnrollMemoryForThisTask(500))
-    assert(memoryStore.currentUnrollMemoryForThisTask === 800)
-    assert(!reserveUnrollMemoryForThisTask(1000000))
-    assert(memoryStore.currentUnrollMemoryForThisTask === 800) // not granted
-    // Release
-    memoryStore.releaseUnrollMemoryForThisTask(100)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 700)
-    memoryStore.releaseUnrollMemoryForThisTask(100)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 600)
-    // Reserve again
-    assert(reserveUnrollMemoryForThisTask(4400))
-    assert(memoryStore.currentUnrollMemoryForThisTask === 5000)
-    assert(!reserveUnrollMemoryForThisTask(20000))
-    assert(memoryStore.currentUnrollMemoryForThisTask === 5000) // not granted
-    // Release again
-    memoryStore.releaseUnrollMemoryForThisTask(1000)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 4000)
-    memoryStore.releaseUnrollMemoryForThisTask() // release all
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-  }
-
-  test("safely unroll blocks") {
-    store = makeBlockManager(12000)
-    val smallList = List.fill(40)(new Array[Byte](100))
-    val bigList = List.fill(40)(new Array[Byte](1000))
-    val memoryStore = store.memoryStore
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-
-    // Unroll with all the space in the world. This should succeed.
-    var putResult = memoryStore.putIterator("unroll", smallList.iterator, StorageLevel.MEMORY_ONLY)
-    assert(putResult.isRight)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-    smallList.iterator.zip(memoryStore.getValues("unroll").get).foreach { case (e, a) =>
-      assert(e === a, "getValues() did not return original values!")
-    }
-    assert(memoryStore.remove("unroll"))
-
-    // Unroll with not enough space. This should succeed after kicking out someBlock1.
-    assert(store.putIterator("someBlock1", smallList.iterator, StorageLevel.MEMORY_ONLY))
-    assert(store.putIterator("someBlock2", smallList.iterator, StorageLevel.MEMORY_ONLY))
-    putResult = memoryStore.putIterator("unroll", smallList.iterator, StorageLevel.MEMORY_ONLY)
-    assert(putResult.isRight)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-    assert(memoryStore.contains("someBlock2"))
-    assert(!memoryStore.contains("someBlock1"))
-    smallList.iterator.zip(memoryStore.getValues("unroll").get).foreach { case (e, a) =>
-      assert(e === a, "getValues() did not return original values!")
-    }
-    assert(memoryStore.remove("unroll"))
-
-    // Unroll huge block with not enough space. Even after ensuring free space of 12000 * 0.4 =
-    // 4800 bytes, there is still not enough room to unroll this block. This returns an iterator.
-    // In the mean time, however, we kicked out someBlock2 before giving up.
-    assert(store.putIterator("someBlock3", smallList.iterator, StorageLevel.MEMORY_ONLY))
-    putResult = memoryStore.putIterator("unroll", bigList.iterator, StorageLevel.MEMORY_ONLY)
-    assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
-    assert(!memoryStore.contains("someBlock2"))
-    assert(putResult.isLeft)
-    bigList.iterator.zip(putResult.left.get).foreach { case (e, a) =>
-      assert(e === a, "putIterator() did not return original values!")
-    }
-    // The unroll memory was freed once the iterator returned by putIterator() was fully traversed.
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-  }
-
-  test("safely unroll blocks through putIterator") {
-    store = makeBlockManager(12000)
-    val memOnly = StorageLevel.MEMORY_ONLY
-    val memoryStore = store.memoryStore
-    val smallList = List.fill(40)(new Array[Byte](100))
-    val bigList = List.fill(40)(new Array[Byte](1000))
-    def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
-    def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-
-    // Unroll with plenty of space. This should succeed and cache both blocks.
-    val result1 = memoryStore.putIterator("b1", smallIterator, memOnly)
-    val result2 = memoryStore.putIterator("b2", smallIterator, memOnly)
-    assert(memoryStore.contains("b1"))
-    assert(memoryStore.contains("b2"))
-    assert(result1.isRight) // unroll was successful
-    assert(result2.isRight)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-
-    // Re-put these two blocks so block manager knows about them too. Otherwise, block manager
-    // would not know how to drop them from memory later.
-    memoryStore.remove("b1")
-    memoryStore.remove("b2")
-    store.putIterator("b1", smallIterator, memOnly)
-    store.putIterator("b2", smallIterator, memOnly)
-
-    // Unroll with not enough space. This should succeed but kick out b1 in the process.
-    val result3 = memoryStore.putIterator("b3", smallIterator, memOnly)
-    assert(result3.isRight)
-    assert(!memoryStore.contains("b1"))
-    assert(memoryStore.contains("b2"))
-    assert(memoryStore.contains("b3"))
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-    memoryStore.remove("b3")
-    store.putIterator("b3", smallIterator, memOnly)
-
-    // Unroll huge block with not enough space. This should fail and kick out b2 in the process.
-    val result4 = memoryStore.putIterator("b4", bigIterator, memOnly)
-    assert(result4.isLeft) // unroll was unsuccessful
-    assert(!memoryStore.contains("b1"))
-    assert(!memoryStore.contains("b2"))
-    assert(memoryStore.contains("b3"))
-    assert(!memoryStore.contains("b4"))
-    assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
-  }
-
-  /**
-   * This test is essentially identical to the preceding one, except that it uses MEMORY_AND_DISK.
-   */
   test("safely unroll blocks through putIterator (disk)") {
     store = makeBlockManager(12000)
-    val memAndDisk = StorageLevel.MEMORY_AND_DISK
     val memoryStore = store.memoryStore
     val diskStore = store.diskStore
     val smallList = List.fill(40)(new Array[Byte](100))
@@ -1170,12 +1163,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
-    store.putIterator("b1", smallIterator, memAndDisk)
-    store.putIterator("b2", smallIterator, memAndDisk)
+    store.putIterator("b1", smallIterator, StorageLevel.MEMORY_AND_DISK)
+    store.putIterator("b2", smallIterator, StorageLevel.MEMORY_AND_DISK)
 
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     // Memory store should contain b2 and b3, while disk store should contain only b1
-    val result3 = memoryStore.putIterator("b3", smallIterator, memAndDisk)
+    val result3 = memoryStore.putIteratorAsValues("b3", smallIterator, ClassTag.Any)
     assert(result3.isRight)
     assert(!memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
@@ -1191,78 +1184,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // the block may be stored to disk. During the unrolling process, block "b2" should be kicked
     // out, so the memory store should contain only b3, while the disk store should contain
     // b1, b2 and b4.
-    val result4 = memoryStore.putIterator("b4", bigIterator, memAndDisk)
+    val result4 = memoryStore.putIteratorAsValues("b4", bigIterator, ClassTag.Any)
     assert(result4.isLeft)
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
     assert(!memoryStore.contains("b4"))
-    assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
-    result4.left.get.close()
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0) // close released the unroll memory
   }
 
-  test("multiple unrolls by the same thread") {
-    store = makeBlockManager(12000)
-    val memOnly = StorageLevel.MEMORY_ONLY
-    val memoryStore = store.memoryStore
-    val smallList = List.fill(40)(new Array[Byte](100))
-    def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-
-    // All unroll memory used is released because putIterator did not return an iterator
-    assert(memoryStore.putIterator("b1", smallIterator, memOnly).isRight)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-    assert(memoryStore.putIterator("b2", smallIterator, memOnly).isRight)
-    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-
-    // Unroll memory is not released because putIterator returned an iterator
-    // that still depends on the underlying vector used in the process
-    assert(memoryStore.putIterator("b3", smallIterator, memOnly).isLeft)
-    val unrollMemoryAfterB3 = memoryStore.currentUnrollMemoryForThisTask
-    assert(unrollMemoryAfterB3 > 0)
-
-    // The unroll memory owned by this thread builds on top of its value after the previous unrolls
-    assert(memoryStore.putIterator("b4", smallIterator, memOnly).isLeft)
-    val unrollMemoryAfterB4 = memoryStore.currentUnrollMemoryForThisTask
-    assert(unrollMemoryAfterB4 > unrollMemoryAfterB3)
-
-    // ... but only to a certain extent (until we run out of free space to grant new unroll memory)
-    assert(memoryStore.putIterator("b5", smallIterator, memOnly).isLeft)
-    val unrollMemoryAfterB5 = memoryStore.currentUnrollMemoryForThisTask
-    assert(memoryStore.putIterator("b6", smallIterator, memOnly).isLeft)
-    val unrollMemoryAfterB6 = memoryStore.currentUnrollMemoryForThisTask
-    assert(memoryStore.putIterator("b7", smallIterator, memOnly).isLeft)
-    val unrollMemoryAfterB7 = memoryStore.currentUnrollMemoryForThisTask
-    assert(unrollMemoryAfterB5 === unrollMemoryAfterB4)
-    assert(unrollMemoryAfterB6 === unrollMemoryAfterB4)
-    assert(unrollMemoryAfterB7 === unrollMemoryAfterB4)
-  }
-
-  test("lazily create a big ByteBuffer to avoid OOM if it cannot be put into MemoryStore") {
-    store = makeBlockManager(12000)
-    val memoryStore = store.memoryStore
-    val blockId = BlockId("rdd_3_10")
-    store.blockInfoManager.lockNewBlockForWriting(
-      blockId, new BlockInfo(StorageLevel.MEMORY_ONLY, tellMaster = false))
-    memoryStore.putBytes(blockId, 13000, () => {
-      fail("A big ByteBuffer that cannot be put into MemoryStore should not be created")
-    })
-  }
-
-  test("put a small ByteBuffer to MemoryStore") {
-    store = makeBlockManager(12000)
-    val memoryStore = store.memoryStore
-    val blockId = BlockId("rdd_3_10")
-    var bytes: ChunkedByteBuffer = null
-    memoryStore.putBytes(blockId, 10000, () => {
-      bytes = new ChunkedByteBuffer(ByteBuffer.allocate(10000))
-      bytes
-    })
-    assert(memoryStore.getSize(blockId) === 10000)
-  }
-
-  test("read-locked blocks cannot be evicted from the MemoryStore") {
+  test("read-locked blocks cannot be evicted from memory") {
     store = makeBlockManager(12000)
     val arr = new Array[Byte](4000)
     // First store a1 and a2, both in memory, and a3, on disk only
@@ -1286,14 +1216,52 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getSingle("a3").isDefined, "a3 was not in store")
   }
 
+  private def testReadWithLossOfOnDiskFiles(
+      storageLevel: StorageLevel,
+      readMethod: BlockManager => Option[_]): Unit = {
+    store = makeBlockManager(12000)
+    assert(store.putSingle("blockId", new Array[Byte](4000), storageLevel))
+    assert(store.getStatus("blockId").isDefined)
+    // Directly delete all files from the disk store, triggering failures when reading blocks:
+    store.diskBlockManager.getAllFiles().foreach(_.delete())
+    // The BlockManager still thinks that these blocks exist:
+    assert(store.getStatus("blockId").isDefined)
+    // Because the BlockManager's metadata claims that the block exists (i.e. that it's present
+    // in at least one store), the read attempts to read it and fails when the on-disk file is
+    // missing.
+    intercept[SparkException] {
+      readMethod(store)
+    }
+    // Subsequent read attempts will succeed; the block isn't present but we return an expected
+    // "block not found" response rather than a fatal error:
+    assert(readMethod(store).isEmpty)
+    // The reason why this second read succeeded is because the metadata entry for the missing
+    // block was removed as a result of the read failure:
+    assert(store.getStatus("blockId").isEmpty)
+  }
+
+  test("remove block if a read fails due to missing DiskStore files (SPARK-15736)") {
+    val storageLevels = Seq(
+      StorageLevel(useDisk = true, useMemory = false, deserialized = false),
+      StorageLevel(useDisk = true, useMemory = false, deserialized = true))
+    val readMethods = Map[String, BlockManager => Option[_]](
+      "getLocalBytes" -> ((m: BlockManager) => m.getLocalBytes("blockId")),
+      "getLocalValues" -> ((m: BlockManager) => m.getLocalValues("blockId"))
+    )
+    testReadWithLossOfOnDiskFiles(StorageLevel.DISK_ONLY, _.getLocalBytes("blockId"))
+    for ((readMethodName, readMethod) <- readMethods; storageLevel <- storageLevels) {
+      withClue(s"$readMethodName $storageLevel") {
+        testReadWithLossOfOnDiskFiles(storageLevel, readMethod)
+      }
+    }
+  }
+
   test("SPARK-13328: refresh block locations (fetch should fail after hitting a threshold)") {
     val mockBlockTransferService =
       new MockBlockTransferService(conf.getInt("spark.block.failures.beforeLocationRefresh", 5))
     store = makeBlockManager(8000, "executor1", transferService = Option(mockBlockTransferService))
     store.putSingle("item", 999L, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    intercept[BlockFetchException] {
-      store.getRemoteBytes("item")
-    }
+    assert(store.getRemoteBytes("item").isEmpty)
   }
 
   test("SPARK-13328: refresh block locations (fetch should succeed after location refresh)") {
@@ -1315,6 +1283,94 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     verify(mockBlockManagerMaster, times(2)).getLocations("item")
   }
 
+  test("SPARK-17484: block status is properly updated following an exception in put()") {
+    val mockBlockTransferService = new MockBlockTransferService(maxFailures = 10) {
+      override def uploadBlock(
+          hostname: String,
+          port: Int, execId: String,
+          blockId: BlockId,
+          blockData: ManagedBuffer,
+          level: StorageLevel,
+          classTag: ClassTag[_]): Future[Unit] = {
+        throw new InterruptedException("Intentional interrupt")
+      }
+    }
+    store = makeBlockManager(8000, "executor1", transferService = Option(mockBlockTransferService))
+    store2 = makeBlockManager(8000, "executor2", transferService = Option(mockBlockTransferService))
+    intercept[InterruptedException] {
+      store.putSingle("item", "value", StorageLevel.MEMORY_ONLY_2, tellMaster = true)
+    }
+    assert(store.getLocalBytes("item").isEmpty)
+    assert(master.getLocations("item").isEmpty)
+    assert(store2.getRemoteBytes("item").isEmpty)
+  }
+
+  test("SPARK-17484: master block locations are updated following an invalid remote block fetch") {
+    store = makeBlockManager(8000, "executor1")
+    store2 = makeBlockManager(8000, "executor2")
+    store.putSingle("item", "value", StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(master.getLocations("item").nonEmpty)
+    store.removeBlock("item", tellMaster = false)
+    assert(master.getLocations("item").nonEmpty)
+    assert(store2.getRemoteBytes("item").isEmpty)
+    assert(master.getLocations("item").isEmpty)
+  }
+
+  test("SPARK-20640: Shuffle registration timeout and maxAttempts conf are working") {
+    val tryAgainMsg = "test_spark_20640_try_again"
+    // a server which delays response 50ms and must try twice for success.
+    def newShuffleServer(port: Int): (TransportServer, Int) = {
+      val attempts = new mutable.HashMap[String, Int]()
+      val handler = new NoOpRpcHandler {
+        override def receive(
+            client: TransportClient,
+            message: ByteBuffer,
+            callback: RpcResponseCallback): Unit = {
+          val msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message)
+          msgObj match {
+            case exec: RegisterExecutor =>
+              Thread.sleep(50)
+              val attempt = attempts.getOrElse(exec.execId, 0) + 1
+              attempts(exec.execId) = attempt
+              if (attempt < 2) {
+                callback.onFailure(new Exception(tryAgainMsg))
+                return
+              }
+              callback.onSuccess(ByteBuffer.wrap(new Array[Byte](0)))
+          }
+        }
+      }
+
+      val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 0)
+      val transCtx = new TransportContext(transConf, handler, true)
+      (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
+    }
+    val candidatePort = RandomUtils.nextInt(1024, 65536)
+    val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
+      newShuffleServer, conf, "ShuffleServer")
+
+    conf.set("spark.shuffle.service.enabled", "true")
+    conf.set("spark.shuffle.service.port", shufflePort.toString)
+    conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
+    conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
+    var e = intercept[SparkException]{
+      makeBlockManager(8000, "executor1")
+    }.getMessage
+    assert(e.contains("TimeoutException"))
+
+    conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
+    conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
+    e = intercept[SparkException]{
+      makeBlockManager(8000, "executor2")
+    }.getMessage
+    assert(e.contains(tryAgainMsg))
+
+    conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "1000")
+    conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "2")
+    makeBlockManager(8000, "executor3")
+    server.close()
+  }
+
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
     var numCalls = 0
 
@@ -1325,7 +1381,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         port: Int,
         execId: String,
         blockIds: Array[String],
-        listener: BlockFetchingListener): Unit = {
+        listener: BlockFetchingListener,
+        shuffleFiles: Array[File]): Unit = {
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
     }
 
@@ -1340,7 +1397,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         port: Int, execId: String,
         blockId: BlockId,
         blockData: ManagedBuffer,
-        level: StorageLevel): Future[Unit] = {
+        level: StorageLevel,
+        classTag: ClassTag[_]): Future[Unit] = {
       import scala.concurrent.ExecutionContext.Implicits.global
       Future {}
     }
@@ -1396,7 +1454,8 @@ private object BlockManagerSuite {
     val getAndReleaseLock: (BlockId) => Option[BlockResult] = wrapGet(store.get)
     val getSingleAndReleaseLock: (BlockId) => Option[Any] = wrapGet(store.getSingle)
     val getLocalBytesAndReleaseLock: (BlockId) => Option[ChunkedByteBuffer] = {
-      wrapGet(store.getLocalBytes)
+      val allocator = ByteBuffer.allocate _
+      wrapGet { bid => store.getLocalBytes(bid).map(_.toChunkedByteBuffer(allocator)) }
     }
   }
 

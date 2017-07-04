@@ -17,18 +17,15 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.PolynomialExpansion;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.ml.linalg.VectorUDT;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -39,9 +36,10 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaPolynomialExpansionExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaPolynomialExpansionExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaPolynomialExpansionExample")
+      .getOrCreate();
 
     // $example on$
     PolynomialExpansion polyExpansion = new PolynomialExpansion()
@@ -49,24 +47,20 @@ public class JavaPolynomialExpansionExample {
       .setOutputCol("polyFeatures")
       .setDegree(3);
 
-    JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
-      RowFactory.create(Vectors.dense(-2.0, 2.3)),
+    List<Row> data = Arrays.asList(
+      RowFactory.create(Vectors.dense(2.0, 1.0)),
       RowFactory.create(Vectors.dense(0.0, 0.0)),
-      RowFactory.create(Vectors.dense(0.6, -1.1))
-    ));
-
+      RowFactory.create(Vectors.dense(3.0, -1.0))
+    );
     StructType schema = new StructType(new StructField[]{
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
     });
+    Dataset<Row> df = spark.createDataFrame(data, schema);
 
-    Dataset<Row> df = jsql.createDataFrame(data, schema);
     Dataset<Row> polyDF = polyExpansion.transform(df);
-
-    List<Row> rows = polyDF.select("polyFeatures").takeAsList(3);
-    for (Row r : rows) {
-      System.out.println(r.get(0));
-    }
+    polyDF.show(false);
     // $example off$
-    jsc.stop();
+
+    spark.stop();
   }
 }

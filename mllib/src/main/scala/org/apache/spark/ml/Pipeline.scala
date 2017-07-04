@@ -27,11 +27,11 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -44,7 +44,14 @@ abstract class PipelineStage extends Params with Logging {
   /**
    * :: DeveloperApi ::
    *
-   * Derives the output schema from the input schema.
+   * Check transform validity and derive the output schema from the input schema.
+   *
+   * We check validity for interactions between parameters during `transformSchema` and
+   * raise an exception if any parameter value is invalid. Parameter value checks which
+   * do not depend on other parameters are handled by `Param.validate()`.
+   *
+   * Typical implementation should first conduct verification on schema change and parameter
+   * validity, including complex parameter interaction checks.
    */
   @DeveloperApi
   def transformSchema(schema: StructType): StructType
@@ -75,19 +82,17 @@ abstract class PipelineStage extends Params with Logging {
 }
 
 /**
- * :: Experimental ::
  * A simple pipeline, which acts as an estimator. A Pipeline consists of a sequence of stages, each
- * of which is either an [[Estimator]] or a [[Transformer]]. When [[Pipeline#fit]] is called, the
- * stages are executed in order. If a stage is an [[Estimator]], its [[Estimator#fit]] method will
+ * of which is either an [[Estimator]] or a [[Transformer]]. When `Pipeline.fit` is called, the
+ * stages are executed in order. If a stage is an [[Estimator]], its `Estimator.fit` method will
  * be called on the input dataset to fit a model. Then the model, which is a transformer, will be
  * used to transform the dataset as the input to the next stage. If a stage is a [[Transformer]],
- * its [[Transformer#transform]] method will be called to produce the dataset for the next stage.
- * The fitted model from a [[Pipeline]] is an [[PipelineModel]], which consists of fitted models and
+ * its `Transformer.transform` method will be called to produce the dataset for the next stage.
+ * The fitted model from a [[Pipeline]] is a [[PipelineModel]], which consists of fitted models and
  * transformers, corresponding to the pipeline stages. If there are no stages, the pipeline acts as
  * an identity transformer.
  */
 @Since("1.2.0")
-@Experimental
 class Pipeline @Since("1.4.0") (
   @Since("1.4.0") override val uid: String) extends Estimator[PipelineModel] with MLWritable {
 
@@ -103,7 +108,10 @@ class Pipeline @Since("1.4.0") (
 
   /** @group setParam */
   @Since("1.2.0")
-  def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
+  def setStages(value: Array[_ <: PipelineStage]): this.type = {
+    set(stages, value.asInstanceOf[Array[PipelineStage]])
+    this
+  }
 
   // Below, we clone stages so that modifications to the list of stages will not change
   // the Param value in the Pipeline.
@@ -113,9 +121,9 @@ class Pipeline @Since("1.4.0") (
 
   /**
    * Fits the pipeline to the input dataset with additional parameters. If a stage is an
-   * [[Estimator]], its [[Estimator#fit]] method will be called on the input dataset to fit a model.
+   * [[Estimator]], its `Estimator.fit` method will be called on the input dataset to fit a model.
    * Then the model, which is a transformer, will be used to transform the dataset as the input to
-   * the next stage. If a stage is a [[Transformer]], its [[Transformer#transform]] method will be
+   * the next stage. If a stage is a [[Transformer]], its `Transformer.transform` method will be
    * called to produce the dataset for the next stage. The fitted model from a [[Pipeline]] is an
    * [[PipelineModel]], which consists of fitted models and transformers, corresponding to the
    * pipeline stages. If there are no stages, the output model acts as an identity transformer.
@@ -123,8 +131,8 @@ class Pipeline @Since("1.4.0") (
    * @param dataset input dataset
    * @return fitted pipeline
    */
-  @Since("1.2.0")
-  override def fit(dataset: DataFrame): PipelineModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): PipelineModel = {
     transformSchema(dataset.schema, logging = true)
     val theStages = $(stages)
     // Search for the last estimator.
@@ -147,7 +155,7 @@ class Pipeline @Since("1.4.0") (
             t
           case _ =>
             throw new IllegalArgumentException(
-              s"Do not support stage $stage of type ${stage.getClass}")
+              s"Does not support stage $stage of type ${stage.getClass}")
         }
         if (index < indexOfLastEstimator) {
           curDataset = transformer.transform(curDataset)
@@ -165,7 +173,7 @@ class Pipeline @Since("1.4.0") (
   override def copy(extra: ParamMap): Pipeline = {
     val map = extractParamMap(extra)
     val newStages = map(stages).map(_.copy(extra))
-    new Pipeline().setStages(newStages)
+    new Pipeline(uid).setStages(newStages)
   }
 
   @Since("1.2.0")
@@ -208,7 +216,9 @@ object Pipeline extends MLReadable[Pipeline] {
     }
   }
 
-  /** Methods for [[MLReader]] and [[MLWriter]] shared between [[Pipeline]] and [[PipelineModel]] */
+  /**
+   * Methods for `MLReader` and `MLWriter` shared between [[Pipeline]] and [[PipelineModel]]
+   */
   private[ml] object SharedReadWrite {
 
     import org.json4s.JsonDSL._
@@ -276,11 +286,9 @@ object Pipeline extends MLReadable[Pipeline] {
 }
 
 /**
- * :: Experimental ::
  * Represents a fitted pipeline.
  */
 @Since("1.2.0")
-@Experimental
 class PipelineModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("1.4.0") val stages: Array[Transformer])
@@ -291,10 +299,10 @@ class PipelineModel private[ml] (
     this(uid, stages.asScala.toArray)
   }
 
-  @Since("1.2.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur))
+    stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
   }
 
   @Since("1.2.0")

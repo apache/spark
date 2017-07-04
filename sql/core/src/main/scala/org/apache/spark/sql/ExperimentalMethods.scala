@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -27,24 +27,29 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * regarding binary compatibility and source compatibility of methods here.
  *
  * {{{
- *   sqlContext.experimental.extraStrategies += ...
+ *   spark.experimental.extraStrategies += ...
  * }}}
  *
  * @since 1.3.0
  */
 @Experimental
+@InterfaceStability.Unstable
 class ExperimentalMethods private[sql]() {
 
   /**
    * Allows extra strategies to be injected into the query planner at runtime.  Note this API
-   * should be consider experimental and is not intended to be stable across releases.
+   * should be considered experimental and is not intended to be stable across releases.
    *
    * @since 1.3.0
    */
-  @Experimental
-  var extraStrategies: Seq[Strategy] = Nil
+  @volatile var extraStrategies: Seq[Strategy] = Nil
 
-  @Experimental
-  var extraOptimizations: Seq[Rule[LogicalPlan]] = Nil
+  @volatile var extraOptimizations: Seq[Rule[LogicalPlan]] = Nil
 
+  override def clone(): ExperimentalMethods = {
+    val result = new ExperimentalMethods
+    result.extraStrategies = extraStrategies
+    result.extraOptimizations = extraOptimizations
+    result
+  }
 }

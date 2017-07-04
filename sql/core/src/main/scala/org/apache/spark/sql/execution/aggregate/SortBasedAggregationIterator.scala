@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
-import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
  * An iterator used to evaluate [[AggregateFunction]]. It assumes the input rows have been
@@ -34,8 +34,8 @@ class SortBasedAggregationIterator(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    numOutputRows: LongSQLMetric)
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    numOutputRows: SQLMetric)
   extends AggregationIterator(
     groupingExpressions,
     valueAttributes,
@@ -46,14 +46,14 @@ class SortBasedAggregationIterator(
     newMutableProjection) {
 
   /**
-    * Creates a new aggregation buffer and initializes buffer values
-    * for all aggregate functions.
-    */
-  private def newBuffer: MutableRow = {
+   * Creates a new aggregation buffer and initializes buffer values
+   * for all aggregate functions.
+   */
+  private def newBuffer: InternalRow = {
     val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
 
-    val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
+    val genericMutableBuffer = new GenericInternalRow(bufferRowSize)
     val useUnsafeBuffer = bufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
 
     val buffer = if (useUnsafeBuffer) {
@@ -84,11 +84,7 @@ class SortBasedAggregationIterator(
   private[this] var sortedInputHasNewGroup: Boolean = false
 
   // The aggregation buffer used by the sort-based aggregation.
-  private[this] val sortBasedAggregationBuffer: MutableRow = newBuffer
-
-  // An SafeProjection to turn UnsafeRow into GenericInternalRow, because UnsafeRow can't be
-  // compared to MutableRow (aggregation buffer) directly.
-  private[this] val safeProj: Projection = FromUnsafeProjection(valueAttributes.map(_.dataType))
+  private[this] val sortBasedAggregationBuffer: InternalRow = newBuffer
 
   protected def initialize(): Unit = {
     if (inputIterator.hasNext) {
@@ -112,7 +108,7 @@ class SortBasedAggregationIterator(
     // We create a variable to track if we see the next group.
     var findNextPartition = false
     // firstRowInNextGroup is the first row of this group. We first process it.
-    processRow(sortBasedAggregationBuffer, safeProj(firstRowInNextGroup))
+    processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
 
     // The search will stop when we see the next group or there is no
     // input row left in the iter.
@@ -123,7 +119,7 @@ class SortBasedAggregationIterator(
 
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {
-        processRow(sortBasedAggregationBuffer, safeProj(currentRow))
+        processRow(sortBasedAggregationBuffer, currentRow)
       } else {
         // We find a new group.
         findNextPartition = true

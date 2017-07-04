@@ -28,6 +28,7 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.util.ThreadUtils
 
 class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Timeouts {
 
@@ -64,9 +65,9 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   test("foreachAsync") {
     zeroPartRdd.foreachAsync(i => Unit).get()
 
-    val accum = sc.accumulator(0)
+    val accum = sc.longAccumulator
     sc.parallelize(1 to 1000, 3).foreachAsync { i =>
-      accum += 1
+      accum.add(1)
     }.get()
     assert(accum.value === 1000)
   }
@@ -74,9 +75,9 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   test("foreachPartitionAsync") {
     zeroPartRdd.foreachPartitionAsync(iter => Unit).get()
 
-    val accum = sc.accumulator(0)
+    val accum = sc.longAccumulator
     sc.parallelize(1 to 1000, 9).foreachPartitionAsync { iter =>
-      accum += 1
+      accum.add(1)
     }.get()
     assert(accum.value === 9)
   }
@@ -185,13 +186,13 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   test("FutureAction result, infinite wait") {
     val f = sc.parallelize(1 to 100, 4)
               .countAsync()
-    assert(Await.result(f, Duration.Inf) === 100)
+    assert(ThreadUtils.awaitResult(f, Duration.Inf) === 100)
   }
 
   test("FutureAction result, finite wait") {
     val f = sc.parallelize(1 to 100, 4)
               .countAsync()
-    assert(Await.result(f, Duration(30, "seconds")) === 100)
+    assert(ThreadUtils.awaitResult(f, Duration(30, "seconds")) === 100)
   }
 
   test("FutureAction result, timeout") {
@@ -199,7 +200,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
               .mapPartitions(itr => { Thread.sleep(20); itr })
               .countAsync()
     intercept[TimeoutException] {
-      Await.result(f, Duration(20, "milliseconds"))
+      ThreadUtils.awaitResult(f, Duration(20, "milliseconds"))
     }
   }
 
@@ -221,7 +222,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
     // Now allow the executors to proceed with task processing.
     starter.release(rdd.partitions.length)
     // Waiting for the result verifies that the tasks were successfully processed.
-    Await.result(executionContextInvoked.future, atMost = 15.seconds)
+    ThreadUtils.awaitResult(executionContextInvoked.future, atMost = 15.seconds)
   }
 
   test("SimpleFutureAction callback must not consume a thread while waiting") {

@@ -34,6 +34,8 @@ import org.apache.spark.internal.Logging
  *
  * @param enabled             enables or disables SSL; if it is set to false, the rest of the
  *                            settings are disregarded
+ * @param port                the port where to bind the SSL server; if not defined, it will be
+ *                            based on the non-SSL port for the same service.
  * @param keyStore            a path to the key-store file
  * @param keyStorePassword    a password to access the key-store file
  * @param keyPassword         a password to access the private key in the key-store
@@ -47,6 +49,7 @@ import org.apache.spark.internal.Logging
  */
 private[spark] case class SSLOptions(
     enabled: Boolean = false,
+    port: Option[Int] = None,
     keyStore: Option[File] = None,
     keyStorePassword: Option[String] = None,
     keyPassword: Option[String] = None,
@@ -71,7 +74,7 @@ private[spark] case class SSLOptions(
       keyPassword.foreach(sslContextFactory.setKeyManagerPassword)
       keyStoreType.foreach(sslContextFactory.setKeyStoreType)
       if (needClientAuth) {
-        trustStore.foreach(file => sslContextFactory.setTrustStore(file.getAbsolutePath))
+        trustStore.foreach(file => sslContextFactory.setTrustStorePath(file.getAbsolutePath))
         trustStorePassword.foreach(sslContextFactory.setTrustStorePassword)
         trustStoreType.foreach(sslContextFactory.setTrustStoreType)
       }
@@ -132,36 +135,42 @@ private[spark] case class SSLOptions(
 
 private[spark] object SSLOptions extends Logging {
 
-  /** Resolves SSLOptions settings from a given Spark configuration object at a given namespace.
-    *
-    * The following settings are allowed:
-    * $ - `[ns].enabled` - `true` or `false`, to enable or disable SSL respectively
-    * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
-    * $ - `[ns].keyStorePassword` - a password to the key-store file
-    * $ - `[ns].keyPassword` - a password to the private key
-    * $ - `[ns].keyStoreType` - the type of the key-store
-    * $ - `[ns].needClientAuth` - whether SSL needs client authentication
-    * $ - `[ns].trustStore` - a path to the trust-store file; can be relative to the current
-    *                         directory
-    * $ - `[ns].trustStorePassword` - a password to the trust-store file
-    * $ - `[ns].trustStoreType` - the type of trust-store
-    * $ - `[ns].protocol` - a protocol name supported by a particular Java version
-    * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
-    *
-    * For a list of protocols and ciphers supported by particular Java versions, you may go to
-    * [[https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https Oracle
-    * blog page]].
-    *
-    * You can optionally specify the default configuration. If you do, for each setting which is
-    * missing in SparkConf, the corresponding setting is used from the default configuration.
-    *
-    * @param conf Spark configuration object where the settings are collected from
-    * @param ns the namespace name
-    * @param defaults the default configuration
-    * @return [[org.apache.spark.SSLOptions]] object
-    */
+  /**
+   * Resolves SSLOptions settings from a given Spark configuration object at a given namespace.
+   *
+   * The following settings are allowed:
+   * $ - `[ns].enabled` - `true` or `false`, to enable or disable SSL respectively
+   * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
+   * $ - `[ns].keyStorePassword` - a password to the key-store file
+   * $ - `[ns].keyPassword` - a password to the private key
+   * $ - `[ns].keyStoreType` - the type of the key-store
+   * $ - `[ns].needClientAuth` - whether SSL needs client authentication
+   * $ - `[ns].trustStore` - a path to the trust-store file; can be relative to the current
+   *                         directory
+   * $ - `[ns].trustStorePassword` - a password to the trust-store file
+   * $ - `[ns].trustStoreType` - the type of trust-store
+   * $ - `[ns].protocol` - a protocol name supported by a particular Java version
+   * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
+   *
+   * For a list of protocols and ciphers supported by particular Java versions, you may go to
+   * <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">
+   * Oracle blog page</a>.
+   *
+   * You can optionally specify the default configuration. If you do, for each setting which is
+   * missing in SparkConf, the corresponding setting is used from the default configuration.
+   *
+   * @param conf Spark configuration object where the settings are collected from
+   * @param ns the namespace name
+   * @param defaults the default configuration
+   * @return [[org.apache.spark.SSLOptions]] object
+   */
   def parse(conf: SparkConf, ns: String, defaults: Option[SSLOptions] = None): SSLOptions = {
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
+
+    val port = conf.getOption(s"$ns.port").map(_.toInt)
+    port.foreach { p =>
+      require(p >= 0, "Port number must be a non-negative value.")
+    }
 
     val keyStore = conf.getOption(s"$ns.keyStore").map(new File(_))
         .orElse(defaults.flatMap(_.keyStore))
@@ -197,6 +206,7 @@ private[spark] object SSLOptions extends Logging {
 
     new SSLOptions(
       enabled,
+      port,
       keyStore,
       keyStorePassword,
       keyPassword,

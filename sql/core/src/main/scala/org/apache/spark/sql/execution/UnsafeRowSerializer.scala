@@ -26,6 +26,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.unsafe.Platform
 
 /**
@@ -39,12 +40,17 @@ import org.apache.spark.unsafe.Platform
  *
  * @param numFields the number of fields in the row being serialized.
  */
-private[sql] class UnsafeRowSerializer(numFields: Int) extends Serializer with Serializable {
-  override def newInstance(): SerializerInstance = new UnsafeRowSerializerInstance(numFields)
-  override private[spark] def supportsRelocationOfSerializedObjects: Boolean = true
+class UnsafeRowSerializer(
+    numFields: Int,
+    dataSize: SQLMetric = null) extends Serializer with Serializable {
+  override def newInstance(): SerializerInstance =
+    new UnsafeRowSerializerInstance(numFields, dataSize)
+  override def supportsRelocationOfSerializedObjects: Boolean = true
 }
 
-private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInstance {
+private class UnsafeRowSerializerInstance(
+    numFields: Int,
+    dataSize: SQLMetric) extends SerializerInstance {
   /**
    * Serializes a stream of UnsafeRows. Within the stream, each record consists of a record
    * length (stored as a 4-byte integer, written high byte first), followed by the record's bytes.
@@ -56,7 +62,9 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
 
     override def writeValue[T: ClassTag](value: T): SerializationStream = {
       val row = value.asInstanceOf[UnsafeRow]
-
+      if (dataSize != null) {
+        dataSize.add(row.getSizeInBytes)
+      }
       dOut.writeInt(row.getSizeInBytes)
       row.writeToStream(dOut, writeBuffer)
       this

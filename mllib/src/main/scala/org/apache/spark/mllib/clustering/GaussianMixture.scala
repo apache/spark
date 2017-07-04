@@ -41,14 +41,16 @@ import org.apache.spark.util.Utils
  * While this process is generally guaranteed to converge, it is not guaranteed
  * to find a global optimum.
  *
- * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
- *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
- *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
- *
  * @param k Number of independent Gaussians in the mixture model.
  * @param convergenceTol Maximum change in log-likelihood at which convergence
  *                       is considered to have occurred.
  * @param maxIterations Maximum number of iterations allowed.
+ *
+ * @note This algorithm is limited in its number of features since it requires storing a covariance
+ * matrix which has size quadratic in the number of features. Even when the number of features does
+ * not exceed this limit, this algorithm may perform poorly on high-dimensional data.
+ * This is due to high-dimensional data (a) making it difficult to cluster at all (based
+ * on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  */
 @Since("1.3.0")
 class GaussianMixture private (
@@ -78,11 +80,9 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setInitialModel(model: GaussianMixtureModel): this.type = {
-    if (model.k == k) {
-      initialModel = Some(model)
-    } else {
-      throw new IllegalArgumentException("mismatched cluster count (model.k != k)")
-    }
+    require(model.k == k,
+      s"Mismatched cluster count (model.k ${model.k} != k ${k})")
+    initialModel = Some(model)
     this
   }
 
@@ -97,6 +97,8 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setK(k: Int): this.type = {
+    require(k > 0,
+      s"Number of Gaussians must be positive but got ${k}")
     this.k = k
     this
   }
@@ -112,6 +114,8 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setMaxIterations(maxIterations: Int): this.type = {
+    require(maxIterations >= 0,
+      s"Maximum of iterations must be nonnegative but got ${maxIterations}")
     this.maxIterations = maxIterations
     this
   }
@@ -128,6 +132,8 @@ class GaussianMixture private (
    */
   @Since("1.3.0")
   def setConvergenceTol(convergenceTol: Double): this.type = {
+    require(convergenceTol >= 0.0,
+      s"Convergence tolerance must be nonnegative but got ${convergenceTol}")
     this.convergenceTol = convergenceTol
     this
   }
@@ -162,10 +168,13 @@ class GaussianMixture private (
     val sc = data.sparkContext
 
     // we will operate on the data as breeze data
-    val breezeData = data.map(_.toBreeze).cache()
+    val breezeData = data.map(_.asBreeze).cache()
 
     // Get length of the input vectors
     val d = breezeData.first().length
+    require(d < GaussianMixture.MAX_NUM_FEATURES, s"GaussianMixture cannot handle more " +
+      s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
+      s" matrix is quadratic in the number of features.")
 
     val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(k, d)
 
@@ -177,13 +186,12 @@ class GaussianMixture private (
     val (weights, gaussians) = initialModel match {
       case Some(gmm) => (gmm.weights, gmm.gaussians)
 
-      case None => {
+      case None =>
         val samples = breezeData.takeSample(withReplacement = true, k * nSamples, seed)
         (Array.fill(k)(1.0 / k), Array.tabulate(k) { i =>
           val slice = samples.view(i * nSamples, (i + 1) * nSamples)
           new MultivariateGaussian(vectorMean(slice), initCovariance(slice))
         })
-      }
     }
 
     var llh = Double.MinValue // current log-likelihood
@@ -195,7 +203,7 @@ class GaussianMixture private (
       val compute = sc.broadcast(ExpectationSum.add(weights, gaussians)_)
 
       // aggregate the cluster contribution for all sample points
-      val sums = breezeData.aggregate(ExpectationSum.zero(k, d))(compute.value, _ += _)
+      val sums = breezeData.treeAggregate(ExpectationSum.zero(k, d))(compute.value, _ += _)
 
       // Create new distributions based on the partial assignments
       // (often referred to as the "M" step in literature)
@@ -208,8 +216,8 @@ class GaussianMixture private (
         val (ws, gs) = sc.parallelize(tuples, numPartitions).map { case (mean, sigma, weight) =>
           updateWeightsAndGaussians(mean, sigma, weight, sumWeights)
         }.collect().unzip
-        Array.copy(ws.toArray, 0, weights, 0, ws.length)
-        Array.copy(gs.toArray, 0, gaussians, 0, gs.length)
+        Array.copy(ws, 0, weights, 0, ws.length)
+        Array.copy(gs, 0, gaussians, 0, gs.length)
       } else {
         var i = 0
         while (i < k) {
@@ -224,13 +232,14 @@ class GaussianMixture private (
       llhp = llh // current becomes previous
       llh = sums.logLikelihood // this is the freshly computed log-likelihood
       iter += 1
+      compute.destroy(blocking = false)
     }
 
     new GaussianMixtureModel(weights, gaussians)
   }
 
   /**
-   * Java-friendly version of [[run()]]
+   * Java-friendly version of `run()`
    */
   @Since("1.3.0")
   def run(data: JavaRDD[Vector]): GaussianMixtureModel = run(data.rdd)
@@ -262,15 +271,19 @@ class GaussianMixture private (
   private def initCovariance(x: IndexedSeq[BV[Double]]): BreezeMatrix[Double] = {
     val mu = vectorMean(x)
     val ss = BDV.zeros[Double](x(0).length)
-    x.foreach(xi => ss += (xi - mu) :^ 2.0)
+    x.foreach(xi => ss += (xi - mu) ^:^ 2.0)
     diag(ss / x.length.toDouble)
   }
 }
 
 private[clustering] object GaussianMixture {
+
+  /** Limit number of features such that numFeatures^2^ < Int.MaxValue */
+  private[clustering] val MAX_NUM_FEATURES = math.sqrt(Int.MaxValue).toInt
+
   /**
-   * Heuristic to distribute the computation of the [[MultivariateGaussian]]s, approximately when
-   * d > 25 except for when k is very small.
+   * Heuristic to distribute the computation of the `MultivariateGaussian`s, approximately when
+   * d is greater than 25 except for when k is very small.
    * @param k  Number of topics
    * @param d  Number of features
    */

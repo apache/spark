@@ -80,7 +80,7 @@ NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
 
 MVN="build/mvn --force"
-PUBLISH_PROFILES="-Pyarn -Phive -Phadoop-2.2"
+PUBLISH_PROFILES="-Pmesos -Pyarn -Phive -Phive-thriftserver"
 PUBLISH_PROFILES="$PUBLISH_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
 
 rm -rf spark
@@ -150,6 +150,7 @@ if [[ "$1" == "package" ]]; then
     NAME=$1
     FLAGS=$2
     ZINC_PORT=$3
+    BUILD_PACKAGE=$4
     cp -r spark spark-$SPARK_VERSION-bin-$NAME
 
     cd spark-$SPARK_VERSION-bin-$NAME
@@ -162,14 +163,62 @@ if [[ "$1" == "package" ]]; then
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
 
+    # Write out the VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
+    # to dev0 to be closer to PEP440.
+    PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -r "s/-/./" | sed -r "s/SNAPSHOT/dev0/"`
+    echo "__version__='$PYSPARK_VERSION'" > python/pyspark/version.py
+
     # Get maven home set by MVN
     MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
 
-    ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz $FLAGS \
-      -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
-    cd ..
-    cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
 
+    if [ -z "$BUILD_PACKAGE" ]; then
+      echo "Creating distribution without PIP/R package"
+      ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz $FLAGS \
+        -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
+      cd ..
+    elif [[ "$BUILD_PACKAGE" == "withr" ]]; then
+      echo "Creating distribution with R package"
+      ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz --r $FLAGS \
+        -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
+      cd ..
+
+      echo "Copying and signing R source package"
+      R_DIST_NAME=SparkR_$SPARK_VERSION.tar.gz
+      cp spark-$SPARK_VERSION-bin-$NAME/R/$R_DIST_NAME .
+
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $R_DIST_NAME.asc \
+        --detach-sig $R_DIST_NAME
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+        MD5 $R_DIST_NAME > \
+        $R_DIST_NAME.md5
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+        SHA512 $R_DIST_NAME > \
+        $R_DIST_NAME.sha
+    else
+      echo "Creating distribution with PIP package"
+      ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz --pip $FLAGS \
+        -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
+      cd ..
+
+      echo "Copying and signing python distribution"
+      PYTHON_DIST_NAME=pyspark-$PYSPARK_VERSION.tar.gz
+      cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_DIST_NAME .
+
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $PYTHON_DIST_NAME.asc \
+        --detach-sig $PYTHON_DIST_NAME
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+        MD5 $PYTHON_DIST_NAME > \
+        $PYTHON_DIST_NAME.md5
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+        SHA512 $PYTHON_DIST_NAME > \
+        $PYTHON_DIST_NAME.sha
+    fi
+
+    echo "Copying and signing regular binary distribution"
+    cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
       --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
       --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
@@ -186,12 +235,10 @@ if [[ "$1" == "package" ]]; then
 
   # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
   # share the same Zinc server.
-  make_binary_release "hadoop2.3" "-Psparkr -Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" "3033" &
-  make_binary_release "hadoop2.4" "-Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" "3034" &
-  make_binary_release "hadoop2.6" "-Psparkr -Phadoop-2.6 -Phive -Phive-thriftserver -Pyarn" "3035" &
-  make_binary_release "hadoop2.7" "-Psparkr -Phadoop-2.7 -Phive -Phive-thriftserver -Pyarn" "3036" &
-  make_binary_release "hadoop2.4-without-hive" "-Psparkr -Phadoop-2.4 -Pyarn" "3037" &
-  make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn" "3038" &
+  FLAGS="-Psparkr -Phive -Phive-thriftserver -Pyarn -Pmesos"
+  make_binary_release "hadoop2.6" "-Phadoop-2.6 $FLAGS" "3035" "withr" &
+  make_binary_release "hadoop2.7" "-Phadoop-2.7 $FLAGS" "3036" "withpip" &
+  make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn -Pmesos" "3038" &
   wait
   rm -rf spark-$SPARK_VERSION-bin-*/
 
@@ -199,14 +246,18 @@ if [[ "$1" == "package" ]]; then
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-bin"
   echo "Copying release tarballs to $dest_dir"
   # Put to new directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mput -O $dest_dir 'spark-*'
+  LFTP mput -O $dest_dir 'pyspark-*'
+  LFTP mput -O $dest_dir 'SparkR_*'
   # Delete /latest directory and rename new upload to /latest
   LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mput -O $dest_dir 'spark-*'
+  LFTP mput -O $dest_dir 'pyspark-*'
+  LFTP mput -O $dest_dir 'SparkR_*'
   exit 0
 fi
 
@@ -216,18 +267,17 @@ if [[ "$1" == "docs" ]]; then
   echo "Building Spark docs"
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-docs"
   cd docs
-  # Compile docs with Java 7 to use nicer format
   # TODO: Make configurable to add this: PRODUCTION=1
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" jekyll build
   echo "Copying release documentation to $dest_dir"
   # Put to new directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mirror -R _site $dest_dir
   # Delete /latest directory and rename new upload to /latest
   LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mirror -R _site $dest_dir
   cd ..
   exit 0
@@ -254,8 +304,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   # Generate random point for Zinc
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
-  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $PUBLISH_PROFILES \
-    -Phive-thriftserver deploy
+  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $PUBLISH_PROFILES deploy
   ./dev/change-scala-version.sh 2.10
   $MVN -DzincPort=$ZINC_PORT -Dscala-2.10 --settings $tmp_settings \
     -DskipTests $PUBLISH_PROFILES clean deploy
@@ -291,8 +340,7 @@ if [[ "$1" == "publish-release" ]]; then
   # Generate random point for Zinc
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
-  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $PUBLISH_PROFILES \
-    -Phive-thriftserver clean install
+  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $PUBLISH_PROFILES clean install
 
   ./dev/change-scala-version.sh 2.10
 

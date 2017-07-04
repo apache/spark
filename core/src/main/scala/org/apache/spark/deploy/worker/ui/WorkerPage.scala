@@ -23,8 +23,8 @@ import scala.xml.Node
 
 import org.json4s.JValue
 
+import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
-import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.{UIUtils, WebUIPage}
@@ -34,12 +34,12 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
   private val workerEndpoint = parent.worker.self
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    val workerState = workerEndpoint.askWithRetry[WorkerStateResponse](RequestWorkerState)
+    val workerState = workerEndpoint.askSync[WorkerStateResponse](RequestWorkerState)
     JsonProtocol.writeWorkerState(workerState)
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val workerState = workerEndpoint.askWithRetry[WorkerStateResponse](RequestWorkerState)
+    val workerState = workerEndpoint.askSync[WorkerStateResponse](RequestWorkerState)
 
     val executorHeaders = Seq("ExecutorID", "Cores", "State", "Memory", "Job Details", "Logs")
     val runningExecutors = workerState.executors
@@ -112,7 +112,15 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       <td>
         <ul class="unstyled">
           <li><strong>ID:</strong> {executor.appId}</li>
-          <li><strong>Name:</strong> {executor.appDesc.name}</li>
+          <li><strong>Name:</strong>
+          {
+            if ({executor.state == ExecutorState.RUNNING} && executor.appDesc.appUiUrl.nonEmpty) {
+              <a href={executor.appDesc.appUiUrl}> {executor.appDesc.name}</a>
+            } else {
+              {executor.appDesc.name}
+            }
+          }
+          </li>
           <li><strong>User:</strong> {executor.appDesc.user}</li>
         </ul>
       </td>

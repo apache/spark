@@ -119,7 +119,7 @@ private[streaming] class ReceivedBlockTracker(
         timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
         lastAllocatedBatchTime = batchTime
       } else {
-        logInfo(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
+        logInfo(s"Possibly processed batch $batchTime needs to be processed again in WAL recovery")
       }
     } else {
       // This situation occurs when:
@@ -129,7 +129,7 @@ private[streaming] class ReceivedBlockTracker(
       // 2. Slow checkpointing makes recovered batch time older than WAL recovered
       // lastAllocatedBatchTime.
       // This situation will only occurs in recovery time.
-      logInfo(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
+      logInfo(s"Possibly processed batch $batchTime needs to be processed again in WAL recovery")
     }
   }
 

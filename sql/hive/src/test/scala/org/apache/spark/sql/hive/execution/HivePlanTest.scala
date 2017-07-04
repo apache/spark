@@ -24,11 +24,11 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HivePlanTest extends QueryTest with TestHiveSingleton {
-  import hiveContext.sql
-  import hiveContext.implicits._
+  import spark.sql
+  import spark.implicits._
 
   test("udf constant folding") {
-    Seq.empty[Tuple1[Int]].toDF("a").registerTempTable("t")
+    Seq.empty[Tuple1[Int]].toDF("a").createOrReplaceTempView("t")
     val optimized = sql("SELECT cos(null) AS c FROM t").queryExecution.optimizedPlan
     val correctAnswer = sql("SELECT cast(null as double) AS c FROM t").queryExecution.optimizedPlan
 

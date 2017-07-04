@@ -29,7 +29,7 @@ import org.apache.spark.launcher.WorkerCommandBuilder
 import org.apache.spark.util.Utils
 
 /**
- ** Utilities for running commands with the spark classpath.
+ * Utilities for running commands with the spark classpath.
  */
 private[deploy]
 object CommandUtils extends Logging {

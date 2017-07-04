@@ -22,9 +22,11 @@ import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.log4j.{Level, LogManager}
+
 import org.apache.spark.{SparkContext, SparkFunSuite}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 class ReplSuite extends SparkFunSuite {
 
@@ -43,11 +45,12 @@ class ReplSuite extends SparkFunSuite {
         }
       }
     }
-    val classpath = paths.mkString(File.pathSeparator)
+    val classpath = paths.map(new File(_).getAbsolutePath).mkString(File.pathSeparator)
 
     val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
-
+    Main.sparkContext = null
+    Main.sparkSession = null // causes recreation of SparkContext for each test.
     Main.conf.set("spark.master", master)
     Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
 
@@ -58,6 +61,10 @@ class ReplSuite extends SparkFunSuite {
     }
     return out.toString
   }
+
+  // Simulate the paste mode in Scala REPL.
+  def runInterpreterInPasteMode(master: String, input: String): String =
+    runInterpreter(master, ":paste\n" + input + 4.toChar) // 4 is the ascii code of CTRL + D
 
   def assertContains(message: String, output: String) {
     val isContain = output.contains(message)
@@ -95,69 +102,50 @@ class ReplSuite extends SparkFunSuite {
     System.clearProperty("spark.driver.port")
   }
 
-  test("simple foreach with accumulator") {
-    val output = runInterpreter("local",
-      """
-        |val accum = sc.accumulator(0)
-        |sc.parallelize(1 to 10).foreach(x => accum += x)
-        |accum.value
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-    assertContains("res1: Int = 55", output)
+  test("SPARK-15236: use Hive catalog") {
+    // turn on the INFO log so that it is possible the code will dump INFO
+    // entry for using "HiveMetastore"
+    val rootLogger = LogManager.getRootLogger()
+    val logLevel = rootLogger.getLevel
+    rootLogger.setLevel(Level.INFO)
+    try {
+      Main.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+      val output = runInterpreter("local",
+        """
+      |spark.sql("drop table if exists t_15236")
+    """.stripMargin)
+      assertDoesNotContain("error:", output)
+      assertDoesNotContain("Exception", output)
+      // only when the config is set to hive and
+      // hive classes are built, we will use hive catalog.
+      // Then log INFO entry will show things using HiveMetastore
+      if (SparkSession.hiveClassesArePresent) {
+        assertContains("HiveMetaStore", output)
+      } else {
+        // If hive classes are not built, in-memory catalog will be used
+        assertDoesNotContain("HiveMetaStore", output)
+      }
+    } finally {
+      rootLogger.setLevel(logLevel)
+    }
   }
 
-  test("external vars") {
-    val output = runInterpreter("local",
-      """
-        |var v = 7
-        |sc.parallelize(1 to 10).map(x => v).collect().reduceLeft(_+_)
-        |v = 10
-        |sc.parallelize(1 to 10).map(x => v).collect().reduceLeft(_+_)
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-    assertContains("res0: Int = 70", output)
-    assertContains("res1: Int = 100", output)
-  }
-
-  test("external classes") {
-    val output = runInterpreter("local",
-      """
-        |class C {
-        |def foo = 5
-        |}
-        |sc.parallelize(1 to 10).map(x => (new C).foo).collect().reduceLeft(_+_)
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-    assertContains("res0: Int = 50", output)
-  }
-
-  test("external functions") {
-    val output = runInterpreter("local",
-      """
-        |def double(x: Int) = x + x
-        |sc.parallelize(1 to 10).map(x => double(x)).collect().reduceLeft(_+_)
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-    assertContains("res0: Int = 110", output)
-  }
-
-  test("external functions that access vars") {
-    val output = runInterpreter("local",
-      """
-        |var v = 7
-        |def getV() = v
-        |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
-        |v = 10
-        |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-    assertContains("res0: Int = 70", output)
-    assertContains("res1: Int = 100", output)
+  test("SPARK-15236: use in-memory catalog") {
+    val rootLogger = LogManager.getRootLogger()
+    val logLevel = rootLogger.getLevel
+    rootLogger.setLevel(Level.INFO)
+    try {
+      Main.conf.set(CATALOG_IMPLEMENTATION.key, "in-memory")
+      val output = runInterpreter("local",
+        """
+          |spark.sql("drop table if exists t_16236")
+        """.stripMargin)
+      assertDoesNotContain("error:", output)
+      assertDoesNotContain("Exception", output)
+      assertDoesNotContain("HiveMetaStore", output)
+    } finally {
+      rootLogger.setLevel(logLevel)
+    }
   }
 
   test("broadcast vars") {
@@ -176,99 +164,6 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("res0: Array[Int] = Array(0, 0, 0, 0, 0)", output)
     assertContains("res2: Array[Int] = Array(5, 0, 0, 0, 0)", output)
-  }
-
-  test("interacting with files") {
-    val tempDir = Utils.createTempDir()
-    val out = new FileWriter(tempDir + "/input")
-    out.write("Hello world!\n")
-    out.write("What's up?\n")
-    out.write("Goodbye\n")
-    out.close()
-    val output = runInterpreter("local",
-      """
-        |var file = sc.textFile("%s").cache()
-        |file.count()
-        |file.count()
-        |file.count()
-      """.stripMargin.format(StringEscapeUtils.escapeJava(
-        tempDir.getAbsolutePath + File.separator + "input")))
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-    assertContains("res0: Long = 3", output)
-    assertContains("res1: Long = 3", output)
-    assertContains("res2: Long = 3", output)
-    Utils.deleteRecursively(tempDir)
-  }
-
-  test("local-cluster mode") {
-    val output = runInterpreter("local-cluster[1,1,1024]",
-      """
-        |var v = 7
-        |def getV() = v
-        |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
-        |v = 10
-        |sc.parallelize(1 to 10).map(x => getV()).collect().reduceLeft(_+_)
-        |var array = new Array[Int](5)
-        |val broadcastArray = sc.broadcast(array)
-        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
-        |array(0) = 5
-        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect()
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-    assertContains("res0: Int = 70", output)
-    assertContains("res1: Int = 100", output)
-    assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
-    assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
-  }
-
-  test("SPARK-1199 two instances of same class don't type check.") {
-    val output = runInterpreter("local-cluster[1,1,1024]",
-      """
-        |case class Sum(exp: String, exp2: String)
-        |val a = Sum("A", "B")
-        |def b(a: Sum): String = a match { case Sum(_, _) => "Found Sum" }
-        |b(a)
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-  }
-
-  test("SPARK-2452 compound statements.") {
-    val output = runInterpreter("local",
-      """
-        |val x = 4 ; def f() = x
-        |f()
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-  }
-
-  test("SPARK-2576 importing SQLContext.createDataFrame.") {
-    // We need to use local-cluster to test this case.
-    val output = runInterpreter("local-cluster[1,1,1024]",
-      """
-        |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-        |import sqlContext.implicits._
-        |case class TestCaseClass(value: Int)
-        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toDF().collect()
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-  }
-
-  test("SPARK-2632 importing a method from non serializable class and not using it.") {
-    val output = runInterpreter("local",
-      """
-      |class TestClass() { def testMethod = 3 }
-      |val t = new TestClass
-      |import t.testMethod
-      |case class TestCaseClass(value: Int)
-      |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).collect()
-    """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
   }
 
   if (System.getenv("MESOS_NATIVE_JAVA_LIBRARY") != null) {
@@ -295,26 +190,31 @@ class ReplSuite extends SparkFunSuite {
     }
   }
 
-  test("collecting objects of class defined in repl") {
-    val output = runInterpreter("local[2]",
+  test("line wrapper only initialized once when used as encoder outer scope") {
+    val output = runInterpreter("local",
       """
-        |case class Foo(i: Int)
-        |val ret = sc.parallelize((1 to 100).map(Foo), 10).collect()
+        |val fileName = "repl-test-" + System.currentTimeMillis
+        |val tmpDir = System.getProperty("java.io.tmpdir")
+        |val file = new java.io.File(tmpDir, fileName)
+        |def createFile(): Unit = file.createNewFile()
+        |
+        |createFile();case class TestCaseClass(value: Int)
+        |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).collect()
+        |
+        |file.delete()
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
-    assertContains("ret: Array[Foo] = Array(Foo(1),", output)
   }
 
-  test("collecting objects of class defined in repl - shuffling") {
-    val output = runInterpreter("local-cluster[1,1,1024]",
+  test("define case class and create Dataset together with paste mode") {
+    val output = runInterpreterInPasteMode("local-cluster[1,1,1024]",
       """
-        |case class Foo(i: Int)
-        |val list = List((1, Foo(1)), (1, Foo(2)))
-        |val ret = sc.parallelize(list).groupByKey().collect()
+        |import spark.implicits._
+        |case class TestClass(value: Int)
+        |Seq(TestClass(1)).toDS()
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
-    assertContains("ret: Array[(Int, Iterable[Foo])] = Array((1,", output)
   }
 }

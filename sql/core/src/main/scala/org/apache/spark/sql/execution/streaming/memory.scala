@@ -18,16 +18,21 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.atomic.AtomicInteger
+import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row, SQLContext}
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, RowEncoder}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
@@ -45,22 +50,34 @@ object MemoryStream {
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     extends Source with Logging {
   protected val encoder = encoderFor[A]
-  protected val logicalPlan = StreamingRelation(this)
+  protected val logicalPlan = StreamingExecutionRelation(this)
   protected val output = logicalPlan.output
-  protected val batches = new ArrayBuffer[Dataset[A]]
 
+  /**
+   * All batches from `lastCommittedOffset + 1` to `currentOffset`, inclusive.
+   * Stored in a ListBuffer to facilitate removing committed batches.
+   */
+  @GuardedBy("this")
+  protected val batches = new ListBuffer[Dataset[A]]
+
+  @GuardedBy("this")
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
-  protected def blockManager = SparkEnv.get.blockManager
+  /**
+   * Last offset that was discarded, or -1 if no commits have occurred. Note that the value
+   * -1 is used in calculations below and isn't just an arbitrary constant.
+   */
+  @GuardedBy("this")
+  protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
 
   def schema: StructType = encoder.schema
 
-  def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
-    Dataset(sqlContext, logicalPlan)
+  def toDS(): Dataset[A] = {
+    Dataset(sqlContext.sparkSession, logicalPlan)
   }
 
-  def toDF()(implicit sqlContext: SQLContext): DataFrame = {
-    Dataset.newDataFrame(sqlContext, logicalPlan)
+  def toDF(): DataFrame = {
+    Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
   }
 
   def addData(data: A*): Offset = {
@@ -69,81 +86,149 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   def addData(data: TraversableOnce[A]): Offset = {
     import sqlContext.implicits._
+    val ds = data.toVector.toDS()
+    logDebug(s"Adding ds: $ds")
     this.synchronized {
       currentOffset = currentOffset + 1
-      val ds = data.toVector.toDS()
-      logDebug(s"Adding ds: $ds")
-      batches.append(ds)
+      batches += ds
       currentOffset
     }
   }
 
-  override def getNextBatch(start: Option[Offset]): Option[Batch] = synchronized {
-    val newBlocks =
-      batches.drop(
-        start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1)
+  override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
 
-    if (newBlocks.nonEmpty) {
-      logDebug(s"Running [$start, $currentOffset] on blocks ${newBlocks.mkString(", ")}")
-      val df = newBlocks
-          .map(_.toDF())
-          .reduceOption(_ unionAll _)
-          .getOrElse(sqlContext.emptyDataFrame)
-
-      Some(new Batch(currentOffset, df))
-    } else {
+  override def getOffset: Option[Offset] = synchronized {
+    if (currentOffset.offset == -1) {
       None
+    } else {
+      Some(currentOffset)
     }
   }
 
-  override def toString: String = s"MemoryStream[${output.mkString(",")}]"
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+    // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
+    val startOrdinal =
+      start.flatMap(LongOffset.convert).getOrElse(LongOffset(-1)).offset.toInt + 1
+    val endOrdinal = LongOffset.convert(end).getOrElse(LongOffset(-1)).offset.toInt + 1
+
+    // Internal buffer only holds the batches after lastCommittedOffset.
+    val newBlocks = synchronized {
+      val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
+      val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
+      batches.slice(sliceStart, sliceEnd)
+    }
+
+    logDebug(
+      s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
+    newBlocks
+      .map(_.toDF())
+      .reduceOption(_ union _)
+      .getOrElse {
+        sys.error("No data selected!")
+      }
+  }
+
+  override def commit(end: Offset): Unit = synchronized {
+    def check(newOffset: LongOffset): Unit = {
+      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
+
+      if (offsetDiff < 0) {
+        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
+      }
+
+      batches.trimStart(offsetDiff)
+      lastOffsetCommitted = newOffset
+    }
+
+    LongOffset.convert(end) match {
+      case Some(lo) => check(lo)
+      case None => sys.error(s"MemoryStream.commit() received an offset ($end) " +
+        "that did not originate with an instance of this class")
+    }
+  }
+
+  override def stop() {}
+
+  def reset(): Unit = synchronized {
+    batches.clear()
+    currentOffset = new LongOffset(-1)
+    lastOffsetCommitted = new LongOffset(-1)
+  }
 }
 
 /**
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySink(schema: StructType) extends Sink with Logging {
+class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink with Logging {
+
+  private case class AddedData(batchId: Long, data: Array[Row])
+
   /** An order list of batches that have been written to this [[Sink]]. */
-  private var batches = new ArrayBuffer[Batch]()
-
-  /** Used to convert an [[InternalRow]] to an external [[Row]] for comparison in testing. */
-  private val externalRowConverter = RowEncoder(schema)
-
-  override def currentOffset: Option[Offset] = synchronized {
-    batches.lastOption.map(_.end)
-  }
-
-  override def addBatch(nextBatch: Batch): Unit = synchronized {
-    nextBatch.data.collect()  // 'compute' the batch's data and record the batch
-    batches.append(nextBatch)
-  }
+  @GuardedBy("this")
+  private val batches = new ArrayBuffer[AddedData]()
 
   /** Returns all rows that are stored in this [[Sink]]. */
   def allData: Seq[Row] = synchronized {
-    batches
-        .map(_.data)
-        .reduceOption(_ unionAll _)
-        .map(_.collect().toSeq)
-        .getOrElse(Seq.empty)
+    batches.map(_.data).flatten
   }
 
-  /**
-   * Atomically drops the most recent `num` batches and resets the [[StreamProgress]] to the
-   * corresponding point in the input. This function can be used when testing to simulate data
-   * that has been lost due to buffering.
-   */
-  def dropBatches(num: Int): Unit = synchronized {
-    batches.dropRight(num)
+  def latestBatchId: Option[Long] = synchronized {
+    batches.lastOption.map(_.batchId)
   }
+
+  def latestBatchData: Seq[Row] = synchronized { batches.lastOption.toSeq.flatten(_.data) }
 
   def toDebugString: String = synchronized {
-    batches.map { b =>
-      val dataStr = try b.data.collect().mkString(" ") catch {
+    batches.map { case AddedData(batchId, data) =>
+      val dataStr = try data.mkString(" ") catch {
         case NonFatal(e) => "[Error converting to string]"
       }
-      s"${b.end}: $dataStr"
+      s"$batchId: $dataStr"
     }.mkString("\n")
   }
+
+  override def addBatch(batchId: Long, data: DataFrame): Unit = {
+    val notCommitted = synchronized {
+      latestBatchId.isEmpty || batchId > latestBatchId.get
+    }
+    if (notCommitted) {
+      logDebug(s"Committing batch $batchId to $this")
+      outputMode match {
+        case Append | Update =>
+          val rows = AddedData(batchId, data.collect())
+          synchronized { batches += rows }
+
+        case Complete =>
+          val rows = AddedData(batchId, data.collect())
+          synchronized {
+            batches.clear()
+            batches += rows
+          }
+
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Output mode $outputMode is not supported by MemorySink")
+      }
+    } else {
+      logDebug(s"Skipping already committed batch: $batchId")
+    }
+  }
+
+  def clear(): Unit = synchronized {
+    batches.clear()
+  }
+
+  override def toString(): String = "MemorySink"
 }
 
+/**
+ * Used to query the data that has been written into a [[MemorySink]].
+ */
+case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode {
+  def this(sink: MemorySink) = this(sink, sink.schema.toAttributes)
+
+  private val sizePerRow = sink.schema.toAttributes.map(_.dataType.defaultSize).sum
+
+  override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
+}

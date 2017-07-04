@@ -21,9 +21,11 @@ import java.io.File
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -42,12 +44,9 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
-      val basePath = new Path(file.getCanonicalPath)
-      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
-      val qualifiedBasePath = fs.makeQualified(basePath)
-
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
+        val partitionDir = new Path(
+          CatalogUtils.URIToString(makeQualifiedPath(file.getCanonicalPath)), s"p1=$p1/p2=$p2")
         sparkContext
           .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
           .toDF("a", "b", "p1")
@@ -58,7 +57,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        hiveContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }
@@ -76,7 +75,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .format("parquet")
         .save(s"${dir.getCanonicalPath}/_temporary")
 
-      checkAnswer(hiveContext.read.format("parquet").load(dir.getCanonicalPath), df.collect())
+      checkAnswer(spark.read.format("parquet").load(dir.getCanonicalPath), df.collect())
     }
   }
 
@@ -104,7 +103,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       // This shouldn't throw anything.
       df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
-      checkAnswer(hiveContext.read.format("parquet").load(path), df)
+      checkAnswer(spark.read.format("parquet").load(path), df)
     }
   }
 
@@ -114,7 +113,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         // Parquet doesn't allow field names with spaces.  Here we are intentionally making an
         // exception thrown from the `ParquetRelation2.prepareForWriteJob()` method to trigger
         // the bug.  Please refer to spark-8079 for more details.
-        hiveContext.range(1, 10)
+        spark.range(1, 10)
           .withColumnRenamed("id", "a b")
           .write
           .format("parquet")
@@ -124,23 +123,28 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 
   test("SPARK-8604: Parquet data source should write summary file while doing appending") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val df = sqlContext.range(0, 5).toDF()
-      df.write.mode(SaveMode.Overwrite).parquet(path)
+    withSQLConf(
+        ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true",
+        SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+          classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = spark.range(0, 5).toDF()
+        df.write.mode(SaveMode.Overwrite).parquet(path)
 
-      val summaryPath = new Path(path, "_metadata")
-      val commonSummaryPath = new Path(path, "_common_metadata")
+        val summaryPath = new Path(path, "_metadata")
+        val commonSummaryPath = new Path(path, "_common_metadata")
 
-      val fs = summaryPath.getFileSystem(hadoopConfiguration)
-      fs.delete(summaryPath, true)
-      fs.delete(commonSummaryPath, true)
+        val fs = summaryPath.getFileSystem(spark.sessionState.newHadoopConf())
+        fs.delete(summaryPath, true)
+        fs.delete(commonSummaryPath, true)
 
-      df.write.mode(SaveMode.Append).parquet(path)
-      checkAnswer(sqlContext.read.parquet(path), df.unionAll(df))
+        df.write.mode(SaveMode.Append).parquet(path)
+        checkAnswer(spark.read.parquet(path), df.union(df))
 
-      assert(fs.exists(summaryPath))
-      assert(fs.exists(commonSummaryPath))
+        assert(fs.exists(summaryPath))
+        assert(fs.exists(commonSummaryPath))
+      }
     }
   }
 
@@ -148,12 +152,12 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      sqlContext.range(2).select('id as 'a, 'id as 'b).write.partitionBy("b").parquet(path)
-      val df = sqlContext.read.parquet(path).filter('a === 0).select('b)
+      spark.range(2).select('id as 'a, 'id as 'b).write.partitionBy("b").parquet(path)
+      val df = spark.read.parquet(path).filter('a === 0).select('b)
       val physicalPlan = df.queryExecution.sparkPlan
 
-      assert(physicalPlan.collect { case p: execution.Project => p }.length === 1)
-      assert(physicalPlan.collect { case p: execution.Filter => p }.length === 1)
+      assert(physicalPlan.collect { case p: execution.ProjectExec => p }.length === 1)
+      assert(physicalPlan.collect { case p: execution.FilterExec => p }.length === 1)
     }
   }
 
@@ -170,7 +174,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
         // The schema consists of the leading columns of the first part-file
         // in the lexicographic order.
-        assert(sqlContext.read.parquet(dir.getCanonicalPath).schema.map(_.name)
+        assert(spark.read.parquet(dir.getCanonicalPath).schema.map(_.name)
           === Seq("a", "b", "c", "d", "part"))
       }
     }
@@ -188,8 +192,8 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         Row(5, 127.toByte), Row(6, -44.toByte), Row(7, 23.toByte), Row(8, -95.toByte),
         Row(9, 127.toByte), Row(10, 13.toByte))
 
-      val rdd = sqlContext.sparkContext.parallelize(data)
-      val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+      val rdd = spark.sparkContext.parallelize(data)
+      val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
 
       df.write
         .mode("overwrite")
@@ -197,7 +201,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .option("dataSchema", df.schema.json)
         .save(path)
 
-      val loadedDF = sqlContext
+      val loadedDF = spark
         .read
         .format(dataSourceName)
         .option("dataSchema", df.schema.json)
@@ -221,7 +225,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         val compressedFiles = new File(path).listFiles()
         assert(compressedFiles.exists(_.getName.endsWith(".gz.parquet")))
 
-        val copyDf = sqlContext
+        val copyDf = spark
           .read
           .parquet(path)
         checkAnswer(df, copyDf)

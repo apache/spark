@@ -23,8 +23,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
-import com.amazonaws.regions.RegionUtils;
-import org.apache.log4j.Logger;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
@@ -81,9 +79,8 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
  */
 public final class JavaKinesisWordCountASL { // needs to be public for access from run-example
   private static final Pattern WORD_SEPARATOR = Pattern.compile(" ");
-  private static final Logger logger = Logger.getLogger(JavaKinesisWordCountASL.class);
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     // Check that all required args were passed in.
     if (args.length != 3) {
       System.err.println(
@@ -129,7 +126,7 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
 
     // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
     // DynamoDB of the same region as the Kinesis stream
-    String regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName();
+    String regionName = KinesisExampleUtils.getRegionNameByEndpoint(endpointUrl);
 
     // Setup the Spark config and StreamingContext
     SparkConf sparkConfig = new SparkConf().setAppName("JavaKinesisWordCountASL");

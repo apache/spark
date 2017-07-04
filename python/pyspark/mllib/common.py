@@ -23,7 +23,7 @@ if sys.version >= '3':
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
-from py4j.java_collections import ListConverter, JavaArray, JavaList
+from py4j.java_collections import JavaArray, JavaList
 
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
@@ -60,13 +60,13 @@ _picklable_classes = [
 
 # this will call the MLlib version of pythonToJava()
 def _to_java_object_rdd(rdd):
-    """ Return an JavaRDD of Object by unpickling
+    """ Return a JavaRDD of Object by unpickling
 
     It will convert each Python object into Java object by Pyrolite, whenever the
     RDD is serialized in batch or not.
     """
     rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
-    return rdd.ctx._jvm.SerDe.pythonToJava(rdd._jrdd, True)
+    return rdd.ctx._jvm.org.apache.spark.mllib.api.python.SerDe.pythonToJava(rdd._jrdd, True)
 
 
 def _py2java(sc, obj):
@@ -78,14 +78,14 @@ def _py2java(sc, obj):
     elif isinstance(obj, SparkContext):
         obj = obj._jsc
     elif isinstance(obj, list):
-        obj = ListConverter().convert([_py2java(sc, x) for x in obj], sc._gateway._gateway_client)
+        obj = [_py2java(sc, x) for x in obj]
     elif isinstance(obj, JavaObject):
         pass
     elif isinstance(obj, (int, long, float, bool, bytes, unicode)):
         pass
     else:
         data = bytearray(PickleSerializer().dumps(obj))
-        obj = sc._jvm.SerDe.loads(data)
+        obj = sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(data)
     return obj
 
 
@@ -98,17 +98,17 @@ def _java2py(sc, r, encoding="bytes"):
             clsName = 'JavaRDD'
 
         if clsName == 'JavaRDD':
-            jrdd = sc._jvm.SerDe.javaToPython(r)
+            jrdd = sc._jvm.org.apache.spark.mllib.api.python.SerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
         if clsName == 'Dataset':
             return DataFrame(r, SQLContext.getOrCreate(sc))
 
         if clsName in _picklable_classes:
-            r = sc._jvm.SerDe.dumps(r)
+            r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
         elif isinstance(r, (JavaArray, JavaList)):
             try:
-                r = sc._jvm.SerDe.dumps(r)
+                r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
             except Py4JJavaError:
                 pass  # not pickable
 

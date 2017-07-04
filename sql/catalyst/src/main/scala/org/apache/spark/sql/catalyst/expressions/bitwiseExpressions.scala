@@ -26,6 +26,13 @@ import org.apache.spark.sql.types._
  *
  * Code generation inherited from BinaryArithmetic.
  */
+@ExpressionDescription(
+  usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise AND of `expr1` and `expr2`.",
+  extended = """
+    Examples:
+      > SELECT 3 _FUNC_ 5;
+       1
+  """)
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = IntegralType
@@ -51,6 +58,13 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
  *
  * Code generation inherited from BinaryArithmetic.
  */
+@ExpressionDescription(
+  usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise OR of `expr1` and `expr2`.",
+  extended = """
+    Examples:
+      > SELECT 3 _FUNC_ 5;
+       7
+  """)
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = IntegralType
@@ -72,10 +86,17 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 }
 
 /**
- * A function that calculates bitwise xor of two numbers.
+ * A function that calculates bitwise xor({@literal ^}) of two numbers.
  *
  * Code generation inherited from BinaryArithmetic.
  */
+@ExpressionDescription(
+  usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise exclusive OR of `expr1` and `expr2`.",
+  extended = """
+    Examples:
+      > SELECT 3 _FUNC_ 5;
+       2
+  """)
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = IntegralType
@@ -99,6 +120,13 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
 /**
  * A function that calculates bitwise not(~) of a number.
  */
+@ExpressionDescription(
+  usage = "_FUNC_ expr - Returns the result of bitwise NOT of `expr`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_ 0;
+       -1
+  """)
 case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
@@ -118,7 +146,7 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
       ((evalE: Long) => ~evalE).asInstanceOf[(Any) => Any]
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dataType)}) ~($c)")
   }
 

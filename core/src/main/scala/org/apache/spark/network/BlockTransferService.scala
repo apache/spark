@@ -17,16 +17,18 @@
 
 package org.apache.spark.network
 
-import java.io.Closeable
+import java.io.{Closeable, File}
 import java.nio.ByteBuffer
 
-import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.Duration
+import scala.reflect.ClassTag
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.util.ThreadUtils
 
 private[spark]
 abstract class BlockTransferService extends ShuffleClient with Closeable with Logging {
@@ -35,7 +37,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
    * local blocks or put local blocks.
    */
-  def init(blockDataManager: BlockDataManager)
+  def init(blockDataManager: BlockDataManager): Unit
 
   /**
    * Tear down the transfer service.
@@ -65,7 +67,8 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
       port: Int,
       execId: String,
       blockIds: Array[String],
-      listener: BlockFetchingListener): Unit
+      listener: BlockFetchingListener,
+      shuffleFiles: Array[File]): Unit
 
   /**
    * Upload a single block to a remote node, available only after [[init]] is invoked.
@@ -76,7 +79,8 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
       execId: String,
       blockId: BlockId,
       blockData: ManagedBuffer,
-      level: StorageLevel): Future[Unit]
+      level: StorageLevel,
+      classTag: ClassTag[_]): Future[Unit]
 
   /**
    * A special case of [[fetchBlocks]], as it fetches only one block and is blocking.
@@ -97,9 +101,8 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           ret.flip()
           result.success(new NioManagedBuffer(ret))
         }
-      })
-
-    Await.result(result.future, Duration.Inf)
+      }, shuffleFiles = null)
+    ThreadUtils.awaitResult(result.future, Duration.Inf)
   }
 
   /**
@@ -114,7 +117,9 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
       execId: String,
       blockId: BlockId,
       blockData: ManagedBuffer,
-      level: StorageLevel): Unit = {
-    Await.result(uploadBlock(hostname, port, execId, blockId, blockData, level), Duration.Inf)
+      level: StorageLevel,
+      classTag: ClassTag[_]): Unit = {
+    val future = uploadBlock(hostname, port, execId, blockId, blockData, level, classTag)
+    ThreadUtils.awaitResult(future, Duration.Inf)
   }
 }

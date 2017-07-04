@@ -23,7 +23,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.Loader
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 
 /**
  * Helper class for import/export of GLM classification models.
@@ -51,8 +51,7 @@ private[classification] object GLMClassificationModel {
         weights: Vector,
         intercept: Double,
         threshold: Option[Double]): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -62,7 +61,7 @@ private[classification] object GLMClassificationModel {
 
       // Create Parquet data.
       val data = Data(weights, intercept, threshold)
-      sc.parallelize(Seq(data), 1).toDF().write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(Loader.dataPath(path))
     }
 
     /**
@@ -73,13 +72,13 @@ private[classification] object GLMClassificationModel {
      * @param modelClass  String name for model class (used for error messages)
      */
     def loadData(sc: SparkContext, path: String, modelClass: String): Data = {
-      val datapath = Loader.dataPath(path)
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val dataRDD = sqlContext.read.parquet(datapath)
+      val dataPath = Loader.dataPath(path)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val dataRDD = spark.read.parquet(dataPath)
       val dataArray = dataRDD.select("weights", "intercept", "threshold").take(1)
-      assert(dataArray.length == 1, s"Unable to load $modelClass data from: $datapath")
+      assert(dataArray.length == 1, s"Unable to load $modelClass data from: $dataPath")
       val data = dataArray(0)
-      assert(data.size == 3, s"Unable to load $modelClass data from: $datapath")
+      assert(data.size == 3, s"Unable to load $modelClass data from: $dataPath")
       val (weights, intercept) = data match {
         case Row(weights: Vector, intercept: Double, _) =>
           (weights, intercept)
@@ -92,5 +91,4 @@ private[classification] object GLMClassificationModel {
       Data(weights, intercept, threshold)
     }
   }
-
 }

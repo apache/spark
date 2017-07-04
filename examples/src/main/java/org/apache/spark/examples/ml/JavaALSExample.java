@@ -17,21 +17,17 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import java.io.Serializable;
 
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.recommendation.ALS;
 import org.apache.spark.ml.recommendation.ALSModel;
-import org.apache.spark.sql.types.DataTypes;
 // $example off$
 
 public class JavaALSExample {
@@ -83,18 +79,16 @@ public class JavaALSExample {
   // $example off$
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaALSExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaALSExample")
+      .getOrCreate();
 
     // $example on$
-    JavaRDD<Rating> ratingsRDD = jsc.textFile("data/mllib/als/sample_movielens_ratings.txt")
-      .map(new Function<String, Rating>() {
-        public Rating call(String str) {
-          return Rating.parseRating(str);
-        }
-      });
-    Dataset<Row> ratings = sqlContext.createDataFrame(ratingsRDD, Rating.class);
+    JavaRDD<Rating> ratingsRDD = spark
+      .read().textFile("data/mllib/als/sample_movielens_ratings.txt").javaRDD()
+      .map(Rating::parseRating);
+    Dataset<Row> ratings = spark.createDataFrame(ratingsRDD, Rating.class);
     Dataset<Row>[] splits = ratings.randomSplit(new double[]{0.8, 0.2});
     Dataset<Row> training = splits[0];
     Dataset<Row> test = splits[1];
@@ -109,10 +103,9 @@ public class JavaALSExample {
     ALSModel model = als.fit(training);
 
     // Evaluate the model by computing the RMSE on the test data
-    Dataset<Row> rawPredictions = model.transform(test);
-    Dataset<Row> predictions = rawPredictions
-      .withColumn("rating", rawPredictions.col("rating").cast(DataTypes.DoubleType))
-      .withColumn("prediction", rawPredictions.col("prediction").cast(DataTypes.DoubleType));
+    // Note we set cold start strategy to 'drop' to ensure we don't get NaN evaluation metrics
+    model.setColdStartStrategy("drop");
+    Dataset<Row> predictions = model.transform(test);
 
     RegressionEvaluator evaluator = new RegressionEvaluator()
       .setMetricName("rmse")
@@ -120,7 +113,15 @@ public class JavaALSExample {
       .setPredictionCol("prediction");
     Double rmse = evaluator.evaluate(predictions);
     System.out.println("Root-mean-square error = " + rmse);
+
+    // Generate top 10 movie recommendations for each user
+    Dataset<Row> userRecs = model.recommendForAllUsers(10);
+    // Generate top 10 user recommendations for each movie
+    Dataset<Row> movieRecs = model.recommendForAllItems(10);
     // $example off$
-    jsc.stop();
+    userRecs.show();
+    movieRecs.show();
+
+    spark.stop();
   }
 }

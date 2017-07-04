@@ -17,14 +17,12 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import java.util.Arrays;
+import java.util.List;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.StringIndexer;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -37,30 +35,34 @@ import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaStringIndexerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaStringIndexerExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaStringIndexerExample")
+      .getOrCreate();
 
     // $example on$
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(0, "a"),
       RowFactory.create(1, "b"),
       RowFactory.create(2, "c"),
       RowFactory.create(3, "a"),
       RowFactory.create(4, "a"),
       RowFactory.create(5, "c")
-    ));
+    );
     StructType schema = new StructType(new StructField[]{
       createStructField("id", IntegerType, false),
       createStructField("category", StringType, false)
     });
-    Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> df = spark.createDataFrame(data, schema);
+
     StringIndexer indexer = new StringIndexer()
       .setInputCol("category")
       .setOutputCol("categoryIndex");
+
     Dataset<Row> indexed = indexer.fit(df).transform(df);
     indexed.show();
     // $example off$
-    jsc.stop();
+
+    spark.stop();
   }
 }

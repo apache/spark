@@ -29,13 +29,15 @@ class PrunedScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimplePrunedScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
+    SimplePrunedScan(parameters("from").toInt, parameters("to").toInt)(sqlContext.sparkSession)
   }
 }
 
-case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
+case class SimplePrunedScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedScan {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(
@@ -48,19 +50,19 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
       case "b" => (i: Int) => Seq(i * 2)
     }
 
-    sqlContext.sparkContext.parallelize(from to to).map(i =>
+    sparkSession.sparkContext.parallelize(from to to).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
 }
 
 class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTenPruned
+        |CREATE TEMPORARY VIEW oneToTenPruned
         |USING org.apache.spark.sql.sources.PrunedScanSource
         |OPTIONS (
         |  from '1',
@@ -120,11 +122,11 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
 
       // These tests check a particular plan, disable whole stage codegen.
-      caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, false)
+      spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, false)
       try {
         val queryExecution = sql(sqlString).queryExecution
         val rawPlan = queryExecution.executedPlan.collect {
-          case p: execution.DataSourceScan => p
+          case p: execution.DataSourceScanExec => p
         } match {
           case Seq(p) => p
           case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
@@ -143,7 +145,7 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
           fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
         }
       } finally {
-        caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED,
+        spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }

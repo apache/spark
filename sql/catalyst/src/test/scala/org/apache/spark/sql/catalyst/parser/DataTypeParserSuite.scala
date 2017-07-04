@@ -22,15 +22,20 @@ import org.apache.spark.sql.types._
 
 class DataTypeParserSuite extends SparkFunSuite {
 
+  def parse(sql: String): DataType = CatalystSqlParser.parseDataType(sql)
+
   def checkDataType(dataTypeString: String, expectedDataType: DataType): Unit = {
     test(s"parse ${dataTypeString.replace("\n", "")}") {
-      assert(DataTypeParser.parse(dataTypeString) === expectedDataType)
+      assert(parse(dataTypeString) === expectedDataType)
     }
   }
 
+  def intercept(sql: String): ParseException =
+    intercept[ParseException](CatalystSqlParser.parseDataType(sql))
+
   def unsupported(dataTypeString: String): Unit = {
     test(s"$dataTypeString is not supported") {
-      intercept[DataTypeException](DataTypeParser.parse(dataTypeString))
+      intercept(dataTypeString)
     }
   }
 
@@ -97,13 +102,6 @@ class DataTypeParserSuite extends SparkFunSuite {
       StructField("arrAy", ArrayType(DoubleType, true), true) ::
       StructField("anotherArray", ArrayType(StringType, true), true) :: Nil)
   )
-  // A column name can be a reserved word in our DDL parser and SqlParser.
-  checkDataType(
-    "Struct<TABLE: string, CASE:boolean>",
-    StructType(
-      StructField("TABLE", StringType, true) ::
-      StructField("CASE", BooleanType, true) :: Nil)
-  )
   // Use backticks to quote column names having special characters.
   checkDataType(
     "struct<`x+y`:int, `!@#$%^&*()`:string, `1_2.345<>:\"`:varchar(20)>",
@@ -119,5 +117,25 @@ class DataTypeParserSuite extends SparkFunSuite {
   unsupported("struct<x+y: int, 1.1:timestamp>")
   unsupported("struct<x: int")
   unsupported("struct<x int, y string>")
-  unsupported("struct<`x``y` int>")
+
+  test("Do not print empty parentheses for no params") {
+    assert(intercept("unkwon").getMessage.contains("unkwon is not supported"))
+    assert(intercept("unkwon(1,2,3)").getMessage.contains("unkwon(1,2,3) is not supported"))
+  }
+
+  // DataType parser accepts certain reserved keywords.
+  checkDataType(
+    "Struct<TABLE: string, DATE:boolean>",
+    StructType(
+      StructField("TABLE", StringType, true) ::
+        StructField("DATE", BooleanType, true) :: Nil)
+  )
+
+  // Use SQL keywords.
+  checkDataType("struct<end: long, select: int, from: string>",
+    (new StructType).add("end", LongType).add("select", IntegerType).add("from", StringType))
+
+  // DataType parser accepts comments.
+  checkDataType("Struct<x: INT, y: STRING COMMENT 'test'>",
+    (new StructType).add("x", IntegerType).add("y", StringType, true, "test"))
 }

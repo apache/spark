@@ -34,14 +34,17 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
 
 // TODO: Expose a jdbcRDD function in SparkContext and mark this as semi-private
 /**
- * An RDD that executes an SQL query on a JDBC connection and reads results.
+ * An RDD that executes a SQL query on a JDBC connection and reads results.
  * For usage example, see test case JdbcRDDSuite.
  *
  * @param getConnection a function that returns an open Connection.
  *   The RDD takes care of closing the connection.
  * @param sql the text of the query.
  *   The query must contain two ? placeholders for parameters used to partition the results.
- *   E.g. "select title, author from books where ? <= id and id <= ?"
+ *   For example,
+ *   {{{
+ *   select title, author from books where ? <= id and id <= ?
+ *   }}}
  * @param lowerBound the minimum value of the first placeholder
  * @param upperBound the maximum value of the second placeholder
  *   The lower and upper bounds are inclusive.
@@ -65,11 +68,11 @@ class JdbcRDD[T: ClassTag](
   override def getPartitions: Array[Partition] = {
     // bounds are inclusive, hence the + 1 here and - 1 on end
     val length = BigInt(1) + upperBound - lowerBound
-    (0 until numPartitions).map(i => {
+    (0 until numPartitions).map { i =>
       val start = lowerBound + ((i * length) / numPartitions)
       val end = lowerBound + (((i + 1) * length) / numPartitions) - 1
       new JdbcPartition(i, start.toLong, end.toLong)
-    }).toArray
+    }.toArray
   }
 
   override def compute(thePart: Partition, context: TaskContext): Iterator[T] = new NextIterator[T]
@@ -79,13 +82,19 @@ class JdbcRDD[T: ClassTag](
     val conn = getConnection()
     val stmt = conn.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
 
-    // setFetchSize(Integer.MIN_VALUE) is a mysql driver specific way to force streaming results,
-    // rather than pulling entire resultset into memory.
-    // see http://dev.mysql.com/doc/refman/5.0/en/connector-j-reference-implementation-notes.html
-    if (conn.getMetaData.getURL.matches("jdbc:mysql:.*")) {
+    val url = conn.getMetaData.getURL
+    if (url.startsWith("jdbc:mysql:")) {
+      // setFetchSize(Integer.MIN_VALUE) is a mysql driver specific way to force
+      // streaming results, rather than pulling entire resultset into memory.
+      // See the below URL
+      // dev.mysql.com/doc/connector-j/5.1/en/connector-j-reference-implementation-notes.html
+
       stmt.setFetchSize(Integer.MIN_VALUE)
-      logInfo("statement fetch size set to: " + stmt.getFetchSize + " to force MySQL streaming ")
+    } else {
+      stmt.setFetchSize(100)
     }
+
+    logInfo(s"statement fetch size set to: ${stmt.getFetchSize}")
 
     stmt.setLong(1, part.lower)
     stmt.setLong(2, part.upper)
@@ -138,14 +147,17 @@ object JdbcRDD {
   }
 
   /**
-   * Create an RDD that executes an SQL query on a JDBC connection and reads results.
+   * Create an RDD that executes a SQL query on a JDBC connection and reads results.
    * For usage example, see test case JavaAPISuite.testJavaJdbcRDD.
    *
    * @param connectionFactory a factory that returns an open Connection.
    *   The RDD takes care of closing the connection.
    * @param sql the text of the query.
    *   The query must contain two ? placeholders for parameters used to partition the results.
-   *   E.g. "select title, author from books where ? <= id and id <= ?"
+   *   For example,
+   *   {{{
+   *   select title, author from books where ? <= id and id <= ?
+   *   }}}
    * @param lowerBound the minimum value of the first placeholder
    * @param upperBound the maximum value of the second placeholder
    *   The lower and upper bounds are inclusive.
@@ -178,14 +190,17 @@ object JdbcRDD {
   }
 
   /**
-   * Create an RDD that executes an SQL query on a JDBC connection and reads results. Each row is
+   * Create an RDD that executes a SQL query on a JDBC connection and reads results. Each row is
    * converted into a `Object` array. For usage example, see test case JavaAPISuite.testJavaJdbcRDD.
    *
    * @param connectionFactory a factory that returns an open Connection.
    *   The RDD takes care of closing the connection.
    * @param sql the text of the query.
    *   The query must contain two ? placeholders for parameters used to partition the results.
-   *   E.g. "select title, author from books where ? <= id and id <= ?"
+   *   For example,
+   *   {{{
+   *   select title, author from books where ? <= id and id <= ?
+   *   }}}
    * @param lowerBound the minimum value of the first placeholder
    * @param upperBound the maximum value of the second placeholder
    *   The lower and upper bounds are inclusive.

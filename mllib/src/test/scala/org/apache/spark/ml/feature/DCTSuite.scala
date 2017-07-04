@@ -22,8 +22,8 @@ import scala.beans.BeanInfo
 import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
@@ -31,6 +31,8 @@ import org.apache.spark.sql.Row
 case class DCTTestData(vec: Vector, wantedVec: Vector)
 
 class DCTSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
 
   test("forward transform of discrete cosine matches jTransforms result") {
     val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
@@ -57,15 +59,13 @@ class DCTSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   private def testDCT(data: Vector, inverse: Boolean): Unit = {
     val expectedResultBuffer = data.toArray.clone()
     if (inverse) {
-      (new DoubleDCT_1D(data.size)).inverse(expectedResultBuffer, true)
+      new DoubleDCT_1D(data.size).inverse(expectedResultBuffer, true)
     } else {
-      (new DoubleDCT_1D(data.size)).forward(expectedResultBuffer, true)
+      new DoubleDCT_1D(data.size).forward(expectedResultBuffer, true)
     }
     val expectedResult = Vectors.dense(expectedResultBuffer)
 
-    val dataset = sqlContext.createDataFrame(Seq(
-      DCTTestData(data, expectedResult)
-    ))
+    val dataset = Seq(DCTTestData(data, expectedResult)).toDF()
 
     val transformer = new DCT()
       .setInputCol("vec")

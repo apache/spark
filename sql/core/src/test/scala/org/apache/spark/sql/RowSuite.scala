@@ -18,8 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, SpecificMutableRow}
-import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -28,7 +27,7 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
   test("create row") {
-    val expected = new GenericMutableRow(4)
+    val expected = new GenericInternalRow(4)
     expected.setInt(0, 2147483647)
     expected.update(1, UTF8String.fromString("this is a string"))
     expected.setBoolean(2, false)
@@ -50,18 +49,9 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("SpecificMutableRow.update with null") {
-    val row = new SpecificMutableRow(Seq(IntegerType))
+    val row = new SpecificInternalRow(Seq(IntegerType))
     row(0) = null
     assert(row.isNullAt(0))
-  }
-
-  test("serialize w/ kryo") {
-    val row = Seq((1, Seq(1), Map(1 -> 1), BigDecimal(1))).toDF().first()
-    val serializer = new SparkSqlSerializer(sparkContext.getConf)
-    val instance = serializer.newInstance()
-    val ser = instance.serialize(row)
-    val de = instance.deserialize(ser).asInstanceOf[Row]
-    assert(de === row)
   }
 
   test("get values by field name on Row created via .toDF") {

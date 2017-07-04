@@ -38,14 +38,15 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
   }
 
   protected def readParquetSchema(path: String, pathFilter: Path => Boolean): MessageType = {
+    val hadoopConf = spark.sessionState.newHadoopConf()
     val fsPath = new Path(path)
-    val fs = fsPath.getFileSystem(hadoopConfiguration)
+    val fs = fsPath.getFileSystem(hadoopConf)
     val parquetFiles = fs.listStatus(fsPath, new PathFilter {
       override def accept(path: Path): Boolean = pathFilter(path)
     }).toSeq.asJava
 
     val footers =
-      ParquetFileReader.readAllFootersInParallel(hadoopConfiguration, parquetFiles, true)
+      ParquetFileReader.readAllFootersInParallel(hadoopConf, parquetFiles, true)
     footers.asScala.head.getParquetMetadata.getFileMetaData.getSchema
   }
 
@@ -118,8 +119,18 @@ private[sql] object ParquetCompatibilityTest {
       metadata: Map[String, String],
       recordWriters: (RecordConsumer => Unit)*): Unit = {
     val messageType = MessageTypeParser.parseMessageType(schema)
-    val writeSupport = new DirectWriteSupport(messageType, metadata)
-    val parquetWriter = new ParquetWriter[RecordConsumer => Unit](new Path(path), writeSupport)
+    val testWriteSupport = new DirectWriteSupport(messageType, metadata)
+    /**
+     * Provide a builder for constructing a parquet writer - after PARQUET-248 directly constructing
+     * the writer is deprecated and should be done through a builder. The default builders include
+     * Avro - but for raw Parquet writing we must create our own builder.
+     */
+    class ParquetWriterBuilder() extends
+        ParquetWriter.Builder[RecordConsumer => Unit, ParquetWriterBuilder](new Path(path)) {
+      override def getWriteSupport(conf: Configuration) = testWriteSupport
+      override def self() = this
+    }
+    val parquetWriter = new ParquetWriterBuilder().build()
     try recordWriters.foreach(parquetWriter.write) finally parquetWriter.close()
   }
 }

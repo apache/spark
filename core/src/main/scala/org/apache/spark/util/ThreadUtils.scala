@@ -19,11 +19,14 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.duration.Duration
 import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
+
+import org.apache.spark.SparkException
 
 private[spark] object ThreadUtils {
 
@@ -174,4 +177,54 @@ private[spark] object ThreadUtils {
       false // asyncMode
     )
   }
+
+  // scalastyle:off awaitresult
+  /**
+   * Preferred alternative to `Await.result()`.
+   *
+   * This method wraps and re-throws any exceptions thrown by the underlying `Await` call, ensuring
+   * that this thread's stack trace appears in logs.
+   *
+   * In addition, it calls `Awaitable.result` directly to avoid using `ForkJoinPool`'s
+   * `BlockingContext`. Codes running in the user's thread may be in a thread of Scala ForkJoinPool.
+   * As concurrent executions in ForkJoinPool may see some [[ThreadLocal]] value unexpectedly, this
+   * method basically prevents ForkJoinPool from running other tasks in the current waiting thread.
+   * In general, we should use this method because many places in Spark use [[ThreadLocal]] and it's
+   * hard to debug when [[ThreadLocal]]s leak to other tasks.
+   */
+  @throws(classOf[SparkException])
+  def awaitResult[T](awaitable: Awaitable[T], atMost: Duration): T = {
+    try {
+      // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
+      // See SPARK-13747.
+      val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
+      awaitable.result(atMost)(awaitPermission)
+    } catch {
+      // TimeoutException is thrown in the current thread, so not need to warp the exception.
+      case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
+        throw new SparkException("Exception thrown in awaitResult: ", t)
+    }
+  }
+  // scalastyle:on awaitresult
+
+  // scalastyle:off awaitready
+  /**
+   * Preferred alternative to `Await.ready()`.
+   *
+   * @see [[awaitResult]]
+   */
+  @throws(classOf[SparkException])
+  def awaitReady[T](awaitable: Awaitable[T], atMost: Duration): awaitable.type = {
+    try {
+      // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
+      // See SPARK-13747.
+      val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
+      awaitable.ready(atMost)(awaitPermission)
+    } catch {
+      // TimeoutException is thrown in the current thread, so not need to warp the exception.
+      case NonFatal(t) if !t.isInstanceOf[TimeoutException] =>
+        throw new SparkException("Exception thrown in awaitResult: ", t)
+    }
+  }
+  // scalastyle:on awaitready
 }

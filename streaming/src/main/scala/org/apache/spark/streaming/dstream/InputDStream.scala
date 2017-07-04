@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.dstream
 
+import java.util.Locale
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
@@ -39,7 +41,7 @@ import org.apache.spark.util.Utils
  *
  * @param _ssc Streaming context that will execute this input stream
  */
-abstract class InputDStream[T: ClassTag] (_ssc: StreamingContext)
+abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
   extends DStream[T](_ssc) {
 
   private[streaming] var lastValidTime: Time = null
@@ -60,7 +62,7 @@ abstract class InputDStream[T: ClassTag] (_ssc: StreamingContext)
       .split("(?=[A-Z])")
       .filter(_.nonEmpty)
       .mkString(" ")
-      .toLowerCase
+      .toLowerCase(Locale.ROOT)
       .capitalize
     s"$newName [$id]"
   }
@@ -74,7 +76,7 @@ abstract class InputDStream[T: ClassTag] (_ssc: StreamingContext)
   protected[streaming] override val baseScope: Option[String] = {
     val scopeName = Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY))
       .map { json => RDDOperationScope.fromJson(json).name + s" [$id]" }
-      .getOrElse(name.toLowerCase)
+      .getOrElse(name.toLowerCase(Locale.ROOT))
     Some(new RDDOperationScope(scopeName).toJson)
   }
 
@@ -88,10 +90,10 @@ abstract class InputDStream[T: ClassTag] (_ssc: StreamingContext)
     if (!super.isTimeValid(time)) {
       false // Time not valid
     } else {
-      // Time is valid, but check it it is more than lastValidTime
+      // Time is valid, but check it is more than lastValidTime
       if (lastValidTime != null && time < lastValidTime) {
-        logWarning("isTimeValid called with " + time + " where as last valid time is " +
-          lastValidTime)
+        logWarning(s"isTimeValid called with $time whereas the last valid time " +
+          s"is $lastValidTime")
       }
       lastValidTime = time
       true
@@ -107,8 +109,8 @@ abstract class InputDStream[T: ClassTag] (_ssc: StreamingContext)
   }
 
   /** Method called to start receiving data. Subclasses must implement this method. */
-  def start()
+  def start(): Unit
 
   /** Method called to stop receiving data. Subclasses must implement this method. */
-  def stop()
+  def stop(): Unit
 }

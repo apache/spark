@@ -26,35 +26,36 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
- * An Schedulable entity that represent collection of Pools or TaskSetManagers
+ * A Schedulable entity that represents collection of Pools or TaskSetManagers
  */
-
 private[spark] class Pool(
     val poolName: String,
     val schedulingMode: SchedulingMode,
     initMinShare: Int,
     initWeight: Int)
-  extends Schedulable
-  with Logging {
+  extends Schedulable with Logging {
 
   val schedulableQueue = new ConcurrentLinkedQueue[Schedulable]
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
-  var weight = initWeight
-  var minShare = initMinShare
+  val weight = initWeight
+  val minShare = initMinShare
   var runningTasks = 0
-  var priority = 0
+  val priority = 0
 
   // A pool's stage id is used to break the tie in scheduling.
   var stageId = -1
-  var name = poolName
+  val name = poolName
   var parent: Pool = null
 
-  var taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
+  private val taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
     schedulingMode match {
       case SchedulingMode.FAIR =>
         new FairSchedulingAlgorithm()
       case SchedulingMode.FIFO =>
         new FIFOSchedulingAlgorithm()
+      case _ =>
+        val msg = s"Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."
+        throw new IllegalArgumentException(msg)
     }
   }
 
@@ -87,10 +88,10 @@ private[spark] class Pool(
     schedulableQueue.asScala.foreach(_.executorLost(executorId, host, reason))
   }
 
-  override def checkSpeculatableTasks(): Boolean = {
+  override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     var shouldRevive = false
     for (schedulable <- schedulableQueue.asScala) {
-      shouldRevive |= schedulable.checkSpeculatableTasks()
+      shouldRevive |= schedulable.checkSpeculatableTasks(minTimeToSpeculation)
     }
     shouldRevive
   }

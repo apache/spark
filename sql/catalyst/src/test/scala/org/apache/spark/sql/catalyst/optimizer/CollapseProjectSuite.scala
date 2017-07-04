@@ -29,7 +29,7 @@ class CollapseProjectSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", FixedPoint(10), EliminateSubqueryAliases) ::
-        Batch("CollapseProject", Once, CollapseProject) :: Nil
+      Batch("CollapseProject", Once, CollapseProject) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int)
@@ -92,6 +92,30 @@ class CollapseProjectSuite extends PlanTest {
 
     val correctAnswer = testRelation
       .select(('a + 1).as('a_plus_1)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("collapse project into aggregate") {
+    val query = testRelation
+      .groupBy('a, 'b)(('a + 1).as('a_plus_1), 'b)
+      .select('a_plus_1, ('b + 1).as('b_plus_1))
+
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = testRelation
+      .groupBy('a, 'b)(('a + 1).as('a_plus_1), ('b + 1).as('b_plus_1)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("do not collapse common nondeterministic project and aggregate") {
+    val query = testRelation
+      .groupBy('a)('a, Rand(10).as('rand))
+      .select(('rand + 1).as('rand1), ('rand + 2).as('rand2))
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = query.analyze
 
     comparePlans(optimized, correctAnswer)
   }
