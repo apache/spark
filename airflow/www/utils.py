@@ -35,6 +35,20 @@ from airflow.utils.json import AirflowJsonEncoder
 
 AUTHENTICATE = configuration.getboolean('webserver', 'AUTHENTICATE')
 
+DEFAULT_SENSITIVE_VARIABLE_FIELDS = (
+    'password',
+    'secret',
+    'passwd',
+    'authorization',
+    'api_key',
+    'apikey',
+    'access_token',
+)
+
+def should_hide_value_for_key(key_name):
+    return any(s in key_name.lower() for s in DEFAULT_SENSITIVE_VARIABLE_FIELDS) \
+           and configuration.getboolean('admin', 'hide_sensitive_variable_fields')
+
 
 class LoginMixin(object):
     def is_accessible(self):
