@@ -103,7 +103,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     }
 
     val content =
-      <h5 id="sqlstat">SQL Statistics</h5> ++
+      <h5 id="sqlstat">SQL Statistics ({numStatement})</h5> ++
         <div>
           <ul class="unstyled">
             {table.getOrElse("No statistics have been generated yet.")}
@@ -143,7 +143,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     val numBatches = sessionList.size
     val table = if (numBatches > 0) {
       val dataRows = sessionList.sortBy(_.startTimestamp).reverse
-      val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
+      val headerRow = Seq("User", "IP", "Session ID", "State", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       def generateDataRow(session: SessionInfo): Seq[Node] = {
         val sessionLink = "%s/%s/session?id=%s"
@@ -152,6 +152,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           <td> {session.userName} </td>
           <td> {session.ip} </td>
           <td> <a href={sessionLink}> {session.sessionId} </a> </td>
+          <td> {if (session.finishTimestamp > 0) "offline" else "online"} </td>
           <td> {formatDate(session.startTimestamp)} </td>
           <td> {if (session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
           <td> {formatDurationOption(Some(session.totalTime))} </td>
@@ -164,7 +165,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     }
 
     val content =
-      <h5 id="sessionstat">Session Statistics</h5> ++
+      <h5 id="sessionstat">Session Statistics ({numBatches})</h5> ++
       <div>
         <ul class="unstyled">
           {table.getOrElse("No statistics have been generated yet.")}
