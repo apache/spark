@@ -449,14 +449,20 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
   }
 
+  test("SPARK-21281 use string types by default if array and map have no argument") {
+    val ds = spark.range(1)
+    var expectedSchema = new StructType()
+      .add("x", ArrayType(StringType, containsNull = false), nullable = false)
+    assert(ds.select(array().as("x")).schema == expectedSchema)
+    expectedSchema = new StructType()
+      .add("x", MapType(StringType, StringType, valueContainsNull = false), nullable = false)
+    assert(ds.select(map().as("x")).schema == expectedSchema)
+  }
+
   test("SPARK-21281 fails if functions have no argument") {
     val df = Seq(1).toDF("a")
 
     val funcsMustHaveAtLeastOneArg =
-      ("array", (df: DataFrame) => df.select(array())) ::
-      ("array", (df: DataFrame) => df.selectExpr("array()")) ::
-      ("map", (df: DataFrame) => df.select(map())) ::
-      ("map", (df: DataFrame) => df.selectExpr("map()")) ::
       ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
       ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
       ("named_struct", (df: DataFrame) => df.select(struct())) ::
