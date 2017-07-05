@@ -404,7 +404,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           pathToNonPartitionedTable,
           userSpecifiedSchema = None,
           userSpecifiedPartitionCols = partitionCols,
-          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedSchema = new StructType().add("num", IntegerType, false).add("str", StringType),
           expectedPartitionCols = Seq.empty[String])
       }
     }

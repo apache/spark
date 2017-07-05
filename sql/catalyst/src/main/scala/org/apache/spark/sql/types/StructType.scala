@@ -370,8 +370,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *
    * 1. If A and B have the same name and data type, they are merged to a field C with the same name
    *    and data type.  C is nullable if and only if either A or B is nullable.
-   * 2. If A doesn't exist in `that`, it's included in the result schema.
-   * 3. If B doesn't exist in `this`, it's also included in the result schema.
+   * 2. If A doesn't exist in `that`, it's included in the result schema with nullable.
+   * 3. If B doesn't exist in `this`, it's also included in the result schema with nullable.
    * 4. Otherwise, `this` and `that` are considered as conflicting schemas and an exception would be
    *    thrown.
    */
@@ -473,7 +473,7 @@ object StructType extends AbstractDataType {
                   nullable = leftNullable || rightNullable)
               }
               .orElse {
-                Some(leftField)
+                Some(leftField.copy(nullable = true))
               }
               .foreach(newFields += _)
         }
@@ -482,7 +482,7 @@ object StructType extends AbstractDataType {
         rightFields
           .filterNot(f => leftMapped.get(f.name).nonEmpty)
           .foreach { f =>
-            newFields += f
+            newFields += f.copy(nullable = true)
           }
 
         StructType(newFields)

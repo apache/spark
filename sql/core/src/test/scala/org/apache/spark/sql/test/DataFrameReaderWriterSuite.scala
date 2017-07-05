@@ -21,12 +21,14 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -123,6 +125,7 @@ class MessageCapturingCommitProtocol(jobId: String, path: String)
   }
 }
 
+case class PointStr(x: String, y: String)
 
 class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
   import testImplicits._
@@ -677,6 +680,63 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         spark.read.schema(schema).table("t")
       }.getMessage
       assert(e.contains("User specified schema not supported with `table`"))
+    }
+  }
+
+  private def readAndWriteWithSchema(schema: StructType,
+      df: DataFrame, result: Array[Row], dfNull: DataFrame): Unit = {
+    val fmt = "parquet"
+    withTempDir { dir =>
+      val path = new File(dir, "nonnull").getCanonicalPath
+      df.write.format(fmt).save(path)
+      val dfRead = spark.read.format(fmt).schema(schema).load(path)
+      checkAnswer(dfRead, result)
+      assert(dfRead.schema.equals(schema))
+
+      val pathNull = new File(dir, "null").getCanonicalPath
+      dfNull.write.format(fmt).save(pathNull)
+      val e = intercept[Exception] {
+        spark.read.format(fmt).schema(schema).load(pathNull).collect
+      }
+      assert(ExceptionUtils.getRootCause(e).isInstanceOf[UnsupportedOperationException] &&
+        e.getMessage.contains("Should not contain null for non-nullable"))
+    }
+  }
+
+  test("SPARK-19950: loadWithSchema") {
+    Seq("true", "false").foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        val dataInt = Seq(1, 2, 3)
+        val dfInt = sparkContext.parallelize(dataInt, 1).toDF("v")
+        val resultInt = dataInt.map(e => Row(e)).toArray
+        val schemaInt = StructType(Seq(StructField("v", IntegerType, false)))
+        val dfIntNull = sparkContext.parallelize(Seq[java.lang.Integer](1, null, 3), 1).toDF("v")
+        readAndWriteWithSchema(schemaInt, dfInt, resultInt, dfIntNull)
+
+        val dataDouble = Seq(1.1D, 2.2D, 3.3D)
+        val dfDouble = sparkContext.parallelize(dataDouble, 1).toDF("v")
+        val resultDouble = dataDouble.map(e => Row(e)).toArray
+        val schemaDouble = StructType(Seq(StructField("v", DoubleType, false)))
+        val dfDoubleNull = sparkContext.parallelize(Seq[java.lang.Double](1.1D, null, 3.3D), 1)
+          .toDF("v")
+        readAndWriteWithSchema(schemaDouble, dfDouble, resultDouble, dfDoubleNull)
+
+        val dataString = Seq("a", "b", "cd")
+        val dfString = sparkContext.parallelize(dataString, 1).toDF("v")
+        val resultString = dataString.map(e => Row(e)).toArray
+        val schemaString = StructType(Seq(StructField("v", StringType, false)))
+        val dfStringNull = sparkContext.parallelize(Seq("a", null, "cd"), 1).toDF("v")
+        readAndWriteWithSchema(schemaString, dfString, resultString, dfStringNull)
+
+        val dataCaseClass = Seq(PointStr("a", "b"), PointStr("c", "d"))
+        val dfCaseClass = sparkContext.parallelize(dataCaseClass, 1).toDF
+        val resultCaseClass = dataCaseClass.map(e => Row(e.x, e.y)).toArray
+        val schemaCaseClass = StructType(
+          Seq(StructField("x", StringType, false), StructField("y", StringType, false)))
+        val dfCaseClassNull = sparkContext.parallelize(
+          Seq(PointStr("a", "b"), PointStr("c", null)), 1).toDF
+        readAndWriteWithSchema(schemaCaseClass, dfCaseClass, resultCaseClass, dfCaseClassNull)
+      }
     }
   }
 
