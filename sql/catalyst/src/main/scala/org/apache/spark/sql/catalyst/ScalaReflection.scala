@@ -335,7 +335,7 @@ object ScalaReflection extends ScalaReflection {
         // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
-        CollectObjectsToMap(
+        CatalystToExternalMap(
           p => deserializerFor(keyType, Some(p), walkedTypePath),
           p => deserializerFor(valueType, Some(p), walkedTypePath),
           getPath,
