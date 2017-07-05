@@ -102,7 +102,7 @@ private[spark] object TreePoint {
     val numFeatures = labeledPoint.features.size
     // For efficiency, use sparse representation when number of feature >= 10000
     if (numFeatures >= 10000) {
-      /* convert to sparse vector */
+      // convert to sparse vector
       val (index, data) = Range(0, numFeatures).map { idx =>
         val bin = findBin(idx, labeledPoint,
           featureArity(idx), thresholds(idx))
@@ -111,7 +111,7 @@ private[spark] object TreePoint {
       val vec = new BSV[Int](index.toArray, data.toArray, numFeatures)
       TreeSparsePoint(labeledPoint.label, vec)
     } else {
-      /* convert to dense array */
+      // convert to dense array
       val arr = new Array[Int](numFeatures)
       var featureIndex = 0
       while (featureIndex < numFeatures) {
