@@ -960,7 +960,7 @@ _array_int_typecode_ctype_mappings = {
 
 # TODO: Uncomment this when 'q' and 'Q' are supported by net.razorvine.pickle
 # Type code 'q' and 'Q' are not available at python 2
-# if sys.version > "2":
+# if sys.version_info[0] >= 3:
 #     _array_int_typecode_ctype_mappings.update({
 #         'q': ctypes.c_longlong,
 #         'Q': ctypes.c_ulonglong
@@ -981,6 +981,7 @@ def _int_size_to_type(size):
         return LongType
     raise TypeError("not supported type: integer size too large.")
 
+# The list of all supported array typecodes is stored here
 _array_type_mappings = {
     # Warning: Actual properties for float and double in C is not unspecified.
     # On most systems, they are IEEE 754 single-precision binary floating-point
@@ -1001,17 +1002,21 @@ for _typecode in _array_int_typecode_ctype_mappings.keys():
             _typecode: _int_size_to_type(size)
         })
     except TypeError:
+        # In case when the integer size is too large to be supported by Scala,
+        # the typecode will be marked as unsupported.
+        # Exception raised by _int_size_to_type will be catched and ignored here.
+        # And users will get an exception during the infer.
         pass
 
 # Type code 'u' in Python's array is deprecated since version 3.3, and will be
 # removed in version 4.0. See: https://docs.python.org/3/library/array.html
-if sys.version < "4":
+if sys.version_info[0] < 4:
     _array_type_mappings.update({
         'u': StringType
     })
 
 # Type code 'c' are only available at python 2
-if sys.version < "3":
+if sys.version_info[0] < 3:
     _array_type_mappings.update({
         'c': StringType
     })

@@ -2291,10 +2291,10 @@ class SQLTests(ReusedPySparkTestCase):
         supported_types = []
 
         # test string types
-        if sys.version < "4":
+        if sys.version_info[0] < 4:
             supported_types += ['u']
             assertCollectSuccess('u', "a")
-        if sys.version < "3":
+        if sys.version_info[0] < 3:
             supported_types += ['c']
             assertCollectSuccess('c', "a")
 
@@ -2313,9 +2313,9 @@ class SQLTests(ReusedPySparkTestCase):
         supported_types += supported_int
         for i in supported_int:
             ctype = _array_int_typecode_ctype_mappings[i]
-            if i.isupper():
+            if i.isupper(): # unsigned
                 assertCollectSuccess(i, 2 ** (ctypes.sizeof(ctype) * 8) - 1)
-            else:
+            else: # signed
                 max_val = 2 ** (ctypes.sizeof(ctype) * 8 - 1) - 1
                 assertCollectSuccess(i, max_val)
                 assertCollectSuccess(i, -max_val)
@@ -2324,7 +2324,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(set(supported_types), set(_array_type_mappings.keys()))
 
         # test unsupported types
-        if sys.version < "3":
+        if sys.version_info[0] < 3:
             all_type_codes = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
         else:
             all_type_codes = set(array.typecodes)
