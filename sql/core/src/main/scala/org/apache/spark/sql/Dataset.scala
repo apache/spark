@@ -38,18 +38,18 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
-import org.apache.spark.sql.catalyst.util.{usePrettyExpression, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -224,7 +224,7 @@ class Dataset[T] private[sql](
     }
   }
 
-  private def aggregatableColumns: Seq[Expression] = {
+  private[sql] def aggregatableColumns: Seq[Expression] = {
     schema.fields
       .filter(f => f.dataType.isInstanceOf[NumericType] || f.dataType.isInstanceOf[StringType])
       .map { n =>
@@ -2205,7 +2205,7 @@ class Dataset[T] private[sql](
    *   // max     92.0  192.0
    * }}}
    *
-   * See also [[summary]]
+   * Use [[summary]] for expanded statistics and control over which statistics to compute.
    *
    * @param cols Columns to compute statistics on.
    *
@@ -2262,102 +2262,21 @@ class Dataset[T] private[sql](
    *   // max     92.0  192.0
    * }}}
    *
+   * To do a summary for specific columns first select them:
+   *
+   * {{{
+   *   ds.select("age", "height").summary().show()
+   * }}}
+   *
+   * See also [[describe]] for basic statistics.
+   *
    * @param statistics Statistics from above list to be computed.
    *
    * @group action
    * @since 2.3.0
    */
   @scala.annotation.varargs
-  def summary(statistics: String*): DataFrame = withPlan {
-
-    val defaultStatistics = Seq("count", "mean", "stddev", "min", "25%", "50%", "75%", "max")
-    val selectedStatistics = if (statistics.nonEmpty) statistics.toSeq else defaultStatistics
-
-    val hasPercentiles = selectedStatistics.exists(_.endsWith("%"))
-    val (percentiles, percentileNames, remainingAggregates) = if (hasPercentiles) {
-      val (pStrings, rest) = selectedStatistics.partition(a => a.endsWith("%"))
-      val percentiles = pStrings.map { p =>
-        try {
-          p.stripSuffix("%").toDouble / 100.0
-        } catch {
-          case e: NumberFormatException =>
-            throw new IllegalArgumentException(s"Unable to parse $p as a percentile", e)
-        }
-      }
-      require(percentiles.forall(p => p >= 0 && p <= 1), "Percentiles must be in the range [0, 1]")
-      (percentiles, pStrings, rest)
-    } else {
-      (Seq(), Seq(), selectedStatistics)
-    }
-
-
-    // The list of summary statistics to compute, in the form of expressions.
-    val availableStatistics = Map[String, Expression => Expression](
-      "count" -> ((child: Expression) => Count(child).toAggregateExpression()),
-      "mean" -> ((child: Expression) => Average(child).toAggregateExpression()),
-      "stddev" -> ((child: Expression) => StddevSamp(child).toAggregateExpression()),
-      "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
-      "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
-
-    val statisticFns = remainingAggregates.map { agg =>
-      require(availableStatistics.contains(agg), s"$agg is not a recognised statistic")
-      agg -> availableStatistics(agg)
-    }
-
-    def percentileAgg(child: Expression): Expression =
-        new ApproximatePercentile(child, CreateArray(percentiles.map(Literal(_))))
-          .toAggregateExpression()
-
-    val outputCols = aggregatableColumns.map(usePrettyExpression(_).sql).toList
-
-    val ret: Seq[Row] = if (outputCols.nonEmpty) {
-      var aggExprs = statisticFns.toList.flatMap { case (_, colToAgg) =>
-        outputCols.map(c => Column(Cast(colToAgg(Column(c).expr), StringType)).as(c))
-      }
-      if (hasPercentiles) {
-        aggExprs = outputCols.map(c => Column(percentileAgg(Column(c).expr)).as(c)) ++ aggExprs
-      }
-
-      val row = groupBy().agg(aggExprs.head, aggExprs.tail: _*).head().toSeq
-
-      // Pivot the data so each summary is one row
-      val grouped: Seq[Seq[Any]] = row.grouped(outputCols.size).toSeq
-
-      val basicStats = if (hasPercentiles) grouped.tail else grouped
-
-      val rows = basicStats.zip(statisticFns).map { case (aggregation, (statistic, _)) =>
-        Row(statistic :: aggregation.toList: _*)
-      }
-
-      if (hasPercentiles) {
-        def nullSafeString(x: Any) = if (x == null) null else x.toString
-        val percentileRows = grouped.head
-          .map {
-            case a: Seq[Any] => a
-            case _ => Seq.fill(percentiles.length)(null: Any)
-          }
-          .transpose
-          .zip(percentileNames)
-          .map { case (values: Seq[Any], name) =>
-              Row(name :: values.map(nullSafeString).toList: _*)
-          }
-        (rows ++ percentileRows)
-          .sortWith((left, right) =>
-            selectedStatistics.indexOf(left(0)) < selectedStatistics.indexOf(right(0)))
-      } else {
-        rows
-      }
-    } else {
-      // If there are no output columns, just output a single column that contains the stats.
-      selectedStatistics.map(Row(_))
-    }
-
-    // All columns are string type
-    val schema = StructType(
-      StructField("summary", StringType) :: outputCols.map(StructField(_, StringType))).toAttributes
-    // `toArray` forces materialization to make the seq serializable
-    LocalRelation.fromExternalRows(schema, ret.toArray.toSeq)
-  }
+  def summary(statistics: String*): DataFrame = StatFunctions.summary(this, statistics.toSeq)
 
   /**
    * Returns the first `n` rows.
