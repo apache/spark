@@ -380,7 +380,7 @@ class SessionCatalog(
    * Alter Spark's statistics of an existing metastore table identified by the provided table
    * identifier.
    */
-  def alterTableStats(identifier: TableIdentifier, newStats: CatalogStatistics): Unit = {
+  def alterTableStats(identifier: TableIdentifier, newStats: Option[CatalogStatistics]): Unit = {
     val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
@@ -1104,10 +1104,10 @@ class SessionCatalog(
    */
   def registerFunction(
       funcDefinition: CatalogFunction,
-      ignoreIfExists: Boolean,
+      overrideIfExists: Boolean,
       functionBuilder: Option[FunctionBuilder] = None): Unit = {
     val func = funcDefinition.identifier
-    if (functionRegistry.functionExists(func) && !ignoreIfExists) {
+    if (functionRegistry.functionExists(func) && !overrideIfExists) {
       throw new AnalysisException(s"Function $func already exists")
     }
     val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
@@ -1219,7 +1219,7 @@ class SessionCatalog(
     // catalog. So, it is possible that qualifiedName is not exactly the same as
     // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
     // At here, we preserve the input from the user.
-    registerFunction(catalogFunction.copy(identifier = qualifiedName), ignoreIfExists = false)
+    registerFunction(catalogFunction.copy(identifier = qualifiedName), overrideIfExists = false)
     // Now, we need to create the Expression.
     functionRegistry.lookupFunction(qualifiedName, children)
   }

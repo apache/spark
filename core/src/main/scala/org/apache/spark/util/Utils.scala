@@ -1348,14 +1348,10 @@ private[spark] object Utils extends Logging {
       try {
         finallyBlock
       } catch {
-        case t: Throwable =>
-          if (originalThrowable != null) {
-            originalThrowable.addSuppressed(t)
-            logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
-            throw originalThrowable
-          } else {
-            throw t
-          }
+        case t: Throwable if (originalThrowable != null && originalThrowable != t) =>
+          originalThrowable.addSuppressed(t)
+          logWarning(s"Suppressing exception in finally: ${t.getMessage}", t)
+          throw originalThrowable
       }
     }
   }
@@ -1387,22 +1383,20 @@ private[spark] object Utils extends Logging {
           catchBlock
         } catch {
           case t: Throwable =>
-            originalThrowable.addSuppressed(t)
-            logWarning(s"Suppressing exception in catch: " + t.getMessage, t)
+            if (originalThrowable != t) {
+              originalThrowable.addSuppressed(t)
+              logWarning(s"Suppressing exception in catch: ${t.getMessage}", t)
+            }
         }
         throw originalThrowable
     } finally {
       try {
         finallyBlock
       } catch {
-        case t: Throwable =>
-          if (originalThrowable != null) {
-            originalThrowable.addSuppressed(t)
-            logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
-            throw originalThrowable
-          } else {
-            throw t
-          }
+        case t: Throwable if (originalThrowable != null && originalThrowable != t) =>
+          originalThrowable.addSuppressed(t)
+          logWarning(s"Suppressing exception in finally: ${t.getMessage}", t)
+          throw originalThrowable
       }
     }
   }

@@ -206,51 +206,53 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[java.lang.Integer] =>
         val boxedType = classOf[java.lang.Integer]
         val objectType = ObjectType(boxedType)
-        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, propagateNull = true)
+        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, returnNullable = false)
 
       case t if t <:< localTypeOf[java.lang.Long] =>
         val boxedType = classOf[java.lang.Long]
         val objectType = ObjectType(boxedType)
-        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, propagateNull = true)
+        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, returnNullable = false)
 
       case t if t <:< localTypeOf[java.lang.Double] =>
         val boxedType = classOf[java.lang.Double]
         val objectType = ObjectType(boxedType)
-        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, propagateNull = true)
+        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, returnNullable = false)
 
       case t if t <:< localTypeOf[java.lang.Float] =>
         val boxedType = classOf[java.lang.Float]
         val objectType = ObjectType(boxedType)
-        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, propagateNull = true)
+        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, returnNullable = false)
 
       case t if t <:< localTypeOf[java.lang.Short] =>
         val boxedType = classOf[java.lang.Short]
         val objectType = ObjectType(boxedType)
-        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, propagateNull = true)
+        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, returnNullable = false)
 
       case t if t <:< localTypeOf[java.lang.Byte] =>
         val boxedType = classOf[java.lang.Byte]
         val objectType = ObjectType(boxedType)
-        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, propagateNull = true)
+        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, returnNullable = false)
 
       case t if t <:< localTypeOf[java.lang.Boolean] =>
         val boxedType = classOf[java.lang.Boolean]
         val objectType = ObjectType(boxedType)
-        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, propagateNull = true)
+        StaticInvoke(boxedType, objectType, "valueOf", getPath :: Nil, returnNullable = false)
 
       case t if t <:< localTypeOf[java.sql.Date] =>
         StaticInvoke(
           DateTimeUtils.getClass,
           ObjectType(classOf[java.sql.Date]),
           "toJavaDate",
-          getPath :: Nil)
+          getPath :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.sql.Timestamp] =>
         StaticInvoke(
           DateTimeUtils.getClass,
           ObjectType(classOf[java.sql.Timestamp]),
           "toJavaTimestamp",
-          getPath :: Nil)
+          getPath :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.lang.String] =>
         Invoke(getPath, "toString", ObjectType(classOf[String]), returnNullable = false)
@@ -335,7 +337,7 @@ object ScalaReflection extends ScalaReflection {
         // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
-        CollectObjectsToMap(
+        CatalystToExternalMap(
           p => deserializerFor(keyType, Some(p), walkedTypePath),
           p => deserializerFor(valueType, Some(p), walkedTypePath),
           getPath,
@@ -446,7 +448,8 @@ object ScalaReflection extends ScalaReflection {
               classOf[UnsafeArrayData],
               ArrayType(dt, false),
               "fromPrimitiveArray",
-              input :: Nil)
+              input :: Nil,
+              returnNullable = false)
           } else {
             NewInstance(
               classOf[GenericArrayData],
@@ -494,6 +497,7 @@ object ScalaReflection extends ScalaReflection {
           inputObject,
           dataTypeFor(keyType),
           serializerFor(_, keyType, keyPath, seenTypeSet),
+          keyNullable = !keyType.typeSymbol.asClass.isPrimitive,
           dataTypeFor(valueType),
           serializerFor(_, valueType, valuePath, seenTypeSet),
           valueNullable = !valueType.typeSymbol.asClass.isPrimitive)
@@ -503,49 +507,56 @@ object ScalaReflection extends ScalaReflection {
           classOf[UTF8String],
           StringType,
           "fromString",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.sql.Timestamp] =>
         StaticInvoke(
           DateTimeUtils.getClass,
           TimestampType,
           "fromJavaTimestamp",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.sql.Date] =>
         StaticInvoke(
           DateTimeUtils.getClass,
           DateType,
           "fromJavaDate",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[BigDecimal] =>
         StaticInvoke(
           Decimal.getClass,
           DecimalType.SYSTEM_DEFAULT,
           "apply",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
         StaticInvoke(
           Decimal.getClass,
           DecimalType.SYSTEM_DEFAULT,
           "apply",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.math.BigInteger] =>
         StaticInvoke(
           Decimal.getClass,
           DecimalType.BigIntDecimal,
           "apply",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[scala.math.BigInt] =>
         StaticInvoke(
           Decimal.getClass,
           DecimalType.BigIntDecimal,
           "apply",
-          inputObject :: Nil)
+          inputObject :: Nil,
+          returnNullable = false)
 
       case t if t <:< localTypeOf[java.lang.Integer] =>
         Invoke(inputObject, "intValue", IntegerType)

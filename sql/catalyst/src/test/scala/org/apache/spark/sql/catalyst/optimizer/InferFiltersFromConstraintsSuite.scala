@@ -206,13 +206,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("No inferred filter when constraint propagation is disabled") {
-    try {
-      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, false)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
-    } finally {
-      SQLConf.get.unsetConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED)
     }
   }
 }
