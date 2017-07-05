@@ -92,6 +92,31 @@ class DiskStoreSuite extends SparkFunSuite {
     assert(diskStore.getSize(blockId) === 0L)
   }
 
+  test("blocks larger than 2gb") {
+    val conf = new SparkConf()
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
+
+    val mb = 1024*1024
+    val gb = 1024*mb
+
+    val blockId = BlockId("rdd_1_2")
+    diskStore.put(blockId) { chan =>
+      val arr = new Array[Byte](mb)
+      for{
+        _ <- 0 until 2048
+      }{
+        val buf = ByteBuffer.wrap(arr)
+        while (buf.hasRemaining()) {
+          chan.write(buf)
+        }
+      }
+    }
+
+    val blockData = diskStore.getBytes(blockId)
+    assert(blockData.size == 2 * gb)
+  }
+
   test("block data encryption") {
     val testDir = Utils.createTempDir()
     val testData = new Array[Byte](128 * 1024)
