@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution
 
+import java.nio.ByteBuffer
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
-
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -35,6 +36,13 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
+
+  val defaultFPGABatchRowNumber = 100
+
+  val CMCCInputSize = 1220
+  val CMCCInputIsString = Array.fill(39)(false)
+  val CMCCInputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3)
+  val CMCCCharLength = Array(32, 8, 8, 12, 12, 8)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -70,13 +78,60 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val project = UnsafeProjection.create(projectList, child.output,
-        subexpressionEliminationEnabled)
-      project.initialize(index)
-      iter.map(project)
+//    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
+//      val project = UnsafeProjection.create(projectList, child.output,
+//        subexpressionEliminationEnabled)
+//      project.initialize(index)
+//      iter.map(project)
+//    }
+    val FPGABatch = toFPGABatch(child.execute())
+    val resFPGABatch = mockFPGA(FPGABatch)
+    val internalRow = toInternalRow(resFPGABatch)
+  }
+
+  def toFPGABatch (input: RDD[InternalRow]): ByteBuffer = {
+
+    input.mapPartitions { iter =>
+      new Iterator[ByteBuffer] {
+
+        override def hasNext: Boolean = iter.hasNext
+
+        def loadRowToBuffer(row: InternalRow, buffer: ByteBuffer): Unit = {
+          CMCCInputSchema.foreach { colType =>
+            var index = 0
+            if(colType == 1) {
+              buffer.putInt(index, row.getInt(index))
+            } else if (colType == 2) {
+              buffer.putLong(index, row.getLong(index))
+            } else {
+              buffer.put()
+            }
+          }
+        }
+
+        override def next(): ByteBuffer = {
+          val buffer = getByteBuffer(defaultFPGABatchRowNumber * CMCCInputSize)
+          while(iter.hasNext) {
+
+          }
+        }
+      }
+
     }
   }
+
+  def toInternalRow(input: ByteBuffer): RDD[InternalRow] = {
+    //
+  }
+
+  def getByteBuffer(size: Int): ByteBuffer = {
+    ByteBuffer.allocate(size)
+  }
+
+  def mockFPGA(input: ByteBuffer) = {
+    input
+  }
+
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
