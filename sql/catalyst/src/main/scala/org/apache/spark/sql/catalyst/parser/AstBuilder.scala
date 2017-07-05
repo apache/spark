@@ -1277,8 +1277,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case unresolved_attr @ UnresolvedAttribute(nameParts) =>
         ctx.fieldName.getStart.getText match {
           case escapedIdentifier(columnNameRegex)
-            if conf.supportQuotedRegexColumnName && isContextNamedExpression(ctx) =>
-            UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name), conf.caseSensitiveAnalysis)
+            if SQLConf.get.supportQuotedRegexColumnName && isContextNamedExpression(ctx) =>
+            UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name),
+              SQLConf.get.caseSensitiveAnalysis)
           case _ =>
             UnresolvedAttribute(nameParts :+ attr)
         }
@@ -1294,8 +1295,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
     ctx.getStart.getText match {
       case escapedIdentifier(columnNameRegex)
-        if conf.supportQuotedRegexColumnName && isContextNamedExpression(ctx) =>
-        UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
+        if SQLConf.get.supportQuotedRegexColumnName && isContextNamedExpression(ctx) =>
+        UnresolvedRegex(columnNameRegex, None, SQLConf.get.caseSensitiveAnalysis)
       case _ =>
         UnresolvedAttribute.quoted(ctx.getText)
     }
