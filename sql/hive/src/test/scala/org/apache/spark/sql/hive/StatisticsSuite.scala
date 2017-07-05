@@ -81,52 +81,39 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       spark.table(tableName).queryExecution.analyzed.stats.sizeInBytes
 
     // Non-partitioned table
-    sql("CREATE TABLE analyzeTable (key STRING, value STRING)")
-    sql("INSERT INTO TABLE analyzeTable SELECT * FROM src")
-    sql("INSERT INTO TABLE analyzeTable SELECT * FROM src")
+    val nonPartTable = "non_part_table"
+    withTable(nonPartTable) {
+      sql(s"CREATE TABLE $nonPartTable (key STRING, value STRING)")
+      sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
+      sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
 
-    sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
+      sql(s"ANALYZE TABLE $nonPartTable COMPUTE STATISTICS noscan")
 
-    assert(queryTotalSize("analyzeTable") === BigInt(11624))
-
-    sql("DROP TABLE analyzeTable")
+      assert(queryTotalSize(nonPartTable) === BigInt(11624))
+    }
 
     // Partitioned table
-    sql(
-      """
-        |CREATE TABLE analyzeTable_part (key STRING, value STRING) PARTITIONED BY (ds STRING)
-      """.stripMargin)
-    sql(
-      """
-        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-01')
-        |SELECT * FROM src
-      """.stripMargin)
-    sql(
-      """
-        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-02')
-        |SELECT * FROM src
-      """.stripMargin)
-    sql(
-      """
-        |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-03')
-        |SELECT * FROM src
-      """.stripMargin)
+    val partTable = "part_table"
+    withTable(partTable) {
+      sql(s"CREATE TABLE $partTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+      sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-01') SELECT * FROM src")
+      sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-02') SELECT * FROM src")
+      sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-03') SELECT * FROM src")
 
-    assert(queryTotalSize("analyzeTable_part") === spark.sessionState.conf.defaultSizeInBytes)
+      assert(queryTotalSize(partTable) === spark.sessionState.conf.defaultSizeInBytes)
 
-    sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
+      sql(s"ANALYZE TABLE $partTable COMPUTE STATISTICS noscan")
 
-    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
-
-    sql("DROP TABLE analyzeTable_part")
+      assert(queryTotalSize(partTable) === BigInt(17436))
+    }
 
     // Try to analyze a temp table
-    sql("""SELECT * FROM src""").createOrReplaceTempView("tempTable")
-    intercept[AnalysisException] {
-      sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
+    withView("tempTable") {
+      sql("""SELECT * FROM src""").createOrReplaceTempView("tempTable")
+      intercept[AnalysisException] {
+        sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
+      }
     }
-    spark.sessionState.catalog.dropTable(
-      TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
   }
 
   test("SPARK-21079 - analyze table with location different than that of individual partitions") {
