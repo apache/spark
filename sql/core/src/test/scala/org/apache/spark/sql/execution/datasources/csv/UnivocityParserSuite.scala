@@ -130,7 +130,7 @@ class UnivocityParserSuite extends SparkFunSuite {
       DateTimeUtils.millisToDays(DateTimeUtils.stringToTime("2015-01-01").getTime))
   }
 
-  test("Float and Double Types do not allow partial results") {
+  test("Throws exception for casting an invalid string to Float and Double Types") {
     val options = new CSVOptions(Map.empty[String, String], "GMT")
     var message = intercept[NumberFormatException] {
       parser.makeConverter("_1", FloatType, options = options).apply("10u000")
