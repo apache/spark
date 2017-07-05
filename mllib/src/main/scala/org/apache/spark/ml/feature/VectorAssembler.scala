@@ -113,12 +113,12 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
-    val inputDataTypes = inputColNames.map(name => (name, schema(name).dataType))
-    inputDataTypes.foreach {
-      case (_, _: NumericType | BooleanType) =>
-      case (_, _: VectorUDT) =>
-      case (name, other) =>
-        throw new IllegalArgumentException(s"Data type $other of column $name is not supported.")
+    inputColNames.foreach { name =>
+      schema(name).dataType match {
+        case _: NumericType | BooleanType | VectorUDT =>
+        case other =>
+          throw new IllegalArgumentException(s"Data type $other of column $name is not supported.")
+      }
     }
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
