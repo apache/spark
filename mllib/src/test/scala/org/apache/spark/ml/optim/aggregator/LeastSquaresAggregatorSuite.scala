@@ -16,7 +16,10 @@
  */
 package org.apache.spark.ml.optim.aggregator
 
+import scala.util.{Failure, Success, Try}
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
@@ -53,7 +56,7 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
   private def getNewAggregator(
       instances: Array[Instance],
       coefficients: Vector,
-      fitIntercept: Boolean): LeastSquaresAggregator = {
+      fitIntercept: Boolean): (Seq[Broadcast[_]], LeastSquaresAggregator) = {
     val (featuresSummarizer, ySummarizer) = getRegressionSummarizers(instances)
     val yStd = math.sqrt(ySummarizer.variance(0))
     val yMean = ySummarizer.mean(0)
@@ -62,40 +65,53 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
     val featuresMean = featuresSummarizer.mean
     val bcFeaturesMean = spark.sparkContext.broadcast(featuresMean.toArray)
     val bcCoefficients = spark.sparkContext.broadcast(coefficients)
-    new LeastSquaresAggregator(yStd, yMean, fitIntercept, bcFeaturesStd,
-      bcFeaturesMean)(bcCoefficients)
+    val broadcasts = List(bcCoefficients, bcFeaturesMean, bcFeaturesStd)
+    val agg = Try(new LeastSquaresAggregator(yStd, yMean, fitIntercept, bcFeaturesStd,
+      bcFeaturesMean)(bcCoefficients)) match {
+      case Success(a) => a
+      case Failure(exception) =>
+        broadcasts.foreach(_.destroy(blocking = false))
+        throw exception
+    }
+    (broadcasts, agg)
   }
 
   test("aggregator add method input size") {
     val coefficients = Vectors.dense(1.0, 2.0)
-    val agg = getNewAggregator(instances, coefficients, fitIntercept = true)
+    val (broadcasts, agg) = getNewAggregator(instances, coefficients, fitIntercept = true)
     withClue("LeastSquaresAggregator features dimension must match coefficients dimension") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, 1.0, Vectors.dense(2.0)))
       }
     }
+    broadcasts.foreach(_.destroy(blocking = false))
   }
 
   test("negative weight") {
     val coefficients = Vectors.dense(1.0, 2.0)
-    val agg = getNewAggregator(instances, coefficients, fitIntercept = true)
+    val (broadcasts, agg) = getNewAggregator(instances, coefficients, fitIntercept = true)
     withClue("LeastSquaresAggregator does not support negative instance weights.") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, -1.0, Vectors.dense(2.0, 1.0)))
       }
     }
+    broadcasts.foreach(_.destroy(blocking = false))
   }
 
   test("check sizes") {
     val coefficients = Vectors.dense(1.0, 2.0)
-    val aggIntercept = getNewAggregator(instances, coefficients, fitIntercept = true)
-    val aggNoIntercept = getNewAggregator(instances, coefficients, fitIntercept = false)
+    val (broadcastsIntercept, aggIntercept) = getNewAggregator(instances, coefficients,
+      fitIntercept = true)
+    val (broadcastsNoIntercept, aggNoIntercept) = getNewAggregator(instances, coefficients,
+      fitIntercept = false)
     instances.foreach(aggIntercept.add)
     instances.foreach(aggNoIntercept.add)
 
     // least squares agg does not include intercept in its gradient array
     assert(aggIntercept.gradient.size === 2)
     assert(aggNoIntercept.gradient.size === 2)
+    broadcastsIntercept.foreach(_.destroy(blocking = false))
+    broadcastsNoIntercept.foreach(_.destroy(blocking = false))
   }
 
   test("check correctness") {
@@ -111,7 +127,7 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
     val yStd = math.sqrt(ySummarizer.variance(0))
     val yMean = ySummarizer.mean(0)
 
-    val agg = getNewAggregator(instances, coefficients, fitIntercept = true)
+    val (broadcasts, agg) = getNewAggregator(instances, coefficients, fitIntercept = true)
     instances.foreach(agg.add)
 
     // compute (y - pred) analytically
@@ -145,11 +161,12 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
 
   test("check with zero standard deviation") {
     val coefficients = Vectors.dense(1.0, 2.0)
-    val aggConstantFeature = getNewAggregator(instancesConstantFeature, coefficients,
-      fitIntercept = true)
+    val (broadcastsConstantFeature, aggConstantFeature) = getNewAggregator(instancesConstantFeature,
+      coefficients, fitIntercept = true)
     instances.foreach(aggConstantFeature.add)
     // constant features should not affect gradient
     assert(aggConstantFeature.gradient(0) === 0.0)
+    broadcastsConstantFeature.foreach(_.destroy(blocking = false))
 
     withClue("LeastSquaresAggregator does not support zero standard deviation of the label") {
       intercept[IllegalArgumentException] {

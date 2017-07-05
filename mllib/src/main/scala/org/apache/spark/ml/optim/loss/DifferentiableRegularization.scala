@@ -40,13 +40,13 @@ private[ml] trait DifferentiableRegularization[T] extends DiffFunction[T] {
  * @param regParam The magnitude of the regularization.
  * @param shouldApply A function (Int => Boolean) indicating whether a given index should have
  *                    regularization applied to it.
- * @param featuresStd Option for a function which maps coefficient index (column major) to the
- *                    feature standard deviation. If `None`, no standardization is applied.
+ * @param applyFeaturesStd Option for a function which maps coefficient index (column major) to the
+ *                         feature standard deviation. If `None`, no standardization is applied.
  */
 private[ml] class L2Regularization(
     override val regParam: Double,
     shouldApply: Int => Boolean,
-    featuresStd: Option[Int => Double]) extends DifferentiableRegularization[Vector] {
+    applyFeaturesStd: Option[Int => Double]) extends DifferentiableRegularization[Vector] {
 
   override def calculate(coefficients: Vector): (Double, Vector) = {
     coefficients match {
@@ -55,7 +55,7 @@ private[ml] class L2Regularization(
         val gradient = new Array[Double](dv.size)
         dv.values.indices.filter(shouldApply).foreach { j =>
           val coef = coefficients(j)
-          featuresStd match {
+          applyFeaturesStd match {
             case Some(getStd) =>
               val std = getStd(j)
               if (std != 0.0) {
