@@ -2303,9 +2303,9 @@ class SQLTests(ReusedPySparkTestCase):
         assertCollectSuccess('f', ctypes.c_float(1e+38).value)
         assertCollectSuccess('f', ctypes.c_float(1e-38).value)
         assertCollectSuccess('f', ctypes.c_float(1.123456).value)
-        assertCollectSuccess('d', ctypes.c_double(1e+308).value)
-        assertCollectSuccess('d', ctypes.c_double(1e+308).value)
-        assertCollectSuccess('d', ctypes.c_double(1.123456789012345).value)
+        assertCollectSuccess('d', sys.float_info.max)
+        assertCollectSuccess('d', sys.float_info.min)
+        assertCollectSuccess('d', sys.float_info.epsilon)
 
         # test int types
         supported_int = list(set(_array_int_typecode_ctype_mappings.keys()).
