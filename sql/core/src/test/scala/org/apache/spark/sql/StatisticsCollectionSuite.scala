@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
@@ -178,36 +178,63 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("change stats after set location command") {
     val table = "change_stats_set_location_table"
-    withTable(table) {
-      spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
-      val fetched1 = checkTableStats(
-        table, hasSizeInBytes = true, expectedRowCounts = Some(100))
-      assert(fetched1.get.sizeInBytes > 0)
-      assert(fetched1.get.colStats.size == 2)
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+        withTable(table) {
+          spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
+          // analyze to get initial stats
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
+          val fetched1 = checkTableStats(
+            table, hasSizeInBytes = true, expectedRowCounts = Some(100))
+          assert(fetched1.get.sizeInBytes > 0)
+          assert(fetched1.get.colStats.size == 2)
 
-      // set location command
-      withTempDir { newLocation =>
-        sql(s"ALTER TABLE $table SET LOCATION '${newLocation.toURI.toString}'")
-        checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+          // set location command
+          val initLocation = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
+            .storage.locationUri.get.toString
+          withTempDir { newLocation =>
+            sql(s"ALTER TABLE $table SET LOCATION '${newLocation.toURI.toString}'")
+            if (autoUpdate) {
+              val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+              assert(fetched2.get.sizeInBytes == 0)
+              assert(fetched2.get.colStats.isEmpty)
+
+              // set back to the initial location
+              sql(s"ALTER TABLE $table SET LOCATION '$initLocation'")
+              val fetched3 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+              assert(fetched3.get.sizeInBytes == fetched1.get.sizeInBytes)
+            } else {
+              checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+            }
+          }
+        }
       }
     }
   }
 
   test("change stats after insert command for datasource table") {
     val table = "change_stats_insert_datasource_table"
-    withTable(table) {
-      sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched1.get.sizeInBytes == 0)
-      assert(fetched1.get.colStats.size == 2)
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
+          // analyze to get initial stats
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
+          val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+          assert(fetched1.get.sizeInBytes == 0)
+          assert(fetched1.get.colStats.size == 2)
 
-      // insert into command
-      sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
-      checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+          // insert into command
+          sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
+          if (autoUpdate) {
+            val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+            assert(fetched2.get.sizeInBytes > 0)
+            assert(fetched2.get.colStats.isEmpty)
+          } else {
+            checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+          }
+        }
+      }
     }
   }
 

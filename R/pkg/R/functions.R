@@ -38,10 +38,10 @@ NULL
 #'
 #' Date time functions defined for \code{Column}.
 #'
-#' @param x Column to compute on.
+#' @param x Column to compute on. In \code{window}, it must be a time Column of \code{TimestampType}.
 #' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
-#'               x Column to DateType or TimestampType. For \code{trunc}, it is the string used
-#'               for specifying the truncation method. For example, "year", "yyyy", "yy" for
+#'               Column \code{x} to DateType or TimestampType. For \code{trunc}, it is the string
+#'               to use to specify the truncation method. For example, "year", "yyyy", "yy" for
 #'               truncate by year, or "month", "mon", "mm" for truncate by month.
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
@@ -122,7 +122,7 @@ NULL
 #'           format to. See 'Details'.
 #'      }
 #' @param y Column to compute on.
-#' @param ... additional columns.
+#' @param ... additional Columns.
 #' @name column_string_functions
 #' @rdname column_string_functions
 #' @family string functions
@@ -167,8 +167,7 @@ NULL
 #' tmp <- mutate(df, v1 = crc32(df$model), v2 = hash(df$model),
 #'                   v3 = hash(df$model, df$mpg), v4 = md5(df$model),
 #'                   v5 = sha1(df$model), v6 = sha2(df$model, 256))
-#' head(tmp)
-#' }
+#' head(tmp)}
 NULL
 
 #' Collection functions for Column operations
@@ -190,7 +189,6 @@ NULL
 #' \dontrun{
 #' # Dataframe used throughout this doc
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
-#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
@@ -198,6 +196,34 @@ NULL
 #' head(select(tmp, posexplode(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))}
+NULL
+
+#' Window functions for Column operations
+#'
+#' Window functions defined for \code{Column}.
+#'
+#' @param x In \code{lag} and \code{lead}, it is the column as a character string or a Column
+#'          to compute on. In \code{ntile}, it is the number of ntile groups.
+#' @param offset In \code{lag}, the number of rows back from the current row from which to obtain
+#'               a value. In \code{lead}, the number of rows after the current row from which to
+#'               obtain a value. If not specified, the default is 1.
+#' @param defaultValue (optional) default to use when the offset row does not exist.
+#' @param ... additional argument(s).
+#' @name column_window_functions
+#' @rdname column_window_functions
+#' @family window functions
+#' @examples
+#' \dontrun{
+#' # Dataframe used throughout this doc
+#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
+#' ws <- orderBy(windowPartitionBy("am"), "hp")
+#' tmp <- mutate(df, dist = over(cume_dist(), ws), dense_rank = over(dense_rank(), ws),
+#'               lag = over(lag(df$mpg), ws), lead = over(lead(df$mpg, 1), ws),
+#'               percent_rank = over(percent_rank(), ws),
+#'               rank = over(rank(), ws), row_number = over(row_number(), ws))
+#' # Get ntile group id (1-4) for hp
+#' tmp <- mutate(tmp, ntile = over(ntile(4), ws))
+#' head(tmp)}
 NULL
 
 #' @details
@@ -366,7 +392,7 @@ setMethod("base64",
           })
 
 #' @details
-#' \code{bin}: An expression that returns the string representation of the binary value
+#' \code{bin}: Returns the string representation of the binary value
 #' of the given long column. For example, bin("12") returns "1100".
 #'
 #' @rdname column_math_functions
@@ -694,7 +720,7 @@ setMethod("dayofyear",
 #' \code{decode}: Computes the first argument into a string from a binary using the provided
 #' character set.
 #'
-#' @param charset Character set to use (one of "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE",
+#' @param charset character set to use (one of "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE",
 #'                "UTF-16LE", "UTF-16").
 #'
 #' @rdname column_string_functions
@@ -827,7 +853,7 @@ setMethod("hex",
           })
 
 #' @details
-#' \code{hour}: Extracts the hours as an integer from a given date/timestamp/string.
+#' \code{hour}: Extracts the hour as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
 #' @aliases hour hour,Column-method
@@ -1149,7 +1175,7 @@ setMethod("min",
           })
 
 #' @details
-#' \code{minute}: Extracts the minutes as an integer from a given date/timestamp/string.
+#' \code{minute}: Extracts the minute as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
 #' @aliases minute minute,Column-method
@@ -1326,7 +1352,7 @@ setMethod("sd",
           })
 
 #' @details
-#' \code{second}: Extracts the seconds as an integer from a given date/timestamp/string.
+#' \code{second}: Extracts the second as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
 #' @aliases second second,Column-method
@@ -1436,20 +1462,18 @@ setMethod("soundex",
             column(jc)
           })
 
-#' Return the partition ID as a column
-#'
-#' Return the partition ID as a SparkDataFrame column.
+#' @details
+#' \code{spark_partition_id}: Returns the partition ID as a SparkDataFrame column.
 #' Note that this is nondeterministic because it depends on data partitioning and
 #' task scheduling.
+#' This is equivalent to the \code{SPARK_PARTITION_ID} function in SQL.
 #'
-#' This is equivalent to the SPARK_PARTITION_ID function in SQL.
-#'
-#' @rdname spark_partition_id
-#' @name spark_partition_id
-#' @aliases spark_partition_id,missing-method
+#' @rdname column_nonaggregate_functions
+#' @aliases spark_partition_id spark_partition_id,missing-method
 #' @export
 #' @examples
-#' \dontrun{select(df, spark_partition_id())}
+#'
+#' \dontrun{head(select(df, spark_partition_id()))}
 #' @note spark_partition_id since 2.0.0
 setMethod("spark_partition_id",
           signature("missing"),
@@ -2000,7 +2024,7 @@ setMethod("pmod", signature(y = "Column"),
             column(jc)
           })
 
-#' @param rsd maximum estimation error allowed (default = 0.05)
+#' @param rsd maximum estimation error allowed (default = 0.05).
 #'
 #' @rdname column_aggregate_functions
 #' @aliases approxCountDistinct,Column-method
@@ -2192,8 +2216,8 @@ setMethod("from_json", signature(x = "Column", schema = "structType"),
 #' @examples
 #'
 #' \dontrun{
-#' tmp <- mutate(df, from_utc = from_utc_timestamp(df$time, 'PST'),
-#'                  to_utc = to_utc_timestamp(df$time, 'PST'))
+#' tmp <- mutate(df, from_utc = from_utc_timestamp(df$time, "PST"),
+#'                  to_utc = to_utc_timestamp(df$time, "PST"))
 #' head(tmp)}
 #' @note from_utc_timestamp since 1.5.0
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
@@ -2227,7 +2251,7 @@ setMethod("instr", signature(y = "Column", x = "character"),
 #' @details
 #' \code{next_day}: Given a date column, returns the first date which is later than the value of
 #' the date column that is on the specified day of the week. For example,
-#' \code{next_day('2015-07-27', "Sunday")} returns 2015-08-02 because that is the first Sunday
+#' \code{next_day("2015-07-27", "Sunday")} returns 2015-08-02 because that is the first Sunday
 #' after 2015-07-27. Day of the week parameter is case insensitive, and accepts first three or
 #' two characters: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
 #'
@@ -2267,7 +2291,7 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
 #' tmp <- mutate(df, t1 = add_months(df$time, 1),
 #'                   t2 = date_add(df$time, 2),
 #'                   t3 = date_sub(df$time, 3),
-#'                   t4 = next_day(df$time, 'Sun'))
+#'                   t4 = next_day(df$time, "Sun"))
 #' head(tmp)}
 #' @note add_months since 1.5.0
 setMethod("add_months", signature(y = "Column", x = "numeric"),
@@ -2376,8 +2400,8 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRight}: (Unigned) shifts the given value numBits right. If the given value is a long value,
-#' it will return a long value else it will return an integer value.
+#' \code{shiftRightUnsigned}: (Unigned) shifts the given value numBits right. If the given value is
+#' a long value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions
 #' @aliases shiftRightUnsigned shiftRightUnsigned,Column,numeric-method
@@ -2485,14 +2509,13 @@ setMethod("from_unixtime", signature(x = "Column"),
             column(jc)
           })
 
-#' window
-#'
-#' Bucketize rows into one or more time windows given a timestamp specifying column. Window
-#' starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+#' @details
+#' \code{window}: Bucketizes rows into one or more time windows given a timestamp specifying column.
+#' Window starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
 #' [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
-#' the order of months are not supported.
+#' the order of months are not supported. It returns an output column of struct called 'window'
+#' by default with the nested columns 'start' and 'end'
 #'
-#' @param x a time Column. Must be of TimestampType.
 #' @param windowDuration a string specifying the width of the window, e.g. '1 second',
 #'                       '1 day 12 hours', '2 minutes'. Valid interval strings are 'week',
 #'                       'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'. Note that
@@ -2508,27 +2531,22 @@ setMethod("from_unixtime", signature(x = "Column"),
 #'                  window intervals. For example, in order to have hourly tumbling windows
 #'                  that start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
 #'                  \code{startTime} as \code{"15 minutes"}.
-#' @param ... further arguments to be passed to or from other methods.
-#' @return An output column of struct called 'window' by default with the nested columns 'start'
-#'         and 'end'.
-#' @family date time functions
-#' @rdname window
-#' @name window
-#' @aliases window,Column-method
+#' @rdname column_datetime_functions
+#' @aliases window window,Column-method
 #' @export
 #' @examples
-#'\dontrun{
-#'   # One minute windows every 15 seconds 10 seconds after the minute, e.g. 09:00:10-09:01:10,
-#'   # 09:00:25-09:01:25, 09:00:40-09:01:40, ...
-#'   window(df$time, "1 minute", "15 seconds", "10 seconds")
 #'
-#'   # One minute tumbling windows 15 seconds after the minute, e.g. 09:00:15-09:01:15,
-#'    # 09:01:15-09:02:15...
-#'   window(df$time, "1 minute", startTime = "15 seconds")
+#' \dontrun{
+#' # One minute windows every 15 seconds 10 seconds after the minute, e.g. 09:00:10-09:01:10,
+#' # 09:00:25-09:01:25, 09:00:40-09:01:40, ...
+#' window(df$time, "1 minute", "15 seconds", "10 seconds")
 #'
-#'   # Thirty-second windows every 10 seconds, e.g. 09:00:00-09:00:30, 09:00:10-09:00:40, ...
-#'   window(df$time, "30 seconds", "10 seconds")
-#'}
+#' # One minute tumbling windows 15 seconds after the minute, e.g. 09:00:15-09:01:15,
+#' # 09:01:15-09:02:15...
+#' window(df$time, "1 minute", startTime = "15 seconds")
+#'
+#' # Thirty-second windows every 10 seconds, e.g. 09:00:00-09:00:30, 09:00:10-09:00:40, ...
+#' window(df$time, "30 seconds", "10 seconds")}
 #' @note window since 2.0.0
 setMethod("window", signature(x = "Column"),
           function(x, windowDuration, slideDuration = NULL, startTime = NULL) {
@@ -2844,27 +2862,16 @@ setMethod("ifelse",
 
 ###################### Window functions######################
 
-#' cume_dist
-#'
-#' Window function: returns the cumulative distribution of values within a window partition,
-#' i.e. the fraction of rows that are below the current row.
-#'
-#'   N = total number of rows in the partition
-#'   cume_dist(x) = number of values before (and including) x / N
-#'
+#' @details
+#' \code{cume_dist}: Returns the cumulative distribution of values within a window partition,
+#' i.e. the fraction of rows that are below the current row:
+#' (number of values before and including x) / (total number of rows in the partition).
 #' This is equivalent to the \code{CUME_DIST} function in SQL.
+#' The method should be used with no argument.
 #'
-#' @rdname cume_dist
-#' @name cume_dist
-#' @family window functions
-#' @aliases cume_dist,missing-method
+#' @rdname column_window_functions
+#' @aliases cume_dist cume_dist,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'   out <- select(df, over(cume_dist(), ws), df$hp, df$am)
-#' }
 #' @note cume_dist since 1.6.0
 setMethod("cume_dist",
           signature("missing"),
@@ -2873,28 +2880,19 @@ setMethod("cume_dist",
             column(jc)
           })
 
-#' dense_rank
-#'
-#' Window function: returns the rank of rows within a window partition, without any gaps.
+#' @details
+#' \code{dense_rank}: Returns the rank of rows within a window partition, without any gaps.
 #' The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
 #' sequence when there are ties. That is, if you were ranking a competition using dense_rank
 #' and had three people tie for second place, you would say that all three were in second
 #' place and that the next person came in third. Rank would give me sequential numbers, making
 #' the person that came in third place (after the ties) would register as coming in fifth.
-#'
 #' This is equivalent to the \code{DENSE_RANK} function in SQL.
+#' The method should be used with no argument.
 #'
-#' @rdname dense_rank
-#' @name dense_rank
-#' @family window functions
-#' @aliases dense_rank,missing-method
+#' @rdname column_window_functions
+#' @aliases dense_rank dense_rank,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'   out <- select(df, over(dense_rank(), ws), df$hp, df$am)
-#' }
 #' @note dense_rank since 1.6.0
 setMethod("dense_rank",
           signature("missing"),
@@ -2903,34 +2901,15 @@ setMethod("dense_rank",
             column(jc)
           })
 
-#' lag
-#'
-#' Window function: returns the value that is \code{offset} rows before the current row, and
+#' @details
+#' \code{lag}: Returns the value that is \code{offset} rows before the current row, and
 #' \code{defaultValue} if there is less than \code{offset} rows before the current row. For example,
 #' an \code{offset} of one will return the previous row at any given point in the window partition.
-#'
 #' This is equivalent to the \code{LAG} function in SQL.
 #'
-#' @param x the column as a character string or a Column to compute on.
-#' @param offset the number of rows back from the current row from which to obtain a value.
-#'               If not specified, the default is 1.
-#' @param defaultValue (optional) default to use when the offset row does not exist.
-#' @param ... further arguments to be passed to or from other methods.
-#' @rdname lag
-#' @name lag
-#' @aliases lag,characterOrColumn-method
-#' @family window functions
+#' @rdname column_window_functions
+#' @aliases lag lag,characterOrColumn-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'
-#'   # Partition by am (transmission) and order by hp (horsepower)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'
-#'   # Lag mpg values by 1 row on the partition-and-ordered table
-#'   out <- select(df, over(lag(df$mpg), ws), df$mpg, df$hp, df$am)
-#' }
 #' @note lag since 1.6.0
 setMethod("lag",
           signature(x = "characterOrColumn"),
@@ -2946,35 +2925,16 @@ setMethod("lag",
             column(jc)
           })
 
-#' lead
-#'
-#' Window function: returns the value that is \code{offset} rows after the current row, and
+#' @details
+#' \code{lead}: Returns the value that is \code{offset} rows after the current row, and
 #' \code{defaultValue} if there is less than \code{offset} rows after the current row.
 #' For example, an \code{offset} of one will return the next row at any given point
 #' in the window partition.
-#'
 #' This is equivalent to the \code{LEAD} function in SQL.
 #'
-#' @param x the column as a character string or a Column to compute on.
-#' @param offset the number of rows after the current row from which to obtain a value.
-#'               If not specified, the default is 1.
-#' @param defaultValue (optional) default to use when the offset row does not exist.
-#'
-#' @rdname lead
-#' @name lead
-#' @family window functions
-#' @aliases lead,characterOrColumn,numeric-method
+#' @rdname column_window_functions
+#' @aliases lead lead,characterOrColumn,numeric-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'
-#'   # Partition by am (transmission) and order by hp (horsepower)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'
-#'   # Lead mpg values by 1 row on the partition-and-ordered table
-#'   out <- select(df, over(lead(df$mpg), ws), df$mpg, df$hp, df$am)
-#' }
 #' @note lead since 1.6.0
 setMethod("lead",
           signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
@@ -2990,31 +2950,15 @@ setMethod("lead",
             column(jc)
           })
 
-#' ntile
-#'
-#' Window function: returns the ntile group id (from 1 to n inclusive) in an ordered window
+#' @details
+#' \code{ntile}: Returns the ntile group id (from 1 to n inclusive) in an ordered window
 #' partition. For example, if n is 4, the first quarter of the rows will get value 1, the second
 #' quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
-#'
 #' This is equivalent to the \code{NTILE} function in SQL.
 #'
-#' @param x Number of ntile groups
-#'
-#' @rdname ntile
-#' @name ntile
-#' @aliases ntile,numeric-method
-#' @family window functions
+#' @rdname column_window_functions
+#' @aliases ntile ntile,numeric-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'
-#'   # Partition by am (transmission) and order by hp (horsepower)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'
-#'   # Get ntile group id (1-4) for hp
-#'   out <- select(df, over(ntile(4), ws), df$hp, df$am)
-#' }
 #' @note ntile since 1.6.0
 setMethod("ntile",
           signature(x = "numeric"),
@@ -3023,27 +2967,15 @@ setMethod("ntile",
             column(jc)
           })
 
-#' percent_rank
+#' @details
+#' \code{percent_rank}: Returns the relative rank (i.e. percentile) of rows within a window partition.
+#' This is computed by: (rank of row in its partition - 1) / (number of rows in the partition - 1).
+#' This is equivalent to the \code{PERCENT_RANK} function in SQL.
+#' The method should be used with no argument.
 #'
-#' Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
-#'
-#' This is computed by:
-#'
-#'   (rank of row in its partition - 1) / (number of rows in the partition - 1)
-#'
-#' This is equivalent to the PERCENT_RANK function in SQL.
-#'
-#' @rdname percent_rank
-#' @name percent_rank
-#' @family window functions
-#' @aliases percent_rank,missing-method
+#' @rdname column_window_functions
+#' @aliases percent_rank percent_rank,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'   out <- select(df, over(percent_rank(), ws), df$hp, df$am)
-#' }
 #' @note percent_rank since 1.6.0
 setMethod("percent_rank",
           signature("missing"),
@@ -3052,29 +2984,19 @@ setMethod("percent_rank",
             column(jc)
           })
 
-#' rank
-#'
-#' Window function: returns the rank of rows within a window partition.
-#'
+#' @details
+#' \code{rank}: Returns the rank of rows within a window partition.
 #' The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
 #' sequence when there are ties. That is, if you were ranking a competition using dense_rank
 #' and had three people tie for second place, you would say that all three were in second
 #' place and that the next person came in third. Rank would give me sequential numbers, making
 #' the person that came in third place (after the ties) would register as coming in fifth.
+#' This is equivalent to the \code{RANK} function in SQL.
+#' The method should be used with no argument.
 #'
-#' This is equivalent to the RANK function in SQL.
-#'
-#' @rdname rank
-#' @name rank
-#' @family window functions
-#' @aliases rank,missing-method
+#' @rdname column_window_functions
+#' @aliases rank rank,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'   out <- select(df, over(rank(), ws), df$hp, df$am)
-#' }
 #' @note rank since 1.6.0
 setMethod("rank",
           signature(x = "missing"),
@@ -3083,11 +3005,7 @@ setMethod("rank",
             column(jc)
           })
 
-# Expose rank() in the R base package
-#' @param x a numeric, complex, character or logical vector.
-#' @param ... additional argument(s) passed to the method.
-#' @name rank
-#' @rdname rank
+#' @rdname column_window_functions
 #' @aliases rank,ANY-method
 #' @export
 setMethod("rank",
@@ -3096,23 +3014,14 @@ setMethod("rank",
             base::rank(x, ...)
           })
 
-#' row_number
+#' @details
+#' \code{row_number}: Returns a sequential number starting at 1 within a window partition.
+#' This is equivalent to the \code{ROW_NUMBER} function in SQL.
+#' The method should be used with no argument.
 #'
-#' Window function: returns a sequential number starting at 1 within a window partition.
-#'
-#' This is equivalent to the ROW_NUMBER function in SQL.
-#'
-#' @rdname row_number
-#' @name row_number
-#' @aliases row_number,missing-method
-#' @family window functions
+#' @rdname column_window_functions
+#' @aliases row_number row_number,missing-method
 #' @export
-#' @examples
-#' \dontrun{
-#'   df <- createDataFrame(mtcars)
-#'   ws <- orderBy(windowPartitionBy("am"), "hp")
-#'   out <- select(df, over(row_number(), ws), df$hp, df$am)
-#' }
 #' @note row_number since 1.6.0
 setMethod("row_number",
           signature("missing"),
@@ -3127,7 +3036,7 @@ setMethod("row_number",
 #' \code{array_contains}: Returns null if the array is null, true if the array contains
 #' the value, and false otherwise.
 #'
-#' @param value A value to be checked if contained in the column
+#' @param value a value to be checked if contained in the column
 #' @rdname column_collection_functions
 #' @aliases array_contains array_contains,Column-method
 #' @export
@@ -3172,7 +3081,7 @@ setMethod("size",
 #' to the natural ordering of the array elements.
 #'
 #' @rdname column_collection_functions
-#' @param asc A logical flag indicating the sorting order.
+#' @param asc a logical flag indicating the sorting order.
 #'            TRUE, sorting is in ascending order.
 #'            FALSE, sorting is in descending order.
 #' @aliases sort_array sort_array,Column-method
@@ -3299,7 +3208,7 @@ setMethod("split_string",
 #' \code{repeat_string}: Repeats string n times.
 #' Equivalent to \code{repeat} SQL function.
 #'
-#' @param n Number of repetitions
+#' @param n number of repetitions.
 #' @rdname column_string_functions
 #' @aliases repeat_string repeat_string,Column-method
 #' @export
@@ -3428,7 +3337,7 @@ setMethod("grouping_bit",
 #' \code{grouping_id}: Returns the level of grouping.
 #' Equals to \code{
 #' grouping_bit(c1) * 2^(n - 1) + grouping_bit(c2) * 2^(n - 2)  + ... + grouping_bit(cn)
-#' }
+#' }.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases grouping_id grouping_id,Column-method

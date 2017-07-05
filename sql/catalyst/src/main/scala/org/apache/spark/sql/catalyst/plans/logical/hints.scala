@@ -42,11 +42,6 @@ case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
   override def output: Seq[Attribute] = child.output
 
   override lazy val canonicalized: LogicalPlan = child.canonicalized
-
-  override def computeStats: Statistics = {
-    val stats = child.stats
-    stats.copy(hints = hints)
-  }
 }
 
 
