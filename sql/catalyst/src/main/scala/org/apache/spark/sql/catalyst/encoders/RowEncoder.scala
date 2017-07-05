@@ -96,28 +96,32 @@ object RowEncoder {
         DateTimeUtils.getClass,
         TimestampType,
         "fromJavaTimestamp",
-        inputObject :: Nil)
+        inputObject :: Nil,
+        returnNullable = false)
 
     case DateType =>
       StaticInvoke(
         DateTimeUtils.getClass,
         DateType,
         "fromJavaDate",
-        inputObject :: Nil)
+        inputObject :: Nil,
+        returnNullable = false)
 
     case d: DecimalType =>
       StaticInvoke(
         Decimal.getClass,
         d,
         "fromDecimal",
-        inputObject :: Nil)
+        inputObject :: Nil,
+        returnNullable = false)
 
     case StringType =>
       StaticInvoke(
         classOf[UTF8String],
         StringType,
         "fromString",
-        inputObject :: Nil)
+        inputObject :: Nil,
+        returnNullable = false)
 
     case t @ ArrayType(et, cn) =>
       et match {
@@ -126,7 +130,8 @@ object RowEncoder {
             classOf[ArrayData],
             t,
             "toArrayData",
-            inputObject :: Nil)
+            inputObject :: Nil,
+            returnNullable = false)
         case _ => MapObjects(
           element => serializerFor(ValidateExternalType(element, et), et),
           inputObject,
@@ -254,14 +259,16 @@ object RowEncoder {
         DateTimeUtils.getClass,
         ObjectType(classOf[java.sql.Timestamp]),
         "toJavaTimestamp",
-        input :: Nil)
+        input :: Nil,
+        returnNullable = false)
 
     case DateType =>
       StaticInvoke(
         DateTimeUtils.getClass,
         ObjectType(classOf[java.sql.Date]),
         "toJavaDate",
-        input :: Nil)
+        input :: Nil,
+        returnNullable = false)
 
     case _: DecimalType =>
       Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]),
@@ -280,7 +287,8 @@ object RowEncoder {
         scala.collection.mutable.WrappedArray.getClass,
         ObjectType(classOf[Seq[_]]),
         "make",
-        arrayData :: Nil)
+        arrayData :: Nil,
+        returnNullable = false)
 
     case MapType(kt, vt, valueNullable) =>
       val keyArrayType = ArrayType(kt, false)
@@ -293,7 +301,8 @@ object RowEncoder {
         ArrayBasedMapData.getClass,
         ObjectType(classOf[Map[_, _]]),
         "toScalaMap",
-        keyData :: valueData :: Nil)
+        keyData :: valueData :: Nil,
+        returnNullable = false)
 
     case schema @ StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
