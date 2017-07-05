@@ -433,9 +433,24 @@ case class AlterTableAddPartitionCommand(
         sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(normalizedSpec, table.storage.copy(
-        locationUri = location.map(CatalogUtils.stringToURI(_))))
+        locationUri = location.map(CatalogUtils.stringToURI)))
     }
     catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
+
+    if (table.stats.nonEmpty) {
+      if (sparkSession.sessionState.conf.autoUpdateSize) {
+        val addedSize = parts.map { part =>
+          CommandUtils.calculateLocationSize(sparkSession.sessionState, table.identifier,
+            part.storage.locationUri)
+        }.sum
+        if (addedSize > 0) {
+          val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
+          catalog.alterTableStats(table.identifier, Some(newStats))
+        }
+      } else {
+        catalog.alterTableStats(table.identifier, None)
+      }
+    }
     Seq.empty[Row]
   }
 
@@ -519,6 +534,9 @@ case class AlterTableDropPartitionCommand(
     catalog.dropPartitions(
       table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge,
       retainData = retainData)
+
+    CommandUtils.updateTableStats(sparkSession, table)
+
     Seq.empty[Row]
   }
 
@@ -768,6 +786,8 @@ case class AlterTableSetLocationCommand(
         // No partition spec is specified, so we set the location for the table itself
         catalog.alterTable(table.withNewStorage(locationUri = Some(locUri)))
     }
+
+    CommandUtils.updateTableStats(sparkSession, table)
     Seq.empty[Row]
   }
 }

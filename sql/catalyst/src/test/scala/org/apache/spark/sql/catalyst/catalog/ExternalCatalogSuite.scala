@@ -260,7 +260,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val oldTableStats = catalog.getTable("db2", "tbl1").stats
     assert(oldTableStats.isEmpty)
     val newStats = CatalogStatistics(sizeInBytes = 1)
-    catalog.alterTableStats("db2", "tbl1", newStats)
+    catalog.alterTableStats("db2", "tbl1", Some(newStats))
     val newTableStats = catalog.getTable("db2", "tbl1").stats
     assert(newTableStats.get == newStats)
   }

@@ -529,14 +529,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
-  <td>200m</td>
-  <td>
-    The blocks of a shuffle request will be fetched to disk when size of the request is above
-    this threshold. This is to avoid a giant request takes too much memory.
-  </td>
-</tr>
-<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
@@ -1477,6 +1469,15 @@ Apart from these, the following properties are also available, and may be useful
     (Experimental) If set to "true", allow Spark to automatically kill, and attempt to re-create,
     executors when they are blacklisted.  Note that, when an entire node is added to the blacklist,
     all of the executors on that node will be killed.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.application.fetchFailure.enabled</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch 
+    failure happenes. If external shuffle service is enabled, then the whole node will be 
+    blacklisted.
   </td>
 </tr>
 <tr>
