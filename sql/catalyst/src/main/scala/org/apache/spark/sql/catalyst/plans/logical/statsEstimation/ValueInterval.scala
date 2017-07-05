@@ -22,12 +22,12 @@ import org.apache.spark.sql.types._
 
 
 /** Value range of a column. */
-trait Range {
+trait ValueInterval {
   def contains(l: Literal): Boolean
 }
 
-/** For simplicity we use decimal to unify operations of numeric ranges. */
-case class NumericRange(min: Decimal, max: Decimal) extends Range {
+/** For simplicity we use decimal to unify operations of numeric intervals. */
+case class NumericValueInterval(min: Decimal, max: Decimal) extends ValueInterval {
   override def contains(l: Literal): Boolean = {
     val lit = EstimationUtils.toDecimal(l.value, l.dataType)
     min <= lit && max >= lit
@@ -38,46 +38,49 @@ case class NumericRange(min: Decimal, max: Decimal) extends Range {
  * This version of Spark does not have min/max for binary/string types, we define their default
  * behaviors by this class.
  */
-class DefaultRange extends Range {
+class DefaultValueInterval extends ValueInterval {
   override def contains(l: Literal): Boolean = true
 }
 
 /** This is for columns with only null values. */
-class NullRange extends Range {
+class NullValueInterval extends ValueInterval {
   override def contains(l: Literal): Boolean = false
 }
 
-object Range {
-  def apply(min: Option[Any], max: Option[Any], dataType: DataType): Range = dataType match {
-    case StringType | BinaryType => new DefaultRange()
-    case _ if min.isEmpty || max.isEmpty => new NullRange()
+object ValueInterval {
+  def apply(
+      min: Option[Any],
+      max: Option[Any],
+      dataType: DataType): ValueInterval = dataType match {
+    case StringType | BinaryType => new DefaultValueInterval()
+    case _ if min.isEmpty || max.isEmpty => new NullValueInterval()
     case _ =>
-      NumericRange(
+      NumericValueInterval(
         min = EstimationUtils.toDecimal(min.get, dataType),
         max = EstimationUtils.toDecimal(max.get, dataType))
   }
 
-  def isIntersected(r1: Range, r2: Range): Boolean = (r1, r2) match {
-    case (_, _: DefaultRange) | (_: DefaultRange, _) =>
+  def isIntersected(r1: ValueInterval, r2: ValueInterval): Boolean = (r1, r2) match {
+    case (_, _: DefaultValueInterval) | (_: DefaultValueInterval, _) =>
       // The DefaultRange represents string/binary types which do not have max/min stats,
       // we assume they are intersected to be conservative on estimation
       true
-    case (_, _: NullRange) | (_: NullRange, _) =>
+    case (_, _: NullValueInterval) | (_: NullValueInterval, _) =>
       false
-    case (n1: NumericRange, n2: NumericRange) =>
+    case (n1: NumericValueInterval, n2: NumericValueInterval) =>
       n1.min.compareTo(n2.max) <= 0 && n1.max.compareTo(n2.min) >= 0
   }
 
   /**
-   * Intersected results of two ranges. This is only for two overlapped ranges.
+   * Intersected results of two intervals. This is only for two overlapped intervals.
    * The outputs are the intersected min/max values.
    */
-  def intersect(r1: Range, r2: Range, dt: DataType): (Option[Any], Option[Any]) = {
+  def intersect(r1: ValueInterval, r2: ValueInterval, dt: DataType): (Option[Any], Option[Any]) = {
     (r1, r2) match {
-      case (_, _: DefaultRange) | (_: DefaultRange, _) =>
+      case (_, _: DefaultValueInterval) | (_: DefaultValueInterval, _) =>
         // binary/string types don't support intersecting.
         (None, None)
-      case (n1: NumericRange, n2: NumericRange) =>
+      case (n1: NumericValueInterval, n2: NumericValueInterval) =>
         // Choose the maximum of two min values, and the minimum of two max values.
         val newMin = if (n1.min <= n2.min) n2.min else n1.min
         val newMax = if (n1.max <= n2.max) n1.max else n2.max
