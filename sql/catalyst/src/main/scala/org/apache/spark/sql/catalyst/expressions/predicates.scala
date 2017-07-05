@@ -176,7 +176,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
                  |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
                """.stripMargin)
           } else {
-            TypeCheckResult.TypeCheckSuccess
+            TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
           }
         }
       case _ =>
@@ -185,7 +185,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
             s"${value.dataType} != ${mismatchOpt.get.dataType}")
         } else {
-          TypeCheckResult.TypeCheckSuccess
+          TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
         }
     }
   }
@@ -280,6 +280,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   @transient private[this] lazy val set = child.dataType match {
     case _: AtomicType => hset
+    case _: NullType => hset
     case _ =>
       // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
       TreeSet.empty(TypeUtils.getInterpretedOrdering (child.dataType) ) ++ hset
