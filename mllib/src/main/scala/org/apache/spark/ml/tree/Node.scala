@@ -295,7 +295,6 @@ private[tree] class LearningNode(
    * or unsplit node; that node's index is returned.
    *
    * @param binnedFeatures  Binned feature method for data point.
-   *                        TODO: Compile fails when SparseVector[Int] is used, see SI-9578.
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
    * @return Leaf index if the data point reaches a leaf.
    *         Otherwise, last node reachable in tree matching this example.
