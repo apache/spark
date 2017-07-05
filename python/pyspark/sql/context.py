@@ -232,6 +232,23 @@ class SQLContext(object):
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
+    @ignore_unicode_prefix
+    @since(2.3)
+    def registerJavaUDAF(self, name, javaClassName):
+        """Register a java UDAF so it can be used in SQL statements.
+
+        :param name:  name of the UDAF
+        :param javaClassName: fully qualified name of java class
+
+        >>> sqlContext.registerJavaUDAF("javaUDAF",
+        ...   "test.org.apache.spark.sql.MyDoubleAvg")
+        >>> df = sqlContext.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])
+        >>> df.registerTempTable("df")
+        >>> sqlContext.sql("SELECT name, javaUDAF(id) as avg from df group by name").collect()
+        [Row(name=u'b', avg=102.0), Row(name=u'a', avg=102.0)]
+        """
+        self.sparkSession._jsparkSession.udf().registerJavaUDAF(name, javaClassName)
+
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
         """
@@ -550,6 +567,12 @@ class UDFRegistration(object):
 
     def register(self, name, f, returnType=StringType()):
         return self.sqlContext.registerFunction(name, f, returnType)
+
+    def registerJavaFunction(self, name, javaClassName, returnType=None):
+        self.sqlContext.registerJavaFunction(name, javaClassName, returnType)
+
+    def registerJavaUDAF(self, name, javaClassName):
+        self.sqlContext.registerJavaUDAF(name, javaClassName)
 
     register.__doc__ = SQLContext.registerFunction.__doc__
 

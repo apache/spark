@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.aggregate;
+package test.org.apache.spark.sql;
 
 import java.util.ArrayList;
 import java.util.List;
