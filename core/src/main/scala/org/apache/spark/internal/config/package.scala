@@ -149,7 +149,20 @@ package object config {
       .internal()
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
+
+  private[spark] val BLACKLIST_FETCH_FAILURE_ENABLED =
+    ConfigBuilder("spark.blacklist.application.fetchFailure.enabled")
+      .booleanConf
+      .createWithDefault(false)
   // End blacklist confs
+
+  private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
+    ConfigBuilder("spark.files.fetchFailure.unRegisterOutputOnHost")
+      .doc("Whether to un-register all the outputs on the host in condition that we receive " +
+        " a FetchFailure. This is set default to false, which means, we only un-register the " +
+        " outputs related to the exact executor(instead of the host) on a FetchFailure.")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
@@ -295,10 +308,32 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(100 * 1024 * 1024)
 
+  private[spark] val SHUFFLE_REGISTRATION_TIMEOUT =
+    ConfigBuilder("spark.shuffle.registration.timeout")
+      .doc("Timeout in milliseconds for registration to the external shuffle service.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(5000)
+
+  private[spark] val SHUFFLE_REGISTRATION_MAX_ATTEMPTS =
+    ConfigBuilder("spark.shuffle.registration.maxAttempts")
+      .doc("When we fail to register to the external shuffle service, we will " +
+        "retry for maxAttempts times.")
+      .intConf
+      .createWithDefault(3)
+
   private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
     ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
+      .internal()
       .doc("The blocks of a shuffle request will be fetched to disk when size of the request is " +
         "above this threshold. This is to avoid a giant request takes too much memory.")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("200m")
+      .createWithDefault(Long.MaxValue)
+
+  private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
+    ConfigBuilder("spark.taskMetrics.trackUpdatedBlockStatuses")
+      .doc("Enable tracking of updatedBlockStatuses in the TaskMetrics. Off by default since " +
+        "tracking the block statuses can use a lot of memory and its not used anywhere within " +
+        "spark.")
+      .booleanConf
+      .createWithDefault(false)
 }

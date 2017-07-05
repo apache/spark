@@ -87,6 +87,11 @@ class SparkSession private(
 
   sparkContext.assertNotStopped()
 
+  // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
+  SQLConf.setSQLConfGetter(() => {
+    SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(SQLConf.getFallbackConf)
+  })
+
   /**
    * The version of Spark on which this application is running.
    *
@@ -113,6 +118,12 @@ class SparkSession private(
   }
 
   /**
+   * Initial options for session. This options are applied once when sessionState is created.
+   */
+  @transient
+  private[sql] val initialSessionOptions = new scala.collection.mutable.HashMap[String, String]
+
+  /**
    * State isolated across sessions, including SQL configurations, temporary tables, registered
    * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
    * If `parentSessionState` is not null, the `SessionState` will be a copy of the parent.
@@ -127,9 +138,11 @@ class SparkSession private(
     parentSessionState
       .map(_.clone(this))
       .getOrElse {
-        SparkSession.instantiateSessionState(
+        val state = SparkSession.instantiateSessionState(
           SparkSession.sessionStateClassName(sparkContext.conf),
           self)
+        initialSessionOptions.foreach { case (k, v) => state.conf.setConfString(k, v) }
+        state
       }
   }
 
@@ -935,7 +948,7 @@ object SparkSession {
         }
 
         session = new SparkSession(sparkContext, None, None, extensions)
-        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+        options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
         defaultSession.set(session)
 
         // Register a successfully instantiated context to the singleton. This should be at the

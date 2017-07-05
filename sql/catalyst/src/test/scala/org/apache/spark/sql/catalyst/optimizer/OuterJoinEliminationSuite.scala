@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Coalesce, IsNotNull}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf.CONSTRAINT_PROPAGATION_ENABLED
+import org.apache.spark.sql.internal.SQLConf
 
 class OuterJoinEliminationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -32,16 +32,7 @@ class OuterJoinEliminationSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Outer Join Elimination", Once,
-        EliminateOuterJoin(conf),
-        PushPredicateThroughJoin) :: Nil
-  }
-
-  object OptimizeWithConstraintPropagationDisabled extends RuleExecutor[LogicalPlan] {
-    val batches =
-      Batch("Subqueries", Once,
-        EliminateSubqueryAliases) ::
-      Batch("Outer Join Elimination", Once,
-        EliminateOuterJoin(conf.copy(CONSTRAINT_PROPAGATION_ENABLED -> false)),
+        EliminateOuterJoin,
         PushPredicateThroughJoin) :: Nil
   }
 
@@ -210,7 +201,7 @@ class OuterJoinEliminationSuite extends PlanTest {
 
     val originalQuery =
       x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
-        .where(Coalesce("y.e".attr :: "x.a".attr :: Nil))
+        .where(Coalesce("y.e".attr :: "x.a".attr :: Nil) === 0)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -218,7 +209,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     val right = testRelation1
     val correctAnswer =
       left.join(right, FullOuter, Option("a".attr === "d".attr))
-        .where(Coalesce("e".attr :: "a".attr :: Nil)).analyze
+        .where(Coalesce("e".attr :: "a".attr :: Nil) === 0).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -243,19 +234,21 @@ class OuterJoinEliminationSuite extends PlanTest {
   }
 
   test("no outer join elimination if constraint propagation is disabled") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val x = testRelation.subquery('x)
+      val y = testRelation1.subquery('y)
 
-    // The predicate "x.b + y.d >= 3" will be inferred constraints like:
-    // "x.b != null" and "y.d != null", if constraint propagation is enabled.
-    // When we disable it, the predicate can't be evaluated on left or right plan and used to
-    // filter out nulls. So the Outer Join will not be eliminated.
-    val originalQuery =
+      // The predicate "x.b + y.d >= 3" will be inferred constraints like:
+      // "x.b != null" and "y.d != null", if constraint propagation is enabled.
+      // When we disable it, the predicate can't be evaluated on left or right plan and used to
+      // filter out nulls. So the Outer Join will not be eliminated.
+      val originalQuery =
       x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
         .where("x.b".attr + "y.d".attr >= 3)
 
-    val optimized = OptimizeWithConstraintPropagationDisabled.execute(originalQuery.analyze)
+      val optimized = Optimize.execute(originalQuery.analyze)
 
-    comparePlans(optimized, originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
   }
 }
