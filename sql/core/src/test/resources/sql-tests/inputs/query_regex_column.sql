@@ -37,3 +37,5 @@ AS testdata3(a, b);
 -- Regex columns
 SELECT `(A)?+.+` FROM testdata3;
 SELECT `(a)?+.+` FROM testdata3;
+SELECT `(A)?+.+` FROM testdata3 WHERE a > 1;
+SELECT `(a)?+.+` FROM testdata3 where `a` > 1;

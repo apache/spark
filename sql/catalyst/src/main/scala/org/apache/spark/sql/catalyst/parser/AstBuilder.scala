@@ -1258,6 +1258,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     CaseWhen(branches, Option(ctx.elseExpression).map(expression))
   }
 
+  private def isContextNamedExpression(ctx: ParserRuleContext): Boolean = withOrigin(ctx) {
+    var parent = ctx.getParent
+    while (parent != null) {
+      if (parent.isInstanceOf[NamedExpressionContext]) return true
+      parent = parent.getParent
+    }
+    return false
+  }
+
   /**
    * Create a dereference expression. The return type depends on the type of the parent.
    * If the parent is an [[UnresolvedAttribute]], it can be a [[UnresolvedAttribute]] or
@@ -1269,7 +1278,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     expression(ctx.base) match {
       case unresolved_attr @ UnresolvedAttribute(nameParts) =>
         ctx.fieldName.getStart.getText match {
-          case escapedIdentifier(columnNameRegex) if conf.supportQuotedRegexColumnName =>
+          case escapedIdentifier(columnNameRegex)
+            if conf.supportQuotedRegexColumnName && isContextNamedExpression(ctx) =>
             UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name), conf.caseSensitiveAnalysis)
           case _ =>
             UnresolvedAttribute(nameParts :+ attr)
@@ -1285,11 +1295,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
     ctx.getStart.getText match {
-      case escapedIdentifier(columnNameRegex) if conf.supportQuotedRegexColumnName =>
+      case escapedIdentifier(columnNameRegex)
+        if conf.supportQuotedRegexColumnName && isContextNamedExpression(ctx) =>
         UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
       case _ =>
         UnresolvedAttribute.quoted(ctx.getText)
     }
+
   }
 
   /**
