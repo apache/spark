@@ -588,6 +588,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
+  public UnsafeSorterIterator getIterator() throws IOException {
+    return getIterator(0);
+  }
+
   /**
    * Returns a iterator, which will return the rows in the order as inserted.
    *
@@ -596,17 +600,37 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    *
    * TODO: support forced spilling
    */
-  public UnsafeSorterIterator getIterator() throws IOException {
+  public UnsafeSorterIterator getIterator(int startIndex) throws IOException {
     if (spillWriters.isEmpty()) {
       assert(inMemSorter != null);
-      return inMemSorter.getSortedIterator();
+      UnsafeSorterIterator iter = inMemSorter.getSortedIterator();
+      for (int i = 0; i < startIndex && iter.hasNext(); i++) {
+        iter.loadNext();
+      }
+      return iter;
     } else {
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
+      int i = 0;
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
-        queue.add(spillWriter.getReader(serializerManager));
+        if (i + spillWriter.recordsSpilled() <= startIndex) {
+          i += spillWriter.recordsSpilled();
+          continue;
+        } else {
+          UnsafeSorterIterator iter = spillWriter.getReader(serializerManager);
+          for (int j = i; j < startIndex && iter.hasNext(); j++) {
+            iter.loadNext();
+          }
+          queue.add(iter);
+          i += spillWriter.recordsSpilled();
+        }
       }
       if (inMemSorter != null) {
-        queue.add(inMemSorter.getSortedIterator());
+        UnsafeSorterIterator iter = inMemSorter.getSortedIterator();
+        while (i < startIndex && iter.hasNext()) {
+          iter.loadNext();
+          i++;
+        }
+        queue.add(iter);
       }
       return new ChainedIterator(queue);
     }

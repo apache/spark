@@ -479,5 +479,37 @@ public class UnsafeExternalSorterSuite {
     }
   }
 
+  @Test
+  public void testGetIterator() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    for (int i = 0; i < 100; i++) {
+      insertNumber(sorter, i);
+    }
+    verifyIntIterator(sorter.getIterator(0), 0, 100);
+    verifyIntIterator(sorter.getIterator(79), 79, 100);
+
+    sorter.spill();
+    for (int i = 100; i < 200; i++) {
+      insertNumber(sorter, i);
+    }
+    sorter.spill();
+    verifyIntIterator(sorter.getIterator(79), 79, 200);
+
+    for (int i = 200; i < 300; i++) {
+      insertNumber(sorter, i);
+    }
+    verifyIntIterator(sorter.getIterator(79), 79, 300);
+    verifyIntIterator(sorter.getIterator(139), 139, 300);
+    verifyIntIterator(sorter.getIterator(279), 279, 300);
+  }
+
+  private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
+      throws IOException {
+    for (int i = start; i < end; i++) {
+      assert (iter.hasNext());
+      iter.loadNext();
+      assert (Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()) == i);
+    }
+  }
 }
 
