@@ -136,7 +136,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
   def post(event: SparkListenerEvent): Unit = {
     if (stopped.get) {
       // Drop further events to make `listenerThread` exit ASAP
-      logError(s"$name has already stopped! Dropping event $event")
+      logDebug(s"$name has already stopped! Dropping event $event")
       return
     }
     metrics.numEventsPosted.inc()
@@ -200,7 +200,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
   private def queueIsEmpty: Boolean = synchronized { eventQueue.isEmpty && !processingEvent }
 
   /**
-   * Stop the listener bus. It will wait until the queued events have been processed, but drop the
+   * Stop the listener bus. It will clear the queued events for faster shutdown and drop the
    * new events after stopping.
    */
   def stop(): Unit = {
@@ -208,6 +208,9 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
       throw new IllegalStateException(s"Attempted to stop $name that has not yet started!")
     }
     if (stopped.compareAndSet(false, true)) {
+
+      eventQueue.clear()
+
       // Call eventLock.release() so that listenerThread will poll `null` from `eventQueue` and know
       // `stop` is called.
       eventLock.release()

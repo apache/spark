@@ -109,8 +109,11 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val iter = endpoints.keySet().iterator()
     while (iter.hasNext) {
       val name = iter.next
-      postMessage(name, message, (e) => logWarning(s"Message $message dropped. ${e.getMessage}"))
-    }
+        postMessage(name, message, (e) => { e match {
+          case e: RpcEnvStoppedException => logDebug (s"Message $message dropped. ${e.getMessage}")
+          case e: Throwable => logWarning(s"Message $message dropped. ${e.getMessage}")
+        }}
+      )}
   }
 
   /** Posts a message sent by a remote endpoint. */

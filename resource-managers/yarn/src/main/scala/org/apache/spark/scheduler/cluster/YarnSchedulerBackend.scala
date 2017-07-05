@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.util.concurrent.atomic.{AtomicBoolean}
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
@@ -31,6 +33,8 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.ui.JettyUtils
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
+
+
 /**
  * Abstract Yarn scheduler backend that contains common logic
  * between the client and cluster Yarn scheduler backends.
@@ -39,6 +43,8 @@ private[spark] abstract class YarnSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
+
+  private val stopped = new AtomicBoolean(false)
 
   override val minRegisteredRatio =
     if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
@@ -93,6 +99,7 @@ private[spark] abstract class YarnSchedulerBackend(
       requestTotalExecutors(0, 0, Map.empty)
       super.stop()
     } finally {
+      stopped.set(true)
       services.stop()
     }
   }
@@ -206,8 +213,10 @@ private[spark] abstract class YarnSchedulerBackend(
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach { executorId =>
-        if (disableExecutor(executorId)) {
-          yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
+        if (!stopped.get) {
+          if (disableExecutor(executorId)) {
+            yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
+          }
         }
       }
     }
