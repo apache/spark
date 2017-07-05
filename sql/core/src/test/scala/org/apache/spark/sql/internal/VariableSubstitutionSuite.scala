@@ -44,9 +44,6 @@ class VariableSubstitutionSuite extends SparkFunSuite with PlanTest {
 
   test("multiple substitutes") {
     val q = "select ${bar} ${foo} ${doo} this is great"
-    conf.setConfString("bar", "1")
-    conf.setConfString("foo", "2")
-    conf.setConfString("doo", "3")
     withSQLConf("bar" -> "1", "foo" -> "2", "doo" -> "3") {
       assert(sub.substitute(q) == "select 1 2 3 this is great")
     }
