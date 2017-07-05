@@ -121,11 +121,6 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
-class CatalystSqlParser extends AbstractSqlParser {
-  val astBuilder = new AstBuilder
-}
-
-/** For test-only. */
 object CatalystSqlParser extends AbstractSqlParser {
   val astBuilder = new AstBuilder
 }

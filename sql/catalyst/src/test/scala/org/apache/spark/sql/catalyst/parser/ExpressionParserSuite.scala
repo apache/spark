@@ -167,7 +167,7 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
-    val parser = new CatalystSqlParser
+    val parser = CatalystSqlParser
     withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
       assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
       assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
@@ -435,7 +435,7 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("strings") {
-    val parser = new CatalystSqlParser
+    val parser = CatalystSqlParser
     Seq(true, false).foreach { escape =>
       withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escape.toString) {
         // tests that have same result whatever the conf is

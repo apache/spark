@@ -56,7 +56,7 @@ class SparkSqlParser extends AbstractSqlParser {
 class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
-  val conf = SQLConf.get
+  private def conf: SQLConf = SQLConf.get
 
   /**
    * Create a [[SetCommand]] logical plan.
