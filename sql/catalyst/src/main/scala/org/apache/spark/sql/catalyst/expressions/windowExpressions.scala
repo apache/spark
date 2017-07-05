@@ -56,7 +56,7 @@ case class WindowSpecDefinition(
     frameSpecification match {
       case UnspecifiedFrame =>
         TypeCheckFailure(
-          "Cann't use an UnspecifiedFrame. This should have been converted during analysis. " +
+          "Cannot use an UnspecifiedFrame. This should have been converted during analysis. " +
             "Please file a bug report.")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded
         && orderSpec.isEmpty =>
@@ -161,7 +161,10 @@ sealed trait WindowFrame extends Expression with Unevaluable {
 /** Used as a placeholder when a frame specification is not defined. */
 case object UnspecifiedFrame extends WindowFrame
 
-/** A specified Window Frame. */
+/**
+ * A specified Window Frame. The val lower/uppper can be either a foldable [[Expression]] or a
+ * [[SpecialFrameBoundary]].
+ */
 case class SpecifiedWindowFrame(
     frameType: FrameType,
     lower: AnyRef,
