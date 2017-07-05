@@ -56,8 +56,7 @@ case class CreateFunctionCommand(
       " is not allowed.")
   }
 
-  // Disallows 'CREATE TEMPORARY FUNCTION IF NOT EXISTS' to be consistent
-  // with 'CREATE TEMPORARY FUNCTION'
+  // Disallow to define a temporary function with `IF NOT EXISTS`
   if (ifNotExists && isTemp) {
     throw new AnalysisException(
       "It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")

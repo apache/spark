@@ -593,7 +593,6 @@ class InMemoryCatalog(
   override protected def doAlterFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
     requireFunctionExists(db, func.identifier.funcName)
-    catalog(db).functions.remove(func.identifier.funcName)
     catalog(db).functions.put(func.identifier.funcName, func)
   }
 

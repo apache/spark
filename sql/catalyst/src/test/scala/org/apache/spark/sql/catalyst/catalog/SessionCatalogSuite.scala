@@ -1316,10 +1316,8 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val funcMeta2 = newFunc("yes_me", None)
       val tempFunc1 = (e: Seq[Expression]) => e.head
       val tempFunc2 = (e: Seq[Expression]) => e.last
-      catalog.registerFunction(
-        funcMeta1, overrideIfExists = false, functionBuilder = Some(tempFunc1))
-      catalog.registerFunction(
-        funcMeta2, overrideIfExists = false, functionBuilder = Some(tempFunc2))
+      catalog.createFunction(newFunc("func2", Some("db2")), ignoreIfExists = false)
+      catalog.createFunction(newFunc("not_me", Some("db2")), ignoreIfExists = false)
       catalog.registerFunction(
         funcMeta1, overrideIfExists = false, functionBuilder = Some(tempFunc1))
       catalog.registerFunction(
