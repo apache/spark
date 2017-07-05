@@ -115,11 +115,11 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val outputColName = $(outputCol)
     val exceptions = inputColNames.map { name =>
       schema(name).dataType match {
-        case _: NumericType | BooleanType =>
-        case t if t.isInstanceOf[VectorUDT] =>
-        case other => s"Data type $other of column $name is not supported."
+        case _: NumericType | BooleanType => None
+        case t if t.isInstanceOf[VectorUDT] => None
+        case other => Some(s"Data type $other of column $name is not supported.")
       }
-    }
+    }.flatten
     if (!exceptions.isEmpty) {
       throw new IllegalArgumentException(exceptions.mkString("\n"))
     }
