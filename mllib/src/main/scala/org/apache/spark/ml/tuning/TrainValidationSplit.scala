@@ -246,14 +246,14 @@ class TrainValidationSplitModel private[ml] (
   /**
    * Return true if there exists summary of model.
    */
-  @Since("2.0.0")
+  @Since("2.3.0")
   def hasSummary: Boolean = trainingSummary.nonEmpty
 
   /**
    * Gets summary of model on training set. An exception is
    * thrown if `trainingSummary == None`.
    */
-  @Since("2.0.0")
+  @Since("2.3.0")
   def summary: TuningSummary = trainingSummary.getOrElse {
     throw new SparkException(
       s"No training summary available for the ${this.getClass.getSimpleName}")
