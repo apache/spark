@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.tree
 
+import breeze.linalg.{SparseVector => BSV}
+
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{ImpurityStats,
@@ -302,13 +304,13 @@ private[tree] class LearningNode(
    *         group of nodes on one call to
    *         [[org.apache.spark.ml.tree.impl.RandomForest.findBestSplits()]].
    */
-  def predictImpl(binnedFeatures: Int => Int, splits: Array[Array[Split]]): Int = {
+  def predictImpl(binnedFeatures: BSV[Int], splits: Array[Array[Split]]): Int = {
     if (this.isLeaf || this.split.isEmpty) {
       this.id
     } else {
       val split = this.split.get
       val featureIndex = split.featureIndex
-      val splitLeft = split.shouldGoLeft(binnedFeatures(featureIndex), splits(featureIndex))
+      val splitLeft = split.shouldGoLeft(binnedFeatures.apply(featureIndex), splits(featureIndex))
       if (this.leftChild.isEmpty) {
         // Not yet split. Return next layer of nodes to train
         if (splitLeft) {
