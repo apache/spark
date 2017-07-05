@@ -123,7 +123,7 @@ object RowEncoder {
         inputObject :: Nil,
         returnNullable = false)
 
-    case t @ ArrayType(et, cn) =>
+    case t @ ArrayType(et, containsNull) =>
       et match {
         case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
           StaticInvoke(
@@ -132,8 +132,16 @@ object RowEncoder {
             "toArrayData",
             inputObject :: Nil,
             returnNullable = false)
+
         case _ => MapObjects(
-          element => serializerFor(ValidateExternalType(element, et), et),
+          element => {
+            val value = serializerFor(ValidateExternalType(element, et), et)
+            if (!containsNull) {
+              AssertNotNull(value, Seq.empty)
+            } else {
+              value
+            }
+          },
           inputObject,
           ObjectType(classOf[Object]))
       }
@@ -155,10 +163,19 @@ object RowEncoder {
           ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
       val convertedValues = serializerFor(values, ArrayType(vt, valueNullable))
 
-      NewInstance(
+      val nonNullOutput = NewInstance(
         classOf[ArrayBasedMapData],
         convertedKeys :: convertedValues :: Nil,
-        dataType = t)
+        dataType = t,
+        propagateNull = false)
+
+      if (inputObject.nullable) {
+        If(IsNull(inputObject),
+          Literal.create(null, inputType),
+          nonNullOutput)
+      } else {
+        nonNullOutput
+      }
 
     case StructType(fields) =>
       val nonNullOutput = CreateNamedStruct(fields.zipWithIndex.flatMap { case (field, index) =>
