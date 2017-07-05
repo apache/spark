@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.tree
 
-import breeze.linalg.{SparseVector => BSV}
-
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{ImpurityStats,
