@@ -2293,7 +2293,7 @@ class SQLTests(ReusedPySparkTestCase):
         # test string types
         if sys.version_info[0] < 4:
             supported_types += ['u']
-            assertCollectSuccess('u', "a")
+            assertCollectSuccess('u', u"a")
         if sys.version_info[0] < 3:
             supported_types += ['c']
             assertCollectSuccess('c', "a")
