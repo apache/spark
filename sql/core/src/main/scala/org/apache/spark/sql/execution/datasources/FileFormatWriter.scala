@@ -128,11 +128,13 @@ object FileFormatWriter extends Logging {
       partitioning.partitionIdExpression
     }
 
-    // If the outputPartitioning for the plan guarantees the bucket spec, then it will have a
-    // constant bucket id. We possibly can avoid the sort altogether.
-    val bucketSortExpression = bucketPartitioning
-      .filterNot(plan.outputPartitioning.guarantees(_))
-      .map(_.partitionIdExpression)
+    // If the plan's outputPartitioning is the same as the the bucket spec, then each row will have
+    // a constant bucket id. We possibly can avoid the sort altogether.
+    val bucketSortExpression = plan.outputPartitioning match {
+      case output: HashPartitioning =>
+        bucketPartitioning.filterNot(_.semanticEquals(output)).map(_.partitionIdExpression)
+      case _ => bucketIdExpression
+    }
 
     val sortColumns = bucketSpec.toSeq.flatMap {
       spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
