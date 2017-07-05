@@ -2313,9 +2313,9 @@ class SQLTests(ReusedPySparkTestCase):
         supported_types += supported_int
         for i in supported_int:
             ctype = _array_int_typecode_ctype_mappings[i]
-            if i.isupper(): # unsigned
+            if i.isupper():  # unsigned
                 assertCollectSuccess(i, 2 ** (ctypes.sizeof(ctype) * 8) - 1)
-            else: # signed
+            else:  # signed
                 max_val = 2 ** (ctypes.sizeof(ctype) * 8 - 1) - 1
                 assertCollectSuccess(i, max_val)
                 assertCollectSuccess(i, -max_val)

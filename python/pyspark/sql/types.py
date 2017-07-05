@@ -983,11 +983,10 @@ def _int_size_to_type(size):
 
 # The list of all supported array typecodes is stored here
 _array_type_mappings = {
-    # Warning: Actual properties for float and double in C is not unspecified.
-    # On most systems, they are IEEE 754 single-precision binary floating-point
-    # format and IEEE 754 double-precision binary floating-point format. And we
-    # do assume the same thing here. This means in some rare case the following
-    # conversion might fail.
+    # Warning: Actual properties for float and double in C is not specified in C.
+    # On almost every system supported by both python and JVM, they are IEEE 754
+    # single-precision binary floating-point format and IEEE 754 double-precision
+    # binary floating-point format. And we do assume the same thing here for now.
     'f': FloatType,
     'd': DoubleType
 }
