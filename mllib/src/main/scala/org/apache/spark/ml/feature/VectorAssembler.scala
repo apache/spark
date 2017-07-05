@@ -113,15 +113,15 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
-    val exceptions = inputColNames.map { name =>
+    val incorrectColumns = inputColNames.flatMap { name =>
       schema(name).dataType match {
         case _: NumericType | BooleanType => None
         case t if t.isInstanceOf[VectorUDT] => None
         case other => Some(s"Data type $other of column $name is not supported.")
       }
-    }.flatten
-    if (!exceptions.isEmpty) {
-      throw new IllegalArgumentException(exceptions.mkString("\n"))
+    }
+    if (!incorrectColumns.isEmpty) {
+      throw new IllegalArgumentException(incorrectColumns.mkString("\n"))
     }
 
     if (schema.fieldNames.contains(outputColName)) {
