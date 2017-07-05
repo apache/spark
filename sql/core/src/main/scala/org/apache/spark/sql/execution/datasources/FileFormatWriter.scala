@@ -116,13 +116,24 @@ object FileFormatWriter extends Logging {
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = allColumns.filterNot(partitionSet.contains)
 
-    val bucketIdExpression = bucketSpec.map { spec =>
+    val bucketPartitioning = bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
+      HashPartitioning(bucketColumns, spec.numBuckets)
+    }
+
+    val bucketIdExpression = bucketPartitioning.map { partitioning =>
       // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
       // guarantee the data distribution is same between shuffle and bucketed data source, which
       // enables us to only shuffle one side when join a bucketed table and a normal one.
-      HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
+      partitioning.partitionIdExpression
     }
+
+    // If the outputPartitioning for the plan guarantees the bucket spec, then it will have a
+    // constant bucket id. We possibly can avoid the sort altogether.
+    val bucketSortExpression = bucketPartitioning
+      .filterNot(plan.outputPartitioning.guarantees(_))
+      .map(_.partitionIdExpression)
+
     val sortColumns = bucketSpec.toSeq.flatMap {
       spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
     }
@@ -150,7 +161,7 @@ object FileFormatWriter extends Logging {
     )
 
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
-    val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
+    val requiredOrdering = partitionColumns ++ bucketSortExpression ++ sortColumns
     // the sort order doesn't matter
     val actualOrdering = plan.outputOrdering.map(_.child)
     val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
