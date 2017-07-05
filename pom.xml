@@ -178,6 +178,7 @@
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.5</commons-lang3.version>
+    <commons-compress.version>1.8.1</commons-compress.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <javax-activation.version>1.1.1</javax-activation.version>
     <objenesis.version>2.5.1</objenesis.version>
@@ -517,6 +518,11 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-math3</artifactId>
         <version>${commons.math3.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-compress</artifactId>
+        <version>${commons-compress.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-collections</groupId>
