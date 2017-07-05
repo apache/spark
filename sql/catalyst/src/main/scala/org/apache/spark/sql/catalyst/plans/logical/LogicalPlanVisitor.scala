@@ -38,10 +38,10 @@ trait LogicalPlanVisitor[T] {
     case p: Range => visitRange(p)
     case p: Repartition => visitRepartition(p)
     case p: RepartitionByExpression => visitRepartitionByExpr(p)
+    case p: ResolvedHint => visitHint(p)
     case p: Sample => visitSample(p)
     case p: ScriptTransformation => visitScriptTransform(p)
     case p: Union => visitUnion(p)
-    case p: ResolvedHint => visitHint(p)
     case p: LogicalPlan => default(p)
   }
 
