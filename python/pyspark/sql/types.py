@@ -942,7 +942,7 @@ if sys.version < "3":
 # precision.
 #
 # Reference for C integer size, see:
-# ISO/IEC 9899:201x specification, § 5.2.4.2.1 Sizes of integer types <limits.h>.
+# ISO/IEC 9899:201x specification, chapter 5.2.4.2.1 Sizes of integer types <limits.h>.
 # Reference for python array typecode, see:
 # https://docs.python.org/2/library/array.html
 # https://docs.python.org/3.6/library/array.html
