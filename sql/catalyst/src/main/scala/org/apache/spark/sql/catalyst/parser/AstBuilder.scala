@@ -1179,32 +1179,26 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create or resolve a [[FrameBoundary]]. Simple math expressions are allowed for Value
-   * Preceding/Following boundaries. These expressions must be constant (foldable) and return an
-   * integer value.
+   * Create or resolve a frame boundary expressions.
    */
-  override def visitFrameBound(ctx: FrameBoundContext): FrameBoundary = withOrigin(ctx) {
-    // We currently only allow foldable integers.
-    def value: Int = {
+  override def visitFrameBound(ctx: FrameBoundContext): AnyRef = withOrigin(ctx) {
+    def value: Expression = {
       val e = expression(ctx.expression)
-      validate(e.resolved && e.foldable && e.dataType == IntegerType,
-        "Frame bound value must be a constant integer.",
-        ctx)
-      e.eval().asInstanceOf[Int]
+      validate(e.resolved && e.foldable, "Frame bound value must be a literal.", ctx)
+      e
     }
 
-    // Create the FrameBoundary
     ctx.boundType.getType match {
       case SqlBaseParser.PRECEDING if ctx.UNBOUNDED != null =>
-        UnboundedPreceding
+        Unbounded
       case SqlBaseParser.PRECEDING =>
-        ValuePreceding(value)
+        UnaryMinus(value)
       case SqlBaseParser.CURRENT =>
         CurrentRow
       case SqlBaseParser.FOLLOWING if ctx.UNBOUNDED != null =>
-        UnboundedFollowing
+        Unbounded
       case SqlBaseParser.FOLLOWING =>
-        ValueFollowing(value)
+        value
     }
   }
 

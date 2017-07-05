@@ -109,10 +109,8 @@ trait CheckAnalysis extends PredicateHelper {
             failAnalysis(s"Distinct window functions are not supported: $w")
 
           case w @ WindowExpression(_: OffsetWindowFunction, WindowSpecDefinition(_, order,
-               SpecifiedWindowFrame(frame,
-                 FrameBoundary(l),
-                 FrameBoundary(h))))
-             if order.isEmpty || frame != RowFrame || l != h =>
+               frame: SpecifiedWindowFrame))
+             if order.isEmpty || !frame.isOffset =>
             failAnalysis("An offset window function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
@@ -121,14 +119,9 @@ trait CheckAnalysis extends PredicateHelper {
             // function.
             e match {
               case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+                w
               case _ =>
                 failAnalysis(s"Expression '$e' not supported within a window function.")
-            }
-            // Make sure the window specification is valid.
-            s.validate match {
-              case Some(m) =>
-                failAnalysis(s"Window specification $s is not valid because $m")
-              case None => w
             }
 
           case s: SubqueryExpression =>

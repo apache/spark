@@ -1109,6 +1109,31 @@ class TypeCoercionSuite extends AnalysisTest {
       EqualTo(Literal(Array(1, 2)), Literal("123")),
       EqualTo(Literal(Array(1, 2)), Literal("123")))
   }
+
+  test("cast WindowFrame boundaries to the type they operate upon") {
+    // Can cast frame boundaries to order dataType.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(3), Literal(2147483648L))),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Cast(3, LongType), Literal(2147483648L)))
+    )
+    // Can cast frame boundaries to order dataType.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal.default(DateType), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L))),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal.default(DateType), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L)))
+    )
+  }
 }
 
 

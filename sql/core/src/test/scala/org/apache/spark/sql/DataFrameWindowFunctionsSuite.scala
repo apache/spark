@@ -151,6 +151,48 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(2.0d), Row(2.0d)))
   }
 
+  test("row between should accept integer values as boundary") {
+    val df = Seq((1L, "1"), (1L, "1"), (2147483650L, "1"),
+      (3L, "2"), (2L, "1"), (2147483650L, "2"))
+      .toDF("key", "value")
+    df.createOrReplaceTempView("window_table")
+    checkAnswer(
+      df.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483647))),
+      Seq(Row(1, 3), Row(1, 4), Row(2, 2), Row(3, 2), Row(2147483650L, 1), Row(2147483650L, 1))
+    )
+
+    val e = intercept[AnalysisException](
+      df.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L))))
+    assert(e.message.contains("Boundary end is not a valid integer: 2147483648"))
+  }
+
+  test("range between should accept literal values as boundary") {
+    val df = Seq((1L, "1"), (1L, "1"), (2147483650L, "1"),
+      (3L, "2"), (2L, "1"), (2147483650L, "2"))
+      .toDF("key", "value")
+    df.createOrReplaceTempView("window_table")
+    checkAnswer(
+      df.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(0, 2147483648L))),
+      Seq(Row(1, 3), Row(1, 3), Row(2, 2), Row(3, 2), Row(2147483650L, 1), Row(2147483650L, 1))
+    )
+    checkAnswer(
+      df.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(-2147483649L, 0))),
+      Seq(Row(1, 2), Row(1, 2), Row(2, 3), Row(2147483650L, 2), Row(2147483650L, 4), Row(3, 1))
+    )
+  }
+
   test("aggregation and rows between with unbounded") {
     val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
     df.createOrReplaceTempView("window_table")

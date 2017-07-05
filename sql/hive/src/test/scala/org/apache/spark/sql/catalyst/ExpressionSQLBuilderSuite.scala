@@ -98,27 +98,27 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
 
     checkSQL(
       WindowSpecDefinition('a.int :: Nil, Nil, frame),
-      s"(PARTITION BY `a` $frame)"
+      s"(PARTITION BY `a` ${frame.sql})"
     )
 
     checkSQL(
       WindowSpecDefinition('a.int :: 'b.string :: Nil, Nil, frame),
-      s"(PARTITION BY `a`, `b` $frame)"
+      s"(PARTITION BY `a`, `b` ${frame.sql})"
     )
 
     checkSQL(
       WindowSpecDefinition(Nil, 'a.int.asc :: Nil, frame),
-      s"(ORDER BY `a` ASC NULLS FIRST $frame)"
+      s"(ORDER BY `a` ASC NULLS FIRST ${frame.sql})"
     )
 
     checkSQL(
       WindowSpecDefinition(Nil, 'a.int.asc :: 'b.string.desc :: Nil, frame),
-      s"(ORDER BY `a` ASC NULLS FIRST, `b` DESC NULLS LAST $frame)"
+      s"(ORDER BY `a` ASC NULLS FIRST, `b` DESC NULLS LAST ${frame.sql})"
     )
 
     checkSQL(
       WindowSpecDefinition('a.int :: 'b.string :: Nil, 'c.int.asc :: 'd.string.desc :: Nil, frame),
-      s"(PARTITION BY `a`, `b` ORDER BY `c` ASC NULLS FIRST, `d` DESC NULLS LAST $frame)"
+      s"(PARTITION BY `a`, `b` ORDER BY `c` ASC NULLS FIRST, `d` DESC NULLS LAST ${frame.sql})"
     )
   }
 

@@ -265,18 +265,20 @@ class ExpressionParserSuite extends PlanTest {
         WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
 
     // Range/Row
+    val date = Literal.default(DateType)
     val frameTypes = Seq(("rows", RowFrame), ("range", RangeFrame))
     val boundaries = Seq(
-      ("10 preceding", ValuePreceding(10), CurrentRow),
-      ("3 + 1 following", ValueFollowing(4), CurrentRow), // Will fail during analysis
-      ("unbounded preceding", UnboundedPreceding, CurrentRow),
-      ("unbounded following", UnboundedFollowing, CurrentRow), // Will fail during analysis
-      ("between unbounded preceding and current row", UnboundedPreceding, CurrentRow),
+      ("10 preceding", -Literal(10), CurrentRow),
+      ("2147483648 preceding", -Literal(2147483648L), CurrentRow),
+      ("3 + 1 following", Add(Literal(3), Literal(1)), CurrentRow), // Will fail during analysis
+      ("unbounded preceding", Unbounded, CurrentRow),
+      ("unbounded following", Unbounded, CurrentRow), // Will fail during analysis
+      ("between unbounded preceding and current row", Unbounded, CurrentRow),
       ("between unbounded preceding and unbounded following",
-        UnboundedPreceding, UnboundedFollowing),
-      ("between 10 preceding and current row", ValuePreceding(10), CurrentRow),
-      ("between current row and 5 following", CurrentRow, ValueFollowing(5)),
-      ("between 10 preceding and 5 following", ValuePreceding(10), ValueFollowing(5))
+        Unbounded, Unbounded),
+      ("between 10 preceding and current row", -Literal(10), CurrentRow),
+      ("between current row and 5 following", CurrentRow, Literal(5)),
+      ("between 10 preceding and 5 following", -Literal(10), Literal(5))
     )
     frameTypes.foreach {
       case (frameTypeSql, frameType) =>
@@ -288,13 +290,9 @@ class ExpressionParserSuite extends PlanTest {
         }
     }
 
-    // We cannot use non integer constants.
-    intercept("foo(*) over (partition by a order by b rows 10.0 preceding)",
-      "Frame bound value must be a constant integer.")
-
     // We cannot use an arbitrary expression.
     intercept("foo(*) over (partition by a order by b rows exp(b) preceding)",
-      "Frame bound value must be a constant integer.")
+      "Frame bound value must be a literal.")
   }
 
   test("row constructor") {

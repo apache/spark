@@ -18,7 +18,7 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.sql.Column
+import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
@@ -123,7 +123,24 @@ class WindowSpec private[sql](
    */
   // Note: when updating the doc for this method, also update Window.rowsBetween.
   def rowsBetween(start: Long, end: Long): WindowSpec = {
-    between(RowFrame, start, end)
+    val boundaryStart = start match {
+      case 0 => CurrentRow
+      case Long.MinValue => Unbounded
+      case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
+      case x => throw new AnalysisException(s"Boundary start is not a valid integer: $x")
+    }
+
+    val boundaryEnd = end match {
+      case 0 => CurrentRow
+      case Long.MaxValue => Unbounded
+      case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
+      case x => throw new AnalysisException(s"Boundary end is not a valid integer: $x")
+    }
+
+    new WindowSpec(
+      partitionSpec,
+      orderSpec,
+      SpecifiedWindowFrame(RowFrame, boundaryStart, boundaryEnd))
   }
 
   /**
@@ -174,28 +191,22 @@ class WindowSpec private[sql](
    */
   // Note: when updating the doc for this method, also update Window.rangeBetween.
   def rangeBetween(start: Long, end: Long): WindowSpec = {
-    between(RangeFrame, start, end)
-  }
-
-  private def between(typ: FrameType, start: Long, end: Long): WindowSpec = {
     val boundaryStart = start match {
       case 0 => CurrentRow
-      case Long.MinValue => UnboundedPreceding
-      case x if x < 0 => ValuePreceding(-start.toInt)
-      case x if x > 0 => ValueFollowing(start.toInt)
+      case Long.MinValue => Unbounded
+      case x => Literal(x)
     }
 
     val boundaryEnd = end match {
       case 0 => CurrentRow
-      case Long.MaxValue => UnboundedFollowing
-      case x if x < 0 => ValuePreceding(-end.toInt)
-      case x if x > 0 => ValueFollowing(end.toInt)
+      case Long.MaxValue => Unbounded
+      case x => Literal(x)
     }
 
     new WindowSpec(
       partitionSpec,
       orderSpec,
-      SpecifiedWindowFrame(typ, boundaryStart, boundaryEnd))
+      SpecifiedWindowFrame(RangeFrame, boundaryStart, boundaryEnd))
   }
 
   /**
