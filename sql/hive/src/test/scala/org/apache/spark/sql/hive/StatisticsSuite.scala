@@ -257,6 +257,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  private val SELECT_FROM_SRC = "SELECT '1', 'A' from src"
+
   test("analyze single partition") {
     val tableName = "analyzeTable_part"
 
@@ -266,64 +268,36 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       partition.stats.get
     }
 
+    def createPartition(ds: String, query: String): Unit = {
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds') $query")
+    }
+
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
 
-      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
-      sql(
-        s"""
-           |INSERT INTO TABLE $tableName PARTITION (ds='2010-01-02')
-           |SELECT * FROM src
-           |UNION ALL
-           |SELECT * FROM src
-         """.stripMargin)
-      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-03') SELECT * FROM src")
+      createPartition("2010-01-01", SELECT_FROM_SRC)
+      createPartition("2010-01-02", s"$SELECT_FROM_SRC UNION ALL $SELECT_FROM_SRC")
+      createPartition("2010-01-03", SELECT_FROM_SRC)
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS NOSCAN")
+
+      assert(queryStats("2010-01-01").rowCount === None)
+      assert(queryStats("2010-01-01").sizeInBytes === 2000)
+
+      assert(queryStats("2010-01-02").rowCount === None)
+      assert(queryStats("2010-01-02").sizeInBytes === 2*2000)
 
       sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS")
 
       sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS")
 
       assert(queryStats("2010-01-01").rowCount.get === 500)
-      assert(queryStats("2010-01-01").sizeInBytes === 5812)
+      assert(queryStats("2010-01-01").sizeInBytes === 2000)
 
       assert(queryStats("2010-01-02").rowCount.get === 2*500)
-      assert(queryStats("2010-01-02").sizeInBytes === 2*5812)
-    }
-  }
-
-  test("analyze single partition noscan") {
-    val tableName = "analyzeTable_part"
-
-    def queryStats(ds: String): CatalogStatistics = {
-      val partition =
-        spark.sessionState.catalog.getPartition(TableIdentifier(tableName), Map("ds" -> ds))
-      partition.stats.get
-    }
-
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
-
-      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
-      sql(
-        s"""
-           |INSERT INTO TABLE $tableName PARTITION (ds='2010-01-02')
-           |SELECT * FROM src
-           |UNION ALL
-           |SELECT * FROM src
-         """.stripMargin)
-      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-03') SELECT * FROM src")
-
-      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
-        .collect()
-
-      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS NOSCAN")
-        .collect()
-
-      assert(queryStats("2010-01-01").rowCount === None)
-      assert(queryStats("2010-01-01").sizeInBytes === 5812)
-
-      assert(queryStats("2010-01-02").rowCount === None)
-      assert(queryStats("2010-01-02").sizeInBytes === 2*5812)
+      assert(queryStats("2010-01-02").sizeInBytes === 2*2000)
     }
   }
 
@@ -343,60 +317,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assert(stats.sizeInBytes === sizeInBytes)
     }
 
-    def assertNoStats(ds: String, hr: String): Unit = {
-      assert(queryStats(ds, hr) === None)
-    }
-
-    def createPartition(ds: String, hr: Int, query: String): Unit = {
-      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds', hr=$hr) $query")
-    }
-
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING, hr INT)")
-
-      createPartition("2010-01-01", 10, "SELECT * FROM SRC")
-      createPartition("2010-01-01", 11, "SELECT * FROM SRC")
-      createPartition("2010-01-02", 10, "SELECT * FROM SRC")
-      createPartition("2010-01-02", 11, "SELECT * FROM SRC UNION ALL SELECT * FROM SRC")
-
-      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS")
-        .collect()
-
-      assertStats("2010-01-01", "10", 500, 5812)
-      assertStats("2010-01-01", "11", 500, 5812)
-      assertNoStats("2010-01-02", "10")
-      assertNoStats("2010-01-02", "11")
-
-      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS")
-        .collect()
-
-      assertStats("2010-01-01", "10", 500, 5812)
-      assertStats("2010-01-01", "11", 500, 5812)
-      assertStats("2010-01-02", "10", 500, 5812)
-      assertStats("2010-01-02", "11", 2*500, 2*5812)
-    }
-  }
-
-  test("analyze a set of partitions noscan") {
-    val tableName = "analyzeTable_part"
-
-    def queryStats(ds: String, hr: String): Option[CatalogStatistics] = {
-      val tableId = TableIdentifier(tableName)
-      val partition =
-        spark.sessionState.catalog.getPartition(tableId, Map("ds" -> ds, "hr" -> hr))
-      partition.stats
-    }
-
-    def assertStats(ds: String, hr: String, sizeInBytes: BigInt): Unit = {
+    def assertSizeInBytesStats(ds: String, hr: String, sizeInBytes: BigInt): Unit = {
       val stats = queryStats(ds, hr).get
       assert(stats.rowCount === None)
       assert(stats.sizeInBytes === sizeInBytes)
     }
 
-    def assertNoStats(ds: String, hr: String): Unit = {
-      assert(queryStats(ds, hr) === None)
-    }
-
     def createPartition(ds: String, hr: Int, query: String): Unit = {
       sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds', hr=$hr) $query")
     }
@@ -404,26 +330,38 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING, hr INT)")
 
-      createPartition("2010-01-01", 10, "SELECT * FROM SRC")
-      createPartition("2010-01-01", 11, "SELECT * FROM SRC")
-      createPartition("2010-01-02", 10, "SELECT * FROM SRC")
-      createPartition("2010-01-02", 11, "SELECT * FROM SRC UNION ALL SELECT * FROM SRC")
+      createPartition("2010-01-01", 10, SELECT_FROM_SRC)
+      createPartition("2010-01-01", 11, SELECT_FROM_SRC)
+      createPartition("2010-01-02", 10, SELECT_FROM_SRC)
+      createPartition("2010-01-02", 11, s"$SELECT_FROM_SRC UNION ALL $SELECT_FROM_SRC")
 
       sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
-        .collect()
 
-      assertStats("2010-01-01", "10", 5812)
-      assertStats("2010-01-01", "11", 5812)
-      assertNoStats("2010-01-02", "10")
-      assertNoStats("2010-01-02", "11")
+      assertSizeInBytesStats("2010-01-01", "10", 2000)
+      assertSizeInBytesStats("2010-01-01", "11", 2000)
+      assert(queryStats("2010-01-02", "10") === None)
+      assert(queryStats("2010-01-02", "11") === None)
 
       sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS NOSCAN")
-        .collect()
 
-      assertStats("2010-01-01", "10", 5812)
-      assertStats("2010-01-01", "11", 5812)
-      assertStats("2010-01-02", "10", 5812)
-      assertStats("2010-01-02", "11", 2*5812)
+      assertSizeInBytesStats("2010-01-01", "10", 2000)
+      assertSizeInBytesStats("2010-01-01", "11", 2000)
+      assertSizeInBytesStats("2010-01-02", "10", 2000)
+      assertSizeInBytesStats("2010-01-02", "11", 2*2000)
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS")
+
+      assertStats("2010-01-01", "10", 500, 2000)
+      assertStats("2010-01-01", "11", 500, 2000)
+      assertSizeInBytesStats("2010-01-02", "10", 2000)
+      assertSizeInBytesStats("2010-01-02", "11", 2*2000)
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS")
+
+      assertStats("2010-01-01", "10", 500, 2000)
+      assertStats("2010-01-01", "11", 500, 2000)
+      assertStats("2010-01-02", "10", 500, 2000)
+      assertStats("2010-01-02", "11", 2*500, 2*2000)
     }
   }
 

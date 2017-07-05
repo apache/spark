@@ -263,20 +263,20 @@ class SparkSqlParserSuite extends AnalysisTest {
 
     // Partitions specified
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> "2008-04-09", "hr" -> "11")))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> "2008-04-09", "hr" -> "11")))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Some(Map("ds" -> "2008-04-09"))))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> "2008-04-09")))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Some(Map("ds" -> "2008-04-09"))))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> "2008-04-09")))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Some(Map("ds" -> "2008-04-09"))))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> "2008-04-09")))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",

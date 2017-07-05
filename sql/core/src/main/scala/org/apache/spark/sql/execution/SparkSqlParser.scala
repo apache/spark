@@ -90,7 +90,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AnalyzeTableCommand]] command or an [[AnalyzeColumnCommand]] command.
+   * Create an [[AnalyzeTableCommand]] command, or an [[AnalyzePartitionCommand]]
+   * or an [[AnalyzeColumnCommand]] command.
    * Example SQL for analyzing table or a set of partitions :
    * {{{
    *   ANALYZE TABLE [db_name.]tablename [PARTITION (partcol1[=val1], partcol2[=val2], ...)]
@@ -122,7 +123,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     val table = visitTableIdentifier(ctx.tableIdentifier)
     if (ctx.identifierSeq() == null) {
-      AnalyzeTableCommand(table, noscan = ctx.identifier != null, partitionSpec)
+      if (partitionSpec.isDefined) {
+        AnalyzePartitionCommand(table, partitionSpec.get, noscan = ctx.identifier != null)
+      } else {
+        AnalyzeTableCommand(table, noscan = ctx.identifier != null)
+      }
     } else {
       if (partitionSpec.isDefined) {
         logWarning(s"Partition specification is ignored: ${ctx.partitionSpec.getText}")

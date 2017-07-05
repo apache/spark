@@ -26,15 +26,12 @@ import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Expression, Lite
 
 
 /**
- * Analyzes the given table or partition to generate statistics, which will be used in
+ * Analyzes the given table to generate statistics, which will be used in
  * query optimizations.
- *
- * If certain partition specs are specified, then statistics are gathered for only those partitions.
  */
 case class AnalyzeTableCommand(
     tableIdent: TableIdentifier,
-    noscan: Boolean = true,
-    partitionSpec: Option[TablePartitionSpec] = None) extends RunnableCommand {
+    noscan: Boolean = true) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
@@ -45,50 +42,74 @@ case class AnalyzeTableCommand(
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
 
-    if (!partitionSpec.isDefined) {
-      // Compute stats for the whole table
-      val newTotalSize = CommandUtils.calculateTotalSize(sessionState, tableMeta)
-      val newRowCount =
-        if (noscan) {
-          None
-        } else {
-          Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
-        }
-
-      def updateStats(newStats: CatalogStatistics): Unit = {
-        sessionState.catalog.alterTableStats(tableIdentWithDB, Some(newStats))
-        // Refresh the cached data source table in the catalog.
-        sessionState.catalog.refreshTable(tableIdentWithDB)
+    // Compute stats for the whole table
+    val newTotalSize = CommandUtils.calculateTotalSize(sessionState, tableMeta)
+    val newRowCount =
+      if (noscan) {
+        None
+      } else {
+        Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
       }
 
-      calculateAndUpdateStats(tableMeta.stats, newTotalSize, newRowCount, updateStats)
-    } else {
-      val partitions = sessionState.catalog.listPartitions(tableMeta.identifier, partitionSpec)
+    val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+    if (newStats.isDefined) {
+      sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
+      // Refresh the cached data source table in the catalog.
+      sessionState.catalog.refreshTable(tableIdentWithDB)
+    }
 
-      if (partitionSpec.isDefined && partitions.isEmpty) {
-        throw new NoSuchPartitionException(db, tableIdent.table, partitionSpec.get)
+    Seq.empty[Row]
+  }
+}
+
+/**
+ * Analyzes a given set of partitions to generate per-partition statistics, which will be used in
+ * query optimizations.
+ */
+case class AnalyzePartitionCommand(
+    tableIdent: TableIdentifier,
+    partitionSpec: TablePartitionSpec,
+    noscan: Boolean = true) extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val sessionState = sparkSession.sessionState
+    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
+    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    if (tableMeta.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+    }
+
+    val partitions = sessionState.catalog.listPartitions(tableMeta.identifier, Some(partitionSpec))
+
+    if (partitions.isEmpty) {
+      throw new NoSuchPartitionException(db, tableIdent.table, partitionSpec)
+    }
+
+    // Compute statistics for individual partitions
+    val rowCounts: Map[TablePartitionSpec, BigInt] =
+      if (noscan) {
+        Map.empty
+      } else {
+        calculateRowCountsPerPartition(sparkSession, tableMeta)
       }
 
-      // Compute stats for individual partitions
-      val rowCounts: Map[TablePartitionSpec, BigInt] =
-        if (noscan) {
-          Map.empty
-        } else {
-          calculateRowCountsPerPartition(sparkSession, tableMeta)
-        }
+    // Update the metastore if newly computed statistics are different from those
+    // recorded in the metastore.
+    val partitionStats = partitions.map { p =>
+      val newTotalSize = CommandUtils.calculateLocationSize(sessionState,
+        tableMeta.identifier, p.storage.locationUri)
+      val newRowCount = rowCounts.get(p.spec)
+      val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+      (p, newStats)
+    }
 
-      partitions.foreach { p =>
-        val newTotalSize = CommandUtils.calculateLocationSize(sessionState,
-          tableMeta.identifier, p.storage.locationUri)
-        val newRowCount = rowCounts.get(p.spec)
+    val newPartitions = partitionStats.filter(_._2.isDefined).map { case (p, newStats) =>
+      p.copy(stats = newStats)
+    }.toList
 
-        def updateStats(newStats: CatalogStatistics): Unit = {
-          sessionState.catalog.alterPartitions(tableMeta.identifier,
-            List(p.copy(stats = Some(newStats))))
-        }
-
-        calculateAndUpdateStats(p.stats, newTotalSize, newRowCount, updateStats)
-      }
+    if (newPartitions.nonEmpty) {
+      sessionState.catalog.alterPartitions(tableMeta.identifier, newPartitions)
     }
 
     Seq.empty[Row]
@@ -97,7 +118,7 @@ case class AnalyzeTableCommand(
   private def calculateRowCountsPerPartition(
       sparkSession: SparkSession,
       tableMeta: CatalogTable): Map[TablePartitionSpec, BigInt] = {
-    val filters = partitionSpec.get.map {
+    val filters = partitionSpec.map {
       case (columnName, value) => EqualTo(UnresolvedAttribute(columnName), Literal(value))
     }
     val filter = filters.reduce(And)
@@ -116,38 +137,5 @@ case class AnalyzeTableCommand(
       val count = BigInt(r.getLong(numPartitionColumns))
       (spec, count)
     }.toMap
-  }
-
-  private def calculateAndUpdateStats(
-      oldStats: Option[CatalogStatistics],
-      newTotalSize: BigInt,
-      newRowCount: Option[BigInt],
-      updateStats: CatalogStatistics => Unit): Unit = {
-
-    val oldTotalSize = oldStats.map(_.sizeInBytes.toLong).getOrElse(0L)
-    val oldRowCount = oldStats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
-
-    var newStats: Option[CatalogStatistics] = None
-    if (newTotalSize >= 0 && newTotalSize != oldTotalSize) {
-      newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
-    }
-    // We only set rowCount when noscan is false, because otherwise:
-    // 1. when total size is not changed, we don't need to alter the table;
-    // 2. when total size is changed, `oldRowCount` becomes invalid.
-    // This is to make sure that we only record the right statistics.
-    if (newRowCount.isDefined) {
-      if (newRowCount.get >= 0 && newRowCount.get != oldRowCount) {
-        newStats = if (newStats.isDefined) {
-          newStats.map(_.copy(rowCount = newRowCount))
-        } else {
-          Some(CatalogStatistics(sizeInBytes = oldTotalSize, rowCount = newRowCount))
-        }
-      }
-    }
-    // Update the metastore if the above statistics of the table are different from those
-    // recorded in the metastore.
-    if (newStats.isDefined) {
-      updateStats(newStats.get)
-    }
   }
 }
