@@ -554,7 +554,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       new PartialFunction[Any, Unit]() {
         override def isDefinedAt(msg: Any): Boolean = {
           msg match {
-            case RetrieveSparkAppConfig =>
+            case RetrieveSparkAppConfig(_) =>
               Utils.isDynamicAllocationEnabled(sc.conf)
             case _ => false
           }
@@ -562,13 +562,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
         override def apply(msg: Any): Unit = {
           msg match {
-            case RetrieveSparkAppConfig =>
+            case RetrieveSparkAppConfig(executorId) =>
               RUNNING_EXECUTOR_PODS_LOCK.synchronized {
                 var resolvedProperties = sparkProperties
                 val runningExecutorPod = kubernetesClient
                   .pods()
-                  .withName(runningExecutorPods(currentExecutorIdCounter.toString)
-                    .getMetadata.getName)
+                  .withName(runningExecutorPods(executorId).getMetadata.getName)
                   .get()
                 val nodeName = runningExecutorPod.getSpec.getNodeName
                 val shufflePodIp = shufflePodCache.get.getShufflePodForExecutor(nodeName)
