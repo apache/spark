@@ -131,8 +131,8 @@ private[sql] class HiveSessionCatalog(
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(funcName)) {
-          // If the function actually exists in functionRegistry, it means that there is an
+        if (functionExists(name)) {
+          // If the function actually exists, it means that there is an
           // error when we create the Expression using the given children.
           // We need to throw the original exception.
           throw error
