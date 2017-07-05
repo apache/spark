@@ -134,7 +134,7 @@ object RowEncoder {
             returnNullable = false)
 
         case _ => MapObjects(
-          { element =>
+          element => {
             val value = serializerFor(ValidateExternalType(element, et), et)
             if (!containsNull) {
               AssertNotNull(value, Seq.empty)
