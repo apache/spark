@@ -2021,4 +2021,30 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(table.filter($"p" === "p1\" and q=\"q1").select($"a"), Row(4))
     }
   }
+
+  test("SPARK-21101 UDTF should override initialize(ObjectInspector[] args)") {
+    withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack1
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      val cnt =
+        sql("SELECT udtf_stack1(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')").count()
+      assert(cnt === 2)
+
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack2
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        sql("SELECT udtf_stack2(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')")
+      }
+      assert(
+        e.getMessage.contains("public StructObjectInspector initialize(ObjectInspector[] args)"))
+    }
+  }
 }
