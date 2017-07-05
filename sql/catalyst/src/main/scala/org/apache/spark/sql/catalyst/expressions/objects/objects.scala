@@ -841,18 +841,21 @@ object ExternalMapToCatalyst {
       inputMap: Expression,
       keyType: DataType,
       keyConverter: Expression => Expression,
+      keyNullable: Boolean,
       valueType: DataType,
       valueConverter: Expression => Expression,
       valueNullable: Boolean): ExternalMapToCatalyst = {
     val id = curId.getAndIncrement()
     val keyName = "ExternalMapToCatalyst_key" + id
+    val keyIsNull = "ExternalMapToCatalyst_key_isNull" + id
     val valueName = "ExternalMapToCatalyst_value" + id
     val valueIsNull = "ExternalMapToCatalyst_value_isNull" + id
 
     ExternalMapToCatalyst(
       keyName,
+      keyIsNull,
       keyType,
-      keyConverter(LambdaVariable(keyName, "false", keyType, false)),
+      keyConverter(LambdaVariable(keyName, keyIsNull, keyType, keyNullable)),
       valueName,
       valueIsNull,
       valueType,
@@ -868,6 +871,8 @@ object ExternalMapToCatalyst {
  *
  * @param key the name of the map key variable that used when iterate the map, and used as input for
  *            the `keyConverter`
+ * @param keyIsNull the nullability of the map key variable that used when iterate the map, and
+ *                  used as input for the `keyConverter`
  * @param keyType the data type of the map key variable that used when iterate the map, and used as
  *                input for the `keyConverter`
  * @param keyConverter A function that take the `key` as input, and converts it to catalyst format.
@@ -883,6 +888,7 @@ object ExternalMapToCatalyst {
  */
 case class ExternalMapToCatalyst private(
     key: String,
+    keyIsNull: String,
     keyType: DataType,
     keyConverter: Expression,
     value: String,
@@ -913,6 +919,7 @@ case class ExternalMapToCatalyst private(
 
     val keyElementJavaType = ctx.javaType(keyType)
     val valueElementJavaType = ctx.javaType(valueType)
+    ctx.addMutableState("boolean", keyIsNull, "")
     ctx.addMutableState(keyElementJavaType, key, "")
     ctx.addMutableState("boolean", valueIsNull, "")
     ctx.addMutableState(valueElementJavaType, value, "")
@@ -950,6 +957,12 @@ case class ExternalMapToCatalyst private(
         defineEntries -> defineKeyValue
     }
 
+    val keyNullCheck = if (ctx.isPrimitiveType(keyType)) {
+      s"$keyIsNull = false;"
+    } else {
+      s"$keyIsNull = $key == null;"
+    }
+
     val valueNullCheck = if (ctx.isPrimitiveType(valueType)) {
       s"$valueIsNull = false;"
     } else {
@@ -972,6 +985,7 @@ case class ExternalMapToCatalyst private(
           $defineEntries
           while($entries.hasNext()) {
             $defineKeyValue
+            $keyNullCheck
             $valueNullCheck
 
             ${genKeyConverter.code}
