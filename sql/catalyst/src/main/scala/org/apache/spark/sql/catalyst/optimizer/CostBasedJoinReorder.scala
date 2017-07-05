@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
 
-  val conf = SQLConf.get
+  private def conf = SQLConf.get
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {

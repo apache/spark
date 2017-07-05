@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 trait PlanTest extends SparkFunSuite with PredicateHelper {
 
   // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
-  protected val conf = SQLConf.get
+  protected def conf = SQLConf.get
 
   /**
    * Since attribute references are given globally unique ids during analysis,
