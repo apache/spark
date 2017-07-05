@@ -35,23 +35,22 @@ import org.apache.spark.rdd.RDD
  *      "Ordered categorical features" are categorical features with high arity,
  *      or any categorical feature used in regression or binary classification.
  *
+ */
+private[spark] sealed trait TreePoint {
+  def label: Double
+  def binnedFeatures(x: Int): Int
+}
+/**
+ * Internal Sparse representation of LabeledPoint for DecisionTree.
+ *
  * @param label  Label from LabeledPoint
- * @param binnedFeatures  Binned feature values.
+ * @param _binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
  */
-private[spark] class TreePoint(val label: Double, val binnedFeatures: BSV[Int])
-  extends Serializable {
-
-  /**
-   * Wrapper for binnedFeatures's apply method.
-   * hotfix for BUG: compile fails when [[org.apache.spark.ml.tree.LearningNode.predictImpl()]]
-   * use breeze.linalg.SparseVector.
-   * @param i index
-   * @return Gets the value of the ith element of binnedFeatures.
-   */
-  def _binnedFeatures(i: Int): Int = binnedFeatures(i)
+private[spark] case class TreeSparsePoint(label: Double,
+                                          _binnedFeatures: BSV[Int]) extends TreePoint {
+  override def binnedFeatures(x: Int): Int = _binnedFeatures.apply(x)
 }
-
 private[spark] object TreePoint {
 
   /**
@@ -107,7 +106,7 @@ private[spark] object TreePoint {
 
     val vec = new BSV[Int](index.toArray, data.toArray, numFeatures)
 
-    new TreePoint(labeledPoint.label, vec)
+    new TreeSparsePoint(labeledPoint.label, vec)
   }
 
   /**
