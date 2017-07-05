@@ -2634,7 +2634,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
             | WHERE minA IN (NAMED_STRUCT('a', 1L, 'b', 1L), NAMED_STRUCT('a', 2L, 'b', 2L),
             |   NAMED_STRUCT('a', 3L, 'b', 3L))
           """.stripMargin)
-        df.explain
         checkAnswer(df, Row(Row(1, 1)))
       }
     }

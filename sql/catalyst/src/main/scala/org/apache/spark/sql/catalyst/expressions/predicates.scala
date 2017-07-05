@@ -279,10 +279,10 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   @transient private[this] lazy val set = child.dataType match {
-    case _: StructType =>
+    case _: AtomicType => hset
+    case _ =>
       // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-      TreeSet.empty (TypeUtils.getInterpretedOrdering (child.dataType) ) ++ hset
-    case _ => hset
+      TreeSet.empty(TypeUtils.getInterpretedOrdering (child.dataType) ) ++ hset
   }
 
   def getSet(): Set[Any] = set
@@ -293,20 +293,24 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     val childGen = child.genCode(ctx)
     ctx.references += this
     val setTerm = ctx.freshName("set")
-    val hasNullTerm = ctx.freshName("hasNull")
+    val setNull = if (hasNull) {
+      s"""
+         |if (!${ev.value}) {
+         |  ${ev.isNull} = true;
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
     ctx.addMutableState(setName, setTerm,
       s"$setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();")
-    ctx.addMutableState("boolean", hasNullTerm,
-      s"$hasNullTerm = ${if (hasNull) "true" else "false"};")
     ev.copy(code = s"""
       ${childGen.code}
       boolean ${ev.isNull} = ${childGen.isNull};
       boolean ${ev.value} = false;
       if (!${ev.isNull}) {
         ${ev.value} = $setTerm.contains(${childGen.value});
-        if (!${ev.value} && $hasNullTerm) {
-          ${ev.isNull} = true;
-        }
+        $setNull
       }
      """)
   }
