@@ -123,7 +123,6 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     if (!incorrectColumns.isEmpty) {
       throw new IllegalArgumentException(incorrectColumns.mkString("\n"))
     }
-
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
     }
