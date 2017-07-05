@@ -1175,7 +1175,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }
   }
 
-  test("Do not partially lose data when parsing float and double") {
+  test("SPARK-21263: Invalid float and double are handled correctly in different modes") {
     val exception = intercept[SparkException] {
       spark.read.schema("a DOUBLE")
         .option("mode", "FAILFAST")
