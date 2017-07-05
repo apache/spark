@@ -242,7 +242,10 @@ public final class UnsafeKVExternalSorter {
       // into the row.
       row1.pointTo(baseObj1, baseOff1 + 4, -1);
       row2.pointTo(baseObj2, baseOff2 + 4, -1);
-      return ordering.compare(row1, row2);
+      int comparison = ordering.compare(row1, row2);
+      row1.pointTo(null, 0L, -1);
+      row2.pointTo(null, 0L, -1);
+      return comparison;
     }
   }
 
