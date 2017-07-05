@@ -277,6 +277,9 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan",
       AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
         partitionSpec = Map("ds" -> "2008-04-09")))
+    assertEqual("ANALYZE TABLE t PARTITION(ds, hr=11) COMPUTE STATISTICS noscan",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("hr" -> "11")))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
