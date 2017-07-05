@@ -37,18 +37,22 @@ import org.apache.spark.rdd.RDD
  *
  */
 private[spark] sealed trait TreePoint {
+  /**
+   * Label from LabeledPoint.
+   */
   def label: Double
+  /**
+   * Binned feature values.
+   * Same length as LabeledPoint.features, but values are bin indices.
+   */
   def binnedFeatures(x: Int): Int
 }
-/**
- * Internal Sparse representation of LabeledPoint for DecisionTree.
- *
- * @param label  Label from LabeledPoint
- * @param _binnedFeatures  Binned feature values.
- *                        Same length as LabeledPoint.features, but values are bin indices.
- */
 private[spark] case class TreeSparsePoint(label: Double,
                                           _binnedFeatures: BSV[Int]) extends TreePoint {
+  override def binnedFeatures(x: Int): Int = _binnedFeatures.apply(x)
+}
+private[spark] case class TreeDensePoint(label: Double,
+                                         _binnedFeatures: Array[Int]) extends TreePoint {
   override def binnedFeatures(x: Int): Int = _binnedFeatures.apply(x)
 }
 private[spark] object TreePoint {
@@ -96,17 +100,27 @@ private[spark] object TreePoint {
       thresholds: Array[Array[Double]],
       featureArity: Array[Int]): TreePoint = {
     val numFeatures = labeledPoint.features.size
-
-    // use to construct a sparse vector
-    val (index, data) = Range(0, numFeatures).map{ idx =>
-      val bin = findBin(idx, labeledPoint,
-                        featureArity(idx), thresholds(idx))
-      (idx, bin)
-    }.filter(_._2 != 0).unzip
-
-    val vec = new BSV[Int](index.toArray, data.toArray, numFeatures)
-
-    new TreeSparsePoint(labeledPoint.label, vec)
+    // For efficiency, use sparse representation when number of feature >= 10000
+    if (numFeatures >= 10000) {
+      /* convert to sparse vector */
+      val (index, data) = Range(0, numFeatures).map { idx =>
+        val bin = findBin(idx, labeledPoint,
+          featureArity(idx), thresholds(idx))
+        (idx, bin)
+      }.filter(_._2 != 0).unzip
+      val vec = new BSV[Int](index.toArray, data.toArray, numFeatures)
+      TreeSparsePoint(labeledPoint.label, vec)
+    } else {
+      /* convert to dense array */
+      val arr = new Array[Int](numFeatures)
+      var featureIndex = 0
+      while (featureIndex < numFeatures) {
+        arr(featureIndex) =
+          findBin(featureIndex, labeledPoint, featureArity(featureIndex), thresholds(featureIndex))
+        featureIndex += 1
+      }
+      TreeDensePoint(labeledPoint.label, arr)
+    }
   }
 
   /**
