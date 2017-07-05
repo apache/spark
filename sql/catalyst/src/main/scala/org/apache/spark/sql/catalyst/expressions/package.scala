@@ -138,5 +138,5 @@ package object expressions  {
    * input will result in null output). We will use this information during constructing IsNotNull
    * constraints.
    */
-  trait NullIntolerant
+  trait NullIntolerant extends Expression
 }

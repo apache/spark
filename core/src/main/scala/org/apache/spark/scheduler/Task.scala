@@ -115,26 +115,33 @@ private[spark] abstract class Task[T](
           case t: Throwable =>
             e.addSuppressed(t)
         }
+        context.markTaskCompleted(Some(e))
         throw e
     } finally {
-      // Call the task completion callbacks.
-      context.markTaskCompleted()
       try {
-        Utils.tryLogNonFatalError {
-          // Release memory used by this thread for unrolling blocks
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
-          // Notify any tasks waiting for execution memory to be freed to wake up and try to
-          // acquire memory again. This makes impossible the scenario where a task sleeps forever
-          // because there are no other tasks left to notify it. Since this is safe to do but may
-          // not be strictly necessary, we should revisit whether we can remove this in the future.
-          val memoryManager = SparkEnv.get.memoryManager
-          memoryManager.synchronized { memoryManager.notifyAll() }
-        }
+        // Call the task completion callbacks. If "markTaskCompleted" is called twice, the second
+        // one is no-op.
+        context.markTaskCompleted(None)
       } finally {
-        // Though we unset the ThreadLocal here, the context member variable itself is still queried
-        // directly in the TaskRunner to check for FetchFailedExceptions.
-        TaskContext.unset()
+        try {
+          Utils.tryLogNonFatalError {
+            // Release memory used by this thread for unrolling blocks
+            SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+            SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(
+              MemoryMode.OFF_HEAP)
+            // Notify any tasks waiting for execution memory to be freed to wake up and try to
+            // acquire memory again. This makes impossible the scenario where a task sleeps forever
+            // because there are no other tasks left to notify it. Since this is safe to do but may
+            // not be strictly necessary, we should revisit whether we can remove this in the
+            // future.
+            val memoryManager = SparkEnv.get.memoryManager
+            memoryManager.synchronized { memoryManager.notifyAll() }
+          }
+        } finally {
+          // Though we unset the ThreadLocal here, the context member variable itself is still
+          // queried directly in the TaskRunner to check for FetchFailedExceptions.
+          TaskContext.unset()
+        }
       }
     }
   }
@@ -149,7 +156,7 @@ private[spark] abstract class Task[T](
 
   def preferredLocations: Seq[TaskLocation] = Nil
 
-  // Map output tracker epoch. Will be set by TaskScheduler.
+  // Map output tracker epoch. Will be set by TaskSetManager.
   var epoch: Long = -1
 
   // Task context, to be initialized in run().
@@ -182,14 +189,11 @@ private[spark] abstract class Task[T](
    */
   def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
     if (context != null) {
-      context.taskMetrics.internalAccums.filter { a =>
-        // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
-        // value will be updated at driver side.
-        // Note: internal accumulators representing task metrics always count failed values
-        !a.isZero || a.name == Some(InternalAccumulator.RESULT_SIZE)
-      // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not filter
-      // them out.
-      } ++ context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
+      // Note: internal accumulators representing task metrics always count failed values
+      context.taskMetrics.nonZeroInternalAccums() ++
+        // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not
+        // filter them out.
+        context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
     } else {
       Seq.empty
     }

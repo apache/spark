@@ -20,8 +20,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.parquet.column.Dictionary;
-import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -180,7 +178,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public boolean getBoolean(int ordinal) {
-      throw new UnsupportedOperationException();
+      return data.getBoolean(offset + ordinal);
     }
 
     @Override
@@ -188,7 +186,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public short getShort(int ordinal) {
-      throw new UnsupportedOperationException();
+      return data.getShort(offset + ordinal);
     }
 
     @Override
@@ -199,7 +197,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public float getFloat(int ordinal) {
-      throw new UnsupportedOperationException();
+      return data.getFloat(offset + ordinal);
     }
 
     @Override
@@ -313,8 +311,8 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Ensures that there is enough storage to store capcity elements. That is, the put() APIs
-   * must work for all rowIds < capcity.
+   * Ensures that there is enough storage to store capacity elements. That is, the put() APIs
+   * must work for all rowIds < capacity.
    */
   protected abstract void reserveInternal(int capacity);
 
@@ -479,7 +477,6 @@ public abstract class ColumnVector implements AutoCloseable {
 
   /**
    * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
-   * src should contain `count` doubles written as ieee format.
    */
   public abstract void putFloats(int rowId, int count, float[] src, int srcIndex);
 
@@ -506,7 +503,6 @@ public abstract class ColumnVector implements AutoCloseable {
 
   /**
    * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
-   * src should contain `count` doubles written as ieee format.
    */
   public abstract void putDoubles(int rowId, int count, double[] src, int srcIndex);
 
@@ -628,8 +624,8 @@ public abstract class ColumnVector implements AutoCloseable {
       ColumnVector.Array a = getByteArray(rowId);
       return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
     } else {
-      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
-      return UTF8String.fromBytes(v.getBytes());
+      byte[] bytes = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
+      return UTF8String.fromBytes(bytes);
     }
   }
 
@@ -643,8 +639,7 @@ public abstract class ColumnVector implements AutoCloseable {
       System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
       return bytes;
     } else {
-      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
-      return v.getBytes();
+      return dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -798,6 +793,14 @@ public abstract class ColumnVector implements AutoCloseable {
     int result = elementsAppended;
     putFloats(elementsAppended, count, v);
     elementsAppended += count;
+    return result;
+  }
+
+  public final int appendFloats(int length, float[] src, int offset) {
+    reserve(elementsAppended + length);
+    int result = elementsAppended;
+    putFloats(elementsAppended, length, src, offset);
+    elementsAppended += length;
     return result;
   }
 

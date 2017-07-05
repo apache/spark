@@ -134,15 +134,20 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("nondeterministic: can't push down filter with nondeterministic condition through project") {
+  test("nondeterministic: can always push down filter through project with deterministic field") {
     val originalQuery = testRelation
-      .select(Rand(10).as('rand), 'a)
-      .where('rand > 5 || 'a > 5)
+      .select('a)
+      .where(Rand(10) > 5 || 'a > 5)
       .analyze
 
     val optimized = Optimize.execute(originalQuery)
 
-    comparePlans(optimized, originalQuery)
+    val correctAnswer = testRelation
+      .where(Rand(10) > 5 || 'a > 5)
+      .select('a)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
   test("nondeterministic: can't push down filter through project with nondeterministic field") {
@@ -154,6 +159,34 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     comparePlans(optimized, originalQuery)
+  }
+
+  test("nondeterministic: can't push down filter through aggregate with nondeterministic field") {
+    val originalQuery = testRelation
+      .groupBy('a)('a, Rand(10).as('rand))
+      .where('a > 5)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    comparePlans(optimized, originalQuery)
+  }
+
+  test("nondeterministic: push down part of filter through aggregate with deterministic field") {
+    val originalQuery = testRelation
+      .groupBy('a)('a)
+      .where('a > 5 && Rand(10) > 5)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+      .where('a > 5)
+      .groupBy('a)('a)
+      .where(Rand(10) > 5)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
   test("filters: combines filters") {
@@ -206,6 +239,16 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("joins: do not push down non-deterministic filters into join condition") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = x.join(y).where(Rand(10) > 5.0).analyze
+    val optimized = Optimize.execute(originalQuery)
+
+    comparePlans(optimized, originalQuery)
   }
 
   test("joins: push to one side after transformCondition") {
@@ -586,14 +629,14 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = {
       testRelationWithArrayType
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6) && ('c > 6))
+        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6) && ('col > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where('b >= 5)
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where('a + Rand(10).as("rnd") > 6 && 'c > 6)
+        .where('a + Rand(10).as("rnd") > 6 && 'col > 6)
         .analyze
     }
 
@@ -633,7 +676,7 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = {
       testRelationWithArrayType
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where(('c > 6) || ('b > 5)).analyze
+        .where(('col > 6) || ('b > 5)).analyze
     }
     val optimized = Optimize.execute(originalQuery)
 
@@ -755,12 +798,12 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("broadcast hint") {
-    val originalQuery = BroadcastHint(testRelation)
+    val originalQuery = ResolvedHint(testRelation)
       .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
-    val correctAnswer = BroadcastHint(testRelation.where('a === 2L))
+    val correctAnswer = ResolvedHint(testRelation.where('a === 2L))
       .where('b + Rand(10).as("rnd") === 3)
       .analyze
 
@@ -1086,6 +1129,9 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
         condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
+    // TODO support nondeterministic expressions in join condition.
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
+      checkAnalysis = false)
   }
 }

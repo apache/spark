@@ -19,6 +19,7 @@ package org.apache.spark.ui
 
 import java.net.{BindException, ServerSocket}
 import java.net.{URI, URL}
+import java.util.Locale
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
@@ -72,10 +73,10 @@ class UISuite extends SparkFunSuite {
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         val html = Source.fromURL(sc.ui.get.webUrl).mkString
         assert(!html.contains("random data that should not be present"))
-        assert(html.toLowerCase.contains("stages"))
-        assert(html.toLowerCase.contains("storage"))
-        assert(html.toLowerCase.contains("environment"))
-        assert(html.toLowerCase.contains("executors"))
+        assert(html.toLowerCase(Locale.ROOT).contains("stages"))
+        assert(html.toLowerCase(Locale.ROOT).contains("storage"))
+        assert(html.toLowerCase(Locale.ROOT).contains("environment"))
+        assert(html.toLowerCase(Locale.ROOT).contains("executors"))
       }
     }
   }
@@ -85,7 +86,7 @@ class UISuite extends SparkFunSuite {
       // test if visible from http://localhost:4040
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         val html = Source.fromURL("http://localhost:4040").mkString
-        assert(html.toLowerCase.contains("stages"))
+        assert(html.toLowerCase(Locale.ROOT).contains("stages"))
       }
     }
   }

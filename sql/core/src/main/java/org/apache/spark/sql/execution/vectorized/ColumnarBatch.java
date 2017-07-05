@@ -149,7 +149,7 @@ public final class ColumnarBatch {
           } else if (dt instanceof DoubleType) {
             row.setDouble(i, getDouble(i));
           } else if (dt instanceof StringType) {
-            row.update(i, getUTF8String(i));
+            row.update(i, getUTF8String(i).copy());
           } else if (dt instanceof BinaryType) {
             row.update(i, getBinary(i));
           } else if (dt instanceof DecimalType) {
@@ -198,21 +198,25 @@ public final class ColumnarBatch {
 
     @Override
     public Decimal getDecimal(int ordinal, int precision, int scale) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getDecimal(rowId, precision, scale);
     }
 
     @Override
     public UTF8String getUTF8String(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getUTF8String(rowId);
     }
 
     @Override
     public byte[] getBinary(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getBinary(rowId);
     }
 
     @Override
     public CalendarInterval getInterval(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       final int months = columns[ordinal].getChildColumn(0).getInt(rowId);
       final long microseconds = columns[ordinal].getChildColumn(1).getLong(rowId);
       return new CalendarInterval(months, microseconds);
@@ -220,11 +224,13 @@ public final class ColumnarBatch {
 
     @Override
     public InternalRow getStruct(int ordinal, int numFields) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getStruct(rowId);
     }
 
     @Override
     public ArrayData getArray(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getArray(rowId);
     }
 
@@ -235,7 +241,40 @@ public final class ColumnarBatch {
 
     @Override
     public Object get(int ordinal, DataType dataType) {
-      throw new UnsupportedOperationException();
+      if (dataType instanceof BooleanType) {
+        return getBoolean(ordinal);
+      } else if (dataType instanceof ByteType) {
+        return getByte(ordinal);
+      } else if (dataType instanceof ShortType) {
+        return getShort(ordinal);
+      } else if (dataType instanceof IntegerType) {
+        return getInt(ordinal);
+      } else if (dataType instanceof LongType) {
+        return getLong(ordinal);
+      } else if (dataType instanceof FloatType) {
+        return getFloat(ordinal);
+      } else if (dataType instanceof DoubleType) {
+        return getDouble(ordinal);
+      } else if (dataType instanceof StringType) {
+        return getUTF8String(ordinal);
+      } else if (dataType instanceof BinaryType) {
+        return getBinary(ordinal);
+      } else if (dataType instanceof DecimalType) {
+        DecimalType t = (DecimalType) dataType;
+        return getDecimal(ordinal, t.precision(), t.scale());
+      } else if (dataType instanceof DateType) {
+        return getInt(ordinal);
+      } else if (dataType instanceof TimestampType) {
+        return getLong(ordinal);
+      } else if (dataType instanceof ArrayType) {
+        return getArray(ordinal);
+      } else if (dataType instanceof StructType) {
+        return getStruct(ordinal, ((StructType)dataType).fields().length);
+      } else if (dataType instanceof MapType) {
+        return getMap(ordinal);
+      } else {
+        throw new UnsupportedOperationException("Datatype not supported " + dataType);
+      }
     }
 
     @Override

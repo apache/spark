@@ -39,6 +39,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
   }
 
+  private lazy val nullData = Seq(
+    (Some(1), Some(1)), (Some(1), Some(2)), (Some(1), None), (None, None)).toDF("a", "b")
+
   test("column names with space") {
     val df = Seq((1, "a")).toDF("name with space", "name.with.dot")
 
@@ -284,23 +287,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("<=>") {
     checkAnswer(
-      testData2.filter($"a" === 1),
-      testData2.collect().toSeq.filter(r => r.getInt(0) == 1))
-
-    checkAnswer(
-      testData2.filter($"a" === $"b"),
-      testData2.collect().toSeq.filter(r => r.getInt(0) == r.getInt(1)))
-  }
-
-  test("=!=") {
-    val nullData = spark.createDataFrame(sparkContext.parallelize(
-      Row(1, 1) ::
-      Row(1, 2) ::
-      Row(1, null) ::
-      Row(null, null) :: Nil),
-      StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType))))
-
-    checkAnswer(
       nullData.filter($"b" <=> 1),
       Row(1, 1) :: Nil)
 
@@ -321,7 +307,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       nullData2.filter($"a" <=> null),
       Row(null) :: Nil)
+  }
 
+  test("=!=") {
+    checkAnswer(
+      nullData.filter($"b" =!= 1),
+      Row(1, 2) :: Nil)
+
+    checkAnswer(nullData.filter($"b" =!= null), Nil)
+
+    checkAnswer(
+      nullData.filter($"a" =!= $"b"),
+      Row(1, 2) :: Nil)
   }
 
   test(">") {

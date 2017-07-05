@@ -835,6 +835,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return res;
   }
 
+  public UTF8String replace(UTF8String search, UTF8String replace) {
+    if (EMPTY_UTF8.equals(search)) {
+      return this;
+    }
+    String replaced = toString().replace(
+      search.toString(), replace.toString());
+    return fromString(replaced);
+  }
+
   // TODO: Need to use `Code Point` here instead of Char in case the character longer than 2 bytes
   public UTF8String translate(Map<Character, Character> dict) {
     String srcStr = this.toString();
@@ -1077,6 +1086,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   @Override
   public UTF8String clone() {
     return fromBytes(getBytes());
+  }
+
+  public UTF8String copy() {
+    byte[] bytes = new byte[numBytes];
+    copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
+    return fromBytes(bytes);
   }
 
   @Override

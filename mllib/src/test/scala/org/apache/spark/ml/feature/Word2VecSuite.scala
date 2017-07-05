@@ -25,6 +25,7 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.feature.{Word2VecModel => OldWord2VecModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
+import org.apache.spark.util.Utils
 
 class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -57,15 +58,14 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     val docDF = doc.zip(expected).toDF("text", "expected")
 
-    val model = new Word2Vec()
+    val w2v = new Word2Vec()
       .setVectorSize(3)
       .setInputCol("text")
       .setOutputCol("result")
       .setSeed(42L)
-      .fit(docDF)
+    val model = w2v.fit(docDF)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(w2v, model)
 
     // These expectations are just magic values, characterizing the current
     // behavior.  The test needs to be updated to be more general, see SPARK-11502
@@ -187,6 +187,15 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }.collect().unzip
     // The similarity score should be very different with the larger window
     assert(math.abs(similarity(5) - similarityLarger(5) / similarity(5)) > 1E-5)
+  }
+
+  test("Word2Vec read/write numPartitions calculation") {
+    val smallModelNumPartitions = Word2VecModel.Word2VecModelWriter.calculateNumberOfPartitions(
+      Utils.byteStringAsBytes("64m"), numWords = 10, vectorSize = 5)
+    assert(smallModelNumPartitions === 1)
+    val largeModelNumPartitions = Word2VecModel.Word2VecModelWriter.calculateNumberOfPartitions(
+      Utils.byteStringAsBytes("64m"), numWords = 1000000, vectorSize = 5000)
+    assert(largeModelNumPartitions > 1)
   }
 
   test("Word2Vec read/write") {

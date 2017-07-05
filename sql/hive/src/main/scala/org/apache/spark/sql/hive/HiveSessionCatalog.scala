@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.util.Locale
+
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
@@ -26,14 +28,12 @@ import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
@@ -43,7 +43,7 @@ import org.apache.spark.util.Utils
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
-    private val metastoreCatalog: HiveMetastoreCatalog,
+    val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
     hadoopConf: Configuration,
@@ -57,25 +57,6 @@ private[sql] class HiveSessionCatalog(
       hadoopConf,
       parser,
       functionResourceLoader) {
-
-  // ----------------------------------------------------------------
-  // | Methods and fields for interacting with HiveMetastoreCatalog |
-  // ----------------------------------------------------------------
-
-  // These 2 rules must be run before all other DDL post-hoc resolution rules, i.e.
-  // `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
-  val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
-  val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions
-
-  def hiveDefaultTableFilePath(name: TableIdentifier): String = {
-    metastoreCatalog.hiveDefaultTableFilePath(name)
-  }
-
-  // For testing only
-  private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
-    val key = metastoreCatalog.getQualifiedTableName(table)
-    tableRelationCache.getIfPresent(key)
-  }
 
   override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
     makeFunctionBuilder(funcName, Utils.classForName(className))
@@ -143,19 +124,12 @@ private[sql] class HiveSessionCatalog(
   }
 
   private def lookupFunction0(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
-    // TODO: Once lookupFunction accepts a FunctionIdentifier, we should refactor this method to
-    // if (super.functionExists(name)) {
-    //   super.lookupFunction(name, children)
-    // } else {
-    //   // This function is a Hive builtin function.
-    //   ...
-    // }
     val database = name.database.map(formatDatabaseName)
     val funcName = name.copy(database = database)
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(funcName.unquotedString)) {
+        if (functionRegistry.functionExists(funcName)) {
           // If the function actually exists in functionRegistry, it means that there is an
           // error when we create the Expression using the given children.
           // We need to throw the original exception.
@@ -164,9 +138,9 @@ private[sql] class HiveSessionCatalog(
           // This function is not in functionRegistry, let's try to load it as a Hive's
           // built-in function.
           // Hive is case insensitive.
-          val functionName = funcName.unquotedString.toLowerCase
+          val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
           if (!hiveFunctions.contains(functionName)) {
-            failFunctionLookup(funcName.unquotedString)
+            failFunctionLookup(funcName)
           }
 
           // TODO: Remove this fallback path once we implement the list of fallback functions
@@ -174,21 +148,22 @@ private[sql] class HiveSessionCatalog(
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                failFunctionLookup(funcName.unquotedString))
+                failFunctionLookup(funcName))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => failFunctionLookup(funcName.unquotedString)
+              case NonFatal(e) => failFunctionLookup(funcName)
             }
           }
           val className = functionInfo.getFunctionClass.getName
-          val builder = makeFunctionBuilder(functionName, className)
+          val functionIdentifier =
+            FunctionIdentifier(functionName.toLowerCase(Locale.ROOT), database)
+          val func = CatalogFunction(functionIdentifier, className, Nil)
           // Put this Hive built-in function to our function registry.
-          val info = new ExpressionInfo(className, functionName)
-          createTempFunction(functionName, info, builder, ignoreIfExists = false)
+          registerFunction(func, overrideIfExists = false)
           // Now, we need to create the Expression.
-          functionRegistry.lookupFunction(functionName, children)
+          functionRegistry.lookupFunction(functionIdentifier, children)
         }
     }
   }

@@ -249,8 +249,7 @@ class DecisionTreeClassifierSuite
     val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(newTree)
+    MLTestingUtils.checkCopyAndUids(dt, newTree)
 
     val predictions = newTree.transform(newData)
       .select(newTree.getPredictionCol, newTree.getRawPredictionCol, newTree.getProbabilityCol)

@@ -669,4 +669,14 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         "positive."))
     }
   }
+
+  test("permanent view should be case-preserving") {
+    withView("v") {
+      sql("CREATE VIEW v AS SELECT 1 as aBc")
+      assert(spark.table("v").schema.head.name == "aBc")
+
+      sql("CREATE OR REPLACE VIEW v AS SELECT 2 as cBa")
+      assert(spark.table("v").schema.head.name == "cBa")
+    }
+  }
 }

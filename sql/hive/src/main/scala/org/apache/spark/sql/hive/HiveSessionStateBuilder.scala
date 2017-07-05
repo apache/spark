@@ -28,7 +28,7 @@ import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
 /**
- * Builder that produces a Hive aware [[SessionState]].
+ * Builder that produces a Hive-aware `SessionState`.
  */
 @Experimental
 @InterfaceStability.Unstable
@@ -75,8 +75,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       new DetermineTableStats(session) +:
-      catalog.ParquetConversions +:
-      catalog.OrcConversions +:
+      RelationConversions(conf, catalog) +:
       PreprocessTableCreation(session) +:
       PreprocessTableInsertion(conf) +:
       DataSourceAnalysis(conf) +:
@@ -102,7 +101,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         experimentalMethods.extraStrategies ++
           extraPlanningStrategies ++ Seq(
           FileSourceStrategy,
-          DataSourceStrategy,
+          DataSourceStrategy(conf),
           SpecialLimits,
           InMemoryScans,
           HiveTableScans,

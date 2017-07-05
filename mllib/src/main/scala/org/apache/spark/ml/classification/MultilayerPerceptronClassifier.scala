@@ -27,13 +27,16 @@ import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasStepSize, HasTol}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 
 /** Params for Multilayer Perceptron. */
 private[classification] trait MultilayerPerceptronParams extends PredictorParams
-  with HasSeed with HasMaxIter with HasTol with HasStepSize {
+  with HasSeed with HasMaxIter with HasTol with HasStepSize with HasSolver {
+
+  import MultilayerPerceptronClassifier._
+
   /**
    * Layer sizes including input size and output size.
    *
@@ -78,14 +81,10 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
    * @group expertParam
    */
   @Since("2.0.0")
-  final val solver: Param[String] = new Param[String](this, "solver",
+  final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
-      s"${MultilayerPerceptronClassifier.supportedSolvers.mkString(", ")}. (Default l-bfgs)",
-    ParamValidators.inArray[String](MultilayerPerceptronClassifier.supportedSolvers))
-
-  /** @group expertGetParam */
-  @Since("2.0.0")
-  final def getSolver: String = $(solver)
+      s"${supportedSolvers.mkString(", ")}. (Default l-bfgs)",
+    ParamValidators.inArray[String](supportedSolvers))
 
   /**
    * The initial weights of the model.
@@ -101,7 +100,7 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
   final def getInitialWeights: Vector = $(initialWeights)
 
   setDefault(maxIter -> 100, tol -> 1e-6, blockSize -> 128,
-    solver -> MultilayerPerceptronClassifier.LBFGS, stepSize -> 0.03)
+    solver -> LBFGS, stepSize -> 0.03)
 }
 
 /** Label to vector converter. */
@@ -329,7 +328,8 @@ class MultilayerPerceptronClassificationModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassificationModel = {
-    copyValues(new MultilayerPerceptronClassificationModel(uid, layers, weights), extra)
+    val copied = new MultilayerPerceptronClassificationModel(uid, layers, weights).setParent(parent)
+    copyValues(copied, extra)
   }
 
   @Since("2.0.0")

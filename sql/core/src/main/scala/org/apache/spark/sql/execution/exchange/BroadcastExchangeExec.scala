@@ -48,10 +48,8 @@ case class BroadcastExchangeExec(
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
-  override def sameResult(plan: SparkPlan): Boolean = plan match {
-    case p: BroadcastExchangeExec =>
-      mode.compatibleWith(p.mode) && child.sameResult(p.child)
-    case _ => false
+  override lazy val canonicalized: SparkPlan = {
+    BroadcastExchangeExec(mode.canonicalized, child.canonicalized)
   }
 
   @transient

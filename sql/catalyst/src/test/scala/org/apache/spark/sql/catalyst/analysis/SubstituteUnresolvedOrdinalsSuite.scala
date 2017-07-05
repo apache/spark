@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TestRelations.testRelation2
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
+import org.apache.spark.sql.internal.SQLConf
 
 class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
   private lazy val a = testRelation2.output(0)
@@ -44,7 +44,7 @@ class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
 
     // order by ordinal can be turned off by config
     comparePlans(
-      new SubstituteUnresolvedOrdinals(conf.copy(orderByOrdinal = false)).apply(plan),
+      new SubstituteUnresolvedOrdinals(conf.copy(SQLConf.ORDER_BY_ORDINAL -> false)).apply(plan),
       testRelation2.orderBy(Literal(1).asc, Literal(2).asc))
   }
 
@@ -60,7 +60,7 @@ class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
 
     // group by ordinal can be turned off by config
     comparePlans(
-      new SubstituteUnresolvedOrdinals(conf.copy(groupByOrdinal = false)).apply(plan2),
+      new SubstituteUnresolvedOrdinals(conf.copy(SQLConf.GROUP_BY_ORDINAL -> false)).apply(plan2),
       testRelation2.groupBy(Literal(1), Literal(2))('a, 'b))
   }
 }

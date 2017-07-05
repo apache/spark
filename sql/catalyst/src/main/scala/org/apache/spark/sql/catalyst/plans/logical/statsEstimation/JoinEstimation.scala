@@ -21,7 +21,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -34,12 +33,12 @@ object JoinEstimation extends Logging {
    * Estimate statistics after join. Return `None` if the join type is not supported, or we don't
    * have enough statistics for estimation.
    */
-  def estimate(conf: CatalystConf, join: Join): Option[Statistics] = {
+  def estimate(join: Join): Option[Statistics] = {
     join.joinType match {
       case Inner | Cross | LeftOuter | RightOuter | FullOuter =>
-        InnerOuterEstimation(conf, join).doEstimate()
+        InnerOuterEstimation(join).doEstimate()
       case LeftSemi | LeftAnti =>
-        LeftSemiAntiEstimation(conf, join).doEstimate()
+        LeftSemiAntiEstimation(join).doEstimate()
       case _ =>
         logDebug(s"[CBO] Unsupported join type: ${join.joinType}")
         None
@@ -47,16 +46,16 @@ object JoinEstimation extends Logging {
   }
 }
 
-case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging {
+case class InnerOuterEstimation(join: Join) extends Logging {
 
-  private val leftStats = join.left.stats(conf)
-  private val rightStats = join.right.stats(conf)
+  private val leftStats = join.left.stats
+  private val rightStats = join.right.stats
 
   /**
    * Estimate output size and number of rows after a join operator, and update output column stats.
    */
   def doEstimate(): Option[Statistics] = join match {
-    case _ if !rowCountsExist(conf, join.left, join.right) =>
+    case _ if !rowCountsExist(join.left, join.right) =>
       None
 
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, _) =>
@@ -217,32 +216,17 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
       if (joinKeyStats.contains(a)) {
         outputAttrStats += a -> joinKeyStats(a)
       } else {
-        val leftRatio = if (leftRows != 0) {
-          BigDecimal(outputRows) / BigDecimal(leftRows)
-        } else {
-          BigDecimal(0)
-        }
-        val rightRatio = if (rightRows != 0) {
-          BigDecimal(outputRows) / BigDecimal(rightRows)
-        } else {
-          BigDecimal(0)
-        }
         val oldColStat = oldAttrStats(a)
         val oldNdv = oldColStat.distinctCount
-        // We only change (scale down) the number of distinct values if the number of rows
-        // decreases after join, because join won't produce new values even if the number of
-        // rows increases.
-        val newNdv = if (join.left.outputSet.contains(a) && leftRatio < 1) {
-          ceil(BigDecimal(oldNdv) * leftRatio)
-        } else if (join.right.outputSet.contains(a) && rightRatio < 1) {
-          ceil(BigDecimal(oldNdv) * rightRatio)
+        val newNdv = if (join.left.outputSet.contains(a)) {
+          updateNdv(oldNumRows = leftRows, newNumRows = outputRows, oldNdv = oldNdv)
         } else {
-          oldNdv
+          updateNdv(oldNumRows = rightRows, newNumRows = outputRows, oldNdv = oldNdv)
         }
+        val newColStat = oldColStat.copy(distinctCount = newNdv)
         // TODO: support nullCount updates for specific outer joins
-        outputAttrStats += a -> oldColStat.copy(distinctCount = newNdv)
+        outputAttrStats += a -> newColStat
       }
-
     }
     outputAttrStats
   }
@@ -288,13 +272,13 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
   }
 }
 
-case class LeftSemiAntiEstimation(conf: CatalystConf, join: Join) {
+case class LeftSemiAntiEstimation(join: Join) {
   def doEstimate(): Option[Statistics] = {
     // TODO: It's error-prone to estimate cardinalities for LeftSemi and LeftAnti based on basic
     // column stats. Now we just propagate the statistics from left side. We should do more
     // accurate estimation when advanced stats (e.g. histograms) are available.
-    if (rowCountsExist(conf, join.left)) {
-      val leftStats = join.left.stats(conf)
+    if (rowCountsExist(join.left)) {
+      val leftStats = join.left.stats
       // Propagate the original column stats for cartesian product
       val outputRows = leftStats.rowCount.get
       Some(Statistics(
