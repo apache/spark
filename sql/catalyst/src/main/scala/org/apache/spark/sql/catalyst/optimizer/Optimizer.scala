@@ -34,10 +34,10 @@ import org.apache.spark.sql.types._
  * Abstract class all optimizers should inherit of, contains the standard batches (extending
  * Optimizers can override this.
  */
-abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
+abstract class Optimizer(sessionCatalog: SessionCatalog)
   extends RuleExecutor[LogicalPlan] {
 
-  protected val fixedPoint = FixedPoint(conf.optimizerMaxIterations)
+  protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
   def batches: Seq[Batch] = {
     Batch("Eliminate Distinct", Once, EliminateDistinct) ::
@@ -178,8 +178,7 @@ class SimpleTestOptimizer extends Optimizer(
   new SessionCatalog(
     new InMemoryCatalog,
     EmptyFunctionRegistry,
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)),
-  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)))
 
 /**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
