@@ -66,6 +66,34 @@ class CrossValidatorSuite
     assert(cvModel.avgMetrics.length === lrParamMaps.length)
   }
 
+  test("cross validation with tuning summary") {
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1.0, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 2))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(3)
+    val cvModel = cv.fit(dataset)
+    assert(cvModel.hasSummary)
+    assert(cvModel.summary.params === lrParamMaps)
+    assert(cvModel.summary.trainingMetrics.count() === lrParamMaps.length)
+    val expectedSummary = spark.createDataFrame(Seq(
+      (0, 0.001),
+      (2, 0.001),
+      (0, 1.0),
+      (2, 1.0),
+      (0, 1000.0),
+      (2, 1000.0)
+    ).map(t => (t._1.toString, t._2.toString))).toDF("maxIter", "regParam")
+    assert(cvModel.summary.trainingMetrics.select("maxIter", "regParam").collect().toSet
+      .equals(expectedSummary.collect().toSet))
+  }
+
   test("cross validation with linear regression") {
     val dataset = sc.parallelize(
       LinearDataGenerator.generateLinearInput(

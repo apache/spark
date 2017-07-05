@@ -74,6 +74,7 @@ object ModelSelectionViaTrainValidationSplitExample {
     model.transform(test)
       .select("features", "label", "prediction")
       .show()
+    model.summary.trainingMetrics.show()
     // $example off$
 
     spark.stop()

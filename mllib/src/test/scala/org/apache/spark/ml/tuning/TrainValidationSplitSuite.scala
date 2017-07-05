@@ -51,15 +51,40 @@ class TrainValidationSplitSuite
       .setEvaluator(eval)
       .setTrainRatio(0.5)
       .setSeed(42L)
-    val tvModel = tvs.fit(dataset)
-    val parent = tvModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    val tvsModel = tvs.fit(dataset)
+    val parent = tvsModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(tvs.getTrainRatio === 0.5)
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
-    assert(tvModel.validationMetrics.length === lrParamMaps.length)
-    assert(tvModel.summary.params === lrParamMaps)
-    assert(tvModel.summary.trainingMetrics.count() === lrParamMaps.length)
-    assert(tvModel.summary.trainingMetrics.columns === Array("maxIter", "regParam", "metrics"))
+    assert(tvsModel.validationMetrics.length === lrParamMaps.length)
+  }
+
+  test("train validation split with tuning summary") {
+    val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1.0, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 2))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val tvs = new TrainValidationSplit()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+    val tvsModel = tvs.fit(dataset)
+    assert(tvsModel.hasSummary)
+    assert(tvsModel.summary.params === lrParamMaps)
+    assert(tvsModel.summary.trainingMetrics.count() === lrParamMaps.length)
+    val expectedSummary = spark.createDataFrame(Seq(
+      (0, 0.001),
+      (2, 0.001),
+      (0, 1.0),
+      (2, 1.0),
+      (0, 1000.0),
+      (2, 1000.0)
+    ).map(t => (t._1.toString, t._2.toString))).toDF("maxIter", "regParam")
+    assert(tvsModel.summary.trainingMetrics.select("maxIter", "regParam").collect().toSet
+      .equals(expectedSummary.collect().toSet))
   }
 
   test("train validation with linear regression") {
@@ -89,7 +114,7 @@ class TrainValidationSplitSuite
     assert(parent.getMaxIter === 10)
     assert(tvsModel.validationMetrics.length === lrParamMaps.length)
 
-      eval.setMetricName("r2")
+    eval.setMetricName("r2")
     val tvsModel2 = tvs.fit(dataset)
     val parent2 = tvsModel2.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent2.getRegParam === 0.001)

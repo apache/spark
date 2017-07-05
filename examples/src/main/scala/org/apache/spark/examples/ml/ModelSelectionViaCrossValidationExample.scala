@@ -112,6 +112,7 @@ object ModelSelectionViaCrossValidationExample {
       .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
         println(s"($id, $text) --> prob=$prob, prediction=$prediction")
       }
+    cvModel.summary.trainingMetrics.show()
     // $example off$
 
     spark.stop()

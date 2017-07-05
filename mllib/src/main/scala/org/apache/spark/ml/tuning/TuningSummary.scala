@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.ml.tuning
 
 import org.apache.spark.annotation.{Experimental, Since}
@@ -29,15 +28,16 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  * @param params  estimator param maps
  * @param metrics  Corresponding evaluation metrics for the param maps
  */
-@Since("2.2.0")
+@Since("2.3.0")
 @Experimental
-class TuningSummary private[tuning](
+private[tuning] class TuningSummary private[tuning](
     val params: Array[ParamMap],
     val metrics: Array[Double],
     val bestIndex: Int) {
 
   /**
-   * Summary of grid search tuning in the format of DataFrame.
+   * Summary of grid search tuning in the format of DataFrame. Each row contains one candidate
+   * paramMap and its corresponding metrics.
    */
   def trainingMetrics: DataFrame = {
     require(params.nonEmpty, "estimator param maps should not be empty")
