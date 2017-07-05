@@ -118,17 +118,20 @@ trait InvokeLike extends Expression with NonSQLExpression {
  * @param arguments An optional list of expressions to pass as arguments to the function.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
  *                      of calling the function.
+ * @param returnNullable When false, indicating the invoked method will always return
+ *                       non-null value.
  */
 case class StaticInvoke(
     staticObject: Class[_],
     dataType: DataType,
     functionName: String,
     arguments: Seq[Expression] = Nil,
-    propagateNull: Boolean = true) extends InvokeLike {
+    propagateNull: Boolean = true,
+    returnNullable: Boolean = true) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
 
   override def eval(input: InternalRow): Any =
@@ -141,19 +144,40 @@ case class StaticInvoke(
 
     val callFunc = s"$objectName.$functionName($argString)"
 
-    // If the function can return null, we do an extra check to make sure our null bit is still set
-    // correctly.
-    val postNullCheck = if (ctx.defaultValue(dataType) == "null") {
-      s"${ev.isNull} = ${ev.value} == null;"
+    val prepareIsNull = if (nullable) {
+      s"boolean ${ev.isNull} = $resultIsNull;"
     } else {
+      ev.isNull = "false"
       ""
+    }
+
+    val evaluate = if (returnNullable) {
+      if (ctx.defaultValue(dataType) == "null") {
+        s"""
+          ${ev.value} = $callFunc;
+          ${ev.isNull} = ${ev.value} == null;
+        """
+      } else {
+        val boxedResult = ctx.freshName("boxedResult")
+        s"""
+          ${ctx.boxedType(dataType)} $boxedResult = $callFunc;
+          ${ev.isNull} = $boxedResult == null;
+          if (!${ev.isNull}) {
+            ${ev.value} = $boxedResult;
+          }
+        """
+      }
+    } else {
+      s"${ev.value} = $callFunc;"
     }
 
     val code = s"""
       $argCode
-      boolean ${ev.isNull} = $resultIsNull;
-      final $javaType ${ev.value} = $resultIsNull ? ${ctx.defaultValue(dataType)} : $callFunc;
-      $postNullCheck
+      $prepareIsNull
+      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!$resultIsNull) {
+        $evaluate
+      }
      """
     ev.copy(code = code)
   }
