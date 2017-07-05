@@ -77,8 +77,9 @@ case class AnalyzeTableCommand(
           calculateRowCountsPerPartition(sparkSession, tableMeta)
         }
 
-      partitions.foreach(p => {
-        val newTotalSize = CommandUtils.calculateTotalSize(sessionState, tableMeta, p)
+      partitions.foreach { p =>
+        val newTotalSize = CommandUtils.calculateLocationSize(sessionState,
+          tableMeta.identifier, p.storage.locationUri)
         val newRowCount = rowCounts.get(p.spec)
 
         def updateStats(newStats: CatalogStatistics): Unit = {
@@ -87,7 +88,7 @@ case class AnalyzeTableCommand(
         }
 
         calculateAndUpdateStats(p.stats, newTotalSize, newRowCount, updateStats)
-      })
+      }
     }
 
     Seq.empty[Row]
@@ -99,27 +100,22 @@ case class AnalyzeTableCommand(
     val filters = partitionSpec.get.map {
       case (columnName, value) => EqualTo(UnresolvedAttribute(columnName), Literal(value))
     }
-    val filter = filters match {
-      case head :: tail =>
-        if (tail.isEmpty) head
-        else tail.foldLeft(head: Expression)((a, b) => And(a, b))
-    }
+    val filter = filters.reduce(And)
 
-    val partitionColumns = tableMeta.partitionColumnNames.map(c => Column(c))
+    val partitionColumns = tableMeta.partitionColumnNames.map(Column(_))
 
     val df = sparkSession.table(tableMeta.identifier).filter(Column(filter))
       .groupBy(partitionColumns: _*).count()
 
     val numPartitionColumns = partitionColumns.size
-    val partitionColumnIndexes = 0 to (numPartitionColumns - 1)
 
-    df.collect().map(r => {
-      val partitionColumnValues = partitionColumnIndexes.map(i => r.get(i).toString)
+    df.collect().map { r =>
+      val partitionColumnValues = partitionColumns.indices.map(r.get(_).toString)
       val spec: TablePartitionSpec =
         tableMeta.partitionColumnNames.zip(partitionColumnValues).toMap
       val count = BigInt(r.getLong(numPartitionColumns))
       (spec, count)
-    }).toMap
+    }.toMap
   }
 
   private def calculateAndUpdateStats(

@@ -646,7 +646,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // convert table statistics to properties so that we can persist them through hive client
     var statsProperties =
       if (stats.isDefined) {
-        statsToHiveProperties(stats.get, rawTable.schema)
+        statsToProperties(stats.get, rawTable.schema)
       } else {
         new mutable.HashMap[String, String]()
       }
@@ -696,7 +696,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // Restore Spark's statistics from information in Metastore.
     val restoredStats =
-      statsFromHiveProperties(table.properties, table.identifier.table, table.schema)
+      statsFromProperties(table.properties, table.identifier.table, table.schema)
     if (restoredStats.isDefined) {
       table = table.copy(stats = restoredStats)
     }
@@ -1002,7 +1002,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     currentFullPath
   }
 
-  private def statsToHiveProperties(
+  private def statsToProperties(
       stats: CatalogStatistics,
       schema: StructType): Map[String, String] = {
 
@@ -1023,7 +1023,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     statsProperties
   }
 
-  private def statsFromHiveProperties(
+  private def statsFromProperties(
       properties: Map[String, String],
       table: String,
       schema: StructType): Option[CatalogStatistics] = {
@@ -1075,7 +1075,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // convert partition statistics to properties so that we can persist them through hive api
     val withStatsProps = lowerCasedParts.map(p => {
       if (p.stats.isDefined) {
-        val statsProperties = statsToHiveProperties(p.stats.get, rawTable.schema)
+        val statsProperties = statsToProperties(p.stats.get, rawTable.schema)
         p.copy(parameters = p.parameters ++ statsProperties)
       } else {
         p
@@ -1105,7 +1105,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // construct Spark's statistics from information in Hive metastore
     val restoredStats =
-      statsFromHiveProperties(partition.parameters, table.identifier.table, table.schema)
+      statsFromProperties(partition.parameters, table.identifier.table, table.schema)
     if (restoredStats.isDefined) {
       partition.copy(
         spec = restoredSpec,

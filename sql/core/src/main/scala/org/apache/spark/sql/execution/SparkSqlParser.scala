@@ -110,11 +110,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     val partitionSpec =
       if (ctx.partitionSpec != null) {
-        val filteredSpec = visitPartitionSpec(ctx.partitionSpec).filter(x => x._2.isDefined)
+        val filteredSpec = visitPartitionSpec(ctx.partitionSpec).filter(_._2.isDefined)
         if (filteredSpec.isEmpty) {
           None
         } else {
-          Some(filteredSpec.mapValues(v => v.get))
+          Some(filteredSpec.mapValues(_.get))
         }
       } else {
         None

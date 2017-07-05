@@ -59,13 +59,6 @@ object CommandUtils extends Logging {
     }
   }
 
-  def calculateTotalSize(
-      sessionState: SessionState,
-      catalogTable: CatalogTable,
-      partition: CatalogTablePartition): Long = {
-    calculateLocationSize(sessionState, catalogTable.identifier, partition.storage.locationUri)
-  }
-
   def calculateLocationSize(
       sessionState: SessionState,
       identifier: TableIdentifier,

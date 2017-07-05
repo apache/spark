@@ -279,9 +279,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
          """.stripMargin)
       sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-03') SELECT * FROM src")
 
-      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS").collect()
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS")
 
-      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS").collect()
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS")
 
       assert(queryStats("2010-01-01").rowCount.get === 500)
       assert(queryStats("2010-01-01").sizeInBytes === 5812)
