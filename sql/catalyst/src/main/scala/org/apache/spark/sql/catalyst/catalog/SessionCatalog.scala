@@ -1056,6 +1056,29 @@ class SessionCatalog(
   }
 
   /**
+   * overwirte a metastore function in the database specified in `funcDefinition`..
+   * If no database is specified, assume the function is in the current database.
+   */
+  def alterFunction(funcDefinition: CatalogFunction): Unit = {
+    val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    requireDbExists(db)
+    val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
+    val newFuncDefinition = funcDefinition.copy(identifier = identifier)
+    if (functionExists(identifier)) {
+      if (functionRegistry.functionExists(identifier)) {
+        // If we have loaded this function into the FunctionRegistry,
+        // also drop it from there.
+        // For a permanent function, because we loaded it to the FunctionRegistry
+        // when it's first used, we also need to drop it from the FunctionRegistry.
+        functionRegistry.dropFunction(identifier)
+      }
+      externalCatalog.alterFunction(db, newFuncDefinition)
+    } else {
+      throw new NoSuchFunctionException(db = db, func = identifier.toString)
+    }
+  }
+
+  /**
    * Retrieve the metadata of a metastore function.
    *
    * If a database is specified in `name`, this will return the function in that database.
@@ -1104,10 +1127,10 @@ class SessionCatalog(
    */
   def registerFunction(
       funcDefinition: CatalogFunction,
-      ignoreIfExists: Boolean,
+      overrideIfExists: Boolean,
       functionBuilder: Option[FunctionBuilder] = None): Unit = {
     val func = funcDefinition.identifier
-    if (functionRegistry.functionExists(func) && !ignoreIfExists) {
+    if (functionRegistry.functionExists(func) && !overrideIfExists) {
       throw new AnalysisException(s"Function $func already exists")
     }
     val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
@@ -1219,7 +1242,7 @@ class SessionCatalog(
     // catalog. So, it is possible that qualifiedName is not exactly the same as
     // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
     // At here, we preserve the input from the user.
-    registerFunction(catalogFunction.copy(identifier = qualifiedName), ignoreIfExists = false)
+    registerFunction(catalogFunction.copy(identifier = qualifiedName), overrideIfExists = false)
     // Now, we need to create the Expression.
     functionRegistry.lookupFunction(qualifiedName, children)
   }
