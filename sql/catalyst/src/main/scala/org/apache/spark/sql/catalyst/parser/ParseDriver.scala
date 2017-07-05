@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -122,13 +121,8 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
-class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser {
-  val astBuilder = new AstBuilder(conf)
-}
-
-/** For test-only. */
 object CatalystSqlParser extends AbstractSqlParser {
-  val astBuilder = new AstBuilder(new SQLConf())
+  val astBuilder = new AstBuilder
 }
 
 /**

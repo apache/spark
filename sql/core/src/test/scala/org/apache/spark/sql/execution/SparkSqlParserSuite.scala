@@ -37,8 +37,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
  */
 class SparkSqlParserSuite extends AnalysisTest {
 
-  val newConf = new SQLConf
-  private lazy val parser = new SparkSqlParser(newConf)
+  private lazy val parser = new SparkSqlParser
 
   /**
    * Normalizes plans:
@@ -285,6 +284,7 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("query organization") {
+    val conf = SQLConf.get
     // Test all valid combinations of order by/sort by/distribute by/cluster by/limit/windows
     val baseSql = "select * from t"
     val basePlan =
@@ -293,20 +293,20 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual(s"$baseSql distribute by a, b",
       RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
         basePlan,
-        numPartitions = newConf.numShufflePartitions))
+        numPartitions = conf.numShufflePartitions))
     assertEqual(s"$baseSql distribute by a sort by b",
       Sort(SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
         global = false,
         RepartitionByExpression(UnresolvedAttribute("a") :: Nil,
           basePlan,
-          numPartitions = newConf.numShufflePartitions)))
+          numPartitions = conf.numShufflePartitions)))
     assertEqual(s"$baseSql cluster by a, b",
       Sort(SortOrder(UnresolvedAttribute("a"), Ascending) ::
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
         global = false,
         RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
           basePlan,
-          numPartitions = newConf.numShufflePartitions)))
+          numPartitions = conf.numShufflePartitions)))
   }
 
   test("pipeline concatenation") {
