@@ -1418,9 +1418,9 @@ setGeneric("split_string", function(x, pattern) { standardGeneric("split_string"
 #' @name NULL
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
 
-#' @param x empty. Should be used with no argument.
-#' @rdname spark_partition_id
+#' @rdname column_nonaggregate_functions
 #' @export
+#' @name NULL
 setGeneric("spark_partition_id", function(x = "missing") { standardGeneric("spark_partition_id") })
 
 #' @rdname column_aggregate_functions
@@ -1538,8 +1538,9 @@ setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
 #' @name NULL
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 
-#' @rdname window
+#' @rdname column_datetime_functions
 #' @export
+#' @name NULL
 setGeneric("window", function(x, ...) { standardGeneric("window") })
 
 #' @rdname column_datetime_functions

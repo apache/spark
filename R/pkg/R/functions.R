@@ -38,10 +38,10 @@ NULL
 #'
 #' Date time functions defined for \code{Column}.
 #'
-#' @param x Column to compute on.
+#' @param x Column to compute on. In \code{window}, it must be a time Column of \code{TimestampType}.
 #' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
-#'               x Column to DateType or TimestampType. For \code{trunc}, it is the string used
-#'               for specifying the truncation method. For example, "year", "yyyy", "yy" for
+#'               Column \code{x} to DateType or TimestampType. For \code{trunc}, it is the string
+#'               to use to specify the truncation method. For example, "year", "yyyy", "yy" for
 #'               truncate by year, or "month", "mon", "mm" for truncate by month.
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
@@ -122,7 +122,7 @@ NULL
 #'           format to. See 'Details'.
 #'      }
 #' @param y Column to compute on.
-#' @param ... additional columns.
+#' @param ... additional Columns.
 #' @name column_string_functions
 #' @rdname column_string_functions
 #' @family string functions
@@ -167,8 +167,7 @@ NULL
 #' tmp <- mutate(df, v1 = crc32(df$model), v2 = hash(df$model),
 #'                   v3 = hash(df$model, df$mpg), v4 = md5(df$model),
 #'                   v5 = sha1(df$model), v6 = sha2(df$model, 256))
-#' head(tmp)
-#' }
+#' head(tmp)}
 NULL
 
 #' Collection functions for Column operations
@@ -189,7 +188,6 @@ NULL
 #' @examples
 #' \dontrun{
 #' # Dataframe used throughout this doc
-#' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))
 #' tmp <- mutate(df, v1 = create_array(df$mpg, df$cyl, df$hp))
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1)))
@@ -394,7 +392,7 @@ setMethod("base64",
           })
 
 #' @details
-#' \code{bin}: An expression that returns the string representation of the binary value
+#' \code{bin}: Returns the string representation of the binary value
 #' of the given long column. For example, bin("12") returns "1100".
 #'
 #' @rdname column_math_functions
@@ -722,7 +720,7 @@ setMethod("dayofyear",
 #' \code{decode}: Computes the first argument into a string from a binary using the provided
 #' character set.
 #'
-#' @param charset Character set to use (one of "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE",
+#' @param charset character set to use (one of "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE",
 #'                "UTF-16LE", "UTF-16").
 #'
 #' @rdname column_string_functions
@@ -855,7 +853,7 @@ setMethod("hex",
           })
 
 #' @details
-#' \code{hour}: Extracts the hours as an integer from a given date/timestamp/string.
+#' \code{hour}: Extracts the hour as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
 #' @aliases hour hour,Column-method
@@ -1177,7 +1175,7 @@ setMethod("min",
           })
 
 #' @details
-#' \code{minute}: Extracts the minutes as an integer from a given date/timestamp/string.
+#' \code{minute}: Extracts the minute as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
 #' @aliases minute minute,Column-method
@@ -1354,7 +1352,7 @@ setMethod("sd",
           })
 
 #' @details
-#' \code{second}: Extracts the seconds as an integer from a given date/timestamp/string.
+#' \code{second}: Extracts the second as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions
 #' @aliases second second,Column-method
@@ -1464,20 +1462,18 @@ setMethod("soundex",
             column(jc)
           })
 
-#' Return the partition ID as a column
-#'
-#' Return the partition ID as a SparkDataFrame column.
+#' @details
+#' \code{spark_partition_id}: Returns the partition ID as a SparkDataFrame column.
 #' Note that this is nondeterministic because it depends on data partitioning and
 #' task scheduling.
+#' This is equivalent to the \code{SPARK_PARTITION_ID} function in SQL.
 #'
-#' This is equivalent to the SPARK_PARTITION_ID function in SQL.
-#'
-#' @rdname spark_partition_id
-#' @name spark_partition_id
-#' @aliases spark_partition_id,missing-method
+#' @rdname column_nonaggregate_functions
+#' @aliases spark_partition_id spark_partition_id,missing-method
 #' @export
 #' @examples
-#' \dontrun{select(df, spark_partition_id())}
+#'
+#' \dontrun{head(select(df, spark_partition_id()))}
 #' @note spark_partition_id since 2.0.0
 setMethod("spark_partition_id",
           signature("missing"),
@@ -2028,7 +2024,7 @@ setMethod("pmod", signature(y = "Column"),
             column(jc)
           })
 
-#' @param rsd maximum estimation error allowed (default = 0.05)
+#' @param rsd maximum estimation error allowed (default = 0.05).
 #'
 #' @rdname column_aggregate_functions
 #' @aliases approxCountDistinct,Column-method
@@ -2220,8 +2216,8 @@ setMethod("from_json", signature(x = "Column", schema = "structType"),
 #' @examples
 #'
 #' \dontrun{
-#' tmp <- mutate(df, from_utc = from_utc_timestamp(df$time, 'PST'),
-#'                  to_utc = to_utc_timestamp(df$time, 'PST'))
+#' tmp <- mutate(df, from_utc = from_utc_timestamp(df$time, "PST"),
+#'                  to_utc = to_utc_timestamp(df$time, "PST"))
 #' head(tmp)}
 #' @note from_utc_timestamp since 1.5.0
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
@@ -2255,7 +2251,7 @@ setMethod("instr", signature(y = "Column", x = "character"),
 #' @details
 #' \code{next_day}: Given a date column, returns the first date which is later than the value of
 #' the date column that is on the specified day of the week. For example,
-#' \code{next_day('2015-07-27', "Sunday")} returns 2015-08-02 because that is the first Sunday
+#' \code{next_day("2015-07-27", "Sunday")} returns 2015-08-02 because that is the first Sunday
 #' after 2015-07-27. Day of the week parameter is case insensitive, and accepts first three or
 #' two characters: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
 #'
@@ -2295,7 +2291,7 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
 #' tmp <- mutate(df, t1 = add_months(df$time, 1),
 #'                   t2 = date_add(df$time, 2),
 #'                   t3 = date_sub(df$time, 3),
-#'                   t4 = next_day(df$time, 'Sun'))
+#'                   t4 = next_day(df$time, "Sun"))
 #' head(tmp)}
 #' @note add_months since 1.5.0
 setMethod("add_months", signature(y = "Column", x = "numeric"),
@@ -2404,8 +2400,8 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRight}: (Unigned) shifts the given value numBits right. If the given value is a long value,
-#' it will return a long value else it will return an integer value.
+#' \code{shiftRightUnsigned}: (Unigned) shifts the given value numBits right. If the given value is
+#' a long value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions
 #' @aliases shiftRightUnsigned shiftRightUnsigned,Column,numeric-method
@@ -2513,14 +2509,13 @@ setMethod("from_unixtime", signature(x = "Column"),
             column(jc)
           })
 
-#' window
-#'
-#' Bucketize rows into one or more time windows given a timestamp specifying column. Window
-#' starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+#' @details
+#' \code{window}: Bucketizes rows into one or more time windows given a timestamp specifying column.
+#' Window starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
 #' [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
-#' the order of months are not supported.
+#' the order of months are not supported. It returns an output column of struct called 'window'
+#' by default with the nested columns 'start' and 'end'
 #'
-#' @param x a time Column. Must be of TimestampType.
 #' @param windowDuration a string specifying the width of the window, e.g. '1 second',
 #'                       '1 day 12 hours', '2 minutes'. Valid interval strings are 'week',
 #'                       'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'. Note that
@@ -2536,27 +2531,22 @@ setMethod("from_unixtime", signature(x = "Column"),
 #'                  window intervals. For example, in order to have hourly tumbling windows
 #'                  that start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
 #'                  \code{startTime} as \code{"15 minutes"}.
-#' @param ... further arguments to be passed to or from other methods.
-#' @return An output column of struct called 'window' by default with the nested columns 'start'
-#'         and 'end'.
-#' @family date time functions
-#' @rdname window
-#' @name window
-#' @aliases window,Column-method
+#' @rdname column_datetime_functions
+#' @aliases window window,Column-method
 #' @export
 #' @examples
-#'\dontrun{
-#'   # One minute windows every 15 seconds 10 seconds after the minute, e.g. 09:00:10-09:01:10,
-#'   # 09:00:25-09:01:25, 09:00:40-09:01:40, ...
-#'   window(df$time, "1 minute", "15 seconds", "10 seconds")
 #'
-#'   # One minute tumbling windows 15 seconds after the minute, e.g. 09:00:15-09:01:15,
-#'    # 09:01:15-09:02:15...
-#'   window(df$time, "1 minute", startTime = "15 seconds")
+#' \dontrun{
+#' # One minute windows every 15 seconds 10 seconds after the minute, e.g. 09:00:10-09:01:10,
+#' # 09:00:25-09:01:25, 09:00:40-09:01:40, ...
+#' window(df$time, "1 minute", "15 seconds", "10 seconds")
 #'
-#'   # Thirty-second windows every 10 seconds, e.g. 09:00:00-09:00:30, 09:00:10-09:00:40, ...
-#'   window(df$time, "30 seconds", "10 seconds")
-#'}
+#' # One minute tumbling windows 15 seconds after the minute, e.g. 09:00:15-09:01:15,
+#' # 09:01:15-09:02:15...
+#' window(df$time, "1 minute", startTime = "15 seconds")
+#'
+#' # Thirty-second windows every 10 seconds, e.g. 09:00:00-09:00:30, 09:00:10-09:00:40, ...
+#' window(df$time, "30 seconds", "10 seconds")}
 #' @note window since 2.0.0
 setMethod("window", signature(x = "Column"),
           function(x, windowDuration, slideDuration = NULL, startTime = NULL) {
@@ -3046,7 +3036,7 @@ setMethod("row_number",
 #' \code{array_contains}: Returns null if the array is null, true if the array contains
 #' the value, and false otherwise.
 #'
-#' @param value A value to be checked if contained in the column
+#' @param value a value to be checked if contained in the column
 #' @rdname column_collection_functions
 #' @aliases array_contains array_contains,Column-method
 #' @export
@@ -3091,7 +3081,7 @@ setMethod("size",
 #' to the natural ordering of the array elements.
 #'
 #' @rdname column_collection_functions
-#' @param asc A logical flag indicating the sorting order.
+#' @param asc a logical flag indicating the sorting order.
 #'            TRUE, sorting is in ascending order.
 #'            FALSE, sorting is in descending order.
 #' @aliases sort_array sort_array,Column-method
@@ -3218,7 +3208,7 @@ setMethod("split_string",
 #' \code{repeat_string}: Repeats string n times.
 #' Equivalent to \code{repeat} SQL function.
 #'
-#' @param n Number of repetitions
+#' @param n number of repetitions.
 #' @rdname column_string_functions
 #' @aliases repeat_string repeat_string,Column-method
 #' @export
@@ -3347,7 +3337,7 @@ setMethod("grouping_bit",
 #' \code{grouping_id}: Returns the level of grouping.
 #' Equals to \code{
 #' grouping_bit(c1) * 2^(n - 1) + grouping_bit(c2) * 2^(n - 2)  + ... + grouping_bit(cn)
-#' }
+#' }.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases grouping_id grouping_id,Column-method
