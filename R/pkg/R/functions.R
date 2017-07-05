@@ -39,9 +39,9 @@ NULL
 #' Date time functions defined for \code{Column}.
 #'
 #' @param x Column to compute on. In \code{window}, it must be a time Column of \code{TimestampType}.
-#' @param format For \code{to_date} and \code{to_timestamp}, it is the string used to parse
-#'               Column \code{x} to DateType or TimestampType. For \code{trunc}, it is the string used
-#'               for specifying the truncation method. For example, "year", "yyyy", "yy" for
+#' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
+#'               Column \code{x} to DateType or TimestampType. For \code{trunc}, it is the string
+#'               to use to specify the truncation method. For example, "year", "yyyy", "yy" for
 #'               truncate by year, or "month", "mon", "mm" for truncate by month.
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
