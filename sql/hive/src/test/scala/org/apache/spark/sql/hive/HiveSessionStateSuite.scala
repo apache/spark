@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 /**
- * Run all tests from `SessionStateSuite` with a `HiveSessionState`.
+ * Run all tests from `SessionStateSuite` with a Hive based `SessionState`.
  */
 class HiveSessionStateSuite extends SessionStateSuite
   with TestHiveSingleton with BeforeAndAfterEach {

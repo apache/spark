@@ -204,20 +204,19 @@ object JavaTypeInference {
     typeToken.getRawType match {
       case c if !inferExternalType(c).isInstanceOf[ObjectType] => getPath
 
-      case c if c == classOf[java.lang.Short] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Integer] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Long] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Double] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Byte] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Float] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Boolean] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
+      case c if c == classOf[java.lang.Short] ||
+                c == classOf[java.lang.Integer] ||
+                c == classOf[java.lang.Long] ||
+                c == classOf[java.lang.Double] ||
+                c == classOf[java.lang.Float] ||
+                c == classOf[java.lang.Byte] ||
+                c == classOf[java.lang.Boolean] =>
+        StaticInvoke(
+          c,
+          ObjectType(c),
+          "valueOf",
+          getPath :: Nil,
+          propagateNull = true)
 
       case c if c == classOf[java.sql.Date] =>
         StaticInvoke(
@@ -268,16 +267,11 @@ object JavaTypeInference {
 
       case c if listType.isAssignableFrom(typeToken) =>
         val et = elementType(typeToken)
-        val array =
-          Invoke(
-            MapObjects(
-              p => deserializerFor(et, Some(p)),
-              getPath,
-              inferDataType(et)._1),
-            "array",
-            ObjectType(classOf[Array[Any]]))
-
-        StaticInvoke(classOf[java.util.Arrays], ObjectType(c), "asList", array :: Nil)
+        MapObjects(
+          p => deserializerFor(et, Some(p)),
+          getPath,
+          inferDataType(et)._1,
+          customCollectionCls = Some(c))
 
       case _ if mapType.isAssignableFrom(typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)

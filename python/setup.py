@@ -167,7 +167,6 @@ try:
                   'pyspark.ml',
                   'pyspark.ml.linalg',
                   'pyspark.ml.param',
-                  'pyspark.ml.stat',
                   'pyspark.sql',
                   'pyspark.streaming',
                   'pyspark.bin',
@@ -200,7 +199,7 @@ try:
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
-            'sql': ['pandas']
+            'sql': ['pandas>=0.13.0']
         },
         classifiers=[
             'Development Status :: 5 - Production/Stable',

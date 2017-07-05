@@ -218,7 +218,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckLastBatch((10, 5)),
       StopStream,
-      AssertOnQuery { q => // clear the sink
+      AssertOnQuery { q => // purge commit and clear the sink
+        val commit = q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
+        q.batchCommitLog.purge(commit)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
@@ -340,6 +342,16 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       .filter(_.metadata.contains(EventTimeWatermark.delayKey))
     assert(eventTimeColumns.size === 1)
     assert(eventTimeColumns(0).name === "second")
+  }
+
+  test("EventTime watermark should be ignored in batch query.") {
+    val df = testData
+      .withColumn("eventTime", $"key".cast("timestamp"))
+      .withWatermark("eventTime", "1 minute")
+      .select("eventTime")
+      .as[Long]
+
+    checkDataset[Long](df, 1L to 100L: _*)
   }
 
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>

@@ -156,6 +156,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Seq(Row(1, "a"), Row(2, null), Row(null, null))))
   }
 
+  test("from_json uses DDL strings for defining a schema - java") {
+    val df = Seq("""{"a": 1, "b": "haa"}""").toDS()
+    checkAnswer(
+      df.select(from_json($"value", "a INT, b STRING", new java.util.HashMap[String, String]())),
+      Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("from_json uses DDL strings for defining a schema - scala") {
+    val df = Seq("""{"a": 1, "b": "haa"}""").toDS()
+    checkAnswer(
+      df.select(from_json($"value", "a INT, b STRING", Map[String, String]())),
+      Row(Row(1, "haa")) :: Nil)
+  }
+
   test("to_json - struct") {
     val df = Seq(Tuple1(Tuple1(1))).toDF("a")
 
@@ -267,7 +281,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val errMsg2 = intercept[AnalysisException] {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
-    assert(errMsg2.getMessage.contains("DataType invalidtype() is not supported"))
+    assert(errMsg2.getMessage.contains("DataType invalidtype is not supported"))
     val errMsg3 = intercept[AnalysisException] {
       df3.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
     }

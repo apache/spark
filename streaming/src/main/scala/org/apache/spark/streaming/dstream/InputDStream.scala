@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.dstream
 
+import java.util.Locale
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
@@ -60,7 +62,7 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
       .split("(?=[A-Z])")
       .filter(_.nonEmpty)
       .mkString(" ")
-      .toLowerCase
+      .toLowerCase(Locale.ROOT)
       .capitalize
     s"$newName [$id]"
   }
@@ -74,7 +76,7 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
   protected[streaming] override val baseScope: Option[String] = {
     val scopeName = Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY))
       .map { json => RDDOperationScope.fromJson(json).name + s" [$id]" }
-      .getOrElse(name.toLowerCase)
+      .getOrElse(name.toLowerCase(Locale.ROOT))
     Some(new RDDOperationScope(scopeName).toJson)
   }
 

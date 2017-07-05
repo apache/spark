@@ -80,7 +80,7 @@ private[deploy] class Master(
   private val waitingDrivers = new ArrayBuffer[DriverInfo]
   private var nextDriverNumber = 0
 
-  Utils.checkHost(address.host, "Expected hostname")
+  Utils.checkHost(address.host)
 
   private val masterMetricsSystem = MetricsSystem.createMetricsSystem("master", conf, securityMgr)
   private val applicationMetricsSystem = MetricsSystem.createMetricsSystem("applications", conf,
@@ -231,7 +231,8 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
-    case RegisterWorker(id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) =>
+    case RegisterWorker(
+      id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl, masterAddress) =>
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -243,7 +244,7 @@ private[deploy] class Master(
           workerRef, workerWebUiUrl)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
-          workerRef.send(RegisteredWorker(self, masterWebUiUrl))
+          workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress))
           schedule()
         } else {
           val workerAddress = worker.endpoint.address
@@ -366,7 +367,7 @@ private[deploy] class Master(
             drivers.find(_.id == driverId).foreach { driver =>
               driver.worker = Some(worker)
               driver.state = DriverState.RUNNING
-              worker.drivers(driverId) = driver
+              worker.addDriver(driver)
             }
           }
         case None =>
@@ -497,7 +498,7 @@ private[deploy] class Master(
   override def onDisconnected(address: RpcAddress): Unit = {
     // The disconnected client could've been either a worker or an app; remove whichever it was
     logInfo(s"$address got disassociated, removing it.")
-    addressToWorker.get(address).foreach(removeWorker)
+    addressToWorker.get(address).foreach(removeWorker(_, s"${address} got disassociated"))
     addressToApp.get(address).foreach(finishApplication)
     if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
   }
@@ -543,8 +544,12 @@ private[deploy] class Master(
     state = RecoveryState.COMPLETING_RECOVERY
 
     // Kill off any workers and apps that didn't respond to us.
-    workers.filter(_.state == WorkerState.UNKNOWN).foreach(removeWorker)
+    workers.filter(_.state == WorkerState.UNKNOWN).foreach(
+      removeWorker(_, "Not responding for recovery"))
     apps.filter(_.state == ApplicationState.UNKNOWN).foreach(finishApplication)
+
+    // Update the state of recovered apps to RUNNING
+    apps.filter(_.state == ApplicationState.WAITING).foreach(_.state = ApplicationState.RUNNING)
 
     // Reschedule drivers which were not claimed by any workers
     drivers.filter(_.worker.isEmpty).foreach { d =>
@@ -654,19 +659,22 @@ private[deploy] class Master(
   private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
-    for (app <- waitingApps if app.coresLeft > 0) {
-      val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
-      // Filter out workers that don't have enough resources to launch an executor
-      val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-        .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-          worker.coresFree >= coresPerExecutor.getOrElse(1))
-        .sortBy(_.coresFree).reverse
-      val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
+    for (app <- waitingApps) {
+      val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
+      // If the cores left is less than the coresPerExecutor,the cores left will not be allocated
+      if (app.coresLeft >= coresPerExecutor) {
+        // Filter out workers that don't have enough resources to launch an executor
+        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+          .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
+            worker.coresFree >= coresPerExecutor)
+          .sortBy(_.coresFree).reverse
+        val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
-      // Now that we've decided how many cores to allocate on each worker, let's allocate them
-      for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
-        allocateWorkerResourceToExecutors(
-          app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
+        // Now that we've decided how many cores to allocate on each worker, let's allocate them
+        for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
+          allocateWorkerResourceToExecutors(
+            app, assignedCores(pos), app.desc.coresPerExecutor, usableWorkers(pos))
+        }
       }
     }
   }
@@ -751,7 +759,7 @@ private[deploy] class Master(
       if (oldWorker.state == WorkerState.UNKNOWN) {
         // A worker registering from UNKNOWN implies that the worker was restarted during recovery.
         // The old worker must thus be dead, so we will remove it and accept the new worker.
-        removeWorker(oldWorker)
+        removeWorker(oldWorker, "Worker replaced by a new worker with same address")
       } else {
         logInfo("Attempted to re-register worker at same address: " + workerAddress)
         return false
@@ -767,7 +775,7 @@ private[deploy] class Master(
     true
   }
 
-  private def removeWorker(worker: WorkerInfo) {
+  private def removeWorker(worker: WorkerInfo, msg: String) {
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
@@ -791,13 +799,27 @@ private[deploy] class Master(
         removeDriver(driver.id, DriverState.ERROR, None)
       }
     }
+    logInfo(s"Telling app of lost worker: " + worker.id)
+    apps.filterNot(completedApps.contains(_)).foreach { app =>
+      app.driver.send(WorkerRemoved(worker.id, worker.host, msg))
+    }
     persistenceEngine.removeWorker(worker)
   }
 
   private def relaunchDriver(driver: DriverInfo) {
-    driver.worker = None
-    driver.state = DriverState.RELAUNCHING
-    waitingDrivers += driver
+    // We must setup a new driver with a new driver id here, because the original driver may
+    // be still running. Consider this scenario: a worker is network partitioned with master,
+    // the master then relaunches driver driverID1 with a driver id driverID2, then the worker
+    // reconnects to master. From this point on, if driverID2 is equal to driverID1, then master
+    // can not distinguish the statusUpdate of the original driver and the newly relaunched one,
+    // for example, when DriverStateChanged(driverID1, KILLED) arrives at master, master will
+    // remove driverID1, so the newly relaunched driver disappears too. See SPARK-19900 for details.
+    removeDriver(driver.id, DriverState.RELAUNCHING, None)
+    val newDriver = createDriver(driver.desc)
+    persistenceEngine.addDriver(newDriver)
+    drivers.add(newDriver)
+    waitingDrivers += newDriver
+
     schedule()
   }
 
@@ -965,7 +987,7 @@ private[deploy] class Master(
       if (worker.state != WorkerState.DEAD) {
         logWarning("Removing %s because we got no heartbeat in %d seconds".format(
           worker.id, WORKER_TIMEOUT_MS / 1000))
-        removeWorker(worker)
+        removeWorker(worker, s"Not receiving heartbeat for ${WORKER_TIMEOUT_MS / 1000} seconds")
       } else {
         if (worker.lastHeartbeat < currentTime - ((REAPER_ITERATIONS + 1) * WORKER_TIMEOUT_MS)) {
           workers -= worker // we've seen this DEAD worker in the UI, etc. for long enough; cull it

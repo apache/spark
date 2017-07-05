@@ -75,9 +75,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
-    confs.foreach { case (k, v) =>
-      conf.set(k, v)
-    }
+    confs.foreach { case (k, v) => conf.set(k, v) }
     sc = new SparkContext(conf)
     taskScheduler = new TaskSchedulerImpl(sc)
     setupHelper()
@@ -89,7 +87,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     conf.set(config.BLACKLIST_ENABLED, true)
     sc = new SparkContext(conf)
     taskScheduler =
-      new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4), Some(blacklist)) {
+      new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4)) {
         override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
           val tsm = super.createTaskSetManager(taskSet, maxFailures)
           // we need to create a spied tsm just so we can set the TaskSetBlacklist
@@ -100,6 +98,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
           stageToMockTaskSetBlacklist(taskSet.stageId) = taskSetBlacklist
           tsmSpy
         }
+
+        override private[scheduler] lazy val blacklistTrackerOpt = Some(blacklist)
       }
     setupHelper()
   }
@@ -903,5 +903,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1))).flatten
     assert(taskDescs.size === 1)
     assert(taskDescs.head.executorId === "exec2")
+  }
+
+  test("TaskScheduler should throw IllegalArgumentException when schedulingMode is not supported") {
+    intercept[IllegalArgumentException] {
+      val taskScheduler = setupScheduler(
+        TaskSchedulerImpl.SCHEDULER_MODE_PROPERTY -> SchedulingMode.NONE.toString)
+      taskScheduler.initialize(new FakeSchedulerBackend)
+    }
   }
 }

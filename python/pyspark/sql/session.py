@@ -33,7 +33,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import Row, DataType, StringType, StructType, _verify_type, \
+from pyspark.sql.types import Row, DataType, StringType, StructType, _make_type_verifier, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
 
@@ -220,6 +220,17 @@ class SparkSession(object):
         if SparkSession._instantiatedSession is None \
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
+
+    def _repr_html_(self):
+        return """
+            <div>
+                <p><b>SparkSession - {catalogImplementation}</b></p>
+                {sc_HTML}
+            </div>
+        """.format(
+            catalogImplementation=self.conf.get("spark.sql.catalogImplementation"),
+            sc_HTML=self.sparkContext._repr_html_()
+        )
 
     @since(2.0)
     def newSession(self):
@@ -503,17 +514,21 @@ class SparkSession(object):
                 schema = [str(x) for x in data.columns]
             data = [r.tolist() for r in data.to_records(index=False)]
 
-        verify_func = _verify_type if verifySchema else lambda _, t: True
         if isinstance(schema, StructType):
+            verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
+
             def prepare(obj):
-                verify_func(obj, schema)
+                verify_func(obj)
                 return obj
         elif isinstance(schema, DataType):
             dataType = schema
             schema = StructType().add("value", schema)
 
+            verify_func = _make_type_verifier(
+                dataType, name="field value") if verifySchema else lambda _: True
+
             def prepare(obj):
-                verify_func(obj, dataType)
+                verify_func(obj)
                 return obj,
         else:
             if isinstance(schema, list):
@@ -575,7 +590,7 @@ class SparkSession(object):
         Returns a :class:`DataStreamReader` that can be used to read data streams
         as a streaming :class:`DataFrame`.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :return: :class:`DataStreamReader`
         """
@@ -587,7 +602,7 @@ class SparkSession(object):
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` StreamingQueries active on `this` context.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :return: :class:`StreamingQueryManager`
         """

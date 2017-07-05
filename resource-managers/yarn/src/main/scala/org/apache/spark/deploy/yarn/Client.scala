@@ -21,7 +21,7 @@ import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
 import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.util.{Properties, UUID}
+import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
@@ -49,7 +49,7 @@ import org.apache.hadoop.yarn.util.Records
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
+import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
@@ -121,7 +121,10 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
-  private val credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+  private val credentialManager = new YARNHadoopDelegationTokenManager(
+    sparkConf,
+    hadoopConf,
+    YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, hadoopConf))
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
@@ -368,9 +371,12 @@ private[spark] class Client(
     val fs = destDir.getFileSystem(hadoopConf)
 
     // Merge credentials obtained from registered providers
-    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
+    val nearestTimeOfNextRenewal = credentialManager.obtainDelegationTokens(hadoopConf, credentials)
 
     if (credentials != null) {
+      // Add credentials to current user's UGI, so that following operations don't need to use the
+      // Kerberos tgt to get delegations again in the client side.
+      UserGroupInformation.getCurrentUser.addCredentials(credentials)
       logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
     }
 
@@ -529,7 +535,7 @@ private[spark] class Client(
           try {
             jarsStream.setLevel(0)
             jarsDir.listFiles().foreach { f =>
-              if (f.isFile && f.getName.toLowerCase().endsWith(".jar") && f.canRead) {
+              if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
                 jarsStream.putNextEntry(new ZipEntry(f.getName))
                 Files.copy(f, jarsStream)
                 jarsStream.closeEntry()
@@ -542,6 +548,7 @@ private[spark] class Client(
           distribute(jarsArchive.toURI.getPath,
             resType = LocalResourceType.ARCHIVE,
             destName = Some(LOCALIZED_LIB_DIR))
+          jarsArchive.delete()
       }
     }
 
@@ -574,7 +581,7 @@ private[spark] class Client(
     ).foreach { case (flist, resType, addToClasspath) =>
       flist.foreach { file =>
         val (_, localizedPath) = distribute(file, resType = resType)
-        // If addToClassPath, we ignore adding jar multiple times to distitrbuted cache.
+        // If addToClassPath, we ignore adding jar multiple times to distributed cache.
         if (addToClasspath) {
           if (localizedPath != null) {
             cachedSecondaryJarLinks += localizedPath
@@ -1271,7 +1278,8 @@ private object Client extends Logging {
     if (sparkConf.get(SPARK_ARCHIVE).isEmpty) {
       sparkConf.get(SPARK_JARS).foreach { jars =>
         jars.filter(isLocalUri).foreach { jar =>
-          addClasspathEntry(getClusterPath(sparkConf, jar), env)
+          val uri = new URI(jar)
+          addClasspathEntry(getClusterPath(sparkConf, uri.getPath()), env)
         }
       }
     }

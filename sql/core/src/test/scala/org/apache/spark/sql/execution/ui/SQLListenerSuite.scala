@@ -25,6 +25,7 @@ import org.mockito.Mockito.mock
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -477,9 +478,11 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExe
 
   override def doExecute(): RDD[InternalRow] = {
     longMetric("dummy") += expectedValue
-    sc.listenerBus.post(SparkListenerDriverAccumUpdates(
-      sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY).toLong,
-      metrics.values.map(m => m.id -> m.value).toSeq))
+
+    SQLMetrics.postDriverMetricUpdates(
+      sc,
+      sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+      metrics.values.toSeq)
     sc.emptyRDD
   }
 }
@@ -494,8 +497,7 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
         .setAppName("test")
         .set(config.MAX_TASK_FAILURES, 1) // Don't retry the tasks to run this test quickly
         .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
-      val sc = new SparkContext(conf)
-      try {
+      withSpark(new SparkContext(conf)) { sc =>
         SparkSession.sqlListener.set(null)
         val spark = new SparkSession(sc)
         import spark.implicits._
@@ -520,8 +522,6 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
         assert(spark.sharedState.listener.executionIdToData.size <= 100)
         assert(spark.sharedState.listener.jobIdToExecutionId.size <= 100)
         assert(spark.sharedState.listener.stageIdToStageMetrics.size <= 100)
-      } finally {
-        sc.stop()
       }
     }
   }

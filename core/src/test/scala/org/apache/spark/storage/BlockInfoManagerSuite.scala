@@ -152,7 +152,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     // one should acquire the write lock. The second thread should block until the winner of the
     // write race releases its lock.
     val winningFuture: Future[Boolean] =
-      Await.ready(Future.firstCompletedOf(Seq(lock1Future, lock2Future)), 1.seconds)
+      ThreadUtils.awaitReady(Future.firstCompletedOf(Seq(lock1Future, lock2Future)), 1.seconds)
     assert(winningFuture.value.get.get)
     val winningTID = blockInfoManager.get("block").get.writerTask
     assert(winningTID === 1 || winningTID === 2)

@@ -33,8 +33,7 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.catalyst.util.FailureSafeParser
-import org.apache.spark.sql.execution.datasources.{CodecStreams, DataSource, HadoopFileLinesReader, PartitionedFile}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
@@ -87,8 +86,8 @@ abstract class JsonDataSource extends Serializable {
 
 object JsonDataSource {
   def apply(options: JSONOptions): JsonDataSource = {
-    if (options.wholeFile) {
-      WholeFileJsonDataSource
+    if (options.multiLine) {
+      MultiLineJsonDataSource
     } else {
       TextInputJsonDataSource
     }
@@ -148,7 +147,7 @@ object TextInputJsonDataSource extends JsonDataSource {
   }
 }
 
-object WholeFileJsonDataSource extends JsonDataSource {
+object MultiLineJsonDataSource extends JsonDataSource {
   override val isSplitable: Boolean = {
     false
   }

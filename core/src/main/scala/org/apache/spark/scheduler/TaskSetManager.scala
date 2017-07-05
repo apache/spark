@@ -19,11 +19,10 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
-import java.util.Arrays
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.math.{max, min}
+import scala.math.max
 import scala.util.control.NonFatal
 
 import org.apache.spark._
@@ -31,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
+import org.apache.spark.util.collection.MedianHeap
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -63,6 +63,8 @@ private[spark] class TaskSetManager(
   // Limit of bytes for total size of results (default is 1GB)
   val maxResultSize = Utils.getMaxResultSize(conf)
 
+  val speculationEnabled = conf.getBoolean("spark.speculation", false)
+
   // Serializer for closures and tasks.
   val env = SparkEnv.get
   val ser = env.closureSerializer.newInstance()
@@ -78,16 +80,16 @@ private[spark] class TaskSetManager(
   private val numFailures = new Array[Int](numTasks)
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
-  var tasksSuccessful = 0
+  private[scheduler] var tasksSuccessful = 0
 
-  var weight = 1
-  var minShare = 0
+  val weight = 1
+  val minShare = 0
   var priority = taskSet.priority
   var stageId = taskSet.stageId
   val name = "TaskSet_" + taskSet.id
   var parent: Pool = null
-  var totalResultSize = 0L
-  var calculatedTasks = 0
+  private var totalResultSize = 0L
+  private var calculatedTasks = 0
 
   private[scheduler] val taskSetBlacklistHelperOpt: Option[TaskSetBlacklist] = {
     blacklistTracker.map { _ =>
@@ -95,9 +97,13 @@ private[spark] class TaskSetManager(
     }
   }
 
-  val runningTasksSet = new HashSet[Long]
+  private[scheduler] val runningTasksSet = new HashSet[Long]
 
   override def runningTasks: Int = runningTasksSet.size
+
+  def someAttemptSucceeded(tid: Long): Boolean = {
+    successful(taskInfos(tid).index)
+  }
 
   // True once no more tasks should be launched for this task set manager. TaskSetManagers enter
   // the zombie state once at least one attempt of each task has completed successfully, or if the
@@ -105,7 +111,7 @@ private[spark] class TaskSetManager(
   // state until all tasks have finished running; we keep TaskSetManagers that are in the zombie
   // state in order to continue to track and account for the running tasks.
   // TODO: We should kill any running task attempts when the task set manager becomes a zombie.
-  var isZombie = false
+  private[scheduler] var isZombie = false
 
   // Set of pending tasks for each executor. These collections are actually
   // treated as stacks, in which new tasks are added to the end of the
@@ -129,17 +135,22 @@ private[spark] class TaskSetManager(
   private val pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
 
   // Set containing pending tasks with no locality preferences.
-  var pendingTasksWithNoPrefs = new ArrayBuffer[Int]
+  private[scheduler] var pendingTasksWithNoPrefs = new ArrayBuffer[Int]
 
   // Set containing all pending tasks (also used as a stack, as above).
-  val allPendingTasks = new ArrayBuffer[Int]
+  private val allPendingTasks = new ArrayBuffer[Int]
 
   // Tasks that can be speculated. Since these will be a small fraction of total
   // tasks, we'll just hold them in a HashSet.
-  val speculatableTasks = new HashSet[Int]
+  private[scheduler] val speculatableTasks = new HashSet[Int]
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
-  val taskInfos = new HashMap[Long, TaskInfo]
+  private val taskInfos = new HashMap[Long, TaskInfo]
+
+  // Use a MedianHeap to record durations of successful tasks so we know when to launch
+  // speculative tasks. This is only used when speculation is enabled, to avoid the overhead
+  // of inserting into the heap when the heap won't be used.
+  val successfulTaskDurations = new MedianHeap()
 
   // How frequently to reprint duplicate exceptions in full, in milliseconds
   val EXCEPTION_PRINT_INTERVAL =
@@ -148,7 +159,7 @@ private[spark] class TaskSetManager(
   // Map of recent exceptions (identified by string representation and top stack frame) to
   // duplicate count (how many times the same exception has appeared) and time the full exception
   // was printed. This should ideally be an LRU map that can drop old exceptions automatically.
-  val recentExceptions = HashMap[String, (Int, Long)]()
+  private val recentExceptions = HashMap[String, (Int, Long)]()
 
   // Figure out the current map output tracker epoch and set it on all tasks
   val epoch = sched.mapOutputTracker.getEpoch
@@ -169,20 +180,22 @@ private[spark] class TaskSetManager(
    * This allows a performance optimization, of skipping levels that aren't relevant (eg., skip
    * PROCESS_LOCAL if no tasks could be run PROCESS_LOCAL for the current set of executors).
    */
-  var myLocalityLevels = computeValidLocalityLevels()
-  var localityWaits = myLocalityLevels.map(getLocalityWait) // Time to wait at each level
+  private[scheduler] var myLocalityLevels = computeValidLocalityLevels()
+
+  // Time to wait at each level
+  private[scheduler] var localityWaits = myLocalityLevels.map(getLocalityWait)
 
   // Delay scheduling variables: we keep track of our current locality level and the time we
   // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
   // We then move down if we manage to launch a "more local" task.
-  var currentLocalityIndex = 0    // Index of our current locality level in validLocalityLevels
-  var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
+  private var currentLocalityIndex = 0 // Index of our current locality level in validLocalityLevels
+  private var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
 
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
   override def schedulingMode: SchedulingMode = SchedulingMode.NONE
 
-  var emittedTaskSizeWarning = false
+  private[scheduler] var emittedTaskSizeWarning = false
 
   /** Add a task to all the pending-task lists that it should be on. */
   private def addPendingTask(index: Int) {
@@ -696,21 +709,22 @@ private[spark] class TaskSetManager(
     val info = taskInfos(tid)
     val index = info.index
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+    if (speculationEnabled) {
+      successfulTaskDurations.insert(info.duration)
+    }
     removeRunningTask(tid)
-    // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
-    // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
-    // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
-    // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
-    // Note: "result.value()" only deserializes the value when it's called at the first time, so
-    // here "result.value()" just returns the value and won't block other threads.
-    sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates, info)
+
     // Kill any other attempts for the same task (since those are unnecessary now that one
     // attempt completed successfully).
     for (attemptInfo <- taskAttempts(index) if attemptInfo.running) {
       logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
         s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
         s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
-      sched.backend.killTask(attemptInfo.taskId, attemptInfo.executorId, true)
+      sched.backend.killTask(
+        attemptInfo.taskId,
+        attemptInfo.executorId,
+        interruptThread = true,
+        reason = "another attempt succeeded")
     }
     if (!successful(index)) {
       tasksSuccessful += 1
@@ -726,6 +740,13 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
+    // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
+    // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
+    // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
+    // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
+    // Note: "result.value()" only deserializes the value when it's called at the first time, so
+    // here "result.value()" just returns the value and won't block other threads.
+    sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates, info)
     maybeFinishTaskSet()
   }
 
@@ -753,6 +774,12 @@ private[spark] class TaskSetManager(
           tasksSuccessful += 1
         }
         isZombie = true
+
+        if (fetchFailed.bmAddress != null) {
+          blacklistTracker.foreach(_.updateBlacklistForFetchFailure(
+            fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
+        }
+
         None
 
       case ef: ExceptionFailure =>
@@ -917,11 +944,10 @@ private[spark] class TaskSetManager(
     var foundTasks = false
     val minFinishedForSpeculation = (SPECULATION_QUANTILE * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
+
     if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
       val time = clock.getTimeMillis()
-      val durations = taskInfos.values.filter(_.successful).map(_.duration).toArray
-      Arrays.sort(durations)
-      val medianDuration = durations(min((0.5 * tasksSuccessful).round.toInt, durations.length - 1))
+      var medianDuration = successfulTaskDurations.median
       val threshold = max(SPECULATION_MULTIPLIER * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.

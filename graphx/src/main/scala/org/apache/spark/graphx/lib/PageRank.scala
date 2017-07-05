@@ -226,18 +226,18 @@ object PageRank extends Logging {
       // Propagates the message along outbound edges
       // and adding start nodes back in with activation resetProb
       val rankUpdates = rankGraph.aggregateMessages[BV[Double]](
-        ctx => ctx.sendToDst(ctx.srcAttr :* ctx.attr),
-        (a : BV[Double], b : BV[Double]) => a :+ b, TripletFields.Src)
+        ctx => ctx.sendToDst(ctx.srcAttr *:* ctx.attr),
+        (a : BV[Double], b : BV[Double]) => a +:+ b, TripletFields.Src)
 
       rankGraph = rankGraph.outerJoinVertices(rankUpdates) {
         (vid, oldRank, msgSumOpt) =>
-          val popActivations: BV[Double] = msgSumOpt.getOrElse(zero) :* (1.0 - resetProb)
+          val popActivations: BV[Double] = msgSumOpt.getOrElse(zero) *:* (1.0 - resetProb)
           val resetActivations = if (sourcesInitMapBC.value contains vid) {
-            sourcesInitMapBC.value(vid) :* resetProb
+            sourcesInitMapBC.value(vid) *:* resetProb
           } else {
             zero
           }
-          popActivations :+ resetActivations
+          popActivations +:+ resetActivations
         }.cache()
 
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
@@ -250,9 +250,9 @@ object PageRank extends Logging {
     }
 
     // SPARK-18847 If the graph has sinks (vertices with no outgoing edges) correct the sum of ranks
-    val rankSums = rankGraph.vertices.values.fold(zero)(_ :+ _)
+    val rankSums = rankGraph.vertices.values.fold(zero)(_ +:+ _)
     rankGraph.mapVertices { (vid, attr) =>
-      Vectors.fromBreeze(attr :/ rankSums)
+      Vectors.fromBreeze(attr /:/ rankSums)
     }
   }
 

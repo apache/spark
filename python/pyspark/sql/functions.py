@@ -144,12 +144,6 @@ _functions_2_1 = {
                'measured in radians.',
 }
 
-_functions_2_2 = {
-    'to_date': 'Converts a string date into a DateType using the (optionally) specified format.',
-    'to_timestamp': 'Converts a string timestamp into a timestamp type using the ' +
-                    '(optionally) specified format.',
-}
-
 # math functions that take two arguments as input
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
@@ -987,9 +981,10 @@ def months_between(date1, date2):
 def to_date(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
-    using the optionally specified format. Default format is 'yyyy-MM-dd'.
-    Specify formats according to
+    using the optionally specified format. Specify formats according to
     `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
+    By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
+    is omitted (equivalent to ``col.cast("date")``).
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_date(df.t).alias('date')).collect()
@@ -1011,9 +1006,10 @@ def to_date(col, format=None):
 def to_timestamp(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
-    using the optionally specified format. Default format is 'yyyy-MM-dd HH:mm:ss'. Specify
-    formats according to
+    using the optionally specified format. Specify formats according to
     `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
+    By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
+    is omitted (equivalent to ``col.cast("timestamp")``).
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_timestamp(df.t).alias('dt')).collect()
@@ -1327,8 +1323,8 @@ def encode(col, charset):
 @since(1.5)
 def format_number(col, d):
     """
-    Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places,
-    and returns the result as a string.
+    Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
+    with HALF_EVEN round mode, and returns the result as a string.
 
     :param col: the column name of the numeric value to be formatted
     :param d: the N decimal places
@@ -1675,8 +1671,8 @@ def array(*cols):
 @since(1.5)
 def array_contains(col, value):
     """
-    Collection function: returns True if the array contains the given value. The collection
-    elements and value must be of the same type.
+    Collection function: returns null if the array is null, true if the array contains the
+    given value, and false otherwise.
 
     :param col: name of column containing array
     :param value: value to check for in array
@@ -1728,6 +1724,71 @@ def posexplode(col):
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.posexplode(_to_java_column(col))
+    return Column(jc)
+
+
+@since(2.3)
+def explode_outer(col):
+    """Returns a new row for each element in the given array or map.
+    Unlike explode, if the array/map is null or empty then null is produced.
+
+    >>> df = spark.createDataFrame(
+    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
+    ...     ("id", "an_array", "a_map")
+    ... )
+    >>> df.select("id", "an_array", explode_outer("a_map")).show()
+    +---+----------+----+-----+
+    | id|  an_array| key|value|
+    +---+----------+----+-----+
+    |  1|[foo, bar]|   x|  1.0|
+    |  2|        []|null| null|
+    |  3|      null|null| null|
+    +---+----------+----+-----+
+
+    >>> df.select("id", "a_map", explode_outer("an_array")).show()
+    +---+-------------+----+
+    | id|        a_map| col|
+    +---+-------------+----+
+    |  1|Map(x -> 1.0)| foo|
+    |  1|Map(x -> 1.0)| bar|
+    |  2|        Map()|null|
+    |  3|         null|null|
+    +---+-------------+----+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.explode_outer(_to_java_column(col))
+    return Column(jc)
+
+
+@since(2.3)
+def posexplode_outer(col):
+    """Returns a new row for each element with position in the given array or map.
+    Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
+
+    >>> df = spark.createDataFrame(
+    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
+    ...     ("id", "an_array", "a_map")
+    ... )
+    >>> df.select("id", "an_array", posexplode_outer("a_map")).show()
+    +---+----------+----+----+-----+
+    | id|  an_array| pos| key|value|
+    +---+----------+----+----+-----+
+    |  1|[foo, bar]|   0|   x|  1.0|
+    |  2|        []|null|null| null|
+    |  3|      null|null|null| null|
+    +---+----------+----+----+-----+
+    >>> df.select("id", "a_map", posexplode_outer("an_array")).show()
+    +---+-------------+----+----+
+    | id|        a_map| pos| col|
+    +---+-------------+----+----+
+    |  1|Map(x -> 1.0)|   0| foo|
+    |  1|Map(x -> 1.0)|   1| bar|
+    |  2|        Map()|null|null|
+    |  3|         null|null|null|
+    +---+-------------+----+----+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.posexplode_outer(_to_java_column(col))
     return Column(jc)
 
 
@@ -1859,6 +1920,46 @@ def sort_array(col, asc=True):
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
 
 
+@since(2.3)
+def map_keys(col):
+    """
+    Collection function: Returns an unordered array containing the keys of the map.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_keys
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_keys("data").alias("keys")).show()
+    +------+
+    |  keys|
+    +------+
+    |[1, 2]|
+    +------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_keys(_to_java_column(col)))
+
+
+@since(2.3)
+def map_values(col):
+    """
+    Collection function: Returns an unordered array containing the values of the map.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import map_values
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
+    >>> df.select(map_values("data").alias("values")).show()
+    +------+
+    |values|
+    +------+
+    |[a, b]|
+    +------+
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.map_values(_to_java_column(col)))
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 def _wrap_function(sc, func, returnType):
@@ -1917,6 +2018,19 @@ class UserDefinedFunction(object):
         sc = SparkContext._active_spark_context
         return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
 
+    def _wrapped(self):
+        """
+        Wrap this udf with a function and attach docstring from func
+        """
+        @functools.wraps(self.func)
+        def wrapper(*args):
+            return self(*args)
+
+        wrapper.func = self.func
+        wrapper.returnType = self.returnType
+
+        return wrapper
+
 
 @since(1.3)
 def udf(f=None, returnType=StringType()):
@@ -1951,15 +2065,7 @@ def udf(f=None, returnType=StringType()):
     """
     def _udf(f, returnType=StringType()):
         udf_obj = UserDefinedFunction(f, returnType)
-
-        @functools.wraps(f)
-        def wrapper(*args):
-            return udf_obj(*args)
-
-        wrapper.func = udf_obj.func
-        wrapper.returnType = udf_obj.returnType
-
-        return wrapper
+        return udf_obj._wrapped()
 
     # decorator @udf, @udf() or @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):

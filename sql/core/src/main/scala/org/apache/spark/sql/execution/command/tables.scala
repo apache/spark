@@ -400,6 +400,7 @@ case class LoadDataCommand(
     // Refresh the metadata cache to ensure the data visible to the users
     catalog.refreshTable(targetTable.identifier)
 
+    CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
   }
 }
@@ -487,6 +488,12 @@ case class TruncateTableCommand(
       case NonFatal(e) =>
         log.warn(s"Exception when attempting to uncache table $tableIdentWithDB", e)
     }
+
+    if (table.stats.nonEmpty) {
+      // empty table after truncation
+      val newStats = CatalogStatistics(sizeInBytes = 0, rowCount = Some(0))
+      catalog.alterTableStats(tableName, Some(newStats))
+    }
     Seq.empty[Row]
   }
 }
@@ -500,8 +507,7 @@ case class TruncateTableCommand(
 case class DescribeTableCommand(
     table: TableIdentifier,
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean,
-    isFormatted: Boolean)
+    isExtended: Boolean)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] = Seq(
@@ -523,27 +529,25 @@ case class DescribeTableCommand(
         throw new AnalysisException(
           s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
       }
-      describeSchema(catalog.lookupRelation(table).schema, result)
+      describeSchema(catalog.lookupRelation(table).schema, result, header = false)
     } else {
       val metadata = catalog.getTableMetadata(table)
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
-        describeSchema(sparkSession.table(metadata.identifier).schema, result)
+        describeSchema(sparkSession.table(metadata.identifier).schema, result, header = false)
       } else {
-        describeSchema(metadata.schema, result)
+        describeSchema(metadata.schema, result, header = false)
       }
 
       describePartitionInfo(metadata, result)
 
-      if (partitionSpec.isEmpty) {
-        if (isExtended) {
-          describeExtendedTableInfo(metadata, result)
-        } else if (isFormatted) {
-          describeFormattedTableInfo(metadata, result)
-        }
-      } else {
+      if (partitionSpec.nonEmpty) {
+        // Outputs the partition-specific info for the DDL command:
+        // "DESCRIBE [EXTENDED|FORMATTED] table_name PARTITION (partitionVal*)"
         describeDetailedPartitionInfo(sparkSession, catalog, metadata, result)
+      } else if (isExtended) {
+        describeFormattedTableInfo(metadata, result)
       }
     }
 
@@ -553,75 +557,20 @@ case class DescribeTableCommand(
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (table.partitionColumnNames.nonEmpty) {
       append(buffer, "# Partition Information", "", "")
-      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-      describeSchema(table.partitionSchema, buffer)
+      describeSchema(table.partitionSchema, buffer, header = true)
     }
-  }
-
-  private def describeExtendedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "# Detailed Table Information", table.toString, "")
   }
 
   private def describeFormattedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    // The following information has been already shown in the previous outputs
+    val excludedTableInfo = Seq(
+      "Partition Columns",
+      "Schema"
+    )
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
-    append(buffer, "Database:", table.database, "")
-    append(buffer, "Owner:", table.owner, "")
-    append(buffer, "Create Time:", new Date(table.createTime).toString, "")
-    append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
-    append(buffer, "Location:", table.storage.locationUri.map(CatalogUtils.URIToString(_))
-      .getOrElse(""), "")
-    append(buffer, "Table Type:", table.tableType.name, "")
-    table.stats.foreach(s => append(buffer, "Statistics:", s.simpleString, ""))
-
-    append(buffer, "Table Parameters:", "", "")
-    table.properties.foreach { case (key, value) =>
-      append(buffer, s"  $key", value, "")
-    }
-
-    describeStorageInfo(table, buffer)
-
-    if (table.tableType == CatalogTableType.VIEW) describeViewInfo(table, buffer)
-
-    if (DDLUtils.isDatasourceTable(table) && table.tracksPartitionsInCatalog) {
-      append(buffer, "Partition Provider:", "Catalog", "")
-    }
-  }
-
-  private def describeStorageInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "# Storage Information", "", "")
-    metadata.storage.serde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
-    metadata.storage.inputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
-    metadata.storage.outputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
-    append(buffer, "Compressed:", if (metadata.storage.compressed) "Yes" else "No", "")
-    describeBucketingInfo(metadata, buffer)
-
-    append(buffer, "Storage Desc Parameters:", "", "")
-    val maskedProperties = CatalogUtils.maskCredentials(metadata.storage.properties)
-    maskedProperties.foreach { case (key, value) =>
-      append(buffer, s"  $key", value, "")
-    }
-  }
-
-  private def describeViewInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "# View Information", "", "")
-    append(buffer, "View Text:", metadata.viewText.getOrElse(""), "")
-    append(buffer, "View Default Database:", metadata.viewDefaultDatabase.getOrElse(""), "")
-    append(buffer, "View Query Output Columns:",
-      metadata.viewQueryColumnNames.mkString("[", ", ", "]"), "")
-  }
-
-  private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    metadata.bucketSpec match {
-      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
-        append(buffer, "Num Buckets:", numBuckets.toString, "")
-        append(buffer, "Bucket Columns:", bucketColumnNames.mkString("[", ", ", "]"), "")
-        append(buffer, "Sort Columns:", sortColumnNames.mkString("[", ", ", "]"), "")
-
-      case _ =>
+    table.toLinkedHashMap.filterKeys(!excludedTableInfo.contains(_)).foreach {
+      s => append(buffer, s._1, s._2, "")
     }
   }
 
@@ -636,21 +585,7 @@ case class DescribeTableCommand(
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
     val partition = catalog.getPartition(table, partitionSpec)
-    if (isExtended) {
-      describeExtendedDetailedPartitionInfo(table, metadata, partition, result)
-    } else if (isFormatted) {
-      describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
-      describeStorageInfo(metadata, result)
-    }
-  }
-
-  private def describeExtendedDetailedPartitionInfo(
-      tableIdentifier: TableIdentifier,
-      table: CatalogTable,
-      partition: CatalogTablePartition,
-      buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "Detailed Partition Information " + partition.toString, "", "")
+    if (isExtended) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
   }
 
   private def describeFormattedDetailedPartitionInfo(
@@ -660,18 +595,26 @@ case class DescribeTableCommand(
       buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Detailed Partition Information", "", "")
-    append(buffer, "Partition Value:", s"[${partition.spec.values.mkString(", ")}]", "")
-    append(buffer, "Database:", table.database, "")
-    append(buffer, "Table:", tableIdentifier.table, "")
-    append(buffer, "Location:", partition.storage.locationUri.map(CatalogUtils.URIToString(_))
-      .getOrElse(""), "")
-    append(buffer, "Partition Parameters:", "", "")
-    partition.parameters.foreach { case (key, value) =>
-      append(buffer, s"  $key", value, "")
+    append(buffer, "Database", table.database, "")
+    append(buffer, "Table", tableIdentifier.table, "")
+    partition.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
+    append(buffer, "", "", "")
+    append(buffer, "# Storage Information", "", "")
+    table.bucketSpec match {
+      case Some(spec) =>
+        spec.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
+      case _ =>
     }
+    table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
   }
 
-  private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
+  private def describeSchema(
+      schema: StructType,
+      buffer: ArrayBuffer[Row],
+      header: Boolean): Unit = {
+    if (header) {
+      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+    }
     schema.foreach { column =>
       append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
     }
@@ -727,7 +670,7 @@ case class ShowTablesCommand(
         val tableName = tableIdent.table
         val isTemp = catalog.isTemporaryTable(tableIdent)
         if (isExtended) {
-          val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).toString
+          val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).simpleString
           Row(database, tableName, isTemp, s"$information\n")
         } else {
           Row(database, tableName, isTemp)
@@ -744,7 +687,7 @@ case class ShowTablesCommand(
       val database = table.database.getOrElse("")
       val tableName = table.table
       val isTemp = catalog.isTemporaryTable(table)
-      val information = partition.toString
+      val information = partition.simpleString
       Seq(Row(database, tableName, isTemp, s"$information\n"))
     }
   }
@@ -972,8 +915,13 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }
 
     if (metadata.bucketSpec.isDefined) {
-      throw new UnsupportedOperationException(
-        "Creating Hive table with bucket spec is not supported yet.")
+      val bucketSpec = metadata.bucketSpec.get
+      builder ++= s"CLUSTERED BY (${bucketSpec.bucketColumnNames.mkString(",")})\n"
+
+      if (bucketSpec.sortColumnNames.nonEmpty) {
+        builder ++= s"SORTED BY (${bucketSpec.sortColumnNames.map(_ + " ASC").mkString(", ")})\n"
+      }
+      builder ++= s"INTO ${bucketSpec.numBuckets} BUCKETS\n"
     }
   }
 

@@ -31,6 +31,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -38,8 +39,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.{QueryExecution, SortExec, SQLExecution}
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.execution.{SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
@@ -80,6 +81,9 @@ object FileFormatWriter extends Logging {
        """.stripMargin)
   }
 
+  /** The result of a successful write task. */
+  private case class WriteTaskResult(commitMsg: TaskCommitMessage, updatedPartitions: Set[String])
+
   /**
    * Basic work flow of this command is:
    * 1. Driver side setup, including output committer initialization and data source specific
@@ -93,7 +97,7 @@ object FileFormatWriter extends Logging {
    */
   def write(
       sparkSession: SparkSession,
-      queryExecution: QueryExecution,
+      plan: SparkPlan,
       fileFormat: FileFormat,
       committer: FileCommitProtocol,
       outputSpec: OutputSpec,
@@ -108,9 +112,9 @@ object FileFormatWriter extends Logging {
     job.setOutputValueClass(classOf[InternalRow])
     FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
-    val allColumns = queryExecution.logical.output
+    val allColumns = plan.output
     val partitionSet = AttributeSet(partitionColumns)
-    val dataColumns = queryExecution.logical.output.filterNot(partitionSet.contains)
+    val dataColumns = allColumns.filterNot(partitionSet.contains)
 
     val bucketIdExpression = bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
@@ -148,7 +152,7 @@ object FileFormatWriter extends Logging {
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
     val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
     // the sort order doesn't matter
-    val actualOrdering = queryExecution.executedPlan.outputOrdering.map(_.child)
+    val actualOrdering = plan.outputOrdering.map(_.child)
     val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
       false
     } else {
@@ -158,43 +162,50 @@ object FileFormatWriter extends Logging {
       }
     }
 
-    SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
-      // This call shouldn't be put into the `try` block below because it only initializes and
-      // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-      committer.setupJob(job)
+    SQLExecution.checkSQLExecutionId(sparkSession)
 
-      try {
-        val rdd = if (orderingMatched) {
-          queryExecution.toRdd
-        } else {
-          SortExec(
-            requiredOrdering.map(SortOrder(_, Ascending)),
-            global = false,
-            child = queryExecution.executedPlan).execute()
-        }
+    // This call shouldn't be put into the `try` block below because it only initializes and
+    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
+    committer.setupJob(job)
 
-        val ret = sparkSession.sparkContext.runJob(rdd,
-          (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
-            executeTask(
-              description = description,
-              sparkStageId = taskContext.stageId(),
-              sparkPartitionId = taskContext.partitionId(),
-              sparkAttemptNumber = taskContext.attemptNumber(),
-              committer,
-              iterator = iter)
-          })
-
-        val commitMsgs = ret.map(_._1)
-        val updatedPartitions = ret.flatMap(_._2).distinct.map(PartitioningUtils.parsePathFragment)
-
-        committer.commitJob(job, commitMsgs)
-        logInfo(s"Job ${job.getJobID} committed.")
-        refreshFunction(updatedPartitions)
-      } catch { case cause: Throwable =>
-        logError(s"Aborting job ${job.getJobID}.", cause)
-        committer.abortJob(job)
-        throw new SparkException("Job aborted.", cause)
+    try {
+      val rdd = if (orderingMatched) {
+        plan.execute()
+      } else {
+        SortExec(
+          requiredOrdering.map(SortOrder(_, Ascending)),
+          global = false,
+          child = plan).execute()
       }
+      val ret = new Array[WriteTaskResult](rdd.partitions.length)
+      sparkSession.sparkContext.runJob(
+        rdd,
+        (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
+          executeTask(
+            description = description,
+            sparkStageId = taskContext.stageId(),
+            sparkPartitionId = taskContext.partitionId(),
+            sparkAttemptNumber = taskContext.attemptNumber(),
+            committer,
+            iterator = iter)
+        },
+        0 until rdd.partitions.length,
+        (index, res: WriteTaskResult) => {
+          committer.onTaskCommit(res.commitMsg)
+          ret(index) = res
+        })
+
+      val commitMsgs = ret.map(_.commitMsg)
+      val updatedPartitions = ret.flatMap(_.updatedPartitions)
+        .distinct.map(PartitioningUtils.parsePathFragment)
+
+      committer.commitJob(job, commitMsgs)
+      logInfo(s"Job ${job.getJobID} committed.")
+      refreshFunction(updatedPartitions)
+    } catch { case cause: Throwable =>
+      logError(s"Aborting job ${job.getJobID}.", cause)
+      committer.abortJob(job)
+      throw new SparkException("Job aborted.", cause)
     }
   }
 
@@ -205,7 +216,7 @@ object FileFormatWriter extends Logging {
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
-      iterator: Iterator[InternalRow]): (TaskCommitMessage, Set[String]) = {
+      iterator: Iterator[InternalRow]): WriteTaskResult = {
 
     val jobId = SparkHadoopWriterUtils.createJobID(new Date, sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
@@ -238,7 +249,7 @@ object FileFormatWriter extends Logging {
         // Execute the task to write rows out and commit the task.
         val outputPartitions = writeTask.execute(iterator)
         writeTask.releaseResources()
-        (committer.commitTask(taskAttemptContext), outputPartitions)
+        WriteTaskResult(committer.commitTask(taskAttemptContext), outputPartitions)
       })(catchBlock = {
         // If there is an error, release resource and then abort the task
         try {
@@ -249,8 +260,10 @@ object FileFormatWriter extends Logging {
         }
       })
     } catch {
+      case e: FetchFailedException =>
+        throw e
       case t: Throwable =>
-        throw new SparkException("Task failed while writing rows", t)
+        throw new SparkException("Task failed while writing rows.", t)
     }
   }
 
@@ -314,8 +327,11 @@ object FileFormatWriter extends Logging {
 
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
-        currentWriter.close()
-        currentWriter = null
+        try {
+          currentWriter.close()
+        } finally {
+          currentWriter = null
+        }
       }
     }
   }
@@ -449,8 +465,11 @@ object FileFormatWriter extends Logging {
 
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
-        currentWriter.close()
-        currentWriter = null
+        try {
+          currentWriter.close()
+        } finally {
+          currentWriter = null
+        }
       }
     }
   }

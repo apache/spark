@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -63,6 +65,7 @@ private[r] class GeneralizedLinearRegressionWrapper private (
 private[r] object GeneralizedLinearRegressionWrapper
   extends MLReadable[GeneralizedLinearRegressionWrapper] {
 
+  // scalastyle:off
   def fit(
       formula: String,
       data: DataFrame,
@@ -73,8 +76,11 @@ private[r] object GeneralizedLinearRegressionWrapper
       weightCol: String,
       regParam: Double,
       variancePower: Double,
-      linkPower: Double): GeneralizedLinearRegressionWrapper = {
+      linkPower: Double,
+      stringIndexerOrderType: String): GeneralizedLinearRegressionWrapper = {
+  // scalastyle:on
     val rFormula = new RFormula().setFormula(formula)
+      .setStringIndexerOrderType(stringIndexerOrderType)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema
@@ -91,7 +97,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
     // set variancePower and linkPower if family is tweedie; otherwise, set link function
-    if (family.toLowerCase == "tweedie") {
+    if (family.toLowerCase(Locale.ROOT) == "tweedie") {
       glr.setVariancePower(variancePower).setLinkPower(linkPower)
     } else {
       glr.setLink(link)
@@ -151,7 +157,7 @@ private[r] object GeneralizedLinearRegressionWrapper
     val rDeviance: Double = summary.deviance
     val rResidualDegreeOfFreedomNull: Long = summary.residualDegreeOfFreedomNull
     val rResidualDegreeOfFreedom: Long = summary.residualDegreeOfFreedom
-    val rAic: Double = if (family.toLowerCase == "tweedie" &&
+    val rAic: Double = if (family.toLowerCase(Locale.ROOT) == "tweedie" &&
       !Array(0.0, 1.0, 2.0).exists(x => math.abs(x - variancePower) < 1e-8)) {
       0.0
     } else {

@@ -22,10 +22,11 @@ import org.antlr.v4.runtime.misc.ParseCancellationException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -34,8 +35,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 abstract class AbstractSqlParser extends ParserInterface with Logging {
 
   /** Creates/Resolves DataType for a given SQL string. */
-  def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
-    // TODO add this to the parser interface.
+  override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     astBuilder.visitSingleDataType(parser.singleDataType())
   }
 
@@ -47,6 +47,13 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   /** Creates TableIdentifier for a given SQL string. */
   override def parseTableIdentifier(sqlText: String): TableIdentifier = parse(sqlText) { parser =>
     astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
+  }
+
+  /** Creates FunctionIdentifier for a given SQL string. */
+  override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
+    parse(sqlText) { parser =>
+      astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
+    }
   }
 
   /**
@@ -71,7 +78,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   protected def astBuilder: AstBuilder
 
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    logInfo(s"Parsing command: $command")
+    logDebug(s"Parsing command: $command")
 
     val lexer = new SqlBaseLexer(new ANTLRNoCaseStringStream(command))
     lexer.removeErrorListeners()
@@ -115,8 +122,13 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
+class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser {
+  val astBuilder = new AstBuilder(conf)
+}
+
+/** For test-only. */
 object CatalystSqlParser extends AbstractSqlParser {
-  val astBuilder = new AstBuilder
+  val astBuilder = new AstBuilder(new SQLConf())
 }
 
 /**

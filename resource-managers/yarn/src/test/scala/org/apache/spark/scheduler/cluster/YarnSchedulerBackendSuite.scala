@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster
 
+import scala.language.reflectiveCalls
+
 import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar
 

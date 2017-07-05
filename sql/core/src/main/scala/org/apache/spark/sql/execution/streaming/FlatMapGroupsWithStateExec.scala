@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, Expression, Literal, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalKeyedState, ProcessingTimeTimeout}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, Expression, Literal, SortOrder, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{KeyedStateTimeout, OutputMode}
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.CompletionIterator
 
 /**
@@ -39,32 +40,48 @@ import org.apache.spark.util.CompletionIterator
  * @param outputObjAttr used to define the output object
  * @param stateEncoder used to serialize/deserialize state before calling `func`
  * @param outputMode the output mode of `func`
- * @param timeout used to timeout groups that have not received data in a while
+ * @param timeoutConf used to timeout groups that have not received data in a while
  * @param batchTimestampMs processing timestamp of the current batch.
  */
 case class FlatMapGroupsWithStateExec(
-    func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
+    func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    stateId: Option[OperatorStateId],
+    stateInfo: Option[StatefulOperatorStateInfo],
     stateEncoder: ExpressionEncoder[Any],
     outputMode: OutputMode,
-    timeout: KeyedStateTimeout,
-    batchTimestampMs: Long,
-    child: SparkPlan) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter {
+    timeoutConf: GroupStateTimeout,
+    batchTimestampMs: Option[Long],
+    override val eventTimeWatermark: Option[Long],
+    child: SparkPlan
+  ) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter with WatermarkSupport {
 
-  private val isTimeoutEnabled = timeout == ProcessingTimeTimeout
+  import GroupStateImpl._
+
+  private val isTimeoutEnabled = timeoutConf != NoTimeout
   private val timestampTimeoutAttribute =
     AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
   private val stateAttributes: Seq[Attribute] = {
     val encSchemaAttribs = stateEncoder.schema.toAttributes
     if (isTimeoutEnabled) encSchemaAttribs :+ timestampTimeoutAttribute else encSchemaAttribs
   }
+  // Get the serializer for the state, taking into account whether we need to save timestamps
+  private val stateSerializer = {
+    val encoderSerializer = stateEncoder.namedExpressions
+    if (isTimeoutEnabled) {
+      encoderSerializer :+ Literal(GroupStateImpl.NO_TIMESTAMP)
+    } else {
+      encoderSerializer
+    }
+  }
+  // Get the deserializer for the state. Note that this must be done in the driver, as
+  // resolving and binding of deserializer expressions to the encoded type can be safely done
+  // only in the driver.
+  private val stateDeserializer = stateEncoder.resolveAndBind().deserializer
 
-  import KeyedStateImpl._
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
@@ -74,25 +91,44 @@ case class FlatMapGroupsWithStateExec(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
+  override def keyExpressions: Seq[Attribute] = groupingAttributes
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
+    // Throw errors early if parameters are not as expected
+    timeoutConf match {
+      case ProcessingTimeTimeout =>
+        require(batchTimestampMs.nonEmpty)
+      case EventTimeTimeout =>
+        require(eventTimeWatermark.nonEmpty)  // watermark value has been populated
+        require(watermarkExpression.nonEmpty) // input schema has watermark attribute
+      case _ =>
+    }
+
     child.execute().mapPartitionsWithStateStore[InternalRow](
-      getStateId.checkpointLocation,
-      getStateId.operatorId,
-      getStateId.batchId,
+      getStateInfo,
       groupingAttributes.toStructType,
       stateAttributes.toStructType,
+      indexOrdinal = None,
       sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iterator) =>
+      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         val updater = new StateStoreUpdater(store)
+
+        // If timeout is based on event time, then filter late data based on watermark
+        val filteredIter = watermarkPredicateForData match {
+          case Some(predicate) if timeoutConf == EventTimeTimeout =>
+            iter.filter(row => !predicate.eval(row))
+          case _ =>
+            iter
+        }
 
         // Generate a iterator that returns the rows grouped by the grouping function
         // Note that this code ensures that the filtering for timeout occurs only after
         // all the data has been processed. This is to ensure that the timeout information of all
         // the keys with data is updated before they are processed for timeouts.
         val outputIterator =
-          updater.updateStateForKeysWithData(iterator) ++ updater.updateStateForTimedOutKeys()
+          updater.updateStateForKeysWithData(filteredIter) ++ updater.updateStateForTimedOutKeys()
 
         // Return an iterator of all the rows generated by all the keys, such that when fully
         // consumed, all the state updates will be committed by the state store
@@ -116,19 +152,9 @@ case class FlatMapGroupsWithStateExec(
       ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
     private val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
 
-    // Converter for translating state rows to Java objects
+    // Converters for translating state between rows and Java objects
     private val getStateObjFromRow = ObjectOperator.deserializeRowToObject(
-      stateEncoder.resolveAndBind().deserializer, stateAttributes)
-
-    // Converter for translating state Java objects to rows
-    private val stateSerializer = {
-      val encoderSerializer = stateEncoder.namedExpressions
-      if (isTimeoutEnabled) {
-        encoderSerializer :+ Literal(KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
-      } else {
-        encoderSerializer
-      }
-    }
+      stateDeserializer, stateAttributes)
     private val getStateRowFromObj = ObjectOperator.serializeObjectToRow(stateSerializer)
 
     // Index of the additional metadata fields in the state row
@@ -157,16 +183,19 @@ case class FlatMapGroupsWithStateExec(
     /** Find the groups that have timeout set and are timing out right now, and call the function */
     def updateStateForTimedOutKeys(): Iterator[InternalRow] = {
       if (isTimeoutEnabled) {
-        val timingOutKeys = store.filter { case (_, stateRow) =>
-          val timeoutTimestamp = getTimeoutTimestamp(stateRow)
-          timeoutTimestamp != TIMEOUT_TIMESTAMP_NOT_SET && timeoutTimestamp < batchTimestampMs
+        val timeoutThreshold = timeoutConf match {
+          case ProcessingTimeTimeout => batchTimestampMs.get
+          case EventTimeTimeout => eventTimeWatermark.get
+          case _ =>
+            throw new IllegalStateException(
+              s"Cannot filter timed out keys for $timeoutConf")
         }
-        timingOutKeys.flatMap { case (keyRow, stateRow) =>
-          callFunctionAndUpdateState(
-            keyRow,
-            Iterator.empty,
-            Some(stateRow),
-            hasTimedOut = true)
+        val timingOutKeys = store.getRange(None, None).filter { rowPair =>
+          val timeoutTimestamp = getTimeoutTimestamp(rowPair.value)
+          timeoutTimestamp != NO_TIMESTAMP && timeoutTimestamp < timeoutThreshold
+        }
+        timingOutKeys.flatMap { rowPair =>
+          callFunctionAndUpdateState(rowPair.key, Iterator.empty, rowPair.value, hasTimedOut = true)
         }
       } else Iterator.empty
     }
@@ -175,18 +204,27 @@ case class FlatMapGroupsWithStateExec(
      * Call the user function on a key's data, update the state store, and return the return data
      * iterator. Note that the store updating is lazy, that is, the store will be updated only
      * after the returned iterator is fully consumed.
+     *
+     * @param keyRow Row representing the key, cannot be null
+     * @param valueRowIter Iterator of values as rows, cannot be null, but can be empty
+     * @param prevStateRow Row representing the previous state, can be null
+     * @param hasTimedOut Whether this function is being called for a key timeout
      */
     private def callFunctionAndUpdateState(
         keyRow: UnsafeRow,
         valueRowIter: Iterator[InternalRow],
-        prevStateRowOption: Option[UnsafeRow],
+        prevStateRow: UnsafeRow,
         hasTimedOut: Boolean): Iterator[InternalRow] = {
 
       val keyObj = getKeyObj(keyRow)  // convert key to objects
       val valueObjIter = valueRowIter.map(getValueObj.apply) // convert value rows to objects
-      val stateObjOption = getStateObj(prevStateRowOption)
-      val keyedState = new KeyedStateImpl(
-        stateObjOption, batchTimestampMs, isTimeoutEnabled, hasTimedOut)
+      val stateObj = getStateObj(prevStateRow)
+      val keyedState = GroupStateImpl.createForStreaming(
+        Option(stateObj),
+        batchTimestampMs.getOrElse(NO_TIMESTAMP),
+        eventTimeWatermark.getOrElse(NO_TIMESTAMP),
+        timeoutConf,
+        hasTimedOut)
 
       // Call function, get the returned objects and convert them to rows
       val mappedIterator = func(keyObj, valueObjIter, keyedState).map { obj =>
@@ -196,36 +234,43 @@ case class FlatMapGroupsWithStateExec(
 
       // When the iterator is consumed, then write changes to state
       def onIteratorCompletion: Unit = {
-        // Has the timeout information changed
+
+        val currentTimeoutTimestamp = keyedState.getTimeoutTimestamp
+        // If the state has not yet been set but timeout has been set, then
+        // we have to generate a row to save the timeout. However, attempting serialize
+        // null using case class encoder throws -
+        //    java.lang.NullPointerException: Null value appeared in non-nullable field:
+        //    If the schema is inferred from a Scala tuple / case class, or a Java bean, please
+        //    try to use scala.Option[_] or other nullable types.
+        if (!keyedState.exists && currentTimeoutTimestamp != NO_TIMESTAMP) {
+          throw new IllegalStateException(
+            "Cannot set timeout when state is not defined, that is, state has not been" +
+              "initialized or has been removed")
+        }
 
         if (keyedState.hasRemoved) {
           store.remove(keyRow)
           numUpdatedStateRows += 1
 
         } else {
-          val previousTimeoutTimestamp = prevStateRowOption match {
-            case Some(row) => getTimeoutTimestamp(row)
-            case None => TIMEOUT_TIMESTAMP_NOT_SET
-          }
-
+          val previousTimeoutTimestamp = getTimeoutTimestamp(prevStateRow)
           val stateRowToWrite = if (keyedState.hasUpdated) {
             getStateRow(keyedState.get)
           } else {
-            prevStateRowOption.orNull
+            prevStateRow
           }
 
-          val hasTimeoutChanged = keyedState.getTimeoutTimestamp != previousTimeoutTimestamp
+          val hasTimeoutChanged = currentTimeoutTimestamp != previousTimeoutTimestamp
           val shouldWriteState = keyedState.hasUpdated || hasTimeoutChanged
 
           if (shouldWriteState) {
             if (stateRowToWrite == null) {
-              // This should never happen because checks in KeyedStateImpl should avoid cases
+              // This should never happen because checks in GroupStateImpl should avoid cases
               // where empty state would need to be written
-              throw new IllegalStateException(
-                "Attempting to write empty state")
+              throw new IllegalStateException("Attempting to write empty state")
             }
-            setTimeoutTimestamp(stateRowToWrite, keyedState.getTimeoutTimestamp)
-            store.put(keyRow.copy(), stateRowToWrite.copy())
+            setTimeoutTimestamp(stateRowToWrite, currentTimeoutTimestamp)
+            store.put(keyRow, stateRowToWrite)
             numUpdatedStateRows += 1
           }
         }
@@ -236,18 +281,21 @@ case class FlatMapGroupsWithStateExec(
     }
 
     /** Returns the state as Java object if defined */
-    def getStateObj(stateRowOption: Option[UnsafeRow]): Option[Any] = {
-      stateRowOption.map(getStateObjFromRow)
+    def getStateObj(stateRow: UnsafeRow): Any = {
+      if (stateRow != null) getStateObjFromRow(stateRow) else null
     }
 
     /** Returns the row for an updated state */
     def getStateRow(obj: Any): UnsafeRow = {
+      assert(obj != null)
       getStateRowFromObj(obj)
     }
 
     /** Returns the timeout timestamp of a state row is set */
     def getTimeoutTimestamp(stateRow: UnsafeRow): Long = {
-      if (isTimeoutEnabled) stateRow.getLong(timeoutTimestampIndex) else TIMEOUT_TIMESTAMP_NOT_SET
+      if (isTimeoutEnabled && stateRow != null) {
+        stateRow.getLong(timeoutTimestampIndex)
+      } else NO_TIMESTAMP
     }
 
     /** Set the timestamp in a state row */
