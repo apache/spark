@@ -1295,9 +1295,9 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
 
         df = self.spark.createDataFrame(
             [(0.2, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
-            (0.5, 2.1, 0.5, Vectors.dense(1.0, 2.0)),
-            (0.9, 0.4, 1.0, Vectors.dense(2.0, 1.0)),
-            (0.7, 0.7, 0.0, Vectors.dense(3.0, 3.0))], ["label", "weight", "offset", "features"])
+             (0.5, 2.1, 0.5, Vectors.dense(1.0, 2.0)),
+             (0.9, 0.4, 1.0, Vectors.dense(2.0, 1.0)),
+             (0.7, 0.7, 0.0, Vectors.dense(3.0, 3.0))], ["label", "weight", "offset", "features"])
 
         glr = GeneralizedLinearRegression(family="poisson", weightCol="weight", offsetCol="offset")
         model = glr.fit(df)

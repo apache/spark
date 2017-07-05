@@ -1376,9 +1376,9 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
                       typeConverter=TypeConverters.toFloat)
     solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
                    "options: irls.", typeConverter=TypeConverters.toString)
-    offsetCol = Param(Params._dummy(), "offsetCol", "The offset column name. If this is not set or " +
-                   "empty, we treat all instance offsets as 0.0",
-                   typeConverter=TypeConverters.toString)
+    offsetCol = Param(Params._dummy(), "offsetCol", "The offset column name. If this is not set " +
+                      "or empty, we treat all instance offsets as 0.0",
+                      typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
