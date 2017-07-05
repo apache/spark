@@ -2316,8 +2316,8 @@ class SQLTests(ReusedPySparkTestCase):
             if i.isupper():  # unsigned
                 assertCollectSuccess(i, 2 ** (ctypes.sizeof(ctype) * 8) - 1)
             else:  # signed
-                max_val = 2 ** (ctypes.sizeof(ctype) * 8 - 1) - 1
-                assertCollectSuccess(i, max_val)
+                max_val = 2 ** (ctypes.sizeof(ctype) * 8 - 1)
+                assertCollectSuccess(i, max_val - 1)
                 assertCollectSuccess(i, -max_val)
 
         # make sure that the test case cover all supported types
