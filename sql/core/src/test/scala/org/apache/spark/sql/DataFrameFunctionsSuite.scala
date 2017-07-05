@@ -471,7 +471,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
     funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
       val errMsg = intercept[AnalysisException] { func(df) }.getMessage
-      assert(errMsg.contains(s"input to function $name requires at least 1 argument"))
+      assert(errMsg.contains(s"input to function $name requires at least one argument"))
     }
 
     val funcsMustHaveAtLeastTwoArgs =
@@ -481,7 +481,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       ("least", (df: DataFrame) => df.selectExpr("least()")) :: Nil
     funcsMustHaveAtLeastTwoArgs.foreach { case (name, func) =>
       val errMsg = intercept[AnalysisException] { func(df) }.getMessage
-      assert(errMsg.contains(s"input to function $name requires at least 2 arguments"))
+      assert(errMsg.contains(s"input to function $name requires at least two arguments"))
     }
   }
 }

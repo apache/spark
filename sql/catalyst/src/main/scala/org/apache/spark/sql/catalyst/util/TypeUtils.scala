@@ -57,17 +57,6 @@ object TypeUtils {
     }
   }
 
-  def checkTypeInputDimension(types: Seq[DataType], caller: String, requiredMinDimension: Int)
-    : TypeCheckResult = {
-    if (types.size >= requiredMinDimension) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to $caller requires at least $requiredMinDimension " +
-          s"argument${if (requiredMinDimension > 1) "s"}")
-    }
-  }
-
   def getNumeric(t: DataType): Numeric[Any] =
     t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
 

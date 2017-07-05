@@ -52,13 +52,11 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val inputDataTypes = children.map(_.dataType)
-    TypeUtils.checkTypeInputDimension(
-        inputDataTypes, s"function $prettyName", requiredMinDimension = 1) match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForSameTypeInputExpr(inputDataTypes, s"function $prettyName")
-      case typeCheckFailure =>
-        typeCheckFailure
+    if (children.length < 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least one argument")
+    } else {
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
     }
   }
 

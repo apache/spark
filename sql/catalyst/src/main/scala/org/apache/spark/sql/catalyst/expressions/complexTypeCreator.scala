@@ -296,25 +296,24 @@ trait CreateNamedStructLike extends Expression {
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    TypeUtils.checkTypeInputDimension(
-        children.map(_.dataType), s"function $prettyName", requiredMinDimension = 1) match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        if (children.size % 2 != 0) {
-          TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
+    if (children.length < 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least one argument")
+    } else {
+      if (children.size % 2 != 0) {
+        TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
+      } else {
+        val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
+        if (invalidNames.nonEmpty) {
+          TypeCheckResult.TypeCheckFailure(
+            "Only foldable StringType expressions are allowed to appear at odd position, got:" +
+              s" ${invalidNames.mkString(",")}")
+        } else if (!names.contains(null)) {
+          TypeCheckResult.TypeCheckSuccess
         } else {
-          val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
-          if (invalidNames.nonEmpty) {
-            TypeCheckResult.TypeCheckFailure(
-              "Only foldable StringType expressions are allowed to appear at odd position, got:" +
-                s" ${invalidNames.mkString(",")}")
-          } else if (!names.contains(null)) {
-            TypeCheckResult.TypeCheckSuccess
-          } else {
-            TypeCheckResult.TypeCheckFailure("Field name should not be null")
-          }
+          TypeCheckResult.TypeCheckFailure("Field name should not be null")
         }
-      case typeCheckFailure =>
-        typeCheckFailure
+      }
     }
   }
 
