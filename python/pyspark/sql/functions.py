@@ -323,7 +323,7 @@ def covar_pop(col1, col2):
 
 @since(2.0)
 def covar_samp(col1, col2):
-    """Returns a new :class:`Column` for the sample covariance of `col1` and `col2`.
+    """Returns a new :class:`Column` for the sample covariance of ``col1`` and ``col2``.
 
     >>> a = [1] * 10
     >>> b = [1] * 10

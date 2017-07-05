@@ -339,7 +339,7 @@ setMethod("asin",
 
 #' @details
 #' \code{atan}: Computes the tangent inverse of the given value; the returned angle is in the range
-#' -pi/2 through pi/2
+#' -pi/2 through pi/2.
 #'
 #' @rdname column_math_functions
 #' @export
@@ -1902,7 +1902,7 @@ setMethod("year",
 #' @details
 #' \code{atan2}: Returns the angle theta from the conversion of rectangular coordinates
 #' (x, y) to polar coordinates (r, theta). Units in radians.
-#
+#'
 #' @rdname column_math_functions
 #' @aliases atan2 atan2,Column-method
 #' @export
