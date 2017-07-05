@@ -22,7 +22,6 @@ import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
 
-import scala.language.reflectiveCalls
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
@@ -94,6 +93,8 @@ private[hive] object IsolatedClientLoader extends Logging {
     case "1.0" | "1.0.0" => hive.v1_0
     case "1.1" | "1.1.0" => hive.v1_1
     case "1.2" | "1.2.0" | "1.2.1" => hive.v1_2
+    case "2.0" | "2.0.0" | "2.0.1" => hive.v2_0
+    case "2.1" | "2.1.0" | "2.1.1" => hive.v2_1
   }
 
   private def downloadVersion(

@@ -397,4 +397,62 @@ public class JavaDataFrameSuite {
       Assert.assertTrue(filter4.mightContain(i * 3));
     }
   }
+
+  public static class BeanWithoutGetter implements Serializable {
+    private String a;
+
+    public void setA(String a) {
+      this.a = a;
+    }
+  }
+
+  @Test
+  public void testBeanWithoutGetter() {
+    BeanWithoutGetter bean = new BeanWithoutGetter();
+    List<BeanWithoutGetter> data = Arrays.asList(bean);
+    Dataset<Row> df = spark.createDataFrame(data, BeanWithoutGetter.class);
+    Assert.assertEquals(df.schema().length(), 0);
+    Assert.assertEquals(df.collectAsList().size(), 1);
+  }
+
+  @Test
+  public void testJsonRDDToDataFrame() {
+    // This is a test for the deprecated API in SPARK-15615.
+    JavaRDD<String> rdd = jsc.parallelize(Arrays.asList("{\"a\": 2}"));
+    Dataset<Row> df = spark.read().json(rdd);
+    Assert.assertEquals(1L, df.count());
+    Assert.assertEquals(2L, df.collectAsList().get(0).getLong(0));
+  }
+
+  public class CircularReference1Bean implements Serializable {
+    private CircularReference2Bean child;
+
+    public CircularReference2Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference2Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference2Bean implements Serializable {
+    private CircularReference1Bean child;
+
+    public CircularReference1Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference1Bean child) {
+      this.child = child;
+    }
+  }
+
+  // Checks a simple case for DataFrame here and put exhaustive tests for the issue
+  // of circular references in `JavaDatasetSuite`.
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean() {
+    CircularReference1Bean bean = new CircularReference1Bean();
+    spark.createDataFrame(Arrays.asList(bean), CircularReference1Bean.class);
+  }
 }

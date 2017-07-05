@@ -44,9 +44,11 @@ private[util] sealed trait BaseReadWrite {
 
   /**
    * Sets the Spark SQLContext to use for saving/loading.
+   *
+   * @deprecated Use session instead. This method will be removed in 3.0.0.
    */
   @Since("1.6.0")
-  @deprecated("Use session instead, This method will be removed in 2.2.0.", "2.0.0")
+  @deprecated("Use session instead. This method will be removed in 3.0.0.", "2.0.0")
   def context(sqlContext: SQLContext): this.type = {
     optionSparkSession = Option(sqlContext.sparkSession)
     this
@@ -104,8 +106,9 @@ abstract class MLWriter extends BaseReadWrite with Logging {
         // TODO: Revert back to the original content if save is not successful.
         fs.delete(qualifiedOutputPath, true)
       } else {
-        throw new IOException(
-          s"Path $path already exists. Please use write.overwrite().save(path) to overwrite it.")
+        throw new IOException(s"Path $path already exists. To overwrite it, " +
+          s"please use write.overwrite().save(path) for Scala and use " +
+          s"write().overwrite().save(path) for Java and Python.")
       }
     }
     saveImpl(path)

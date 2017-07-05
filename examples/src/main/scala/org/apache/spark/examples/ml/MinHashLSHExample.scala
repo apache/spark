@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 /**
  * An example demonstrating MinHashLSH.
  * Run with:
- *   bin/run-example org.apache.spark.examples.ml.MinHashLSHExample
+ *   bin/run-example ml.MinHashLSHExample
  */
 object MinHashLSHExample {
   def main(args: Array[String]): Unit = {

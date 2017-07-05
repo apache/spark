@@ -123,6 +123,7 @@ sql = Module(
     ],
 )
 
+
 hive = Module(
     name="hive",
     dependencies=[sql],
@@ -139,6 +140,18 @@ hive = Module(
     test_tags=[
         "org.apache.spark.tags.ExtendedHiveTest"
     ]
+)
+
+
+repl = Module(
+    name="repl",
+    dependencies=[hive],
+    source_file_regexes=[
+        "repl/",
+    ],
+    sbt_test_goals=[
+        "repl/test",
+    ],
 )
 
 
@@ -340,6 +353,7 @@ pyspark_core = Module(
         "pyspark.profiler",
         "pyspark.shuffle",
         "pyspark.tests",
+        "pyspark.util",
     ]
 )
 
@@ -423,15 +437,17 @@ pyspark_ml = Module(
         "python/pyspark/ml/"
     ],
     python_test_goals=[
-        "pyspark.ml.feature",
         "pyspark.ml.classification",
         "pyspark.ml.clustering",
+        "pyspark.ml.evaluation",
+        "pyspark.ml.feature",
+        "pyspark.ml.fpm",
         "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",
         "pyspark.ml.regression",
+        "pyspark.ml.stat",
         "pyspark.ml.tuning",
         "pyspark.ml.tests",
-        "pyspark.ml.evaluation",
     ],
     blacklisted_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there

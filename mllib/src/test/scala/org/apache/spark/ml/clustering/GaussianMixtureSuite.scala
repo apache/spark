@@ -77,8 +77,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(gm.getTol === 0.01)
     val model = gm.setMaxIter(1).fit(dataset)
 
-    // copied model must have the same parent
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(gm, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
@@ -163,7 +162,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
       assert(model.gaussians.map(_.cov) === model2.gaussians.map(_.cov))
     }
     val gm = new GaussianMixture()
-    testEstimatorAndModelReadWrite(gm, dataset,
+    testEstimatorAndModelReadWrite(gm, dataset, GaussianMixtureSuite.allParamSettings,
       GaussianMixtureSuite.allParamSettings, checkModelData)
   }
 

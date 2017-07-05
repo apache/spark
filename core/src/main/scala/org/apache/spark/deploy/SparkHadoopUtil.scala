@@ -23,11 +23,13 @@ import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
@@ -82,17 +84,20 @@ class SparkHadoopUtil extends Logging {
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
       // Explicitly check for S3 environment variables
-      if (System.getenv("AWS_ACCESS_KEY_ID") != null &&
-          System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
-        val keyId = System.getenv("AWS_ACCESS_KEY_ID")
-        val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
-
+      val keyId = System.getenv("AWS_ACCESS_KEY_ID")
+      val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
+      if (keyId != null && accessKey != null) {
         hadoopConf.set("fs.s3.awsAccessKeyId", keyId)
         hadoopConf.set("fs.s3n.awsAccessKeyId", keyId)
         hadoopConf.set("fs.s3a.access.key", keyId)
         hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey)
         hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey)
         hadoopConf.set("fs.s3a.secret.key", accessKey)
+
+        val sessionToken = System.getenv("AWS_SESSION_TOKEN")
+        if (sessionToken != null) {
+          hadoopConf.set("fs.s3a.session.token", sessionToken)
+        }
       }
       // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
       conf.getAll.foreach { case (key, value) =>
@@ -139,14 +144,29 @@ class SparkHadoopUtil extends Logging {
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If
    * getFSBytesReadOnThreadCallback is called from thread r at time t, the returned callback will
    * return the bytes read on r since t.
-   *
-   * @return None if the required method can't be found.
    */
   private[spark] def getFSBytesReadOnThreadCallback(): () => Long = {
-    val threadStats = FileSystem.getAllStatistics.asScala.map(_.getThreadStatistics)
-    val f = () => threadStats.map(_.getBytesRead).sum
-    val baselineBytesRead = f()
-    () => f() - baselineBytesRead
+    val f = () => FileSystem.getAllStatistics.asScala.map(_.getThreadStatistics.getBytesRead).sum
+    val baseline = (Thread.currentThread().getId, f())
+
+    /**
+     * This function may be called in both spawned child threads and parent task thread (in
+     * PythonRDD), and Hadoop FileSystem uses thread local variables to track the statistics.
+     * So we need a map to track the bytes read from the child threads and parent thread,
+     * summing them together to get the bytes read of this task.
+     */
+    new Function0[Long] {
+      private val bytesReadMap = new mutable.HashMap[Long, Long]()
+
+      override def apply(): Long = {
+        bytesReadMap.synchronized {
+          bytesReadMap.put(Thread.currentThread().getId, f())
+          bytesReadMap.map { case (k, v) =>
+            v - (if (k == baseline._1) baseline._2 else 0)
+          }.sum
+        }
+      }
+    }
   }
 
   /**
@@ -346,9 +366,31 @@ class SparkHadoopUtil extends Logging {
       }
     } catch {
       case e: IOException =>
-        logDebug("Failed to decode $token: $e", e)
+        logDebug(s"Failed to decode $token: $e", e)
     }
     buffer.toString
+  }
+
+  private[spark] def checkAccessPermission(status: FileStatus, mode: FsAction): Boolean = {
+    val perm = status.getPermission
+    val ugi = UserGroupInformation.getCurrentUser
+
+    if (ugi.getShortUserName == status.getOwner) {
+      if (perm.getUserAction.implies(mode)) {
+        return true
+      }
+    } else if (ugi.getGroupNames.contains(status.getGroup)) {
+      if (perm.getGroupAction.implies(mode)) {
+        return true
+      }
+    } else if (perm.getOtherAction.implies(mode)) {
+      return true
+    }
+
+    logDebug(s"Permission denied: user=${ugi.getShortUserName}, " +
+      s"path=${status.getPath}:${status.getOwner}:${status.getGroup}" +
+      s"${if (status.isDirectory) "d" else "-"}$perm")
+    false
   }
 }
 

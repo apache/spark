@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.sources.BaseRelation
@@ -66,7 +67,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def mode(saveMode: String): DataFrameWriter[T] = {
-    this.mode = saveMode.toLowerCase match {
+    this.mode = saveMode.toLowerCase(Locale.ROOT) match {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
       case "ignore" => SaveMode.Ignore
@@ -89,6 +90,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Adds an output option for the underlying data source.
+   *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -121,6 +128,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
+   *
    * @since 1.4.0
    */
   def options(options: scala.collection.Map[String, String]): DataFrameWriter[T] = {
@@ -130,6 +143,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Adds output options for the underlying data source.
+   *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -205,7 +224,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def save(): Unit = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "write files of Hive data source directly.")
     }
@@ -213,12 +232,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotBucketed("save")
 
     runCommand(df.sparkSession, "save") {
-      SaveIntoDataSourceCommand(
-        query = df.logicalPlan,
-        provider = source,
+      DataSource(
+        sparkSession = df.sparkSession,
+        className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap,
-        mode = mode)
+        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
     }
   }
 
@@ -268,7 +286,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         partition = Map.empty[String, Option[String]],
         query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
-        ifNotExists = false)
+        ifPartitionNotExists = false)
     }
   }
 
@@ -319,6 +337,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *    +---+---+
    * }}}
    *
+   * In this method, save mode is used to determine the behavior if the data source table exists in
+   * Spark catalog. We will always overwrite the underlying data of data source (e.g. a table in
+   * JDBC data source) if the table doesn't exist in Spark catalog, and will always append to the
+   * underlying data of data source if the table already exists.
+   *
    * When the DataFrame is created from a non-partitioned `HadoopFsRelation` with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
    * and Parquet), the table is persisted in a Hive compatible format, which means other systems
@@ -349,8 +372,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // Get all input data source or hive relations of the query.
         val srcRelations = df.logicalPlan.collect {
           case LogicalRelation(src: BaseRelation, _, _) => src
-          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable) =>
-            relation.catalogTable.identifier
+          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta) =>
+            relation.tableMeta.identifier
         }
 
         val tableRelation = df.sparkSession.table(tableIdentWithDB).queryExecution.analyzed
@@ -360,8 +383,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           // check hive table relation when overwrite mode
-          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable)
-            && srcRelations.contains(relation.catalogTable.identifier) =>
+          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta)
+            && srcRelations.contains(relation.tableMeta.identifier) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           case _ => // OK
@@ -454,11 +477,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -552,7 +573,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>
-   * <li>`quoteAll` (default `false`): A flag indicating whether all values should always be
+   * <li>`quoteAll` (default `false`): a flag indicating whether all values should always be
    * enclosed in quotes. Default is to only escape values containing a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
@@ -562,11 +583,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps.</li>
+   * <li>`ignoreLeadingWhiteSpace` (default `true`): a flag indicating whether or not leading
+   * whitespaces from values being written should be skipped.</li>
+   * <li>`ignoreTrailingWhiteSpace` (default `true`): a flag indicating defines whether or not
+   * trailing whitespaces from values being written should be skipped.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -584,7 +607,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     try {
       val start = System.nanoTime()
       // call `QueryExecution.toRDD` to trigger the execution of commands.
-      qe.toRdd
+      SQLExecution.withNewExecutionId(session, qe)(qe.toRdd)
       val end = System.nanoTime()
       session.listenerManager.onSuccess(name, qe, end - start)
     } catch {

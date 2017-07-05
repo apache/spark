@@ -93,7 +93,7 @@ private [sql] object GenArrayData {
     if (!ctx.isPrimitiveType(elementType)) {
       val genericArrayClass = classOf[GenericArrayData].getName
       ctx.addMutableState("Object[]", arrayName,
-        s"this.$arrayName = new Object[${numElements}];")
+        s"$arrayName = new Object[${numElements}];")
 
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
@@ -340,7 +340,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+    ctx.addMutableState("Object[]", values, s"$values = null;")
 
     ev.copy(code = s"""
       $values = new Object[${valExprs.size}];""" +
@@ -357,7 +357,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
         }) +
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
+        $values = null;
       """, isNull = "false")
   }
 
@@ -390,6 +390,8 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateName
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
        map("a":"1","b":"2","c":"3")
+      > SELECT _FUNC_('a');
+       map("a":null)
   """)
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
@@ -407,7 +409,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
 
-  override def dataType: DataType = MapType(StringType, StringType, valueContainsNull = false)
+  override def dataType: DataType = MapType(StringType, StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (Seq(pairDelim, keyValueDelim).exists(! _.foldable)) {

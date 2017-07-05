@@ -176,7 +176,7 @@ private[ml] trait HasThreshold extends Params {
 private[ml] trait HasThresholds extends Params {
 
   /**
-   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0 excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.
+   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values &gt; 0 excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.
    * @group param
    */
   final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0 excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold", (t: Array[Double]) => t.forall(_ >= 0) && t.count(_ == 0) <= 1)
@@ -374,17 +374,15 @@ private[ml] trait HasWeightCol extends Params {
 }
 
 /**
- * Trait for shared param solver (default: "auto").
+ * Trait for shared param solver.
  */
 private[ml] trait HasSolver extends Params {
 
   /**
-   * Param for the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+   * Param for the solver algorithm for optimization.
    * @group param
    */
-  final val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'")
-
-  setDefault(solver, "auto")
+  val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization")
 
   /** @group getParam */
   final def getSolver: String = $(solver)

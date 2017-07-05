@@ -75,6 +75,19 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
     }
   }
 
+  /**
+   * Override the parent `postToAll` to remove the query id from `activeQueryRunIds` after all
+   * the listeners process `QueryTerminatedEvent`. (SPARK-19594)
+   */
+  override def postToAll(event: Event): Unit = {
+    super.postToAll(event)
+    event match {
+      case t: QueryTerminatedEvent =>
+        activeQueryRunIds.synchronized { activeQueryRunIds -= t.runId }
+      case _ =>
+    }
+  }
+
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
       case e: StreamingQueryListener.Event =>
@@ -112,7 +125,6 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
       case queryTerminated: QueryTerminatedEvent =>
         if (shouldReport(queryTerminated.runId)) {
           listener.onQueryTerminated(queryTerminated)
-          activeQueryRunIds.synchronized { activeQueryRunIds -= queryTerminated.runId }
         }
       case _ =>
     }

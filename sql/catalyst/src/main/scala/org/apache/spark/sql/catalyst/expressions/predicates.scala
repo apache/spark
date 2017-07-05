@@ -20,20 +20,22 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => BasePredicate}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 
 object InterpretedPredicate {
-  def create(expression: Expression, inputSchema: Seq[Attribute]): (InternalRow => Boolean) =
+  def create(expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
     create(BindReferences.bindReference(expression, inputSchema))
 
-  def create(expression: Expression): (InternalRow => Boolean) = {
-    (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean]
-  }
+  def create(expression: Expression): InterpretedPredicate = new InterpretedPredicate(expression)
 }
 
+case class InterpretedPredicate(expression: Expression) extends BasePredicate {
+  override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+}
 
 /**
  * An [[Expression]] that returns a boolean value.
@@ -90,6 +92,15 @@ trait PredicateHelper {
    * Returns true iff `expr` could be evaluated as a condition within join.
    */
   protected def canEvaluateWithinJoin(expr: Expression): Boolean = expr match {
+    // Non-deterministic expressions are not allowed as join conditions.
+    case e if !e.deterministic => false
+    case _: ListQuery | _: Exists =>
+      // A ListQuery defines the query which we want to search in an IN subquery expression.
+      // Currently the only way to evaluate an IN subquery is to convert it to a
+      // LeftSemi/LeftAnti/ExistenceJoin by `RewritePredicateSubquery` rule.
+      // It cannot be evaluated as part of a Join operator.
+      // An Exists shouldn't be push into a Join operator too.
+      false
     case e: SubqueryExpression =>
       // non-correlated subquery will be replaced as literal
       e.children.isEmpty
@@ -123,19 +134,56 @@ case class Not(child: Expression)
  */
 @ExpressionDescription(
   usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.")
-case class In(value: Expression, list: Seq[Expression]) extends Predicate
-    with ImplicitCastInputTypes {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   require(list != null, "list should not be null")
-
-  override def inputTypes: Seq[AbstractDataType] = value.dataType +: list.map(_.dataType)
-
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (list.exists(l => l.dataType != value.dataType)) {
-      TypeCheckResult.TypeCheckFailure(
-        "Arguments must be same type")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
+    list match {
+      case ListQuery(sub, _, _) :: Nil =>
+        val valExprs = value match {
+          case cns: CreateNamedStruct => cns.valExprs
+          case expr => Seq(expr)
+        }
+        if (valExprs.length != sub.output.length) {
+          TypeCheckResult.TypeCheckFailure(
+            s"""
+               |The number of columns in the left hand side of an IN subquery does not match the
+               |number of columns in the output of subquery.
+               |#columns in left hand side: ${valExprs.length}.
+               |#columns in right hand side: ${sub.output.length}.
+               |Left side columns:
+               |[${valExprs.map(_.sql).mkString(", ")}].
+               |Right side columns:
+               |[${sub.output.map(_.sql).mkString(", ")}].
+             """.stripMargin)
+        } else {
+          val mismatchedColumns = valExprs.zip(sub.output).flatMap {
+            case (l, r) if l.dataType != r.dataType =>
+              s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
+            case _ => None
+          }
+          if (mismatchedColumns.nonEmpty) {
+            TypeCheckResult.TypeCheckFailure(
+              s"""
+                 |The data type of one or more elements in the left hand side of an IN subquery
+                 |is not compatible with the data type of the output of the subquery
+                 |Mismatched columns:
+                 |[${mismatchedColumns.mkString(", ")}]
+                 |Left side:
+                 |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
+                 |Right side:
+                 |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
+               """.stripMargin)
+          } else {
+            TypeCheckResult.TypeCheckSuccess
+          }
+        }
+      case _ =>
+        if (list.exists(l => l.dataType != value.dataType)) {
+          TypeCheckResult.TypeCheckFailure("Arguments must be same type")
+        } else {
+          TypeCheckResult.TypeCheckSuccess
+        }
     }
   }
 

@@ -629,6 +629,11 @@ others.
       <td>Continuous</td>
       <td>Inverse*, Idenity, Log</td>
     </tr>
+    <tr>
+      <td>Tweedie</td>
+      <td>Zero-inflated continuous</td>
+      <td>Power link function</td>
+    </tr>
     <tfoot><tr><td colspan="4">* Canonical Link</td></tr></tfoot>
   </tbody>
 </table>
@@ -701,6 +706,13 @@ More details on parameters can be found in the [Java API documentation](api/java
 More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.regression.DecisionTreeRegressor).
 
 {% include_example python/ml/decision_tree_regression_example.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
+
+{% include_example regression r/ml/decisionTree.R %}
 </div>
 
 </div>

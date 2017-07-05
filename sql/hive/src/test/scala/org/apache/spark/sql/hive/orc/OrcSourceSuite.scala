@@ -153,22 +153,26 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
   }
 
   test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
     val location = Utils.createTempDir()
     val uri = location.toURI
     try {
+      hiveClient.runSqlHive("USE default")
       hiveClient.runSqlHive(
         """
-           |CREATE EXTERNAL TABLE hive_orc(
-           |  a STRING,
-           |  b CHAR(10),
-           |  c VARCHAR(10))
-           |STORED AS orc""".stripMargin)
+          |CREATE EXTERNAL TABLE hive_orc(
+          |  a STRING,
+          |  b CHAR(10),
+          |  c VARCHAR(10),
+          |  d ARRAY<CHAR(3)>)
+          |STORED AS orc""".stripMargin)
       // Hive throws an exception if I assign the location in the create table statement.
       hiveClient.runSqlHive(
         s"ALTER TABLE hive_orc SET LOCATION '$uri'")
       hiveClient.runSqlHive(
-        "INSERT INTO TABLE hive_orc SELECT 'a', 'b', 'c' FROM (SELECT 1) t")
+        """
+          |INSERT INTO TABLE hive_orc
+          |SELECT 'a', 'b', 'c', ARRAY(CAST('d' AS CHAR(3)))
+          |FROM (SELECT 1) t""".stripMargin)
 
       // We create a different table in Spark using the same schema which points to
       // the same location.
@@ -177,10 +181,11 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
            |CREATE EXTERNAL TABLE spark_orc(
            |  a STRING,
            |  b CHAR(10),
-           |  c VARCHAR(10))
+           |  c VARCHAR(10),
+           |  d ARRAY<CHAR(3)>)
            |STORED AS orc
            |LOCATION '$uri'""".stripMargin)
-      val result = Row("a", "b         ", "c")
+      val result = Row("a", "b         ", "c", Seq("d  "))
       checkAnswer(spark.table("hive_orc"), result)
       checkAnswer(spark.table("spark_orc"), result)
     } finally {
