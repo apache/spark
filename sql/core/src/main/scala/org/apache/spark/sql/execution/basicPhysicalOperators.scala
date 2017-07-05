@@ -41,8 +41,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   val CMCCInputSize = 1220
   val CMCCInputIsString = Array.fill(39)(false)
-  val CMCCInputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3)
-  val CMCCCharLength = Array(32, 8, 8, 12, 12, 8)
+  val CMCCInputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3) ++ Array.fill(26)(1)
+  // Another hacker way to deal with 8 chars String => as Int, is this better?
+  val CMCCCharLength = Array(32, 8, 8, 12, 12, 20, 8)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -78,41 +79,46 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-//    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-//      val project = UnsafeProjection.create(projectList, child.output,
-//        subexpressionEliminationEnabled)
-//      project.initialize(index)
-//      iter.map(project)
-//    }
     val FPGABatch = toFPGABatch(child.execute())
-    val resFPGABatch = mockFPGA(FPGABatch)
+    val resFPGABatch = FPGABatch.map(mockFPGA(_))
     val internalRow = toInternalRow(resFPGABatch)
   }
 
-  def toFPGABatch (input: RDD[InternalRow]): ByteBuffer = {
+  def toFPGABatch (input: RDD[InternalRow]): RDD[ByteBuffer] = {
 
-    input.mapPartitions { iter =>
+    input.mapPartitions[ByteBuffer] { iter =>
       new Iterator[ByteBuffer] {
 
         override def hasNext: Boolean = iter.hasNext
 
+        override def next(): ByteBuffer = {
+          val buffer = mockGetByteBuffer(defaultFPGABatchRowNumber * CMCCInputSize)
+          var count = 0
+          while(iter.hasNext && count < defaultFPGABatchRowNumber) {
+            loadRowToBuffer(iter.next(), buffer)
+            count += 1
+          }
+          buffer
+        }
+
         def loadRowToBuffer(row: InternalRow, buffer: ByteBuffer): Unit = {
+          // Another way to implement index: zipWithIndex, which is better?
+          var index = 0
+          var stringIndex = 0
           CMCCInputSchema.foreach { colType =>
-            var index = 0
-            if(colType == 1) {
+            if (colType == 1) {
               buffer.putInt(index, row.getInt(index))
             } else if (colType == 2) {
               buffer.putLong(index, row.getLong(index))
             } else {
-              buffer.put()
+              val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
+              // From QuanFu
+              System.arraycopy(
+                row.getUTF8String(index).getBytes, 0, tmpBuffer, 0, CMCCCharLength(stringIndex));
+              buffer.put(tmpBuffer)
             }
-          }
-        }
-
-        override def next(): ByteBuffer = {
-          val buffer = getByteBuffer(defaultFPGABatchRowNumber * CMCCInputSize)
-          while(iter.hasNext) {
-
+            index += 1
+            stringIndex += 1
           }
         }
       }
@@ -120,15 +126,17 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     }
   }
 
-  def toInternalRow(input: ByteBuffer): RDD[InternalRow] = {
-    //
+  def toInternalRow(input: RDD[ByteBuffer]): RDD[InternalRow] = {
+    input.flatMap[InternalRow] { buffer =>
+      val rowCount = buffer.
+    }
   }
 
-  def getByteBuffer(size: Int): ByteBuffer = {
+  def mockGetByteBuffer(size: Int): ByteBuffer = {
     ByteBuffer.allocate(size)
   }
 
-  def mockFPGA(input: ByteBuffer) = {
+  def mockFPGA(input: ByteBuffer): ByteBuffer = {
     input
   }
 
