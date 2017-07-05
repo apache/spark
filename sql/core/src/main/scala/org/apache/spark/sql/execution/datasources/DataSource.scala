@@ -89,12 +89,6 @@ case class DataSource(
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver
 
-  userSpecifiedSchema.foreach { dataSchema =>
-    SchemaUtils.checkColumnNameDuplication(
-      dataSchema.map(_.name), "in the data schema", equality)
-  }
-  SchemaUtils.checkColumnNameDuplication(
-    partitionColumns, "in the partition column(s)", equality)
   bucketSpec.map { bucket =>
     SchemaUtils.checkColumnNameDuplication(
       bucket.bucketColumnNames, "in the bucket column(s)", equality)
@@ -194,11 +188,6 @@ case class DataSource(
       throw new AnalysisException(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
-
-    SchemaUtils.checkColumnNameDuplication(
-      dataSchema.map(_.name), "in the data schema", equality)
-    SchemaUtils.checkColumnNameDuplication(
-      partitionSchema.map(_.name), "in the partition column(s)", equality)
 
     // We just print a waring message if the data schema and partition schema have the duplicate
     // columns. This is because we allow users to do so in the previous Spark releases and
@@ -329,13 +318,7 @@ case class DataSource(
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
         dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions, schema)
       case (dataSource: RelationProvider, None) =>
-        val baseRelation =
-          dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
-        SchemaUtils.checkColumnNameDuplication(
-          baseRelation.schema.map(_.name),
-          "in the relation schema",
-          equality)
-        baseRelation
+        dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
       case (_: SchemaRelationProvider, None) =>
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
       case (dataSource: RelationProvider, Some(schema)) =>
@@ -420,6 +403,18 @@ case class DataSource(
       case _ =>
         throw new AnalysisException(
           s"$className is not a valid Spark SQL Data Source.")
+    }
+
+    (relation match {
+      case hs: HadoopFsRelation =>
+        Some((hs.dataSchema.map(_.name), hs.partitionSchema.map(_.name)))
+      case bs: BaseRelation =>
+        Some((bs.schema.map(_.name), Seq.empty[String]))
+      case _ =>
+        None
+    }).foreach { case (dataCols, partCols) =>
+      SchemaUtils.checkColumnNameDuplication(dataCols, "in the data schema", equality)
+      SchemaUtils.checkColumnNameDuplication(partCols, "in the partition column(s)", equality)
     }
 
     relation
