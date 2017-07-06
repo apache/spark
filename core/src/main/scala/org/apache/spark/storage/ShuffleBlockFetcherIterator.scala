@@ -497,8 +497,8 @@ final class ShuffleBlockFetcherIterator(
 
     // Checks if sending a new fetch request will exceed the max no. of blocks being fetched from a
     // given remote address.
-    def isRemoteAddressMaxedOut(remoteHost: BlockManagerId, request: FetchRequest): Boolean = {
-      numBlocksInFlightPerAddress.getOrElse(remoteHost, 0) + request.blocks.size >
+    def isRemoteAddressMaxedOut(remoteAddress: BlockManagerId, request: FetchRequest): Boolean = {
+      numBlocksInFlightPerAddress.getOrElse(remoteAddress, 0) + request.blocks.size >
         maxBlocksInFlightPerAddress
     }
   }
