@@ -388,8 +388,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>
-        val statsInterval = ValueInterval(colStat.min, colStat.max, dataType)
-          .asInstanceOf[NumericValueInterval]
+        val statsInterval =
+          ValueInterval(colStat.min, colStat.max, dataType).asInstanceOf[NumericValueInterval]
         val validQuerySet = hSet.filter { v =>
           v != null && statsInterval.contains(Literal(v, dataType))
         }
@@ -441,8 +441,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
       update: Boolean): Option[BigDecimal] = {
 
     val colStat = colStatsMap(attr)
-    val statsInterval = ValueInterval(colStat.min, colStat.max, attr.dataType)
-      .asInstanceOf[NumericValueInterval]
+    val statsInterval =
+      ValueInterval(colStat.min, colStat.max, attr.dataType).asInstanceOf[NumericValueInterval]
     val max = statsInterval.max.toBigDecimal
     val min = statsInterval.min.toBigDecimal
     val ndv = BigDecimal(colStat.distinctCount)
