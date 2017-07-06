@@ -320,7 +320,7 @@ final class OneVsRest @Since("1.4.0") (
 
     val multiclassLabeled = getClassifier match {
       // SPARK-21306: cache weightCol if necessary
-      case c: HasWeightCol if c.isDefined(c.weightCol) && !c.getWeightCol.isEmpty =>
+      case c: HasWeightCol if c.isDefined(c.weightCol) && c.getWeightCol.nonEmpty =>
         dataset.select($(labelCol), $(featuresCol), c.getWeightCol)
       case _ => dataset.select($(labelCol), $(featuresCol))
     }
