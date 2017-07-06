@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
@@ -40,10 +40,13 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   val defaultFPGABatchRowNumber = 100
 
   val CMCCInputSize = 1220
-  val CMCCInputIsString = Array.fill(39)(false)
-  val CMCCInputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3) ++ Array.fill(26)(1)
+  val CMCCOutputSize = 1220
+
+  val CMCCInputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(24)(1)
+  val CMCCOutputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(24)(1)
+
   // Another hacker way to deal with 8 chars String => as Int, is this better?
-  val CMCCCharLength = Array(32, 8, 8, 12, 12, 20, 8)
+  val CMCCCharLength = Array(32, 8, 8, 12, 12, 20, 8, 8)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -79,9 +82,11 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    println("In projection")
     val FPGABatch = toFPGABatch(child.execute())
     val resFPGABatch = FPGABatch.map(mockFPGA(_))
     val internalRow = toInternalRow(resFPGABatch)
+    internalRow
   }
 
   def toFPGABatch (input: RDD[InternalRow]): RDD[ByteBuffer] = {
@@ -128,7 +133,39 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   def toInternalRow(input: RDD[ByteBuffer]): RDD[InternalRow] = {
     input.flatMap[InternalRow] { buffer =>
-      val rowCount = buffer.
+      val rowCount = buffer.array().length / CMCCOutputSize
+      new Iterator[InternalRow] {
+
+        val numFields = CMCCOutputSchema.length
+
+        override def hasNext: Boolean = rowCount != 0
+
+        override def next(): InternalRow = {
+
+          val row: UnsafeRow = new UnsafeRow(numFields)
+          val holder: BufferHolder = new BufferHolder(row, 0)
+          val rowWriter = new UnsafeRowWriter(holder, numFields)
+
+          var stringIndex = 0
+          CMCCOutputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
+            val (colType, index) = colTypeWithIndex
+            if (colType == 1) {
+              rowWriter.write(index, buffer.getInt())
+            } else if (colType == 2) {
+              rowWriter.write(index, buffer.getLong)
+            } else {
+              val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
+              (0 until tmpBuffer.length).foreach { index =>
+                //Changed getChar -> get
+                tmpBuffer(index) = buffer.get()
+              }
+              rowWriter.write(index, tmpBuffer)
+              stringIndex += 1
+            }
+          }
+          row
+        }
+      }
     }
   }
 
