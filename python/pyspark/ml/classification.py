@@ -1468,7 +1468,7 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
 
 @inherit_doc
-class OneVsRest(Estimator, OneVsRestParams, JavaParams, JavaMLReadable, JavaMLWritable):
+class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1521,10 +1521,6 @@ class OneVsRest(Estimator, OneVsRestParams, JavaParams, JavaMLReadable, JavaMLWr
         super(OneVsRest, self).__init__()
         kwargs = self._input_kwargs
         self._set(**kwargs)
-
-        self._setDefault(classifier=LogisticRegression())
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
-                             self.uid)
 
     @keyword_only
     @since("2.0.0")
@@ -1624,12 +1620,9 @@ class OneVsRest(Estimator, OneVsRestParams, JavaParams, JavaMLReadable, JavaMLWr
         """
         sc = SparkContext._active_spark_context
         param = self._resolveParam(param)
-        print "self uid in function:",self.uid
-        print "JAVA OBJ in func:",self._java_obj
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
                                              self.uid)
-        print "Created java obj:",_java_obj
-        java_param = self._java_obj.getParam(param.name)
+        java_param = _java_obj.getParam(param.name)
         if isinstance(value, JavaParams):
             # used in the case of an estimator having another estimator as a parameter
             # the reason why this is not in _py2java in common.py is that importing

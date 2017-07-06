@@ -62,7 +62,6 @@ private[ml] trait OneVsRestParams extends PredictorParams with ClassifierTypeTra
    * @group param
    */
   val classifier: Param[ClassifierType] = new Param(this, "classifier", "base binary classifier")
-  setDefault(classifier -> new LogisticRegression)
 
   /** @group getParam */
   def getClassifier: ClassifierType = $(classifier)

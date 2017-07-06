@@ -1506,16 +1506,9 @@ class DefaultValuesTests(PySparkTestCase):
                                     "param %s for Params %s"
                                     % (str(java_default), str(py_default), p.name, str(py_stage)))
                     return
-                if p.name == "classifier":
-                    for param in py_default.extractParamMap():
-                        self.assertEqual(py_default.getOrDefault(param), java_default.getOrDefault(param),
-                                         "Java default %s != python default %s of classifier param"
-                                         % (str(py_default.getOrDefault(param)),
-                                            str(java_default.getOrDefaultparam)))
-                else:
-                    self.assertEqual(java_default, py_default,
-                                     "Java default %s != python default %s of param %s for Params %s"
-                                     % (str(java_default), str(py_default), p.name, str(py_stage)))
+                self.assertEqual(java_default, py_default,
+                                 "Java default %s != python default %s of param %s for Params %s"
+                                 % (str(java_default), str(py_default), p.name, str(py_stage)))
 
     def test_java_params(self):
         import pyspark.ml.feature
