@@ -491,7 +491,7 @@ Streaming DataFrames can be created through the `DataStreamReader` interface
 returned by `SparkSession.readStream()`. In [R](api/R/read.stream.html), with the `read.stream()` method. Similar to the read interface for creating static DataFrame, you can specify the details of the source – data format, schema, options, etc.
 
 #### Input Sources
-In Spark 2.0, there are a few built-in sources.
+There are a few built-in sources.
 
   - **File source** - Reads files written in a directory as a stream of data. Supported file formats are text, csv, json, parquet. See the docs of the DataStreamReader interface for a more up-to-date list, and supported options for each file format. Note that the files must be atomically placed in the given directory, which in most file systems, can be achieved by file move operations.
 
@@ -522,17 +522,18 @@ Here are the details of all the sources in Spark.
         <br/>
         <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
         <br/>
-        · "file:///dataset.txt"<br/>
-        · "s3://a/dataset.txt"<br/>
-        · "s3n://a/b/dataset.txt"<br/>
-        · "s3a://a/b/c/dataset.txt"<br/>
-        <br/>
-
-        <br/>
+        "file:///dataset.txt"<br/>
+        "s3://a/dataset.txt"<br/>
+        "s3n://a/b/dataset.txt"<br/>
+        "s3a://a/b/c/dataset.txt"<br/>
+        <br/><br/>
         For file-format-specific options, see the related methods in <code>DataStreamReader</code>
         (<a href="api/scala/index.html#org.apache.spark.sql.streaming.DataStreamReader">Scala</a>/<a href="api/java/org/apache/spark/sql/streaming/DataStreamReader.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader">Python</a>/<a
         href="api/R/read.stream.html">R</a>).
-        E.g. for "parquet" format options see <code>DataStreamReader.parquet()</code></td>
+        E.g. for "parquet" format options see <code>DataStreamReader.parquet()</code>.
+        <br/><br/>
+        In addition, there are session configurations that affect certain file-formats. See the <a href="sql-programming-guide.html">SQL Programming Guide</a> for more details. E.g., for "parquet", see <a href="sql-programming-guide.html#configuration">Parquet configuration</a> section.
+        </td>
     <td>Yes</td>
     <td>Supports glob paths, but does not support multiple comma-separated paths/globs.</td>
   </tr>
@@ -2066,7 +2067,7 @@ write.stream(aggDF, "memory", outputMode = "complete", checkpointLocation = "pat
 **Further Reading**
 
 - See and run the
-  [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/sql/streaming)/[Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/sql/streaming)/[Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/sql/streaming)/[R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r/streaming)
+  [Scala]({{site.SPARK_GITHUB_URL}}/tree/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming)/[Java]({{site.SPARK_GITHUB_URL}}/tree/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming)/[Python]({{site.SPARK_GITHUB_URL}}/tree/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/sql/streaming)/[R]({{site.SPARK_GITHUB_URL}}/tree/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/r/streaming)
   examples.
     - [Instructions](index.html#running-the-examples-and-shell) on how to run Spark examples
 - Read about integrating with Kafka in the [Structured Streaming Kafka Integration Guide](structured-streaming-kafka-integration.html)
