@@ -18,13 +18,11 @@
 package org.apache.spark.ml.classification
 
 import java.util.UUID
-import java.util.concurrent.ExecutorService
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 import scala.language.existentials
 
-import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject, _}
 import org.json4s.JsonDSL._
@@ -34,7 +32,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamPair, Params, ParamValidators}
+import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -329,6 +327,7 @@ final class OneVsRest @Since("1.4.0") (
     }
 
     val executionContext = getExecutionContext
+    instr.logParams(parallelism)
 
     // create k columns, one for each binary classifier.
     val modelFutures = Range(0, numClasses).map { index =>

@@ -17,11 +17,7 @@
 
 package org.apache.spark.ml.util
 
-import java.util.concurrent.ExecutorService
-
 import scala.concurrent.ExecutionContext
-
-import com.google.common.util.concurrent.MoreExecutors
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{IntParam, Params, ParamValidators}
@@ -33,18 +29,16 @@ import org.apache.spark.util.ThreadUtils
 private[ml] trait HasParallelism extends Params {
 
   /**
-   * param for the number of processes to use when running parallel one vs. rest
+   * param for the number of threads to use when running parallel one vs. rest
    * The implementation of parallel one vs. rest runs the classification for
-   * each class in a separate process.
+   * each class in a separate threads.
    * @group expertParam
    */
   @Since("2.3.0")
   val parallelism = new IntParam(this, "parallelism",
-    "the number of processes to use when running parallel algorithms", ParamValidators.gtEq(1))
+    "the number of threads to use when running parallel algorithms", ParamValidators.gtEq(1))
 
-  setDefault(
-    parallelism -> 1
-  )
+  setDefault(parallelism -> 1)
 
   /** @group getParam */
   def getParallelism: Int = $(parallelism)
@@ -55,13 +49,13 @@ private[ml] trait HasParallelism extends Params {
     set(parallelism, value)
   }
 
-  def getExecutionContext: ExecutionContext = {
+  protected def getExecutionContext: ExecutionContext = {
     getParallelism match {
       case 1 =>
         ThreadUtils.sameThread
       case n =>
         ExecutionContext.fromExecutorService(ThreadUtils
-          .newDaemonCachedThreadPool(s"${this.getClass.getSimpleName}-thread-pool", getParallelism))
+          .newDaemonCachedThreadPool(s"${this.getClass.getSimpleName}-thread-pool", n))
     }
   }
 }

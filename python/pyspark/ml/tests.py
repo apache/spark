@@ -951,7 +951,7 @@ class PersistenceTest(SparkSessionTestCase):
                                          (2.0, Vectors.dense(0.5, 0.5))] * 10,
                                         ["label", "features"])
         lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr, parallelism=1)
+        ovr = OneVsRest(classifier=lr)
         model = ovr.fit(df)
         ovrPath = temp_path + "/ovr"
         ovr.save(ovrPath)
@@ -1244,6 +1244,14 @@ class OneVsRestTests(SparkSessionTestCase):
         ovrPar2 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=2)
         modelPar2 = ovrPar2.fit(df)
         self.assertEqual(modelPar1.getPredictionCol(), modelPar2.getPredictionCol())
+        for model in modelPar1.models:
+            foundCloseCoeffs = False
+            for model2 in modelPar2.models:
+                if np.allclose(model.coefficients.toArray(),
+                               model2.coefficients.toArray(), atol=1E-4):
+                    foundCloseCoeffs = True
+                    break
+            self.assertTrue(foundCloseCoeffs)
 
 
 class HashingTFTest(SparkSessionTestCase):

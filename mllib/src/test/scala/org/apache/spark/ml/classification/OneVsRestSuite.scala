@@ -128,7 +128,21 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
     val metricsPar1 = new MulticlassMetrics(ovaResultsPar1)
     val metricsPar2 = new MulticlassMetrics(ovaResultsPar2)
-    assert(metricsPar1.confusionMatrix ~== metricsPar2.confusionMatrix absTol 400)
+    assert(metricsPar1.confusionMatrix == metricsPar2.confusionMatrix)
+
+    for (i <- 0 until ovaModelPar1.models.length) {
+      var foundCloseCoeffs = false
+      val currentCoeffs = ovaModelPar1.models(i)
+                          .asInstanceOf[LogisticRegressionModel].coefficients
+      for (j <- 0 until ovaModelPar2.models.length) {
+        val otherCoeffs = ovaModelPar2.models(i)
+                      .asInstanceOf[LogisticRegressionModel].coefficients
+        if (currentCoeffs == otherCoeffs) {
+          foundCloseCoeffs = true
+        }
+      }
+      assert(foundCloseCoeffs)
+    }
   }
 
   test("one-vs-rest: pass label metadata correctly during train") {

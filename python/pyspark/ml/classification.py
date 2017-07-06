@@ -1513,7 +1513,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     """
 
     parallelism = Param(Params._dummy(), "parallelism",
-                        "number of processors to use when fitting models in parallel",
+                        "number of threads to use when fitting models in parallel",
                         typeConverter=TypeConverters.toInt)
 
     @keyword_only
@@ -1530,8 +1530,8 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None,
-                  classifier=None, parallelism=None):
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  classifier=None, parallelism=1):
         """
         setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
         Sets params for OneVsRest.
