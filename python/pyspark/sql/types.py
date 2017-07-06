@@ -1051,7 +1051,7 @@ def _infer_type(obj):
             return ArrayType(NullType(), True)
     elif isinstance(obj, array):
         if obj.typecode in _array_type_mappings:
-            return ArrayType(_array_type_mappings[obj.typecode](), True)
+            return ArrayType(_array_type_mappings[obj.typecode](), False)
         else:
             raise TypeError("not supported type: array(%s)" % obj.typecode)
     else:
