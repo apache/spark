@@ -590,38 +590,41 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
       .map(col => col.getName).toSet
 
-    def isExtractable(expr: Expression): Boolean =
-      expr match {
-        case Literal(_, _: IntegralType) | Literal(_, _: StringType) => true
-        case _ => false
+    object ExtractableLiteral {
+      def unapply(expr: Expression): Option[String] = expr match {
+        case Literal(value, _: IntegralType) => Some(value.toString)
+        case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString))
+        case _ => None
       }
+    }
 
-    def extractValue(expr: Expression): String =
-      expr match {
-        case Literal(v, _: IntegralType) => v.toString
-        case Literal(v, _: StringType) => quoteStringLiteral(v.toString)
+    object ExtractableLiterals {
+      def unapply(exprs: Seq[Expression]): Option[Seq[String]] = {
+        exprs.map(ExtractableLiteral.unapply).foldLeft(Option(Seq.empty[String])) {
+          case (Some(accum), Some(value)) => Some(accum :+ value)
+          case _ => None
+        }
       }
+    }
 
-    lazy val convert: PartialFunction[Expression, String] =
-      {
-        case In(a: Attribute, exprs)
-            if !varcharKeys.contains(a.name) && exprs.forall(isExtractable) =>
-          val or =
-            exprs
-              .map(expr => s"${a.name} = ${extractValue(expr)}")
-              .reduce(_ + " or " + _)
-          "(" + or + ")"
-        case op @ BinaryComparison(a: Attribute, expr2)
-            if !varcharKeys.contains(a.name) && isExtractable(expr2) =>
-          s"${a.name} ${op.symbol} ${extractValue(expr2)}"
-        case op @ BinaryComparison(expr1, a: Attribute)
-            if !varcharKeys.contains(a.name) && isExtractable(expr1) =>
-          s"${extractValue(expr1)} ${op.symbol} ${a.name}"
-        case op @ And(expr1, expr2) =>
-          s"(${convert(expr1)} and ${convert(expr2)})"
-        case op @ Or(expr1, expr2) =>
-          s"(${convert(expr1)} or ${convert(expr2)})"
-      }
+    lazy val convert: PartialFunction[Expression, String] = {
+      case In(a: Attribute, ExtractableLiterals(values)) if !varcharKeys.contains(a.name) =>
+        val or =
+          values
+            .map(value => s"${a.name} = $value")
+            .reduce(_ + " or " + _)
+        "(" + or + ")"
+      case op @ BinaryComparison(a: Attribute, ExtractableLiteral(value))
+          if !varcharKeys.contains(a.name) =>
+        s"${a.name} ${op.symbol} $value"
+      case op @ BinaryComparison(ExtractableLiteral(value), a: Attribute)
+          if !varcharKeys.contains(a.name) =>
+        s"$value ${op.symbol} ${a.name}"
+      case op @ And(expr1, expr2) =>
+        s"(${convert(expr1)} and ${convert(expr2)})"
+      case op @ Or(expr1, expr2) =>
+        s"(${convert(expr1)} or ${convert(expr2)})"
+    }
 
     filters.flatMap(f => Try(convert(f)).toOption).mkString(" and ")
   }

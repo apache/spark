@@ -89,6 +89,16 @@ class HiveClientSuite(version: String)
       "aa" :: "ab" :: "ba" :: "bb" :: Nil)
   }
 
+  test("getPartitionsByFilter: ds=(20170101 + 1) and h=0") {
+    // Should return all partitions because getPartitionsByFilter does not support comparisons to
+    // non-literal values
+    testMetastorePartitionFiltering(
+      "ds=(20170101 + 1) and h=0",
+      20170101 to 20170103,
+      0 to 23,
+      "aa" :: "ab" :: "ba" :: "bb" :: Nil)
+  }
+
   test("getPartitionsByFilter: chunk='aa'") {
     testMetastorePartitionFiltering(
       "chunk='aa'",
