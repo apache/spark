@@ -37,7 +37,7 @@ class JoinOptimizationSuite extends PlanTest {
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
-        ReorderJoin(conf),
+        ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) :: Nil

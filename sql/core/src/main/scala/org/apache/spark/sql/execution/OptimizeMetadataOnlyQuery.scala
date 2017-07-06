@@ -38,12 +38,10 @@ import org.apache.spark.sql.internal.SQLConf
  * 3. aggregate function on partition columns which have same result w or w/o DISTINCT keyword.
  *  e.g. SELECT col1, Max(col2) FROM tbl GROUP BY col1.
  */
-case class OptimizeMetadataOnlyQuery(
-    catalog: SessionCatalog,
-    conf: SQLConf) extends Rule[LogicalPlan] {
+case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.optimizerMetadataOnly) {
+    if (!SQLConf.get.optimizerMetadataOnly) {
       return plan
     }
 
@@ -106,7 +104,7 @@ case class OptimizeMetadataOnlyQuery(
             val caseInsensitiveProperties =
               CaseInsensitiveMap(relation.tableMeta.storage.properties)
             val timeZoneId = caseInsensitiveProperties.get(DateTimeUtils.TIMEZONE_OPTION)
-              .getOrElse(conf.sessionLocalTimeZone)
+              .getOrElse(SQLConf.get.sessionLocalTimeZone)
             val partitionData = catalog.listPartitions(relation.tableMeta.identifier).map { p =>
               InternalRow.fromSeq(partAttrs.map { attr =>
                 Cast(Literal(p.spec(attr.name)), attr.dataType, Option(timeZoneId)).eval()

@@ -35,7 +35,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
       Batch("Constant Folding", FixedPoint(50),
-        NullPropagation(conf),
+        NullPropagation,
         ConstantFolding,
         BooleanSimplification,
         PruneFilters) :: Nil
