@@ -307,7 +307,10 @@ object ScalaReflection extends ScalaReflection {
           Invoke(arrayData, primitiveMethod, arrayCls, returnNullable = false)
         }
 
-      case t if t <:< localTypeOf[Seq[_]] =>
+      // We serialize a `Set` to Catalyst array. When we deserialize a Catalyst array
+      // to a `Set`, if there are duplicated elements, the elements will be de-duplicated.
+      case t if t <:< localTypeOf[Seq[_]] ||
+          t <:< localTypeOf[scala.collection.Set[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, elementNullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
@@ -326,7 +329,10 @@ object ScalaReflection extends ScalaReflection {
 
         val companion = t.normalize.typeSymbol.companionSymbol.typeSignature
         val cls = companion.declaration(newTermName("newBuilder")) match {
-          case NoSymbol => classOf[Seq[_]]
+          // It always returns `NoSymbol` for set classes. But we can't simply use the class of
+          // `Set` here. Because of Scala optimization such as `Set.Set2`, there will be runtime
+          // exception due to type mismatching.
+          case NoSymbol if t <:< localTypeOf[Seq[_]] => classOf[Seq[_]]
           case _ => mirror.runtimeClass(t.typeSymbol.asClass)
         }
         UnresolvedMapObjects(mapFunction, getPath, Some(cls))
@@ -341,28 +347,6 @@ object ScalaReflection extends ScalaReflection {
           getPath,
           mirror.runtimeClass(t.typeSymbol.asClass)
         )
-
-      // We serialize a `Set` to Catalyst array. When we deserialize a Catalyst array
-      // to a `Set`, if there are duplicated elements, the elements will be de-duplicated.
-      case t if t <:< localTypeOf[scala.collection.Set[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, elementNullable) = schemaFor(elementType)
-        val className = getClassNameFromType(elementType)
-        val newTypePath = s"""- set element class: "$className"""" +: walkedTypePath
-
-        val mapFunction: Expression => Expression = element => {
-          // upcast the array element to the data type the encoder expected.
-          val casted = upCastToExpectedType(element, dataType, newTypePath)
-          val converter = deserializerFor(elementType, Some(casted), newTypePath)
-          if (elementNullable) {
-            converter
-          } else {
-            AssertNotNull(converter, newTypePath)
-          }
-        }
-
-        val cls = mirror.runtimeClass(t.typeSymbol.asClass)
-        UnresolvedMapObjects(mapFunction, getPath, Some(cls))
 
       case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()

@@ -462,13 +462,14 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
 
     checkDataset(
-      df.select(collect_set($"a").as("aSet"))
-        .as[Set[Int]],
+      df.select(collect_set($"a").as("aSet")).as[Set[Int]],
       Set(1, 2, 3))
     checkDataset(
-      df.select(collect_set($"b").as("bSet"))
-        .as[Set[Int]],
+      df.select(collect_set($"b").as("bSet")).as[Set[Int]],
       Set(2, 4))
+    checkDataset(
+      df.select(collect_set($"a"), collect_set($"b")).as[(Set[Int], Set[Int])],
+      Seq(Set(1, 2, 3) -> Set(2, 4)): _*)
   }
 
   test("collect functions structs") {
