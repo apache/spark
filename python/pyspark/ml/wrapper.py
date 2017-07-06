@@ -106,7 +106,7 @@ class JavaParams(JavaWrapper, Params):
 
     def _make_java_param_pair(self, param, value):
         """
-        Makes a Java parm pair.
+        Makes a Java param pair.
         """
         sc = SparkContext._active_spark_context
         param = self._resolveParam(param)

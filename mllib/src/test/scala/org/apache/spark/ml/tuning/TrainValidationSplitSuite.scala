@@ -135,7 +135,7 @@ class TrainValidationSplitSuite
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
     assert(tvs.getSeed === tvs2.getSeed)
 
-    TrainValidationSplitSuite
+    ValidatorParamsSuiteHelpers
       .compareParamMaps(tvs.getEstimatorParamMaps, tvs2.getEstimatorParamMaps)
 
     tvs2.getEstimator match {
@@ -177,7 +177,7 @@ class TrainValidationSplitSuite
         classifier match {
           case lr: LogisticRegression =>
             assert(ova.getClassifier.asInstanceOf[LogisticRegression].getMaxIter
-              === lr.asInstanceOf[LogisticRegression].getMaxIter)
+              === lr.getMaxIter)
           case _ =>
             throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
               s" LogisticREgression but found ${classifier.getClass.getName}")
@@ -187,6 +187,9 @@ class TrainValidationSplitSuite
         throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
           s" OneVsRest but found ${other.getClass.getName}")
     }
+
+    ValidatorParamsSuiteHelpers
+      .compareParamMaps(tvs.getEstimatorParamMaps, tvs2.getEstimatorParamMaps)
   }
 
   test("read/write: TrainValidationSplitModel") {
@@ -214,20 +217,7 @@ class TrainValidationSplitSuite
 }
 
 object TrainValidationSplitSuite extends SparkFunSuite{
-  /**
-   * Assert sequences of estimatorParamMaps are identical.
-   * Params must be simple types comparable with `===`.
-   */
-  def compareParamMaps(pMaps: Array[ParamMap], pMaps2: Array[ParamMap]): Unit = {
-    assert(pMaps.length === pMaps2.length)
-    pMaps.zip(pMaps2).foreach { case (pMap, pMap2) =>
-      assert(pMap.size === pMap2.size)
-      pMap.toSeq.foreach { case ParamPair(p, v) =>
-        assert(pMap2.contains(p))
-        assert(pMap2(p) === v)
-      }
-    }
-  }
+
   abstract class MyModel extends Model[MyModel]
 
   class MyEstimator(override val uid: String) extends Estimator[MyModel] with HasInputCol {

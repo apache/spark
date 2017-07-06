@@ -153,7 +153,8 @@ class CrossValidatorSuite
           s" LogisticRegression but found ${other.getClass.getName}")
     }
 
-    CrossValidatorSuite.compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+    ValidatorParamsSuiteHelpers
+      .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
   }
 
   test("read/write: CrossValidator with nested estimator") {
@@ -190,7 +191,7 @@ class CrossValidatorSuite
         classifier match {
           case lr: LogisticRegression =>
             assert(ova.getClassifier.asInstanceOf[LogisticRegression].getMaxIter
-              === lr.asInstanceOf[LogisticRegression].getMaxIter)
+              === lr.getMaxIter)
           case _ =>
             throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
               s" LogisticREgression but found ${classifier.getClass.getName}")
@@ -200,6 +201,9 @@ class CrossValidatorSuite
         throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
           s" OneVsRest but found ${other.getClass.getName}")
     }
+
+    ValidatorParamsSuiteHelpers
+      .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
   }
 
   test("read/write: CrossValidator with complex estimator") {
@@ -239,7 +243,8 @@ class CrossValidatorSuite
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     assert(cv.getEvaluator.uid === cv2.getEvaluator.uid)
 
-    CrossValidatorSuite.compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+    ValidatorParamsSuiteHelpers
+      .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
 
     cv2.getEstimator match {
       case pipeline2: Pipeline =>
@@ -258,7 +263,8 @@ class CrossValidatorSuite
             assert(lrcv.uid === lrcv2.uid)
             assert(lrcv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
             assert(lrEvaluator.uid === lrcv2.getEvaluator.uid)
-            CrossValidatorSuite.compareParamMaps(lrParamMaps, lrcv2.getEstimatorParamMaps)
+            ValidatorParamsSuiteHelpers
+              .compareParamMaps(lrParamMaps, lrcv2.getEstimatorParamMaps)
           case other =>
             throw new AssertionError("Loaded Pipeline expected stages (HashingTF, CrossValidator)" +
               " but found: " + other.map(_.getClass.getName).mkString(", "))
@@ -324,7 +330,8 @@ class CrossValidatorSuite
           s" LogisticRegression but found ${other.getClass.getName}")
     }
 
-    CrossValidatorSuite.compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+   ValidatorParamsSuiteHelpers
+     .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
 
     cv2.bestModel match {
       case lrModel2: LogisticRegressionModel =>
@@ -341,21 +348,6 @@ class CrossValidatorSuite
 }
 
 object CrossValidatorSuite extends SparkFunSuite {
-
-  /**
-   * Assert sequences of estimatorParamMaps are identical.
-   * Params must be simple types comparable with `===`.
-   */
-  def compareParamMaps(pMaps: Array[ParamMap], pMaps2: Array[ParamMap]): Unit = {
-    assert(pMaps.length === pMaps2.length)
-    pMaps.zip(pMaps2).foreach { case (pMap, pMap2) =>
-      assert(pMap.size === pMap2.size)
-      pMap.toSeq.foreach { case ParamPair(p, v) =>
-        assert(pMap2.contains(p))
-        assert(pMap2(p) === v)
-      }
-    }
-  }
 
   abstract class MyModel extends Model[MyModel]
 

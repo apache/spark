@@ -712,7 +712,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
-    def test_save_load_nested_stimator(self):
+    def test_save_load_nested_estimator(self):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
             [(Vectors.dense([0.0]), 0.0),
@@ -1506,9 +1506,16 @@ class DefaultValuesTests(PySparkTestCase):
                                     "param %s for Params %s"
                                     % (str(java_default), str(py_default), p.name, str(py_stage)))
                     return
-                self.assertEqual(java_default, py_default,
-                                 "Java default %s != python default %s of param %s for Params %s"
-                                 % (str(java_default), str(py_default), p.name, str(py_stage)))
+                if p.name == "classifier":
+                    for param in py_default.extractParamMap():
+                        self.assertEqual(py_default.getOrDefault(param), java_default.getOrDefault(param),
+                                         "Java default %s != python default %s of classifier param"
+                                         % (str(py_default.getOrDefault(param)),
+                                            str(java_default.getOrDefaultparam)))
+                else:
+                    self.assertEqual(java_default, py_default,
+                                     "Java default %s != python default %s of param %s for Params %s"
+                                     % (str(java_default), str(py_default), p.name, str(py_stage)))
 
     def test_java_params(self):
         import pyspark.ml.feature

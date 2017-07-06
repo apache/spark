@@ -140,12 +140,6 @@ class ValidatorParams(HasSeed):
         """
         return self.getOrDefault(self.evaluator)
 
-    def getEvaluator(self):
-        """
-        Gets the value of evaluator or its default value.
-        """
-        return self.getOrDefault(self.evaluator)
-
     @classmethod
     def _from_java_impl(cls, java_stage):
         """
@@ -306,11 +300,6 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
-    @since("2.3.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
     @classmethod
     @since("2.3.0")
     def read(cls):
@@ -318,7 +307,6 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         return JavaMLReader(cls)
 
     @classmethod
-    @since("2.3.0")
     def _from_java(cls, java_stage):
         """
         Given a Java CrossValidator, create and return a Python wrapper of it.
@@ -334,7 +322,6 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
-    @since("2.3.0")
     def _to_java(self):
         """
         Transfer this instance to a Java CrossValidator. Used for ML persistence.
@@ -397,11 +384,6 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
-    @since("2.3.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
     @classmethod
     @since("2.3.0")
     def read(cls):
@@ -409,7 +391,6 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         return JavaMLReader(cls)
 
     @classmethod
-    @since("2.3.0")
     def _from_java(cls, java_stage):
         """
         Given a Java CrossValidatorModel, create and return a Python wrapper of it.
@@ -425,7 +406,6 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
-    @since("2.3.0")
     def _to_java(self):
         """
         Transfer this instance to a Java CrossValidatorModel. Used for ML persistence.
@@ -567,11 +547,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
-    @since("2.3.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
     @classmethod
     @since("2.3.0")
     def read(cls):
@@ -579,7 +554,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         return JavaMLReader(cls)
 
     @classmethod
-    @since("2.3.0")
     def _from_java(cls, java_stage):
         """
         Given a Java TrainValidationSplit, create and return a Python wrapper of it.
@@ -595,7 +569,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
-    @since("2.3.0")
     def _to_java(self):
         """
         Transfer this instance to a Java TrainValidationSplit. Used for ML persistence.
@@ -657,11 +630,6 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
-    @since("2.3.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
     @classmethod
     @since("2.3.0")
     def read(cls):
@@ -669,7 +637,6 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         return JavaMLReader(cls)
 
     @classmethod
-    @since("2.3.0")
     def _from_java(cls, java_stage):
         """
         Given a Java TrainValidationSplitModel, create and return a Python wrapper of it.
@@ -687,7 +654,6 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
-    @since("2.3.0")
     def _to_java(self):
         """
         Transfer this instance to a Java TrainValidationSplitModel. Used for ML persistence.

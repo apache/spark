@@ -1468,7 +1468,7 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
 
 @inherit_doc
-class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
+class OneVsRest(Estimator, OneVsRestParams, JavaParams, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1521,6 +1521,10 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         super(OneVsRest, self).__init__()
         kwargs = self._input_kwargs
         self._set(**kwargs)
+
+        self._setDefault(classifier=LogisticRegression())
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
+                             self.uid)
 
     @keyword_only
     @since("2.0.0")
@@ -1616,14 +1620,17 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
 
     def _make_java_param_pair(self, param, value):
         """
-        Makes a Java parm pair.
+        Makes a Java param pair.
         """
         sc = SparkContext._active_spark_context
         param = self._resolveParam(param)
+        print "self uid in function:",self.uid
+        print "JAVA OBJ in func:",self._java_obj
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
                                              self.uid)
-        java_param = _java_obj.getParam(param.name)
-        if isinstance(value, Estimator) or isinstance(value, Model):
+        print "Created java obj:",_java_obj
+        java_param = self._java_obj.getParam(param.name)
+        if isinstance(value, JavaParams):
             # used in the case of an estimator having another estimator as a parameter
             # the reason why this is not in _py2java in common.py is that importing
             # Estimator and Model in common.py results in a circular import with inherit_doc
@@ -1679,6 +1686,7 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         java_models_array = JavaWrapper._new_java_array(java_models,
                                                         sc._gateway.jvm.org.apache.spark.ml
                                                         .classification.ClassificationModel)
+        # TODO: need to set metadata
         metadata = JavaParams._new_java_obj("org.apache.spark.sql.types.Metadata")
         self._java_obj = \
             JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRestModel",
