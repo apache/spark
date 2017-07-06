@@ -588,12 +588,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
-  public UnsafeSorterIterator getIterator() throws IOException {
-    return getIterator(0);
-  }
-
   /**
-   * Returns a iterator, which will return the rows in the order as inserted.
+   * Returns a iterator starts from startIndex, which will return the rows in the order as inserted.
    *
    * It is the caller's responsibility to call `cleanupResources()`
    * after consuming this iterator.
@@ -604,9 +600,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     if (spillWriters.isEmpty()) {
       assert(inMemSorter != null);
       UnsafeSorterIterator iter = inMemSorter.getSortedIterator();
-      for (int i = 0; i < startIndex && iter.hasNext(); i++) {
-        iter.loadNext();
-      }
+      moveOver(iter, 0, startIndex);
       return iter;
     } else {
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
@@ -614,25 +608,28 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
         if (i + spillWriter.recordsSpilled() <= startIndex) {
           i += spillWriter.recordsSpilled();
-          continue;
         } else {
           UnsafeSorterIterator iter = spillWriter.getReader(serializerManager);
-          for (int j = i; j < startIndex && iter.hasNext(); j++) {
-            iter.loadNext();
-          }
+          moveOver(iter, i, startIndex);
           queue.add(iter);
           i += spillWriter.recordsSpilled();
         }
       }
       if (inMemSorter != null) {
         UnsafeSorterIterator iter = inMemSorter.getSortedIterator();
-        while (i < startIndex && iter.hasNext()) {
-          iter.loadNext();
-          i++;
-        }
+        moveOver(iter, i, startIndex);
         queue.add(iter);
       }
       return new ChainedIterator(queue);
+    }
+  }
+
+  private void moveOver(UnsafeSorterIterator iter, int currentIndex, int targetIndex)
+      throws IOException {
+    if (currentIndex < targetIndex) {
+      for (int i = currentIndex; i < targetIndex && iter.hasNext(); i++) {
+        iter.loadNext();
+      }
     }
   }
 

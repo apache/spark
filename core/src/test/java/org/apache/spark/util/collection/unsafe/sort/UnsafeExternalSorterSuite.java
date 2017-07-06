@@ -395,7 +395,7 @@ public class UnsafeExternalSorterSuite {
         sorter.spill();
       }
     }
-    UnsafeSorterIterator iter = sorter.getIterator();
+    UnsafeSorterIterator iter = sorter.getIterator(0);
     for (int i = 0; i < n; i++) {
       iter.hasNext();
       iter.loadNext();
