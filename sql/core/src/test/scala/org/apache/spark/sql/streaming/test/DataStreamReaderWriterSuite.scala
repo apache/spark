@@ -641,6 +641,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("temp checkpoint dir should be deleted if a query is stopped without errors") {
     import testImplicits._
     val query = MemoryStream[Int].toDS.writeStream.format("console").start()
+    query.processAllAvailable()
     val checkpointDir = new Path(
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.checkpointRoot)
     val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
