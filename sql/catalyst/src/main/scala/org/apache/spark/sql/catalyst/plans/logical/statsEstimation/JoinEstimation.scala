@@ -175,9 +175,9 @@ case class InnerOuterEstimation(join: Join) extends Logging {
       // Check if the two sides are disjoint
       val leftKeyStats = leftStats.attributeStats(leftKey)
       val rightKeyStats = rightStats.attributeStats(rightKey)
-      val lRange = Range(leftKeyStats.min, leftKeyStats.max, leftKey.dataType)
-      val rRange = Range(rightKeyStats.min, rightKeyStats.max, rightKey.dataType)
-      if (Range.isIntersected(lRange, rRange)) {
+      val lInterval = ValueInterval(leftKeyStats.min, leftKeyStats.max, leftKey.dataType)
+      val rInterval = ValueInterval(rightKeyStats.min, rightKeyStats.max, rightKey.dataType)
+      if (ValueInterval.isIntersected(lInterval, rInterval)) {
         // Get the largest ndv among pairs of join keys
         val maxNdv = leftKeyStats.distinctCount.max(rightKeyStats.distinctCount)
         if (maxNdv > ndvDenom) ndvDenom = maxNdv
@@ -239,16 +239,16 @@ case class InnerOuterEstimation(join: Join) extends Logging {
     joinKeyPairs.foreach { case (leftKey, rightKey) =>
       val leftKeyStats = leftStats.attributeStats(leftKey)
       val rightKeyStats = rightStats.attributeStats(rightKey)
-      val lRange = Range(leftKeyStats.min, leftKeyStats.max, leftKey.dataType)
-      val rRange = Range(rightKeyStats.min, rightKeyStats.max, rightKey.dataType)
+      val lInterval = ValueInterval(leftKeyStats.min, leftKeyStats.max, leftKey.dataType)
+      val rInterval = ValueInterval(rightKeyStats.min, rightKeyStats.max, rightKey.dataType)
       // When we reach here, join selectivity is not zero, so each pair of join keys should be
       // intersected.
-      assert(Range.isIntersected(lRange, rRange))
+      assert(ValueInterval.isIntersected(lInterval, rInterval))
 
       // Update intersected column stats
       assert(leftKey.dataType.sameType(rightKey.dataType))
       val newNdv = leftKeyStats.distinctCount.min(rightKeyStats.distinctCount)
-      val (newMin, newMax) = Range.intersect(lRange, rRange, leftKey.dataType)
+      val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
       val newMaxLen = math.min(leftKeyStats.maxLen, rightKeyStats.maxLen)
       val newAvgLen = (leftKeyStats.avgLen + rightKeyStats.avgLen) / 2
       val newStats = ColumnStat(newNdv, newMin, newMax, 0, newAvgLen, newMaxLen)
