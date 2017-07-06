@@ -62,7 +62,7 @@ project and read the [netlib-java](https://github.com/fommil/netlib-java) docume
 platform's additional installation instructions.
 
 Some popular native BLAS (e.g. Intel MKL, OpenBLAS) are based on multi-threading, which will conflict with Spark.
-To use multi-threading based native BLAS, you must set it to use single thread first.
+To use multi-threading based native BLAS, you must set it to use single thread first (SPARK-21305).
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
