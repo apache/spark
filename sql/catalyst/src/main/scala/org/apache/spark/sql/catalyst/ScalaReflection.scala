@@ -328,11 +328,10 @@ object ScalaReflection extends ScalaReflection {
         }
 
         val companion = t.normalize.typeSymbol.companionSymbol.typeSignature
-        val cls = companion.declaration(newTermName("newBuilder")) match {
-          // It always returns `NoSymbol` for set classes. But we can't simply use the class of
-          // `Set` here. Because of Scala optimization such as `Set.Set2`, there will be runtime
-          // exception due to type mismatching.
+        val cls = companion.member(newTermName("newBuilder")) match {
           case NoSymbol if t <:< localTypeOf[Seq[_]] => classOf[Seq[_]]
+          case NoSymbol if t <:< localTypeOf[scala.collection.Set[_]] =>
+            classOf[scala.collection.Set[_]]
           case _ => mirror.runtimeClass(t.typeSymbol.asClass)
         }
         UnresolvedMapObjects(mapFunction, getPath, Some(cls))
