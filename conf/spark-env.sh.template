@@ -62,6 +62,6 @@
 # - SPARK_NICENESS      The scheduling priority for daemons. (Default: 0)
 # - SPARK_NO_DAEMONIZE  Run the proposed command in the foreground. It will not output a PID file.
 # Options for native BLAS, like Intel MKL, OpenBLAS, and so on.
-# You shoud enable these options if use native BLAS (SPARK-21305).
+# You shoud enable these options if using native BLAS (see SPARK-21305).
 # - MKL_NUM_THREADS=1        Disable multi-threading of Intel MKL
 # - OPENBLAS_NUM_THREADS=1   Disable multi-threading of OpenBLAS
