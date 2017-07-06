@@ -299,20 +299,18 @@ trait CreateNamedStructLike extends Expression {
     if (children.length < 1) {
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName requires at least one argument")
+    } else if (children.size % 2 != 0) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
     } else {
-      if (children.size % 2 != 0) {
-        TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
+      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
+      if (invalidNames.nonEmpty) {
+        TypeCheckResult.TypeCheckFailure(
+          "Only foldable StringType expressions are allowed to appear at odd position, got:" +
+            s" ${invalidNames.mkString(",")}")
+      } else if (!names.contains(null)) {
+        TypeCheckResult.TypeCheckSuccess
       } else {
-        val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
-        if (invalidNames.nonEmpty) {
-          TypeCheckResult.TypeCheckFailure(
-            "Only foldable StringType expressions are allowed to appear at odd position, got:" +
-              s" ${invalidNames.mkString(",")}")
-        } else if (!names.contains(null)) {
-          TypeCheckResult.TypeCheckSuccess
-        } else {
-          TypeCheckResult.TypeCheckFailure("Field name should not be null")
-        }
+        TypeCheckResult.TypeCheckFailure("Field name should not be null")
       }
     }
   }
