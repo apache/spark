@@ -765,13 +765,39 @@ count(groupBy(df, "deviceType"))
 
 You can also register a streaming DataFrame/Dataset as a temporary view and then apply SQL commands on it.
 
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
 {% highlight scala %}
 df.createOrReplaceTempView("updates")
 spark.sql("select count(*) from updates")  // returns another streaming DF
 {% endhighlight %}
 
-Note, you can identify whether a DataFrame/Dataset has streaming data or not by using
-`df.isStreaming()`.
+</div>
+<div data-lang="java"  markdown="1">  
+
+{% highlight java %}
+df.createOrReplaceTempView("updates");
+spark.sql("select count(*) from updates");  // returns another streaming DF
+{% endhighlight %}
+
+</div>
+<div data-lang="python"  markdown="1">  
+
+{% highlight python %}
+df.createOrReplaceTempView("updates")
+spark.sql("select count(*) from updates")  // returns another streaming DF
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+
+</div>
+</div>
+{% highlight scala %}
+{% endhighlight %}
+
+Note, you can identify whether a DataFrame/Dataset has streaming data or not by using `df.isStreaming()`.
 
 ### Window Operations on Event Time
 Aggregations over a sliding event-time window are straightforward with Structured Streaming and are very similar to grouped aggregations. In a grouped aggregation, aggregate values (e.g. counts) are maintained for each unique value in the user-specified grouping column. In case of window-based aggregations, aggregate values are maintained for each window the event-time of a row falls into. Let's understand this with an illustration. 
@@ -1956,9 +1982,33 @@ Not available in R.
 ### Reporting Metrics using Dropwizard 
 Spark supports reporting metrics using the [Dropwizard Library](monitoring.html#metrics). To enable metrics of Structured Streaming queries to be reported as well, you have to explicitly enable the configuration `spark.sql.streaming.metricsEnabled` in the SparkSession. 
 
-{% highlight bash %}
-spark.conf().set("spark.sql.streaming.metricsEnabled", "true")
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+spark.conf.set("spark.sql.streaming.metricsEnabled", "true")
 {% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">  
+
+{% highlight java %}
+spark.conf().set("spark.sql.streaming.metricsEnabled", "true");
+{% endhighlight %}
+
+</div>
+<div data-lang="python"  markdown="1">  
+
+{% highlight python %}
+spark.conf.set("spark.sql.streaming.metricsEnabled", "true")
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+
+</div>
+</div>
+
 
 All queries started in the SparkSession after this configuration has been enabled will report metrics through Dropwizard to whatever [sinks](monitoring.html#metrics) have been configured (e.g. Ganglia, Graphite, JMX, etc.).
 
