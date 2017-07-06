@@ -37,8 +37,6 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  val defaultFPGABatchRowNumber = 100
-
   val CMCCInputSize = 1220
   val CMCCOutputSize = 1220
 
@@ -94,14 +92,21 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     input.mapPartitions[ByteBuffer] { iter =>
       new Iterator[ByteBuffer] {
 
-        override def hasNext: Boolean = iter.hasNext
+        var flag = true
+
+        // Sum all rows to 1 ByteBuffer
+        override def hasNext: Boolean = if (flag) {
+          flag = false
+          iter.hasNext
+        } else {
+          flag
+        }
 
         override def next(): ByteBuffer = {
-          val buffer = mockGetByteBuffer(defaultFPGABatchRowNumber * CMCCInputSize)
-          var count = 0
-          while(iter.hasNext && count < defaultFPGABatchRowNumber) {
+          // Get the default ByteBuffer with big enough size
+          val buffer = mockGetByteBuffer(0)
+          while(iter.hasNext) {
             loadRowToBuffer(iter.next(), buffer)
-            count += 1
           }
           buffer
         }
