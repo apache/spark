@@ -1291,6 +1291,20 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         self.assertTrue(np.allclose(model2.coefficients.toArray(), [-0.6667, 0.5], atol=1E-4))
         self.assertTrue(np.isclose(model2.intercept, 0.6667, atol=1E-4))
 
+    def test_offset(self):
+
+        df = self.spark.createDataFrame(
+            [(0.2, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
+             (0.5, 2.1, 0.5, Vectors.dense(1.0, 2.0)),
+             (0.9, 0.4, 1.0, Vectors.dense(2.0, 1.0)),
+             (0.7, 0.7, 0.0, Vectors.dense(3.0, 3.0))], ["label", "weight", "offset", "features"])
+
+        glr = GeneralizedLinearRegression(family="poisson", weightCol="weight", offsetCol="offset")
+        model = glr.fit(df)
+        self.assertTrue(np.allclose(model.coefficients.toArray(), [0.664647, -0.3192581],
+                                    atol=1E-4))
+        self.assertTrue(np.isclose(model.intercept, -1.561613, atol=1E-4))
+
 
 class FPGrowthTests(SparkSessionTestCase):
     def setUp(self):
