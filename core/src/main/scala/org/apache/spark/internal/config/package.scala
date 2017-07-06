@@ -329,6 +329,7 @@ package object config {
         " could crash the Node Manager under increased load. You can mitigate this issue by " +
         " setting it to a lower value.")
       .intConf
+      .checkValue(_ > 0, "The max no. of blocks in flight cannot be non-positive.")
       .createWithDefault(Int.MaxValue)
 
   private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
