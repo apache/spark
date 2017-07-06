@@ -1003,6 +1003,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Lists files recursively.
+   */
+  def recursiveList(f: File): Array[File] = {
+    require(f.isDirectory)
+    val current = f.listFiles
+    current ++ current.filter(_.isDirectory).flatMap(recursiveList)
+  }
+
+  /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
