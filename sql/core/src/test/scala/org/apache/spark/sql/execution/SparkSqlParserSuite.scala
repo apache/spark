@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
@@ -37,8 +37,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
  */
 class SparkSqlParserSuite extends AnalysisTest {
 
-  val newConf = new SQLConf
-  private lazy val parser = new SparkSqlParser(newConf)
+  private lazy val parser = new SparkSqlParser
 
   /**
    * Normalizes plans:
@@ -64,6 +63,25 @@ class SparkSqlParserSuite extends AnalysisTest {
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
+  }
+
+  test("refresh resource") {
+    assertEqual("REFRESH prefix_path", RefreshResource("prefix_path"))
+    assertEqual("REFRESH /", RefreshResource("/"))
+    assertEqual("REFRESH /path///a", RefreshResource("/path///a"))
+    assertEqual("REFRESH pat1h/112/_1a", RefreshResource("pat1h/112/_1a"))
+    assertEqual("REFRESH pat1h/112/_1a/a-1", RefreshResource("pat1h/112/_1a/a-1"))
+    assertEqual("REFRESH path-with-dash", RefreshResource("path-with-dash"))
+    assertEqual("REFRESH \'path with space\'", RefreshResource("path with space"))
+    assertEqual("REFRESH \"path with space 2\"", RefreshResource("path with space 2"))
+    intercept("REFRESH a b", "REFRESH statements cannot contain")
+    intercept("REFRESH a\tb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\nb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\rb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\r\nb", "REFRESH statements cannot contain")
+    intercept("REFRESH @ $a$", "REFRESH statements cannot contain")
+    intercept("REFRESH  ", "Resource paths cannot be empty in REFRESH statements")
+    intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
   }
 
   test("show functions") {
@@ -266,6 +284,7 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   test("query organization") {
+    val conf = SQLConf.get
     // Test all valid combinations of order by/sort by/distribute by/cluster by/limit/windows
     val baseSql = "select * from t"
     val basePlan =
@@ -274,20 +293,20 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual(s"$baseSql distribute by a, b",
       RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
         basePlan,
-        numPartitions = newConf.numShufflePartitions))
+        numPartitions = conf.numShufflePartitions))
     assertEqual(s"$baseSql distribute by a sort by b",
       Sort(SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
         global = false,
         RepartitionByExpression(UnresolvedAttribute("a") :: Nil,
           basePlan,
-          numPartitions = newConf.numShufflePartitions)))
+          numPartitions = conf.numShufflePartitions)))
     assertEqual(s"$baseSql cluster by a, b",
       Sort(SortOrder(UnresolvedAttribute("a"), Ascending) ::
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
         global = false,
         RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
           basePlan,
-          numPartitions = newConf.numShufflePartitions)))
+          numPartitions = conf.numShufflePartitions)))
   }
 
   test("pipeline concatenation") {

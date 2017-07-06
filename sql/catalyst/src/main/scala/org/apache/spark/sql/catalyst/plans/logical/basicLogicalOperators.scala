@@ -63,14 +63,6 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
 
   override def validConstraints: Set[Expression] =
     child.constraints.union(getAliasedConstraints(projectList))
-
-  override def computeStats: Statistics = {
-    if (conf.cboEnabled) {
-      ProjectEstimation.estimate(this).getOrElse(super.computeStats)
-    } else {
-      super.computeStats
-    }
-  }
 }
 
 /**
@@ -137,14 +129,6 @@ case class Filter(condition: Expression, child: LogicalPlan)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
   }
-
-  override def computeStats: Statistics = {
-    if (conf.cboEnabled) {
-      FilterEstimation(this).estimate.getOrElse(super.computeStats)
-    } else {
-      super.computeStats
-    }
-  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -190,15 +174,6 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       Some(children.flatMap(_.maxRows).min)
     }
   }
-
-  override def computeStats: Statistics = {
-    val leftSize = left.stats.sizeInBytes
-    val rightSize = right.stats.sizeInBytes
-    val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    Statistics(
-      sizeInBytes = sizeInBytes,
-      hints = left.stats.hints.resetForJoin())
-  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
@@ -207,10 +182,6 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   override def output: Seq[Attribute] = left.output
 
   override protected def validConstraints: Set[Expression] = leftConstraints
-
-  override def computeStats: Statistics = {
-    left.stats.copy()
-  }
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -245,11 +216,6 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
           case (l, r) => l.dataType.sameType(r.dataType)
         })
     children.length > 1 && childrenResolved && allChildrenCompatible
-  }
-
-  override def computeStats: Statistics = {
-    val sizeInBytes = children.map(_.stats.sizeInBytes).sum
-    Statistics(sizeInBytes = sizeInBytes)
   }
 
   /**
@@ -354,25 +320,6 @@ case class Join(
     case NaturalJoin(_) => false
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
-  }
-
-  override def computeStats: Statistics = {
-    def simpleEstimation: Statistics = joinType match {
-      case LeftAnti | LeftSemi =>
-        // LeftSemi and LeftAnti won't ever be bigger than left
-        left.stats
-      case _ =>
-        // Make sure we don't propagate isBroadcastable in other joins, because
-        // they could explode the size.
-        val stats = super.computeStats
-        stats.copy(hints = stats.hints.resetForJoin())
-    }
-
-    if (conf.cboEnabled) {
-      JoinEstimation.estimate(this).getOrElse(simpleEstimation)
-    } else {
-      simpleEstimation
-    }
   }
 }
 
@@ -522,13 +469,12 @@ case class Range(
 
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override def computeStats: Statistics = {
-    val sizeInBytes = LongType.defaultSize * numElements
-    Statistics( sizeInBytes = sizeInBytes )
-  }
-
   override def simpleString: String = {
     s"Range ($start, $end, step=$step, splits=$numSlices)"
+  }
+
+  override def computeStats(): Statistics = {
+    Statistics(sizeInBytes = LongType.defaultSize * numElements)
   }
 }
 
@@ -553,25 +499,6 @@ case class Aggregate(
   override def validConstraints: Set[Expression] = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     child.constraints.union(getAliasedConstraints(nonAgg))
-  }
-
-  override def computeStats: Statistics = {
-    def simpleEstimation: Statistics = {
-      if (groupingExpressions.isEmpty) {
-        Statistics(
-          sizeInBytes = EstimationUtils.getOutputSize(output, outputRowCount = 1),
-          rowCount = Some(1),
-          hints = child.stats.hints)
-      } else {
-        super.computeStats
-      }
-    }
-
-    if (conf.cboEnabled) {
-      AggregateEstimation.estimate(this).getOrElse(simpleEstimation)
-    } else {
-      simpleEstimation
-    }
   }
 }
 
@@ -671,11 +598,6 @@ case class Expand(
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  override def computeStats: Statistics = {
-    val sizeInBytes = super.computeStats.sizeInBytes * projections.length
-    Statistics(sizeInBytes = sizeInBytes)
-  }
-
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
   override protected def validConstraints: Set[Expression] = Set.empty[Expression]
@@ -742,16 +664,6 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
       case _ => None
     }
   }
-  override def computeStats: Statistics = {
-    val limit = limitExpr.eval().asInstanceOf[Int]
-    val childStats = child.stats
-    val rowCount: BigInt = childStats.rowCount.map(_.min(limit)).getOrElse(limit)
-    // Don't propagate column stats, because we don't know the distribution after a limit operation
-    Statistics(
-      sizeInBytes = EstimationUtils.getOutputSize(output, rowCount, childStats.attributeStats),
-      rowCount = Some(rowCount),
-      hints = childStats.hints)
-  }
 }
 
 case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
@@ -760,24 +672,6 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
       case _ => None
-    }
-  }
-  override def computeStats: Statistics = {
-    val limit = limitExpr.eval().asInstanceOf[Int]
-    val childStats = child.stats
-    if (limit == 0) {
-      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
-      // (product of children).
-      Statistics(
-        sizeInBytes = 1,
-        rowCount = Some(0),
-        hints = childStats.hints)
-    } else {
-      // The output row count of LocalLimit should be the sum of row counts from each partition.
-      // However, since the number of partitions is not available here, we just use statistics of
-      // the child. Because the distribution after a limit operation is unknown, we do not propagate
-      // the column stats.
-      childStats.copy(attributeStats = AttributeMap(Nil))
     }
   }
 }
@@ -828,18 +722,6 @@ case class Sample(
   }
 
   override def output: Seq[Attribute] = child.output
-
-  override def computeStats: Statistics = {
-    val ratio = upperBound - lowerBound
-    val childStats = child.stats
-    var sizeInBytes = EstimationUtils.ceil(BigDecimal(childStats.sizeInBytes) * ratio)
-    if (sizeInBytes == 0) {
-      sizeInBytes = 1
-    }
-    val sampledRowCount = childStats.rowCount.map(c => EstimationUtils.ceil(BigDecimal(c) * ratio))
-    // Don't propagate column stats, because we don't know the distribution after a sample operation
-    Statistics(sizeInBytes, sampledRowCount, hints = childStats.hints)
-  }
 }
 
 /**
@@ -893,7 +775,7 @@ case class RepartitionByExpression(
 case object OneRowRelation extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
-  override def computeStats: Statistics = Statistics(sizeInBytes = 1)
+  override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
 }
 
 /** A logical plan for `dropDuplicates`. */

@@ -1265,8 +1265,8 @@ class NaiveBayesModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaML
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                     HasMaxIter, HasTol, HasSeed, HasStepSize, JavaMLWritable,
-                                     JavaMLReadable):
+                                     HasMaxIter, HasTol, HasSeed, HasStepSize, HasSolver,
+                                     JavaMLWritable, JavaMLReadable):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -1406,20 +1406,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         Gets the value of stepSize or its default value.
         """
         return self.getOrDefault(self.stepSize)
-
-    @since("2.0.0")
-    def setSolver(self, value):
-        """
-        Sets the value of :py:attr:`solver`.
-        """
-        return self._set(solver=value)
-
-    @since("2.0.0")
-    def getSolver(self):
-        """
-        Gets the value of solver or its default value.
-        """
-        return self.getOrDefault(self.solver)
 
     @since("2.0.0")
     def setInitialWeights(self, value):
