@@ -768,38 +768,55 @@ You can also register a streaming DataFrame/Dataset as a temporary view and then
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-
 {% highlight scala %}
 df.createOrReplaceTempView("updates")
 spark.sql("select count(*) from updates")  // returns another streaming DF
 {% endhighlight %}
-
 </div>
 <div data-lang="java"  markdown="1">  
-
 {% highlight java %}
 df.createOrReplaceTempView("updates");
 spark.sql("select count(*) from updates");  // returns another streaming DF
 {% endhighlight %}
-
 </div>
 <div data-lang="python"  markdown="1">  
-
 {% highlight python %}
 df.createOrReplaceTempView("updates")
 spark.sql("select count(*) from updates")  # returns another streaming DF
 {% endhighlight %}
-
 </div>
 <div data-lang="r"  markdown="1">
+{% highlight r %}
 createOrReplaceTempView(df, "updates")
 sql("select count(*) from updates")
-</div>
-</div>
-{% highlight scala %}
 {% endhighlight %}
+</div>
+</div>
 
-Note, you can identify whether a DataFrame/Dataset has streaming data or not by using `df.isStreaming()`.
+Note, you can identify whether a DataFrame/Dataset has streaming data or not by using `df.isStreaming`.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+df.isStreaming
+{% endhighlight %}
+</div>
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+df.isStreaming()
+{% endhighlight %}
+</div>
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+df.isStreaming()
+{% endhighlight %}
+</div>
+<div data-lang="r"  markdown="1">
+{% highlight bash %}
+Not available.
+{% endhighlight %}
+</div>
+</div>
 
 ### Window Operations on Event Time
 Aggregations over a sliding event-time window are straightforward with Structured Streaming and are very similar to grouped aggregations. In a grouped aggregation, aggregate values (e.g. counts) are maintained for each unique value in the user-specified grouping column. In case of window-based aggregations, aggregate values are maintained for each window the event-time of a row falls into. Let's understand this with an illustration. 
