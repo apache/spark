@@ -90,7 +90,7 @@ SELECT mydb1.t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query 10 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`mydb1.t1.i1`' given input columns: [i1, i1]; line 1 pos 7
+cannot resolve '`mydb1.t1.i1`' given input columns: [t1.i1, t1.i1]; line 1 pos 7
 
 
 -- !query 11
@@ -161,7 +161,7 @@ SELECT db1.t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query 18 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`db1.t1.i1`' given input columns: [i1, i1]; line 1 pos 7
+cannot resolve '`db1.t1.i1`' given input columns: [t1.i1, t1.i1]; line 1 pos 7
 
 
 -- !query 19
@@ -186,7 +186,7 @@ SELECT mydb1.t1 FROM t1
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`mydb1.t1`' given input columns: [i1]; line 1 pos 7
+cannot resolve '`mydb1.t1`' given input columns: [t1.i1]; line 1 pos 7
 
 
 -- !query 22
@@ -204,7 +204,7 @@ SELECT t1 FROM mydb1.t1
 struct<>
 -- !query 23 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`t1`' given input columns: [i1]; line 1 pos 7
+cannot resolve '`t1`' given input columns: [t1.i1]; line 1 pos 7
 
 
 -- !query 24
@@ -221,7 +221,7 @@ SELECT mydb1.t1.i1 FROM t1
 struct<>
 -- !query 25 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`mydb1.t1.i1`' given input columns: [i1]; line 1 pos 7
+cannot resolve '`mydb1.t1.i1`' given input columns: [t1.i1]; line 1 pos 7
 
 
 -- !query 26

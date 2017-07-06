@@ -504,7 +504,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       outStream.println("Unknown/unsupported param " + unknownParam)
     }
     val command = sys.env.get("_SPARK_CMD_USAGE").getOrElse(
-      """Usage: spark-submit [options] <app jar | python file> [app arguments]
+      """Usage: spark-submit [options] <app jar | python file | R file> [app arguments]
         |Usage: spark-submit --kill [submission ID] --master [spark://...]
         |Usage: spark-submit --status [submission ID] --master [spark://...]
         |Usage: spark-submit run-example [options] example-class [example args]""".stripMargin)
@@ -520,7 +520,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              (Default: client).
         |  --class CLASS_NAME          Your application's main class (for Java / Scala apps).
         |  --name NAME                 A name of your application.
-        |  --jars JARS                 Comma-separated list of local jars to include on the driver
+        |  --jars JARS                 Comma-separated list of jars to include on the driver
         |                              and executor classpaths.
         |  --packages                  Comma-separated list of maven coordinates of jars to include
         |                              on the driver and executor classpaths. Will search the local

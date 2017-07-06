@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.util.Utils
@@ -43,11 +44,14 @@ case class LogicalRelation(
   }
 
   // Only care about relation when canonicalizing.
-  override def preCanonicalized: LogicalPlan = copy(catalogTable = None)
+  override lazy val canonicalized: LogicalPlan = copy(
+    output = output.map(QueryPlan.normalizeExprId(_, output)),
+    catalogTable = None)
 
-  @transient override def computeStats: Statistics = {
-    catalogTable.flatMap(_.stats.map(_.toPlanStats(output))).getOrElse(
-      Statistics(sizeInBytes = relation.sizeInBytes))
+  override def computeStats(): Statistics = {
+    catalogTable
+      .flatMap(_.stats.map(_.toPlanStats(output)))
+      .getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
   }
 
   /** Used to lookup original attribute capitalization */

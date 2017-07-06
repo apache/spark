@@ -45,10 +45,8 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging {
+class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   import ParserUtils._
-
-  def this() = this(new SQLConf())
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
@@ -1062,6 +1060,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[CreateStruct]] expression.
+   */
+  override def visitStruct(ctx: StructContext): Expression = withOrigin(ctx) {
+    CreateStruct(ctx.argument.asScala.map(expression))
+  }
+
+  /**
    * Create a [[First]] expression.
    */
   override def visitFirst(ctx: FirstContext): Expression = withOrigin(ctx) {
@@ -1091,7 +1096,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Create the function call.
     val name = ctx.qualifiedName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
-    val arguments = ctx.namedExpression().asScala.map(expression) match {
+    val arguments = ctx.argument.asScala.map(expression) match {
       case Seq(UnresolvedStar(None))
         if name.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
         // Transform COUNT(*) into COUNT(1).
@@ -1450,7 +1455,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Special characters can be escaped by using Hive/C-style escaping.
    */
   private def createString(ctx: StringLiteralContext): String = {
-    if (conf.escapedStringLiterals) {
+    if (SQLConf.get.escapedStringLiterals) {
       ctx.STRING().asScala.map(stringWithoutUnescape).mkString
     } else {
       ctx.STRING().asScala.map(string).mkString

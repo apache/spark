@@ -95,6 +95,9 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     .. versionadded:: 1.4.0
     """
 
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: auto, normal, l-bfgs.", typeConverter=TypeConverters.toString)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
@@ -1371,17 +1374,22 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     linkPower = Param(Params._dummy(), "linkPower", "The index in the power link function. " +
                       "Only applicable to the Tweedie family.",
                       typeConverter=TypeConverters.toFloat)
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: irls.", typeConverter=TypeConverters.toString)
+    offsetCol = Param(Params._dummy(), "offsetCol", "The offset column name. If this is not set " +
+                      "or empty, we treat all instance offsets as 0.0",
+                      typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None,
-                 variancePower=0.0, linkPower=None):
+                 variancePower=0.0, linkPower=None, offsetCol=None):
         """
         __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
-                 variancePower=0.0, linkPower=None)
+                 variancePower=0.0, linkPower=None, offsetCol=None)
         """
         super(GeneralizedLinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1397,12 +1405,12 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     def setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction",
                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
                   regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None,
-                  variancePower=0.0, linkPower=None):
+                  variancePower=0.0, linkPower=None, offsetCol=None):
         """
         setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
                   regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
-                  variancePower=0.0, linkPower=None)
+                  variancePower=0.0, linkPower=None, offsetCol=None)
         Sets params for generalized linear regression.
         """
         kwargs = self._input_kwargs
@@ -1480,6 +1488,20 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         Gets the value of linkPower or its default value.
         """
         return self.getOrDefault(self.linkPower)
+
+    @since("2.3.0")
+    def setOffsetCol(self, value):
+        """
+        Sets the value of :py:attr:`offsetCol`.
+        """
+        return self._set(offsetCol=value)
+
+    @since("2.3.0")
+    def getOffsetCol(self):
+        """
+        Gets the value of offsetCol or its default value.
+        """
+        return self.getOrDefault(self.offsetCol)
 
 
 class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable,
