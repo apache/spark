@@ -138,8 +138,8 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         // Specifically, the nonExistentDirectory will contain a colon in windows, this is invalid
         // for hadoop. Remove the drive letter and colon, e.g. "D:" out of this path by default
         val nonExistentDirectory = new File(
-          System.getProperty("java.io.tmpdir").replaceFirst("[a-zA-Z]:", ""),
-          UUID.randomUUID().toString).getPath
+          System.getProperty("java.io.tmpdir"), 
+          UUID.randomUUID().toString).getAbsolutePath.replaceFirst("[a-zA-Z]:", "")
         writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
           SparkEnv.get.conf, nonExistentDirectory, hadoopConf)
         dataRead = writeAheadLog.read(partition.walRecordHandle)
