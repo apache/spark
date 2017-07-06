@@ -1761,14 +1761,10 @@ class Dataset[T] private[sql](
    * @since 2.3.0
    */
   def unionByName(other: Dataset[T]): Dataset[T] = withSetOperator {
-    // Resolves children first to reorder output attributes in `other` by name
-    val leftPlan = sparkSession.sessionState.executePlan(logicalPlan)
-    val rightPlan = sparkSession.sessionState.executePlan(other.logicalPlan)
-
     // Check column name duplication
     val resolver = sparkSession.sessionState.analyzer.resolver
-    val leftOutputAttrs = leftPlan.analyzed.output
-    val rightOutputAttrs = rightPlan.analyzed.output
+    val leftOutputAttrs = logicalPlan.output
+    val rightOutputAttrs = other.logicalPlan.output
     // SchemaUtils.checkColumnNameDuplication(
     //   leftOutputAttrs.map(_.name),
     //   "in the left attributes",
@@ -1789,11 +1785,11 @@ class Dataset[T] private[sql](
 
     // Delegates failure checks to `CheckAnalysis`
     val notFoundAttrs = rightOutputAttrs.diff(rightProjectList)
-    val rightChild = Project(rightProjectList ++ notFoundAttrs, rightPlan.analyzed)
+    val rightChild = Project(rightProjectList ++ notFoundAttrs, other.logicalPlan)
 
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(leftPlan.analyzed, rightChild))
+    CombineUnions(Union(logicalPlan, rightChild))
   }
 
   /**
