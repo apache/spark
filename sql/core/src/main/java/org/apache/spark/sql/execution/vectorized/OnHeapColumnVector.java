@@ -130,6 +130,16 @@ public final class OnHeapColumnVector extends ColumnVector {
     return byteData[rowId] == 1;
   }
 
+  @Override
+  public boolean[] getBooleans(int rowId, int count) {
+    assert(dictionary == null);
+    boolean[] array = new boolean[count];
+    for (int i = 0; i < count; ++i) {
+      array[i] = (byteData[rowId + i] == 1);
+    }
+   return array;
+  }
+
   //
 
   //
@@ -163,9 +173,11 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getBytes(byte[] dst, int rowId, int count) {
+  public byte[] getBytes(int rowId, int count) {
     assert(dictionary == null);
-    System.arraycopy(byteData, rowId, dst, 0, count);
+    byte[] array = new byte[count];
+    System.arraycopy(byteData, rowId, array, 0, count);
+    return array;
   }
 
   //
@@ -199,9 +211,11 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getShorts(short[] dst, int rowId, int count) {
+  public short[] getShorts(int rowId, int count) {
     assert(dictionary == null);
-    System.arraycopy(shortData, rowId, dst, 0, count);
+    short[] array = new short[count];
+    System.arraycopy(shortData, rowId, array, 0, count);
+    return array;
   }
 
 
@@ -247,9 +261,11 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getInts(int[] dst, int rowId, int count) {
+  public int[] getInts(int rowId, int count) {
     assert(dictionary == null);
-    System.arraycopy(intData, rowId, dst, 0, count);
+    int[] array = new int[count];
+    System.arraycopy(intData, rowId, array, 0, count);
+    return array;
   }
 
   /**
@@ -305,9 +321,11 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getLongs(long[] dst, int rowId, int count) {
+  public long[] getLongs(int rowId, int count) {
     assert(dictionary == null);
-    System.arraycopy(longData, rowId, dst, 0, count);
+    long[] array = new long[count];
+    System.arraycopy(longData, rowId, array, 0, count);
+    return array;
   }
 
   //
@@ -350,9 +368,11 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getFloats(float[] dst, int rowId, int count) {
+  public float[] getFloats(int rowId, int count) {
     assert(dictionary == null);
-    System.arraycopy(floatData, rowId, dst, 0, count);
+    float[] array = new float[count];
+    System.arraycopy(floatData, rowId, array, 0, count);
+    return array;
   }
 
   //
@@ -397,9 +417,11 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getDoubles(double[] dst, int rowId, int count) {
+  public double[] getDoubles(int rowId, int count) {
     assert(dictionary == null);
-    System.arraycopy(doubleData, rowId, dst, 0, count);
+    double[] array = new double[count];
+    System.arraycopy(doubleData, rowId, array, 0, count);
+    return array;
   }
 
   //

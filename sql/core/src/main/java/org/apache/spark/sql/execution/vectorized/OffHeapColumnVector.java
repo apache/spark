@@ -134,6 +134,16 @@ public final class OffHeapColumnVector extends ColumnVector {
   @Override
   public boolean getBoolean(int rowId) { return Platform.getByte(null, data + rowId) == 1; }
 
+  @Override
+  public boolean[] getBooleans(int rowId, int count) {
+    assert(dictionary == null);
+    boolean[] array = new boolean[count];
+    for (int i = 0; i < count; ++i) {
+      array[i] = (Platform.getByte(null, data + rowId + i) == 1);
+    }
+    return array;
+  }
+
   //
   // APIs dealing with Bytes
   //
@@ -166,9 +176,11 @@ public final class OffHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getBytes(byte[] dst, int rowId, int count) {
+  public byte[] getBytes(int rowId, int count) {
     assert(dictionary == null);
-    Platform.copyMemory(null, data + rowId, dst, Platform.BYTE_ARRAY_OFFSET, count);
+    byte[] array = new byte[count];
+    Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
+    return array;
   }
 
   //
@@ -204,9 +216,11 @@ public final class OffHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getShorts(short[] dst, int rowId, int count) {
+  public short[] getShorts(int rowId, int count) {
     assert(dictionary == null);
-    Platform.copyMemory(null, data + rowId * 2, dst, Platform.SHORT_ARRAY_OFFSET, count * 2);
+    short[] array = new short[count];
+    Platform.copyMemory(null, data + rowId * 2, array, Platform.SHORT_ARRAY_OFFSET, count * 2);
+    return array;
   }
 
   //
@@ -257,9 +271,11 @@ public final class OffHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getInts(int[] dst, int rowId, int count) {
+  public int[] getInts(int rowId, int count) {
     assert(dictionary == null);
-    Platform.copyMemory(null, data + rowId * 4, dst, Platform.INT_ARRAY_OFFSET, count * 4);
+    int[] array = new int[count];
+    Platform.copyMemory(null, data + rowId * 4, array, Platform.INT_ARRAY_OFFSET, count * 4);
+    return array;
   }
 
   /**
@@ -321,9 +337,11 @@ public final class OffHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getLongs(long[] dst, int rowId, int count) {
+  public long[] getLongs(int rowId, int count) {
     assert(dictionary == null);
-    Platform.copyMemory(null, data + rowId * 8, dst, Platform.LONG_ARRAY_OFFSET, count * 8);
+    long[] array = new long[count];
+    Platform.copyMemory(null, data + rowId * 8, array, Platform.LONG_ARRAY_OFFSET, count * 8);
+    return array;
   }
 
   //
@@ -373,8 +391,11 @@ public final class OffHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getFloats(float[] dst, int rowId, int count) {
-    Platform.copyMemory(null, data + rowId * 4, dst, Platform.FLOAT_ARRAY_OFFSET, count * 4);
+  public float[] getFloats(int rowId, int count) {
+    assert(dictionary == null);
+    float[] array = new float[count];
+    Platform.copyMemory(null, data + rowId * 4, array, Platform.FLOAT_ARRAY_OFFSET, count * 4);
+    return array;
   }
 
 
@@ -425,8 +446,11 @@ public final class OffHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public void getDoubles(double[] dst, int rowId, int count) {
-    Platform.copyMemory(null, data + rowId * 8, dst, Platform.DOUBLE_ARRAY_OFFSET, count * 8);
+  public double[] getDoubles(int rowId, int count) {
+    assert(dictionary == null);
+    double[] array = new double[count];
+    Platform.copyMemory(null, data + rowId * 8, array, Platform.DOUBLE_ARRAY_OFFSET, count * 8);
+    return array;
   }
 
   //
