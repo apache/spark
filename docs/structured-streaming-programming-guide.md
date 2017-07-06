@@ -787,12 +787,13 @@ spark.sql("select count(*) from updates");  // returns another streaming DF
 
 {% highlight python %}
 df.createOrReplaceTempView("updates")
-spark.sql("select count(*) from updates")  // returns another streaming DF
+spark.sql("select count(*) from updates")  # returns another streaming DF
 {% endhighlight %}
 
 </div>
 <div data-lang="r"  markdown="1">
-
+createOrReplaceTempView(df, "updates")
+sql("select count(*) from updates")
 </div>
 </div>
 {% highlight scala %}
@@ -1985,28 +1986,30 @@ Spark supports reporting metrics using the [Dropwizard Library](monitoring.html#
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-
 {% highlight scala %}
 spark.conf.set("spark.sql.streaming.metricsEnabled", "true")
+// or
+spark.sql("SET spark.sql.streaming.metricsEnabled=true")
 {% endhighlight %}
-
 </div>
 <div data-lang="java"  markdown="1">  
-
 {% highlight java %}
 spark.conf().set("spark.sql.streaming.metricsEnabled", "true");
+// or
+spark.sql("SET spark.sql.streaming.metricsEnabled=true");
 {% endhighlight %}
-
 </div>
 <div data-lang="python"  markdown="1">  
-
 {% highlight python %}
 spark.conf.set("spark.sql.streaming.metricsEnabled", "true")
+# or
+spark.sql("SET spark.sql.streaming.metricsEnabled=true")
 {% endhighlight %}
-
 </div>
 <div data-lang="r"  markdown="1">
-
+{% highlight r %}
+sql("SET spark.sql.streaming.metricsEnabled=true")
+{% endhighlight %}
 </div>
 </div>
 
