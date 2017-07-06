@@ -132,15 +132,16 @@ class UnivocityParserSuite extends SparkFunSuite {
 
   test("Throws exception for casting an invalid string to Float and Double Types") {
     val options = new CSVOptions(Map.empty[String, String], "GMT")
-    var message = intercept[NumberFormatException] {
-      parser.makeConverter("_1", FloatType, options = options).apply("10u000")
-    }.getMessage
-    assert(message.contains("10u000"))
-
-    message = intercept[NumberFormatException] {
-      parser.makeConverter("_1", DoubleType, options = options).apply("10u000")
-    }.getMessage
-    assert(message.contains("10u000"))
+    val types = Seq(DoubleType, FloatType)
+    val input = Seq("10u000", "abc", "1 2/3")
+    types.foreach { dt =>
+      input.foreach { v =>
+        val message = intercept[NumberFormatException] {
+          parser.makeConverter("_1", dt, options = options).apply(v)
+        }.getMessage
+        assert(message.contains(v))
+      }
+    }
   }
 
   test("Float NaN values are parsed correctly") {

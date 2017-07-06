@@ -1182,7 +1182,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .csv(Seq("10u12").toDS())
         .collect()
     }
-    assert(exception.getMessage.contains("10u12"))
+    assert(exception.getMessage.contains("""input string: "10u12""""))
 
     val count = spark.read.schema("a FLOAT")
       .option("mode", "DROPMALFORMED")
