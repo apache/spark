@@ -472,7 +472,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       val excMsg = intercept[IllegalArgumentException] {
         BlacklistTracker.validateBlacklistConfs(conf)
       }.getMessage()
-      assert(excMsg.contains(s"${config.key} was 0, but must be > 0."))
+      assert(excMsg.contains(s"${config.key} should be greater than 0."))
       conf.remove(config)
     }
   }
