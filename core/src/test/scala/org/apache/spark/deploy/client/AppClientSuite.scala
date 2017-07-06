@@ -244,6 +244,8 @@ class AppClientSuite
     def executorDecommissioned(id: String, message: String): Unit = {
       execDecommissionedList.add(id)
     }
+
+    def workerRemoved(workerId: String, host: String, message: String): Unit = {}
   }
 
   /** Create AppClient and supporting objects */

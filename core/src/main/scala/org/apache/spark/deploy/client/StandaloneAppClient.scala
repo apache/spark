@@ -185,6 +185,10 @@ private[spark] class StandaloneAppClient(
           listener.executorDecommissioned(fullId, message.getOrElse(""))
         }
 
+      case WorkerRemoved(id, host, message) =>
+        logInfo("Master removed worker %s: %s".format(id, message))
+        listener.workerRemoved(id, host, message)
+
       case MasterChanged(masterRef, masterWebUiUrl) =>
         logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
         master = Some(masterRef)

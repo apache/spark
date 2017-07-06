@@ -63,7 +63,7 @@ class JavaClassificationModel(JavaPredictionModel):
 @inherit_doc
 class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                 HasRegParam, HasTol, HasRawPredictionCol, HasFitIntercept, HasStandardization,
-                HasThreshold, HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
+                HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -109,6 +109,12 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     .. versionadded:: 2.2.0
     """
 
+    threshold = Param(Params._dummy(), "threshold",
+                      "The threshold in binary classification applied to the linear model"
+                      " prediction.  This threshold can be any real number, where Inf will make"
+                      " all predictions 0.0 and -Inf will make all predictions 1.0.",
+                      typeConverter=TypeConverters.toFloat)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
@@ -146,6 +152,18 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
 
     def _create_model(self, java_model):
         return LinearSVCModel(java_model)
+
+    def setThreshold(self, value):
+        """
+        Sets the value of :py:attr:`threshold`.
+        """
+        return self._set(threshold=value)
+
+    def getThreshold(self):
+        """
+        Gets the value of threshold or its default value.
+        """
+        return self.getOrDefault(self.threshold)
 
 
 class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
@@ -1247,8 +1265,8 @@ class NaiveBayesModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaML
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                     HasMaxIter, HasTol, HasSeed, HasStepSize, JavaMLWritable,
-                                     JavaMLReadable):
+                                     HasMaxIter, HasTol, HasSeed, HasStepSize, HasSolver,
+                                     JavaMLWritable, JavaMLReadable):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -1388,20 +1406,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         Gets the value of stepSize or its default value.
         """
         return self.getOrDefault(self.stepSize)
-
-    @since("2.0.0")
-    def setSolver(self, value):
-        """
-        Sets the value of :py:attr:`solver`.
-        """
-        return self._set(solver=value)
-
-    @since("2.0.0")
-    def getSolver(self):
-        """
-        Gets the value of solver or its default value.
-        """
-        return self.getOrDefault(self.solver)
 
     @since("2.0.0")
     def setInitialWeights(self, value):

@@ -529,14 +529,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
-  <td>200m</td>
-  <td>
-    The blocks of a shuffle request will be fetched to disk when size of the request is above
-    this threshold. This is to avoid a giant request takes too much memory.
-  </td>
-</tr>
-<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
@@ -639,6 +631,20 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.registration.timeout</code></td>
+  <td>5000</td>
+  <td>
+    Timeout in milliseconds for registration to the external shuffle service.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.registration.maxAttempts</code></td>
+  <td>3</td>
+  <td>
+    When we fail to register to the external shuffle service, we will retry for maxAttempts times.
+  </td>
+</tr>
+<tr>
   <td><code>spark.io.encryption.enabled</code></td>
   <td>false</td>
   <td>
@@ -719,7 +725,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedJobs</code></td>
   <td>1000</td>
   <td>
-    How many jobs the Spark UI and status APIs remember before garbage collecting. 
+    How many jobs the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -727,7 +733,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedStages</code></td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI and status APIs remember before garbage collecting. 
+    How many stages the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -735,7 +741,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedTasks</code></td>
   <td>100000</td>
   <td>
-    How many tasks the Spark UI and status APIs remember before garbage collecting. 
+    How many tasks the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -1384,6 +1390,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
+  <td>10000</td>
+  <td>
+    Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
+    value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
+    driver using more memory.
+  </td>
+</tr>
+<tr>
   <td><code>spark.blacklist.enabled</code></td>
   <td>
     false
@@ -1463,6 +1478,15 @@ Apart from these, the following properties are also available, and may be useful
     (Experimental) If set to "true", allow Spark to automatically kill, and attempt to re-create,
     executors when they are blacklisted.  Note that, when an entire node is added to the blacklist,
     all of the executors on that node will be killed.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.application.fetchFailure.enabled</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch
+    failure happenes. If external shuffle service is enabled, then the whole node will be
+    blacklisted.
   </td>
 </tr>
 <tr>
@@ -1552,6 +1576,8 @@ Apart from these, the following properties are also available, and may be useful
     of this setting is to act as a safety-net to prevent runaway uncancellable tasks from rendering
     an executor unusable.
   </td>
+</tr>
+<tr>
   <td><code>spark.stage.maxConsecutiveAttempts</code></td>
   <td>4</td>
   <td>

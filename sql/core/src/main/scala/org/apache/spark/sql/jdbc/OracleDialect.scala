@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{Date, Timestamp, Types}
 
 import org.apache.spark.sql.types._
 
@@ -43,10 +43,6 @@ private case object OracleDialect extends JdbcDialect {
         // Not sure if there is a more robust way to identify the field as a float (or other
         // numeric types that do not specify a scale.
         case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
-        case 1 => Option(BooleanType)
-        case 3 | 5 | 10 => Option(IntegerType)
-        case 19 if scale == 0L => Option(LongType)
-        case 19 if scale == 4L => Option(FloatType)
         case _ => None
       }
     } else {
@@ -66,6 +62,19 @@ private case object OracleDialect extends JdbcDialect {
     case ShortType => Some(JdbcType("NUMBER(5)", java.sql.Types.SMALLINT))
     case StringType => Some(JdbcType("VARCHAR2(255)", java.sql.Types.VARCHAR))
     case _ => None
+  }
+
+  override def compileValue(value: Any): Any = value match {
+    // The JDBC drivers support date literals in SQL statements written in the
+    // format: {d 'yyyy-mm-dd'} and timestamp literals in SQL statements written
+    // in the format: {ts 'yyyy-mm-dd hh:mm:ss.f...'}. For details, see
+    // 'Oracle Database JDBC Developer’s Guide and Reference, 11g Release 1 (11.1)'
+    // Appendix A Reference Information.
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
+    case dateValue: Date => "{d '" + dateValue + "'}"
+    case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case _ => value
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)

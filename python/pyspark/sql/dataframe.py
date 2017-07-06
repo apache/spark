@@ -833,6 +833,8 @@ class DataFrame(object):
         else:
             if how is None:
                 how = "inner"
+            if on is None:
+                on = self._jseq([])
             assert isinstance(how, basestring), "how should be basestring"
             jdf = self._jdf.join(other._jdf, on, how)
         return DataFrame(jdf, self.sql_ctx)
@@ -1721,7 +1723,18 @@ class DataFrame(object):
         1    5    Bob
         """
         import pandas as pd
-        return pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+        dtype = {}
+        for field in self.schema:
+            pandas_type = _to_corrected_pandas_type(field.dataType)
+            if pandas_type is not None:
+                dtype[field.name] = pandas_type
+
+        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+        for f, t in dtype.items():
+            pdf[f] = pdf[f].astype(t, copy=False)
+        return pdf
 
     ##########################################################################################
     # Pandas compatibility
@@ -1748,6 +1761,24 @@ def _to_scala_map(sc, jm):
     Convert a dict into a JVM Map.
     """
     return sc._jvm.PythonUtils.toScalaMap(jm)
+
+
+def _to_corrected_pandas_type(dt):
+    """
+    When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
+    This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
+    """
+    import numpy as np
+    if type(dt) == ByteType:
+        return np.int8
+    elif type(dt) == ShortType:
+        return np.int16
+    elif type(dt) == IntegerType:
+        return np.int32
+    elif type(dt) == FloatType:
+        return np.float32
+    else:
+        return None
 
 
 class DataFrameNaFunctions(object):

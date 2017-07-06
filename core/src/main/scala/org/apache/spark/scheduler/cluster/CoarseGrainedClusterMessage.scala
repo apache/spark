@@ -87,6 +87,9 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class DecomissionExecutor(executorId: String)  extends CoarseGrainedClusterMessage
 
+  case class RemoveWorker(workerId: String, host: String, message: String)
+    extends CoarseGrainedClusterMessage
+
   case class SetupDriver(driver: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
   // Exchanged between the driver and the AM in Yarn client mode

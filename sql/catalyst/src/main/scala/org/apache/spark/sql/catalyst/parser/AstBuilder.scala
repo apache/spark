@@ -45,10 +45,8 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging {
+class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   import ParserUtils._
-
-  def this() = this(new SQLConf())
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
@@ -627,7 +625,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
         s"Sampling fraction ($fraction) must be on interval [0, 1]",
         ctx)
-      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)(true)
+      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)
     }
 
     ctx.sampleType.getType match {
@@ -636,7 +634,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
       case SqlBaseParser.PERCENTLIT =>
         val fraction = ctx.percentage.getText.toDouble
-        sample(fraction / 100.0d)
+        val sign = if (ctx.negativeSign == null) 1 else -1
+        sample(sign * fraction / 100.0d)
 
       case SqlBaseParser.BYTELENGTH_LITERAL =>
         throw new ParseException(
@@ -1061,6 +1060,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[CreateStruct]] expression.
+   */
+  override def visitStruct(ctx: StructContext): Expression = withOrigin(ctx) {
+    CreateStruct(ctx.argument.asScala.map(expression))
+  }
+
+  /**
    * Create a [[First]] expression.
    */
   override def visitFirst(ctx: FirstContext): Expression = withOrigin(ctx) {
@@ -1090,7 +1096,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Create the function call.
     val name = ctx.qualifiedName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
-    val arguments = ctx.namedExpression().asScala.map(expression) match {
+    val arguments = ctx.argument.asScala.map(expression) match {
       case Seq(UnresolvedStar(None))
         if name.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
         // Transform COUNT(*) into COUNT(1).
@@ -1449,7 +1455,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Special characters can be escaped by using Hive/C-style escaping.
    */
   private def createString(ctx: StringLiteralContext): String = {
-    if (conf.escapedStringLiterals) {
+    if (SQLConf.get.escapedStringLiterals) {
       ctx.STRING().asScala.map(stringWithoutUnescape).mkString
     } else {
       ctx.STRING().asScala.map(string).mkString

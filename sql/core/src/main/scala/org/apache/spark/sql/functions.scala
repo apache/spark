@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, ResolvedHint}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -1276,7 +1275,7 @@ object functions {
    */
   def expr(expr: String): Column = {
     val parser = SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
-      new SparkSqlParser(new SQLConf)
+      new SparkSqlParser
     }
     Column(parser.parseExpression(expr))
   }
@@ -2292,7 +2291,8 @@ object functions {
   }
 
   /**
-   * Left-pad the string column with
+   * Left-pad the string column with pad to a length of len. If the string column is longer
+   * than len, the return value is shortened to len characters.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2350,7 +2350,8 @@ object functions {
   def unbase64(e: Column): Column = withExpr { UnBase64(e.expr) }
 
   /**
-   * Right-padded with pad to a length of len.
+   * Right-pad the string column with pad to a length of len. If the string column is longer
+   * than len, the return value is shortened to len characters.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -3160,6 +3161,20 @@ object functions {
    * @since 1.5.0
    */
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
+
+  /**
+   * Returns an unordered array containing the keys of the map.
+   * @group collection_funcs
+   * @since 2.3.0
+   */
+  def map_keys(e: Column): Column = withExpr { MapKeys(e.expr) }
+
+  /**
+   * Returns an unordered array containing the values of the map.
+   * @group collection_funcs
+   * @since 2.3.0
+   */
+  def map_values(e: Column): Column = withExpr { MapValues(e.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////

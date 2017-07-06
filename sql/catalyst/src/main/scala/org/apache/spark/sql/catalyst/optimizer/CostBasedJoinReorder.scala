@@ -58,7 +58,7 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
       // Do reordering if the number of items is appropriate and join conditions exist.
       // We also need to check if costs of all items can be evaluated.
       if (items.size > 2 && items.size <= conf.joinReorderDPThreshold && conditions.nonEmpty &&
-          items.forall(_.stats(conf).rowCount.isDefined)) {
+          items.forall(_.stats.rowCount.isDefined)) {
         JoinReorderDP.search(conf, items, conditions, output)
       } else {
         plan
@@ -322,7 +322,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     /** Get the cost of the root node of this plan tree. */
     def rootCost(conf: SQLConf): Cost = {
       if (itemIds.size > 1) {
-        val rootStats = plan.stats(conf)
+        val rootStats = plan.stats
         Cost(rootStats.rowCount.get, rootStats.sizeInBytes)
       } else {
         // If the plan is a leaf item, it has zero cost.

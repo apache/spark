@@ -517,7 +517,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     val msg1 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
     }
-    assert(msg1.getMessage.contains("Correlated scalar subqueries must be Aggregated"))
+    assert(msg1.getMessage.contains("Correlated scalar subqueries must be aggregated"))
 
     val msg2 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
@@ -870,9 +870,9 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-20688: correctly check analysis for scalar sub-queries") {
     withTempView("t") {
-      Seq(1 -> "a").toDF("i", "j").createTempView("t")
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
       val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
-      assert(e.message.contains("cannot resolve '`a`' given input columns: [i, j]"))
+      assert(e.message.contains("cannot resolve '`a`' given input columns: [t.i, t.j]"))
     }
   }
 }

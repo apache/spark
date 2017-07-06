@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -29,13 +29,13 @@ import org.apache.spark.sql.types.IntegerType
  *
  * There is also SparkSqlParserSuite in sql/core module for parser rules defined in sql/core module.
  */
-class PlanParserSuite extends PlanTest {
+class PlanParserSuite extends AnalysisTest {
   import CatalystSqlParser._
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
-    comparePlans(parsePlan(sqlCommand), plan)
+    comparePlans(parsePlan(sqlCommand), plan, checkAnalysis = false)
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit = {
@@ -223,6 +223,12 @@ class PlanParserSuite extends PlanTest {
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
       GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b), table("d"),
         Seq('a, 'b, 'sum.function('c).as("c"))))
+
+    val m = intercept[ParseException] {
+      parsePlan("SELECT a, b, count(distinct a, distinct b) as c FROM d GROUP BY a, b")
+    }.getMessage
+    assert(m.contains("extraneous input 'b'"))
+
   }
 
   test("limit") {
@@ -411,9 +417,9 @@ class PlanParserSuite extends PlanTest {
     assertEqual(s"$sql tablesample(100 rows)",
       table("t").limit(100).select(star()))
     assertEqual(s"$sql tablesample(43 percent) as x",
-      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
+      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x")).select(star()))
     assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
-      Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
+      Sample(0, .4d, withReplacement = false, 10L, table("t").as("x")).select(star()))
     intercept(s"$sql tablesample(bucket 4 out of 10 on x) as x",
       "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported")
     intercept(s"$sql tablesample(bucket 11 out of 10) as x",
