@@ -31,8 +31,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait PlanTest extends SparkFunSuite with PredicateHelper {
 
-  // TODO(gatorsmile): remove this from PlanTest and all the analyzer/optimizer rules
-  protected val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)
+  // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
+  protected def conf = SQLConf.get
 
   /**
    * Since attribute references are given globally unique ids during analysis,
