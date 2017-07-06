@@ -85,7 +85,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
       .rdd
       .map { case Row(prediction: Double, label: Double) => (prediction, label) }
     val metrics = new RegressionMetrics(predictionAndLabels)
-    val metric = getMetricName.toLowerCase(Locale.ROOT) match {
+    val metric = $(metricName).toLowerCase(Locale.ROOT) match {
       case RMSE => metrics.rootMeanSquaredError
       case MSE => metrics.meanSquaredError
       case R2 => metrics.r2
@@ -96,7 +96,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("1.4.0")
   override def isLargerBetter: Boolean =
-    Param.findStringOption(supportedMetricNames, getMetricName) match {
+    $(metricName).toLowerCase(Locale.ROOT) match {
       case RMSE => false
       case MSE => false
       case R2 => true
@@ -114,17 +114,17 @@ object RegressionEvaluator extends DefaultParamsReadable[RegressionEvaluator] {
   override def load(path: String): RegressionEvaluator = super.load(path)
 
   /** String name for `rmse` metric name. */
-  private[spark] val RMSE: String = "rmse"
+  private[RegressionEvaluator] val RMSE: String = "rmse"
 
   /** String name for `mse` metric name. */
-  private[spark] val MSE: String = "mse"
+  private[RegressionEvaluator] val MSE: String = "mse"
 
   /** String name for `r2` metric name. */
-  private[spark] val R2: String = "r2"
+  private[RegressionEvaluator] val R2: String = "r2"
 
   /** String name for `mae` metric name. */
-  private[spark] val MAE: String = "mae"
+  private[RegressionEvaluator] val MAE: String = "mae"
 
   /** Set of metric names that RegressionEvaluator supports. */
-  private[spark] val supportedMetricNames = Array(RMSE, MSE, R2, MAE)
+  private[RegressionEvaluator] val supportedMetricNames = Array(RMSE, MSE, R2, MAE)
 }

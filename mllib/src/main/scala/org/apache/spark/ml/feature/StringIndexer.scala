@@ -76,7 +76,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
   final val stringOrderType: Param[String] = new Param[String](this, "stringOrderType",
     "How to order labels of string column. " +
     "The first label after ordering is assigned an index of 0. " +
-    s"Supported options: ${StringIndexer.supportedStringOrderType.mkString("(", ",", ")")}.",
+    s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
     ParamValidators.inStringArray(StringIndexer.supportedStringOrderType))
 
   /** @group getParam */
@@ -140,8 +140,7 @@ class StringIndexer @Since("1.4.0") (
     val values = dataset.na.drop(Array($(inputCol)))
       .select(col($(inputCol)).cast(StringType))
       .rdd.map(_.getString(0))
-    val labels = Param.findStringOption(
-      StringIndexer.supportedStringOrderType, getStringOrderType) match {
+    val labels = $(stringOrderType).toLowerCase(Locale.ROOT) match {
       case StringIndexer.frequencyDesc => values.countByValue().toSeq.sortBy(-_._2)
         .map(_._1).toArray
       case StringIndexer.frequencyAsc => values.countByValue().toSeq.sortBy(_._2)
@@ -168,10 +167,10 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
-  private[feature] val frequencyDesc: String = "frequencyDesc"
-  private[feature] val frequencyAsc: String = "frequencyAsc"
-  private[feature] val alphabetDesc: String = "alphabetDesc"
-  private[feature] val alphabetAsc: String = "alphabetAsc"
+  private[feature] val frequencyDesc: String = "frequencyDesc".toLowerCase(Locale.ROOT)
+  private[feature] val frequencyAsc: String = "frequencyAsc".toLowerCase(Locale.ROOT)
+  private[feature] val alphabetDesc: String = "alphabetDesc".toLowerCase(Locale.ROOT)
+  private[feature] val alphabetAsc: String = "alphabetAsc".toLowerCase(Locale.ROOT)
   private[feature] val supportedStringOrderType: Array[String] =
     Array(frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc)
 

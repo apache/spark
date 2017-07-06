@@ -35,6 +35,7 @@ import org.apache.spark.sql.types._
  * Params for [[Imputer]] and [[ImputerModel]].
  */
 private[feature] trait ImputerParams extends Params with HasInputCols {
+
   /**
    * The imputation strategy. Currently only "mean" and "median" are supported.
    * If "mean", then replace missing values using the mean value of the feature.
@@ -143,7 +144,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         throw new SparkException(s"surrogate cannot be computed. " +
           s"All the values in $inputCol are Null, Nan or missingValue(${$(missingValue)})")
       }
-      val surrogate = getStrategy.toLowerCase(Locale.ROOT) match {
+      val surrogate = $(strategy).toLowerCase(Locale.ROOT) match {
         case Imputer.mean => filtered.select(avg(inputCol)).as[Double].first()
         case Imputer.median => filtered.stat.approxQuantile(inputCol, Array(0.5), 0.001).head
       }

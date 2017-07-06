@@ -58,7 +58,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   @Since("2.0.0")
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the error distribution to be used in the " +
-      s"model. Supported options: ${supportedFamilyNames.mkString("(", ",", ")")}.",
+      s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
     ParamValidators.inStringArray(supportedFamilyNames))
 
   /** @group getParam */
@@ -100,7 +100,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   @Since("2.0.0")
   final val link: Param[String] = new Param(this, "link", "The name of link function " +
     "which provides the relationship between the linear predictor and the mean of the " +
-    s"distribution function. Supported options: ${supportedLinkNames.mkString("(", ",", ")")}",
+    s"distribution function. Supported options: ${supportedLinkNames.mkString(", ")}",
     ParamValidators.inStringArray(supportedLinkNames))
 
   /** @group getParam */
@@ -182,7 +182,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    if (getFamily.toLowerCase(Locale.ROOT) == "tweedie") {
+    if ($(family).toLowerCase(Locale.ROOT) == "tweedie") {
       if (isSet(link)) {
         logWarning("When family is tweedie, use param linkPower to specify link function. " +
           "Setting param link will take no effect.")
@@ -199,7 +199,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
         require(supportedFamilyAndLinkPairs.contains(
           Family.fromParams(this) -> Link.fromParams(this)),
           s"Generalized Linear Regression with ${$(family)} family " +
-            s"does not support ${getLink.toLowerCase(Locale.ROOT)} link function.")
+            s"does not support ${$(link)} link function.")
       }
     }
 

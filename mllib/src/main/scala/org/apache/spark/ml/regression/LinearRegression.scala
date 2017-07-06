@@ -69,7 +69,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
   @Since("1.6.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
-      s"${supportedSolvers.mkString("(", ",", ")")}. (Default auto)",
+      s"${supportedSolvers.mkString(", ")}. (Default auto)",
     ParamValidators.inStringArray(supportedSolvers))
 }
 
@@ -228,7 +228,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     if ((getSolver.toLowerCase(Locale.ROOT) == Auto &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) ||
-      getSolver.toLowerCase(Locale.ROOT) == NORMAL) {
+      getSolver.toLowerCase(Locale.ROOT) == Normal) {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 
@@ -466,13 +466,13 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
   private[regression] val Auto = "auto"
 
   /** String name for "normal". */
-  private[regression] val NORMAL = "normal"
+  private[regression] val Normal = "normal"
 
   /** String name for "l-bfgs". */
   private[regression] val LBFGS = "l-bfgs"
 
   /** Set of solvers that LinearRegression supports. */
-  private[regression] val supportedSolvers = Array(Auto, NORMAL, LBFGS)
+  private[regression] val supportedSolvers = Array(Auto, Normal, LBFGS)
 }
 
 /**

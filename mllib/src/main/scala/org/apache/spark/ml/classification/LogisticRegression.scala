@@ -93,7 +93,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   @Since("2.1.0")
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the label distribution to be used in the " +
-      s"model. Supported options: ${supportedFamilyNames.mkString("(", ",", ")")}.",
+      s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
     ParamValidators.inStringArray(supportedFamilyNames))
 
   /** @group getParam */
@@ -896,16 +896,16 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
   override def load(path: String): LogisticRegression = super.load(path)
 
   /** String name for "auto". */
-  private[classification] val Auto = "auto"
+  private[LogisticRegression] val Auto = "auto"
 
   /** String name for "binomial". */
-  private[classification] val Binomial = "binomial"
+  private[LogisticRegression] val Binomial = "binomial"
 
-  /** String name for "Multinomial". */
-  private[classification] val Multinomial = "multinomial"
+  /** String name for "multinomial". */
+  private[LogisticRegression] val Multinomial = "multinomial"
 
   /** Set of solvers that LogisticRegression supports. */
-  private[classification] val supportedFamilyNames =
+  private[LogisticRegression] val supportedFamilyNames =
     Array(Auto, Binomial, Multinomial).map(_.toLowerCase(Locale.ROOT))
 }
 

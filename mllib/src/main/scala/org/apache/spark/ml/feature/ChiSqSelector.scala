@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import java.util.Locale
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -130,7 +128,7 @@ private[feature] trait ChiSqSelectorParams extends Params
   final val selectorType = new Param[String](this, "selectorType",
     "The selector type of the ChisqSelector. " +
       "Supported options: " + OldChiSqSelector.supportedSelectorTypes.mkString(", "),
-    ParamValidators.inStringArray(OldChiSqSelector.supportedSelectorTypes))
+    ParamValidators.inArray[String](OldChiSqSelector.supportedSelectorTypes))
   setDefault(selectorType -> OldChiSqSelector.NumTopFeatures)
 
   /** @group getParam */
@@ -207,8 +205,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
           OldLabeledPoint(label, OldVectors.fromML(features))
       }
     val selector = new feature.ChiSqSelector()
-      .setSelectorType(Param.findStringOption(
-        OldChiSqSelector.supportedSelectorTypes, getSelectorType))
+      .setSelectorType($(selectorType))
       .setNumTopFeatures($(numTopFeatures))
       .setPercentile($(percentile))
       .setFpr($(fpr))
@@ -220,11 +217,10 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    val otherPairs = OldChiSqSelector.supportedSelectorTypes
-      .filter(_.toLowerCase(Locale.ROOT) != getSelectorType.toLowerCase(Locale.ROOT))
+    val otherPairs = OldChiSqSelector.supportedSelectorTypes.filter(_ != $(selectorType))
     otherPairs.foreach { paramName: String =>
       if (isSet(getParam(paramName))) {
-        logWarning(s"Param $paramName will take no effect when selector type = $getSelectorType.")
+        logWarning(s"Param $paramName will take no effect when selector type = ${$(selectorType)}.")
       }
     }
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)

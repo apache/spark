@@ -85,7 +85,7 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
   @Since("2.0.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
-      s"${supportedSolvers.mkString("(", ",", ")")}. (Default l-bfgs)",
+      s"${supportedSolvers.mkString(", ")}. (Default l-bfgs)",
     ParamValidators.inStringArray(supportedSolvers))
 
   /**
@@ -252,7 +252,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
       trainer.setSeed($(seed))
     }
 
-    getSolver.toLowerCase(Locale.ROOT) match {
+    $(solver).toLowerCase(Locale.ROOT) match {
       case MultilayerPerceptronClassifier.LBFGS =>
         trainer.LBFGSOptimizer
           .setConvergenceTol($(tol))
@@ -264,7 +264,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
           .setStepSize($(stepSize))
       case _ =>
         throw new IllegalArgumentException(
-          s"The solver $getSolver is not supported by MultilayerPerceptronClassifier.")
+          s"The solver ${$(solver)} is not supported by MultilayerPerceptronClassifier.")
     }
 
     trainer.setStackSize($(blockSize))

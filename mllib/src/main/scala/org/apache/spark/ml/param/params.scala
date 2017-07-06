@@ -137,14 +137,6 @@ private[ml] object Param {
             s"${this.getClass.getName} must override jsonDecode to support its value type.")
     }
   }
-
-  /** Looks for the corresponding case-insensitive string option. */
-  def findStringOption(supportedValues: Array[String], value: String): String = {
-    val index = supportedValues.map(_.toLowerCase(Locale.ROOT))
-      .indexOf(value.toLowerCase(Locale.ROOT))
-    require(index >= 0, s"Can not find $value")
-    supportedValues(index)
-  }
 }
 
 /**

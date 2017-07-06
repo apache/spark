@@ -118,7 +118,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
     "strategy for dealing with unknown or new users/items at prediction time. This may be " +
     "useful in cross-validation or production scenarios, for handling user/item ids the model " +
     "has not seen in the training data. Supported values: " +
-    s"${ALSModel.supportedColdStartStrategies.mkString("(", ",", ")")}.",
+    s"${ALSModel.supportedColdStartStrategies.mkString(",")}.",
     ParamValidators.inStringArray(ALSModel.supportedColdStartStrategies))
 
   /** @group expertGetParam */
