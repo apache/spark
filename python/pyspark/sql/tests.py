@@ -2344,9 +2344,9 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_create_dataframe_from_array_of_long(self):
         import array
-        data = [Row(l=array.array('l', [-9223372036854775808, 0, 9223372036854775807]))]
+        data = [Row(longarray=array.array('l', [-9223372036854775808, 0, 9223372036854775807]))]
         df = self.spark.createDataFrame(data)
-        self.assertEqual(df.first(), Row(l=[-9223372036854775808, 0, 9223372036854775807]))
+        self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
