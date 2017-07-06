@@ -2229,7 +2229,7 @@ class Dataset[T] private[sql](
    * - arbitrary approximate percentiles specified as a percentage (eg, 75%)
    *
    * If no statistics are given, this function computes count, mean, stddev, min,
-   * approximate quartiles, and max.
+   * approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
    * backward compatibility of the schema of the resulting Dataset. If you want to

@@ -230,16 +230,6 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  protected lazy val person2: DataFrame = {
-    val df = spark.sparkContext.parallelize(
-      Person2("Bob", 16, 176) ::
-      Person2("Alice", 32, 164) ::
-      Person2("David", 60, 192) ::
-      Person2("Amy", 24, 180) :: Nil).toDF()
-    df.createOrReplaceTempView("person2")
-    df
-  }
-
   protected lazy val salary: DataFrame = {
     val df = spark.sparkContext.parallelize(
       Salary(0, 2000.0) ::
@@ -320,7 +310,6 @@ private[sql] object SQLTestData {
   case class NullStrings(n: Int, s: String)
   case class TableName(tableName: String)
   case class Person(id: Int, name: String, age: Int)
-  case class Person2(name: String, age: Int, height: Int)
   case class Salary(personId: Int, salary: Double)
   case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   case class CourseSales(course: String, year: Int, earnings: Double)

@@ -223,7 +223,7 @@ object StatFunctions extends Logging {
   }
 
   /** Calculate selected summary statistics for a dataset */
-  def summary[T](ds: Dataset[T], statistics: Seq[String]): DataFrame = {
+  def summary(ds: Dataset[_], statistics: Seq[String]): DataFrame = {
 
     val defaultStatistics = Seq("count", "mean", "stddev", "min", "25%", "50%", "75%", "max")
     val selectedStatistics = if (statistics.nonEmpty) statistics else defaultStatistics
