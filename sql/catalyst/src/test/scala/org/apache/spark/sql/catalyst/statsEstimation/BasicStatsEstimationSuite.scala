@@ -78,6 +78,37 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     checkStats(globalLimit, stats)
   }
 
+  test("sample estimation") {
+    val sample = Sample(0.0, 0.5, withReplacement = false, (math.random * 1000).toLong, plan)
+    checkStats(sample, Statistics(sizeInBytes = 60, rowCount = Some(5)))
+
+    // Child doesn't have rowCount in stats
+    val childStats = Statistics(sizeInBytes = 120)
+    val childPlan = DummyLogicalPlan(childStats, childStats)
+    val sample2 =
+      Sample(0.0, 0.11, withReplacement = false, (math.random * 1000).toLong, childPlan)
+    checkStats(sample2, Statistics(sizeInBytes = 14))
+  }
+
+  test("estimate statistics when the conf changes") {
+    val expectedDefaultStats =
+      Statistics(
+        sizeInBytes = 40,
+        rowCount = Some(10),
+        attributeStats = AttributeMap(Seq(
+          AttributeReference("c1", IntegerType)() -> ColumnStat(10, Some(1), Some(10), 0, 4, 4))))
+    val expectedCboStats =
+      Statistics(
+        sizeInBytes = 4,
+        rowCount = Some(1),
+        attributeStats = AttributeMap(Seq(
+          AttributeReference("c1", IntegerType)() -> ColumnStat(1, Some(5), Some(5), 0, 4, 4))))
+
+    val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
+    checkStats(
+      plan, expectedStatsCboOn = expectedCboStats, expectedStatsCboOff = expectedDefaultStats)
+  }
+
   /** Check estimated stats when cbo is turned on/off. */
   private def checkStats(
       plan: LogicalPlan,
@@ -98,4 +129,18 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   /** Check estimated stats when it's the same whether cbo is turned on or off. */
   private def checkStats(plan: LogicalPlan, expectedStats: Statistics): Unit =
     checkStats(plan, expectedStats, expectedStats)
+}
+
+/**
+ * This class is used for unit-testing the cbo switch, it mimics a logical plan which computes
+ * a simple statistics or a cbo estimated statistics based on the conf.
+ */
+private case class DummyLogicalPlan(
+    defaultStats: Statistics,
+    cboStats: Statistics)
+  extends LeafNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override def computeStats(): Statistics = if (conf.cboEnabled) cboStats else defaultStats
 }
