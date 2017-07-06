@@ -159,7 +159,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   test("SPARK-21306: OneVsRest should cache weightCol if necessary") {
     val dataset2 = dataset.withColumn("weight", lit(1))
     val ova = new OneVsRest().setClassifier(new LogisticRegression().setWeightCol("weight"))
-    // run without any exception.
+    // failed if weightCol is not cached.
     val ovaModel = ova.fit(dataset2)
     assert(ovaModel !== null)
   }
