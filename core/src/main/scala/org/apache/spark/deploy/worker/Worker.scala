@@ -737,7 +737,8 @@ private[deploy] object Worker extends Logging {
   val ENDPOINT_NAME = "Worker"
 
   def main(argStrings: Array[String]) {
-    Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(false))
+    Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(
+      exitOnUncaughtException = false))
     Utils.initDaemon(log)
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)

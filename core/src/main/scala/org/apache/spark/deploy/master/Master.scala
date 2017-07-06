@@ -1037,7 +1037,8 @@ private[deploy] object Master extends Logging {
   val ENDPOINT_NAME = "Master"
 
   def main(argStrings: Array[String]) {
-    Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(false))
+    Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(
+      exitOnUncaughtException = false))
     Utils.initDaemon(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
