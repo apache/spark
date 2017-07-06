@@ -405,16 +405,21 @@ case class DataSource(
           s"$className is not a valid Spark SQL Data Source.")
     }
 
-    (relation match {
+    relation match {
       case hs: HadoopFsRelation =>
-        Some((hs.dataSchema.map(_.name), hs.partitionSchema.map(_.name)))
-      case bs: BaseRelation =>
-        Some((bs.schema.map(_.name), Seq.empty[String]))
+        SchemaUtils.checkColumnNameDuplication(
+          hs.dataSchema.map(_.name),
+          "in the data schema",
+          equality)
+        SchemaUtils.checkColumnNameDuplication(
+          hs.partitionSchema.map(_.name),
+          "in the partition column(s)",
+          equality)
       case _ =>
-        None
-    }).foreach { case (dataCols, partCols) =>
-      SchemaUtils.checkColumnNameDuplication(dataCols, "in the data schema", equality)
-      SchemaUtils.checkColumnNameDuplication(partCols, "in the partition column(s)", equality)
+        SchemaUtils.checkColumnNameDuplication(
+          relation.schema.map(_.name),
+          "in the data schema",
+          equality)
     }
 
     relation
