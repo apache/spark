@@ -120,7 +120,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case other => Some(s"Data type $other of column $name is not supported.")
       }
     }
-    if (!incorrectColumns.isEmpty) {
+    if (incorrectColumns.nonEmpty) {
       throw new IllegalArgumentException(incorrectColumns.mkString("\n"))
     }
     if (schema.fieldNames.contains(outputColName)) {
