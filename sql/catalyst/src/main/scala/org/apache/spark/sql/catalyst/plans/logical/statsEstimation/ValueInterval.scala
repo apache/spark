@@ -62,7 +62,7 @@ object ValueInterval {
 
   def isIntersected(r1: ValueInterval, r2: ValueInterval): Boolean = (r1, r2) match {
     case (_, _: DefaultValueInterval) | (_: DefaultValueInterval, _) =>
-      // The DefaultRange represents string/binary types which do not have max/min stats,
+      // The DefaultValueInterval represents string/binary types which do not have max/min stats,
       // we assume they are intersected to be conservative on estimation
       true
     case (_, _: NullValueInterval) | (_: NullValueInterval, _) =>
