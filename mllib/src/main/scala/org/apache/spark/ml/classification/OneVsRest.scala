@@ -34,6 +34,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -317,7 +318,12 @@ final class OneVsRest @Since("1.4.0") (
     val numClasses = MetadataUtils.getNumClasses(labelSchema).fold(computeNumClasses())(identity)
     instr.logNumClasses(numClasses)
 
-    val multiclassLabeled = dataset.select($(labelCol), $(featuresCol))
+    val multiclassLabeled = getClassifier match {
+      // SPARK-21306: cache weightCol if necessary
+      case c: HasWeightCol if c.isDefined(c.weightCol) && !c.getWeightCol.isEmpty =>
+        dataset.select($(labelCol), $(featuresCol), c.getWeightCol)
+      case _ => dataset.select($(labelCol), $(featuresCol))
+    }
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
