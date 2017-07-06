@@ -283,7 +283,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     case _: NullType => hset
     case _ =>
       // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-      TreeSet.empty(TypeUtils.getInterpretedOrdering (child.dataType) ) ++ hset
+      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ hset
   }
 
   def getSet(): Set[Any] = set
