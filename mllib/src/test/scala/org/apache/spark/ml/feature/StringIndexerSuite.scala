@@ -314,27 +314,4 @@ class StringIndexerSuite
       idx += 1
     }
   }
-
-  test("string params should be case-insensitive") {
-    val data = Seq((0, "b"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "b"))
-    val df = data.toDF("id", "label")
-
-    val indexer = new StringIndexer()
-      .setInputCol("label")
-      .setOutputCol("labelIndex")
-
-    Seq("SKip", "ErroR", "kEep").foreach { handleInvalid =>
-      indexer.setHandleInvalid(handleInvalid)
-      assert(indexer.getHandleInvalid === handleInvalid)
-      val model = indexer.fit(df)
-      assert(model.getHandleInvalid === handleInvalid)
-    }
-
-    Seq("freQuencYDesc", "frEquencyasC", "ALphabetdesc", "alphaBETasc").foreach { order =>
-      indexer.setStringOrderType(order)
-      assert(indexer.getStringOrderType === order)
-      val model = indexer.fit(df)
-      assert(model.getStringOrderType === order)
-    }
-  }
 }
