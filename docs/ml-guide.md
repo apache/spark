@@ -61,7 +61,7 @@ To configure `netlib-java` / Breeze to use system optimised binaries, include
 project and read the [netlib-java](https://github.com/fommil/netlib-java) documentation for your
 platform's additional installation instructions.
 
-Some popular native BLAS (e.g. Intel MKL, OpenBLAS) are based on multi-threading, which will conflict with Spark.
+The most popular native BLAS such as [Intel MKL](https://software.intel.com/en-us/mkl), OpenBLAS, are based on multi-threading, which will conflict with Spark.
 To use multi-threading based native BLAS, you must set it to use single thread first (SPARK-21305).
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
