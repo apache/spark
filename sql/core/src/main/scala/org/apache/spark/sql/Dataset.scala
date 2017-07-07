@@ -1008,7 +1008,7 @@ class Dataset[T] private[sql](
         Some(condition.expr))).analyzed.asInstanceOf[Join]
 
     if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
-      throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType)
+      throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
     }
 
     // For both join side, combine all outputs into a single column and alias it with "_1" or "_2",

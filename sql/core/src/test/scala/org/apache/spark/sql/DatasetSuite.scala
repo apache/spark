@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
@@ -328,12 +329,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val e1 = intercept[AnalysisException] {
       ds1.joinWith(ds2, $"a.value" === $"b.value", "left_semi")
     }.getMessage
-    assert(e1.contains("Invalid join type in joinWith: LeftSemi"))
+    assert(e1.contains("Invalid join type in joinWith: " + LeftSemi.sql))
 
     val e2 = intercept[AnalysisException] {
       ds1.joinWith(ds2, $"a.value" === $"b.value", "left_anti")
     }.getMessage
-    assert(e2.contains("Invalid join type in joinWith: LeftAnti"))
+    assert(e2.contains("Invalid join type in joinWith: " + LeftAnti.sql))
   }
 
   test("groupBy function, keys") {
