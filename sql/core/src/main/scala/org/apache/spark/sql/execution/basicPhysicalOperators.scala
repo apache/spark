@@ -132,10 +132,17 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     }
   }
 
+  def loadBytesToBuffer(byteNum: Int, buffer: ByteBuffer): Unit = {
+    val tmpBuffer = new Array[Byte](byteNum)
+    buffer.put(tmpBuffer)
+  }
+
   def toFPGABatch (iter: Iterator[InternalRow]): ByteBuffer = {
     val originBuffer = mockGetByteBuffer(0)
     while(iter.hasNext) {
       loadRowToBuffer(iter.next, originBuffer)
+      // FPGA needs this 16 whatever bytes
+//      loadBytesToBuffer(16, originBuffer)
       FPGARowNumber += 1
     }
     originBuffer.flip()
