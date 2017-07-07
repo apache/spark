@@ -275,8 +275,6 @@ object FileFormatWriter extends Logging {
     /**
      * The data structures used to measure metrics during writing.
      */
-    protected var totalWritingTime: Long = 0L
-    protected var timeOnCurrentFile: Long = 0L
     protected var numOutputRows: Long = 0L
     protected var numOutputBytes: Long = 0L
 
@@ -343,9 +341,7 @@ object FileFormatWriter extends Logging {
         }
 
         val internalRow = iter.next()
-        val startTime = System.nanoTime()
         currentWriter.write(internalRow)
-        timeOnCurrentFile += (System.nanoTime() - startTime)
         recordsInFile += 1
       }
       releaseResources()
@@ -355,17 +351,13 @@ object FileFormatWriter extends Logging {
         updatedPartitions = Set.empty,
         numOutputFile = fileCounter + 1,
         numOutputBytes = numOutputBytes,
-        numOutputRows = numOutputRows,
-        totalWritingTime = totalWritingTime)
+        numOutputRows = numOutputRows)
     }
 
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
         try {
-          val startTime = System.nanoTime()
           currentWriter.close()
-          totalWritingTime += (timeOnCurrentFile + System.nanoTime() - startTime) / 1000 / 1000
-          timeOnCurrentFile = 0
           numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
         } finally {
           currentWriter = null
@@ -504,9 +496,7 @@ object FileFormatWriter extends Logging {
           releaseResources()
           newOutputWriter(currentPartColsAndBucketId, getPartPath, fileCounter, updatedPartitions)
         }
-        val startTime = System.nanoTime()
         currentWriter.write(getOutputRow(row))
-        timeOnCurrentFile += (System.nanoTime() - startTime)
         recordsInFile += 1
       }
       if (currentPartColsAndBucketId != null) {
@@ -519,17 +509,13 @@ object FileFormatWriter extends Logging {
         updatedPartitions = updatedPartitions.toSet,
         numOutputFile = totalFileCounter,
         numOutputBytes = numOutputBytes,
-        numOutputRows = numOutputRows,
-        totalWritingTime = totalWritingTime)
+        numOutputRows = numOutputRows)
     }
 
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
         try {
-          val startTime = System.nanoTime()
           currentWriter.close()
-          totalWritingTime += (timeOnCurrentFile + System.nanoTime() - startTime) / 1000 / 1000
-          timeOnCurrentFile = 0
           numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
         } finally {
           currentWriter = null
@@ -547,11 +533,9 @@ object FileFormatWriter extends Logging {
  * @param numOutputFile the total number of files.
  * @param numOutputRows the number of output rows.
  * @param numOutputBytes the bytes of output data.
- * @param totalWritingTime the total writing time in ms.
  */
 case class ExecutedWriteSummary(
   updatedPartitions: Set[String],
   numOutputFile: Int,
   numOutputRows: Long,
-  numOutputBytes: Long,
-  totalWritingTime: Long)
+  numOutputBytes: Long)

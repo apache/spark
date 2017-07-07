@@ -65,9 +65,6 @@ class SQLMetricsSuite extends SQLTestUtils with TestHiveSingleton {
     val totalNumBytesMetric = executedNode.metrics.find(_.name == "bytes of written output").get
     val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "").toInt
     assert(totalNumBytes > 0)
-    val writingTimeMetric = executedNode.metrics.find(_.name == "average writing time (ms)").get
-    val writingTime = metrics(writingTimeMetric.accumulatorId).replaceAll(",", "").toInt
-    assert(writingTime >= 0)
   }
 
   private def testMetricsNonDynamicPartition(
