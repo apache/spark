@@ -30,7 +30,6 @@ trait DataWritingCommand extends RunnableCommand {
   override lazy val metrics: Map[String, SQLMetric] = {
     val sparkContext = SparkContext.getActive.get
     Map(
-      "avgTime" -> SQLMetrics.createMetric(sparkContext, "average writing time (ms)"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
       "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
       "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -47,23 +46,14 @@ trait DataWritingCommand extends RunnableCommand {
     var numFiles = 0
     var totalNumBytes: Long = 0L
     var totalNumOutput: Long = 0L
-    var totalWritingTime: Long = 0L
 
     writeSummaries.foreach { summary =>
       numPartitions += summary.updatedPartitions.size
       numFiles += summary.numOutputFile
       totalNumBytes += summary.numOutputBytes
       totalNumOutput += summary.numOutputRows
-      totalWritingTime += summary.totalWritingTime
     }
 
-    val avgWritingTime = if (numFiles > 0) {
-      (totalWritingTime / numFiles).toLong
-    } else {
-      0L
-    }
-
-    metrics("avgTime").add(avgWritingTime)
     metrics("numFiles").add(numFiles)
     metrics("numOutputBytes").add(totalNumBytes)
     metrics("numOutputRows").add(totalNumOutput)
