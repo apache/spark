@@ -88,13 +88,12 @@ options for deployment:
 **Programming Guides:**
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [Spark Programming Guide](programming-guide.html): detailed overview of Spark
-  in all supported languages (Scala, Java, Python, R)
-* Modules built on Spark:
-  * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
-  * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): support for structured data and relational queries
-  * [MLlib](ml-guide.html): built-in machine learning library
-  * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
+* [RDD Programming Guide](programming-guide.html): overview of Spark basics - RDDs (core but old API), accumulators, and broadcast variables  
+* [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): processing structured data with relational queries (newer API than RDDs)
+* [Structured Streaming](structured-streaming-programming-guide.html): processing structured data streams with relation queries (using Datasets and DataFrames, newer API than DStreams)
+* [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams (old API)
+* [MLlib](ml-guide.html): applying machine learning algorithms
+* [GraphX](graphx-programming-guide.html): processing graphs 
 
 **API Docs:**
 
