@@ -10,7 +10,7 @@ Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache
 The advantages of deploying Spark with Mesos include:
 
 - dynamic partitioning between Spark and other
-  [frameworks](https://mesos.apache.org/documentation/latest/mesos-frameworks/)
+  [frameworks](https://mesos.apache.org/documentation/latest/frameworks/)
 - scalable partitioning between multiple instances of Spark
 
 # How it Works
