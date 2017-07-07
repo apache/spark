@@ -94,58 +94,17 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
     input.mapPartitions[InternalRow] { iter =>
 
-      val originBuffer = mockGetByteBuffer(0)
-
       // Convert InternalRows => ByteBuffer
-      while(iter.hasNext) {
-        loadRowToBuffer(iter.next, originBuffer)
-        FPGARowNumber += 1
-      }
-      originBuffer.flip()
+      val originBuffer = toFPGABatch(iter)
 
       // FPGA Calculation
       val outputBuffer = mockFPGA(originBuffer)
 
       // Convert ByteBuffer => InternalRows
-      var rowCount = FPGARowNumber
-      new Iterator[InternalRow] {
+      val resIter = toInternalRow(outputBuffer)
 
-        val numFields = CMCCOutputSchema.length
+      resIter
 
-        override def hasNext: Boolean = rowCount != 0
-
-        override def next(): InternalRow = {
-
-          val row: UnsafeRow = new UnsafeRow(numFields)
-          val holder: BufferHolder = new BufferHolder(row, 0)
-          val rowWriter = new UnsafeRowWriter(holder, numFields)
-          holder.reset()
-
-          var stringIndex = 0
-          CMCCOutputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
-            val (colType, index) = colTypeWithIndex
-            if (colType == 1) {
-              rowWriter.write(index, outputBuffer.getInt)
-            } else if (colType == 2) {
-              rowWriter.write(index, outputBuffer.getLong)
-            } else {
-              val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
-              outputBuffer.get(tmpBuffer, 0, tmpBuffer.length)
-              val res = tmpBuffer.zipWithIndex.filter(_._1 == 0).headOption
-              if (res == None) {
-                val string = UTF8String.fromBytes(tmpBuffer)
-                rowWriter.write(index, string)
-              } else {
-                val string = UTF8String.fromBytes(tmpBuffer, 0, res.get._2)
-                rowWriter.write(index, string)
-              }
-              stringIndex += 1
-            }
-          }
-          rowCount -= 1
-          row
-        }
-      }
     }
   }
 
@@ -170,15 +129,57 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     }
   }
 
-//  def toFPGABatch (input: Iterator[InternalRow]): ByteBuffer = {
-//
-//  }
-//
-//  def toInternalRow(input: RDD[ByteBuffer]): RDD[InternalRow] = {
-//    input.flatMap[InternalRow] { buffer =>
-//
-//    }
-//  }
+  def toFPGABatch (iter: Iterator[InternalRow]): ByteBuffer = {
+    val originBuffer = mockGetByteBuffer(0)
+    while(iter.hasNext) {
+      loadRowToBuffer(iter.next, originBuffer)
+      FPGARowNumber += 1
+    }
+    originBuffer.flip()
+    originBuffer
+  }
+
+  def toInternalRow(buffer: ByteBuffer): Iterator[InternalRow] = {
+    var rowCount = FPGARowNumber
+    new Iterator[InternalRow] {
+
+      val numFields = CMCCOutputSchema.length
+
+      override def hasNext: Boolean = rowCount != 0
+
+      override def next(): InternalRow = {
+
+        val row: UnsafeRow = new UnsafeRow(numFields)
+        val holder: BufferHolder = new BufferHolder(row, 0)
+        val rowWriter = new UnsafeRowWriter(holder, numFields)
+        holder.reset()
+
+        var stringIndex = 0
+        CMCCOutputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
+          val (colType, index) = colTypeWithIndex
+          if (colType == 1) {
+            rowWriter.write(index, buffer.getInt)
+          } else if (colType == 2) {
+            rowWriter.write(index, buffer.getLong)
+          } else {
+            val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
+            buffer.get(tmpBuffer, 0, tmpBuffer.length)
+            val res = tmpBuffer.zipWithIndex.filter(_._1 == 0).headOption
+            if (res == None) {
+              val string = UTF8String.fromBytes(tmpBuffer)
+              rowWriter.write(index, string)
+            } else {
+              val string = UTF8String.fromBytes(tmpBuffer, 0, res.get._2)
+              rowWriter.write(index, string)
+            }
+            stringIndex += 1
+          }
+        }
+        rowCount -= 1
+        row
+      }
+    }
+  }
 
   def mockGetByteBuffer(size: Int): ByteBuffer = {
     ByteBuffer.allocate(10000)
