@@ -200,10 +200,11 @@ abstract class LogicalPlan
   }
 
   /** Performs attribute resolution given a name and a sequence of possible attributes. */
-  protected def resolve(
+  def resolve(
       nameParts: Seq[String],
       input: Seq[Attribute],
-      resolver: Resolver): Option[NamedExpression] = {
+      resolver: Resolver,
+      resolveNestedFields: Boolean = true): Option[NamedExpression] = {
 
     // A sequence of possible candidate matches.
     // Each candidate is a tuple. The first element is a resolved attribute, followed by a list
@@ -237,14 +238,19 @@ abstract class LogicalPlan
 
       // One match, but we also need to extract the requested nested field.
       case Seq((a, nestedFields)) =>
-        // The foldLeft adds ExtractValues for every remaining parts of the identifier,
-        // and aliased it with the last part of the name.
-        // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
-        // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
-        // expression as "c".
-        val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
-          ExtractValue(expr, Literal(fieldName), resolver))
-        Some(Alias(fieldExprs, nestedFields.last)())
+        if (resolveNestedFields) {
+          // The foldLeft adds ExtractValues for every remaining parts of the identifier,
+          // and aliased it with the last part of the name.
+          // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
+          // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
+          // expression as "c".
+          val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
+            ExtractValue(expr, Literal(fieldName), resolver))
+          Some(Alias(fieldExprs, nestedFields.last)())
+        } else {
+          throw new AnalysisException(
+            s"Nested column is not supported: $name")
+        }
 
       // No matches.
       case Seq() =>

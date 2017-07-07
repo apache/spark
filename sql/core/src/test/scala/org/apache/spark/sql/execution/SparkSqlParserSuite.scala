@@ -254,22 +254,26 @@ class SparkSqlParserSuite extends AnalysisTest {
   test("describe table column") {
     assertEqual("DESCRIBE t col",
       DescribeColumnCommand(
-        TableIdentifier("t"), "col", isFormatted = false))
+        TableIdentifier("t"), Seq("col"), isFormatted = false))
     assertEqual("DESCRIBE t `abc.xyz`",
       DescribeColumnCommand(
-        TableIdentifier("t"), "abc.xyz", isFormatted = false))
-    // Do not support nested column
-    intercept("DESCRIBE t abc.xyz")
+        TableIdentifier("t"), Seq("abc.xyz"), isFormatted = false))
+    assertEqual("DESCRIBE t abc.xyz",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("abc", "xyz"), isFormatted = false))
+    assertEqual("DESCRIBE t `a.b`.`x.y`",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("a.b", "x.y"), isFormatted = false))
 
     assertEqual("DESCRIBE TABLE t col",
       DescribeColumnCommand(
-        TableIdentifier("t"), "col", isFormatted = false))
+        TableIdentifier("t"), Seq("col"), isFormatted = false))
     assertEqual("DESCRIBE TABLE EXTENDED t col",
       DescribeColumnCommand(
-        TableIdentifier("t"), "col", isFormatted = false))
+        TableIdentifier("t"), Seq("col"), isFormatted = false))
     assertEqual("DESCRIBE TABLE FORMATTED t col",
       DescribeColumnCommand(
-        TableIdentifier("t"), "col", isFormatted = true))
+        TableIdentifier("t"), Seq("col"), isFormatted = true))
 
     intercept("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col",
       "DESC TABLE COLUMN for a specific partition is not supported")

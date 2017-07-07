@@ -262,7 +262,7 @@ describeFuncName
     ;
 
 describeColName
-    : identifier
+    : nameParts+=identifier ('.' nameParts+=identifier)*
     ;
 
 ctes

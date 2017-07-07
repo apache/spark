@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -635,7 +635,7 @@ case class DescribeTableCommand(
  */
 case class DescribeColumnCommand(
     table: TableIdentifier,
-    column: String,
+    colNameParts: Seq[String],
     isFormatted: Boolean)
   extends RunnableCommand {
 
@@ -678,14 +678,17 @@ case class DescribeColumnCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val resolver = sparkSession.sessionState.conf.resolver
-    val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
+    val relation = sparkSession.table(table).queryExecution.analyzed
     val attribute = {
-      val field = catalogTable.schema.find(f => resolver(f.name, column))
+      val field = relation.resolve(
+        colNameParts, relation.output, resolver, resolveNestedFields = false)
       field.getOrElse {
-        throw new AnalysisException(s"Column $column does not exist.")
+        throw new AnalysisException(s"Column ${UnresolvedAttribute(colNameParts).name} does not " +
+          s"exist")
       }
     }
 
+    val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
     val colStats = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
     val cs = colStats.get(attribute.name)
 
@@ -695,26 +698,41 @@ case class DescribeColumnCommand(
       None
     }
 
-    val result = if (isFormatted) {
+    val fieldValues = if (isFormatted) {
       // Show column stats only when formatted is specified.
-      Row(
+      Seq(
         attribute.name,
         attribute.dataType.catalogString,
-        cs.flatMap(_.min.map(_.toString)).orNull,
-        cs.flatMap(_.max.map(_.toString)).orNull,
-        cs.map(_.nullCount.toString).orNull,
-        cs.map(_.distinctCount.toString).orNull,
-        cs.map(_.avgLen.toString).orNull,
-        cs.map(_.maxLen.toString).orNull,
-        comment.orNull)
+        cs.flatMap(_.min.map(_.toString)).getOrElse("NULL"),
+        cs.flatMap(_.max.map(_.toString)).getOrElse("NULL"),
+        cs.map(_.nullCount.toString).getOrElse("NULL"),
+        cs.map(_.distinctCount.toString).getOrElse("NULL"),
+        cs.map(_.avgLen.toString).getOrElse("NULL"),
+        cs.map(_.maxLen.toString).getOrElse("NULL"),
+        comment.getOrElse("NULL"))
     } else {
-      Row(
+      Seq(
         attribute.name,
         attribute.dataType.catalogString,
-        comment.orNull)
+        comment.getOrElse("NULL"))
     }
 
-    Seq(result)
+    Seq(Row(formatColumnInfo(fieldValues)))
+  }
+
+  /** Do alignment for the result for better readability. */
+  private def formatColumnInfo(fieldValues: Seq[String]): String = {
+    assert(output.length == fieldValues.length)
+    val fieldNames = output.map(_.name)
+    val nameBuilder = new StringBuilder()
+    val valueBuilder = new StringBuilder()
+    fieldNames.zip(fieldValues).foreach { case (name, value) =>
+      // This is for alignment.
+      val len = math.max(name.length, value.length) + 1
+      nameBuilder.append(String.format("%-" + len + "s", name)).append("\t")
+      valueBuilder.append(String.format("%-" + len + "s", value)).append("\t")
+    }
+    nameBuilder.toString() + "\n" + valueBuilder.toString()
   }
 }
 

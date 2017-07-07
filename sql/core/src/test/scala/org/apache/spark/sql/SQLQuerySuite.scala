@@ -39,40 +39,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   setupTestData()
 
-  test("describe table column") {
-    def checkDescColumn(
-        table: String,
-        column: String,
-        dataType: String,
-        comment: Option[String]): Unit = {
-      checkAnswer(sql(s"DESC $table $column"), Row(column, dataType, comment.orNull))
-      checkAnswer(sql(s"DESC EXTENDED $table $column"), Row(column, dataType, comment.orNull))
-      checkAnswer(sql(s"DESC FORMATTED $table $column"),
-        Row(column, dataType, null, null, null, null, null, null, comment.orNull))
-    }
-
-    val comment = "foo bar"
-    // Test temp table
-    withTempView("desc_col_tempTable") {
-      sql(s"CREATE TEMPORARY VIEW desc_col_tempTable (key int COMMENT '$comment') USING PARQUET")
-      checkDescColumn("desc_col_tempTable", "key", "int", Some(comment))
-
-      // Describe a non-existent column
-      val msg = intercept[AnalysisException](sql("DESC desc_col_tempTable key1")).getMessage
-      assert(msg.contains("Column key1 does not exist."))
-    }
-
-    withTable("desc_col_persistentTable", "desc_col_complexTable") {
-      // Test persistent table
-      sql(s"CREATE TABLE desc_col_persistentTable (key int COMMENT '$comment') USING PARQUET")
-      checkDescColumn("desc_col_persistentTable", "key", "int", Some(comment))
-
-      // Test complex column
-      complexData.write.saveAsTable("desc_col_complexTable")
-      checkDescColumn("desc_col_complexTable", "s", "struct<key:int,value:string>", None)
-    }
-  }
-
   test("SPARK-8010: promote numeric to string") {
     val df = Seq((1, 1)).toDF("key", "value")
     df.createOrReplaceTempView("src")

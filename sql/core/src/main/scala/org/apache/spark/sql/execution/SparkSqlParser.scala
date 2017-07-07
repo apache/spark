@@ -326,7 +326,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       } else {
         DescribeColumnCommand(
           visitTableIdentifier(ctx.tableIdentifier),
-          ctx.describeColName.getText,
+          ctx.describeColName.nameParts.asScala.map(_.getText),
           ctx.FORMATTED != null)
       }
     } else {
