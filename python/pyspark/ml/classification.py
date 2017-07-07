@@ -1546,7 +1546,9 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
         numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
 
-        if isinstance(classifier, HasWeightCol) and classifier.getWeightCol():
+        if (isinstance(classifier, HasWeightCol) and
+            classifier.isDefined(classifier.weightCol) and
+            classifier.getWeightCol()):
             multiclassLabeled = dataset.select(labelCol, featuresCol, classifier.getWeightCol())
         else:
             multiclassLabeled = dataset.select(labelCol, featuresCol)
