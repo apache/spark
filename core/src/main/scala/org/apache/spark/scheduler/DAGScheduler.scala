@@ -1164,16 +1164,24 @@ class DAGScheduler(
       return
     }
 
+    val stage = stageIdToStage(task.stageId)
+
     // Make sure the task's accumulators are updated before any other processing happens, so that
     // we can post a task end event before any jobs or stages are updated. The accumulators are
     // only updated in certain cases.
     event.reason match {
-      case Success | _: ExceptionFailure => updateAccumulators(event)
+      case Success =>
+        stage match {
+          case rs: ResultStage if rs.activeJob.isEmpty =>
+            // Ignore update if task's job has finished.
+          case _ =>
+            updateAccumulators(event)
+        }
+      case _: ExceptionFailure => updateAccumulators(event)
       case _ =>
     }
     postTaskEnd(event)
 
-    val stage = stageIdToStage(task.stageId)
     event.reason match {
       case Success =>
         task match {
