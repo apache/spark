@@ -72,6 +72,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(SQLConf.get.getConfString("spark-config2") == "a")
     SparkSession.clearActiveSession()
 
+    val m = "dummy change"
+
     assert(SparkSession.builder().getOrCreate() == defaultSession)
     SparkSession.clearDefaultSession()
   }
