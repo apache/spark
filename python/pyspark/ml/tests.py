@@ -1255,6 +1255,16 @@ class OneVsRestTests(SparkSessionTestCase):
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
 
+    def test_cache_weightCol_if_necessary(self):
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8), 1.0),
+                                         (1.0, Vectors.sparse(2, [], []), 1.0),
+                                         (2.0, Vectors.dense(0.5, 0.5), 1.0)],
+                                        ["label", "features", "weight"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
+        ovr = OneVsRest(classifier=lr)
+        model = ovr.fit(df)
+        self.assertIsNone(model)
+
 
 class HashingTFTest(SparkSessionTestCase):
 
