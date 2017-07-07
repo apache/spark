@@ -695,12 +695,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         var errorMsg = intercept[AnalysisException] {
           Seq((1, 1)).toDF("col", c0).write.bucketBy(2, c0, c1).saveAsTable("t")
         }.getMessage
-        assert(errorMsg.contains("Found duplicate column(s) in the bucket column(s)"))
+        assert(errorMsg.contains("Found duplicate column(s) in the bucket definition"))
 
         errorMsg = intercept[AnalysisException] {
           Seq((1, 1)).toDF("col", c0).write.bucketBy(2, "col").sortBy(c0, c1).saveAsTable("t")
         }.getMessage
-        assert(errorMsg.contains("Found duplicate column(s) in the sort column(s)"))
+        assert(errorMsg.contains("Found duplicate column(s) in the sort definition"))
       }
     }
   }
@@ -734,7 +734,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       val errorMsg = intercept[AnalysisException] {
         spark.read.format(format).load(testDir.getAbsolutePath)
       }.getMessage
-      assert(errorMsg.contains("Found duplicate column(s) in the partition column(s):"))
+      assert(errorMsg.contains("Found duplicate column(s) in the partition schema:"))
     }
 
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>

@@ -361,7 +361,7 @@ object ViewHelper {
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
     SchemaUtils.checkColumnNameDuplication(
-      queryOutput, "the view", session.sessionState.conf.resolver)
+      queryOutput, "in the view definition", session.sessionState.conf.resolver)
 
     // Generate the view default database name.
     val viewDefaultDatabase = session.sessionState.catalog.getCurrentDatabase

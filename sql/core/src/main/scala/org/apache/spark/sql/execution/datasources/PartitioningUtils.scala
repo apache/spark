@@ -303,7 +303,7 @@ object PartitioningUtils {
     }
 
     SchemaUtils.checkColumnNameDuplication(
-      normalizedPartSpec.map(_._1), "in the partition column(s)", resolver)
+      normalizedPartSpec.map(_._1), "in the partition schema", resolver)
 
     normalizedPartSpec.toMap
   }

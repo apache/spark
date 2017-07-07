@@ -91,9 +91,9 @@ case class DataSource(
 
   bucketSpec.map { bucket =>
     SchemaUtils.checkColumnNameDuplication(
-      bucket.bucketColumnNames, "in the bucket column(s)", equality)
+      bucket.bucketColumnNames, "in the bucket definition", equality)
     SchemaUtils.checkColumnNameDuplication(
-      bucket.sortColumnNames, "in the sort column(s)", equality)
+      bucket.sortColumnNames, "in the sort definition", equality)
   }
 
   /**
@@ -196,7 +196,7 @@ case class DataSource(
     try {
       SchemaUtils.checkColumnNameDuplication(
         (dataSchema ++ partitionSchema).map(_.name),
-        "in the data schema and the partition column(s)",
+        "in the data schema and the partition schema",
         equality)
     } catch {
       case e: AnalysisException => logWarning(e.getMessage)
@@ -413,7 +413,7 @@ case class DataSource(
           equality)
         SchemaUtils.checkColumnNameDuplication(
           hs.partitionSchema.map(_.name),
-          "in the partition column(s)",
+          "in the partition schema",
           equality)
       case _ =>
         SchemaUtils.checkColumnNameDuplication(
