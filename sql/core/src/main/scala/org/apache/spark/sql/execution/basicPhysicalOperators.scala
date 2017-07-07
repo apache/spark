@@ -45,7 +45,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   var FPGARowNumber = 0
 
   val CMCCInputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(24)(1)
-  val CMCCOutputSchema = CMCCInputSchema
+  val testOutputSchema = CMCCInputSchema
+  val CMCCOutputSchema = Array(2, 3, 3, 3, 1, 1, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(132)(1)
 
   // Another hacker way to deal with 8 chars String => as Int, is this better?
   val CMCCCharLength = Array(32, 8, 8, 12, 12, 20, 8, 8)
@@ -153,7 +154,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     var rowCount = FPGARowNumber
     new Iterator[InternalRow] {
 
-      val numFields = CMCCOutputSchema.length
+      val numFields = testOutputSchema.length
 
       override def hasNext: Boolean = rowCount != 0
 
@@ -165,7 +166,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
         holder.reset()
 
         var stringIndex = 0
-        CMCCOutputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
+        testOutputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
           val (colType, index) = colTypeWithIndex
           if (colType == 1) {
             rowWriter.write(index, buffer.getInt)
