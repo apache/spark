@@ -2646,9 +2646,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
       val e = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)"))
       assert(e.message ==
-        "cannot resolve '`v.i`' given input columns: [_auto_generated_subquery_name.i]")
+        "cannot resolve '`v.i`' given input columns: [__auto_generated_subquery_name.i]")
 
-      checkAnswer(sql("SELECT _auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+      checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
   }
 }

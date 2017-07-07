@@ -756,7 +756,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       // normal subquery names, so that parent operators can only access the columns in subquery by
       // unqualified names. Users can still use this special qualifier to access columns if they
       // know it, but that's not recommended.
-      "_auto_generated_subquery_name"
+      "__auto_generated_subquery_name"
     } else {
       ctx.strictIdentifier.getText
     }
