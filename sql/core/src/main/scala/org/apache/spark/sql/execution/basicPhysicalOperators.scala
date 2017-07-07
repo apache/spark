@@ -121,8 +121,11 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
         buffer.putLong(row.getLong(index))
       } else {
         val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
-        val bytesOfStr = row.getUTF8String(index).getBytes
-        System.arraycopy(bytesOfStr, 0, tmpBuffer, 0, bytesOfStr.length);
+        val string = row.getUTF8String(index)
+        if (string != null) {
+          val bytesOfStr = string.getBytes
+          System.arraycopy(bytesOfStr, 0, tmpBuffer, 0, bytesOfStr.length);
+        }
         buffer.put(tmpBuffer)
         stringIndex += 1
       }
@@ -168,6 +171,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
             if (res == None) {
               val string = UTF8String.fromBytes(tmpBuffer)
               rowWriter.write(index, string)
+            } else if (res.get._2 == 0) {
+              rowWriter.setNullAt(index)
+              rowWriter.write(0, null.asInstanceOf[UTF8String])
             } else {
               val string = UTF8String.fromBytes(tmpBuffer, 0, res.get._2)
               rowWriter.write(index, string)
