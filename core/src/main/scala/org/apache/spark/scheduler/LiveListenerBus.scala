@@ -232,6 +232,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
         "This likely means one of the SparkListeners is too slow and cannot keep up with " +
         "the rate at which tasks are being started by the scheduler.")
     }
+    logTrace(s"Dropping event $event")
   }
 }
 
