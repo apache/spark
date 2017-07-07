@@ -95,12 +95,12 @@ private[libsvm] class LibSVMFileFormat
     val numFeatures: Int = libSVMOptions.numFeatures.getOrElse {
       if (files.isEmpty) {
         throw new IOException("No input path specified for libsvm data")
-      } else if (files.length > 1) {
-        logWarning(
-          "Multiple input paths detected, determining the number of features by going " +
-          "though the input. If you know the number in advance, please specify it via " +
-          "'numFeatures' option to avoid the extra scan.")
       }
+
+      logWarning(
+        "'numFeatures' option not specified, determining the number of features by going " +
+        "though the input. If you know the number in advance, please specify it via " +
+        "'numFeatures' option to avoid the extra scan.")
 
       val paths = files.map(_.getPath.toUri.toString)
       val parsed = MLUtils.parseLibSVMFile(sparkSession, paths)
