@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
@@ -30,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
@@ -37,11 +39,13 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  val CMCCInputSize = 1220
-  val CMCCOutputSize = 1220
+  val CMCCInputSize = 1164
+  val CMCCOutputSize = 1164
+
+  var FPGARowNumber = 0
 
   val CMCCInputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(24)(1)
-  val CMCCOutputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(24)(1)
+  val CMCCOutputSchema = CMCCInputSchema
 
   // Another hacker way to deal with 8 chars String => as Int, is this better?
   val CMCCCharLength = Array(32, 8, 8, 12, 12, 20, 8, 8)
@@ -106,29 +110,31 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
           // Get the default ByteBuffer with big enough size
           val buffer = mockGetByteBuffer(0)
           while(iter.hasNext) {
-            loadRowToBuffer(iter.next(), buffer)
+            loadRowToBuffer(iter.next, buffer)
+            FPGARowNumber += 1
           }
+          buffer.flip()
           buffer
         }
 
         def loadRowToBuffer(row: InternalRow, buffer: ByteBuffer): Unit = {
-          // Another way to implement index: zipWithIndex, which is better?
-          var index = 0
+          // Index to infer string length using CMCCCharLength
           var stringIndex = 0
-          CMCCInputSchema.foreach { colType =>
+          // Another way to implement index: use a var index, and increase every time, which is more
+          // efficient?
+          CMCCInputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
+            val (colType, index) = colTypeWithIndex
             if (colType == 1) {
-              buffer.putInt(index, row.getInt(index))
+              buffer.putInt(row.getInt(index))
             } else if (colType == 2) {
-              buffer.putLong(index, row.getLong(index))
+              buffer.putLong(row.getLong(index))
             } else {
               val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
-              // From QuanFu
-              System.arraycopy(
-                row.getUTF8String(index).getBytes, 0, tmpBuffer, 0, CMCCCharLength(stringIndex));
+              val bytesOfStr = row.getUTF8String(index).getBytes
+              System.arraycopy(bytesOfStr, 0, tmpBuffer, 0, bytesOfStr.length);
               buffer.put(tmpBuffer)
+              stringIndex += 1
             }
-            index += 1
-            stringIndex += 1
           }
         }
       }
@@ -138,7 +144,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   def toInternalRow(input: RDD[ByteBuffer]): RDD[InternalRow] = {
     input.flatMap[InternalRow] { buffer =>
-      val rowCount = buffer.array().length / CMCCOutputSize
+      var rowCount = FPGARowNumber
       new Iterator[InternalRow] {
 
         val numFields = CMCCOutputSchema.length
@@ -150,24 +156,25 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
           val row: UnsafeRow = new UnsafeRow(numFields)
           val holder: BufferHolder = new BufferHolder(row, 0)
           val rowWriter = new UnsafeRowWriter(holder, numFields)
+          holder.reset()
 
           var stringIndex = 0
           CMCCOutputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
             val (colType, index) = colTypeWithIndex
             if (colType == 1) {
-              rowWriter.write(index, buffer.getInt())
+              rowWriter.write(index, buffer.getInt)
             } else if (colType == 2) {
               rowWriter.write(index, buffer.getLong)
             } else {
               val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
-              (0 until tmpBuffer.length).foreach { index =>
-                //Changed getChar -> get
-                tmpBuffer(index) = buffer.get()
-              }
-              rowWriter.write(index, tmpBuffer)
+              buffer.get(tmpBuffer, 0, tmpBuffer.length)
+
+              val string = UTF8String.fromBytes(tmpBuffer)
+              rowWriter.write(index, string)
               stringIndex += 1
             }
           }
+          rowCount -= 1
           row
         }
       }
@@ -175,7 +182,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   def mockGetByteBuffer(size: Int): ByteBuffer = {
-    ByteBuffer.allocate(size)
+    ByteBuffer.allocate(10000)
   }
 
   def mockFPGA(input: ByteBuffer): ByteBuffer = {
