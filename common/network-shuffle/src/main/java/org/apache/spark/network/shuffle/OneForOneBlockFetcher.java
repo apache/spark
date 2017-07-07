@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,7 +122,7 @@ public class OneForOneBlockFetcher {
           for (int i = 0; i < streamHandle.numChunks; i++) {
             if (shuffleFiles != null) {
               client.stream(OneForOneStreamManager.genStreamChunkId(streamHandle.streamId, i),
-                new DownloadCallback(shuffleFiles[i], i));
+                new DownloadCallback(i));
             } else {
               client.fetchChunk(streamHandle.streamId, i, chunkCallback);
             }
@@ -151,15 +152,27 @@ public class OneForOneBlockFetcher {
     }
   }
 
+  private static synchronized boolean renameFile(File src, File dest) {
+    if (dest.exists()) {
+      if (!dest.delete()) {
+        return false;
+      }
+    }
+    return src.renameTo(dest);
+  }
+
   private class DownloadCallback implements StreamCallback {
 
     private WritableByteChannel channel = null;
     private File targetFile = null;
+    private File tmpFile = null;
     private int chunkIndex;
 
-    DownloadCallback(File targetFile, int chunkIndex) throws IOException {
-      this.targetFile = targetFile;
-      this.channel = Channels.newChannel(new FileOutputStream(targetFile));
+    DownloadCallback(int chunkIndex) throws IOException {
+      this.targetFile = shuffleFiles[chunkIndex];
+      this.tmpFile = new File(targetFile.getParent(),
+        targetFile.getName() + "_" + UUID.randomUUID());
+      this.channel = Channels.newChannel(new FileOutputStream(tmpFile));
       this.chunkIndex = chunkIndex;
     }
 
@@ -171,14 +184,23 @@ public class OneForOneBlockFetcher {
     @Override
     public void onComplete(String streamId) throws IOException {
       channel.close();
+      if (!renameFile(tmpFile, targetFile)) {
+        onFailure(streamId, new Exception("Failed renaming " + tmpFile.getAbsolutePath() + " to " +
+          targetFile.getAbsolutePath()));
+        return;
+      }
       ManagedBuffer buffer = new FileSegmentManagedBuffer(transportConf, targetFile, 0,
         targetFile.length());
+      tmpFile.delete();
       listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
     }
 
     @Override
     public void onFailure(String streamId, Throwable cause) throws IOException {
-      channel.close();
+      if (channel.isOpen()) {
+        channel.close();
+      }
+      tmpFile.delete();
       // On receipt of a failure, fail every block from chunkIndex onwards.
       String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
       failRemainingBlocks(remainingBlockIds, cause);
