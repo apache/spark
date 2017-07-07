@@ -818,15 +818,13 @@ class ALSCleanerSuite extends SparkFunSuite {
       FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
     try {
       conf.set("spark.local.dir", localDir.getAbsolutePath)
-      val sc = new SparkContext("local[2]", "test", conf)
+      val sc = new SparkContext("local[2]", "ALSCleanerSuite", conf)
       try {
         sc.setCheckpointDir(checkpointDir.getAbsolutePath)
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
         val spark = SparkSession.builder
-          .master("local[2]")
-          .appName("ALSCleanerSuite")
           .sparkContext(sc)
           .getOrCreate()
         import spark.implicits._

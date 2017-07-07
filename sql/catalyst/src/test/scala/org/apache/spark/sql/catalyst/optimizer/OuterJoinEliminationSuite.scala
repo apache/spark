@@ -234,9 +234,7 @@ class OuterJoinEliminationSuite extends PlanTest {
   }
 
   test("no outer join elimination if constraint propagation is disabled") {
-    try {
-      SQLConf.get.setConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED, false)
-
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val x = testRelation.subquery('x)
       val y = testRelation1.subquery('y)
 
@@ -251,8 +249,6 @@ class OuterJoinEliminationSuite extends PlanTest {
       val optimized = Optimize.execute(originalQuery.analyze)
 
       comparePlans(optimized, originalQuery.analyze)
-    } finally {
-      SQLConf.get.unsetConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED)
     }
   }
 }

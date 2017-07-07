@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.io.IOException
 import java.lang.reflect.{ParameterizedType, Type}
 
 import scala.reflect.runtime.universe.TypeTag
@@ -456,9 +455,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         .map(_.asInstanceOf[ParameterizedType])
         .filter(e => e.getRawType.isInstanceOf[Class[_]] && e.getRawType.asInstanceOf[Class[_]].getCanonicalName.startsWith("org.apache.spark.sql.api.java.UDF"))
       if (udfInterfaces.length == 0) {
-        throw new IOException(s"UDF class ${className} doesn't implement any UDF interface")
+        throw new AnalysisException(s"UDF class ${className} doesn't implement any UDF interface")
       } else if (udfInterfaces.length > 1) {
-        throw new IOException(s"It is invalid to implement multiple UDF interfaces, UDF class ${className}")
+        throw new AnalysisException(s"It is invalid to implement multiple UDF interfaces, UDF class ${className}")
       } else {
         try {
           val udf = clazz.newInstance()
@@ -491,17 +490,39 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
             case 21 => register(name, udf.asInstanceOf[UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
             case 22 => register(name, udf.asInstanceOf[UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
             case 23 => register(name, udf.asInstanceOf[UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case n => logError(s"UDF class with ${n} type arguments is not supported ")
+            case n =>
+              throw new AnalysisException(s"UDF class with ${n} type arguments is not supported.")
           }
         } catch {
           case e @ (_: InstantiationException | _: IllegalArgumentException) =>
-            logError(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
+            throw new AnalysisException(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
         }
       }
     } catch {
-      case e: ClassNotFoundException => logError(s"Can not load class ${className}, please make sure it is on the classpath")
+      case e: ClassNotFoundException => throw new AnalysisException(s"Can not load class ${className}, please make sure it is on the classpath")
     }
 
+  }
+
+  /**
+   * Register a Java UDAF class using reflection, for use from pyspark
+   *
+   * @param name     UDAF name
+   * @param className    fully qualified class name of UDAF
+   */
+  private[sql] def registerJavaUDAF(name: String, className: String): Unit = {
+    try {
+      val clazz = Utils.classForName(className)
+      if (!classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
+        throw new AnalysisException(s"class $className doesn't implement interface UserDefinedAggregateFunction")
+      }
+      val udaf = clazz.newInstance().asInstanceOf[UserDefinedAggregateFunction]
+      register(name, udaf)
+    } catch {
+      case e: ClassNotFoundException => throw new AnalysisException(s"Can not load class ${className}, please make sure it is on the classpath")
+      case e @ (_: InstantiationException | _: IllegalArgumentException) =>
+        throw new AnalysisException(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
+    }
   }
 
   /**

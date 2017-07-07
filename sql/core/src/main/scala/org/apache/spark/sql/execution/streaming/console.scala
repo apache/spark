@@ -48,12 +48,12 @@ class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
     println(batchIdStr)
     println("-------------------------------------------")
     // scalastyle:off println
-    SQLExecution.ignoreNestedExecutionId(data.sparkSession) {
-      data.sparkSession.createDataFrame(
-        data.sparkSession.sparkContext.parallelize(data.collect()), data.schema)
-        .show(numRowsToShow, isTruncated)
-    }
+    data.sparkSession.createDataFrame(
+      data.sparkSession.sparkContext.parallelize(data.collect()), data.schema)
+      .show(numRowsToShow, isTruncated)
   }
+
+  override def toString(): String = s"ConsoleSink[numRows=$numRowsToShow, truncate=$isTruncated]"
 }
 
 case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
@@ -82,9 +82,7 @@ class ConsoleSinkProvider extends StreamSinkProvider
 
     // Truncate the displayed data if it is too long, by default it is true
     val isTruncated = parameters.get("truncate").map(_.toBoolean).getOrElse(true)
-    SQLExecution.ignoreNestedExecutionId(sqlContext.sparkSession) {
-      data.show(numRowsToShow, isTruncated)
-    }
+    data.show(numRowsToShow, isTruncated)
 
     ConsoleRelation(sqlContext, data)
   }
