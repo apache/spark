@@ -102,11 +102,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(session.conf.get("key1") == "value1")
     assert(session.conf.get("key2") == "value2")
     assert(session.sparkContext == sparkContext2)
-    assert(session.sparkContext.conf.get("key1") == "value1")
-    // If the created sparkContext is not passed through the Builder's API sparkContext,
-    // the conf of this sparkContext will also contain the conf set through the API config.
-    assert(session.sparkContext.conf.get("key2") == "value2")
-    assert(session.sparkContext.conf.get("spark.app.name") == "test")
+    // We won't update conf for existing `SparkContext`
+    assert(!sparkContext2.conf.contains("key2"))
+    assert(sparkContext2.conf.get("key1") == "value1")
     session.stop()
   }
 
