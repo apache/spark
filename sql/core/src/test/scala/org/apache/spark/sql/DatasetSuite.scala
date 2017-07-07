@@ -325,13 +325,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds1 = Seq(1, 2, 3).toDS().as("a")
     val ds2 = Seq(1, 2).toDS().as("b")
 
-    intercept[AnalysisException] {
+    val e1 = intercept[AnalysisException] {
       ds1.joinWith(ds2, $"a.value" === $"b.value", "left_semi")
-    }
+    }.getMessage
+    assert(e1.contains("Invalid join type in joinWith: LeftSemi"))
 
-    intercept[AnalysisException] {
+    val e2 = intercept[AnalysisException] {
       ds1.joinWith(ds2, $"a.value" === $"b.value", "left_anti")
-    }
+    }.getMessage
+    assert(e2.contains("Invalid join type in joinWith: LeftAnti"))
   }
 
   test("groupBy function, keys") {
