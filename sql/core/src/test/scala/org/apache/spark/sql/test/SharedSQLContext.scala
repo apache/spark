@@ -61,8 +61,10 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach with Eventua
    */
   protected override def beforeAll(): Unit = {
     SparkSession.sqlListener.set(null)
-    if (_spark == null) {
-      _spark = createSparkSession
+    synchronized {
+      if (_spark == null) {
+        _spark = createSparkSession
+      }
     }
     // Ensure we have initialized the context before calling parent code
     super.beforeAll()
