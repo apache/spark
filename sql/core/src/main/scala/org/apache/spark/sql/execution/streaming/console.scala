@@ -52,6 +52,8 @@ class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
       data.sparkSession.sparkContext.parallelize(data.collect()), data.schema)
       .show(numRowsToShow, isTruncated)
   }
+
+  override def toString(): String = s"ConsoleSink[numRows=$numRowsToShow, truncate=$isTruncated]"
 }
 
 case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
