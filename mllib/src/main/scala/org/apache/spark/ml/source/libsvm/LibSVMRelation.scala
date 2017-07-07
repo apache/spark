@@ -93,10 +93,7 @@ private[libsvm] class LibSVMFileFormat
       files: Seq[FileStatus]): Option[StructType] = {
     val libSVMOptions = new LibSVMOptions(options)
     val numFeatures: Int = libSVMOptions.numFeatures.getOrElse {
-      if (files.isEmpty) {
-        throw new IOException("No input path specified for libsvm data")
-      }
-
+      require(files.nonEmpty, "No input path specified for libsvm data")
       logWarning(
         "'numFeatures' option not specified, determining the number of features by going " +
         "though the input. If you know the number in advance, please specify it via " +
