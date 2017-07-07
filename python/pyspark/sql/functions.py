@@ -1160,8 +1160,8 @@ def from_utc_timestamp(timestamp, tz):
 @since(1.5)
 def to_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp, which corresponds to a time of day in the timezone `tz`,
-    returns another timestamp that corresponds to the same time of day in UTC.
+    Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
+    another timestamp that corresponds to the same time of day in UTC.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
     >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
