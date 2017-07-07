@@ -1177,8 +1177,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // retrying the task otherwise there's a race condition where run on
     // the same executor that it was intended to be black listed from.
     val conf = new SparkConf().
-      set(config.BLACKLIST_ENABLED, true).
-      set(config.MAX_TASK_ATTEMPTS_PER_EXECUTOR, 1)
+      set(config.BLACKLIST_ENABLED, true)
 
     // Create a task with two executors.
     sc = new SparkContext("local", "test", conf)
@@ -1208,10 +1207,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       }
     )
 
-    // Simulate an out of memory error
-    val e = new OutOfMemoryError
-    taskSetManagerSpy.handleFailedTask(
-      taskDesc.get.taskId, TaskState.FAILED, new ExceptionFailure(e, Seq()))
+    // Simulate a fake exception
+    val e = new ExceptionFailure("a", "b", Array(), "c", None)
+    taskSetManagerSpy.handleFailedTask(taskDesc.get.taskId, TaskState.FAILED, e)
 
     verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt())
   }
