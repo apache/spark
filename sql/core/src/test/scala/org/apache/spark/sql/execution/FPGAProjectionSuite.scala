@@ -22,7 +22,7 @@ object FPGAProjectionSuite {
       val row2 = InternalRow(+20140409, 3L,UTF8String.fromString("2O08141Juc1J2"),UTF8String.fromString("B1101"),UTF8String.fromString("B1101"),1,UTF8String.fromString("HB.WH.03"),UTF8String.fromString("13507190977"),0,+3L,UTF8String.fromString("HB.WH.01.16.06"),+1L,UTF8String.fromString("US10"),UTF8String.fromString("US10"),19320716,3030,3,0,0,0,0,0,0,0,0,1162,3,3,300,0,0,0,+300,+0,+0,+0,20000221,+10)
       val row3 = InternalRow(+20140407, 3L,UTF8String.fromString("2O06141Juc1J6"),UTF8String.fromString("B1101"),UTF8String.fromString("B1101"),1,UTF8String.fromString("HB.WH.01"),UTF8String.fromString("13507190977"),0,+3L,UTF8String.fromString("HB.WH.01.16.06"),+1L,UTF8String.fromString("US10"),UTF8String.fromString("US10"),19320716,300,3,0,0,0,0,0,0,0,0,116,3,3,300,0,0,0,+300,+0,+0,+0,20000221,+10)
 
-      val seqRows: Seq[InternalRow] = Seq(row1)
+      val seqRows: Seq[InternalRow] = Seq(row1, row2, row3)
       spark.sparkContext.parallelize[InternalRow](seqRows)
     }
 
@@ -31,13 +31,25 @@ object FPGAProjectionSuite {
       RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(1, 1, 1, 1)))
 
     val data = produceData()
-    val FPGABatch = project.toFPGABatch(data)
-    val back = project.toInternalRow(FPGABatch).collect()
+    val back = project.FPGAProjection(data).collect()
     val collectData = data.collect()
 
+    val schema = project.CMCCInputSchema
     // TODO: Use new verification
-    collectData.foreach(back.contains(_))
-    back.foreach(collectData.contains(_))
+    back.zip(collectData).foreach { rowPair:(InternalRow, InternalRow) =>
+      val (row1, row2) = rowPair
+      schema.zipWithIndex.foreach { colTypeWithIndex:(Int, Int) =>
+        val (colType, index) = colTypeWithIndex
+        if (colType == 1) {
+          assert(row1.getInt(index) == row2.getInt(index))
+        } else if (colType == 2) {
+          assert(row1.getLong(index) == row2.getLong(index))
+        } else if (colType == 3) {
+          assert(row1.getUTF8String(index).equals(row2.getUTF8String(index)))
+        }
+      }
+    }
+    println("******************** Right man! ********************")
 
   }
 }
