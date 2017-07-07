@@ -1263,7 +1263,7 @@ class OneVsRestTests(SparkSessionTestCase):
         lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
         ovr = OneVsRest(classifier=lr)
         model = ovr.fit(df)
-        self.assertIsNone(model)
+        self.assertIsNotNone(model)
 
 
 class HashingTFTest(SparkSessionTestCase):
