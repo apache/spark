@@ -17,14 +17,19 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -37,6 +42,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import org.apache.commons.io.FileUtils;
+import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -116,6 +123,77 @@ public class OneForOneBlockFetcherSuite {
     } catch (IllegalArgumentException e) {
       assertEquals("Zero-sized blockIds array", e.getMessage());
     }
+  }
+
+  @Test
+  public void testFetchToDisk() throws Exception {
+    File file0 = new File("file-" + UUID.randomUUID());
+    File file1 = new File("file-" + UUID.randomUUID());
+    file0.createNewFile();
+    file1.createNewFile();
+    System.out.println(file0.getAbsolutePath());
+    System.out.println(file1.getAbsolutePath());
+    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    String HELLO_WORLD = "hello world";
+    String IM_A_COW = "I'm a cow";
+    blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(HELLO_WORLD.getBytes())));
+    blocks.put("b1", new NioManagedBuffer(ByteBuffer.wrap(IM_A_COW.getBytes())));
+    BlockFetchingListener listener = fetchBlocksToDisk(blocks, new File[]{file0, file1});
+    ArgumentCaptor<String> blockIdCaptor = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<ManagedBuffer> managedBufferCaptor =
+      ArgumentCaptor.forClass(ManagedBuffer.class);
+    verify(listener, times(2)).onBlockFetchSuccess(blockIdCaptor.capture(),
+      managedBufferCaptor.capture());
+    List<String> blockIds = blockIdCaptor.getAllValues();
+    List<ManagedBuffer> managedBuffers = managedBufferCaptor.getAllValues();
+    assert (blockIds.get(0).equals("b0"));
+    assert (blockIds.get(1).equals("b1"));
+    assert (managedBuffers.get(0) instanceof FileSegmentManagedBuffer);
+    assert new String(managedBuffers.get(0).nioByteBuffer().array()).equals(HELLO_WORLD);
+    assert (managedBuffers.get(1) instanceof FileSegmentManagedBuffer);
+    assert new String(managedBuffers.get(1).nioByteBuffer().array()).equals(IM_A_COW);
+  }
+
+  private BlockFetchingListener fetchBlocksToDisk(
+      LinkedHashMap<String, ManagedBuffer> blocks,
+      File[] files) {
+    TransportClient client = mock(TransportClient.class);
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+    OneForOneBlockFetcher fetcher =
+      new OneForOneBlockFetcher(client, "app-id", "exec-id", blockIds, listener, conf, files);
+    doAnswer(invocationOnMock -> {
+      BlockTransferMessage message = BlockTransferMessage.Decoder.fromByteBuffer(
+        (ByteBuffer) invocationOnMock.getArguments()[0]);
+      RpcResponseCallback callback = (RpcResponseCallback) invocationOnMock.getArguments()[1];
+      callback.onSuccess(new StreamHandle(123, blocks.size()).toByteBuffer());
+      assertEquals(new OpenBlocks("app-id", "exec-id", blockIds), message);
+      return null;
+    }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
+    AtomicInteger expectedChunkIndex = new AtomicInteger(0);
+    Iterator<ManagedBuffer> blockIterator = blocks.values().iterator();
+    doAnswer(invocation -> {
+      try {
+        long streamId = (Long) invocation.getArguments()[0];
+        int myChunkIndex = (Integer) invocation.getArguments()[1];
+        assertEquals(123, streamId);
+        assertEquals(expectedChunkIndex.getAndIncrement(), myChunkIndex);
+
+        ChunkReceivedCallback callback = (ChunkReceivedCallback) invocation.getArguments()[2];
+        ManagedBuffer result = blockIterator.next();
+        if (result != null) {
+          callback.onSuccess(myChunkIndex, result);
+        } else {
+          callback.onFailure(myChunkIndex, new RuntimeException("Failed " + myChunkIndex));
+        }
+      } catch (Exception e) {
+        e.printStackTrace();
+        fail("Unexpected failure");
+      }
+      return null;
+    }).when(client).fetchChunk(anyLong(), anyInt(), any());
+    fetcher.start();
+    return listener;
   }
 
   /**
