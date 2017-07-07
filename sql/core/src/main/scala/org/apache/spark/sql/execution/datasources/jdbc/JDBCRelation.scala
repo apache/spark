@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -129,14 +130,9 @@ private[sql] case class JDBCRelation(
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
-    import scala.collection.JavaConverters._
-
-    val options = jdbcOptions.asProperties.asScala +
-      ("url" -> jdbcOptions.url, "dbtable" -> jdbcOptions.table)
-    val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
-
-    new JdbcRelationProvider().createRelation(
-      data.sparkSession.sqlContext, mode, options.toMap, data)
+    data.write
+      .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
+      .jdbc(jdbcOptions.url, jdbcOptions.table, jdbcOptions.asProperties)
   }
 
   override def toString: String = {

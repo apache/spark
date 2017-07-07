@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -67,6 +68,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(activeSession != defaultSession)
     assert(session == activeSession)
     assert(session.conf.get("spark-config2") == "a")
+    assert(session.sessionState.conf == SQLConf.get)
+    assert(SQLConf.get.getConfString("spark-config2") == "a")
     SparkSession.clearActiveSession()
 
     assert(SparkSession.builder().getOrCreate() == defaultSession)
@@ -98,8 +101,25 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     val session = SparkSession.builder().config("key2", "value2").getOrCreate()
     assert(session.conf.get("key1") == "value1")
     assert(session.conf.get("key2") == "value2")
+    assert(session.sparkContext == sparkContext2)
+    // We won't update conf for existing `SparkContext`
+    assert(!sparkContext2.conf.contains("key2"))
+    assert(sparkContext2.conf.get("key1") == "value1")
+    session.stop()
+  }
+
+  test("create SparkContext first then pass context to SparkSession") {
+    sparkContext.stop()
+    val conf = new SparkConf().setAppName("test").setMaster("local").set("key1", "value1")
+    val newSC = new SparkContext(conf)
+    val session = SparkSession.builder().sparkContext(newSC).config("key2", "value2").getOrCreate()
+    assert(session.conf.get("key1") == "value1")
+    assert(session.conf.get("key2") == "value2")
+    assert(session.sparkContext == newSC)
     assert(session.sparkContext.conf.get("key1") == "value1")
-    assert(session.sparkContext.conf.get("key2") == "value2")
+    // If the created sparkContext is passed through the Builder's API sparkContext,
+    // the conf of this sparkContext will not contain the conf set through the API config.
+    assert(!session.sparkContext.conf.contains("key2"))
     assert(session.sparkContext.conf.get("spark.app.name") == "test")
     session.stop()
   }

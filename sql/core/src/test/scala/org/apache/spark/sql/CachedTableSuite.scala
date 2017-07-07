@@ -313,7 +313,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     spark.table("testData").queryExecution.withCachedData.collect {
       case cached: InMemoryRelation =>
         val actualSizeInBytes = (1 to 100).map(i => 4 + i.toString.length + 4).sum
-        assert(cached.stats(sqlConf).sizeInBytes === actualSizeInBytes)
+        assert(cached.stats.sizeInBytes === actualSizeInBytes)
     }
   }
 
@@ -631,13 +631,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       val ds2 =
         sql(
           """
-            |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1) tt
+            |SELECT * FROM (SELECT c1, max(c1) FROM t1 GROUP BY c1)
             |WHERE
-            |tt.c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
+            |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
             |OR
             |EXISTS (SELECT c1 FROM t3)
             |OR
-            |tt.c1 IN (SELECT c1 FROM t4)
+            |c1 IN (SELECT c1 FROM t4)
           """.stripMargin)
       assert(getNumInMemoryRelations(ds2) == 4)
     }
@@ -683,20 +683,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       Seq(1).toDF("c1").createOrReplaceTempView("t1")
       Seq(2).toDF("c1").createOrReplaceTempView("t2")
 
-      sql(
+      val sql1 =
         """
           |SELECT * FROM t1
           |WHERE
           |NOT EXISTS (SELECT * FROM t2)
-        """.stripMargin).cache()
+        """.stripMargin
+      sql(sql1).cache()
 
-      val cachedDs =
-        sql(
-          """
-            |SELECT * FROM t1
-            |WHERE
-            |NOT EXISTS (SELECT * FROM t2)
-          """.stripMargin)
+      val cachedDs = sql(sql1)
       assert(getNumInMemoryRelations(cachedDs) == 1)
 
       // Additional predicate in the subquery plan should cause a cache miss
@@ -717,20 +712,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       Seq(1).toDF("c1").createOrReplaceTempView("t2")
 
       // Simple correlated predicate in subquery
-      sql(
+      val sqlText =
         """
           |SELECT * FROM t1
           |WHERE
           |t1.c1 in (SELECT t2.c1 FROM t2 where t1.c1 = t2.c1)
-        """.stripMargin).cache()
+        """.stripMargin
+      sql(sqlText).cache()
 
-      val cachedDs =
-        sql(
-          """
-            |SELECT * FROM t1
-            |WHERE
-            |t1.c1 in (SELECT t2.c1 FROM t2 where t1.c1 = t2.c1)
-          """.stripMargin)
+      val cachedDs = sql(sqlText)
       assert(getNumInMemoryRelations(cachedDs) == 1)
     }
   }
@@ -741,22 +731,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       spark.catalog.cacheTable("t1")
 
       // underlying table t1 is cached as well as the query that refers to it.
-      val ds =
-      sql(
+      val sqlText =
         """
           |SELECT * FROM t1
           |WHERE
           |NOT EXISTS (SELECT * FROM t1)
-        """.stripMargin)
+        """.stripMargin
+      val ds = sql(sqlText)
       assert(getNumInMemoryRelations(ds) == 2)
 
-      val cachedDs =
-        sql(
-          """
-            |SELECT * FROM t1
-            |WHERE
-            |NOT EXISTS (SELECT * FROM t1)
-          """.stripMargin).cache()
+      val cachedDs = sql(sqlText).cache()
       assert(getNumInMemoryTablesRecursively(cachedDs.queryExecution.sparkPlan) == 3)
     }
   }
@@ -769,45 +753,31 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       Seq(1).toDF("c1").createOrReplaceTempView("t4")
 
       // Nested predicate subquery
-      sql(
+      val sql1 =
         """
           |SELECT * FROM t1
           |WHERE
           |c1 IN (SELECT c1 FROM t2 WHERE c1 IN (SELECT c1 FROM t3 WHERE c1 = 1))
-        """.stripMargin).cache()
+        """.stripMargin
+      sql(sql1).cache()
 
-      val cachedDs =
-        sql(
-          """
-            |SELECT * FROM t1
-            |WHERE
-            |c1 IN (SELECT c1 FROM t2 WHERE c1 IN (SELECT c1 FROM t3 WHERE c1 = 1))
-          """.stripMargin)
+      val cachedDs = sql(sql1)
       assert(getNumInMemoryRelations(cachedDs) == 1)
 
       // Scalar subquery and predicate subquery
-      sql(
+      val sql2 =
         """
-          |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1) tt
+          |SELECT * FROM (SELECT c1, max(c1) FROM t1 GROUP BY c1)
           |WHERE
-          |tt.c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
+          |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
           |OR
           |EXISTS (SELECT c1 FROM t3)
           |OR
-          |tt.c1 IN (SELECT c1 FROM t4)
-        """.stripMargin).cache()
+          |c1 IN (SELECT c1 FROM t4)
+        """.stripMargin
+      sql(sql2).cache()
 
-      val cachedDs2 =
-        sql(
-          """
-            |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1) tt
-            |WHERE
-            |tt.c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
-            |OR
-            |EXISTS (SELECT c1 FROM t3)
-            |OR
-            |tt.c1 IN (SELECT c1 FROM t4)
-          """.stripMargin)
+      val cachedDs2 = sql(sql2)
       assert(getNumInMemoryRelations(cachedDs2) == 1)
     }
   }

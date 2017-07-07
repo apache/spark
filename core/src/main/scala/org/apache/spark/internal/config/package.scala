@@ -149,6 +149,11 @@ package object config {
       .internal()
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
+
+  private[spark] val BLACKLIST_FETCH_FAILURE_ENABLED =
+    ConfigBuilder("spark.blacklist.application.fetchFailure.enabled")
+      .booleanConf
+      .createWithDefault(false)
   // End blacklist confs
 
   private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
@@ -318,8 +323,44 @@ package object config {
 
   private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
     ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
+      .internal()
       .doc("The blocks of a shuffle request will be fetched to disk when size of the request is " +
         "above this threshold. This is to avoid a giant request takes too much memory.")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("200m")
+      .createWithDefault(Long.MaxValue)
+
+  private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
+    ConfigBuilder("spark.taskMetrics.trackUpdatedBlockStatuses")
+      .doc("Enable tracking of updatedBlockStatuses in the TaskMetrics. Off by default since " +
+        "tracking the block statuses can use a lot of memory and its not used anywhere within " +
+        "spark.")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_FILE_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.file.buffer")
+      .doc("Size of the in-memory buffer for each shuffle file output stream. " +
+        "These buffers reduce the number of disk seeks and system calls made " +
+        "in creating intermediate shuffle files.")
+      .bytesConf(ByteUnit.KiB)
+      .checkValue(v => v > 0 && v <= Int.MaxValue / 1024,
+        s"The file buffer size must be greater than 0 and less than ${Int.MaxValue / 1024}.")
+      .createWithDefaultString("32k")
+
+  private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")
+      .doc("The file system for this buffer size after each partition " +
+        "is written in unsafe shuffle writer.")
+      .bytesConf(ByteUnit.KiB)
+      .checkValue(v => v > 0 && v <= Int.MaxValue / 1024,
+        s"The buffer size must be greater than 0 and less than ${Int.MaxValue / 1024}.")
+      .createWithDefaultString("32k")
+
+  private[spark] val SHUFFLE_DISK_WRITE_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.spill.diskWriteBufferSize")
+      .doc("The buffer size to use when writing the sorted records to an on-disk file.")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0 && v <= Int.MaxValue,
+        s"The buffer size must be greater than 0 and less than ${Int.MaxValue}.")
+      .createWithDefault(1024 * 1024)
 }

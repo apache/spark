@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -28,9 +29,10 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Provides helper methods for comparing plans.
  */
-abstract class PlanTest extends SparkFunSuite with PredicateHelper {
+trait PlanTest extends SparkFunSuite with PredicateHelper {
 
-  protected val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)
+  // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
+  protected def conf = SQLConf.get
 
   /**
    * Since attribute references are given globally unique ids during analysis,
@@ -63,14 +65,14 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
    */
   protected def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan transform {
-      case filter @ Filter(condition: Expression, child: LogicalPlan) =>
-        Filter(splitConjunctivePredicates(condition).map(rewriteEqual(_)).sortBy(_.hashCode())
+      case Filter(condition: Expression, child: LogicalPlan) =>
+        Filter(splitConjunctivePredicates(condition).map(rewriteEqual).sortBy(_.hashCode())
           .reduce(And), child)
       case sample: Sample =>
-        sample.copy(seed = 0L)(true)
-      case join @ Join(left, right, joinType, condition) if condition.isDefined =>
+        sample.copy(seed = 0L)
+      case Join(left, right, joinType, condition) if condition.isDefined =>
         val newCondition =
-          splitConjunctivePredicates(condition.get).map(rewriteEqual(_)).sortBy(_.hashCode())
+          splitConjunctivePredicates(condition.get).map(rewriteEqual).sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, joinType, Some(newCondition))
     }
@@ -140,6 +142,34 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
         p1.projectList == p2.projectList && sameJoinPlan(p1.child, p2.child)
       case _ =>
         plan1 == plan2
+    }
+  }
+
+  /**
+   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
+   * configurations.
+   */
+  protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    val conf = SQLConf.get
+    val (keys, values) = pairs.unzip
+    val currentValues = keys.map { key =>
+      if (conf.contains(key)) {
+        Some(conf.getConfString(key))
+      } else {
+        None
+      }
+    }
+    (keys, values).zipped.foreach { (k, v) =>
+      if (SQLConf.staticConfKeys.contains(k)) {
+        throw new AnalysisException(s"Cannot modify the value of a static config: $k")
+      }
+      conf.setConfString(k, v)
+    }
+    try f finally {
+      keys.zip(currentValues).foreach {
+        case (key, Some(value)) => conf.setConfString(key, value)
+        case (key, None) => conf.unsetConf(key)
+      }
     }
   }
 }

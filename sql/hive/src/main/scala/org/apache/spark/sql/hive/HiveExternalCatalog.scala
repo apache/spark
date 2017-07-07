@@ -631,21 +631,23 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def alterTableStats(
       db: String,
       table: String,
-      stats: CatalogStatistics): Unit = withClient {
+      stats: Option[CatalogStatistics]): Unit = withClient {
     requireTableExists(db, table)
     val rawTable = getRawTable(db, table)
 
     // convert table statistics to properties so that we can persist them through hive client
-    var statsProperties: Map[String, String] =
-      Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
-    if (stats.rowCount.isDefined) {
-      statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
-    }
-    val colNameTypeMap: Map[String, DataType] =
-      rawTable.schema.fields.map(f => (f.name, f.dataType)).toMap
-    stats.colStats.foreach { case (colName, colStat) =>
-      colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
-        statsProperties += (columnStatKeyPropName(colName, k) -> v)
+    val statsProperties = new mutable.HashMap[String, String]()
+    if (stats.isDefined) {
+      statsProperties += STATISTICS_TOTAL_SIZE -> stats.get.sizeInBytes.toString()
+      if (stats.get.rowCount.isDefined) {
+        statsProperties += STATISTICS_NUM_ROWS -> stats.get.rowCount.get.toString()
+      }
+      val colNameTypeMap: Map[String, DataType] =
+        rawTable.schema.fields.map(f => (f.name, f.dataType)).toMap
+      stats.get.colStats.foreach { case (colName, colStat) =>
+        colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
+          statsProperties += (columnStatKeyPropName(colName, k) -> v)
+        }
       }
     }
 
@@ -1128,6 +1130,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override protected def doDropFunction(db: String, name: String): Unit = withClient {
     requireFunctionExists(db, name)
     client.dropFunction(db, name)
+  }
+
+  override protected def doAlterFunction(
+      db: String, funcDefinition: CatalogFunction): Unit = withClient {
+    requireDbExists(db)
+    val functionName = funcDefinition.identifier.funcName.toLowerCase(Locale.ROOT)
+    requireFunctionExists(db, functionName)
+    val functionIdentifier = funcDefinition.identifier.copy(funcName = functionName)
+    client.alterFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
   override protected def doRenameFunction(
