@@ -42,12 +42,18 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(initialSession.sparkContext.conf.get("some-config") == "v2")
     assert(initialSession.conf.get("some-config") == "v2")
     SparkSession.clearDefaultSession()
+
+    assert(SparkSession.getDefaultSession === None)
+    assert(SparkSession.getActiveSession === None)
   }
 
   test("use global default session") {
     val session = SparkSession.builder().getOrCreate()
     assert(SparkSession.builder().getOrCreate() == session)
     SparkSession.clearDefaultSession()
+
+    assert(SparkSession.getDefaultSession === None)
+    assert(SparkSession.getActiveSession === None)
   }
 
   test("config options are propagated to existing SparkSession") {
@@ -56,8 +62,10 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     val session2 = SparkSession.builder().config("spark-config1", "b").getOrCreate()
     assert(session1 == session2)
     assert(session1.conf.get("spark-config1") == "b")
-    SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
+
+    assert(SparkSession.getDefaultSession === None)
+    assert(SparkSession.getActiveSession === None)
   }
 
   test("use session from active thread session and propagate config options") {
@@ -74,8 +82,10 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     SparkSession.clearActiveSession()
 
     assert(SparkSession.builder().getOrCreate() == defaultSession)
-    SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
+
+    assert(SparkSession.getDefaultSession === None)
+    assert(SparkSession.getActiveSession === None)
   }
 
   test("create a new session if the default session has been stopped") {
@@ -85,8 +95,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     val newSession = SparkSession.builder().master("local").getOrCreate()
     assert(newSession != defaultSession)
     newSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
+
+    assert(SparkSession.getDefaultSession === None)
+    assert(SparkSession.getActiveSession === None)
   }
 
   test("create a new session if the active thread session has been stopped") {
@@ -97,7 +108,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(newSession != activeSession)
     newSession.stop()
     SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
+
+    assert(SparkSession.getDefaultSession === None)
+    assert(SparkSession.getActiveSession === None)
   }
 
   test("create SparkContext first then SparkSession") {
@@ -112,8 +125,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(!sparkContext2.conf.contains("key2"))
     assert(sparkContext2.conf.get("key1") == "value1")
     session.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
+
+    assert(SparkSession.getDefaultSession === None)
+    assert(SparkSession.getActiveSession === None)
   }
 
   test("create SparkContext first then pass context to SparkSession") {
@@ -130,8 +144,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(!session.sparkContext.conf.contains("key2"))
     assert(session.sparkContext.conf.get("spark.app.name") == "test")
     session.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
+
+    assert(SparkSession.getDefaultSession === None)
+    assert(SparkSession.getActiveSession === None)
   }
 
   test("SPARK-15887: hive-site.xml should be loaded") {
@@ -139,8 +154,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(session.sessionState.newHadoopConf().get("hive.in.test") == "true")
     assert(session.sparkContext.hadoopConfiguration.get("hive.in.test") == "true")
     session.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
+
+    assert(SparkSession.getDefaultSession === None)
+    assert(SparkSession.getActiveSession === None)
   }
 
   test("SPARK-15991: Set global Hadoop conf") {
@@ -154,5 +170,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
       session.sparkContext.hadoopConfiguration.unset(mySpecialKey)
       session.stop()
     }
+
+    assert(SparkSession.getDefaultSession === None)
+    assert(SparkSession.getActiveSession === None)
   }
 }
