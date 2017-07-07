@@ -29,6 +29,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -672,26 +673,30 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.putArray(2, 2, 0)
       column.putArray(3, 3, 3)
 
-      val a1 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
-      val a2 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(1)).asInstanceOf[Array[Int]]
-      val a3 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(2)).asInstanceOf[Array[Int]]
-      val a4 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(3)).asInstanceOf[Array[Int]]
+      val a1 = ColumnVectorUtils.toPrimitiveJavaArray(
+        column.getArray(0).asInstanceOf[ColumnVector.Array]).asInstanceOf[Array[Int]]
+      val a2 = ColumnVectorUtils.toPrimitiveJavaArray(
+        column.getArray(1).asInstanceOf[ColumnVector.Array]).asInstanceOf[Array[Int]]
+      val a3 = ColumnVectorUtils.toPrimitiveJavaArray(
+        column.getArray(2).asInstanceOf[ColumnVector.Array]).asInstanceOf[Array[Int]]
+      val a4 = ColumnVectorUtils.toPrimitiveJavaArray(
+        column.getArray(3).asInstanceOf[ColumnVector.Array]).asInstanceOf[Array[Int]]
       assert(a1 === Array(0))
       assert(a2 === Array(1, 2))
       assert(a3 === Array.empty[Int])
       assert(a4 === Array(3, 4, 5))
 
       // Verify the ArrayData APIs
-      assert(column.getArray(0).length == 1)
+      assert(column.getArray(0).numElements() == 1)
       assert(column.getArray(0).getInt(0) == 0)
 
-      assert(column.getArray(1).length == 2)
+      assert(column.getArray(1).numElements() == 2)
       assert(column.getArray(1).getInt(0) == 1)
       assert(column.getArray(1).getInt(1) == 2)
 
-      assert(column.getArray(2).length == 0)
+      assert(column.getArray(2).numElements() == 0)
 
-      assert(column.getArray(3).length == 3)
+      assert(column.getArray(3).numElements() == 3)
       assert(column.getArray(3).getInt(0) == 3)
       assert(column.getArray(3).getInt(1) == 4)
       assert(column.getArray(3).getInt(2) == 5)
@@ -704,8 +709,55 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(data.capacity == array.length * 2)
       data.putInts(0, array.length, array, 0)
       column.putArray(0, 0, array.length)
-      assert(ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
-        === array)
+      assert(ColumnVectorUtils.toPrimitiveJavaArray(
+        column.getArray(0).asInstanceOf[ColumnVector.Array]).asInstanceOf[Array[Int]] === array)
+    }}
+  }
+
+  test("Int UnsafeArray") {
+    (MemoryMode.ON_HEAP :: Nil).foreach { memMode => {
+      val column = ColumnVector.allocate(10, new ArrayType(IntegerType, true), memMode)
+
+      // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
+      val len1 = column.putArray(0, UnsafeArrayData.fromPrimitiveArray(Array(0)))
+      val len2 = column.putArray(1, UnsafeArrayData.fromPrimitiveArray(Array(1, 2)))
+      val len3 = column.putArray(2, UnsafeArrayData.fromPrimitiveArray(Array.empty[Int]))
+      val len4 = column.putArray(3, UnsafeArrayData.fromPrimitiveArray(Array(3, 4, 5)))
+      // since UnsafeArrayData.fromPrimitiveArray allocates long[], size should be ceiled by 8
+      assert(len1 == ((UnsafeArrayData.calculateHeaderPortionInBytes(1) + 1 * 4 + 7) / 8) * 8)
+      assert(len2 == ((UnsafeArrayData.calculateHeaderPortionInBytes(2) + 2 * 4 + 7) / 8) * 8)
+      assert(len3 == ((UnsafeArrayData.calculateHeaderPortionInBytes(0) + 0 * 4 + 7) / 8) * 8)
+      assert(len4 == ((UnsafeArrayData.calculateHeaderPortionInBytes(3) + 3 * 4 + 7) / 8) * 8)
+
+      val a1 = column.getArray(0).toIntArray
+      val a2 = column.getArray(1).toIntArray
+      val a3 = column.getArray(2).toIntArray
+      val a4 = column.getArray(3).toIntArray
+      assert(a1 === Array(0))
+      assert(a2 === Array(1, 2))
+      assert(a3 === Array.empty[Int])
+      assert(a4 === Array(3, 4, 5))
+
+      // Verify the ArrayData APIs
+      assert(column.getArray(0).numElements() == 1)
+      assert(column.getArray(0).getInt(0) == 0)
+
+      assert(column.getArray(1).numElements() == 2)
+      assert(column.getArray(1).getInt(0) == 1)
+      assert(column.getArray(1).getInt(1) == 2)
+
+      assert(column.getArray(2).numElements() == 0)
+
+      assert(column.getArray(3).numElements() == 3)
+      assert(column.getArray(3).getInt(0) == 3)
+      assert(column.getArray(3).getInt(1) == 4)
+      assert(column.getArray(3).getInt(2) == 5)
+
+      // Add a longer array which requires resizing
+      column.reset
+      val array = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
+      column.putArray(0, UnsafeArrayData.fromPrimitiveArray(array))
+      assert(column.getArray(0).toIntArray === array)
     }}
   }
 

@@ -134,6 +134,9 @@ public final class OffHeapColumnVector extends ColumnVector {
   @Override
   public boolean getBoolean(int rowId) { return Platform.getByte(null, data + rowId) == 1; }
 
+  @Override
+  public void getBooleanArray(int offset, int length, boolean[] array) { throw new UnsupportedOperationException(); }
+
   //
   // APIs dealing with Bytes
   //
@@ -164,6 +167,9 @@ public final class OffHeapColumnVector extends ColumnVector {
       return (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
   }
+
+  @Override
+  public void getByteArray(int offset, int length, byte[] array) { throw new UnsupportedOperationException(); }
 
   //
   // APIs dealing with shorts
@@ -196,6 +202,9 @@ public final class OffHeapColumnVector extends ColumnVector {
       return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
   }
+
+  @Override
+  public void getShortArray(int offset, int length, short[] array) { throw new UnsupportedOperationException(); }
 
   //
   // APIs dealing with ints
@@ -255,6 +264,9 @@ public final class OffHeapColumnVector extends ColumnVector {
     return Platform.getInt(null, data + 4 * rowId);
   }
 
+  @Override
+  public void getIntArray(int offset, int length, int[] array) { throw new UnsupportedOperationException(); }
+
   //
   // APIs dealing with Longs
   //
@@ -302,6 +314,9 @@ public final class OffHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getLongArray(int offset, int length, long[] array) { throw new UnsupportedOperationException(); }
+
   //
   // APIs dealing with floats
   //
@@ -348,6 +363,8 @@ public final class OffHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getFloatArray(int offset, int length, float[] array) { throw new UnsupportedOperationException(); }
 
   //
   // APIs dealing with doubles
@@ -395,6 +412,9 @@ public final class OffHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getDoubleArray(int offset, int length, double[] array) { throw new UnsupportedOperationException(); }
+
   //
   // APIs dealing with Arrays.
   //
@@ -403,6 +423,11 @@ public final class OffHeapColumnVector extends ColumnVector {
     assert(offset >= 0 && offset + length <= childColumns[0].capacity);
     Platform.putInt(null, lengthData + 4 * rowId, length);
     Platform.putInt(null, offsetData + 4 * rowId, offset);
+  }
+
+  @Override
+  public void putArray(int rowId, Object src, int srcOffset, int dstOffset, int length) {
+    throw new UnsupportedOperationException();
   }
 
   @Override

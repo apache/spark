@@ -130,6 +130,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     return byteData[rowId] == 1;
   }
 
+  @Override
+  public void getBooleanArray(int offset, int length, boolean[] array) {
+    // assume that it is possible to do bulkcopy from byte[] to boolean[]
+    Platform.copyMemory(byteData, Platform.BYTE_ARRAY_OFFSET + offset, array, Platform.BOOLEAN_ARRAY_OFFSET, length);
+  }
+
   //
 
   //
@@ -162,6 +168,11 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getByteArray(int offset, int length, byte[] array) {
+    Platform.copyMemory(byteData, Platform.BYTE_ARRAY_OFFSET + offset, array, Platform.BYTE_ARRAY_OFFSET, length);
+  }
+
   //
   // APIs dealing with Shorts
   //
@@ -192,6 +203,10 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getShortArray(int offset, int length, short[] array) {
+    Platform.copyMemory(shortData, Platform.SHORT_ARRAY_OFFSET + offset * 2, array, Platform.SHORT_ARRAY_OFFSET, length * 2);
+  }
 
   //
   // APIs dealing with Ints
@@ -232,6 +247,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getIntArray(int offset, int length, int[] array) {
+    assert(dictionary == null);
+    Platform.copyMemory(intData, Platform.INT_ARRAY_OFFSET + offset * 4, array, Platform.INT_ARRAY_OFFSET, length * 4);
   }
 
   /**
@@ -286,6 +307,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getLongArray(int offset, int length, long[] array) {
+    assert(dictionary == null);
+    Platform.copyMemory(longData, Platform.LONG_ARRAY_OFFSET + offset * 8, array, Platform.LONG_ARRAY_OFFSET, length * 8);
+  }
+
   //
   // APIs dealing with floats
   //
@@ -323,6 +350,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public void getFloatArray(int offset, int length, float[] array) {
+    assert(dictionary == null);
+    Platform.copyMemory(floatData, Platform.FLOAT_ARRAY_OFFSET + offset * 4, array, Platform.FLOAT_ARRAY_OFFSET, length * 4);
   }
 
   //
@@ -366,6 +399,12 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void getDoubleArray(int offset, int length, double[] array) {
+    assert(dictionary == null);
+    Platform.copyMemory(doubleData, Platform.DOUBLE_ARRAY_OFFSET + offset * 8, array, Platform.DOUBLE_ARRAY_OFFSET, length * 8);
+  }
+
   //
   // APIs dealing with Arrays
   //
@@ -383,6 +422,35 @@ public final class OnHeapColumnVector extends ColumnVector {
   public void putArray(int rowId, int offset, int length) {
     arrayOffsets[rowId] = offset;
     arrayLengths[rowId] = length;
+  }
+
+  @Override
+  public void putArray(int rowId, Object src, int srcOffset, int dstOffset, int numElements) {
+    DataType et = type;
+    reserve(dstOffset + numElements);
+    if (et == DataTypes.BooleanType || et == DataTypes.ByteType) {
+      Platform.copyMemory(
+        src, srcOffset, byteData, Platform.BYTE_ARRAY_OFFSET + dstOffset, numElements);
+    } else if (et == DataTypes.BooleanType || et == DataTypes.ByteType) {
+      Platform.copyMemory(
+        src, srcOffset, shortData, Platform.SHORT_ARRAY_OFFSET + dstOffset * 2, numElements * 2);
+    } else if (et == DataTypes.IntegerType || et == DataTypes.DateType ||
+      DecimalType.is32BitDecimalType(type)) {
+      Platform.copyMemory(
+        src, srcOffset, intData, Platform.INT_ARRAY_OFFSET + dstOffset * 4, numElements * 4);
+    } else if (type instanceof LongType || type instanceof TimestampType ||
+      DecimalType.is64BitDecimalType(type)) {
+      Platform.copyMemory(
+        src, srcOffset, longData, Platform.LONG_ARRAY_OFFSET + dstOffset * 8, numElements * 8);
+    } else if (et == DataTypes.FloatType) {
+      Platform.copyMemory(
+        src, srcOffset, floatData, Platform.FLOAT_ARRAY_OFFSET + dstOffset * 4, numElements * 4);
+    } else if (et == DataTypes.DoubleType) {
+      Platform.copyMemory(
+        src, srcOffset, doubleData, Platform.DOUBLE_ARRAY_OFFSET + dstOffset * 8, numElements * 8);
+    } else {
+      throw new RuntimeException("Unhandled " + type);
+    }
   }
 
   @Override
