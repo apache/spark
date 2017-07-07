@@ -11,6 +11,8 @@ SELECT `(a)?+.+` FROM testData2 WHERE a = 1;
 SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1;
 SELECT `(a|b)` FROM testData2 WHERE a = 2;
 SELECT `(a|b)?+.+` FROM testData2 WHERE a = 2;
+SELECT SUM(`(a|b)?+.+`) FROM testData2;
+SELECT SUM(`(a)`) FROM testData2;
 
 set spark.sql.parser.quotedRegexColumnNames=true;
 
@@ -39,3 +41,10 @@ SELECT `(A)?+.+` FROM testdata3;
 SELECT `(a)?+.+` FROM testdata3;
 SELECT `(A)?+.+` FROM testdata3 WHERE a > 1;
 SELECT `(a)?+.+` FROM testdata3 where `a` > 1;
+SELECT SUM(`a`) FROM testdata3;
+SELECT SUM(`(a)`) FROM testdata3;
+SELECT SUM(`(a)?+.+`) FROM testdata3;
+SELECT SUM(a) FROM testdata3 GROUP BY `a`;
+-- AnalysisException
+SELECT SUM(a) FROM testdata3 GROUP BY `(a)`;
+SELECT SUM(a) FROM testdata3 GROUP BY `(a)?+.+`;

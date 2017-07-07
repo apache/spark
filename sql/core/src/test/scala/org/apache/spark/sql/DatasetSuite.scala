@@ -261,6 +261,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
       checkDataset(
+        ds.select(ds.col("_2")).as[Int],
+        1, 2, 3)
+
+      checkDataset(
+        ds.select(ds.colRegex("`(_1)?+.+`")).as[Int],
+        1, 2, 3)
+
+      checkDataset(
         ds.select(ds("`(_1|_2)`"))
           .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
         ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
