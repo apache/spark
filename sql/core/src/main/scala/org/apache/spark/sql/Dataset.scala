@@ -484,7 +484,6 @@ class Dataset[T] private[sql](
    * @group streaming
    * @since 2.0.0
    */
-  @Experimental
   @InterfaceStability.Evolving
   def isStreaming: Boolean = logicalPlan.isStreaming
 
@@ -545,7 +544,6 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * :: Experimental ::
    * Defines an event time watermark for this [[Dataset]]. A watermark tracks a point in time
    * before which we assume no more late data is going to arrive.
    *
@@ -569,7 +567,6 @@ class Dataset[T] private[sql](
    * @group streaming
    * @since 2.1.0
    */
-  @Experimental
   @InterfaceStability.Evolving
   // We only accept an existing column name, not a derived column here as a watermark that is
   // defined on a derived column cannot referenced elsewhere in the plan.
