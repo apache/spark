@@ -631,13 +631,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       val ds2 =
         sql(
           """
-            |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1) tt
+            |SELECT * FROM (SELECT c1, max(c1) FROM t1 GROUP BY c1)
             |WHERE
-            |tt.c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
+            |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
             |OR
             |EXISTS (SELECT c1 FROM t3)
             |OR
-            |tt.c1 IN (SELECT c1 FROM t4)
+            |c1 IN (SELECT c1 FROM t4)
           """.stripMargin)
       assert(getNumInMemoryRelations(ds2) == 4)
     }
@@ -788,25 +788,25 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       // Scalar subquery and predicate subquery
       sql(
         """
-          |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1) tt
+          |SELECT * FROM (SELECT c1, max(c1) as c1 FROM t1 GROUP BY c1)
           |WHERE
-          |tt.c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
+          |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
           |OR
           |EXISTS (SELECT c1 FROM t3)
           |OR
-          |tt.c1 IN (SELECT c1 FROM t4)
+          |c1 IN (SELECT c1 FROM t4)
         """.stripMargin).cache()
 
       val cachedDs2 =
         sql(
           """
-            |SELECT * FROM (SELECT max(c1) as c1 FROM t1 GROUP BY c1) tt
+            |SELECT * FROM (SELECT c1, max(c1) as c1 FROM t1 GROUP BY c1)
             |WHERE
-            |tt.c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
+            |c1 = (SELECT max(c1) FROM t2 GROUP BY c1)
             |OR
             |EXISTS (SELECT c1 FROM t3)
             |OR
-            |tt.c1 IN (SELECT c1 FROM t4)
+            |c1 IN (SELECT c1 FROM t4)
           """.stripMargin)
       assert(getNumInMemoryRelations(cachedDs2) == 1)
     }

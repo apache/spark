@@ -253,7 +253,7 @@ abstract class LogicalPlan
 
       // More than one match.
       case ambiguousReferences =>
-        val referenceNames = ambiguousReferences.map(_._1).mkString(", ")
+        val referenceNames = ambiguousReferences.map(_._1.qualifiedName).mkString(", ")
         throw new AnalysisException(
           s"Reference '$name' is ambiguous, could be: $referenceNames.")
     }
