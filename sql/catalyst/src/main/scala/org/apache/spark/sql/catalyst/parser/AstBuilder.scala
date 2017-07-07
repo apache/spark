@@ -751,15 +751,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    // The unaliased subqueries in the FROM clause are disallowed. Instead of rejecting it in
-    // parser rules, we handle it here in order to provide better error message.
-    if (ctx.strictIdentifier == null) {
-      throw new ParseException("The unaliased subqueries in the FROM clause are not supported.",
-        ctx)
+    val alias = if (ctx.strictIdentifier == null) {
+      // For un-aliased subqueries, use a default alias name that is not likely to conflict with
+      // normal subquery names, so that parent operators can only access the columns in subquery by
+      // unqualified names. Users can still use this special qualifier to access columns if they
+      // know it, but that's not recommended.
+      "__auto_generated_subquery_name"
+    } else {
+      ctx.strictIdentifier.getText
     }
 
-    aliasPlan(ctx.strictIdentifier,
-      plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample))
+    SubqueryAlias(alias, plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample))
   }
 
   /**

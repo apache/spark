@@ -450,19 +450,6 @@ class PlanParserSuite extends AnalysisTest {
         |      (select id from t0)) as u_1
       """.stripMargin,
       plan.union(plan).union(plan).as("u_1").select('id))
-
-  }
-
-  test("aliased subquery") {
-    val errMsg = "The unaliased subqueries in the FROM clause are not supported"
-
-    assertEqual("select a from (select id as a from t0) tt",
-      table("t0").select('id.as("a")).as("tt").select('a))
-    intercept("select a from (select id as a from t0)", errMsg)
-
-    assertEqual("from (select id as a from t0) tt select a",
-      table("t0").select('id.as("a")).as("tt").select('a))
-    intercept("from (select id as a from t0) select a", errMsg)
   }
 
   test("scalar sub-query") {
