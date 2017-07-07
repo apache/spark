@@ -51,7 +51,7 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
   private final int ORDINAL = 0;
 
   protected OnHeapCachedBatch(int capacity, DataType type) {
-    super(capacity, type, MemoryMode.ON_HEAP_CACHEDBATCH);
+    super(capacity, type, VectorType.Compressible, MemoryMode.ON_HEAP);
     reserveInternal(capacity);
     reset();
   }

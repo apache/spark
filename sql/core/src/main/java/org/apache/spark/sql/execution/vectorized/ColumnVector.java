@@ -61,14 +61,24 @@ public abstract class ColumnVector implements AutoCloseable {
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
    * in number of elements, not number of bytes.
    */
-  public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
+  public static ColumnVector allocate(int capacity, DataType type, VectorType vector, MemoryMode mode) {
     if (mode == MemoryMode.OFF_HEAP) {
-      return new OffHeapColumnVector(capacity, type);
-    } else if (mode == MemoryMode.ON_HEAP_CACHEDBATCH) {
-      return new OnHeapCachedBatch(capacity, type);
+      if (vector == VectorType.NonCompressible) {
+        return new OffHeapColumnVector(capacity, type);
+      } else {
+        throw new UnsupportedOperationException();
+      }
     } else {
-      return new OnHeapColumnVector(capacity, type);
+      if (vector == VectorType.NonCompressible) {
+        return new OnHeapColumnVector(capacity, type);
+      } else {
+        return new OnHeapCachedBatch(capacity, type);
+      }
     }
+  }
+
+  public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
+    return allocate(capacity, type, VectorType.NonCompressible, mode);
   }
 
   /**
@@ -956,9 +966,9 @@ public abstract class ColumnVector implements AutoCloseable {
   protected int MAX_CAPACITY = Integer.MAX_VALUE;
 
   /**
-   * Memory mode for this column.
+   * Vector type for this column.
    */
-  private MemoryMode mode;
+  private VectorType vector;
 
   /**
    * Data type for this column.
@@ -1056,11 +1066,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected ColumnVector(int capacity, DataType type, MemoryMode memMode) {
+  protected ColumnVector(int capacity, DataType type, VectorType vector, MemoryMode memMode) {
     this.capacity = capacity;
     this.type = type;
-    this.mode = memMode;
-    if (mode == MemoryMode.ON_HEAP_CACHEDBATCH && type instanceof StringType) {
+    this.vector = vector;
+    if (vector == VectorType.Compressible && type instanceof StringType) {
       this.childColumns = null;
       this.resultArray = null;
       this.resultStruct = null;

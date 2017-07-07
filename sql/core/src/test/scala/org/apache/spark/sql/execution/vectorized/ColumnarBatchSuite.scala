@@ -342,7 +342,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
         columnBuilder.appendFrom(row, 0)
       }
 
-      val column = ColumnVector.allocate(1024, dataType, MemoryMode.ON_HEAP_CACHEDBATCH)
+      val column =
+        ColumnVector.allocate(1024, dataType, VectorType.Compressible, MemoryMode.ON_HEAP)
       column.asInstanceOf[OnHeapCachedBatch]
         .putByteArray(JavaUtils.bufferToArray(columnBuilder.build))
 
@@ -367,7 +368,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
         columnBuilder.appendFrom(row, 0)
       }
 
-      val column = ColumnVector.allocate(1024, dataType, MemoryMode.ON_HEAP_CACHEDBATCH)
+      val column =
+        ColumnVector.allocate(1024, dataType, VectorType.Compressible, MemoryMode.ON_HEAP)
       column.asInstanceOf[OnHeapCachedBatch]
         .putByteArray(JavaUtils.bufferToArray(columnBuilder.build))
 

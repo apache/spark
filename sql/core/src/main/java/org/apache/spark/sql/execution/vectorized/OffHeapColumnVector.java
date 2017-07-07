@@ -41,7 +41,7 @@ public final class OffHeapColumnVector extends ColumnVector {
   private long offsetData;
 
   protected OffHeapColumnVector(int capacity, DataType type) {
-    super(capacity, type, MemoryMode.OFF_HEAP);
+    super(capacity, type, VectorType.NonCompressible, MemoryMode.OFF_HEAP);
 
     nulls = 0;
     data = 0;
