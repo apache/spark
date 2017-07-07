@@ -61,7 +61,7 @@ third party projects publish binary releases that may be helpful in setting Meso
 
 One of those is Mesosphere.  To install Mesos using the binary releases provided by Mesosphere:
 
-1. Download Mesos installation package from [downloads page](http://mesosphere.io/downloads/)
+1. Download Mesos installation package from [downloads page](https://open.mesosphere.com/downloads/mesos/)
 2. Follow their instructions for installation and configuration
 
 The Mesosphere installation documents suggest setting up ZooKeeper to handle Mesos master failover,
