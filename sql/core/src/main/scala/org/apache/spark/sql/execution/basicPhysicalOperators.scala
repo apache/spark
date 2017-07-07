@@ -85,65 +85,28 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   protected override def doExecute(): RDD[InternalRow] = {
     println("In projection")
-    val FPGABatch = toFPGABatch(child.execute())
-    val resFPGABatch = FPGABatch.map(mockFPGA(_))
-    val internalRow = toInternalRow(resFPGABatch)
-    internalRow
+    val res = FPGAProjection(child.execute())
+    res
   }
 
-  def toFPGABatch (input: RDD[InternalRow]): RDD[ByteBuffer] = {
 
-    input.mapPartitions[ByteBuffer] { iter =>
-      new Iterator[ByteBuffer] {
+  def FPGAProjection(input: RDD[InternalRow]): RDD[InternalRow] = {
 
-        var flag = true
+    input.mapPartitions[InternalRow] { iter =>
 
-        // Sum all rows to 1 ByteBuffer
-        override def hasNext: Boolean = if (flag) {
-          flag = false
-          iter.hasNext
-        } else {
-          flag
-        }
+      val originBuffer = mockGetByteBuffer(0)
 
-        override def next(): ByteBuffer = {
-          // Get the default ByteBuffer with big enough size
-          val buffer = mockGetByteBuffer(0)
-          while(iter.hasNext) {
-            loadRowToBuffer(iter.next, buffer)
-            FPGARowNumber += 1
-          }
-          buffer.flip()
-          buffer
-        }
-
-        def loadRowToBuffer(row: InternalRow, buffer: ByteBuffer): Unit = {
-          // Index to infer string length using CMCCCharLength
-          var stringIndex = 0
-          // Another way to implement index: use a var index, and increase every time, which is more
-          // efficient?
-          CMCCInputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
-            val (colType, index) = colTypeWithIndex
-            if (colType == 1) {
-              buffer.putInt(row.getInt(index))
-            } else if (colType == 2) {
-              buffer.putLong(row.getLong(index))
-            } else {
-              val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
-              val bytesOfStr = row.getUTF8String(index).getBytes
-              System.arraycopy(bytesOfStr, 0, tmpBuffer, 0, bytesOfStr.length);
-              buffer.put(tmpBuffer)
-              stringIndex += 1
-            }
-          }
-        }
+      // Convert InternalRows => ByteBuffer
+      while(iter.hasNext) {
+        loadRowToBuffer(iter.next, originBuffer)
+        FPGARowNumber += 1
       }
+      originBuffer.flip()
 
-    }
-  }
+      // FPGA Calculation
+      val outputBuffer = mockFPGA(originBuffer)
 
-  def toInternalRow(input: RDD[ByteBuffer]): RDD[InternalRow] = {
-    input.flatMap[InternalRow] { buffer =>
+      // Convert ByteBuffer => InternalRows
       var rowCount = FPGARowNumber
       new Iterator[InternalRow] {
 
@@ -162,15 +125,20 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
           CMCCOutputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
             val (colType, index) = colTypeWithIndex
             if (colType == 1) {
-              rowWriter.write(index, buffer.getInt)
+              rowWriter.write(index, outputBuffer.getInt)
             } else if (colType == 2) {
-              rowWriter.write(index, buffer.getLong)
+              rowWriter.write(index, outputBuffer.getLong)
             } else {
               val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
-              buffer.get(tmpBuffer, 0, tmpBuffer.length)
-
-              val string = UTF8String.fromBytes(tmpBuffer)
-              rowWriter.write(index, string)
+              outputBuffer.get(tmpBuffer, 0, tmpBuffer.length)
+              val res = tmpBuffer.zipWithIndex.filter(_._1 == 0).headOption
+              if (res == None) {
+                val string = UTF8String.fromBytes(tmpBuffer)
+                rowWriter.write(index, string)
+              } else {
+                val string = UTF8String.fromBytes(tmpBuffer, 0, res.get._2)
+                rowWriter.write(index, string)
+              }
               stringIndex += 1
             }
           }
@@ -180,6 +148,37 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       }
     }
   }
+
+  def loadRowToBuffer(row: InternalRow, buffer: ByteBuffer): Unit = {
+    // Index to infer string length using CMCCCharLength
+    var stringIndex = 0
+    // Another way to implement index: use a var index, and increase every time, which is more
+    // efficient?
+    CMCCInputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
+      val (colType, index) = colTypeWithIndex
+      if (colType == 1) {
+        buffer.putInt(row.getInt(index))
+      } else if (colType == 2) {
+        buffer.putLong(row.getLong(index))
+      } else {
+        val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
+        val bytesOfStr = row.getUTF8String(index).getBytes
+        System.arraycopy(bytesOfStr, 0, tmpBuffer, 0, bytesOfStr.length);
+        buffer.put(tmpBuffer)
+        stringIndex += 1
+      }
+    }
+  }
+
+//  def toFPGABatch (input: Iterator[InternalRow]): ByteBuffer = {
+//
+//  }
+//
+//  def toInternalRow(input: RDD[ByteBuffer]): RDD[InternalRow] = {
+//    input.flatMap[InternalRow] { buffer =>
+//
+//    }
+//  }
 
   def mockGetByteBuffer(size: Int): ByteBuffer = {
     ByteBuffer.allocate(10000)
