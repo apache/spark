@@ -80,7 +80,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     defaultSession.stop()
     val newSession = SparkSession.builder().master("local").getOrCreate()
     assert(newSession != defaultSession)
-    newSession.stop()
   }
 
   test("create a new session if the active thread session has been stopped") {
@@ -89,7 +88,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     activeSession.stop()
     val newSession = SparkSession.builder().master("local").getOrCreate()
     assert(newSession != activeSession)
-    newSession.stop()
   }
 
   test("create SparkContext first then SparkSession") {
@@ -102,7 +100,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     // We won't update conf for existing `SparkContext`
     assert(!sparkContext2.conf.contains("key2"))
     assert(sparkContext2.conf.get("key1") == "value1")
-    session.stop()
   }
 
   test("create SparkContext first then pass context to SparkSession") {
@@ -117,14 +114,12 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     // the conf of this sparkContext will not contain the conf set through the API config.
     assert(!session.sparkContext.conf.contains("key2"))
     assert(session.sparkContext.conf.get("spark.app.name") == "test")
-    session.stop()
   }
 
   test("SPARK-15887: hive-site.xml should be loaded") {
     val session = SparkSession.builder().master("local").getOrCreate()
     assert(session.sessionState.newHadoopConf().get("hive.in.test") == "true")
     assert(session.sparkContext.hadoopConfiguration.get("hive.in.test") == "true")
-    session.stop()
   }
 
   test("SPARK-15991: Set global Hadoop conf") {
@@ -136,7 +131,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       assert(session.sessionState.newHadoopConf().get(mySpecialKey) == mySpecialValue)
     } finally {
       session.sparkContext.hadoopConfiguration.unset(mySpecialKey)
-      session.stop()
     }
   }
 }
