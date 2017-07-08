@@ -22,10 +22,10 @@ key      	int       	column_comment
 -- !query 2
 DESC EXTENDED desc_col_temp_table key
 -- !query 2 schema
-struct<col_name:string,data_type:string,comment:string>
+struct<col_name:string,data_type:string,min:string,max:string,num_nulls:string,distinct_count:string,avg_col_len:string,max_col_len:string,comment:string>
 -- !query 2 output
-col_name 	data_type 	comment        	
-key      	int       	column_comment
+col_name 	data_type 	min  	max  	num_nulls 	distinct_count 	avg_col_len 	max_col_len 	comment        	
+key      	int       	NULL 	NULL 	NULL      	NULL           	NULL        	NULL        	column_comment
 
 
 -- !query 3
@@ -83,10 +83,10 @@ key      	int       	column_comment
 -- !query 9
 DESC EXTENDED desc_col_table key
 -- !query 9 schema
-struct<col_name:string,data_type:string,comment:string>
+struct<col_name:string,data_type:string,min:string,max:string,num_nulls:string,distinct_count:string,avg_col_len:string,max_col_len:string,comment:string>
 -- !query 9 output
-col_name 	data_type 	comment        	
-key      	int       	column_comment
+col_name 	data_type 	min  	max  	num_nulls 	distinct_count 	avg_col_len 	max_col_len 	comment        	
+key      	int       	NULL 	NULL 	0         	0              	4           	4           	column_comment
 
 
 -- !query 10
@@ -130,4 +130,4 @@ DESC FORMATTED desc_col_complex_table col.x
 struct<>
 -- !query 14 output
 org.apache.spark.sql.AnalysisException
-Nested column is not supported: col.x;
+DESC TABLE COLUMN command is not supported for nested column: col.x;

@@ -636,13 +636,13 @@ case class DescribeTableCommand(
 case class DescribeColumnCommand(
     table: TableIdentifier,
     colNameParts: Seq[String],
-    isFormatted: Boolean)
+    isExtended: Boolean)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] = {
     // The displayed names are based on Hive.
     // (Link for the corresponding Hive Jira: https://issues.apache.org/jira/browse/HIVE-7050)
-    if (isFormatted) {
+    if (isExtended) {
       Seq(
         AttributeReference("col_name", StringType, nullable = false,
           new MetadataBuilder().putString("comment", "name of the column").build())(),
@@ -679,30 +679,33 @@ case class DescribeColumnCommand(
     val catalog = sparkSession.sessionState.catalog
     val resolver = sparkSession.sessionState.conf.resolver
     val relation = sparkSession.table(table).queryExecution.analyzed
-    val attribute = {
-      val field = relation.resolve(
-        colNameParts, relation.output, resolver, resolveNestedFields = false)
-      field.getOrElse {
+    val field = {
+      relation.resolve(colNameParts, resolver).getOrElse {
         throw new AnalysisException(s"Column ${UnresolvedAttribute(colNameParts).name} does not " +
           s"exist")
       }
     }
+    if (!field.isInstanceOf[Attribute]) {
+      // If the field is not an attribute after `resolve`, then it's a nested field.
+      throw new AnalysisException(s"DESC TABLE COLUMN command is not supported for nested column:" +
+        s" ${UnresolvedAttribute(colNameParts).name}")
+    }
 
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
     val colStats = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
-    val cs = colStats.get(attribute.name)
+    val cs = colStats.get(field.name)
 
-    val comment = if (attribute.metadata.contains("comment")) {
-      Option(attribute.metadata.getString("comment"))
+    val comment = if (field.metadata.contains("comment")) {
+      Option(field.metadata.getString("comment"))
     } else {
       None
     }
 
-    val fieldValues = if (isFormatted) {
+    val fieldValues = if (isExtended) {
       // Show column stats only when formatted is specified.
       Seq(
-        attribute.name,
-        attribute.dataType.catalogString,
+        field.name,
+        field.dataType.catalogString,
         cs.flatMap(_.min.map(_.toString)).getOrElse("NULL"),
         cs.flatMap(_.max.map(_.toString)).getOrElse("NULL"),
         cs.map(_.nullCount.toString).getOrElse("NULL"),
@@ -712,8 +715,8 @@ case class DescribeColumnCommand(
         comment.getOrElse("NULL"))
     } else {
       Seq(
-        attribute.name,
-        attribute.dataType.catalogString,
+        field.name,
+        field.dataType.catalogString,
         comment.getOrElse("NULL"))
     }
 
