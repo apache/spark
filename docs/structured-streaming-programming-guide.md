@@ -499,6 +499,8 @@ There are a few built-in sources.
 
   - **Socket source (for testing)** - Reads UTF8 text data from a socket connection. The listening server socket is at the driver. Note that this should be used only for testing as this does not provide end-to-end fault-tolerance guarantees. 
 
+  - **Rate source (for testing)** - Generates data at the specified number of rows per second, each output row contains a `timestamp` and `value`. Where `timestamp` is a `Timestamp` type containing the time of message dispatch, and `value` is of `Long` type containing the message count, starting from 0 as the first row. This source is intended for testing and benchmarking.
+
 Some sources are not fault-tolerant because they do not guarantee that data can be replayed using 
 checkpointed offsets after a failure. See the earlier section on 
 [fault-tolerance semantics](#fault-tolerance-semantics).
@@ -546,6 +548,19 @@ Here are the details of all the sources in Spark.
     <td>No</td>
     <td></td>
   </tr>
+  <tr>
+    <td><b>Rate Source</b></td>
+    <td>
+        <code>rowsPerSecond</code> (e.g. 100, default: 1): How many rows should be generated per second.<br/><br/>
+        <code>rampUpTime</code> (e.g. 5s, default: 0s): How long to ramp up before the generating speed becomes <code>rowsPerSecond</code>. Using finer granularities than seconds will be truncated to integer seconds. <br/><br/>
+        <code>numPartitions</code> (e.g. 10, default: Spark's default parallelism): The partition number for the generated rows. <br/><br/>
+        
+        The source will try its best to reach <code>rowsPerSecond</code>, but the query may be resource constrained, and <code>numPartitions</code> can be tweaked to help reach the desired speed.
+    </td>
+    <td>Yes</td>
+    <td></td>
+  </tr>
+
   <tr>
     <td><b>Kafka Source</b></td>
     <td>
