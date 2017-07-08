@@ -429,8 +429,8 @@ export("structField",
        "structField.character",
        "print.structField",
        "structType",
-       "structType.jobj",
        "structTypeFromDDL",
+       "structType.jobj",
        "structType.structField",
        "print.structType")
 

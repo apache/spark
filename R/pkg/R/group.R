@@ -233,13 +233,13 @@ setMethod("gapplyCollect",
           })
 
 gapplyInternal <- function(x, func, schema) {
+  if (is.character(schema)) {
+    schema <- structTypeFromDDL(schema)
+  }
   packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                        connection = NULL)
   broadcastArr <- lapply(ls(.broadcastNames),
                     function(name) { get(name, .broadcastNames) })
-  if (is.character(schema)) {
-    schema <- structTypeFromDDL(schema)
-  }
 
   sdf <- callJStatic(
            "org.apache.spark.sql.api.r.SQLUtils",

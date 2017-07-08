@@ -3073,8 +3073,8 @@ object functions {
    * string.
    *
    * @param e a string column containing JSON data.
-   * @param schema the schema to use when parsing the json string as a json string
-   *               or a DDL-formatted string.
+   * @param schema the schema to use when parsing the json string as a json string, it could be a
+   *               JSON format string or a DDL-formatted string.
    *
    * @group collection_funcs
    * @since 2.3.0

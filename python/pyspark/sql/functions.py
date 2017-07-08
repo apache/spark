@@ -1886,7 +1886,8 @@ def from_json(col, schema, options={}):
     :param schema: a StructType or ArrayType of StructType to use when parsing the json column.
     :param options: options to control parsing. accepts the same options as the json datasource
 
-    .. note:: Since Spark 2.3, the DDL-formatted string is also supported for ``schema``.
+    .. note:: Since Spark 2.3, the DDL-formatted string or a JSON format string is also
+              supported for ``schema``.
 
     >>> from pyspark.sql.types import *
     >>> data = [(1, '''{"a": 1}''')]
