@@ -44,7 +44,7 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
   private transient UnsafeRowWriter rowWriter;
   private transient MutableUnsafeRow mutableRow;
 
-  // accesssor for a column
+  // accessor for a column
   private transient ColumnAccessor columnAccessor;
 
   // an accessor uses only column 0
@@ -170,6 +170,11 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
     return unsafeRow.getBoolean(ORDINAL);
   }
 
+  @Override
+  public boolean[] getBooleans(int rowId, int count)  {
+    throw new UnsupportedOperationException();
+  }
+
   //
 
   //
@@ -197,6 +202,11 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
     return unsafeRow.getByte(ORDINAL);
   }
 
+  @Override
+  public byte[] getBytes(int rowId, int count)  {
+    throw new UnsupportedOperationException();
+  }
+
   //
   // APIs dealing with Shorts
   //
@@ -222,6 +232,10 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
     return unsafeRow.getShort(ORDINAL);
   }
 
+  @Override
+  public short[] getShorts(int rowId, int count)  {
+    throw new UnsupportedOperationException();
+  }
 
   //
   // APIs dealing with Ints
@@ -251,6 +265,11 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
   public int getInt(int rowId) {
     prepareRowAccess(rowId);
     return unsafeRow.getInt(ORDINAL);
+  }
+
+  @Override
+  public int[] getInts(int rowId, int count)  {
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -292,6 +311,11 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
     return unsafeRow.getLong(ORDINAL);
   }
 
+  @Override
+  public long[] getLongs(int rowId, int count)  {
+    throw new UnsupportedOperationException();
+  }
+
   //
   // APIs dealing with floats
   //
@@ -322,6 +346,11 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
     return unsafeRow.getFloat(ORDINAL);
   }
 
+  @Override
+  public float[] getFloats(int rowId, int count)  {
+    throw new UnsupportedOperationException();
+  }
+
   //
   // APIs dealing with doubles
   //
@@ -350,6 +379,11 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
   public double getDouble(int rowId) {
     prepareRowAccess(rowId);
     return unsafeRow.getDouble(ORDINAL);
+  }
+
+  @Override
+  public double[] getDoubles(int rowId, int count)  {
+    throw new UnsupportedOperationException();
   }
 
   //
