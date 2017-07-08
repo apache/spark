@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
@@ -2278,25 +2278,32 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("task end event should have updated accumulators (SPARK-20342)") {
-    val accumIds = new HashSet[Long]()
+    val tasks = 10
+
+    val accumId = new AtomicLong()
+    val foundCount = new AtomicLong()
     val listener = new SparkListener() {
       override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
-        event.taskInfo.accumulables.foreach { acc => accumIds += acc.id }
+        event.taskInfo.accumulables.find(_.id == accumId.get).foreach { _ =>
+          foundCount.incrementAndGet()
+        }
       }
     }
     sc.addSparkListener(listener)
 
     // Try a few times in a loop to make sure. This is not guaranteed to fail when the bug exists,
     // but it should at least make the test flaky. If the bug is fixed, this should always pass.
-    (1 to 10).foreach { _ =>
-      accumIds.clear()
+    (1 to 10).foreach { i =>
+      foundCount.set(0L)
 
-      val accum = sc.longAccumulator
-      sc.parallelize(1 to 10, 10).foreach { _ =>
+      val accum = sc.longAccumulator(s"accum$i")
+      accumId.set(accum.id)
+
+      sc.parallelize(1 to tasks, tasks).foreach { _ =>
         accum.add(1L)
       }
       sc.listenerBus.waitUntilEmpty(1000)
-      assert(accumIds.nonEmpty)
+      assert(foundCount.get() === tasks)
     }
   }
 
