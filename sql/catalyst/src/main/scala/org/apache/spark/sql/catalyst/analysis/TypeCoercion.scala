@@ -181,6 +181,17 @@ object TypeCoercion {
         case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
           findWiderTypeWithoutStringPromotionForTwo(et1, et2)
             .map(ArrayType(_, containsNull1 || containsNull2))
+        case (st1 @ StructType(fields1), st2 @ StructType(fields2)) if st1.sameType(st2) =>
+          Some(StructType(fields1.zip(fields2).map { case (sf1, sf2) =>
+            // Since `st1.sameType(st2)` is true, two StructTypes have the same DataType
+            // except `name` (in case of `spark.sql.caseSensitive=false`) and `nullable`.
+            // - Different names: use a lower case name because
+            //                    findWiderTypeWithoutStringPromotionForTwo is commutative.
+            // - Different nullabilities: `nullable` is true iff one of them is nullable.
+            val name = if (sf1.name == sf2.name) sf1.name else sf1.name.toLowerCase(Locale.ROOT)
+            val dataType = findWiderTypeWithoutStringPromotionForTwo(sf1.dataType, sf2.dataType).get
+            StructField(name, dataType, nullable = sf1.nullable || sf2.nullable)
+          }))
         case _ => None
       })
   }
