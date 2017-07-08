@@ -62,6 +62,12 @@ package object config {
 
   private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus").intConf.createWithDefault(1)
 
+  private[spark] val TASK_SIZE_THRESHOLD_TO_WARN = ConfigBuilder("spark.task.size.warnThreshold")
+    .doc("Warning threshold for task size in bytes")
+    .intConf
+    .checkValue(_ > 0, "The warning threshold of task size must be positive")
+    .createWithDefault(100 * 1024)
+
   private[spark] val DYN_ALLOCATION_MIN_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.minExecutors").intConf.createWithDefault(0)
 

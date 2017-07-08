@@ -153,7 +153,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
  */
 class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0) {
 
-  val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024)
+  val randomBuffer = new Array[Byte](config.TASK_SIZE_THRESHOLD_TO_WARN.defaultValue.get)
   val random = new Random(0)
   random.nextBytes(randomBuffer)
 
@@ -638,6 +638,21 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
 
     assert(manager.emittedTaskSizeWarning)
+  }
+
+  test("configure threshold of serialized task size warning") {
+    sc = new SparkContext("local", "test")
+    sc.conf.set(config.TASK_SIZE_THRESHOLD_TO_WARN.key, "200000")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+
+    val taskSet = new TaskSet(Array(new LargeTask(0)), 0, 0, 0, null)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    assert(!manager.emittedTaskSizeWarning)
+
+    assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
+
+    assert(!manager.emittedTaskSizeWarning)
   }
 
   test("Not serializable exception thrown if the task cannot be serialized") {
