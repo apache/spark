@@ -20,7 +20,9 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
@@ -50,6 +52,7 @@ public class ExternalShuffleClient extends ShuffleClient {
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
+  private final Set<OneForOneBlockFetcher> blockfetchers;
 
   protected TransportClientFactory clientFactory;
   protected String appId;
@@ -67,6 +70,7 @@ public class ExternalShuffleClient extends ShuffleClient {
     this.secretKeyHolder = secretKeyHolder;
     this.authEnabled = authEnabled;
     this.registrationTimeoutMs = registrationTimeoutMs;
+    this.blockfetchers = new HashSet<>();
   }
 
   protected void checkInit() {
@@ -91,15 +95,17 @@ public class ExternalShuffleClient extends ShuffleClient {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener,
-      File[] shuffleFiles) {
+      boolean toDisk) {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
           (blockIds1, listener1) -> {
             TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockFetcher(client, appId, execId, blockIds1, listener1, conf,
-              shuffleFiles).start();
+            OneForOneBlockFetcher blockFetcher = new OneForOneBlockFetcher(client, appId, execId,
+              blockIds1, listener1, conf, toDisk, tmpFileCreater);
+            blockfetchers.add(blockFetcher);
+            blockFetcher.start();
           };
 
       int maxRetries = conf.maxIORetries();
@@ -142,5 +148,8 @@ public class ExternalShuffleClient extends ShuffleClient {
   @Override
   public void close() {
     clientFactory.close();
+    for (OneForOneBlockFetcher blockFetcher : blockfetchers) {
+      blockFetcher.cleanup();
+    }
   }
 }

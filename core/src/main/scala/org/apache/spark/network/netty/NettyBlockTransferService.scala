@@ -53,6 +53,7 @@ private[spark] class NettyBlockTransferService(
   private val serializer = new JavaSerializer(conf)
   private val authEnabled = securityManager.isAuthenticationEnabled()
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numCores)
+  private val blockFetchers = collection.mutable.HashSet[OneForOneBlockFetcher]()
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
@@ -90,14 +91,16 @@ private[spark] class NettyBlockTransferService(
       execId: String,
       blockIds: Array[String],
       listener: BlockFetchingListener,
-      shuffleFiles: Array[File]): Unit = {
+      toDisk: Boolean): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
-          new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray, listener,
-            transportConf, shuffleFiles).start()
+          val blockFetcher = new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray,
+            listener, transportConf, toDisk, tmpFileCreater)
+          blockFetchers += blockFetcher
+          blockFetcher.start()
         }
       }
 
@@ -158,5 +161,6 @@ private[spark] class NettyBlockTransferService(
     if (clientFactory != null) {
       clientFactory.close()
     }
+    blockFetchers.foreach(_.cleanup())
   }
 }

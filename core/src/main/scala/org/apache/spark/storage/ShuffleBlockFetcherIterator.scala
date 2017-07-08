@@ -131,12 +131,6 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] var isZombie = false
 
-  /**
-   * A set to store the files used for shuffling remote huge blocks. Files in this set will be
-   * deleted when cleanup. This is a layer of defensiveness against disk file leaks.
-   */
-  val shuffleFilesSet = mutable.HashSet[File]()
-
   initialize()
 
   // Decrements the buffer reference count.
@@ -172,11 +166,6 @@ final class ShuffleBlockFetcherIterator(
           }
           buf.release()
         case _ =>
-      }
-    }
-    shuffleFilesSet.foreach { file =>
-      if (!file.delete()) {
-        logInfo("Failed to cleanup shuffle fetch temp file " + file.getAbsolutePath());
       }
     }
   }
@@ -221,15 +210,15 @@ final class ShuffleBlockFetcherIterator(
     // already encrypted and compressed over the wire(w.r.t. the related configs), we can just fetch
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
-      val shuffleFiles = blockIds.map { _ =>
-        blockManager.diskBlockManager.createTempLocalBlock()._2
-      }.toArray
-      shuffleFilesSet ++= shuffleFiles
+      shuffleClient.setTmpFileCreaterWhenNull(new ShuffleClient.TmpFileCreater {
+        override def createTempBlock(): File =
+          blockManager.diskBlockManager.createTempLocalBlock()._2
+      })
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, shuffleFiles)
+        blockFetchingListener, true)
     } else {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, null)
+        blockFetchingListener, false)
     }
   }
 
