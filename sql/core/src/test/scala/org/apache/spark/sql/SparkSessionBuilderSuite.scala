@@ -40,8 +40,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     // This suite should not interfere with the other test suites.
-    assert(SparkSession.getDefaultSession === None)
-    assert(SparkSession.getActiveSession === None)
+    SparkSession.clearDefaultSession()
+    SparkSession.clearActiveSession()
   }
 
   test("create with config options and propagate them to SparkContext and SparkSession") {
@@ -49,13 +49,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkContext
     assert(initialSession.sparkContext.conf.get("some-config") == "v2")
     assert(initialSession.conf.get("some-config") == "v2")
-    SparkSession.clearDefaultSession()
   }
 
   test("use global default session") {
     val session = SparkSession.builder().getOrCreate()
     assert(SparkSession.builder().getOrCreate() == session)
-    SparkSession.clearDefaultSession()
   }
 
   test("config options are propagated to existing SparkSession") {
@@ -64,7 +62,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     val session2 = SparkSession.builder().config("spark-config1", "b").getOrCreate()
     assert(session1 == session2)
     assert(session1.conf.get("spark-config1") == "b")
-    SparkSession.clearDefaultSession()
   }
 
   test("use session from active thread session and propagate config options") {
@@ -81,7 +78,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     SparkSession.clearActiveSession()
 
     assert(SparkSession.builder().getOrCreate() == defaultSession)
-    SparkSession.clearDefaultSession()
   }
 
   test("create a new session if the default session has been stopped") {
@@ -100,7 +96,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     val newSession = SparkSession.builder().master("local").getOrCreate()
     assert(newSession != activeSession)
     newSession.stop()
-    SparkSession.clearActiveSession()
   }
 
   test("create SparkContext first then SparkSession") {
