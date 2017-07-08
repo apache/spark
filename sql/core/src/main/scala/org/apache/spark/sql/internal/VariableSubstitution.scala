@@ -25,9 +25,7 @@ import org.apache.spark.internal.config._
  *
  * Variable substitution is controlled by `SQLConf.variableSubstituteEnabled`.
  */
-class VariableSubstitution {
-
-  private def conf = SQLConf.get
+class VariableSubstitution(conf: SQLConf) {
 
   private val provider = new ConfigProvider {
     override def get(key: String): Option[String] = Option(conf.getConfString(key, ""))
