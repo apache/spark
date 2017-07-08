@@ -44,7 +44,7 @@ private[spark] class CsvSink(
   }
 
   private val pollUnit: TimeUnit = Option(property.getProperty(CSV_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
     case None => TimeUnit.valueOf(CSV_DEFAULT_UNIT)
   }
 

@@ -42,7 +42,7 @@ private[spark] class Slf4jSink(
   }
 
   private val pollUnit: TimeUnit = Option(property.getProperty(SLF4J_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
     case None => TimeUnit.valueOf(SLF4J_DEFAULT_UNIT)
   }
 

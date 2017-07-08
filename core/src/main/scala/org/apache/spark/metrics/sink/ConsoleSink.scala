@@ -41,7 +41,7 @@ private[spark] class ConsoleSink(
   }
 
   private val pollUnit: TimeUnit = Option(property.getProperty(CONSOLE_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
     case None => TimeUnit.valueOf(CONSOLE_DEFAULT_UNIT)
   }
 

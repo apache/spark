@@ -60,7 +60,7 @@ private[spark] class GraphiteSink(
   }
 
   private val pollUnit: TimeUnit = propertyToOption(GRAPHITE_KEY_UNIT) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
     case None => TimeUnit.valueOf(GRAPHITE_DEFAULT_UNIT)
   }
 
