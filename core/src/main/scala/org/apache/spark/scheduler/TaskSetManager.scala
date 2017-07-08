@@ -819,13 +819,19 @@ private[spark] class TaskSetManager(
         }
         ef.exception
 
+      case tk: TaskKilled =>
+        // TaskKilled might have accumulator updates
+        accumUpdates = tk.accums
+        logWarning(failureReason)
+        None
+
       case e: ExecutorLostFailure if !e.exitCausedByApp =>
         logInfo(s"Task $tid failed because while it was being computed, its executor " +
           "exited for a reason unrelated to the task. Not counting this failure towards the " +
           "maximum number of failures for the task.")
         None
 
-      case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
+      case e: TaskFailedReason =>  // TaskResultLost and others
         logWarning(failureReason)
         None
     }

@@ -1373,14 +1373,18 @@ class DAGScheduler(
       case commitDenied: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
-      case exceptionFailure: ExceptionFailure =>
-        // Tasks failed with exceptions might still have accumulator updates.
+      case _: ExceptionFailure =>
+        // Tasks killed or failed with exceptions might still have accumulator updates.
+        updateAccumulators(event)
+
+      case _: TaskKilled =>
+        // Tasks killed or failed with exceptions might still have accumulator updates.
         updateAccumulators(event)
 
       case TaskResultLost =>
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
-      case _: ExecutorLostFailure | _: TaskKilled | UnknownReason =>
+      case _: ExecutorLostFailure | UnknownReason =>
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
     }

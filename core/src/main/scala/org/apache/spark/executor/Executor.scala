@@ -451,16 +451,43 @@ private[spark] class Executor(
 
         case t: TaskKilledException =>
           logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
+
+          // Collect latest accumulator values to report back to the driver
+          val accums: Seq[AccumulatorV2[_, _]] =
+            if (task != null) {
+              task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+              task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+              task.collectAccumulatorUpdates(taskFailed = true)
+            } else {
+              Seq.empty
+            }
+          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
+
+          val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates).withAccums(accums))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case _: InterruptedException | NonFatal(_) if
             task != null && task.reasonIfKilled.isDefined =>
           val killReason = task.reasonIfKilled.getOrElse("unknown reason")
           logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
+
+          // Collect latest accumulator values to report back to the driver
+          val accums: Seq[AccumulatorV2[_, _]] =
+            if (task != null) {
+              task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+              task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+              task.collectAccumulatorUpdates(taskFailed = true)
+            } else {
+              Seq.empty
+            }
+          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(
-            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
+
+          val serializedTK = ser.serialize(TaskKilled(killReason, accUpdates).withAccums(accums))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskFailedReason
