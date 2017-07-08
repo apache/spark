@@ -42,18 +42,8 @@ public abstract class ShuffleClient implements Closeable {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener,
-      boolean toDisk);
-
-  /**
-   * Used to create tmp files to shuffle remote blocks to disk.
-   */
-  protected TmpFileCreater tmpFileCreater;
-
-  public void setTmpFileCreaterWhenNull(TmpFileCreater tmpFileCreater) {
-    if (this.tmpFileCreater == null) {
-      this.tmpFileCreater = tmpFileCreater;
-    }
-  }
+      boolean toDisk,
+      TmpFileCreater tmpFileCreater);
 
   /**
    * An interface to provide approach to create tmp file.

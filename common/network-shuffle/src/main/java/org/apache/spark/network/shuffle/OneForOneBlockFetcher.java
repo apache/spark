@@ -201,9 +201,7 @@ public class OneForOneBlockFetcher {
 
     @Override
     public void onFailure(String streamId, Throwable cause) throws IOException {
-      if (channel.isOpen()) {
-        channel.close();
-      }
+      channel.close();
       // On receipt of a failure, fail every block from chunkIndex onwards.
       String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
       failRemainingBlocks(remainingBlockIds, cause);

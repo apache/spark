@@ -210,15 +210,15 @@ final class ShuffleBlockFetcherIterator(
     // already encrypted and compressed over the wire(w.r.t. the related configs), we can just fetch
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
-      shuffleClient.setTmpFileCreaterWhenNull(new ShuffleClient.TmpFileCreater {
+      val tmpFileCreater = new ShuffleClient.TmpFileCreater {
         override def createTempBlock(): File =
           blockManager.diskBlockManager.createTempLocalBlock()._2
-      })
+      }
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, true)
+        blockFetchingListener, true, tmpFileCreater)
     } else {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, false)
+        blockFetchingListener, false, null)
     }
   }
 

@@ -95,7 +95,8 @@ public class ExternalShuffleClient extends ShuffleClient {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener,
-      boolean toDisk) {
+      boolean toDisk,
+      TmpFileCreater tmpFileCreater) {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {

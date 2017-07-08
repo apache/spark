@@ -158,7 +158,7 @@ public class ExternalShuffleIntegrationSuite {
             }
           }
         }
-      }, false);
+      }, false, null);
 
     if (!requestsRemaining.tryAcquire(blockIds.length, 5, TimeUnit.SECONDS)) {
       fail("Timeout getting response from the server");

@@ -68,7 +68,8 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
       execId: String,
       blockIds: Array[String],
       listener: BlockFetchingListener,
-      toDisk: Boolean): Unit
+      toDisk: Boolean,
+      tmpFileCreater: ShuffleClient.TmpFileCreater): Unit
 
   /**
    * Upload a single block to a remote node, available only after [[init]] is invoked.
@@ -101,7 +102,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           ret.flip()
           result.success(new NioManagedBuffer(ret))
         }
-      }, toDisk = false)
+      }, toDisk = false, tmpFileCreater = null)
     ThreadUtils.awaitResult(result.future, Duration.Inf)
   }
 
