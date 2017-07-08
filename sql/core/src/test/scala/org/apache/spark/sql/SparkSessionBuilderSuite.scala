@@ -27,37 +27,31 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
-  private var initialSession: SparkSession = _
+  override def afterEach(): Unit = {
+    // This suite should not interfere with the other test suites.
+    SparkSession.getActiveSession.foreach(_.stop())
+    SparkSession.clearActiveSession()
+    SparkSession.getDefaultSession.foreach(_.stop())
+    SparkSession.clearDefaultSession()
+  }
 
-  private lazy val sparkContext: SparkContext = {
-    initialSession = SparkSession.builder()
+  test("create with config options and propagate them to SparkContext and SparkSession") {
+    val session = SparkSession.builder()
       .master("local")
       .config("spark.ui.enabled", value = false)
       .config("some-config", "v2")
       .getOrCreate()
-    initialSession.sparkContext
-  }
-
-  override def afterEach(): Unit = {
-    // This suite should not interfere with the other test suites.
-    SparkSession.clearDefaultSession()
-    SparkSession.clearActiveSession()
-  }
-
-  test("create with config options and propagate them to SparkContext and SparkSession") {
-    // Creating a new session with config - this works by just calling the lazy val
-    sparkContext
-    assert(initialSession.sparkContext.conf.get("some-config") == "v2")
-    assert(initialSession.conf.get("some-config") == "v2")
+    assert(session.sparkContext.conf.get("some-config") == "v2")
+    assert(session.conf.get("some-config") == "v2")
   }
 
   test("use global default session") {
-    val session = SparkSession.builder().getOrCreate()
+    val session = SparkSession.builder().master("local").getOrCreate()
     assert(SparkSession.builder().getOrCreate() == session)
   }
 
   test("config options are propagated to existing SparkSession") {
-    val session1 = SparkSession.builder().config("spark-config1", "a").getOrCreate()
+    val session1 = SparkSession.builder().master("local").config("spark-config1", "a").getOrCreate()
     assert(session1.conf.get("spark-config1") == "a")
     val session2 = SparkSession.builder().config("spark-config1", "b").getOrCreate()
     assert(session1 == session2)
@@ -65,7 +59,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("use session from active thread session and propagate config options") {
-    val defaultSession = SparkSession.builder().getOrCreate()
+    val defaultSession = SparkSession.builder().master("local").getOrCreate()
     val activeSession = defaultSession.newSession()
     SparkSession.setActiveSession(activeSession)
     val session = SparkSession.builder().config("spark-config2", "a").getOrCreate()
@@ -81,7 +75,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("create a new session if the default session has been stopped") {
-    val defaultSession = SparkSession.builder().getOrCreate()
+    val defaultSession = SparkSession.builder().master("local").getOrCreate()
     SparkSession.setDefaultSession(defaultSession)
     defaultSession.stop()
     val newSession = SparkSession.builder().master("local").getOrCreate()
@@ -99,7 +93,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("create SparkContext first then SparkSession") {
-    sparkContext.stop()
     val conf = new SparkConf().setAppName("test").setMaster("local").set("key1", "value1")
     val sparkContext2 = new SparkContext(conf)
     val session = SparkSession.builder().config("key2", "value2").getOrCreate()
@@ -113,7 +106,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("create SparkContext first then pass context to SparkSession") {
-    sparkContext.stop()
     val conf = new SparkConf().setAppName("test").setMaster("local").set("key1", "value1")
     val newSC = new SparkContext(conf)
     val session = SparkSession.builder().sparkContext(newSC).config("key2", "value2").getOrCreate()
