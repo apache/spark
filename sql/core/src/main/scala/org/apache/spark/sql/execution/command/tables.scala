@@ -702,7 +702,7 @@ case class DescribeColumnCommand(
     }
 
     val fieldValues = if (isExtended) {
-      // Show column stats only when formatted is specified.
+      // Show column stats when extended or formatted is specified.
       Seq(
         field.name,
         field.dataType.catalogString,
