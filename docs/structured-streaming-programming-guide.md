@@ -557,7 +557,7 @@ Here are the details of all the sources in Spark.
         
         The source will try its best to reach <code>rowsPerSecond</code>, but the query may be resource constrained, and <code>numPartitions</code> can be tweaked to help reach the desired speed.
     </td>
-    <td>No</td>
+    <td>Yes</td>
     <td></td>
   </tr>
 
