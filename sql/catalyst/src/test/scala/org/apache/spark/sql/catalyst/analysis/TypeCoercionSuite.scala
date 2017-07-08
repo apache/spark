@@ -447,6 +447,15 @@ class TypeCoercionSuite extends AnalysisTest {
       None)
     widenTestWithStringPromotion(
       StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", DoubleType, nullable = false))),
+      None)
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", DoubleType, nullable = false))),
+      None)
+
+    widenTestWithStringPromotion(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
       StructType(Seq(StructField("a", IntegerType, nullable = false))),
       Some(StructType(Seq(StructField("a", IntegerType, nullable = false)))))
     widenTestWithStringPromotion(
@@ -461,14 +470,40 @@ class TypeCoercionSuite extends AnalysisTest {
       StructType(Seq(StructField("a", IntegerType, nullable = true))),
       StructType(Seq(StructField("a", IntegerType, nullable = true))),
       Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = false)))))
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+    widenTestWithoutStringPromotion(
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       widenTestWithStringPromotion(
+        StructType(Seq(StructField("a", IntegerType))),
+        StructType(Seq(StructField("A", IntegerType))),
+        None)
+      widenTestWithoutStringPromotion(
         StructType(Seq(StructField("a", IntegerType))),
         StructType(Seq(StructField("A", IntegerType))),
         None)
     }
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       widenTestWithStringPromotion(
+        StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType))),
+        StructType(Seq(StructField("A", IntegerType), StructField("b", IntegerType))),
+        Some(StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType)))))
+      widenTestWithoutStringPromotion(
         StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType))),
         StructType(Seq(StructField("A", IntegerType), StructField("b", IntegerType))),
         Some(StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType)))))
