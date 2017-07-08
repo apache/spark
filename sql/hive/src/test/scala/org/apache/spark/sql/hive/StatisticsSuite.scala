@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
@@ -215,23 +215,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
       }
     }
-  }
-
-  private def checkTableStats(
-      tableName: String,
-      hasSizeInBytes: Boolean,
-      expectedRowCounts: Option[Int]): Option[CatalogStatistics] = {
-    val stats = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).stats
-
-    if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
-      assert(stats.isDefined)
-      assert(stats.get.sizeInBytes > 0)
-      assert(stats.get.rowCount === expectedRowCounts)
-    } else {
-      assert(stats.isEmpty)
-    }
-
-    stats
   }
 
   test("test table-level statistics for hive tables created in HiveExternalCatalog") {
