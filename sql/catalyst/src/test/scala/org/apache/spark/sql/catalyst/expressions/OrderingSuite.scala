@@ -137,4 +137,22 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     // verify that we can support up to 5000 ordering comparisons, which should be sufficient
     GenerateOrdering.generate(Array.fill(5000)(sortOrder))
   }
+
+  test("SPARK-21344: BinaryType comparison does signed byte array comparison") {
+    val b1 = Array[Byte](1)   // 0x01
+    val b2 = Array[Byte](-1)  // 0xff
+
+    val rowOrdering = InterpretedOrdering.forSchema(Seq(BinaryType, BinaryType))
+    val genOrdering = GenerateOrdering.generate(
+      BoundReference(0, BinaryType, nullable = true).asc ::
+        BoundReference(1, BinaryType, nullable = true).asc :: Nil)
+    val rowType = StructType(
+      StructField("b1", BinaryType, nullable = true) ::
+        StructField("b2", BinaryType, nullable = true) :: Nil)
+    val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
+    val rowB1 = toCatalyst(Row(b1)).asInstanceOf[InternalRow]
+    val rowB2 = toCatalyst(Row(b2)).asInstanceOf[InternalRow]
+    assert(rowOrdering.compare(rowB1, rowB2) < 0)
+    assert(genOrdering.compare(rowB1, rowB2) < 0)
+  }
 }
