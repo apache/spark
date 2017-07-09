@@ -153,6 +153,7 @@ test_that("structType and structField", {
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
 
   expect_error(structTypeFromDDL("A stri"), "DataType stri is not supported.")
+  expect_error(structTypeFromDDL(123), "schema must be a DDL-formatted string.")
 })
 
 test_that("structField type strings", {

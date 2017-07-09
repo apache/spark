@@ -81,7 +81,7 @@ structType.structField <- function(x, ...) {
 #' @note structTypeFromDDL since 2.3.0
 structTypeFromDDL <- function(x) {
   if (!is.character(x)) {
-    stop("schema name must be a DDL-formatted string.")
+    stop("schema must be a DDL-formatted string.")
   }
 
   stObj <- handledCallJStatic("org.apache.spark.sql.types.StructType",

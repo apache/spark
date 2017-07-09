@@ -240,7 +240,6 @@ gapplyInternal <- function(x, func, schema) {
                        connection = NULL)
   broadcastArr <- lapply(ls(.broadcastNames),
                     function(name) { get(name, .broadcastNames) })
-
   sdf <- callJStatic(
            "org.apache.spark.sql.api.r.SQLUtils",
            "gapply",
