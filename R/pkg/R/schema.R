@@ -31,12 +31,12 @@
 #' @export
 #' @examples
 #'\dontrun{
-#' schema <-  structType(structField("a", "integer"), structField("c", "string"),
+#' schema <- structType(structField("a", "integer"), structField("c", "string"),
 #'                       structField("avg", "double"))
 #' df1 <- gapply(df, list("a", "c"),
 #'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
 #'               schema)
-#' schema <-  structType("a INT, c STRING, avg DOUBLE")
+#' schema <- structType("a INT, c STRING, avg DOUBLE")
 #' df1 <- gapply(df, list("a", "c"),
 #'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
 #'               schema)
@@ -121,7 +121,7 @@ print.structType <- function(x, ...) {
 #' field1 <- structField("a", "integer")
 #' field2 <- structField("c", "string")
 #' field3 <- structField("avg", "double")
-#' schema <-  structType(field1, field2, field3)
+#' schema <- structType(field1, field2, field3)
 #' df1 <- gapply(df, list("a", "c"),
 #'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
 #'               schema)
