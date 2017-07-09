@@ -23,7 +23,8 @@
 #' Create a structType object that contains the metadata for a SparkDataFrame. Intended for
 #' use with createDataFrame and toDF.
 #'
-#' @param x a structField object (created with the field() function)
+#' @param x a structField object (created with the field() function). Since Spark 2.3, the
+#'          DDL-formatted string is also supported.
 #' @param ... additional structField objects
 #' @return a structType object
 #' @rdname structType
@@ -32,6 +33,10 @@
 #'\dontrun{
 #' schema <-  structType(structField("a", "integer"), structField("c", "string"),
 #'                       structField("avg", "double"))
+#' df1 <- gapply(df, list("a", "c"),
+#'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
+#'               schema)
+#' schema <-  structType("a INT, c STRING, avg DOUBLE")
 #' df1 <- gapply(df, list("a", "c"),
 #'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
 #'               schema)
@@ -68,18 +73,10 @@ structType.structField <- function(x, ...) {
   structType(stObj)
 }
 
-#' Create \code{structType} for a given DDL-formatted string.
-#'
-#' Create \code{structType} for a given DDL-formatted string, which is a comma separated list
-#' of field definitions, e.g., a INT, b STRING.
-#'
-#' @param x The data schema defined in a DDL-formatted string.
-#' @examples
-#'\dontrun{
-#' structTypeFromDDL("a INT, b STRING")
-#' }
-#' @note structTypeFromDDL since 2.3.0
-structTypeFromDDL <- function(x) {
+#' @rdname structType
+#' @method structType character
+#' @export
+structType.character <- function(x) {
   if (!is.character(x)) {
     stop("schema must be a DDL-formatted string.")
   }

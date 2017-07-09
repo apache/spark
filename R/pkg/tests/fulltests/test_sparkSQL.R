@@ -147,13 +147,12 @@ test_that("structType and structField", {
   expect_is(testSchema$fields()[[2]], "structField")
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
 
-  testSchema <- structTypeFromDDL("a STRING, b INT")
+  testSchema <- structType("a STRING, b INT")
   expect_is(testSchema, "structType")
   expect_is(testSchema$fields()[[2]], "structField")
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
 
-  expect_error(structTypeFromDDL("A stri"), "DataType stri is not supported.")
-  expect_error(structTypeFromDDL(123), "schema must be a DDL-formatted string.")
+  expect_error(structType("A stri"), "DataType stri is not supported.")
 })
 
 test_that("structField type strings", {
