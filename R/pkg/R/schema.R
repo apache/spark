@@ -76,7 +76,7 @@ structType.structField <- function(x, ...) {
 #' @rdname structType
 #' @method structType character
 #' @export
-structType.character <- function(x) {
+structType.character <- function(x, ...) {
   if (!is.character(x)) {
     stop("schema must be a DDL-formatted string.")
   }
