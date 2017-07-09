@@ -74,6 +74,10 @@ trait CheckAnalysis extends PredicateHelper {
     }
   }
 
+  private def getNumLeafNodes(operator: LogicalPlan): Int = {
+    operator.collect { case _: LeafNode => 1 }.sum
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
@@ -99,6 +103,10 @@ trait CheckAnalysis extends PredicateHelper {
           case c: Cast if !c.resolved =>
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
+
+          case e @ (_: InputFileName | _: InputFileBlockLength | _: InputFileBlockStart)
+              if getNumLeafNodes(operator) > 1 =>
+            e.failAnalysis(s"'${e.prettyName}' does not support more than one sources")
 
           case g: Grouping =>
             failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")

@@ -530,10 +530,26 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("input_file_name, input_file_block_start, input_file_block_length - more than one sources") {
+    withTable("tab1", "tab2") {
+      val data = sparkContext.parallelize(0 to 10).toDF("id")
+      data.write.saveAsTable("tab1")
+      data.write.saveAsTable("tab2")
+      Seq("input_file_name", "input_file_block_start", "input_file_block_length").foreach { func =>
+        val e = intercept[AnalysisException] {
+          sql(s"SELECT *, $func() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
+        }.getMessage
+        assert(e.contains(s"'$func' does not support more than one sources"))
+      }
+    }
+  }
+
   test("input_file_name, input_file_block_start, input_file_block_length - FileScanRDD") {
     withTempPath { dir =>
       val data = sparkContext.parallelize(0 to 10).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
+
+      spark.read.parquet(dir.getCanonicalPath).explain(true)
 
       // Test the 3 expressions when reading from files
       val q = spark.read.parquet(dir.getCanonicalPath).select(
