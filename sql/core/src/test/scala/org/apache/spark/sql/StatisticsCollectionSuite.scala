@@ -40,17 +40,6 @@ import org.apache.spark.sql.types._
 class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSQLContext {
   import testImplicits._
 
-  private def checkTableStats(tableName: String, expectedRowCount: Option[Int])
-    : Option[CatalogStatistics] = {
-    val df = spark.table(tableName)
-    val stats = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-      assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
-      rel.catalogTable.get.stats
-    }
-    assert(stats.size == 1)
-    stats.head
-  }
-
   test("estimates the size of a limit 0 on outer join") {
     withTempView("test") {
       Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4)).toDF("k", "v")
@@ -88,6 +77,19 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("analyze empty table") {
+    val table = "emptyTable"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (key STRING, value STRING) USING PARQUET")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS noscan")
+      val fetchedStats1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+      assert(fetchedStats1.get.sizeInBytes == 0)
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+      val fetchedStats2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+      assert(fetchedStats2.get.sizeInBytes == 0)
+    }
+  }
+
   test("test table-level statistics for data source table") {
     val tableName = "tbl"
     withTable(tableName) {
@@ -96,11 +98,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
-      checkTableStats(tableName, expectedRowCount = None)
+      checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
-      checkTableStats(tableName, expectedRowCount = Some(2))
+      checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = Some(2))
     }
   }
 
@@ -218,6 +220,23 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   )
 
   private val randomName = new Random(31)
+
+  def checkTableStats(
+      tableName: String,
+      hasSizeInBytes: Boolean,
+      expectedRowCounts: Option[Int]): Option[CatalogStatistics] = {
+    val stats = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).stats
+
+    if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
+      assert(stats.isDefined)
+      assert(stats.get.sizeInBytes >= 0)
+      assert(stats.get.rowCount === expectedRowCounts)
+    } else {
+      assert(stats.isEmpty)
+    }
+
+    stats
+  }
 
   /**
    * Compute column stats for the given DataFrame and compare it with colStats.
