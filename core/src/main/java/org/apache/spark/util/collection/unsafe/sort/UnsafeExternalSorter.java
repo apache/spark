@@ -589,7 +589,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   }
 
   /**
-   * Returns a iterator starts from startIndex, which will return the rows in the order as inserted.
+   * Returns an iterator starts from startIndex, which will return the rows in the order as
+   * inserted.
    *
    * It is the caller's responsibility to call `cleanupResources()`
    * after consuming this iterator.
