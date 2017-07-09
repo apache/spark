@@ -224,14 +224,14 @@ final class ShuffleBlockFetcherIterator(
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, true, new Supplier[File] {
+        blockFetchingListener, new Supplier[File] {
           override def get(): File = blockManager.diskBlockManager.createTempLocalBlock()._2
         }, new Supplier[java.lang.Boolean] {
           override def get(): java.lang.Boolean = isZombie
         })
     } else {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, false, null, null)
+        blockFetchingListener, null, null)
     }
   }
 

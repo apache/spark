@@ -92,9 +92,8 @@ public class ExternalShuffleClient extends ShuffleClient {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener,
-      boolean toDisk,
       Supplier<File> tmpFileCreater,
-      Supplier<Boolean> shuffleBlockFetcherIteratorIsZombie) {
+      Supplier<Boolean> canCallerSideDeleteFile) {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
@@ -102,8 +101,8 @@ public class ExternalShuffleClient extends ShuffleClient {
           (blockIds1, listener1) -> {
             TransportClient client = clientFactory.createClient(host, port);
             new OneForOneBlockFetcher(client, appId, execId,
-              blockIds1, listener1, conf, toDisk, tmpFileCreater,
-              shuffleBlockFetcherIteratorIsZombie).start();
+              blockIds1, listener1, conf, tmpFileCreater,
+              canCallerSideDeleteFile).start();
           };
 
       int maxRetries = conf.maxIORetries();

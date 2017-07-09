@@ -91,16 +91,15 @@ private[spark] class NettyBlockTransferService(
       execId: String,
       blockIds: Array[String],
       listener: BlockFetchingListener,
-      toDisk: Boolean,
       tmpFileCreater: Supplier[File],
-      shuffleBlockFetcherIteratorIsZombie: Supplier[java.lang.Boolean]): Unit = {
+      canCallerSideDeleteFile: Supplier[java.lang.Boolean]): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
           new OneForOneBlockFetcher(client, appId, execId, blockIds, listener,
-            transportConf, toDisk, tmpFileCreater, shuffleBlockFetcherIteratorIsZombie).start()
+            transportConf, tmpFileCreater, canCallerSideDeleteFile).start()
         }
       }
 

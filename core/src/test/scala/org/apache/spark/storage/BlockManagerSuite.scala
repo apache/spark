@@ -1384,9 +1384,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         execId: String,
         blockIds: Array[String],
         listener: BlockFetchingListener,
-        toDisk: Boolean,
         tmpFileCreater: Supplier[File],
-        shuffleBlockFetcherIteratorIsZombie: Supplier[java.lang.Boolean]): Unit = {
+        canCallerSideDeleteFile: Supplier[java.lang.Boolean]): Unit = {
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
     }
 

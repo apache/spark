@@ -59,9 +59,8 @@ public class OneForOneBlockFetcher {
   private final BlockFetchingListener listener;
   private final ChunkReceivedCallback chunkCallback;
   private TransportConf transportConf = null;
-  private Boolean toDisk;
   private Supplier<File> tmpFileCreater;
-  private Supplier<Boolean> shuffleBlockFetcherIteratorIsZombie;
+  private Supplier<Boolean> canCallerSideDeleteFile;
 
   private StreamHandle streamHandle = null;
 
@@ -72,7 +71,7 @@ public class OneForOneBlockFetcher {
     String[] blockIds,
     BlockFetchingListener listener,
     TransportConf transportConf) {
-    this(client, appId, execId, blockIds, listener, transportConf, false, null, null);
+    this(client, appId, execId, blockIds, listener, transportConf, null, null);
   }
 
   public OneForOneBlockFetcher(
@@ -82,18 +81,18 @@ public class OneForOneBlockFetcher {
       String[] blockIds,
       BlockFetchingListener listener,
       TransportConf transportConf,
-      Boolean toDisk,
       Supplier<File> tmpFileCreater,
-      Supplier<Boolean> shuffleBlockFetcherIteratorIsZombie) {
+      Supplier<Boolean> canCallerSideDeleteFile) {
     this.client = client;
     this.openMessage = new OpenBlocks(appId, execId, blockIds);
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
     this.transportConf = transportConf;
-    this.toDisk = toDisk;
     this.tmpFileCreater = tmpFileCreater;
-    this.shuffleBlockFetcherIteratorIsZombie = shuffleBlockFetcherIteratorIsZombie;
+    this.canCallerSideDeleteFile = canCallerSideDeleteFile;
+    assert (tmpFileCreater == null && canCallerSideDeleteFile == null ||
+      tmpFileCreater != null && canCallerSideDeleteFile != null);
   }
 
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */
@@ -132,7 +131,7 @@ public class OneForOneBlockFetcher {
           // Immediately request all chunks -- we expect that the total size of the request is
           // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
           for (int i = 0; i < streamHandle.numChunks; i++) {
-            if (toDisk) {
+            if (tmpFileCreater != null) {
               client.stream(OneForOneStreamManager.genStreamChunkId(streamHandle.streamId, i),
                 new DownloadCallback(i));
             } else {
@@ -187,7 +186,7 @@ public class OneForOneBlockFetcher {
       ManagedBuffer buffer = new FileSegmentManagedBuffer(transportConf, targetFile, 0,
         targetFile.length());
       listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
-      if (shuffleBlockFetcherIteratorIsZombie.get()) {
+      if (canCallerSideDeleteFile.get()) {
         targetFile.delete();
       }
     }

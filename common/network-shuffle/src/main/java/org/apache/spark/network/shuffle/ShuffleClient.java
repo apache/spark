@@ -43,7 +43,6 @@ public abstract class ShuffleClient implements Closeable {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener,
-      boolean toDisk,
       Supplier<File> tmpFileCreater,
-      Supplier<Boolean> shuffleBlockFetcherIteratorIsZombie);
+      Supplier<Boolean> canCallerSideDeleteFile);
 }
