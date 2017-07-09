@@ -184,4 +184,47 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
       spark.sql("DROP TABLE IF EXISTS libsvmTable")
     }
   }
+
+  test("SPARK-21289: Support line separator") {
+    import testImplicits._
+
+    val data = """1 1:1.0 3:2.0 5:3.0|0|0 2:4.0 4:5.0 6:6.0"""
+    val lineSep = "|"
+    Seq(data, s"$data$lineSep").foreach { lines =>
+      val path0 = new File(tempDir.getCanonicalPath, "write0")
+      val path1 = new File(tempDir.getCanonicalPath, "write1")
+      try {
+        // Read
+        java.nio.file.Files.write(path0.toPath, lines.getBytes(StandardCharsets.UTF_8))
+        val df = spark.read
+          .option("lineSep", lineSep)
+          .format("libsvm")
+          .load(path0.getAbsolutePath)
+
+        assert(df.columns(0) == "label")
+        assert(df.columns(1) == "features")
+        val row1 = df.first()
+        assert(row1.getDouble(0) == 1.0)
+        val v = row1.getAs[SparseVector](1)
+        assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+
+        // Write
+        df.coalesce(1).write.option("lineSep", "^").format("libsvm").save(path1.getAbsolutePath)
+        val partFile = Utils.recursiveList(path1).filter(f => f.getName.startsWith("part-")).head
+        val readBack = new String(
+          java.nio.file.Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
+        assert(readBack === "1.0 1:1.0 3:2.0 5:3.0^0.0^0.0 2:4.0 4:5.0 6:6.0^")
+
+        // Roundtrip
+        val readBackDF = spark.read
+          .option("lineSep", "^")
+          .format("libsvm")
+          .load(path1.getAbsolutePath)
+        assert(df.collect().toSet() === readBackDF.collect().toSet())
+      } finally {
+        Utils.deleteRecursively(path0)
+        Utils.deleteRecursively(path1)
+      }
+    }
+  }
 }

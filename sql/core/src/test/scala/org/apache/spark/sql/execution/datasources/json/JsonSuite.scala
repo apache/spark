@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.io.{File, StringWriter}
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
@@ -2061,6 +2062,45 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         df.select("_corrupt_record"),
         Row(null) :: Row(null) :: Row("{\"field\": \"3\"}") :: Nil
       )
+    }
+  }
+
+  test("SPARK-21289: Support line separator") {
+    // Read
+    val data =
+      """
+        |  {"f":
+        |"a", "f0": 1}|{"f":
+        |
+        |"c",  "f0": 2}|{"f": "d",  "f0": 3}
+      """.stripMargin
+    val lineSep = "|"
+    Seq(data, s"$data$lineSep").foreach { lines =>
+      withTempPath { path =>
+        Files.write(path.toPath, lines.getBytes(StandardCharsets.UTF_8))
+        val df = spark.read.option("lineSep", "|").json(path.getAbsolutePath)
+        val expectedSchema =
+          StructType(StructField("f", StringType) :: StructField("f0", LongType) :: Nil)
+        checkAnswer(df, Seq(("a", 1), ("c", 2), ("d", 3)).toDF())
+        assert(df.schema === expectedSchema)
+      }
+    }
+
+    // Write
+    withTempPath { path =>
+      Seq("a", "b", "c").toDF("value").coalesce(1)
+        .write.option("lineSep", "^").json(path.getAbsolutePath)
+      val partFile = Utils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+      val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
+      assert(readBack === """{"value":"a"}^{"value":"b"}^{"value":"c"}^""")
+    }
+
+    // Roundtrip
+    withTempPath { path =>
+      val df = Seq("a", "b", "c").toDF()
+      df.write.option("lineSep", "!").json(path.getAbsolutePath)
+      val readBack = spark.read.option("lineSep", "!").json(path.getAbsolutePath)
+      checkAnswer(df, readBack)
     }
   }
 }
