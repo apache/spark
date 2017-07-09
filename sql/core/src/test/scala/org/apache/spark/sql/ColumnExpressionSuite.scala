@@ -549,8 +549,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       val data = sparkContext.parallelize(0 to 10).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
 
-      spark.read.parquet(dir.getCanonicalPath).explain(true)
-
       // Test the 3 expressions when reading from files
       val q = spark.read.parquet(dir.getCanonicalPath).select(
         input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
