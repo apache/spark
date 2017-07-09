@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.function.Supplier
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -1384,7 +1385,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         blockIds: Array[String],
         listener: BlockFetchingListener,
         toDisk: Boolean,
-        tmpFileCreater: ShuffleClient.TmpFileCreater): Unit = {
+        tmpFileCreater: Supplier[File],
+        shuffleBlockFetcherIteratorIsZombie: Supplier[java.lang.Boolean]): Unit = {
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
     }
 

@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.function.Supplier
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -131,6 +132,12 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] var isZombie = false
 
+  /**
+   * A set to store the files used for shuffling remote huge blocks. Files in this set will be
+   * deleted when cleanup. This is a layer of defensiveness against disk file leaks.
+   */
+  val shuffleFilesSet = mutable.HashSet[File]()
+
   initialize()
 
   // Decrements the buffer reference count.
@@ -160,12 +167,18 @@ final class ShuffleBlockFetcherIterator(
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
             if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
+              shuffleFilesSet += buf.asInstanceOf[FileSegmentManagedBuffer].getFile
               shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
             }
             shuffleMetrics.incRemoteBlocksFetched(1)
           }
           buf.release()
         case _ =>
+      }
+    }
+    shuffleFilesSet.foreach { file =>
+      if (!file.delete()) {
+        logInfo("Failed to cleanup shuffle fetch temp file " + file.getAbsolutePath())
       }
     }
   }
@@ -210,15 +223,15 @@ final class ShuffleBlockFetcherIterator(
     // already encrypted and compressed over the wire(w.r.t. the related configs), we can just fetch
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
-      val tmpFileCreater = new ShuffleClient.TmpFileCreater {
-        override def createTempBlock(): File =
-          blockManager.diskBlockManager.createTempLocalBlock()._2
-      }
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, true, tmpFileCreater)
+        blockFetchingListener, true, new Supplier[File] {
+          override def get(): File = blockManager.diskBlockManager.createTempLocalBlock()._2
+        }, new Supplier[java.lang.Boolean] {
+          override def get(): java.lang.Boolean = isZombie
+        })
     } else {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, false, null)
+        blockFetchingListener, false, null, null)
     }
   }
 
@@ -356,6 +369,7 @@ final class ShuffleBlockFetcherIterator(
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
             if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
+              shuffleFilesSet += buf.asInstanceOf[FileSegmentManagedBuffer].getFile
               shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
             }
             shuffleMetrics.incRemoteBlocksFetched(1)

@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.io.Closeable;
 import java.io.File;
+import java.util.function.Supplier;
 
 /** Provides an interface for reading shuffle files, either from an Executor or external service. */
 public abstract class ShuffleClient implements Closeable {
@@ -43,12 +44,6 @@ public abstract class ShuffleClient implements Closeable {
       String[] blockIds,
       BlockFetchingListener listener,
       boolean toDisk,
-      TmpFileCreater tmpFileCreater);
-
-  /**
-   * An interface to provide approach to create tmp file.
-   */
-  public interface TmpFileCreater {
-    File createTempBlock();
-  }
+      Supplier<File> tmpFileCreater,
+      Supplier<Boolean> shuffleBlockFetcherIteratorIsZombie);
 }

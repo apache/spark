@@ -20,9 +20,8 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
+import java.util.function.Supplier;
 
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
@@ -52,7 +51,6 @@ public class ExternalShuffleClient extends ShuffleClient {
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
-  private final Set<OneForOneBlockFetcher> blockfetchers;
 
   protected TransportClientFactory clientFactory;
   protected String appId;
@@ -70,7 +68,6 @@ public class ExternalShuffleClient extends ShuffleClient {
     this.secretKeyHolder = secretKeyHolder;
     this.authEnabled = authEnabled;
     this.registrationTimeoutMs = registrationTimeoutMs;
-    this.blockfetchers = new HashSet<>();
   }
 
   protected void checkInit() {
@@ -96,17 +93,17 @@ public class ExternalShuffleClient extends ShuffleClient {
       String[] blockIds,
       BlockFetchingListener listener,
       boolean toDisk,
-      TmpFileCreater tmpFileCreater) {
+      Supplier<File> tmpFileCreater,
+      Supplier<Boolean> shuffleBlockFetcherIteratorIsZombie) {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
           (blockIds1, listener1) -> {
             TransportClient client = clientFactory.createClient(host, port);
-            OneForOneBlockFetcher blockFetcher = new OneForOneBlockFetcher(client, appId, execId,
-              blockIds1, listener1, conf, toDisk, tmpFileCreater);
-            blockfetchers.add(blockFetcher);
-            blockFetcher.start();
+            new OneForOneBlockFetcher(client, appId, execId,
+              blockIds1, listener1, conf, toDisk, tmpFileCreater,
+              shuffleBlockFetcherIteratorIsZombie).start();
           };
 
       int maxRetries = conf.maxIORetries();
@@ -149,8 +146,5 @@ public class ExternalShuffleClient extends ShuffleClient {
   @Override
   public void close() {
     clientFactory.close();
-    for (OneForOneBlockFetcher blockFetcher : blockfetchers) {
-      blockFetcher.cleanup();
-    }
   }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.network.netty
 
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.function.Supplier
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
@@ -30,7 +31,7 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap, TransportClientFactory}
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
-import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher, RetryingBlockFetcher, ShuffleClient}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher, RetryingBlockFetcher}
 import org.apache.spark.network.shuffle.protocol.UploadBlock
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
@@ -53,7 +54,6 @@ private[spark] class NettyBlockTransferService(
   private val serializer = new JavaSerializer(conf)
   private val authEnabled = securityManager.isAuthenticationEnabled()
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numCores)
-  private val blockFetchers = collection.mutable.HashSet[OneForOneBlockFetcher]()
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
@@ -92,16 +92,15 @@ private[spark] class NettyBlockTransferService(
       blockIds: Array[String],
       listener: BlockFetchingListener,
       toDisk: Boolean,
-      tmpFileCreater: ShuffleClient.TmpFileCreater): Unit = {
+      tmpFileCreater: Supplier[File],
+      shuffleBlockFetcherIteratorIsZombie: Supplier[java.lang.Boolean]): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
-          val blockFetcher = new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray,
-            listener, transportConf, toDisk, tmpFileCreater)
-          blockFetchers += blockFetcher
-          blockFetcher.start()
+          new OneForOneBlockFetcher(client, appId, execId, blockIds, listener,
+            transportConf, toDisk, tmpFileCreater, shuffleBlockFetcherIteratorIsZombie).start()
         }
       }
 
@@ -162,6 +161,5 @@ private[spark] class NettyBlockTransferService(
     if (clientFactory != null) {
       clientFactory.close()
     }
-    blockFetchers.foreach(_.cleanup())
   }
 }

@@ -24,8 +24,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,11 +60,8 @@ public class OneForOneBlockFetcher {
   private final ChunkReceivedCallback chunkCallback;
   private TransportConf transportConf = null;
   private Boolean toDisk;
-  private ShuffleClient.TmpFileCreater tmpFileCreater;
-
-  // A set to store the files used for shuffling remote huge blocks. Files in this set will be
-  // deleted when cleanup. This is a layer of defensiveness against disk file leaks.
-  private Set<File> shuffleFiles;
+  private Supplier<File> tmpFileCreater;
+  private Supplier<Boolean> shuffleBlockFetcherIteratorIsZombie;
 
   private StreamHandle streamHandle = null;
 
@@ -76,7 +72,7 @@ public class OneForOneBlockFetcher {
     String[] blockIds,
     BlockFetchingListener listener,
     TransportConf transportConf) {
-    this(client, appId, execId, blockIds, listener, transportConf, false, null);
+    this(client, appId, execId, blockIds, listener, transportConf, false, null, null);
   }
 
   public OneForOneBlockFetcher(
@@ -87,7 +83,8 @@ public class OneForOneBlockFetcher {
       BlockFetchingListener listener,
       TransportConf transportConf,
       Boolean toDisk,
-      ShuffleClient.TmpFileCreater tmpFileCreater) {
+      Supplier<File> tmpFileCreater,
+      Supplier<Boolean> shuffleBlockFetcherIteratorIsZombie) {
     this.client = client;
     this.openMessage = new OpenBlocks(appId, execId, blockIds);
     this.blockIds = blockIds;
@@ -96,7 +93,7 @@ public class OneForOneBlockFetcher {
     this.transportConf = transportConf;
     this.toDisk = toDisk;
     this.tmpFileCreater = tmpFileCreater;
-    this.shuffleFiles = new HashSet<>();
+    this.shuffleBlockFetcherIteratorIsZombie = shuffleBlockFetcherIteratorIsZombie;
   }
 
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */
@@ -167,12 +164,6 @@ public class OneForOneBlockFetcher {
     }
   }
 
-  public void cleanup() {
-    for (File file: shuffleFiles) {
-      file.delete();
-    }
-  }
-
   private class DownloadCallback implements StreamCallback {
 
     private WritableByteChannel channel = null;
@@ -180,8 +171,7 @@ public class OneForOneBlockFetcher {
     private int chunkIndex;
 
     DownloadCallback(int chunkIndex) throws IOException {
-      this.targetFile = tmpFileCreater.createTempBlock();
-      shuffleFiles.add(targetFile);
+      this.targetFile = tmpFileCreater.get();
       this.channel = Channels.newChannel(new FileOutputStream(targetFile));
       this.chunkIndex = chunkIndex;
     }
@@ -197,6 +187,9 @@ public class OneForOneBlockFetcher {
       ManagedBuffer buffer = new FileSegmentManagedBuffer(transportConf, targetFile, 0,
         targetFile.length());
       listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
+      if (shuffleBlockFetcherIteratorIsZombie.get()) {
+        targetFile.delete();
+      }
     }
 
     @Override
@@ -205,6 +198,7 @@ public class OneForOneBlockFetcher {
       // On receipt of a failure, fail every block from chunkIndex onwards.
       String[] remainingBlockIds = Arrays.copyOfRange(blockIds, chunkIndex, blockIds.length);
       failRemainingBlocks(remainingBlockIds, cause);
+      targetFile.delete();
     }
   }
 }
