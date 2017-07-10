@@ -48,8 +48,8 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
    * @group param
    */
   @Since("1.6.0")
-  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "How to handle " +
-    "invalid data (unseen labels or NULL values). " +
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "How to handle invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
     ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
