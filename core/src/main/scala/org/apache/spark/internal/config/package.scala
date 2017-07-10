@@ -323,11 +323,11 @@ package object config {
 
   private[spark] val REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS =
     ConfigBuilder("spark.reducer.maxBlocksInFlightPerAddress")
-      .doc("This configuration limits the number of remote blocks being fetched from a given " +
-        " host port at any given point. When external shuffle is enabled and a large number of " +
-        " blocks are being requested from a given node in a single fetch or simultaneously, this " +
-        " could crash the Node Manager under increased load. You can mitigate this issue by " +
-        " setting it to a lower value.")
+      .doc("This configuration limits the number of remote blocks being fetched per reduce task" +
+        " from a given host port. When a large number of blocks are being requested from a given" +
+        " address in a single fetch or simultaneously, this could crash the serving executor or" +
+        " Node Manager. This is especially useful to reduce the load on the Node Manager when" +
+        "external shuffle is enabled. You can mitigate the issue by setting it to a lower value.")
       .intConf
       .checkValue(_ > 0, "The max no. of blocks in flight cannot be non-positive.")
       .createWithDefault(Int.MaxValue)
