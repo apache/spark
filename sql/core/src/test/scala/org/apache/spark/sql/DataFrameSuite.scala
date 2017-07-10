@@ -188,7 +188,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           df1.unionByName(df2)
         }.getMessage
         assert(errMsg.contains("Found duplicate column(s) in the left attributes:"))
-            df1 = Seq((1, 1)).toDF("c0", "c1")
+        df1 = Seq((1, 1)).toDF("c0", "c1")
         df2 = Seq((1, 1)).toDF(c0, c1)
         errMsg = intercept[AnalysisException] {
           df1.unionByName(df2)
