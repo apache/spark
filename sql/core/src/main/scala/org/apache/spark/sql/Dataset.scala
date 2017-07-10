@@ -21,7 +21,6 @@ import java.io.CharArrayWriter
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -53,6 +52,7 @@ import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
@@ -1765,14 +1765,15 @@ class Dataset[T] private[sql](
     val resolver = sparkSession.sessionState.analyzer.resolver
     val leftOutputAttrs = logicalPlan.output
     val rightOutputAttrs = other.logicalPlan.output
-    // SchemaUtils.checkColumnNameDuplication(
-    //   leftOutputAttrs.map(_.name),
-    //   "in the left attributes",
-    //   sparkSession.sessionState.conf.caseSensitiveAnalysis)
-    // SchemaUtils.checkColumnNameDuplication(
-    //   rightOutputAttrs.map(_.name),
-    //   "in the right attributes",
-    //   sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
+    SchemaUtils.checkColumnNameDuplication(
+      leftOutputAttrs.map(_.name),
+      "in the left attributes",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    SchemaUtils.checkColumnNameDuplication(
+      rightOutputAttrs.map(_.name),
+      "in the right attributes",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     // Builds a project list for `other` based on `logicalPlan` output names
     val rightProjectList = leftOutputAttrs.map { lattr =>
