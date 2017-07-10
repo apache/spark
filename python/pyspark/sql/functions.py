@@ -1883,14 +1883,19 @@ def from_json(col, schema, options={}):
     string.
 
     :param col: string column in json format
-    :param schema: a StructType or ArrayType of StructType to use when parsing the json column
+    :param schema: a StructType or ArrayType of StructType to use when parsing the json column.
     :param options: options to control parsing. accepts the same options as the json datasource
+
+    .. note:: Since Spark 2.3, the DDL-formatted string or a JSON format string is also
+              supported for ``schema``.
 
     >>> from pyspark.sql.types import *
     >>> data = [(1, '''{"a": 1}''')]
     >>> schema = StructType([StructField("a", IntegerType())])
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=1))]
+    >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
     [Row(json=Row(a=1))]
     >>> data = [(1, '''[{"a": 1}]''')]
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
@@ -1900,7 +1905,9 @@ def from_json(col, schema, options={}):
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.from_json(_to_java_column(col), schema.json(), options)
+    if isinstance(schema, DataType):
+        schema = schema.json()
+    jc = sc._jvm.functions.from_json(_to_java_column(col), schema, options)
     return Column(jc)
 
 
