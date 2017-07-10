@@ -1246,6 +1246,31 @@ class SQLTests(ReusedPySparkTestCase):
         with self.assertRaises(TypeError):
             not_a_field = struct1[9.9]
 
+    def test_parse_datatype_string(self):
+        from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
+        for k, t in _all_atomic_types.items():
+            if t != NullType:
+                self.assertEqual(t(), _parse_datatype_string(k))
+        self.assertEqual(IntegerType(), _parse_datatype_string("int"))
+        self.assertEqual(DecimalType(1, 1), _parse_datatype_string("decimal(1  ,1)"))
+        self.assertEqual(DecimalType(10, 1), _parse_datatype_string("decimal( 10,1 )"))
+        self.assertEqual(DecimalType(11, 1), _parse_datatype_string("decimal(11,1)"))
+        self.assertEqual(
+            ArrayType(IntegerType()),
+            _parse_datatype_string("array<int >"))
+        self.assertEqual(
+            MapType(IntegerType(), DoubleType()),
+            _parse_datatype_string("map< int, double  >"))
+        self.assertEqual(
+            StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
+            _parse_datatype_string("struct<a:int, c:double >"))
+        self.assertEqual(
+            StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
+            _parse_datatype_string("a:int, c:double"))
+        self.assertEqual(
+            StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
+            _parse_datatype_string("a INT, c DOUBLE"))
+
     def test_metadata_null(self):
         from pyspark.sql.types import StructType, StringType, StructField
         schema = StructType([StructField("f1", StringType(), True, None),
