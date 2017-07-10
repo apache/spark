@@ -141,7 +141,7 @@ package object config {
     .createWithDefaultString("1s")
 
   private[spark] val CLIENT_LAUNCH_MONITOR_INTERVAL =
-    ConfigBuilder("spark.yarn.am.launchMonitorInterval")
+    ConfigBuilder("spark.yarn.clientLaunchMonitorInterval")
       .doc("Interval between requests for status the client mode AM when starting the app.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1s")
