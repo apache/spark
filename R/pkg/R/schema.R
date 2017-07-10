@@ -23,8 +23,9 @@
 #' Create a structType object that contains the metadata for a SparkDataFrame. Intended for
 #' use with createDataFrame and toDF.
 #'
-#' @param x a structField object (created with the field() function). Since Spark 2.3, the
-#'          DDL-formatted string is also supported.
+#' @param x a structField object (created with the \code{structField} method). Since Spark 2.3,
+#'          this can be a DDL-formatted string, which is a comma separated list of field
+#'          definitions, e.g., "a INT, b STRING".
 #' @param ... additional structField objects
 #' @return a structType object
 #' @rdname structType
@@ -79,6 +80,9 @@ structType.structField <- function(x, ...) {
 structType.character <- function(x, ...) {
   if (!is.character(x)) {
     stop("schema must be a DDL-formatted string.")
+  }
+  if (length(list(...)) > 0) {
+    stop("multiple DDL-formatted strings are not supported")
   }
 
   stObj <- handledCallJStatic("org.apache.spark.sql.types.StructType",
