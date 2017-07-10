@@ -82,6 +82,19 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("analyze empty table") {
+    val table = "emptyTable"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (key STRING, value STRING) USING PARQUET")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS noscan")
+      val fetchedStats1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+      assert(fetchedStats1.get.sizeInBytes == 0)
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+      val fetchedStats2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+      assert(fetchedStats2.get.sizeInBytes == 0)
+    }
+  }
+
   test("analyze column command - unsupported types and invalid columns") {
     val tableName = "column_stats_test1"
     withTable(tableName) {
