@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -247,32 +248,34 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
     assert(expectedSchema == spark.table("tableWithSchema").schema)
 
-    checkAnswer(
-      sql(
-        """SELECT
-          | `string$%Field`,
-          | cast(binaryField as string),
-          | booleanField,
-          | byteField,
-          | shortField,
-          | int_Field,
-          | `longField_:,<>=+/~^`,
-          | floatField,
-          | doubleField,
-          | decimalField1,
-          | decimalField2,
-          | dateField,
-          | timestampField,
-          | varcharField,
-          | charField,
-          | arrayFieldSimple,
-          | arrayFieldComplex,
-          | mapFieldSimple,
-          | mapFieldComplex,
-          | structFieldSimple,
-          | structFieldComplex FROM tableWithSchema""".stripMargin),
-      tableWithSchemaExpected
-    )
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+        checkAnswer(
+          sql(
+            """SELECT
+            | `string$%Field`,
+            | cast(binaryField as string),
+            | booleanField,
+            | byteField,
+            | shortField,
+            | int_Field,
+            | `longField_:,<>=+/~^`,
+            | floatField,
+            | doubleField,
+            | decimalField1,
+            | decimalField2,
+            | dateField,
+            | timestampField,
+            | varcharField,
+            | charField,
+            | arrayFieldSimple,
+            | arrayFieldComplex,
+            | mapFieldSimple,
+            | mapFieldComplex,
+            | structFieldSimple,
+            | structFieldComplex FROM tableWithSchema""".stripMargin),
+        tableWithSchemaExpected
+      )
+    }
   }
 
   sqlTest(
@@ -281,7 +284,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   sqlTest(
     "SELECT `string$%Field` FROM tableWithSchema",
-    (1 to 10).map(i => Row(s"str_$i")).toSeq)
+    (1 to 10).map(i => Row(s"str_$i")).toSeq, "false")
 
   sqlTest(
     "SELECT int_Field FROM tableWithSchema WHERE int_Field < 5",
@@ -289,7 +292,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   sqlTest(
     "SELECT `longField_:,<>=+/~^` * 2 FROM tableWithSchema",
-    (1 to 10).map(i => Row(i * 2.toLong)).toSeq)
+    (1 to 10).map(i => Row(i * 2.toLong)).toSeq, "false")
 
   sqlTest(
     "SELECT structFieldSimple.key, arrayFieldSimple[1] FROM tableWithSchema a where int_Field=1",
@@ -297,7 +300,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   sqlTest(
     "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",
-    (1 to 10).map(i => Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))).toSeq)
+    (1 to 10).map(i => Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))).toSeq, "false")
 
   test("Caching")  {
     // Cached Query Execution

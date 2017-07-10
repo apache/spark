@@ -1,3 +1,5 @@
+set spark.sql.parser.quotedRegexColumnNames=false;
+
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, "1", "11"), (2, "2", "22"), (3, "3", "33"), (4, "4", "44"), (5, "5", "55"), (6, "6", "66")
 AS testData(key, value1, value2);
