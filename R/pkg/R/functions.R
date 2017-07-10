@@ -2174,8 +2174,9 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'
 #' @rdname column_collection_functions
 #' @param schema a structType object to use as the schema to use when parsing the JSON string.
+#'               Since Spark 2.3, the DDL-formatted string is also supported for the schema.
 #' @param as.json.array indicating if input string is JSON array of objects or a single object.
-#' @aliases from_json from_json,Column,structType-method
+#' @aliases from_json from_json,Column,characterOrstructType-method
 #' @export
 #' @examples
 #'
@@ -2188,10 +2189,15 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' df2 <- sql("SELECT named_struct('name', 'Bob') as people")
 #' df2 <- mutate(df2, people_json = to_json(df2$people))
 #' schema <- structType(structField("name", "string"))
-#' head(select(df2, from_json(df2$people_json, schema)))}
+#' head(select(df2, from_json(df2$people_json, schema)))
+#' head(select(df2, from_json(df2$people_json, "name STRING")))}
 #' @note from_json since 2.2.0
-setMethod("from_json", signature(x = "Column", schema = "structType"),
+setMethod("from_json", signature(x = "Column", schema = "characterOrstructType"),
           function(x, schema, as.json.array = FALSE, ...) {
+            if (is.character(schema)) {
+              schema <- structType(schema)
+            }
+
             if (as.json.array) {
               jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
                                      "createArrayType",
