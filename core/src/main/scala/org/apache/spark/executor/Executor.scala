@@ -57,6 +57,12 @@ private[spark] class Executor(
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
+  // WQF, load FPGA engine library
+  logWarning("### loading sql engine library ...");
+  logWarning(System.getProperty("java.library.path"));
+  System.loadLibrary("sqlengine");
+
+
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()

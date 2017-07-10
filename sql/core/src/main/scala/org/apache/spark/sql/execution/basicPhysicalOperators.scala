@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
+import org.apache.spark.sql.sqlEngine.FpgaSqlEngine
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -196,11 +197,13 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   def mockGetByteBuffer(size: Int): ByteBuffer = {
-    ByteBuffer.allocate(10000)
+//    ByteBuffer.allocate(10000)
+    FpgaSqlEngine.getBuf(10000)
   }
 
   def mockFPGA(input: ByteBuffer): ByteBuffer = {
-    input
+//    input
+    FpgaSqlEngine.project(input)
   }
 
 
