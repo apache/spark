@@ -626,8 +626,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private void moveOver(UnsafeSorterIterator iter, int steps)
       throws IOException {
     if (steps > 0) {
-      for (int i = 0; i < steps && iter.hasNext(); i++) {
-        iter.loadNext();
+      for (int i = 0; i < steps; i++) {
+        if (iter.hasNext()) {
+          iter.loadNext();
+        } else {
+          throw new ArrayIndexOutOfBoundsException("Failed to move the iterator " + steps +
+            " steps forward");
+        }
       }
     }
   }
