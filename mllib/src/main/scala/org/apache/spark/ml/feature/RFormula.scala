@@ -27,7 +27,7 @@ import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineS
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators}
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
+import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasHandleInvalid, HasLabelCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types._
@@ -108,7 +108,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
 @Experimental
 @Since("1.5.0")
 class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
-  extends Estimator[RFormulaModel] with RFormulaBase with DefaultParamsWritable {
+  extends Estimator[RFormulaModel] with RFormulaBase with HasHandleInvalid
+    with DefaultParamsWritable {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("rFormula"))
@@ -141,8 +142,8 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
    * @group param
    */
   @Since("2.3.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "How to handle " +
-    "invalid data (unseen labels or NULL values). " +
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "How to handle invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
     ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
@@ -151,10 +152,6 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   /** @group setParam */
   @Since("2.3.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
-
-  /** @group getParam */
-  @Since("2.3.0")
-  def getHandleInvalid: String = $(handleInvalid)
 
   /** @group setParam */
   @Since("1.5.0")

@@ -67,7 +67,7 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("handleInvalid", "how to handle invalid entries. Options are skip (which " +
         "will filter out rows with bad values), or error (which will throw an error). More " +
         "options may be added later",
-        isValid = "ParamValidators.inArray(Array(\"skip\", \"error\"))"),
+        isValid = "ParamValidators.inArray(Array(\"skip\", \"error\"))", finalFields = false),
       ParamDesc[Boolean]("standardization", "whether to standardize the training features" +
         " before fitting the model", Some("true")),
       ParamDesc[Long]("seed", "random seed", Some("this.getClass.getName.hashCode.toLong")),
