@@ -99,7 +99,6 @@ object TPCDSQueryBenchmark {
   }
 
   def main(args: Array[String]): Unit = {
-
     if (args.length < 1) {
       // scalastyle:off println
       println(
