@@ -139,20 +139,24 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-21344: BinaryType comparison does signed byte array comparison") {
-    val b1 = Array[Byte](1)   // 0x01
-    val b2 = Array[Byte](-1)  // 0xff
-
-    val rowOrdering = InterpretedOrdering.forSchema(Seq(BinaryType, BinaryType))
-    val genOrdering = GenerateOrdering.generate(
-      BoundReference(0, BinaryType, nullable = true).asc ::
-        BoundReference(1, BinaryType, nullable = true).asc :: Nil)
-    val rowType = StructType(
-      StructField("b1", BinaryType, nullable = true) ::
-        StructField("b2", BinaryType, nullable = true) :: Nil)
-    val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
-    val rowB1 = toCatalyst(Row(b1)).asInstanceOf[InternalRow]
-    val rowB2 = toCatalyst(Row(b2)).asInstanceOf[InternalRow]
-    assert(rowOrdering.compare(rowB1, rowB2) < 0)
-    assert(genOrdering.compare(rowB1, rowB2) < 0)
+    val data = Seq(
+      (Array[Byte](1), Array[Byte](-1)),
+      (Array[Byte](1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, -1)),
+      (Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, -1))
+      )
+    data.foreach { case (b1, b2) =>
+      val rowOrdering = InterpretedOrdering.forSchema(Seq(BinaryType, BinaryType))
+      val genOrdering = GenerateOrdering.generate(
+        BoundReference(0, BinaryType, nullable = true).asc ::
+          BoundReference(1, BinaryType, nullable = true).asc :: Nil)
+      val rowType = StructType(
+        StructField("b1", BinaryType, nullable = true) ::
+          StructField("b2", BinaryType, nullable = true) :: Nil)
+      val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
+      val rowB1 = toCatalyst(Row(b1)).asInstanceOf[InternalRow]
+      val rowB2 = toCatalyst(Row(b2)).asInstanceOf[InternalRow]
+      assert(rowOrdering.compare(rowB1, rowB2) < 0)
+      assert(genOrdering.compare(rowB1, rowB2) < 0)
+    }
   }
 }
