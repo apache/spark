@@ -60,10 +60,10 @@ case class AnalyzeTableCommand(
     }
 
     def updateTableStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
-      val oldTotalSize = catalogTable.stats.map(_.sizeInBytes.toLong).getOrElse(0L)
+      val oldTotalSize = catalogTable.stats.map(_.sizeInBytes.toLong).getOrElse(-1L)
       val oldRowCount = catalogTable.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
       var newStats: Option[Statistics] = None
-      if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+      if (newTotalSize >= 0 && newTotalSize != oldTotalSize) {
         newStats = Some(Statistics(sizeInBytes = newTotalSize))
       }
       // We only set rowCount when noscan is false, because otherwise:
