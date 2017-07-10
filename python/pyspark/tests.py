@@ -1032,7 +1032,7 @@ class RDDTests(ReusedPySparkTestCase):
 
         repartitioned = rdd.repartitionAndSortWithinPartitions(2, lambda key: key % 2, False)
         partitions = repartitioned.glom().collect()
-        self.assertEqual(partitions[0], [(2, 6), (0, 8), (0, 5)])
+        self.assertEqual(partitions[0], [(2, 6), (0, 5), (0, 8)])
         self.assertEqual(partitions[1], [(3, 8), (3, 8), (1, 3)])
 
     def test_repartition_no_skewed(self):
