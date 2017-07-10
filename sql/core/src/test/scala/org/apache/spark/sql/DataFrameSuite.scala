@@ -770,7 +770,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val fooE = intercept[IllegalArgumentException] {
       person2.summary("foo")
     }
-    assert(fooE.getMessage === "requirement failed: foo is not a recognised statistic")
+    assert(fooE.getMessage === "foo is not a recognised statistic")
 
     val parseE = intercept[IllegalArgumentException] {
       person2.summary("foo%")
