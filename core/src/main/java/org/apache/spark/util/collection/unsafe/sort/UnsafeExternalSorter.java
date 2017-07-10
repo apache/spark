@@ -601,7 +601,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     if (spillWriters.isEmpty()) {
       assert(inMemSorter != null);
       UnsafeSorterIterator iter = inMemSorter.getSortedIterator();
-      moveOver(iter, 0, startIndex);
+      moveOver(iter, startIndex);
       return iter;
     } else {
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
@@ -611,24 +611,24 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           i += spillWriter.recordsSpilled();
         } else {
           UnsafeSorterIterator iter = spillWriter.getReader(serializerManager);
-          moveOver(iter, i, startIndex);
+          moveOver(iter, startIndex - i);
           queue.add(iter);
           i += spillWriter.recordsSpilled();
         }
       }
       if (inMemSorter != null) {
         UnsafeSorterIterator iter = inMemSorter.getSortedIterator();
-        moveOver(iter, i, startIndex);
+        moveOver(iter, startIndex - i);
         queue.add(iter);
       }
       return new ChainedIterator(queue);
     }
   }
 
-  private void moveOver(UnsafeSorterIterator iter, int currentIndex, int targetIndex)
+  private void moveOver(UnsafeSorterIterator iter, int steps)
       throws IOException {
-    if (currentIndex < targetIndex) {
-      for (int i = currentIndex; i < targetIndex && iter.hasNext(); i++) {
+    if (steps > 0) {
+      for (int i = 0; i < steps && iter.hasNext(); i++) {
         iter.loadNext();
       }
     }
