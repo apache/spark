@@ -116,3 +116,13 @@ class Model(Transformer):
     """
 
     __metaclass__ = ABCMeta
+
+@inherit_doc
+class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
+
+    def __init__(self, input, output, datatype):
+        self.in = in
+        self.out = out
+        self.type = datatype
+
+
