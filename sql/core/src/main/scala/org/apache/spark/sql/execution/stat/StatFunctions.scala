@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.stat
 
+import java.util.Locale
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -248,18 +250,15 @@ object StatFunctions extends Logging {
           GetArrayItem(
             new ApproximatePercentile(child, Literal.create(percentiles)).toAggregateExpression(),
             Literal(index))
-      } else if (stats == "count") {
-        (child: Expression) => Count(child).toAggregateExpression()
-      } else if (stats == "mean") {
-        (child: Expression) => Average(child).toAggregateExpression()
-      } else if (stats == "stddev") {
-        (child: Expression) => StddevSamp(child).toAggregateExpression()
-      } else if (stats == "min") {
-        (child: Expression) => Min(child).toAggregateExpression()
-      } else if (stats == "max") {
-        (child: Expression) => Max(child).toAggregateExpression()
       } else {
-        throw new IllegalArgumentException(s"$stats is not a recognised statistic")
+        stats.toLowerCase(Locale.ROOT) match {
+          case "count" => (child: Expression) => Count(child).toAggregateExpression()
+          case "mean" => (child: Expression) => Average(child).toAggregateExpression()
+          case "stddev" => (child: Expression) => StddevSamp(child).toAggregateExpression()
+          case "min" => (child: Expression) => Min(child).toAggregateExpression()
+          case "max" => (child: Expression) => Max(child).toAggregateExpression()
+          case _ => throw new IllegalArgumentException(s"$stats is not a recognised statistic")
+        }
       }
     }
 
