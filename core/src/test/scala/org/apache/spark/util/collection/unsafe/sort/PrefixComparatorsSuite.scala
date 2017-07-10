@@ -63,7 +63,9 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
 
      def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
       for (i <- 0 until x.length; if i < y.length) {
-        val res = x(i).compare(y(i))
+        val v1 = x(i) & 0xff
+        val v2 = y(i) & 0xff
+        val res = v1 - v2
         if (res != 0) return res
       }
       x.length - y.length
