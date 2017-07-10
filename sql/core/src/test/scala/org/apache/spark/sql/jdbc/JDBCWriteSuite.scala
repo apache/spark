@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -478,7 +479,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       }.getMessage()
       assert(msg.contains(
-        "Found duplicate column(s) in createTableColumnTypes option value: name, NaMe"))
+        "Found duplicate column(s) in the createTableColumnTypes option value: `name`"))
     }
   }
 
@@ -505,5 +506,12 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       assert(msg.contains("createTableColumnTypes option column Name not found in " +
         "schema struct<name:string,id:int>"))
     }
+  }
+
+  test("SPARK-19726: INSERT null to a NOT NULL column") {
+    val e = intercept[SparkException] {
+      sql("INSERT INTO PEOPLE1 values (null, null)")
+    }.getMessage
+    assert(e.contains("NULL not allowed for column \"NAME\""))
   }
 }

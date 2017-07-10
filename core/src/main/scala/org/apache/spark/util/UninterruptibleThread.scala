@@ -55,9 +55,6 @@ private[spark] class UninterruptibleThread(
    * Run `f` uninterruptibly in `this` thread. The thread won't be interrupted before returning
    * from `f`.
    *
-   * If this method finds that `interrupt` is called before calling `f` and it's not inside another
-   * `runUninterruptibly`, it will throw `InterruptedException`.
-   *
    * Note: this method should be called only in `this` thread.
    */
   def runUninterruptibly[T](f: => T): T = {
@@ -73,12 +70,7 @@ private[spark] class UninterruptibleThread(
 
     uninterruptibleLock.synchronized {
       // Clear the interrupted status if it's set.
-      if (Thread.interrupted() || shouldInterruptThread) {
-        shouldInterruptThread = false
-        // Since it's interrupted, we don't need to run `f` which may be a long computation.
-        // Throw InterruptedException as we don't have a T to return.
-        throw new InterruptedException()
-      }
+      shouldInterruptThread = Thread.interrupted() || shouldInterruptThread
       uninterruptible = true
     }
     try {

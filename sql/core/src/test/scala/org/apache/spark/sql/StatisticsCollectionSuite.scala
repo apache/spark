@@ -17,19 +17,12 @@
 
 package org.apache.spark.sql
 
-import java.{lang => jl}
-import java.sql.{Date, Timestamp}
-
 import scala.collection.mutable
-import scala.util.Random
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.internal.StaticSQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
 
@@ -55,6 +48,50 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
       assert(sizes.head === BigInt(96),
         s"expected exact size 96 for table 'test', got: ${sizes.head}")
+    }
+  }
+
+  test("analyzing views is not supported") {
+    def assertAnalyzeUnsupported(analyzeCommand: String): Unit = {
+      val err = intercept[AnalysisException] {
+        sql(analyzeCommand)
+      }
+      assert(err.message.contains("ANALYZE TABLE is not supported"))
+    }
+
+    val tableName = "tbl"
+    withTable(tableName) {
+      spark.range(10).write.saveAsTable(tableName)
+      val viewName = "view"
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName AS SELECT * FROM $tableName")
+        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+      }
+    }
+  }
+
+  test("statistics collection of a table with zero column") {
+    val table_no_cols = "table_no_cols"
+    withTable(table_no_cols) {
+      val rddNoCols = sparkContext.parallelize(1 to 10).map(_ => Row.empty)
+      val dfNoCols = spark.createDataFrame(rddNoCols, StructType(Seq.empty))
+      dfNoCols.write.format("json").saveAsTable(table_no_cols)
+      sql(s"ANALYZE TABLE $table_no_cols COMPUTE STATISTICS")
+      checkTableStats(table_no_cols, hasSizeInBytes = true, expectedRowCounts = Some(10))
+    }
+  }
+
+  test("analyze empty table") {
+    val table = "emptyTable"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (key STRING, value STRING) USING PARQUET")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS noscan")
+      val fetchedStats1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+      assert(fetchedStats1.get.sizeInBytes == 0)
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+      val fetchedStats2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+      assert(fetchedStats2.get.sizeInBytes == 0)
     }
   }
 
@@ -178,188 +215,64 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("change stats after set location command") {
     val table = "change_stats_set_location_table"
-    withTable(table) {
-      spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
-      val fetched1 = checkTableStats(
-        table, hasSizeInBytes = true, expectedRowCounts = Some(100))
-      assert(fetched1.get.sizeInBytes > 0)
-      assert(fetched1.get.colStats.size == 2)
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+        withTable(table) {
+          spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
+          // analyze to get initial stats
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
+          val fetched1 = checkTableStats(
+            table, hasSizeInBytes = true, expectedRowCounts = Some(100))
+          assert(fetched1.get.sizeInBytes > 0)
+          assert(fetched1.get.colStats.size == 2)
 
-      // set location command
-      withTempDir { newLocation =>
-        sql(s"ALTER TABLE $table SET LOCATION '${newLocation.toURI.toString}'")
-        checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+          // set location command
+          val initLocation = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
+            .storage.locationUri.get.toString
+          withTempDir { newLocation =>
+            sql(s"ALTER TABLE $table SET LOCATION '${newLocation.toURI.toString}'")
+            if (autoUpdate) {
+              val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+              assert(fetched2.get.sizeInBytes == 0)
+              assert(fetched2.get.colStats.isEmpty)
+
+              // set back to the initial location
+              sql(s"ALTER TABLE $table SET LOCATION '$initLocation'")
+              val fetched3 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+              assert(fetched3.get.sizeInBytes == fetched1.get.sizeInBytes)
+            } else {
+              checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+            }
+          }
+        }
       }
     }
   }
 
   test("change stats after insert command for datasource table") {
     val table = "change_stats_insert_datasource_table"
-    withTable(table) {
-      sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched1.get.sizeInBytes == 0)
-      assert(fetched1.get.colStats.size == 2)
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
+          // analyze to get initial stats
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS i, j")
+          val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
+          assert(fetched1.get.sizeInBytes == 0)
+          assert(fetched1.get.colStats.size == 2)
 
-      // insert into command
-      sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
-      checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
-    }
-  }
-
-}
-
-
-/**
- * The base for test cases that we want to include in both the hive module (for verifying behavior
- * when using the Hive external catalog) as well as in the sql/core module.
- */
-abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils {
-  import testImplicits._
-
-  private val dec1 = new java.math.BigDecimal("1.000000000000000000")
-  private val dec2 = new java.math.BigDecimal("8.000000000000000000")
-  private val d1 = Date.valueOf("2016-05-08")
-  private val d2 = Date.valueOf("2016-05-09")
-  private val t1 = Timestamp.valueOf("2016-05-08 00:00:01")
-  private val t2 = Timestamp.valueOf("2016-05-09 00:00:02")
-
-  /**
-   * Define a very simple 3 row table used for testing column serialization.
-   * Note: last column is seq[int] which doesn't support stats collection.
-   */
-  protected val data = Seq[
-    (jl.Boolean, jl.Byte, jl.Short, jl.Integer, jl.Long,
-      jl.Double, jl.Float, java.math.BigDecimal,
-      String, Array[Byte], Date, Timestamp,
-      Seq[Int])](
-    (false, 1.toByte, 1.toShort, 1, 1L, 1.0, 1.0f, dec1, "s1", "b1".getBytes, d1, t1, null),
-    (true, 2.toByte, 3.toShort, 4, 5L, 6.0, 7.0f, dec2, "ss9", "bb0".getBytes, d2, t2, null),
-    (null, null, null, null, null, null, null, null, null, null, null, null, null)
-  )
-
-  /** A mapping from column to the stats collected. */
-  protected val stats = mutable.LinkedHashMap(
-    "cbool" -> ColumnStat(2, Some(false), Some(true), 1, 1, 1),
-    "cbyte" -> ColumnStat(2, Some(1.toByte), Some(2.toByte), 1, 1, 1),
-    "cshort" -> ColumnStat(2, Some(1.toShort), Some(3.toShort), 1, 2, 2),
-    "cint" -> ColumnStat(2, Some(1), Some(4), 1, 4, 4),
-    "clong" -> ColumnStat(2, Some(1L), Some(5L), 1, 8, 8),
-    "cdouble" -> ColumnStat(2, Some(1.0), Some(6.0), 1, 8, 8),
-    "cfloat" -> ColumnStat(2, Some(1.0f), Some(7.0f), 1, 4, 4),
-    "cdecimal" -> ColumnStat(2, Some(Decimal(dec1)), Some(Decimal(dec2)), 1, 16, 16),
-    "cstring" -> ColumnStat(2, None, None, 1, 3, 3),
-    "cbinary" -> ColumnStat(2, None, None, 1, 3, 3),
-    "cdate" -> ColumnStat(2, Some(DateTimeUtils.fromJavaDate(d1)),
-      Some(DateTimeUtils.fromJavaDate(d2)), 1, 4, 4),
-    "ctimestamp" -> ColumnStat(2, Some(DateTimeUtils.fromJavaTimestamp(t1)),
-      Some(DateTimeUtils.fromJavaTimestamp(t2)), 1, 8, 8)
-  )
-
-  private val randomName = new Random(31)
-
-  def checkTableStats(
-      tableName: String,
-      hasSizeInBytes: Boolean,
-      expectedRowCounts: Option[Int]): Option[CatalogStatistics] = {
-    val stats = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).stats
-    if (hasSizeInBytes || expectedRowCounts.nonEmpty) {
-      assert(stats.isDefined)
-      assert(stats.get.sizeInBytes >= 0)
-      assert(stats.get.rowCount === expectedRowCounts)
-    } else {
-      assert(stats.isEmpty)
-    }
-
-    stats
-  }
-
-  /**
-   * Compute column stats for the given DataFrame and compare it with colStats.
-   */
-  def checkColStats(
-      df: DataFrame,
-      colStats: mutable.LinkedHashMap[String, ColumnStat]): Unit = {
-    val tableName = "column_stats_test_" + randomName.nextInt(1000)
-    withTable(tableName) {
-      df.write.saveAsTable(tableName)
-
-      // Collect statistics
-      sql(s"analyze table $tableName compute STATISTICS FOR COLUMNS " +
-        colStats.keys.mkString(", "))
-
-      // Validate statistics
-      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
-      assert(table.stats.isDefined)
-      assert(table.stats.get.colStats.size == colStats.size)
-
-      colStats.foreach { case (k, v) =>
-        withClue(s"column $k") {
-          assert(table.stats.get.colStats(k) == v)
+          // insert into command
+          sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
+          if (autoUpdate) {
+            val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+            assert(fetched2.get.sizeInBytes > 0)
+            assert(fetched2.get.colStats.isEmpty)
+          } else {
+            checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+          }
         }
       }
     }
   }
 
-  // This test will be run twice: with and without Hive support
-  test("SPARK-18856: non-empty partitioned table should not report zero size") {
-    withTable("ds_tbl", "hive_tbl") {
-      spark.range(100).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("ds_tbl")
-      val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats
-      assert(stats.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
-
-      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
-        sql("CREATE TABLE hive_tbl(i int) PARTITIONED BY (j int)")
-        sql("INSERT INTO hive_tbl PARTITION(j=1) SELECT 1")
-        val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.stats
-        assert(stats2.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
-      }
-    }
-  }
-
-  // This test will be run twice: with and without Hive support
-  test("conversion from CatalogStatistics to Statistics") {
-    withTable("ds_tbl", "hive_tbl") {
-      // Test data source table
-      checkStatsConversion(tableName = "ds_tbl", isDatasourceTable = true)
-      // Test hive serde table
-      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
-        checkStatsConversion(tableName = "hive_tbl", isDatasourceTable = false)
-      }
-    }
-  }
-
-  private def checkStatsConversion(tableName: String, isDatasourceTable: Boolean): Unit = {
-    // Create an empty table and run analyze command on it.
-    val createTableSql = if (isDatasourceTable) {
-      s"CREATE TABLE $tableName (c1 INT, c2 STRING) USING PARQUET"
-    } else {
-      s"CREATE TABLE $tableName (c1 INT, c2 STRING)"
-    }
-    sql(createTableSql)
-    // Analyze only one column.
-    sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
-    val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
-      case catalogRel: CatalogRelation => (catalogRel, catalogRel.tableMeta)
-      case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
-    }.head
-    val emptyColStat = ColumnStat(0, None, None, 0, 4, 4)
-    // Check catalog statistics
-    assert(catalogTable.stats.isDefined)
-    assert(catalogTable.stats.get.sizeInBytes == 0)
-    assert(catalogTable.stats.get.rowCount == Some(0))
-    assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
-
-    // Check relation statistics
-    assert(relation.stats.sizeInBytes == 0)
-    assert(relation.stats.rowCount == Some(0))
-    assert(relation.stats.attributeStats.size == 1)
-    val (attribute, colStat) = relation.stats.attributeStats.head
-    assert(attribute.name == "c1")
-    assert(colStat == emptyColStat)
-  }
 }

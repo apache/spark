@@ -33,7 +33,7 @@ import org.scalatest.PrivateMethodTester
 import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.shuffle.BlockFetchingListener
+import org.apache.spark.network.shuffle.{BlockFetchingListener, TempShuffleFileManager}
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.Utils
@@ -437,12 +437,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val remoteBlocks = Map[BlockId, ManagedBuffer](
       ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer())
     val transfer = mock(classOf[BlockTransferService])
-    var shuffleFiles: Array[File] = null
+    var tempShuffleFileManager: TempShuffleFileManager = null
     when(transfer.fetchBlocks(any(), any(), any(), any(), any(), any()))
       .thenAnswer(new Answer[Unit] {
         override def answer(invocation: InvocationOnMock): Unit = {
           val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
-          shuffleFiles = invocation.getArguments()(5).asInstanceOf[Array[File]]
+          tempShuffleFileManager = invocation.getArguments()(5).asInstanceOf[TempShuffleFileManager]
           Future {
             listener.onBlockFetchSuccess(
               ShuffleBlockId(0, 0, 0).toString, remoteBlocks(ShuffleBlockId(0, 0, 0)))
@@ -472,13 +472,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     fetchShuffleBlock(blocksByAddress1)
     // `maxReqSizeShuffleToMem` is 200, which is greater than the block size 100, so don't fetch
     // shuffle block to disk.
-    assert(shuffleFiles === null)
+    assert(tempShuffleFileManager == null)
 
     val blocksByAddress2 = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (remoteBmId, remoteBlocks.keys.map(blockId => (blockId, 300L)).toSeq))
     fetchShuffleBlock(blocksByAddress2)
     // `maxReqSizeShuffleToMem` is 200, which is smaller than the block size 300, so fetch
     // shuffle block to disk.
-    assert(shuffleFiles != null)
+    assert(tempShuffleFileManager != null)
   }
 }

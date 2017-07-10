@@ -551,6 +551,27 @@ class FeatureTests(SparkSessionTestCase):
         for i in range(0, len(expected)):
             self.assertTrue(all(observed[i]["features"].toArray() == expected[i]))
 
+    def test_string_indexer_handle_invalid(self):
+        df = self.spark.createDataFrame([
+            (0, "a"),
+            (1, "d"),
+            (2, None)], ["id", "label"])
+
+        si1 = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="keep",
+                            stringOrderType="alphabetAsc")
+        model1 = si1.fit(df)
+        td1 = model1.transform(df)
+        actual1 = td1.select("id", "indexed").collect()
+        expected1 = [Row(id=0, indexed=0.0), Row(id=1, indexed=1.0), Row(id=2, indexed=2.0)]
+        self.assertEqual(actual1, expected1)
+
+        si2 = si1.setHandleInvalid("skip")
+        model2 = si2.fit(df)
+        td2 = model2.transform(df)
+        actual2 = td2.select("id", "indexed").collect()
+        expected2 = [Row(id=0, indexed=0.0), Row(id=1, indexed=1.0)]
+        self.assertEqual(actual2, expected2)
+
 
 class HasInducedError(Params):
 
@@ -1269,6 +1290,20 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         model2 = glr.setLinkPower(-1.0).fit(df)
         self.assertTrue(np.allclose(model2.coefficients.toArray(), [-0.6667, 0.5], atol=1E-4))
         self.assertTrue(np.isclose(model2.intercept, 0.6667, atol=1E-4))
+
+    def test_offset(self):
+
+        df = self.spark.createDataFrame(
+            [(0.2, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
+             (0.5, 2.1, 0.5, Vectors.dense(1.0, 2.0)),
+             (0.9, 0.4, 1.0, Vectors.dense(2.0, 1.0)),
+             (0.7, 0.7, 0.0, Vectors.dense(3.0, 3.0))], ["label", "weight", "offset", "features"])
+
+        glr = GeneralizedLinearRegression(family="poisson", weightCol="weight", offsetCol="offset")
+        model = glr.fit(df)
+        self.assertTrue(np.allclose(model.coefficients.toArray(), [0.664647, -0.3192581],
+                                    atol=1E-4))
+        self.assertTrue(np.isclose(model.intercept, -1.561613, atol=1E-4))
 
 
 class FPGrowthTests(SparkSessionTestCase):

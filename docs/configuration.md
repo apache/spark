@@ -95,6 +95,13 @@ in the `spark-defaults.conf` file. A few configuration keys have been renamed si
 versions of Spark; in such cases, the older key names are still accepted, but take lower
 precedence than any instance of the newer key.
 
+Spark properties mainly can be divided into two kinds: one is related to deploy, like
+"spark.driver.memory", "spark.executor.instances", this kind of properties may not be affected when
+setting programmatically through `SparkConf` in runtime, or the behavior is depending on which
+cluster manager and deploy mode you choose, so it would be suggested to set through configuration
+file or `spark-submit` command line options; another is mainly related to Spark runtime control,
+like "spark.task.maxFailures", this kind of properties can be set in either way.
+
 ## Viewing Spark Properties
 
 The application web UI at `http://<driver>:4040` lists Spark properties in the "Environment" tab.
@@ -422,21 +429,21 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.files</code></td>
   <td></td>
   <td>
-    Comma-separated list of files to be placed in the working directory of each executor.
+    Comma-separated list of files to be placed in the working directory of each executor. Globs are allowed.
   </td>
 </tr>
 <tr>
   <td><code>spark.submit.pyFiles</code></td>
   <td></td>
   <td>
-    Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps.
+    Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps. Globs are allowed.
   </td>
 </tr>
 <tr>
   <td><code>spark.jars</code></td>
   <td></td>
   <td>
-    Comma-separated list of local jars to include on the driver and executor classpaths.
+    Comma-separated list of jars to include on the driver and executor classpaths. Globs are allowed.
   </td>
 </tr>
 <tr>
@@ -537,6 +544,14 @@ Apart from these, the following properties are also available, and may be useful
       requested from a given node in a single fetch or simultaneously, this could crash the
       Node Manager under increased load. You can mitigate this issue by setting it to a lower value.
     </td>
+  <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
+  <td>Long.MaxValue</td>
+  <td>
+    The blocks of a shuffle request will be fetched to disk when size of the request is above
+    this threshold. This is to avoid a giant request takes too much memory. We can enable this
+    config by setting a specific value(e.g. 200m). Note that this config can be enabled only when
+    the shuffle shuffle service is newer than Spark-2.2 or the shuffle service is disabled.
+  </td>
 </tr>
 <tr>
   <td><code>spark.shuffle.compress</code></td>
@@ -735,7 +750,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedJobs</code></td>
   <td>1000</td>
   <td>
-    How many jobs the Spark UI and status APIs remember before garbage collecting. 
+    How many jobs the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -743,7 +758,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedStages</code></td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI and status APIs remember before garbage collecting. 
+    How many stages the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -751,7 +766,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedTasks</code></td>
   <td>100000</td>
   <td>
-    How many tasks the Spark UI and status APIs remember before garbage collecting. 
+    How many tasks the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -1400,6 +1415,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
+  <td>10000</td>
+  <td>
+    Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
+    value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
+    driver using more memory.
+  </td>
+</tr>
+<tr>
   <td><code>spark.blacklist.enabled</code></td>
   <td>
     false
@@ -1485,8 +1509,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.blacklist.application.fetchFailure.enabled</code></td>
   <td>false</td>
   <td>
-    (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch 
-    failure happenes. If external shuffle service is enabled, then the whole node will be 
+    (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch
+    failure happenes. If external shuffle service is enabled, then the whole node will be
     blacklisted.
   </td>
 </tr>

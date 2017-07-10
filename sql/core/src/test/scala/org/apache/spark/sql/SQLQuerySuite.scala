@@ -2616,4 +2616,39 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException](sql("SELECT nvl(1, 2, 3)"))
     assert(e.message.contains("Invalid number of arguments"))
   }
+
+  test("SPARK-21228: InSet incorrect handling of structs") {
+    withTempView("A") {
+      // reduce this from the default of 10 so the repro query text is not too long
+      withSQLConf((SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "3")) {
+        // a relation that has 1 column of struct type with values (1,1), ..., (9, 9)
+        spark.range(1, 10).selectExpr("named_struct('a', id, 'b', id) as a")
+          .createOrReplaceTempView("A")
+        val df = sql(
+          """
+            |SELECT * from
+            | (SELECT MIN(a) as minA FROM A) AA -- this Aggregate will return UnsafeRows
+            | -- the IN will become InSet with a Set of GenericInternalRows
+            | -- a GenericInternalRow is never equal to an UnsafeRow so the query would
+            | -- returns 0 results, which is incorrect
+            | WHERE minA IN (NAMED_STRUCT('a', 1L, 'b', 1L), NAMED_STRUCT('a', 2L, 'b', 2L),
+            |   NAMED_STRUCT('a', 3L, 'b', 3L))
+          """.stripMargin)
+        checkAnswer(df, Row(Row(1, 1)))
+      }
+    }
+  }
+
+  test("SPARK-21335: support un-aliased subquery") {
+    withTempView("v") {
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
+      checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
+
+      val e = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)"))
+      assert(e.message ==
+        "cannot resolve '`v.i`' given input columns: [__auto_generated_subquery_name.i]")
+
+      checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+    }
+  }
 }

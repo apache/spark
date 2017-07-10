@@ -223,6 +223,12 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
       GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b), table("d"),
         Seq('a, 'b, 'sum.function('c).as("c"))))
+
+    val m = intercept[ParseException] {
+      parsePlan("SELECT a, b, count(distinct a, distinct b) as c FROM d GROUP BY a, b")
+    }.getMessage
+    assert(m.contains("extraneous input 'b'"))
+
   }
 
   test("limit") {
@@ -444,19 +450,6 @@ class PlanParserSuite extends AnalysisTest {
         |      (select id from t0)) as u_1
       """.stripMargin,
       plan.union(plan).union(plan).as("u_1").select('id))
-
-  }
-
-  test("aliased subquery") {
-    val errMsg = "The unaliased subqueries in the FROM clause are not supported"
-
-    assertEqual("select a from (select id as a from t0) tt",
-      table("t0").select('id.as("a")).as("tt").select('a))
-    intercept("select a from (select id as a from t0)", errMsg)
-
-    assertEqual("from (select id as a from t0) tt select a",
-      table("t0").select('id.as("a")).as("tt").select('a))
-    intercept("from (select id as a from t0) select a", errMsg)
   }
 
   test("scalar sub-query") {

@@ -28,8 +28,7 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Project, Union}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
@@ -663,13 +662,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
   }
 
-  test("describe") {
-    val describeTestData = Seq(
-      ("Bob", 16, 176),
-      ("Alice", 32, 164),
-      ("David", 60, 192),
-      ("Amy", 24, 180)).toDF("name", "age", "height")
+  private lazy val person2: DataFrame = Seq(
+    ("Bob", 16, 176),
+    ("Alice", 32, 164),
+    ("David", 60, 192),
+    ("Amy", 24, 180)).toDF("name", "age", "height")
 
+  test("describe") {
     val describeResult = Seq(
       Row("count", "4", "4", "4"),
       Row("mean", null, "33.0", "178.0"),
@@ -686,30 +685,97 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val describeTwoCols = describeTestData.describe("name", "age", "height")
-    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "name", "age", "height"))
-    checkAnswer(describeTwoCols, describeResult)
-    // All aggregate value should have been cast to string
-    describeTwoCols.collect().foreach { row =>
-      assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
-      assert(row.get(3).isInstanceOf[String], "expected string but found " + row.get(3).getClass)
-    }
-
-    val describeAllCols = describeTestData.describe()
+    val describeAllCols = person2.describe()
     assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeAllCols, describeResult)
+    // All aggregate value should have been cast to string
+    describeAllCols.collect().foreach { row =>
+      row.toSeq.foreach { value =>
+        if (value != null) {
+          assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+        }
+      }
+    }
 
-    val describeOneCol = describeTestData.describe("age")
+    val describeOneCol = person2.describe("age")
     assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
     checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d)} )
 
-    val describeNoCol = describeTestData.select("name").describe()
-    assert(getSchemaAsSeq(describeNoCol) === Seq("summary", "name"))
-    checkAnswer(describeNoCol, describeResult.map { case Row(s, n, _, _) => Row(s, n)} )
+    val describeNoCol = person2.select().describe()
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _, _) => Row(s)} )
 
-    val emptyDescription = describeTestData.limit(0).describe()
+    val emptyDescription = person2.limit(0).describe()
     assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptyDescribeResult)
+  }
+
+  test("summary") {
+    val summaryResult = Seq(
+      Row("count", "4", "4", "4"),
+      Row("mean", null, "33.0", "178.0"),
+      Row("stddev", null, "19.148542155126762", "11.547005383792516"),
+      Row("min", "Alice", "16", "164"),
+      Row("25%", null, "24.0", "176.0"),
+      Row("50%", null, "24.0", "176.0"),
+      Row("75%", null, "32.0", "180.0"),
+      Row("max", "David", "60", "192"))
+
+    val emptySummaryResult = Seq(
+      Row("count", "0", "0", "0"),
+      Row("mean", null, null, null),
+      Row("stddev", null, null, null),
+      Row("min", null, null, null),
+      Row("25%", null, null, null),
+      Row("50%", null, null, null),
+      Row("75%", null, null, null),
+      Row("max", null, null, null))
+
+    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
+
+    val summaryAllCols = person2.summary()
+
+    assert(getSchemaAsSeq(summaryAllCols) === Seq("summary", "name", "age", "height"))
+    checkAnswer(summaryAllCols, summaryResult)
+    // All aggregate value should have been cast to string
+    summaryAllCols.collect().foreach { row =>
+      row.toSeq.foreach { value =>
+        if (value != null) {
+          assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+        }
+      }
+    }
+
+    val summaryOneCol = person2.select("age").summary()
+    assert(getSchemaAsSeq(summaryOneCol) === Seq("summary", "age"))
+    checkAnswer(summaryOneCol, summaryResult.map { case Row(s, _, d, _) => Row(s, d)} )
+
+    val summaryNoCol = person2.select().summary()
+    assert(getSchemaAsSeq(summaryNoCol) === Seq("summary"))
+    checkAnswer(summaryNoCol, summaryResult.map { case Row(s, _, _, _) => Row(s)} )
+
+    val emptyDescription = person2.limit(0).summary()
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
+    checkAnswer(emptyDescription, emptySummaryResult)
+  }
+
+  test("summary advanced") {
+    val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
+    val orderMatters = person2.summary(stats: _*)
+    assert(orderMatters.collect().map(_.getString(0)) === stats)
+
+    val onlyPercentiles = person2.summary("0.1%", "99.9%")
+    assert(onlyPercentiles.count() === 2)
+
+    val fooE = intercept[IllegalArgumentException] {
+      person2.summary("foo")
+    }
+    assert(fooE.getMessage === "foo is not a recognised statistic")
+
+    val parseE = intercept[IllegalArgumentException] {
+      person2.summary("foo%")
+    }
+    assert(parseE.getMessage === "Unable to parse foo% as a percentile")
   }
 
   test("apply on query results (SPARK-5462)") {
@@ -1123,7 +1189,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq((1, 2, 3), (2, 3, 4), (3, 4, 5)).toDF("column1", "column2", "column1")
         .write.format("parquet").save("temp")
     }
-    assert(e.getMessage.contains("Duplicate column(s)"))
+    assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
     assert(e.getMessage.contains("column1"))
     assert(!e.getMessage.contains("column2"))
 
@@ -1133,7 +1199,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .toDF("column1", "column2", "column3", "column1", "column3")
         .write.format("json").save("temp")
     }
-    assert(f.getMessage.contains("Duplicate column(s)"))
+    assert(f.getMessage.contains("Found duplicate column(s) when inserting into"))
     assert(f.getMessage.contains("column1"))
     assert(f.getMessage.contains("column3"))
     assert(!f.getMessage.contains("column2"))

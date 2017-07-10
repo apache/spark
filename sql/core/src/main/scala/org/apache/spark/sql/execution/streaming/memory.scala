@@ -230,6 +230,5 @@ case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode
 
   private val sizePerRow = sink.schema.toAttributes.map(_.dataType.defaultSize).sum
 
-  override def computeStats: Statistics =
-    Statistics(sizePerRow * sink.allData.size)
+  override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
 }

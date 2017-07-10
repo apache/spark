@@ -29,6 +29,7 @@ import scala.language.existentials
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -777,7 +778,20 @@ class ALSSuite
   }
 }
 
-class ALSCleanerSuite extends SparkFunSuite {
+class ALSCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    // Once `Utils.getOrCreateLocalRootDirs` is called, it is cached in `Utils.localRootDirs`.
+    // Unless this is manually cleared before and after a test, it returns the same directory
+    // set before even if 'spark.local.dir' is configured afterwards.
+    Utils.clearLocalRootDirs()
+  }
+
+  override def afterEach(): Unit = {
+    Utils.clearLocalRootDirs()
+    super.afterEach()
+  }
+
   test("ALS shuffle cleanup standalone") {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
@@ -818,15 +832,13 @@ class ALSCleanerSuite extends SparkFunSuite {
       FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
     try {
       conf.set("spark.local.dir", localDir.getAbsolutePath)
-      val sc = new SparkContext("local[2]", "test", conf)
+      val sc = new SparkContext("local[2]", "ALSCleanerSuite", conf)
       try {
         sc.setCheckpointDir(checkpointDir.getAbsolutePath)
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
         val spark = SparkSession.builder
-          .master("local[2]")
-          .appName("ALSCleanerSuite")
           .sparkContext(sc)
           .getOrCreate()
         import spark.implicits._
