@@ -607,14 +607,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
       int i = 0;
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
-        if (i + spillWriter.recordsSpilled() <= startIndex) {
-          i += spillWriter.recordsSpilled();
-        } else {
+        if (i + spillWriter.recordsSpilled() > startIndex) {
           UnsafeSorterIterator iter = spillWriter.getReader(serializerManager);
           moveOver(iter, startIndex - i);
           queue.add(iter);
-          i += spillWriter.recordsSpilled();
         }
+        i += spillWriter.recordsSpilled();
       }
       if (inMemSorter != null) {
         UnsafeSorterIterator iter = inMemSorter.getSortedIterator();
