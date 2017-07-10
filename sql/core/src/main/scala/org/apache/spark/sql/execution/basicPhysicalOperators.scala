@@ -126,7 +126,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
         val string = row.getUTF8String(index)
         if (string != null) {
           val bytesOfStr = string.getBytes
-          System.arraycopy(bytesOfStr, 0, tmpBuffer, 0, bytesOfStr.length);
+          System.arraycopy(
+            bytesOfStr, 0, tmpBuffer, 0, math.min(bytesOfStr.length, CMCCCharLength(stringIndex)));
         }
         buffer.put(tmpBuffer)
         stringIndex += 1
@@ -203,7 +204,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   def mockFPGA(input: ByteBuffer): ByteBuffer = {
 //    input
-    FpgaSqlEngine.project(input)
+    FpgaSqlEngine.project(input, FPGARowNumber)
   }
 
 
