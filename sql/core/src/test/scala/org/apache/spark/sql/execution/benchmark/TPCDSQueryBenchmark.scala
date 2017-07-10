@@ -65,8 +65,8 @@ object TPCDSQueryBenchmark {
       "please modify the value of dataLocation to point to your local TPCDS data")
     val tableSizes = setupTables(dataLocation)
     queries.foreach { name =>
-      val queryString = fileToString(new File(Thread.currentThread().getContextClassLoader
-        .getResource(s"tpcds/$name.sql").getFile))
+      val queryString = resourceToString(s"tpcds/$name.sql", "UTF-8",
+        Thread.currentThread().getContextClassLoader)
 
       // This is an indirect hack to estimate the size of each query's input by traversing the
       // logical plan and adding up the sizes of all tables that appear in the plan. Note that this
@@ -100,6 +100,14 @@ object TPCDSQueryBenchmark {
 
   def main(args: Array[String]): Unit = {
 
+    if (args.length < 1) {
+      // scalastyle:off println
+      println(
+        "Usage: spark-submit --class <this class> --jars <spark sql test jar> <data location>")
+      // scalastyle:on println
+      System.exit(1)
+    }
+
     // List of all TPC-DS queries
     val tpcdsQueries = Seq(
       "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11",
@@ -117,7 +125,7 @@ object TPCDSQueryBenchmark {
     // https://github.com/databricks/spark-sql-perf/blob/master/README.md to generate the TPCDS data
     // locally (preferably with a scale factor of 5 for benchmarking). Thereafter, the value of
     // dataLocation below needs to be set to the location where the generated data is stored.
-    val dataLocation = ""
+    val dataLocation = args(0)
 
     tpcdsAll(dataLocation, queries = tpcdsQueries)
   }
