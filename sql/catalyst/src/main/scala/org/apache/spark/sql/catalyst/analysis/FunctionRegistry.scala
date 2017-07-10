@@ -112,12 +112,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
         throw new AnalysisException(s"undefined function $name")
       }
     }
-    try {
-      func(children)
-    } catch {
-      case _: ClassCastException =>
-        throw new AnalysisException(s"Invalid number of arguments for function $name")
-    }
+    func(children)
   }
 
   override def listFunction(): Seq[FunctionIdentifier] = synchronized {
