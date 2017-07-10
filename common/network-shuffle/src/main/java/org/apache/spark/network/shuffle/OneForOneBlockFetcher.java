@@ -24,7 +24,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
-import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,9 +57,8 @@ public class OneForOneBlockFetcher {
   private final String[] blockIds;
   private final BlockFetchingListener listener;
   private final ChunkReceivedCallback chunkCallback;
-  private TransportConf transportConf = null;
-  private Supplier<File> tmpFileCreater;
-  private Supplier<Boolean> canCallerSideDeleteFile;
+  private final TransportConf transportConf;
+  private final TempShuffleFileManager tempShuffleFileManager;
 
   private StreamHandle streamHandle = null;
 
@@ -71,7 +69,7 @@ public class OneForOneBlockFetcher {
     String[] blockIds,
     BlockFetchingListener listener,
     TransportConf transportConf) {
-    this(client, appId, execId, blockIds, listener, transportConf, null, null);
+    this(client, appId, execId, blockIds, listener, transportConf, null);
   }
 
   public OneForOneBlockFetcher(
@@ -81,18 +79,14 @@ public class OneForOneBlockFetcher {
       String[] blockIds,
       BlockFetchingListener listener,
       TransportConf transportConf,
-      Supplier<File> tmpFileCreater,
-      Supplier<Boolean> canCallerSideDeleteFile) {
+      TempShuffleFileManager tempShuffleFileManager) {
     this.client = client;
     this.openMessage = new OpenBlocks(appId, execId, blockIds);
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
     this.transportConf = transportConf;
-    this.tmpFileCreater = tmpFileCreater;
-    this.canCallerSideDeleteFile = canCallerSideDeleteFile;
-    assert (tmpFileCreater == null && canCallerSideDeleteFile == null ||
-      tmpFileCreater != null && canCallerSideDeleteFile != null);
+    this.tempShuffleFileManager = tempShuffleFileManager;
   }
 
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */
@@ -131,7 +125,7 @@ public class OneForOneBlockFetcher {
           // Immediately request all chunks -- we expect that the total size of the request is
           // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
           for (int i = 0; i < streamHandle.numChunks; i++) {
-            if (tmpFileCreater != null) {
+            if (tempShuffleFileManager != null) {
               client.stream(OneForOneStreamManager.genStreamChunkId(streamHandle.streamId, i),
                 new DownloadCallback(i));
             } else {
@@ -170,7 +164,7 @@ public class OneForOneBlockFetcher {
     private int chunkIndex;
 
     DownloadCallback(int chunkIndex) throws IOException {
-      this.targetFile = tmpFileCreater.get();
+      this.targetFile = tempShuffleFileManager.createTempShuffleFile();
       this.channel = Channels.newChannel(new FileOutputStream(targetFile));
       this.chunkIndex = chunkIndex;
     }
@@ -186,7 +180,7 @@ public class OneForOneBlockFetcher {
       ManagedBuffer buffer = new FileSegmentManagedBuffer(transportConf, targetFile, 0,
         targetFile.length());
       listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
-      if (canCallerSideDeleteFile.get()) {
+      if (!tempShuffleFileManager.registerTempShuffleFileToClean(targetFile)) {
         targetFile.delete();
       }
     }

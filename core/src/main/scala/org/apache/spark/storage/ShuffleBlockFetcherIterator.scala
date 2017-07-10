@@ -20,7 +20,6 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
-import java.util.function.Supplier
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -29,7 +28,7 @@ import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempShuffleFileManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
@@ -67,7 +66,7 @@ final class ShuffleBlockFetcherIterator(
     maxReqsInFlight: Int,
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean)
-  extends Iterator[(BlockId, InputStream)] with Logging {
+  extends Iterator[(BlockId, InputStream)] with TempShuffleFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
 
@@ -136,7 +135,8 @@ final class ShuffleBlockFetcherIterator(
    * A set to store the files used for shuffling remote huge blocks. Files in this set will be
    * deleted when cleanup. This is a layer of defensiveness against disk file leaks.
    */
-  val shuffleFilesSet = mutable.HashSet[File]()
+  @GuardedBy("this")
+  private[this] val shuffleFilesSet = mutable.HashSet[File]()
 
   initialize()
 
@@ -148,6 +148,19 @@ final class ShuffleBlockFetcherIterator(
       currentResult.buf.release()
     }
     currentResult = null
+  }
+
+  override def createTempShuffleFile(): File = {
+    blockManager.diskBlockManager.createTempLocalBlock()._2
+  }
+
+  override def registerTempShuffleFileToClean(file: File): Boolean = synchronized {
+    if (isZombie) {
+      false
+    } else {
+      shuffleFilesSet += file
+      true
+    }
   }
 
   /**
@@ -167,7 +180,6 @@ final class ShuffleBlockFetcherIterator(
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
             if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
-              shuffleFilesSet += buf.asInstanceOf[FileSegmentManagedBuffer].getFile
               shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
             }
             shuffleMetrics.incRemoteBlocksFetched(1)
@@ -178,7 +190,7 @@ final class ShuffleBlockFetcherIterator(
     }
     shuffleFilesSet.foreach { file =>
       if (!file.delete()) {
-        logInfo("Failed to cleanup shuffle fetch temp file " + file.getAbsolutePath())
+        logWarning("Failed to cleanup shuffle fetch temp file " + file.getAbsolutePath())
       }
     }
   }
@@ -224,14 +236,10 @@ final class ShuffleBlockFetcherIterator(
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, new Supplier[File] {
-          override def get(): File = blockManager.diskBlockManager.createTempLocalBlock()._2
-        }, new Supplier[java.lang.Boolean] {
-          override def get(): java.lang.Boolean = isZombie
-        })
+        blockFetchingListener, this)
     } else {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, null, null)
+        blockFetchingListener, null)
     }
   }
 
@@ -369,7 +377,6 @@ final class ShuffleBlockFetcherIterator(
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
             if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
-              shuffleFilesSet += buf.asInstanceOf[FileSegmentManagedBuffer].getFile
               shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
             }
             shuffleMetrics.incRemoteBlocksFetched(1)

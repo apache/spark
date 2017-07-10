@@ -17,11 +17,9 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.function.Supplier;
 
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
@@ -92,8 +90,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener,
-      Supplier<File> tmpFileCreater,
-      Supplier<Boolean> canCallerSideDeleteFile) {
+      TempShuffleFileManager tempShuffleFileManager) {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
@@ -101,8 +98,7 @@ public class ExternalShuffleClient extends ShuffleClient {
           (blockIds1, listener1) -> {
             TransportClient client = clientFactory.createClient(host, port);
             new OneForOneBlockFetcher(client, appId, execId,
-              blockIds1, listener1, conf, tmpFileCreater,
-              canCallerSideDeleteFile).start();
+              blockIds1, listener1, conf, tempShuffleFileManager).start();
           };
 
       int maxRetries = conf.maxIORetries();

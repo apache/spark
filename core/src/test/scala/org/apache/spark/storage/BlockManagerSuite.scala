@@ -19,7 +19,6 @@ package org.apache.spark.storage
 
 import java.io.File
 import java.nio.ByteBuffer
-import java.util.function.Supplier
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -46,8 +45,7 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
-import org.apache.spark.network.shuffle.BlockFetchingListener
-import org.apache.spark.network.shuffle.ShuffleClient
+import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempShuffleFileManager}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
@@ -1384,8 +1382,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         execId: String,
         blockIds: Array[String],
         listener: BlockFetchingListener,
-        tmpFileCreater: Supplier[File],
-        canCallerSideDeleteFile: Supplier[java.lang.Boolean]): Unit = {
+        tempShuffleFileManager: TempShuffleFileManager): Unit = {
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
     }
 
