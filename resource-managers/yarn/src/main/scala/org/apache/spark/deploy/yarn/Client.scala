@@ -721,6 +721,12 @@ private[spark] class Client(
         }
       }
 
+      // Save the YARN configuration into a separate file that will be overlayed on top of the
+      // cluster's Hadoop conf.
+      confStream.putNextEntry(new ZipEntry(SPARK_HADOOP_CONF_FILE))
+      yarnConf.writeXml(confStream)
+      confStream.closeEntry()
+
       // Save Spark configuration to a file in the archive.
       val props = new Properties()
       sparkConf.getAll.foreach { case (k, v) => props.setProperty(k, v) }
@@ -1193,6 +1199,10 @@ private object Client extends Logging {
 
   // Name of the file in the conf archive containing Spark configuration.
   val SPARK_CONF_FILE = "__spark_conf__.properties"
+
+  // Name of the file containing the gateway's Hadoop configuration, to be overlayed on top of the
+  // cluster's Hadoop config.
+  val SPARK_HADOOP_CONF_FILE = "__spark_conf__.xml"
 
   // Subdirectory where the user's python files (not archives) will be placed.
   val LOCALIZED_PYTHON_DIR = "__pyfiles__"
