@@ -96,17 +96,17 @@ object TPCDSQueryBenchmark {
 
   def main(args: Array[String]): Unit = {
     if (args.length < 1) {
-      // scalastyle:off println
+      // scalastyle:off
       println(
         s"""
            |Usage: spark-submit --class <this class> <spark sql test jar> <TPCDS data location>
            |
            |In order to run this benchmark, please follow the instructions at
-           |https://github.com/databricks/spark-sql-perf/blob/master/README.md to generate the TPCDS data
-           |locally (preferably with a scale factor of 5 for benchmarking). Thereafter, the value of
-           |dataLocation below needs to be set to the location where the generated data is stored.
+           |https://github.com/databricks/spark-sql-perf/blob/master/README.md
+           |to generate the TPCDS data locally (preferably with a scale factor of 5 for benchmarking).
+           |Thereafter, the value of <TPCDS data location> needs to be set to the location where the generated data is stored.
          """.stripMargin)
-      // scalastyle:on println
+      // scalastyle:on
       System.exit(1)
     }
 
