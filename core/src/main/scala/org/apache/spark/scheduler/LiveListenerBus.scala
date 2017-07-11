@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.bus._
-import org.apache.spark.util.{WithListenerBus, WithMultipleListenerBus}
+import org.apache.spark.util.WithMultipleListenerBus
 
 /**
  * Asynchronously passes SparkListenerEvents to registered SparkListeners.
@@ -51,9 +51,6 @@ private[spark] class LiveListenerBus(conf: SparkConf)
     new GroupOfListenersBusQueue("default", conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
 
   @volatile private var otherListenerQueues = Seq.empty[ListenerBusQueue]
-
-  // Post on queues should be done synchronously
-  private val postLock = new ReentrantLock()
 
   // start, stop and add/remove listener should be mutually exclusive
   private val startStopAddRemoveLock = new ReentrantLock()
@@ -151,10 +148,8 @@ private[spark] class LiveListenerBus(conf: SparkConf)
       logDebug(s"$name has already stopped! Dropping event $event")
       return
     }
-    postLock.lock()
     defaultListenerQueue.post(event)
     otherListenerQueues.foreach(q => q.post(event))
-    postLock.unlock()
   }
 
 
@@ -247,16 +242,9 @@ private[spark] class LiveListenerBus(conf: SparkConf)
 
   /**
    * Return whether the event queue is empty.
-   *
-   * The use of synchronization here guarantees that all events that once belonged to this queue
-   * have already been processed by all attached listeners, if this returns true.
    */
-  private def queueIsEmpty: Boolean = {
-    postLock.lock()
-    val isEmpty = defaultListenerQueue.isQueueEmpty && otherListenerQueues.forall(_.isQueueEmpty)
-    postLock.unlock()
-    isEmpty
-  }
+  private def queueIsEmpty: Boolean =
+    defaultListenerQueue.isQueueEmpty && otherListenerQueues.forall(_.isQueueEmpty)
 
 }
 

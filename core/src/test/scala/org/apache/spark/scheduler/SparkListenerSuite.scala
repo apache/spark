@@ -177,20 +177,18 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     // Post a message to the listener bus and wait for processing to begin:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
     listenerStarted.acquire()
-    listenerWait.release()
-    bus.waitUntilEmpty(200)
-    assert(metrics.queueSize.getValue === 0)
+    assert(metrics.queueSize.getValue === 1)
     assert(metrics.numDroppedEvents.getCount === 0)
 
     // If we post an additional message then it should remain in the queue because the listener is
     // busy processing the first event:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    assert(metrics.queueSize.getValue === 1)
+    assert(metrics.queueSize.getValue === 2)
     assert(metrics.numDroppedEvents.getCount === 0)
 
     // The queue is now full, so any additional events posted to the listener will be dropped:
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
-    assert(metrics.queueSize.getValue === 1)
+    assert(metrics.queueSize.getValue === 2)
     assert(metrics.numDroppedEvents.getCount === 1)
 
 

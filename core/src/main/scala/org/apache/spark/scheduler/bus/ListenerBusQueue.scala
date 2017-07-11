@@ -17,8 +17,8 @@
 
 package org.apache.spark.scheduler.bus
 
-import java.util.concurrent.Semaphore
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
 import com.codahale.metrics.Timer
 import scala.reflect.ClassTag
@@ -29,8 +29,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
-
-
 
 
 // One producer one consumer asynchronous queue.
@@ -44,17 +42,13 @@ private[spark] abstract class ListenerBusQueue (
 
   private var sparkContext: SparkContext = _
 
-  private val circularBuffer = new Array[SparkListenerEvent](bufferSize)
+  private val circularBuffer = new ArrayBlockingQueue[SparkListenerEvent](bufferSize)
   private val numberOfEvents = new AtomicInteger(0)
 
-  @volatile private var writeIndex = 0
-  @volatile private var readIndex = 0
-
-  @volatile private var hasDropped = false
-  @volatile private var numberOfDrop = 0
+  private val hasDropped = new AtomicBoolean(false)
+  private val numberOfDrop = new AtomicLong(0L)
 
   private val stopped = new AtomicBoolean(false)
-  private val empty = new Semaphore(0)
 
   private[scheduler] val metrics =
     new QueueMetrics(busName, numberOfEvents, withEventProcessingTime)
@@ -64,26 +58,23 @@ private[spark] abstract class ListenerBusQueue (
     override def run(): Unit = Utils.tryOrStopSparkContext(sparkContext) {
       LiveListenerBus.withinListenerThread.withValue(true) {
         val oTimer = metrics.eventProcessingTime
-        var nbElem: Int = 0
-        do {
-          nbElem = numberOfEvents.get()
-          if (nbElem == 0) {
-            empty.acquire(1)
-            nbElem = numberOfEvents.get()
-          } else {
+        while (true) {
+          val newElem = circularBuffer.take()
+          if (newElem.eq(LAST_PROCESSED_MESSAGE)) {
+            return
+          }
+          else {
             val timerContext = oTimer.map(_.time())
             try {
-              consumeEvent(circularBuffer(readIndex))
+              consumeEvent(newElem)
             } catch {
               case NonFatal(e) =>
                 logError(s"Listener bus $busName threw an exception", e)
             }
-            timerContext.foreach(_.stop())
-            circularBuffer(readIndex) = null // clean reference
             numberOfEvents.decrementAndGet()
-            readIndex = (readIndex + 1) % bufferSize
+            timerContext.foreach(_.stop())
           }
-        } while (!stopped.get() || nbElem > 0)
+        }
       }
     }
   }
@@ -91,8 +82,8 @@ private[spark] abstract class ListenerBusQueue (
   // should be called only once
   private[scheduler] def start(sc: SparkContext, metricsSystem: MetricsSystem): Unit = {
     sparkContext = sc
-    metricsSystem.registerSource(metrics)
     initAdditionalMetrics(metrics)
+    metricsSystem.registerSource(metrics)
     consumerThread.start()
   }
 
@@ -103,19 +94,15 @@ private[spark] abstract class ListenerBusQueue (
     if (!stopped.get()) {
       throw new IllegalStateException(s"$busName was not asked for stop !")
     }
-    empty.release(1) // unblock the consumer if the qeue is empty
+    circularBuffer.put(LAST_PROCESSED_MESSAGE)
     consumerThread.join()
   }
 
   private[scheduler] def post(event: SparkListenerEvent): Unit = {
     if (eventFilter(event)) {
-      if (numberOfEvents.get() < bufferSize) {
-        circularBuffer(writeIndex) = event
-        if (numberOfEvents.incrementAndGet() == 1) {
-          // The queue was empty
-          empty.release(1)
-        }
-        writeIndex = (writeIndex + 1) % bufferSize
+      val hasPosted = circularBuffer.offer(event)
+      if (hasPosted) {
+        numberOfEvents.incrementAndGet()
         metrics.numEventsPosted.inc()
       } else {
         onDropEvent()
@@ -127,23 +114,24 @@ private[spark] abstract class ListenerBusQueue (
   private[scheduler] def isAlive: Boolean = consumerThread.isAlive
 
   // For test only
-  private[scheduler] def isQueueEmpty: Boolean = numberOfEvents.get() == 0
+  // need to test both value to be sure that the queue is empty and no event is being processed
+  private[scheduler] def isQueueEmpty: Boolean =
+    circularBuffer.size() == 0 && numberOfEvents.get() == 0
 
 
   private def onDropEvent(): Unit = {
-    if (!hasDropped) {
-      hasDropped = true
+    if (hasDropped.compareAndSet(false, true)) {
       logError(s"Dropping SparkListenerEvent from the bus $busName because no remaining " +
         "room in event queue. " +
         "This likely means one of the SparkListeners is too slow and cannot keep up with " +
         "the rate at which tasks are being started by the scheduler.")
     }
-    numberOfDrop = numberOfDrop + 1
+    numberOfDrop.incrementAndGet()
     metrics.numDroppedEvents.inc()
-    if (numberOfDrop == DROP_MESSAGE_LOG_FREQUENCY) {
+    if (numberOfDrop.get() >= DROP_MESSAGE_LOG_FREQUENCY) {
       logWarning(s"$DROP_MESSAGE_LOG_FREQUENCY SparkListenerEvents have been dropped " +
         s"from the bus $busName")
-      numberOfDrop = 0
+      numberOfDrop.set(0L)
     }
   }
 
@@ -160,6 +148,8 @@ private[spark] object ListenerBusQueue {
 
   private val DROP_MESSAGE_LOG_FREQUENCY = 50
   private[scheduler] val ALL_MESSAGES: SparkListenerEvent => Boolean = _ => true
+
+  private object LAST_PROCESSED_MESSAGE extends SparkListenerEvent
 
   private[bus] abstract class GroupSparkListener() extends SparkListenerInterface with Logging {
 
