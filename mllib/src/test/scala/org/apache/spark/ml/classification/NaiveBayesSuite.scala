@@ -375,7 +375,16 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       nb, spark) { (expected, actual) =>
         assert(expected.pi === actual.pi)
         assert(expected.theta === actual.theta)
+        assert(expected.sigma.isEmpty && actual.sigma.isEmpty)
       }
+
+    val gnb = new NaiveBayes().setModelType("gaussian")
+    MLTestingUtils.checkNumericTypes[NaiveBayesModel, NaiveBayes](
+      gnb, spark) { (expected, actual) =>
+      assert(expected.pi === actual.pi)
+      assert(expected.theta === actual.theta)
+      assert(expected.sigma.get === actual.sigma.get)
+    }
   }
 }
 
@@ -389,6 +398,16 @@ object NaiveBayesSuite {
   val allParamSettings: Map[String, Any] = Map(
     "predictionCol" -> "myPrediction",
     "smoothing" -> 0.1
+  )
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettingsForGaussian: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "modelType" -> "gaussian"
   )
 
   private def calcLabel(p: Double, pi: Array[Double]): Int = {

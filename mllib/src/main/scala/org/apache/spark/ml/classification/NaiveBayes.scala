@@ -236,7 +236,7 @@ class NaiveBayes @Since("1.5.0") (
       instr.logNumClasses(numLabels)
 
       val numInstances = aggregated.map(_._2._1).sum
- 
+
       // If the ratio of data variance between dimensions is too small, it
       // will cause numerical errors. To address this, we artificially
       // boost the variance by epsilon, a small fraction of the standard
