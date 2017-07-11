@@ -122,25 +122,27 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         }""")
     }
 
-    (1 to 22).foreach { i =>
-      val extTypeArgs = (1 to i).map(_ => "_").mkString(", ")
-      val anyTypeArgs = (1 to i).map(_ => "Any").mkString(", ")
-      val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs, Any]]"
+    (0 to 22).foreach { i =>
+      val extTypeArgs = (0 to i).map(_ => "_").mkString(", ")
+      val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")
+      val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs]]"
       val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
+      val version = if (i == 0) "2.3.0" else "1.3.0"
+      val funcCall = if (i == 0) "() => func" else "func"
       println(s"""
         |/**
         | * Register a user-defined function with ${i} arguments.
-        | * @since 1.3.0
+        | * @since $version
         | */
-        |def register(name: String, f: UDF$i[$extTypeArgs, _], returnType: DataType): Unit = {
+        |def register(name: String, f: UDF$i[$extTypeArgs], returnType: DataType): Unit = {
         |  val func = f$anyCast.call($anyParams)
-        |def builder(e: Seq[Expression]) = if (e.length == $i) {
-        |  ScalaUDF(func, returnType, e)
-        |} else {
-        |  throw new AnalysisException("Invalid number of arguments for function " + name +
-        |    ". Expected: $i; Found: " + e.length)
-        |}
-        |functionRegistry.createOrReplaceTempFunction(name, builder)
+        |  def builder(e: Seq[Expression]) = if (e.length == $i) {
+        |    ScalaUDF($funcCall, returnType, e)
+        |  } else {
+        |    throw new AnalysisException("Invalid number of arguments for function " + name +
+        |      ". Expected: $i; Found: " + e.length)
+        |  }
+        |  functionRegistry.createOrReplaceTempFunction(name, builder)
         |}""".stripMargin)
     }
     */
@@ -592,6 +594,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
           }
 
           udfInterfaces(0).getActualTypeArguments.length match {
+            case 1 => register(name, udf.asInstanceOf[UDF0[_]], returnType)
             case 2 => register(name, udf.asInstanceOf[UDF1[_, _]], returnType)
             case 3 => register(name, udf.asInstanceOf[UDF2[_, _, _]], returnType)
             case 4 => register(name, udf.asInstanceOf[UDF3[_, _, _, _]], returnType)
@@ -647,6 +650,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       case e @ (_: InstantiationException | _: IllegalArgumentException) =>
         throw new AnalysisException(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
     }
+  }
+
+  /**
+   * Register a user-defined function with 0 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF0[_], returnType: DataType): Unit = {
+    val func = f.asInstanceOf[UDF0[Any]].call()
+    def builder(e: Seq[Expression]) = if (e.length == 0) {
+      ScalaUDF(() => func, returnType, e)
+    } else {
+      throw new AnalysisException("Invalid number of arguments for function " + name +
+        ". Expected: 0; Found: " + e.length)
+    }
+    functionRegistry.createOrReplaceTempFunction(name, builder)
   }
 
   /**
