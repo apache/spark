@@ -2995,6 +2995,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
     True
     >>> loadedRF.getLabelCol() == rf.getLabelCol()
     True
+    >>> loadedRF.getHandleInvalid() == rf.getHandleInvalid()
+    True
     >>> str(loadedRF)
     'RFormula(y ~ x + s) (uid=...)'
     >>> modelPath = temp_path + "/rFormulaModel"
@@ -3041,28 +3043,29 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
 
     @keyword_only
     def __init__(self, formula=None, featuresCol="features", labelCol="label",
-                 forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
-                 handleInvalid="error"):
+                 forceIndexLabel=False, handleInvalid="error",
+                 stringIndexerOrderType="frequencyDesc"):
         """
         __init__(self, formula=None, featuresCol="features", labelCol="label", \
-                 forceIndexLabel=False, stringIndexerOrderType="frequencyDesc", \
-                 handleInvalid="error")
+                 forceIndexLabel=False, handleInvalid="error", \
+                 stringIndexerOrderType="frequencyDesc")
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
-        self._setDefault(forceIndexLabel=False, stringIndexerOrderType="frequencyDesc")
+        self._setDefault(forceIndexLabel=False, handleInvalid="error",
+                         stringIndexerOrderType="frequencyDesc")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.5.0")
     def setParams(self, formula=None, featuresCol="features", labelCol="label",
-                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
-                  handleInvalid="error"):
+                  forceIndexLabel=False, handleInvalid="error",
+                  stringIndexerOrderType="frequencyDesc"):
         """
         setParams(self, formula=None, featuresCol="features", labelCol="label", \
-                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc", \
-                  handleInvalid="error")
+                  forceIndexLabel=False, handleInvalid="error", \
+                  stringIndexerOrderType="frequencyDesc")
         Sets params for RFormula.
         """
         kwargs = self._input_kwargs
