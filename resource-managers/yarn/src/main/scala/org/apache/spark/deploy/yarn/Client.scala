@@ -733,12 +733,17 @@ private[spark] class Client(
   /**
    * Set up the environment for launching our ApplicationMaster container.
    */
-  private def setupLaunchEnv(
+  private[yarn] def setupLaunchEnv(
       stagingDirPath: Path,
       pySparkArchives: Seq[String]): HashMap[String, String] = {
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
-    populateClasspath(args, yarnConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
+    val extraClassPath = if (isClusterMode) {
+      sparkConf.get(DRIVER_CLASS_PATH)
+    } else {
+      sparkConf.get(AM_EXTRA_CLASSPATH)
+    }
+    populateClasspath(args, yarnConf, sparkConf, env, extraClassPath)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()

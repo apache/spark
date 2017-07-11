@@ -375,6 +375,22 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
 
+  test("add extra classpath to AM in client mode") {
+    val temp = Utils.createTempDir()
+    val jarsDir = new File(temp, "jars")
+    assert(jarsDir.mkdir())
+    val jar = TestUtils.createJarWithFiles(Map(), jarsDir)
+    new FileOutputStream(new File(temp, "RELEASE")).close()
+
+    val sparkConf = new SparkConf()
+      .set(AM_EXTRA_CLASSPATH, jar.toString)
+      .set("spark.submit.deployMode", "client")
+    val client = createClient(sparkConf)
+    val env = client.setupLaunchEnv(new Path(temp.getAbsolutePath), Nil)
+    val cp = classpath(env)
+    cp should contain (jar.getPath)
+  }
+
   object Fixtures {
 
     val knownDefYarnAppCP: Seq[String] =
