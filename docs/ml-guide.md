@@ -61,11 +61,11 @@ To configure `netlib-java` / Breeze to use system optimised binaries, include
 project and read the [netlib-java](https://github.com/fommil/netlib-java) documentation for your
 platform's additional installation instructions.
 
-The most popular native BLAS such as [Intel MKL](https://software.intel.com/en-us/mkl), [OpenBLAS](http://www.openblas.net), are based on multi-threading, which will conflict with Spark.
+The most popular native BLAS such as [Intel MKL](https://software.intel.com/en-us/mkl), [OpenBLAS](http://www.openblas.net), can use multiple threads in a single operation, which can conflict with Spark's execution model.
 
-If using a native BLAS based on multi-threading, you might get better performance to set it to use single thread first ([SPARK-21305](https://issues.apache.org/jira/browse/SPARK-21305)). 
+Configuring these BLAS implementations to use a single thread for operations may actually improve performance (see [SPARK-21305](https://issues.apache.org/jira/browse/SPARK-21305)). It is usually optimal to match this to the number of cores each Spark task is configured to use, which is 1 by default and typically left at 1.
 
-Please reference the recommended settings for [Intel MKL](https://software.intel.com/en-us/articles/recommended-settings-for-calling-intel-mkl-routines-from-multi-threaded-applications) and [OpenBLAS](https://github.com/xianyi/OpenBLAS/wiki/faq#multi-threaded).
+Please refer to resources like the following to understand how to configure the number of threads these BLAS implementations use: [Intel MKL](https://software.intel.com/en-us/articles/recommended-settings-for-calling-intel-mkl-routines-from-multi-threaded-applications) and [OpenBLAS](https://github.com/xianyi/OpenBLAS/wiki/faq#multi-threaded).
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
