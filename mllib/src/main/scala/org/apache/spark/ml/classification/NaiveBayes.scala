@@ -510,9 +510,11 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val dataPath = new Path(path, "data").toString
 
       if (instance.getModelType == Multinomial || instance.getModelType == Bernoulli) {
+        // Save model data: pi, theta
         val data = Data(instance.pi, instance.theta)
         sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
       } else if (instance.getModelType == Gaussian) {
+        // Save model data: pi, theta, sigma
         val data = GaussianData(instance.pi, instance.theta, instance.sigma.get)
         sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
       } else {
