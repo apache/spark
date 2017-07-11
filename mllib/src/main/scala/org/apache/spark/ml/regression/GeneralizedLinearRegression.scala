@@ -171,7 +171,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    *
    * @group param
    */
-  @Since("2.3.0")
+  @Since("2.0.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
       s"${supportedSolvers.mkString(", ")}. (Default irls)",

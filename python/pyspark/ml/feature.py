@@ -314,7 +314,8 @@ class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable)
 
 
 @inherit_doc
-class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
+                 JavaMLReadable, JavaMLWritable):
     """
     Maps a column of continuous features to a column of feature buckets.
 
@@ -397,20 +398,6 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.splits)
-
-    @since("2.1.0")
-    def setHandleInvalid(self, value):
-        """
-        Sets the value of :py:attr:`handleInvalid`.
-        """
-        return self._set(handleInvalid=value)
-
-    @since("2.1.0")
-    def getHandleInvalid(self):
-        """
-        Gets the value of :py:attr:`handleInvalid` or its default value.
-        """
-        return self.getOrDefault(self.handleInvalid)
 
 
 @inherit_doc
@@ -1623,7 +1610,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid,
+                          JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1742,20 +1730,6 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
         Gets the value of relativeError or its default value.
         """
         return self.getOrDefault(self.relativeError)
-
-    @since("2.1.0")
-    def setHandleInvalid(self, value):
-        """
-        Sets the value of :py:attr:`handleInvalid`.
-        """
-        return self._set(handleInvalid=value)
-
-    @since("2.1.0")
-    def getHandleInvalid(self):
-        """
-        Gets the value of :py:attr:`handleInvalid` or its default value.
-        """
-        return self.getOrDefault(self.handleInvalid)
 
     def _create_model(self, java_model):
         """
@@ -2977,7 +2951,8 @@ class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaMLWritable):
+class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
+               JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -3058,12 +3033,20 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
                                    "RFormula drops the same category as R when encoding strings.",
                                    typeConverter=TypeConverters.toString)
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
+                          "Options are 'skip' (filter out rows with invalid values), " +
+                          "'error' (throw an error), or 'keep' (put invalid data in a special " +
+                          "additional bucket, at index numLabels).",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
     def __init__(self, formula=None, featuresCol="features", labelCol="label",
-                 forceIndexLabel=False, stringIndexerOrderType="frequencyDesc"):
+                 forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
+                 handleInvalid="error"):
         """
         __init__(self, formula=None, featuresCol="features", labelCol="label", \
-                 forceIndexLabel=False, stringIndexerOrderType="frequencyDesc")
+                 forceIndexLabel=False, stringIndexerOrderType="frequencyDesc", \
+                 handleInvalid="error")
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
@@ -3074,10 +3057,12 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     @keyword_only
     @since("1.5.0")
     def setParams(self, formula=None, featuresCol="features", labelCol="label",
-                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc"):
+                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
+                  handleInvalid="error"):
         """
         setParams(self, formula=None, featuresCol="features", labelCol="label", \
-                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc")
+                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc", \
+                  handleInvalid="error")
         Sets params for RFormula.
         """
         kwargs = self._input_kwargs
