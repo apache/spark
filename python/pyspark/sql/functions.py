@@ -1116,9 +1116,11 @@ def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     representing the timestamp of that moment in the current system time zone in the given
     format.
 
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> time_df = spark.createDataFrame([(1428476400,)], ['unix_time'])
     >>> time_df.select(from_unixtime('unix_time').alias('ts')).collect()
     [Row(ts=u'2015-04-08 00:00:00')]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.from_unixtime(_to_java_column(timestamp), format))
@@ -1133,9 +1135,11 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
 
     if `timestamp` is None, then it returns current timestamp.
 
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> time_df = spark.createDataFrame([('2015-04-08',)], ['dt'])
     >>> time_df.select(unix_timestamp('dt', 'yyyy-MM-dd').alias('unix_time')).collect()
     [Row(unix_time=1428476400)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     sc = SparkContext._active_spark_context
     if timestamp is None:
