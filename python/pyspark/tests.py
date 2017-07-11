@@ -1019,13 +1019,21 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual((["ab", "ef"], [5]), rdd.histogram(1))
         self.assertRaises(TypeError, lambda: rdd.histogram(2))
 
-    def test_repartitionAndSortWithinPartitions(self):
+    def test_repartitionAndSortWithinPartitions_asc(self):
         rdd = self.sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)], 2)
 
-        repartitioned = rdd.repartitionAndSortWithinPartitions(2, lambda key: key % 2)
+        repartitioned = rdd.repartitionAndSortWithinPartitions(2, lambda key: key % 2, True)
         partitions = repartitioned.glom().collect()
         self.assertEqual(partitions[0], [(0, 5), (0, 8), (2, 6)])
         self.assertEqual(partitions[1], [(1, 3), (3, 8), (3, 8)])
+
+    def test_repartitionAndSortWithinPartitions_desc(self):
+        rdd = self.sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)], 2)
+
+        repartitioned = rdd.repartitionAndSortWithinPartitions(2, lambda key: key % 2, False)
+        partitions = repartitioned.glom().collect()
+        self.assertEqual(partitions[0], [(2, 6), (0, 5), (0, 8)])
+        self.assertEqual(partitions[1], [(3, 8), (3, 8), (1, 3)])
 
     def test_repartition_no_skewed(self):
         num_partitions = 20
