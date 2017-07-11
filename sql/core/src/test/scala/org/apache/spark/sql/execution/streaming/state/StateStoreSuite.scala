@@ -132,7 +132,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     // read-only store
     val store2 = provider.getStore(1)
     assert(store2.invokePrivate(getState()) === provider.HDFSBackedStateStore.INITIALIZED)
-    assert(get(store2, "a") === 0)
+    assert(get(store2, "a").get === 0)
     assert(store2.invokePrivate(getState()) === provider.HDFSBackedStateStore.INITIALIZED)
     store2.abort()
     assert(store2.invokePrivate(getState()) === provider.HDFSBackedStateStore.ABORTED)
