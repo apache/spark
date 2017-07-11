@@ -78,6 +78,12 @@ spark_rotate_log ()
     if [ -n "$2" ]; then
 	num=$2
     fi
+
+    expr $num + 0 &>/dev/null
+    if [ $? -ne 0 ] || [ $num -eq 0 ]; then
+        num=5
+    fi
+
     if [ -f "$log" ]; then # rotate logs
 	while [ $num -gt 1 ]; do
 	    prev=`expr $num - 1`
