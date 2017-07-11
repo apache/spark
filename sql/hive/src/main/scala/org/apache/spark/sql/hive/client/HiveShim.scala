@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTableParti
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegralType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -607,26 +608,50 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
     }
 
+    object ExtractableValues {
+      private lazy val valueToLiteralString: PartialFunction[Any, String] = {
+        case value: Byte => value.toString
+        case value: Short => value.toString
+        case value: Int => value.toString
+        case value: Long => value.toString
+        case value: UTF8String => quoteStringLiteral(value.toString)
+      }
+
+      def unapply(values: Set[Any]): Option[Seq[String]] = {
+        values.toSeq.foldLeft(Option(Seq.empty[String])) {
+          case (Some(accum), value) if valueToLiteralString.isDefinedAt(value) =>
+            Some(accum :+ valueToLiteralString(value))
+          case _ => None
+        }
+      }
+    }
+
+    def convertInToOr(a: Attribute, values: Seq[String]): String = {
+      values.map(value => s"${a.name} = $value").mkString("(", " or ", ")")
+    }
+
     lazy val convert: PartialFunction[Expression, String] = {
-      case In(a: Attribute, ExtractableLiterals(values)) if !varcharKeys.contains(a.name) =>
-        val or =
-          values
-            .map(value => s"${a.name} = $value")
-            .reduce(_ + " or " + _)
-        "(" + or + ")"
+      case In(a: Attribute, ExtractableLiterals(values))
+          if !varcharKeys.contains(a.name) && values.nonEmpty =>
+        convertInToOr(a, values)
+      case InSet(a: Attribute, ExtractableValues(values))
+          if !varcharKeys.contains(a.name) && values.nonEmpty =>
+        convertInToOr(a, values)
       case op @ BinaryComparison(a: Attribute, ExtractableLiteral(value))
           if !varcharKeys.contains(a.name) =>
         s"${a.name} ${op.symbol} $value"
       case op @ BinaryComparison(ExtractableLiteral(value), a: Attribute)
           if !varcharKeys.contains(a.name) =>
         s"$value ${op.symbol} ${a.name}"
-      case op @ And(expr1, expr2) =>
-        s"(${convert(expr1)} and ${convert(expr2)})"
-      case op @ Or(expr1, expr2) =>
-        s"(${convert(expr1)} or ${convert(expr2)})"
+      case op @ And(expr1, expr2)
+          if convert.isDefinedAt(expr1) || convert.isDefinedAt(expr2) =>
+        (convert.lift(expr1) ++ convert.lift(expr2)).mkString("(", " and ", ")")
+      case op @ Or(expr1, expr2)
+          if convert.isDefinedAt(expr1) && convert.isDefinedAt(expr2) =>
+        (convert.lift(expr1) ++ convert.lift(expr2)).mkString("(", " or ", ")")
     }
 
-    filters.flatMap(f => Try(convert(f)).toOption).mkString(" and ")
+    filters.map(convert.lift).collect { case Some(filterString) => filterString }.mkString(" and ")
   }
 
   private def quoteStringLiteral(str: String): String = {
