@@ -197,6 +197,11 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val AM_EXTRA_CLASSPATH = ConfigBuilder("spark.yarn.am.extraClassPath")
+    .doc("Extra classpath for client-mode AM.")
+    .stringConf
+    .createOptional
+
   private[spark] val AM_MEMORY_OVERHEAD = ConfigBuilder("spark.yarn.am.memoryOverhead")
     .bytesConf(ByteUnit.MiB)
     .createOptional

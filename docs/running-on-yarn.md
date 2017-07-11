@@ -300,6 +300,15 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.extraClassPath</code></td>
+  <td>(none)</td>
+  <td>
+  Extra classpath entries to prepend to the classpath of the YARN Application Master in client mode. 
+  A string of extra JVM options to pass to the YARN Application Master in client mode.
+  In cluster mode, use <code>spark.driver.extraClassPath</code> instead.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.am.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
