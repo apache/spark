@@ -349,21 +349,7 @@ class NaiveBayesModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
-  import NaiveBayes.{Bernoulli, Multinomial, Gaussian}
-
-  $(modelType) match {
-    case Multinomial =>
-      require(sigma.isEmpty)
-    case Bernoulli =>
-      require(sigma.isEmpty)
-    case Gaussian =>
-      require(sigma.isDefined)
-      require(theta.numRows == sigma.get.numRows)
-      require(theta.numCols == sigma.get.numCols)
-    case _ =>
-      // This should never happen.
-      throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
-  }
+  import NaiveBayes._
 
   /**
    * mllib NaiveBayes is a wrapper of ml implementation currently.
@@ -384,7 +370,6 @@ class NaiveBayesModel private[ml] (
    * application of this condition (in predict function).
    */
   private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
-    case Multinomial => (None, None)
     case Bernoulli =>
       val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
       val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
@@ -392,7 +377,11 @@ class NaiveBayesModel private[ml] (
         value - math.log(1.0 - math.exp(value))
       }
       (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
+    case Multinomial => (None, None)
     case Gaussian => (None, None)
+    case _ =>
+      // This should never happen.
+      throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
   }
 
   /**
@@ -410,6 +399,9 @@ class NaiveBayesModel private[ml] (
         }.sum
       }.toArray
       Some(Vectors.dense(logVarSum))
+    case _ =>
+      // This should never happen.
+      throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
   }
 
   @Since("1.6.0")
@@ -511,7 +503,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     private case class GaussianData(pi: Vector, theta: Matrix, sigma: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
-      import NaiveBayes.{Bernoulli, Multinomial, Gaussian}
+      import NaiveBayes._
 
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
@@ -537,7 +529,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     private val className = classOf[NaiveBayesModel].getName
 
     override def load(path: String): NaiveBayesModel = {
-      import NaiveBayes.{Bernoulli, Multinomial, Gaussian}
+      import NaiveBayes._
 
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
@@ -562,8 +554,8 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
         }
 
         modelType match {
-          case Multinomial => None
           case Bernoulli => None
+          case Multinomial => None
           case Gaussian =>
             val Row(s: Matrix) =
               MLUtils.convertMatrixColumnsToML(vecConverted, "sigma")
