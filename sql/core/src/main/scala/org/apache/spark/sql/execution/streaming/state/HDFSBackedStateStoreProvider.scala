@@ -80,16 +80,12 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   class HDFSBackedStateStore(val version: Long, mapToUpdate: MapType)
     extends StateStore {
 
-    /** Trait and classes representing the internal state of the store */
-    trait STATE
-    case object UPDATING extends STATE
-    case object COMMITTED extends STATE
-    case object ABORTED extends STATE
+    import HDFSBackedStateStore._
 
     private val newVersion = version + 1
     private val tempDeltaFile = new Path(baseDir, s"temp-${Random.nextLong}")
     private lazy val tempDeltaFileStream = compressStream(fs.create(tempDeltaFile, true))
-    @volatile private var state: STATE = UPDATING
+    @volatile private var state: STATE = INITIALIZED
     @volatile private var finalDeltaFile: Path = null
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
@@ -98,8 +94,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       mapToUpdate.get(key)
     }
 
+    private def isUpdatable: Boolean = state == INITIALIZED || state == UPDATING
+
     override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
-      verify(state == UPDATING, "Cannot put after already committed or aborted")
+      verify(isUpdatable, "Cannot put after already committed or aborted")
+      state = UPDATING
       val keyCopy = key.copy()
       val valueCopy = value.copy()
       mapToUpdate.put(keyCopy, valueCopy)
@@ -107,7 +106,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     }
 
     override def remove(key: UnsafeRow): Unit = {
-      verify(state == UPDATING, "Cannot remove after already committed or aborted")
+      verify(isUpdatable, "Cannot remove after already committed or aborted")
+      state = UPDATING
       val prevValue = mapToUpdate.remove(key)
       if (prevValue != null) {
         writeRemoveToDeltaFile(tempDeltaFileStream, key)
@@ -117,14 +117,13 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     override def getRange(
         start: Option[UnsafeRow],
         end: Option[UnsafeRow]): Iterator[UnsafeRowPair] = {
-      verify(state == UPDATING, "Cannot getRange after already committed or aborted")
+      verify(isUpdatable, "Cannot getRange after already committed or aborted")
       iterator()
     }
 
     /** Commit all the updates that have been made to the store, and return the new version. */
     override def commit(): Long = {
-      verify(state == UPDATING, "Cannot commit after already committed or aborted")
-
+      verify(isUpdatable, "Cannot commit after already committed or aborted")
       try {
         finalizeDeltaFile(tempDeltaFileStream)
         finalDeltaFile = commitUpdates(newVersion, mapToUpdate, tempDeltaFile)
@@ -140,25 +139,28 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
     /** Abort all the updates made on this store. This store will not be usable any more. */
     override def abort(): Unit = {
-      verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
-      try {
-        state = ABORTED
-        if (tempDeltaFileStream != null) {
-          tempDeltaFileStream.close()
-        }
-        if (tempDeltaFile != null) {
-          fs.delete(tempDeltaFile, true)
-        }
-      } catch {
-        case c: ClosedChannelException =>
-          // This can happen when underlying file output stream has been closed before the
-          // compression stream.
-          logDebug(s"Error aborting version $newVersion into $this", c)
+      if (state == UPDATING) {
+        try {
+          state = ABORTED
+          if (tempDeltaFileStream != null) {
+            tempDeltaFileStream.close()
+          }
+          if (tempDeltaFile != null) {
+            fs.delete(tempDeltaFile, true)
+          }
+        } catch {
+          case c: ClosedChannelException =>
+            // This can happen when underlying file output stream has been closed before the
+            // compression stream.
+            logDebug(s"Error aborting version $newVersion into $this", c)
 
-        case e: Exception =>
-          logWarning(s"Error aborting version $newVersion into $this", e)
+          case e: Exception =>
+            logWarning(s"Error aborting version $newVersion into $this", e)
+        }
+        logInfo(s"Aborted version $newVersion for $this")
+      } else {
+        state = ABORTED
       }
-      logInfo(s"Aborted version $newVersion for $this")
     }
 
     /**
@@ -184,6 +186,15 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     override def toString(): String = {
       s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
+  }
+
+  object HDFSBackedStateStore {
+    /** Trait and classes representing the internal state of the store */
+    trait STATE
+    case object INITIALIZED extends STATE
+    case object UPDATING extends STATE
+    case object COMMITTED extends STATE
+    case object ABORTED extends STATE
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
