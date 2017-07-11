@@ -365,19 +365,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("analyze all partitions") {
     val tableName = "analyzeTable_part"
 
-    def queryStats(ds: String, hr: String): Option[CatalogStatistics] = {
-      val tableId = TableIdentifier(tableName)
-      val partition =
-        spark.sessionState.catalog.getPartition(tableId, Map("ds" -> ds, "hr" -> hr))
-      partition.stats
-    }
-
     def assertPartitionStats(
         ds: String,
         hr: String,
         rowCount: Option[BigInt],
         sizeInBytes: BigInt): Unit = {
-      val stats = queryStats(ds, hr).get
+      val stats = spark.sessionState.catalog.getPartition(TableIdentifier(tableName),
+        Map("ds" -> ds, "hr" -> hr)).stats.get
       assert(stats.rowCount === rowCount)
       assert(stats.sizeInBytes === sizeInBytes)
     }
