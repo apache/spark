@@ -405,6 +405,20 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("analyze partitions for an empty table") {
+    val tableName = "analyzeTable_part"
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      // make sure there is no exception
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds) COMPUTE STATISTICS NOSCAN")
+
+      // make sure there is no exception
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds) COMPUTE STATISTICS")
+    }
+  }
+
   test("analyze non-existent partition") {
     val tableName = "analyzeTable_part"
     withTable(tableName) {

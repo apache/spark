@@ -27,6 +27,17 @@ import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
 /**
  * Analyzes a given set of partitions to generate per-partition statistics, which will be used in
  * query optimizations.
+ *
+ * When `partitionSpec` is empty, statistics for all partitions are collected and stored in
+ * Metastore.
+ *
+ * When `partitionSpec` mentions only some of the partition columns, all partitions with
+ * matching values for specified columns are processed.
+ *
+ * If `partitionSpec` mentions unknown partition column, an `AnalysisException` is raised.
+ *
+ * By default, total number of rows and total size in bytes is calculated. When `noscan`
+ * is `false`, only total size in bytes is computed.
  */
 case class AnalyzePartitionCommand(
     tableIdent: TableIdentifier,
