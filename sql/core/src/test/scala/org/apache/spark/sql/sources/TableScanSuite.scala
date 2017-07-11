@@ -284,7 +284,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   sqlTest(
     "SELECT `string$%Field` FROM tableWithSchema",
-    (1 to 10).map(i => Row(s"str_$i")).toSeq, "false")
+    (1 to 10).map(i => Row(s"str_$i")).toSeq)
 
   sqlTest(
     "SELECT int_Field FROM tableWithSchema WHERE int_Field < 5",
@@ -292,7 +292,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   sqlTest(
     "SELECT `longField_:,<>=+/~^` * 2 FROM tableWithSchema",
-    (1 to 10).map(i => Row(i * 2.toLong)).toSeq, "false")
+    (1 to 10).map(i => Row(i * 2.toLong)).toSeq)
 
   sqlTest(
     "SELECT structFieldSimple.key, arrayFieldSimple[1] FROM tableWithSchema a where int_Field=1",
@@ -300,7 +300,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   sqlTest(
     "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",
-    (1 to 10).map(i => Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))).toSeq, "false")
+    (1 to 10).map(i => Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))).toSeq)
 
   test("Caching")  {
     // Cached Query Execution

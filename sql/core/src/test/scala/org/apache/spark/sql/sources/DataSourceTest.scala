@@ -26,9 +26,9 @@ import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] abstract class DataSourceTest extends QueryTest {
 
-  protected def sqlTest(sqlString: String, expectedAnswer: Seq[Row], enableRegex: String = "true") {
+  protected def sqlTest(sqlString: String, expectedAnswer: Seq[Row], enableRegex: Boolean = false) {
     test(sqlString) {
-      withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> enableRegex) {
+      withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> enableRegex.toString) {
         checkAnswer(spark.sql(sqlString), expectedAnswer)
       }
     }

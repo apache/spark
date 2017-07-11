@@ -1260,6 +1260,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     CaseWhen(branches, Option(ctx.elseExpression).map(expression))
   }
 
+  /**
+   * Currently only regex in expressions of SELECT statements are supported; in other
+   * places, e.g., where `(a)?+.+` = 2, regex are not meaningful.
+   */
   private def canApplyRegex(ctx: ParserRuleContext): Boolean = withOrigin(ctx) {
     var parent = ctx.getParent
     while (parent != null) {
@@ -1281,9 +1285,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case unresolved_attr @ UnresolvedAttribute(nameParts) =>
         ctx.fieldName.getStart.getText match {
           case escapedIdentifier(columnNameRegex)
-            if SQLConf.get.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
+            if conf.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
             UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name),
-              SQLConf.get.caseSensitiveAnalysis)
+              conf.caseSensitiveAnalysis)
           case _ =>
             UnresolvedAttribute(nameParts :+ attr)
         }
@@ -1299,8 +1303,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
     ctx.getStart.getText match {
       case escapedIdentifier(columnNameRegex)
-        if SQLConf.get.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
-        UnresolvedRegex(columnNameRegex, None, SQLConf.get.caseSensitiveAnalysis)
+        if conf.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
+        UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
       case _ =>
         UnresolvedAttribute.quoted(ctx.getText)
     }
