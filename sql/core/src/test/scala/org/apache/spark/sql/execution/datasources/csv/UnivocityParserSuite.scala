@@ -130,16 +130,17 @@ class UnivocityParserSuite extends SparkFunSuite {
       DateTimeUtils.millisToDays(DateTimeUtils.stringToTime("2015-01-01").getTime))
   }
 
-  test("Float and Double Types are cast without respect to platform default Locale") {
-    val originalLocale = Locale.getDefault
-    try {
-      Locale.setDefault(new Locale("fr", "FR"))
-      // Would parse as 1.0 in fr-FR
-      val options = new CSVOptions(Map.empty[String, String], "GMT")
-      assert(parser.makeConverter("_1", FloatType, options = options).apply("1,00") == 100.0)
-      assert(parser.makeConverter("_1", DoubleType, options = options).apply("1,00") == 100.0)
-    } finally {
-      Locale.setDefault(originalLocale)
+  test("Throws exception for casting an invalid string to Float and Double Types") {
+    val options = new CSVOptions(Map.empty[String, String], "GMT")
+    val types = Seq(DoubleType, FloatType)
+    val input = Seq("10u000", "abc", "1 2/3")
+    types.foreach { dt =>
+      input.foreach { v =>
+        val message = intercept[NumberFormatException] {
+          parser.makeConverter("_1", dt, options = options).apply(v)
+        }.getMessage
+        assert(message.contains(v))
+      }
     }
   }
 

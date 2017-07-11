@@ -21,7 +21,6 @@ import java.io.IOException
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.SparkContext
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
@@ -30,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
@@ -64,13 +63,10 @@ case class InsertIntoHadoopFsRelationCommand(
     assert(children.length == 1)
 
     // Most formats don't do well with duplicate columns, so lets not allow that
-    if (query.schema.fieldNames.length != query.schema.fieldNames.distinct.length) {
-      val duplicateColumns = query.schema.fieldNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => "\"" + x + "\""
-      }.mkString(", ")
-      throw new AnalysisException(s"Duplicate column(s): $duplicateColumns found, " +
-        "cannot save to file.")
-    }
+    SchemaUtils.checkSchemaColumnNameDuplication(
+      query.schema,
+      s"when inserting into $outputPath",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)

@@ -47,11 +47,11 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionality
  * is not fully tested.
  */
+// TODO: Refactor this to `HiveClientSuite` and make it a subclass of `HiveVersionSuite`
 @ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
-  private val clientBuilder = new HiveClientBuilder
-  import clientBuilder.buildClient
+  import HiveClientBuilder.buildClient
 
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
