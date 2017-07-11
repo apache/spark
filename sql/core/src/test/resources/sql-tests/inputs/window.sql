@@ -17,7 +17,7 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData;
 SELECT val, cate, sum(val) OVER(PARTITION BY cate ORDER BY val DESC
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData;
 
--- window functions
+-- Window functions
 SELECT val, cate,
 max(val) OVER(PARTITION BY cate ORDER BY val),
 min(val) OVER(PARTITION BY cate ORDER BY val),
@@ -51,3 +51,13 @@ SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData;
 
 -- Over clause is empty
 SELECT val, cate, sum(val) OVER(), avg(val) OVER() FROM testData;
+
+-- first_value()/last_value() over ()
+SELECT val, cate,
+first_value(false) OVER(),
+first_value(false, false) OVER(),
+first_value(true, true) OVER(),
+last_value(false) OVER(),
+last_value(false, false) OVER(),
+last_value(true, true) OVER()
+FROM testData;
