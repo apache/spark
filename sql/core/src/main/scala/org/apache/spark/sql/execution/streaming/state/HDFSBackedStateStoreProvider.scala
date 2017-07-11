@@ -80,12 +80,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   class HDFSBackedStateStore(val version: Long, mapToUpdate: MapType)
     extends StateStore {
 
-    /** Trait and classes representing the internal state of the store */
-    trait STATE
-    case object INITIALIZED extends STATE
-    case object UPDATING extends STATE
-    case object COMMITTED extends STATE
-    case object ABORTED extends STATE
+    import HDFSBackedStateStore._
 
     private val newVersion = version + 1
     private val tempDeltaFile = new Path(baseDir, s"temp-${Random.nextLong}")
@@ -163,6 +158,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
             logWarning(s"Error aborting version $newVersion into $this", e)
         }
         logInfo(s"Aborted version $newVersion for $this")
+      } else {
+        state = ABORTED
       }
     }
 
@@ -189,6 +186,15 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     override def toString(): String = {
       s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
+  }
+
+  object HDFSBackedStateStore {
+    /** Trait and classes representing the internal state of the store */
+    trait STATE
+    case object INITIALIZED extends STATE
+    case object UPDATING extends STATE
+    case object COMMITTED extends STATE
+    case object ABORTED extends STATE
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */

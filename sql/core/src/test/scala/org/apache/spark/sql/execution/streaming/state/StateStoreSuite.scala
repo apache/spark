@@ -117,6 +117,35 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(getData(provider) === Set("a" -> 20), "snapshotting messed up the data")
   }
 
+  test("state changes") {
+    val provider = newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
+    val getState = PrivateMethod[provider.HDFSBackedStateStore.STATE]('state)
+
+    // read-write store
+    val store1 = provider.getStore(0)
+    assert(store1.invokePrivate(getState()) === provider.HDFSBackedStateStore.INITIALIZED)
+    put(store1, "a", 0)
+    assert(store1.invokePrivate(getState()) === provider.HDFSBackedStateStore.UPDATING)
+    store1.commit()
+    assert(store1.invokePrivate(getState()) === provider.HDFSBackedStateStore.COMMITTED)
+
+    // read-only store
+    val store2 = provider.getStore(1)
+    assert(store2.invokePrivate(getState()) === provider.HDFSBackedStateStore.INITIALIZED)
+    assert(get(store2, "a") === 0)
+    assert(store2.invokePrivate(getState()) === provider.HDFSBackedStateStore.INITIALIZED)
+    store2.abort()
+    assert(store2.invokePrivate(getState()) === provider.HDFSBackedStateStore.ABORTED)
+
+    // read-write store
+    val store3 = provider.getStore(1)
+    assert(store3.invokePrivate(getState()) === provider.HDFSBackedStateStore.INITIALIZED)
+    remove(store3, _ == "a")
+    assert(store3.invokePrivate(getState()) === provider.HDFSBackedStateStore.UPDATING)
+    store3.commit()
+    assert(store3.invokePrivate(getState()) === provider.HDFSBackedStateStore.COMMITTED)
+  }
+
   test("cleaning") {
     val provider = newStoreProvider(opId = Random.nextInt, partition = 0, minDeltasForSnapshot = 5)
 
