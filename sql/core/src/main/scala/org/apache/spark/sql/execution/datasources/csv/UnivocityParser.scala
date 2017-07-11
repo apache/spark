@@ -111,9 +111,7 @@ class UnivocityParser(
         case options.nanValue => Float.NaN
         case options.negativeInf => Float.NegativeInfinity
         case options.positiveInf => Float.PositiveInfinity
-        case datum =>
-          Try(datum.toFloat)
-            .getOrElse(NumberFormat.getInstance(Locale.US).parse(datum).floatValue())
+        case datum => datum.toFloat
       }
 
     case _: DoubleType => (d: String) =>
@@ -121,9 +119,7 @@ class UnivocityParser(
         case options.nanValue => Double.NaN
         case options.negativeInf => Double.NegativeInfinity
         case options.positiveInf => Double.PositiveInfinity
-        case datum =>
-          Try(datum.toDouble)
-            .getOrElse(NumberFormat.getInstance(Locale.US).parse(datum).doubleValue())
+        case datum => datum.toDouble
       }
 
     case _: BooleanType => (d: String) =>
