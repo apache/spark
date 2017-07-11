@@ -532,7 +532,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("input_file_name, input_file_block_start, input_file_block_length - more than one sources") {
     withTable("tab1", "tab2") {
-      val data = sparkContext.parallelize(0 to 10).toDF("id")
+      val data = sparkContext.parallelize(0 to 9).toDF("id")
       data.write.saveAsTable("tab1")
       data.write.saveAsTable("tab2")
       Seq("input_file_name", "input_file_block_start", "input_file_block_length").foreach { func =>
@@ -541,6 +541,31 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
         }.getMessage
         assert(e.contains(s"'$func' does not support more than one sources"))
       }
+
+      val df = sql(
+        """
+          |SELECT *, input_file_name()
+          |FROM (SELECT * FROM tab1 UNION ALL SELECT * FROM tab2 UNION ALL SELECT * FROM tab2)
+        """.stripMargin)
+      assert(df.count() == 30)
+
+      var e = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT *, input_file_name()
+            |FROM (SELECT * FROM tab1 NATURAL JOIN tab2) UNION ALL SELECT * FROM tab2
+          """.stripMargin)
+        }.getMessage
+      assert(e.contains("'input_file_name' does not support more than one sources"))
+
+      e = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT *, input_file_name()
+            |FROM (SELECT * FROM tab1 UNION ALL SELECT * FROM tab2) NATURAL JOIN tab2
+          """.stripMargin)
+      }.getMessage
+      assert(e.contains("'input_file_name' does not support more than one sources"))
     }
   }
 
