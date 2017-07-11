@@ -319,7 +319,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       model.transform(badPredict).collect()
     }
   }
-  
+
   test("Naive Bayes Gaussian") {
     val piArray = Array(0.5, 0.1, 0.4).map(math.log)
 
