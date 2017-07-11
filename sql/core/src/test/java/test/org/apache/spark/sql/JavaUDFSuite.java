@@ -25,6 +25,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.api.java.UDF2;
@@ -104,5 +105,12 @@ public class JavaUDFSuite implements Serializable {
       sum += result.getLong(0);
     }
     Assert.assertEquals(55, sum);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test(expected = AnalysisException.class)
+  public void udf5Test() {
+    spark.udf().register("inc", (Long i) -> i + 1, DataTypes.LongType);
+    List<Row> results = spark.sql("SELECT inc(1, 5)").collectAsList();
   }
 }
