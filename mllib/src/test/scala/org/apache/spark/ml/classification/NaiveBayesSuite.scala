@@ -361,12 +361,24 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
   test("read/write") {
     def checkModelData(model: NaiveBayesModel, model2: NaiveBayesModel): Unit = {
+      assert(model.getModelType === model2.getModelType)
       assert(model.pi === model2.pi)
       assert(model.theta === model2.theta)
+      if (model.getModelType == "gaussian") {
+        assert(model.sigma.get === model2.sigma.get)
+      } else {
+        assert(model.sigma.isEmpty && model2.sigma.isEmpty)
+      }
     }
+
     val nb = new NaiveBayes()
     testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings,
       NaiveBayesSuite.allParamSettings, checkModelData)
+
+    val gnb = new NaiveBayes().setModelType("gaussian")
+    testEstimatorAndModelReadWrite(gnb, gaussianDataset,
+      NaiveBayesSuite.allParamSettingsForGaussian,
+      NaiveBayesSuite.allParamSettingsForGaussian, checkModelData)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {
@@ -377,14 +389,6 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
         assert(expected.theta === actual.theta)
         assert(expected.sigma.isEmpty && actual.sigma.isEmpty)
       }
-
-    val gnb = new NaiveBayes().setModelType("gaussian")
-    MLTestingUtils.checkNumericTypes[NaiveBayesModel, NaiveBayes](
-      gnb, spark) { (expected, actual) =>
-      assert(expected.pi === actual.pi)
-      assert(expected.theta === actual.theta)
-      assert(expected.sigma.get === actual.sigma.get)
-    }
   }
 }
 
