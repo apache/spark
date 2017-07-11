@@ -71,12 +71,21 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("error reporting for incorrect number of arguments") {
+  test("error reporting for incorrect number of arguments - builtin function") {
     val df = spark.emptyDataFrame
     val e = intercept[AnalysisException] {
       df.selectExpr("substr('abcd', 2, 3, 4)")
     }
-    assert(e.getMessage.contains("arguments"))
+    assert(e.getMessage.contains("Invalid number of arguments for function substr"))
+  }
+
+  test("error reporting for incorrect number of arguments - udf") {
+    val df = spark.emptyDataFrame
+    val e = intercept[AnalysisException] {
+      spark.udf.register("foo", (_: String).length)
+      df.selectExpr("foo(2, 3, 4)")
+    }
+    assert(e.getMessage.contains("Invalid number of arguments for function foo"))
   }
 
   test("error reporting for undefined functions") {
