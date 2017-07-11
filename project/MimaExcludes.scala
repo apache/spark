@@ -44,7 +44,10 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetricDistributions.this"),
 
     // [SPARK-21276] Update lz4-java to the latest (v1.4.0)
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.io.LZ4BlockInputStream")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.io.LZ4BlockInputStream"),
+
+    // [SPARK-16872][ML] Add Gaussian NB
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.NaiveBayesModel.this")
   )
 
   // Exclude rules for 2.2.x
