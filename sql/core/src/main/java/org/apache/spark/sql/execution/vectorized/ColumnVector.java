@@ -698,6 +698,11 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
+   * Returns the UTF8String from a compressed column
+   */
+  public UTF8String getUTF8StringFromCompressible(int rowId) { return null; }
+
+  /**
    * Returns the byte array for rowId.
    */
   public byte[] getBinary(int rowId) {

@@ -38,17 +38,15 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
   // e.g. when isNullAt() and getInt() ara called, extractTo() must be called only once
   private boolean[] calledExtractTo;
 
-  // a row where the compressed data is extracted
-  private transient UnsafeRow unsafeRow;
-  private transient BufferHolder bufferHolder;
-  private transient UnsafeRowWriter rowWriter;
-  private transient MutableUnsafeRow mutableRow;
-
   // accessor for a column
   private transient ColumnAccessor columnAccessor;
 
-  // an accessor uses only column 0
-  private final int ORDINAL = 0;
+  // a row where the compressed data is extracted
+  private transient ColumnVector columnVector;
+
+  // an accessor uses only row 0 in columnVector
+  private final int ROWID = 0;
+
 
   protected OnHeapCachedBatch(int capacity, DataType type) {
     super(capacity, type, VectorType.Compressible, MemoryMode.ON_HEAP);
@@ -73,8 +71,8 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
     if (columnAccessor == null) {
       setColumnAccessor();
     }
-    if (mutableRow == null) {
-      setRowSetter();
+    if (columnVector == null) {
+      columnVector = new OnHeapColumnVector(1, type);
     }
   }
 
@@ -84,20 +82,11 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
     calledExtractTo = new boolean[capacity];
   }
 
-  private void setRowSetter() {
-    unsafeRow = new UnsafeRow(1);
-    bufferHolder = new BufferHolder(unsafeRow);
-    rowWriter = new UnsafeRowWriter(bufferHolder, 1);
-    mutableRow = new MutableUnsafeRow(rowWriter);
-  }
-
   // call extractTo() before getting actual data
-  private void prepareRowAccess(int rowId) {
+  private void prepareAccess(int rowId) {
     if (!calledExtractTo[rowId]) {
       assert (columnAccessor.hasNext());
-      bufferHolder.reset();
-      rowWriter.zeroOutNullBytes();
-      columnAccessor.extractTo(mutableRow, ORDINAL);
+      columnAccessor.extractTo(columnVector, ROWID);
       calledExtractTo[rowId] = true;
     }
   }
@@ -146,8 +135,8 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
 
   @Override
   public boolean isNullAt(int rowId) {
-    prepareRowAccess(rowId);
-    return unsafeRow.isNullAt(ORDINAL);
+    prepareAccess(rowId);
+    return columnVector.isNullAt(ROWID);
   }
 
   //
@@ -166,8 +155,8 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
 
   @Override
   public boolean getBoolean(int rowId) {
-    prepareRowAccess(rowId);
-    return unsafeRow.getBoolean(ORDINAL);
+    prepareAccess(rowId);
+    return columnVector.getBoolean(ROWID);
   }
 
   @Override
@@ -198,8 +187,8 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
 
   @Override
   public byte getByte(int rowId) {
-    prepareRowAccess(rowId);
-    return unsafeRow.getByte(ORDINAL);
+    prepareAccess(rowId);
+    return columnVector.getByte(ROWID);
   }
 
   @Override
@@ -228,8 +217,8 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
 
   @Override
   public short getShort(int rowId) {
-    prepareRowAccess(rowId);
-    return unsafeRow.getShort(ORDINAL);
+    prepareAccess(rowId);
+    return columnVector.getShort(ROWID);
   }
 
   @Override
@@ -263,8 +252,8 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
 
   @Override
   public int getInt(int rowId) {
-    prepareRowAccess(rowId);
-    return unsafeRow.getInt(ORDINAL);
+    prepareAccess(rowId);
+    return columnVector.getInt(ROWID);
   }
 
   @Override
@@ -307,8 +296,8 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
 
   @Override
   public long getLong(int rowId) {
-    prepareRowAccess(rowId);
-    return unsafeRow.getLong(ORDINAL);
+    prepareAccess(rowId);
+    return columnVector.getLong(ROWID);
   }
 
   @Override
@@ -342,8 +331,8 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
 
   @Override
   public float getFloat(int rowId) {
-    prepareRowAccess(rowId);
-    return unsafeRow.getFloat(ORDINAL);
+    prepareAccess(rowId);
+    return columnVector.getFloat(ROWID);
   }
 
   @Override
@@ -377,8 +366,8 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
 
   @Override
   public double getDouble(int rowId) {
-    prepareRowAccess(rowId);
-    return unsafeRow.getDouble(ORDINAL);
+    prepareAccess(rowId);
+    return columnVector.getDouble(ROWID);
   }
 
   @Override
@@ -418,9 +407,9 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
     throw new UnsupportedOperationException();
   }
 
-  public final UTF8String getUTF8StringInternal(int rowId) {
-    prepareRowAccess(rowId);
-    return unsafeRow.getUTF8String(ORDINAL);
+  public final UTF8String getUTF8StringFromCompressible(int rowId) {
+    prepareAccess(rowId);
+    return columnVector.getUTF8String(ROWID);
   }
 
   // Spilt this function out since it is the slow path.

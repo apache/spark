@@ -24,6 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.columnar._
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types._
 
 
@@ -58,6 +59,10 @@ private[columnar] case object PassThrough extends CompressionScheme {
 
     override def next(row: InternalRow, ordinal: Int): Unit = {
       columnType.extract(buffer, row, ordinal)
+    }
+
+    override def next(column: ColumnVector, ordinal: Int): Unit = {
+      columnType.extract(buffer, column, ordinal)
     }
 
     override def hasNext: Boolean = buffer.hasRemaining
@@ -166,6 +171,18 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       }
 
       columnType.setField(row, ordinal, currentValue)
+    }
+
+    override def next(column: ColumnVector, ordinal: Int): Unit = {
+      if (valueCount == run) {
+        currentValue = columnType.extract(buffer)
+        run = ByteBufferHelper.getInt(buffer)
+        valueCount = 1
+      } else {
+        valueCount += 1
+      }
+
+      columnType.setField(column, ordinal, currentValue)
     }
 
     override def hasNext: Boolean = valueCount < run || buffer.hasRemaining
@@ -277,6 +294,11 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
       columnType.setField(row, ordinal, dictionary(buffer.getShort()).asInstanceOf[T#InternalType])
     }
 
+    override def next(column: ColumnVector, ordinal: Int): Unit = {
+      columnType.setField(
+        column, ordinal, dictionary(buffer.getShort()).asInstanceOf[T#InternalType])
+    }
+
     override def hasNext: Boolean = buffer.hasRemaining
   }
 }
@@ -367,6 +389,17 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
       row.setBoolean(ordinal, ((currentWord >> bit) & 1) != 0)
     }
 
+    override def next(column: ColumnVector, ordinal: Int): Unit = {
+      val bit = visited % BITS_PER_LONG
+
+      visited += 1
+      if (bit == 0) {
+        currentWord = ByteBufferHelper.getLong(buffer)
+      }
+
+      column.putBoolean(ordinal, ((currentWord >> bit) & 1) != 0)
+    }
+
     override def hasNext: Boolean = visited < count
   }
 }
@@ -448,6 +481,12 @@ private[columnar] case object IntDelta extends CompressionScheme {
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getInt(buffer)
       row.setInt(ordinal, prev)
     }
+
+    override def next(column: ColumnVector, ordinal: Int): Unit = {
+      val delta = buffer.get()
+      prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getInt(buffer)
+      column.putInt(ordinal, prev)
+    }
   }
 }
 
@@ -527,6 +566,12 @@ private[columnar] case object LongDelta extends CompressionScheme {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getLong(buffer)
       row.setLong(ordinal, prev)
+    }
+
+    override def next(column: ColumnVector, ordinal: Int): Unit = {
+      val delta = buffer.get()
+      prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getLong(buffer)
+      column.putLong(ordinal, prev)
     }
   }
 }

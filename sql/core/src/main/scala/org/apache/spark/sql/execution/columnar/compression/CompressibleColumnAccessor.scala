@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.columnar.{ColumnAccessor, NativeColumnAccessor}
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types.AtomicType
 
 private[columnar] trait CompressibleColumnAccessor[T <: AtomicType] extends ColumnAccessor {
@@ -35,5 +36,9 @@ private[columnar] trait CompressibleColumnAccessor[T <: AtomicType] extends Colu
 
   override def extractSingle(row: InternalRow, ordinal: Int): Unit = {
     decoder.next(row, ordinal)
+  }
+
+  override def extractSingle(column: ColumnVector, ordinal: Int): Unit = {
+    decoder.next(column, ordinal)
   }
 }

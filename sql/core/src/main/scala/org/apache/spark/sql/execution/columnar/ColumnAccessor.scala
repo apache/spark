@@ -24,6 +24,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types._
 
 /**
@@ -41,6 +42,8 @@ private[columnar] trait ColumnAccessor {
 
   def extractTo(row: InternalRow, ordinal: Int): Unit
 
+  def extractTo(column: ColumnVector, rowId: Int): Unit
+
   protected def underlyingBuffer: ByteBuffer
 }
 
@@ -57,8 +60,16 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
     extractSingle(row, ordinal)
   }
 
+  override def extractTo(column: ColumnVector, rowId: Int): Unit = {
+    extractSingle(column, rowId)
+  }
+
   def extractSingle(row: InternalRow, ordinal: Int): Unit = {
     columnType.extract(buffer, row, ordinal)
+  }
+
+  def extractSingle(column: ColumnVector, rowId: Int): Unit = {
+    columnType.extract(buffer, column, rowId)
   }
 
   protected def underlyingBuffer = buffer

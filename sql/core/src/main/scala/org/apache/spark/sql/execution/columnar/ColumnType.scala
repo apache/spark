@@ -25,6 +25,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
@@ -96,6 +97,10 @@ private[columnar] sealed abstract class ColumnType[JvmType] {
     setField(row, ordinal, extract(buffer))
   }
 
+  def extract(buffer: ByteBuffer, column: ColumnVector, rowId: Int): Unit = {
+    setField(column, rowId, extract(buffer))
+  }
+
   /**
    * Appends the given value v of type T into the given ByteBuffer.
    */
@@ -127,6 +132,8 @@ private[columnar] sealed abstract class ColumnType[JvmType] {
    */
   def setField(row: InternalRow, ordinal: Int, value: JvmType): Unit
 
+  def setField(column: ColumnVector, rowId: Int, value: JvmType): Unit
+
   /**
    * Copies `from(fromOrdinal)` to `to(toOrdinal)`. Subclasses should override this method to avoid
    * boxing/unboxing costs whenever possible.
@@ -150,6 +157,7 @@ private[columnar] object NULL extends ColumnType[Any] {
   override def append(v: Any, buffer: ByteBuffer): Unit = {}
   override def extract(buffer: ByteBuffer): Any = null
   override def setField(row: InternalRow, ordinal: Int, value: Any): Unit = row.setNullAt(ordinal)
+  override def setField(column: ColumnVector, rowId: Int, value: Any): Unit = column.putNull(rowId)
   override def getField(row: InternalRow, ordinal: Int): Any = null
 }
 
@@ -185,6 +193,10 @@ private[columnar] object INT extends NativeColumnType(IntegerType, 4) {
     row.setInt(ordinal, value)
   }
 
+  override def setField(column: ColumnVector, rowId: Int, value: Int): Unit = {
+    column.putInt(rowId, value)
+  }
+
   override def getField(row: InternalRow, ordinal: Int): Int = row.getInt(ordinal)
 
 
@@ -212,6 +224,10 @@ private[columnar] object LONG extends NativeColumnType(LongType, 8) {
 
   override def setField(row: InternalRow, ordinal: Int, value: Long): Unit = {
     row.setLong(ordinal, value)
+  }
+
+  override def setField(column: ColumnVector, rowId: Int, value: Long): Unit = {
+    column.putLong(rowId, value)
   }
 
   override def getField(row: InternalRow, ordinal: Int): Long = row.getLong(ordinal)
@@ -242,6 +258,10 @@ private[columnar] object FLOAT extends NativeColumnType(FloatType, 4) {
     row.setFloat(ordinal, value)
   }
 
+  override def setField(column: ColumnVector, rowId: Int, value: Float): Unit = {
+    column.putFloat(rowId, value)
+  }
+
   override def getField(row: InternalRow, ordinal: Int): Float = row.getFloat(ordinal)
 
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
@@ -270,6 +290,10 @@ private[columnar] object DOUBLE extends NativeColumnType(DoubleType, 8) {
     row.setDouble(ordinal, value)
   }
 
+  override def setField(column: ColumnVector, rowId: Int, value: Double): Unit = {
+    column.putDouble(rowId, value)
+  }
+
   override def getField(row: InternalRow, ordinal: Int): Double = row.getDouble(ordinal)
 
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
@@ -294,6 +318,10 @@ private[columnar] object BOOLEAN extends NativeColumnType(BooleanType, 1) {
 
   override def setField(row: InternalRow, ordinal: Int, value: Boolean): Unit = {
     row.setBoolean(ordinal, value)
+  }
+
+  override def setField(column: ColumnVector, rowId: Int, value: Boolean): Unit = {
+    column.putBoolean(rowId, value)
   }
 
   override def getField(row: InternalRow, ordinal: Int): Boolean = row.getBoolean(ordinal)
@@ -324,6 +352,10 @@ private[columnar] object BYTE extends NativeColumnType(ByteType, 1) {
     row.setByte(ordinal, value)
   }
 
+  override def setField(column: ColumnVector, rowId: Int, value: Byte): Unit = {
+    column.putByte(rowId, value)
+  }
+
   override def getField(row: InternalRow, ordinal: Int): Byte = row.getByte(ordinal)
 
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
@@ -350,6 +382,10 @@ private[columnar] object SHORT extends NativeColumnType(ShortType, 2) {
 
   override def setField(row: InternalRow, ordinal: Int, value: Short): Unit = {
     row.setShort(ordinal, value)
+  }
+
+  override def setField(column: ColumnVector, rowId: Int, value: Short): Unit = {
+    column.putShort(rowId, value)
   }
 
   override def getField(row: InternalRow, ordinal: Int): Short = row.getShort(ordinal)
@@ -415,6 +451,10 @@ private[columnar] object STRING
     }
   }
 
+  override def setField(column: ColumnVector, rowId: Int, value: UTF8String): Unit = {
+    column.putByteArray(rowId, value.getBytes)
+  }
+
   override def getField(row: InternalRow, ordinal: Int): UTF8String = {
     row.getUTF8String(ordinal)
   }
@@ -463,6 +503,10 @@ private[columnar] case class COMPACT_DECIMAL(precision: Int, scale: Int)
     row.setDecimal(ordinal, value, precision)
   }
 
+  override def setField(column: ColumnVector, rowId: Int, value: Decimal): Unit = {
+    throw new UnsupportedOperationException
+  }
+
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
@@ -501,6 +545,10 @@ private[columnar] object BINARY extends ByteArrayColumnType[Array[Byte]](16) {
     row.update(ordinal, value)
   }
 
+  override def setField(column: ColumnVector, rowId: Int, value: Array[Byte]): Unit = {
+    throw new UnsupportedOperationException
+  }
+
   override def getField(row: InternalRow, ordinal: Int): Array[Byte] = {
     row.getBinary(ordinal)
   }
@@ -524,6 +572,10 @@ private[columnar] case class LARGE_DECIMAL(precision: Int, scale: Int)
 
   override def setField(row: InternalRow, ordinal: Int, value: Decimal): Unit = {
     row.setDecimal(ordinal, value, precision)
+  }
+
+  override def setField(column: ColumnVector, rowId: Int, value: Decimal): Unit = {
+    throw new UnsupportedOperationException
   }
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
@@ -555,6 +607,10 @@ private[columnar] case class STRUCT(dataType: StructType)
 
   override def setField(row: InternalRow, ordinal: Int, value: UnsafeRow): Unit = {
     row.update(ordinal, value)
+  }
+
+  override def setField(column: ColumnVector, rowId: Int, value: UnsafeRow): Unit = {
+    throw new UnsupportedOperationException
   }
 
   override def getField(row: InternalRow, ordinal: Int): UnsafeRow = {
@@ -595,6 +651,10 @@ private[columnar] case class ARRAY(dataType: ArrayType)
     row.update(ordinal, value)
   }
 
+  override def setField(column: ColumnVector, rowId: Int, value: UnsafeArrayData): Unit = {
+    throw new UnsupportedOperationException
+  }
+
   override def getField(row: InternalRow, ordinal: Int): UnsafeArrayData = {
     row.getArray(ordinal).asInstanceOf[UnsafeArrayData]
   }
@@ -632,6 +692,10 @@ private[columnar] case class MAP(dataType: MapType)
 
   override def setField(row: InternalRow, ordinal: Int, value: UnsafeMapData): Unit = {
     row.update(ordinal, value)
+  }
+
+  override def setField(column: ColumnVector, rowId: Int, value: UnsafeMapData): Unit = {
+    throw new UnsupportedOperationException
   }
 
   override def getField(row: InternalRow, ordinal: Int): UnsafeMapData = {
