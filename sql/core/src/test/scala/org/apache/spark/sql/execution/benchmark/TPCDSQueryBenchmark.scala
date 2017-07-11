@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.io.File
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -31,7 +29,7 @@ import org.apache.spark.util.Benchmark
 /**
  * Benchmark to measure TPCDS query performance.
  * To run this:
- *  spark-submit --class <this class> --jars <spark sql test jar>
+ *  spark-submit --class <this class> <spark sql test jar> <TPCDS data location>
  */
 object TPCDSQueryBenchmark {
   val conf =
@@ -61,12 +59,10 @@ object TPCDSQueryBenchmark {
   }
 
   def tpcdsAll(dataLocation: String, queries: Seq[String]): Unit = {
-    require(dataLocation.nonEmpty,
-      "please modify the value of dataLocation to point to your local TPCDS data")
     val tableSizes = setupTables(dataLocation)
     queries.foreach { name =>
-      val queryString = resourceToString(s"tpcds/$name.sql", "UTF-8",
-        Thread.currentThread().getContextClassLoader)
+      val queryString = resourceToString(s"tpcds/$name.sql",
+        classLoader = Thread.currentThread().getContextClassLoader)
 
       // This is an indirect hack to estimate the size of each query's input by traversing the
       // logical plan and adding up the sizes of all tables that appear in the plan. Note that this
@@ -102,7 +98,14 @@ object TPCDSQueryBenchmark {
     if (args.length < 1) {
       // scalastyle:off println
       println(
-        "Usage: spark-submit --class <this class> --jars <spark sql test jar> <data location>")
+        s"""
+           |Usage: spark-submit --class <this class> <spark sql test jar> <TPCDS data location>
+           |
+           |In order to run this benchmark, please follow the instructions at
+           |https://github.com/databricks/spark-sql-perf/blob/master/README.md to generate the TPCDS data
+           |locally (preferably with a scale factor of 5 for benchmarking). Thereafter, the value of
+           |dataLocation below needs to be set to the location where the generated data is stored.
+         """.stripMargin)
       // scalastyle:on println
       System.exit(1)
     }
@@ -120,10 +123,6 @@ object TPCDSQueryBenchmark {
       "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
       "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
-    // In order to run this benchmark, please follow the instructions at
-    // https://github.com/databricks/spark-sql-perf/blob/master/README.md to generate the TPCDS data
-    // locally (preferably with a scale factor of 5 for benchmarking). Thereafter, the value of
-    // dataLocation below needs to be set to the location where the generated data is stored.
     val dataLocation = args(0)
 
     tpcdsAll(dataLocation, queries = tpcdsQueries)
