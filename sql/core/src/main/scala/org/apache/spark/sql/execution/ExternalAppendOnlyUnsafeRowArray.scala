@@ -166,7 +166,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     if (spillableArray == null) {
       new InMemoryBufferIterator(startIndex)
     } else {
-      new SpillableArrayIterator(spillableArray.getIterator, numFieldsPerRow, startIndex)
+      new SpillableArrayIterator(spillableArray.getIterator(startIndex), numFieldsPerRow)
     }
   }
 
@@ -204,28 +204,10 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
   private[this] class SpillableArrayIterator(
       iterator: UnsafeSorterIterator,
-      numFieldPerRow: Int,
-      startIndex: Int)
+      numFieldPerRow: Int)
     extends ExternalAppendOnlyUnsafeRowArrayIterator {
 
     private val currentRow = new UnsafeRow(numFieldPerRow)
-
-    def init(): Unit = {
-      var i = 0
-      while (i < startIndex) {
-        if (iterator.hasNext) {
-          iterator.loadNext()
-        } else {
-          throw new ArrayIndexOutOfBoundsException(
-            "Invalid `startIndex` provided for generating iterator over the array. " +
-              s"Total elements: $numRows, requested `startIndex`: $startIndex")
-        }
-        i += 1
-      }
-    }
-
-    // Traverse upto the given [[startIndex]]
-    init()
 
     override def hasNext(): Boolean = !isModified() && iterator.hasNext
 
