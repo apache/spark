@@ -758,7 +758,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
-  test("Putting null should fail when null is forbidden in array.") {
+  test("Putting null(s) should fail when null is forbidden in array.") {
     (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
       val column = ColumnVector.allocate(10, new ArrayType(IntegerType, false), memMode)
       val data = column.arrayData();
@@ -766,10 +766,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
       data.putInt(1, 1)
       assert(data.getInt(0) === 0)
       assert(data.getInt(1) === 1)
-      val ex = intercept[RuntimeException] {
+      val ex0 = intercept[RuntimeException] {
         data.putNull(2)
       }
-      assert(ex.getMessage.contains("Not allowed to put null in this column."))
+      assert(ex0.getMessage.contains("Not allowed to put null in this column."))
+      val ex1 = intercept[RuntimeException] {
+        data.putNulls(2, 2)
+      }
+      assert(ex1.getMessage.contains("Not allowed to put nulls in this column."))
     }
   }
 

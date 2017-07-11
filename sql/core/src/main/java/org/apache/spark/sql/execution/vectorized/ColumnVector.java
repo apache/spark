@@ -1079,7 +1079,7 @@ public abstract class ColumnVector implements AutoCloseable {
       } else if (type instanceof BinaryType || type instanceof StringType) {
         childType = DataTypes.ByteType;
         childCapacity *= DEFAULT_ARRAY_LENGTH;
-        this.childColumns[0] = ColumnVector.allocate(childCapacity, childType, memMode, false);
+        this.childColumns[0] = ColumnVector.allocate(childCapacity, childType, memMode, containsNull = false);
       } else {
         childType = DataTypes.ByteType;
         childCapacity *= DEFAULT_ARRAY_LENGTH;
