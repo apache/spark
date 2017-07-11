@@ -648,7 +648,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         (convert.lift(expr1) ++ convert.lift(expr2)).mkString("(", " and ", ")")
       case op @ Or(expr1, expr2)
           if convert.isDefinedAt(expr1) && convert.isDefinedAt(expr2) =>
-        (convert.lift(expr1) ++ convert.lift(expr2)).mkString("(", " or ", ")")
+        s"(${convert(expr1)} or ${convert(expr2)})"
     }
 
     filters.map(convert.lift).collect { case Some(filterString) => filterString }.mkString(" and ")
