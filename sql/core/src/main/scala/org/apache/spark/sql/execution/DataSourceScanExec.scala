@@ -33,19 +33,18 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   val relation: BaseRelation
-  val metastoreTableIdentifier: Option[TableIdentifier]
+  val tableIdentifier: Option[TableIdentifier]
 
   protected val nodeNamePrefix: String = ""
 
   override val nodeName: String = {
-    s"Scan $relation ${metastoreTableIdentifier.map(_.unquotedString).getOrElse("")}"
+    s"Scan $relation ${tableIdentifier.map(_.unquotedString).getOrElse("")}"
   }
 
   override def simpleString: String = {
@@ -73,34 +72,24 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
 
 /** Physical plan node for scanning data from a relation. */
 case class RowDataSourceScanExec(
-    output: Seq[Attribute],
+    fullOutput: Seq[Attribute],
+    requiredColumnsIndex: Seq[Int],
+    filters: Set[Filter],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
-    override val outputPartitioning: Partitioning,
-    override val metadata: Map[String, String],
-    override val metastoreTableIdentifier: Option[TableIdentifier])
+    override val tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
+
+  def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
 
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  val outputUnsafeRows = relation match {
-    case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
-      !SparkSession.getActiveSession.get.sessionState.conf.getConf(
-        SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
-    case _: HadoopFsRelation => true
-    case _ => false
-  }
-
   protected override def doExecute(): RDD[InternalRow] = {
-    val unsafeRow = if (outputUnsafeRows) {
-      rdd
-    } else {
-      rdd.mapPartitionsWithIndexInternal { (index, iter) =>
-        val proj = UnsafeProjection.create(schema)
-        proj.initialize(index)
-        iter.map(proj)
-      }
+    val unsafeRow = rdd.mapPartitionsWithIndexInternal { (index, iter) =>
+      val proj = UnsafeProjection.create(schema)
+      proj.initialize(index)
+      iter.map(proj)
     }
 
     val numOutputRows = longMetric("numOutputRows")
@@ -126,24 +115,22 @@ case class RowDataSourceScanExec(
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columnsRowInput = exprRows.map(_.genCode(ctx))
-    val inputRow = if (outputUnsafeRows) row else null
     s"""
        |while ($input.hasNext()) {
        |  InternalRow $row = (InternalRow) $input.next();
        |  $numOutputRows.add(1);
-       |  ${consume(ctx, columnsRowInput, inputRow).trim}
+       |  ${consume(ctx, columnsRowInput, null).trim}
        |  if (shouldStop()) return;
        |}
      """.stripMargin
   }
 
-  // Only care about `relation` and `metadata` when canonicalizing.
+  // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
   override lazy val canonicalized: SparkPlan =
     copy(
-      output.map(QueryPlan.normalizeExprId(_, output)),
+      fullOutput.map(QueryPlan.normalizeExprId(_, fullOutput)),
       rdd = null,
-      outputPartitioning = null,
-      metastoreTableIdentifier = None)
+      tableIdentifier = None)
 }
 
 /**
@@ -154,7 +141,7 @@ case class RowDataSourceScanExec(
  * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
  * @param partitionFilters Predicates to use for partition pruning.
  * @param dataFilters Filters on non-partition columns.
- * @param metastoreTableIdentifier identifier for the table in the metastore.
+ * @param tableIdentifier identifier for the table in the metastore.
  */
 case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
@@ -162,7 +149,7 @@ case class FileSourceScanExec(
     requiredSchema: StructType,
     partitionFilters: Seq[Expression],
     dataFilters: Seq[Expression],
-    override val metastoreTableIdentifier: Option[TableIdentifier])
+    override val tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with ColumnarBatchScan  {
 
   val supportsBatch: Boolean = relation.fileFormat.supportBatch(
