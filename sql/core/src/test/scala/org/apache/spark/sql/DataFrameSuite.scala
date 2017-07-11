@@ -111,6 +111,93 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("union by name") {
+    var df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
+    var df2 = Seq((3, 1, 2)).toDF("c", "a", "b")
+    val df3 = Seq((2, 3, 1)).toDF("b", "c", "a")
+    val unionDf = df1.unionByName(df2.unionByName(df3))
+    checkAnswer(unionDf,
+      Row(1, 2, 3) :: Row(1, 2, 3) :: Row(1, 2, 3) :: Nil
+    )
+
+    // Check if adjacent unions are combined into a single one
+    assert(unionDf.queryExecution.optimizedPlan.collect { case u: Union => true }.size == 1)
+
+    // Check failure cases
+    df1 = Seq((1, 2)).toDF("a", "c")
+    df2 = Seq((3, 4, 5)).toDF("a", "b", "c")
+    var errMsg = intercept[AnalysisException] {
+      df1.unionByName(df2)
+    }.getMessage
+    assert(errMsg.contains(
+      "Union can only be performed on tables with the same number of columns, " +
+        "but the first table has 2 columns and the second table has 3 columns"))
+
+    df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
+    df2 = Seq((4, 5, 6)).toDF("a", "c", "d")
+    errMsg = intercept[AnalysisException] {
+      df1.unionByName(df2)
+    }.getMessage
+    assert(errMsg.contains("""Cannot resolve column name "b" among (a, c, d)"""))
+  }
+
+  test("union by name - type coercion") {
+    var df1 = Seq((1, "a")).toDF("c0", "c1")
+    var df2 = Seq((3, 1L)).toDF("c1", "c0")
+    checkAnswer(df1.unionByName(df2), Row(1L, "a") :: Row(1L, "3") :: Nil)
+
+    df1 = Seq((1, 1.0)).toDF("c0", "c1")
+    df2 = Seq((8L, 3.0)).toDF("c1", "c0")
+    checkAnswer(df1.unionByName(df2), Row(1.0, 1.0) :: Row(3.0, 8.0) :: Nil)
+
+    df1 = Seq((2.0f, 7.4)).toDF("c0", "c1")
+    df2 = Seq(("a", 4.0)).toDF("c1", "c0")
+    checkAnswer(df1.unionByName(df2), Row(2.0, "7.4") :: Row(4.0, "a") :: Nil)
+
+    df1 = Seq((1, "a", 3.0)).toDF("c0", "c1", "c2")
+    df2 = Seq((1.2, 2, "bc")).toDF("c2", "c0", "c1")
+    val df3 = Seq(("def", 1.2, 3)).toDF("c1", "c2", "c0")
+    checkAnswer(df1.unionByName(df2.unionByName(df3)),
+      Row(1, "a", 3.0) :: Row(2, "bc", 1.2) :: Row(3, "def", 1.2) :: Nil
+    )
+  }
+
+  test("union by name - check case sensitivity") {
+    def checkCaseSensitiveTest(): Unit = {
+      val df1 = Seq((1, 2, 3)).toDF("ab", "cd", "ef")
+      val df2 = Seq((4, 5, 6)).toDF("cd", "ef", "AB")
+      checkAnswer(df1.unionByName(df2), Row(1, 2, 3) :: Row(6, 4, 5) :: Nil)
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val errMsg2 = intercept[AnalysisException] {
+        checkCaseSensitiveTest()
+      }.getMessage
+      assert(errMsg2.contains("""Cannot resolve column name "ab" among (cd, ef, AB)"""))
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkCaseSensitiveTest()
+    }
+  }
+
+  test("union by name - check name duplication") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        var df1 = Seq((1, 1)).toDF(c0, c1)
+        var df2 = Seq((1, 1)).toDF("c0", "c1")
+        var errMsg = intercept[AnalysisException] {
+          df1.unionByName(df2)
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the left attributes:"))
+        df1 = Seq((1, 1)).toDF("c0", "c1")
+        df2 = Seq((1, 1)).toDF(c0, c1)
+        errMsg = intercept[AnalysisException] {
+          df1.unionByName(df2)
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the right attributes:"))
+      }
+    }
+  }
+
   test("empty data frame") {
     assert(spark.emptyDataFrame.columns.toSeq === Seq.empty[String])
     assert(spark.emptyDataFrame.count() === 0)
