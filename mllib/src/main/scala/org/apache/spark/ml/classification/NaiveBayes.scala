@@ -507,19 +507,18 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = instance.getModelType match {
-        // Save model data: pi, theta
-        case Multinomial => Data(instance.pi, instance.theta)
-        // Save model data: pi, theta
-        case Bernoulli => Data(instance.pi, instance.theta)
-        // Save model data: pi, theta, sigma
-        case Gaussian => GaussianData(instance.pi, instance.theta, instance.sigma.get)
-        case _ =>
-          // This should never happen.
-          throw new UnknownError(s"Invalid modelType: ${instance.getModelType}.")
-      }
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+
+      if (instance.getModelType == Multinomial || instance.getModelType == Bernoulli) {
+        val data = Data(instance.pi, instance.theta)
+        sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      } else if (instance.getModelType == Gaussian) {
+        val data = GaussianData(instance.pi, instance.theta, instance.sigma.get)
+        sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      } else {
+        // This should never happen.
+        throw new UnknownError(s"Invalid modelType: ${instance.getModelType}.")
+      }
     }
   }
 

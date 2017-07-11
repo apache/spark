@@ -69,7 +69,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
     dataset = generateNaiveBayesInput(pi, theta, 100, seed).toDF()
     bernoulliDataset = generateNaiveBayesInput(pi, theta, 100, seed, "bernoulli").toDF()
-    gaussianDataset = generateGaussianNaiveBayesInput(pi, theta2, sigma, 100, seed).toDF()
+    gaussianDataset = generateGaussianNaiveBayesInput(pi, theta2, sigma, 1000, seed).toDF()
   }
 
   def validatePrediction(predictionAndLabels: DataFrame): Unit = {
