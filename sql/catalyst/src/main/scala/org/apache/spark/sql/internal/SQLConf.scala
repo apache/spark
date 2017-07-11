@@ -860,7 +860,7 @@ object SQLConf {
       " as regular expressions.")
     .booleanConf
     .createWithDefault(false)
-  
+
   val ARROW_EXECUTION_ENABLE =
     buildConf("spark.sql.execution.arrow.enable")
       .internal()
