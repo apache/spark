@@ -72,7 +72,11 @@ private[spark] object SerDeUtil extends Logging {
         val typecode = args(0).asInstanceOf[String].charAt(0)
         // This must be ISO 8859-1 / Latin 1, not UTF-8, to interoperate correctly
         val data = args(1).asInstanceOf[String].getBytes(StandardCharsets.ISO_8859_1)
-        construct(typecode, machineCodes(typecode), data)
+        val machine_code = machineCodes(typecode)
+        // fix data alignment
+        val unit_length = if (machine_code==18 || machine_code==19) 2 else 4
+        val aligned_data = data ++ Array.fill[Byte](unit_length - data.length % unit_length)(0)
+        construct(typecode, machine_code, aligned_data)
       } else if (args.length == 2 && args(0) == "l") {
         // On Python 2, an array of typecode 'l' should be handled as long rather than int.
         val values = args(1).asInstanceOf[JArrayList[_]]
