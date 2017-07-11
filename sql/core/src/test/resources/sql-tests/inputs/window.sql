@@ -21,29 +21,31 @@ RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val;
 
 -- Window functions
 SELECT val, cate,
-max(val) OVER(PARTITION BY cate ORDER BY val),
-min(val) OVER(PARTITION BY cate ORDER BY val),
-mean(val) OVER(PARTITION BY cate ORDER BY val),
-count(val) OVER(PARTITION BY cate ORDER BY val),
-sum(val) OVER(PARTITION BY cate ORDER BY val),
-avg(val) OVER(PARTITION BY cate ORDER BY val),
-stddev(val) OVER(PARTITION BY cate ORDER BY val),
-first_value(val) OVER(PARTITION BY cate ORDER BY val),
-first_value(val, true) OVER(PARTITION BY cate ORDER BY val),
-first_value(val, false) OVER(PARTITION BY cate ORDER BY val),
-last_value(val) OVER(PARTITION BY cate ORDER BY val),
-last_value(val, true) OVER(PARTITION BY cate ORDER BY val),
-last_value(val, false) OVER(PARTITION BY cate ORDER BY val),
-rank() OVER(PARTITION BY cate ORDER BY val),
-dense_rank() OVER(PARTITION BY cate ORDER BY val),
-cume_dist() OVER(PARTITION BY cate ORDER BY val),
-percent_rank() OVER(PARTITION BY cate ORDER BY val),
-ntile(2) OVER(PARTITION BY cate ORDER BY val),
-row_number() OVER(PARTITION BY cate ORDER BY val),
-var_pop(val) OVER(PARTITION BY cate ORDER BY val),
-var_samp(val) OVER(PARTITION BY cate ORDER BY val),
-approx_count_distinct(val) OVER(PARTITION BY cate ORDER BY val)
-FROM testData ORDER BY cate, val;
+max(val) OVER w AS max,
+min(val) OVER w AS min,
+min(val) OVER w AS min,
+count(val) OVER w AS count,
+sum(val) OVER w AS sum,
+avg(val) OVER w AS avg,
+stddev(val) OVER w AS stddev,
+first_value(val) OVER w AS first_value,
+first_value(val, true) OVER w AS first_value_ignore_null,
+first_value(val, false) OVER w AS first_value_contain_null,
+last_value(val) OVER w AS last_value,
+last_value(val, true) OVER w AS last_value_ignore_null,
+last_value(val, false) OVER w AS last_value_contain_null,
+rank() OVER w AS rank,
+dense_rank() OVER w AS dense_rank,
+cume_dist() OVER w AS cume_dist,
+percent_rank() OVER w AS percent_rank,
+ntile(2) OVER w AS ntile,
+row_number() OVER w AS row_number,
+var_pop(val) OVER w AS var_pop,
+var_samp(val) OVER w AS var_samp,
+approx_count_distinct(val) OVER w AS approx_count_distinct
+FROM testData
+WINDOW w AS (PARTITION BY cate ORDER BY val)
+ORDER BY cate, val;
 
 -- Null inputs
 SELECT val, cate, avg(null) OVER(PARTITION BY cate ORDER BY val) FROM testData ORDER BY cate, val;
@@ -56,10 +58,12 @@ SELECT val, cate, sum(val) OVER(), avg(val) OVER() FROM testData ORDER BY cate, 
 
 -- first_value()/last_value() over ()
 SELECT val, cate,
-first_value(false) OVER(),
-first_value(false, false) OVER(),
-first_value(true, true) OVER(),
-last_value(false) OVER(),
-last_value(false, false) OVER(),
-last_value(true, true) OVER()
-FROM testData ORDER BY cate, val;
+first_value(false) OVER w AS first_value,
+first_value(true, true) OVER w AS first_value_ignore_null,
+first_value(false, false) OVER w AS first_value_contain_null,
+last_value(false) OVER w AS last_value,
+last_value(true, true) OVER w AS last_value_ignore_null,
+last_value(false, false) OVER w AS last_value_contain_null
+FROM testData
+WINDOW w AS ()
+ORDER BY cate, val;

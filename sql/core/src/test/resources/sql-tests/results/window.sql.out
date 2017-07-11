@@ -99,41 +99,43 @@ NULL	a	NULL
 
 -- !query 6
 SELECT val, cate,
-max(val) OVER(PARTITION BY cate ORDER BY val),
-min(val) OVER(PARTITION BY cate ORDER BY val),
-mean(val) OVER(PARTITION BY cate ORDER BY val),
-count(val) OVER(PARTITION BY cate ORDER BY val),
-sum(val) OVER(PARTITION BY cate ORDER BY val),
-avg(val) OVER(PARTITION BY cate ORDER BY val),
-stddev(val) OVER(PARTITION BY cate ORDER BY val),
-first_value(val) OVER(PARTITION BY cate ORDER BY val),
-first_value(val, true) OVER(PARTITION BY cate ORDER BY val),
-first_value(val, false) OVER(PARTITION BY cate ORDER BY val),
-last_value(val) OVER(PARTITION BY cate ORDER BY val),
-last_value(val, true) OVER(PARTITION BY cate ORDER BY val),
-last_value(val, false) OVER(PARTITION BY cate ORDER BY val),
-rank() OVER(PARTITION BY cate ORDER BY val),
-dense_rank() OVER(PARTITION BY cate ORDER BY val),
-cume_dist() OVER(PARTITION BY cate ORDER BY val),
-percent_rank() OVER(PARTITION BY cate ORDER BY val),
-ntile(2) OVER(PARTITION BY cate ORDER BY val),
-row_number() OVER(PARTITION BY cate ORDER BY val),
-var_pop(val) OVER(PARTITION BY cate ORDER BY val),
-var_samp(val) OVER(PARTITION BY cate ORDER BY val),
-approx_count_distinct(val) OVER(PARTITION BY cate ORDER BY val)
-FROM testData ORDER BY cate, val
+max(val) OVER w AS max,
+min(val) OVER w AS min,
+min(val) OVER w AS min,
+count(val) OVER w AS count,
+sum(val) OVER w AS sum,
+avg(val) OVER w AS avg,
+stddev(val) OVER w AS stddev,
+first_value(val) OVER w AS first_value,
+first_value(val, true) OVER w AS first_value_ignore_null,
+first_value(val, false) OVER w AS first_value_contain_null,
+last_value(val) OVER w AS last_value,
+last_value(val, true) OVER w AS last_value_ignore_null,
+last_value(val, false) OVER w AS last_value_contain_null,
+rank() OVER w AS rank,
+dense_rank() OVER w AS dense_rank,
+cume_dist() OVER w AS cume_dist,
+percent_rank() OVER w AS percent_rank,
+ntile(2) OVER w AS ntile,
+row_number() OVER w AS row_number,
+var_pop(val) OVER w AS var_pop,
+var_samp(val) OVER w AS var_samp,
+approx_count_distinct(val) OVER w AS approx_count_distinct
+FROM testData
+WINDOW w AS (PARTITION BY cate ORDER BY val)
+ORDER BY cate, val
 -- !query 6 schema
-struct<val:int,cate:string,max(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,min(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,avg(CAST(val AS BIGINT)) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double,count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint,sum(CAST(val AS BIGINT)) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint,avg(CAST(val AS BIGINT)) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double,stddev_samp(CAST(val AS DOUBLE)) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double,first(val, false) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,first(val, true) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,first(val, false) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,last(val, false) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,last(val, true) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,last(val, false) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,RANK() OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,DENSE_RANK() OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,cume_dist() OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double,PERCENT_RANK() OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double,ntile(2) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,row_number() OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,var_pop(CAST(val AS DOUBLE)) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double,var_samp(CAST(val AS DOUBLE)) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double,approx_count_distinct(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+struct<val:int,cate:string,max:int,min:int,min:int,count:bigint,sum:bigint,avg:double,stddev:double,first_value:int,first_value_ignore_null:int,first_value_contain_null:int,last_value:int,last_value_ignore_null:int,last_value_contain_null:int,rank:int,dense_rank:int,cume_dist:double,percent_rank:double,ntile:int,row_number:int,var_pop:double,var_samp:double,approx_count_distinct:bigint>
 -- !query 6 output
 NULL	NULL	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.5	0.0	1	1	NULL	NULL	0
-3	NULL	3	3	3.0	1	3	3.0	NaN	NULL	3	NULL	3	3	3	2	2	1.0	1.0	2	2	0.0	NaN	1
+3	NULL	3	3	3	1	3	3.0	NaN	NULL	3	NULL	3	3	3	2	2	1.0	1.0	2	2	0.0	NaN	1
 NULL	a	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.25	0.0	1	1	NULL	NULL	0
-1	a	1	1	1.0	2	2	1.0	0.0	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	1	2	0.0	0.0	1
-1	a	1	1	1.0	2	2	1.0	0.0	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	2	3	0.0	0.0	1
-2	a	2	1	1.3333333333333333	3	4	1.3333333333333333	0.5773502691896258	NULL	1	NULL	2	2	2	4	3	1.0	1.0	2	4	0.22222222222222224	0.33333333333333337	2
-1	b	1	1	1.0	1	1	1.0	NaN	1	1	1	1	1	1	1	1	0.3333333333333333	0.0	1	1	0.0	NaN	1
-2	b	2	1	1.5	2	3	1.5	0.7071067811865476	1	1	1	2	2	2	2	2	0.6666666666666666	0.5	1	2	0.25	0.5	2
-3	b	3	1	2.0	3	6	2.0	1.0	1	1	1	3	3	3	3	3	1.0	1.0	2	3	0.6666666666666666	1.0	3
+1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	1	2	0.0	0.0	1
+1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	2	3	0.0	0.0	1
+2	a	2	1	1	3	4	1.3333333333333333	0.5773502691896258	NULL	1	NULL	2	2	2	4	3	1.0	1.0	2	4	0.22222222222222224	0.33333333333333337	2
+1	b	1	1	1	1	1	1.0	NaN	1	1	1	1	1	1	1	1	0.3333333333333333	0.0	1	1	0.0	NaN	1
+2	b	2	1	1	2	3	1.5	0.7071067811865476	1	1	1	2	2	2	2	2	0.6666666666666666	0.5	1	2	0.25	0.5	2
+3	b	3	1	1	3	6	2.0	1.0	1	1	1	3	3	3	3	3	1.0	1.0	2	3	0.6666666666666666	1.0	3
 
 
 -- !query 7
@@ -179,22 +181,24 @@ NULL	a	13	1.8571428571428572
 
 -- !query 10
 SELECT val, cate,
-first_value(false) OVER(),
-first_value(false, false) OVER(),
-first_value(true, true) OVER(),
-last_value(false) OVER(),
-last_value(false, false) OVER(),
-last_value(true, true) OVER()
-FROM testData ORDER BY cate, val
+first_value(false) OVER w AS first_value,
+first_value(true, true) OVER w AS first_value_ignore_null,
+first_value(false, false) OVER w AS first_value_contain_null,
+last_value(false) OVER w AS last_value,
+last_value(true, true) OVER w AS last_value_ignore_null,
+last_value(false, false) OVER w AS last_value_contain_null
+FROM testData
+WINDOW w AS ()
+ORDER BY cate, val
 -- !query 10 schema
-struct<val:int,cate:string,first(false, false) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):boolean,first(false, false) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):boolean,first(true, true) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):boolean,last(false, false) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):boolean,last(false, false) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):boolean,last(true, true) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):boolean>
+struct<val:int,cate:string,first_value:boolean,first_value_ignore_null:boolean,first_value_contain_null:boolean,last_value:boolean,last_value_ignore_null:boolean,last_value_contain_null:boolean>
 -- !query 10 output
-NULL	NULL	false	false	true	false	false	true
-3	NULL	false	false	true	false	false	true
-NULL	a	false	false	true	false	false	true
-1	a	false	false	true	false	false	true
-1	a	false	false	true	false	false	true
-2	a	false	false	true	false	false	true
-1	b	false	false	true	false	false	true
-2	b	false	false	true	false	false	true
-3	b	false	false	true	false	false	true
+NULL	NULL	false	true	false	false	true	false
+3	NULL	false	true	false	false	true	false
+NULL	a	false	true	false	false	true	false
+1	a	false	true	false	false	true	false
+1	a	false	true	false	false	true	false
+2	a	false	true	false	false	true	false
+1	b	false	true	false	false	true	false
+2	b	false	true	false	false	true	false
+3	b	false	true	false	false	true	false
