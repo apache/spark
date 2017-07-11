@@ -85,7 +85,7 @@ case class WindowSpecDefinition(
     val elements =
       toSql(partitionSpec, "PARTITION BY ") ++
         toSql(orderSpec, "ORDER BY ") ++
-        frameSpecification.map(_.sql)
+        Seq(frameSpecification.sql)
     elements.mkString("(", " ", ")")
   }
 
