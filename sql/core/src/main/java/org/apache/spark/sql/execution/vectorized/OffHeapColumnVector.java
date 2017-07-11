@@ -40,8 +40,8 @@ public final class OffHeapColumnVector extends ColumnVector {
   private long lengthData;
   private long offsetData;
 
-  protected OffHeapColumnVector(int capacity, DataType type) {
-    super(capacity, type, MemoryMode.OFF_HEAP);
+  protected OffHeapColumnVector(int capacity, DataType type, boolean containsNull) {
+    super(capacity, type, MemoryMode.OFF_HEAP, containsNull);
 
     nulls = 0;
     data = 0;
@@ -85,6 +85,9 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public void putNull(int rowId) {
+    if (!containsNull) {
+      throw new RuntimeException("Not allowed to put null in this column.");
+    }
     Platform.putByte(null, nulls + rowId, (byte) 1);
     ++numNulls;
     anyNullsSet = true;
@@ -92,6 +95,9 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public void putNulls(int rowId, int count) {
+    if (!containsNull) {
+      throw new RuntimeException("Not allowed to put nulls in this column.");
+    }
     long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 1);

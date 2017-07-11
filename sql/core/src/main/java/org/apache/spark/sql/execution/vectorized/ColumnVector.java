@@ -62,10 +62,18 @@ public abstract class ColumnVector implements AutoCloseable {
    * in number of elements, not number of bytes.
    */
   public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
+    return allocate(capacity, type, mode, true);
+  }
+
+  public static ColumnVector allocate(
+      int capacity,
+      DataType type,
+      MemoryMode mode,
+      boolean containsNull) {
     if (mode == MemoryMode.OFF_HEAP) {
-      return new OffHeapColumnVector(capacity, type);
+      return new OffHeapColumnVector(capacity, type, containsNull);
     } else {
-      return new OnHeapColumnVector(capacity, type);
+      return new OnHeapColumnVector(capacity, type, containsNull);
     }
   }
 
@@ -959,6 +967,11 @@ public abstract class ColumnVector implements AutoCloseable {
   protected final DataType type;
 
   /**
+   * Indicates if values can be `null`.
+   */
+  protected boolean containsNull;
+
+  /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
    */
   protected int numNulls;
@@ -1049,22 +1062,29 @@ public abstract class ColumnVector implements AutoCloseable {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected ColumnVector(int capacity, DataType type, MemoryMode memMode) {
+  protected ColumnVector(int capacity, DataType type, MemoryMode memMode, boolean containsNull) {
     this.capacity = capacity;
     this.type = type;
+    this.containsNull = containsNull;
 
     if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
         || DecimalType.isByteArrayDecimalType(type)) {
       DataType childType;
       int childCapacity = capacity;
+      this.childColumns = new ColumnVector[1];
       if (type instanceof ArrayType) {
         childType = ((ArrayType)type).elementType();
+        this.childColumns[0] = ColumnVector.allocate(childCapacity, childType, memMode,
+          ((ArrayType) type).containsNull());
+      } else if (type instanceof BinaryType || type instanceof StringType) {
+        childType = DataTypes.ByteType;
+        childCapacity *= DEFAULT_ARRAY_LENGTH;
+        this.childColumns[0] = ColumnVector.allocate(childCapacity, childType, memMode, containsNull = false);
       } else {
         childType = DataTypes.ByteType;
         childCapacity *= DEFAULT_ARRAY_LENGTH;
+        this.childColumns[0] = ColumnVector.allocate(childCapacity, childType, memMode);
       }
-      this.childColumns = new ColumnVector[1];
-      this.childColumns[0] = ColumnVector.allocate(childCapacity, childType, memMode);
       this.resultArray = new Array(this.childColumns[0]);
       this.resultStruct = null;
     } else if (type instanceof StructType) {
