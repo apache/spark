@@ -753,17 +753,26 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * hooks.
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    val alias = if (ctx.strictIdentifier == null) {
+    val alias = if (ctx.tableAlias.strictIdentifier == null) {
       // For un-aliased subqueries, use a default alias name that is not likely to conflict with
       // normal subquery names, so that parent operators can only access the columns in subquery by
       // unqualified names. Users can still use this special qualifier to access columns if they
       // know it, but that's not recommended.
       "__auto_generated_subquery_name"
     } else {
-      ctx.strictIdentifier.getText
+      ctx.tableAlias.strictIdentifier.getText
     }
 
-    SubqueryAlias(alias, plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample))
+    val columnNamesOption = if (ctx.tableAlias.identifierList != null) {
+      Some(visitIdentifierList(ctx.tableAlias.identifierList)).map { names =>
+        names.map(n => UnresolvedAttribute(n :: Nil))
+      }
+    } else {
+      None
+    }
+
+    SubqueryAlias(alias, plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample),
+      columnNamesOption)
   }
 
   /**

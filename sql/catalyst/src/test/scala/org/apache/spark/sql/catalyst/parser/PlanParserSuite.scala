@@ -495,6 +495,16 @@ class PlanParserSuite extends AnalysisTest {
         .select(star()))
   }
 
+  test("SPARK-20962 Support subquery column aliases in FROM clause") {
+    assertEqual(
+      "SELECT * FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
+      SubqueryAlias(
+        "t",
+        UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")),
+        Some(Seq("col1", "col2").map(n => UnresolvedAttribute(n :: Nil)))
+      ).select(star()))
+  }
+
   test("inline table") {
     assertEqual("values 1, 2, 3, 4",
       UnresolvedInlineTable(Seq("col1"), Seq(1, 2, 3, 4).map(x => Seq(Literal(x)))))

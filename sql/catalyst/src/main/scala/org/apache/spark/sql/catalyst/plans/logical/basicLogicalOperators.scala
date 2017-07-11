@@ -677,19 +677,44 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 }
 
 /**
- * Aliased subquery.
+ * Aliased subquery. We could add alias names for output columns in the subquery:
+ * {{{
+ *   // Assign alias names for output columns
+ *   SELECT col1, col2 FROM testData AS t(col1, col2);
+ * }}}
  *
  * @param alias the alias name for this subquery.
  * @param child the logical plan of this subquery.
+ * @param outputColumnNames the column names for this subquery.
  */
 case class SubqueryAlias(
     alias: String,
-    child: LogicalPlan)
+    child: LogicalPlan,
+    outputColumnNames: Option[Seq[NamedExpression]] = None)
   extends UnaryNode {
 
   override lazy val canonicalized: LogicalPlan = child.canonicalized
 
-  override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
+  override def validConstraints: Set[Expression] = outputColumnNames.map { exprs =>
+    child.constraints.union(getAliasedConstraints(exprs))
+  }.getOrElse {
+    Set.empty
+  }
+
+  override def output: Seq[Attribute] = {
+    val attrs = outputColumnNames.map { exprs =>
+      exprs.map(_.toAttribute)
+    }.getOrElse {
+      child.output
+    }
+    attrs.map(_.withQualifier(Some(alias)))
+  }
+
+  override def simpleString: String = statePrefix + outputColumnNames.map { names =>
+    s"SubqueryAlias $alias${Utils.truncatedString(names, "(", ", ", ")")}"
+  }.getOrElse {
+    s"SubqueryAlias $alias"
+  }
 }
 
 /**

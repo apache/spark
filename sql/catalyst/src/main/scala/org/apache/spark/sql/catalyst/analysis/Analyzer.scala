@@ -625,7 +625,7 @@ class Analyzer(
           execute(child)
         }
         view.copy(child = newChild)
-      case p @ SubqueryAlias(_, view: View) =>
+      case p @ SubqueryAlias(_, view: View, _) =>
         val newChild = resolveRelation(view)
         p.copy(child = newChild)
       case _ => plan
@@ -858,6 +858,22 @@ class Analyzer(
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
+
+      case q @ SubqueryAlias(alias, child, Some(columnNames)) if child.resolved && !q.resolved =>
+        // Resolves output attributes if a query has alias names in its subquery:
+        // e.g., SELECT * FROM (SELECT 1 AS a, 1 AS b) t(col1, col2)
+        val outputAttrs = child.output
+        // Checks if the number of the aliases equals to the number of output columns
+        // in the subquery.
+        if (columnNames.size != outputAttrs.size) {
+          q.failAnalysis(s"Number of column aliases does not match number of columns. " +
+            s"Number of column aliases: ${columnNames.size}; " +
+            s"number of columns: ${outputAttrs.size}.")
+        }
+        val aliases = outputAttrs.zip(columnNames).map { case (attr, ue) =>
+          Alias(attr, ue.name)()
+        }
+        q.copy(outputColumnNames = Some(aliases))
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
@@ -2218,7 +2234,8 @@ class Analyzer(
  */
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child) => child
+    case SubqueryAlias(_, child, Some(columnNames)) => Project(columnNames, child)
+    case SubqueryAlias(_, child, _) => child
   }
 }
 
@@ -2270,6 +2287,9 @@ object CleanupAliases extends Rule[LogicalPlan] {
     case o: ObjectConsumer => o
     case o: ObjectProducer => o
     case a: AppendColumns => a
+
+    // Also, `SubqueryAlias` should never have extra aliases
+    case q: SubqueryAlias => q
 
     case other =>
       other transformExpressionsDown {
