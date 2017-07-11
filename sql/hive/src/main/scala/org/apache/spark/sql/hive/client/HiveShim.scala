@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
@@ -46,6 +47,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTableParti
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegralType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -589,18 +591,67 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
       .map(col => col.getName).toSet
 
-    filters.collect {
-      case op @ BinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
-        s"${a.name} ${op.symbol} $v"
-      case op @ BinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
-        s"$v ${op.symbol} ${a.name}"
-      case op @ BinaryComparison(a: Attribute, Literal(v, _: StringType))
+    object ExtractableLiteral {
+      def unapply(expr: Expression): Option[String] = expr match {
+        case Literal(value, _: IntegralType) => Some(value.toString)
+        case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString))
+        case _ => None
+      }
+    }
+
+    object ExtractableLiterals {
+      def unapply(exprs: Seq[Expression]): Option[Seq[String]] = {
+        exprs.map(ExtractableLiteral.unapply).foldLeft(Option(Seq.empty[String])) {
+          case (Some(accum), Some(value)) => Some(accum :+ value)
+          case _ => None
+        }
+      }
+    }
+
+    object ExtractableValues {
+      private lazy val valueToLiteralString: PartialFunction[Any, String] = {
+        case value: Byte => value.toString
+        case value: Short => value.toString
+        case value: Int => value.toString
+        case value: Long => value.toString
+        case value: UTF8String => quoteStringLiteral(value.toString)
+      }
+
+      def unapply(values: Set[Any]): Option[Seq[String]] = {
+        values.toSeq.foldLeft(Option(Seq.empty[String])) {
+          case (Some(accum), value) if valueToLiteralString.isDefinedAt(value) =>
+            Some(accum :+ valueToLiteralString(value))
+          case _ => None
+        }
+      }
+    }
+
+    def convertInToOr(a: Attribute, values: Seq[String]): String = {
+      values.map(value => s"${a.name} = $value").mkString("(", " or ", ")")
+    }
+
+    lazy val convert: PartialFunction[Expression, String] = {
+      case In(a: Attribute, ExtractableLiterals(values))
+          if !varcharKeys.contains(a.name) && values.nonEmpty =>
+        convertInToOr(a, values)
+      case InSet(a: Attribute, ExtractableValues(values))
+          if !varcharKeys.contains(a.name) && values.nonEmpty =>
+        convertInToOr(a, values)
+      case op @ BinaryComparison(a: Attribute, ExtractableLiteral(value))
           if !varcharKeys.contains(a.name) =>
-        s"""${a.name} ${op.symbol} ${quoteStringLiteral(v.toString)}"""
-      case op @ BinaryComparison(Literal(v, _: StringType), a: Attribute)
+        s"${a.name} ${op.symbol} $value"
+      case op @ BinaryComparison(ExtractableLiteral(value), a: Attribute)
           if !varcharKeys.contains(a.name) =>
-        s"""${quoteStringLiteral(v.toString)} ${op.symbol} ${a.name}"""
-    }.mkString(" and ")
+        s"$value ${op.symbol} ${a.name}"
+      case op @ And(expr1, expr2)
+          if convert.isDefinedAt(expr1) || convert.isDefinedAt(expr2) =>
+        (convert.lift(expr1) ++ convert.lift(expr2)).mkString("(", " and ", ")")
+      case op @ Or(expr1, expr2)
+          if convert.isDefinedAt(expr1) && convert.isDefinedAt(expr2) =>
+        s"(${convert(expr1)} or ${convert(expr2)})"
+    }
+
+    filters.map(convert.lift).collect { case Some(filterString) => filterString }.mkString(" and ")
   }
 
   private def quoteStringLiteral(str: String): String = {
