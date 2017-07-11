@@ -22,7 +22,7 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A Spark SQL UDF that has 1 arguments.
+ * A Spark SQL UDF that has 0 arguments.
  */
 @InterfaceStability.Stable
 public interface UDF0<R> extends Serializable {
