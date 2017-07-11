@@ -259,31 +259,33 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("analyze table t compute statistics noscan",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
     assertEqual("analyze table t partition (a) compute statistics nOscAn",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), Map("a" -> None), noscan = true))
 
     // Partitions specified
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
       AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> "2008-04-09", "hr" -> "11")))
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
       AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> "2008-04-09", "hr" -> "11")))
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan",
       AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> "2008-04-09")))
+        partitionSpec = Map("ds" -> Some("2008-04-09"))))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS",
       AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
-        partitionSpec = Map("ds" -> "2008-04-09")))
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan",
       AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("ds" -> "2008-04-09")))
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr=11) COMPUTE STATISTICS noscan",
       AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
-        partitionSpec = Map("hr" -> "11")))
+        partitionSpec = Map("ds" -> None, "hr" -> Some("11"))))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> None, "hr" -> None)))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> None, "hr" -> None)))
 
     intercept("analyze table t compute statistics xxxx",
       "Expected `NOSCAN` instead of `xxxx`")

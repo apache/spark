@@ -257,8 +257,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  private val SELECT_FROM_SRC = "SELECT '1', 'A' from src"
-
   test("analyze single partition") {
     val tableName = "analyzeTable_part"
 
@@ -275,9 +273,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
 
-      createPartition("2010-01-01", SELECT_FROM_SRC)
-      createPartition("2010-01-02", s"$SELECT_FROM_SRC UNION ALL $SELECT_FROM_SRC")
-      createPartition("2010-01-03", SELECT_FROM_SRC)
+      createPartition("2010-01-01", "SELECT '1', 'A' from src")
+      createPartition("2010-01-02", "SELECT '1', 'A' from src UNION ALL SELECT '1', 'A' from src")
+      createPartition("2010-01-03", "SELECT '1', 'A' from src")
 
       sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
 
@@ -311,15 +309,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       partition.stats
     }
 
-    def assertStats(ds: String, hr: String, rowCount: BigInt, sizeInBytes: BigInt): Unit = {
+    def assertPartitionStats(
+        ds: String,
+        hr: String,
+        rowCount: Option[BigInt],
+        sizeInBytes: BigInt): Unit = {
       val stats = queryStats(ds, hr).get
-      assert(stats.rowCount === Some(rowCount))
-      assert(stats.sizeInBytes === sizeInBytes)
-    }
-
-    def assertSizeInBytesStats(ds: String, hr: String, sizeInBytes: BigInt): Unit = {
-      val stats = queryStats(ds, hr).get
-      assert(stats.rowCount === None)
+      assert(stats.rowCount === rowCount)
       assert(stats.sizeInBytes === sizeInBytes)
     }
 
@@ -330,38 +326,88 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING, hr INT)")
 
-      createPartition("2010-01-01", 10, SELECT_FROM_SRC)
-      createPartition("2010-01-01", 11, SELECT_FROM_SRC)
-      createPartition("2010-01-02", 10, SELECT_FROM_SRC)
-      createPartition("2010-01-02", 11, s"$SELECT_FROM_SRC UNION ALL $SELECT_FROM_SRC")
+      createPartition("2010-01-01", 10, "SELECT '1', 'A' from src")
+      createPartition("2010-01-01", 11, "SELECT '1', 'A' from src")
+      createPartition("2010-01-02", 10, "SELECT '1', 'A' from src")
+      createPartition("2010-01-02", 11,
+        "SELECT '1', 'A' from src UNION ALL SELECT '1', 'A' from src")
 
       sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
 
-      assertSizeInBytesStats("2010-01-01", "10", 2000)
-      assertSizeInBytesStats("2010-01-01", "11", 2000)
+      assertPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
       assert(queryStats("2010-01-02", "10") === None)
       assert(queryStats("2010-01-02", "11") === None)
 
       sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS NOSCAN")
 
-      assertSizeInBytesStats("2010-01-01", "10", 2000)
-      assertSizeInBytesStats("2010-01-01", "11", 2000)
-      assertSizeInBytesStats("2010-01-02", "10", 2000)
-      assertSizeInBytesStats("2010-01-02", "11", 2*2000)
+      assertPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "10", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "11", rowCount = None, sizeInBytes = 2*2000)
 
       sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS")
 
-      assertStats("2010-01-01", "10", 500, 2000)
-      assertStats("2010-01-01", "11", 500, 2000)
-      assertSizeInBytesStats("2010-01-02", "10", 2000)
-      assertSizeInBytesStats("2010-01-02", "11", 2*2000)
+      assertPartitionStats("2010-01-01", "10", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "10", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "11", rowCount = None, sizeInBytes = 2*2000)
 
       sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS")
 
-      assertStats("2010-01-01", "10", 500, 2000)
-      assertStats("2010-01-01", "11", 500, 2000)
-      assertStats("2010-01-02", "10", 500, 2000)
-      assertStats("2010-01-02", "11", 2*500, 2*2000)
+      assertPartitionStats("2010-01-01", "10", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "10", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "11", rowCount = Some(2*500), sizeInBytes = 2*2000)
+    }
+  }
+
+  test("analyze all partitions") {
+    val tableName = "analyzeTable_part"
+
+    def queryStats(ds: String, hr: String): Option[CatalogStatistics] = {
+      val tableId = TableIdentifier(tableName)
+      val partition =
+        spark.sessionState.catalog.getPartition(tableId, Map("ds" -> ds, "hr" -> hr))
+      partition.stats
+    }
+
+    def assertPartitionStats(
+        ds: String,
+        hr: String,
+        rowCount: Option[BigInt],
+        sizeInBytes: BigInt): Unit = {
+      val stats = queryStats(ds, hr).get
+      assert(stats.rowCount === rowCount)
+      assert(stats.sizeInBytes === sizeInBytes)
+    }
+
+    def createPartition(ds: String, hr: Int, query: String): Unit = {
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds', hr=$hr) $query")
+    }
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+
+      createPartition("2010-01-01", 10, "SELECT '1', 'A' from src")
+      createPartition("2010-01-01", 11, "SELECT '1', 'A' from src")
+      createPartition("2010-01-02", 10, "SELECT '1', 'A' from src")
+      createPartition("2010-01-02", 11,
+        "SELECT '1', 'A' from src UNION ALL SELECT '1', 'A' from src")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds, hr) COMPUTE STATISTICS NOSCAN")
+
+      assertPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "11", rowCount = None, sizeInBytes = 2*2000)
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds, hr) COMPUTE STATISTICS")
+
+      assertPartitionStats("2010-01-01", "10", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "11", rowCount = Some(2*500), sizeInBytes = 2*2000)
     }
   }
 
@@ -376,28 +422,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS")
       }
 
+      intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS")
+      }
+
       intercept[NoSuchPartitionException] {
         sql(s"ANALYZE TABLE $tableName PARTITION (ds='2011-02-30') COMPUTE STATISTICS")
-      }
-    }
-  }
-
-  test("analyzing views is not supported") {
-    def assertAnalyzeUnsupported(analyzeCommand: String): Unit = {
-      val err = intercept[AnalysisException] {
-        sql(analyzeCommand)
-      }
-      assert(err.message.contains("ANALYZE TABLE is not supported"))
-    }
-
-    val tableName = "tbl"
-    withTable(tableName) {
-      spark.range(10).write.saveAsTable(tableName)
-      val viewName = "view"
-      withView(viewName) {
-        sql(s"CREATE VIEW $viewName AS SELECT * FROM $tableName")
-        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
-        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
       }
     }
   }

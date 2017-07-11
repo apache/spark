@@ -109,28 +109,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
     }
 
-    val partitionSpec =
-      if (ctx.partitionSpec != null) {
-        val filteredSpec = visitPartitionSpec(ctx.partitionSpec).filter(_._2.isDefined)
-        if (filteredSpec.isEmpty) {
-          None
-        } else {
-          Some(filteredSpec.mapValues(_.get))
-        }
-      } else {
-        None
-      }
-
     val table = visitTableIdentifier(ctx.tableIdentifier)
     if (ctx.identifierSeq() == null) {
-      if (partitionSpec.isDefined) {
-        AnalyzePartitionCommand(table, partitionSpec.get, noscan = ctx.identifier != null)
+      if (ctx.partitionSpec != null) {
+        AnalyzePartitionCommand(table, visitPartitionSpec(ctx.partitionSpec),
+          noscan = ctx.identifier != null)
       } else {
         AnalyzeTableCommand(table, noscan = ctx.identifier != null)
       }
     } else {
-      if (partitionSpec.isDefined) {
-        logWarning(s"Partition specification is ignored: ${ctx.partitionSpec.getText}")
+      if (ctx.partitionSpec != null) {
+        logWarning("Partition specification is ignored when collecting column statistics: " +
+          ctx.partitionSpec.getText)
       }
       AnalyzeColumnCommand(
         table,
