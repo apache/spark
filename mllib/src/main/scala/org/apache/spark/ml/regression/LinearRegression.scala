@@ -64,7 +64,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
    *
    * @group param
    */
-  @Since("2.3.0")
+  @Since("1.6.0")
   final override val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
       s"${supportedSolvers.mkString(", ")}. (Default auto)",
@@ -194,7 +194,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.6.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> AUTO)
+  setDefault(solver -> Auto)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -224,8 +224,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
-    if (($(solver) == AUTO &&
-      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == NORMAL) {
+    if (($(solver) == Auto &&
+      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == Normal) {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 
@@ -460,16 +460,16 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
   val MAX_FEATURES_FOR_NORMAL_SOLVER: Int = WeightedLeastSquares.MAX_NUM_FEATURES
 
   /** String name for "auto". */
-  private[regression] val AUTO = "auto"
+  private[regression] val Auto = "auto"
 
   /** String name for "normal". */
-  private[regression] val NORMAL = "normal"
+  private[regression] val Normal = "normal"
 
   /** String name for "l-bfgs". */
   private[regression] val LBFGS = "l-bfgs"
 
   /** Set of solvers that LinearRegression supports. */
-  private[regression] val supportedSolvers = Array(AUTO, NORMAL, LBFGS)
+  private[regression] val supportedSolvers = Array(Auto, Normal, LBFGS)
 }
 
 /**
