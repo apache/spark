@@ -24,7 +24,7 @@ import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -35,7 +35,8 @@ import org.apache.spark.sql.types._
  */
 @Since("1.4.0")
 final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
+  extends Transformer with HasInputCol with HasOutputCol with HasThreshold
+    with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("binarizer"))
@@ -48,12 +49,8 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * @group param
    */
   @Since("1.4.0")
-  val threshold: DoubleParam =
+  final override val threshold: DoubleParam =
     new DoubleParam(this, "threshold", "threshold used to binarize continuous features")
-
-  /** @group getParam */
-  @Since("1.4.0")
-  def getThreshold: Double = $(threshold)
 
   /** @group setParam */
   @Since("1.4.0")

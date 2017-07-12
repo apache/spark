@@ -63,7 +63,7 @@ class JavaClassificationModel(JavaPredictionModel):
 @inherit_doc
 class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                 HasRegParam, HasTol, HasRawPredictionCol, HasFitIntercept, HasStandardization,
-                HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
+                HasWeightCol, HasAggregationDepth, HasThreshold, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -152,18 +152,6 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
 
     def _create_model(self, java_model):
         return LinearSVCModel(java_model)
-
-    def setThreshold(self, value):
-        """
-        Sets the value of :py:attr:`threshold`.
-        """
-        return self._set(threshold=value)
-
-    def getThreshold(self):
-        """
-        Gets the value of threshold or its default value.
-        """
-        return self.getOrDefault(self.threshold)
 
 
 class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
@@ -1029,6 +1017,11 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                      "Loss function which GBT tries to minimize (case-insensitive). " +
                      "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
                      typeConverter=TypeConverters.toString)
+
+    stepSize = Param(Params._dummy(), "stepSize",
+                     "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
+                     "the contribution of each estimator.",
+                     typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",

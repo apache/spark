@@ -61,7 +61,8 @@ __all__ = ['Binarizer',
 
 
 @inherit_doc
-class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, HasThreshold,
+                JavaMLReadable, JavaMLWritable):
     """
     Binarize a column of continuous features given a threshold.
 
@@ -107,20 +108,6 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
-
-    @since("1.4.0")
-    def setThreshold(self, value):
-        """
-        Sets the value of :py:attr:`threshold`.
-        """
-        return self._set(threshold=value)
-
-    @since("1.4.0")
-    def getThreshold(self):
-        """
-        Gets the value of threshold or its default value.
-        """
-        return self.getOrDefault(self.threshold)
 
 
 class LSHParams(Params):
