@@ -155,4 +155,8 @@ public final class UnsafeSorterSpillWriter {
   public UnsafeSorterSpillReader getReader(SerializerManager serializerManager) throws IOException {
     return new UnsafeSorterSpillReader(serializerManager, file, blockId);
   }
+
+  public int recordsSpilled() {
+    return numRecordsSpilled;
+  }
 }
