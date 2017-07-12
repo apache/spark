@@ -38,13 +38,15 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  * Allows the user to specify if user class path should be first.
  * This class loader delegates getting/finding resources to parent loader,
  * which makes sense until REPL never provide resource dynamically.
+ * This class does not set parent classloader since this class loader
+ * has higher precedence over its parent class loader.
  */
 class ExecutorClassLoader(
     conf: SparkConf,
     env: SparkEnv,
     classUri: String,
     parent: ClassLoader,
-    userClassPathFirst: Boolean) extends ClassLoader with Logging {
+    userClassPathFirst: Boolean) extends ClassLoader(null) with Logging {
   val uri = new URI(classUri)
   val directory = uri.getPath
 
