@@ -72,7 +72,6 @@ private[feature] trait QuantileDiscretizerBase extends Params
    * Default: "error"
    * @group param
    */
-  // TODO: SPARK-18619 Make QuantileDiscretizer inherit from HasHandleInvalid.
   @Since("2.1.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "how to handle invalid entries. Options are skip (filter out rows with invalid values), " +
