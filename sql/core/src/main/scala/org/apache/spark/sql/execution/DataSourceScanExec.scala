@@ -47,6 +47,9 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
     s"Scan $relation ${tableIdentifier.map(_.unquotedString).getOrElse("")}"
   }
 
+  // Metadata that describes more details of this scan.
+  protected def metadata: Map[String, String]
+
   override def simpleString: String = {
     val metadataEntries = metadata.toSeq.sorted.map {
       case (key, value) =>
@@ -75,6 +78,7 @@ case class RowDataSourceScanExec(
     fullOutput: Seq[Attribute],
     requiredColumnsIndex: Seq[Int],
     filters: Set[Filter],
+    handledFilters: Set[Filter],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val tableIdentifier: Option[TableIdentifier])
@@ -123,6 +127,15 @@ case class RowDataSourceScanExec(
        |  if (shouldStop()) return;
        |}
      """.stripMargin
+  }
+
+  override val metadata: Map[String, String] = {
+    val markedFilters = for (filter <- filters) yield {
+      if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
+    }
+    Map(
+      "ReadSchema" -> output.toStructType.catalogString,
+      "PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
@@ -248,7 +261,6 @@ case class FileSourceScanExec(
   private val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
   logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
 
-  // These metadata values make scan plans uniquely identifiable for equality checking.
   override val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
     val location = relation.location

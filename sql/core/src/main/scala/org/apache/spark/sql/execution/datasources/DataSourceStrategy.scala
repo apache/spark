@@ -288,6 +288,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         l.output,
         l.output.indices,
         Set.empty,
+        Set.empty,
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         None) :: Nil
@@ -372,8 +373,10 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         relation.output,
         requestedColumns.map(relation.output.indexOf),
         pushedFilters.toSet,
+        handledFilters,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, relation.catalogTable.map(_.identifier))
+        relation.relation,
+        relation.catalogTable.map(_.identifier))
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
       // A set of column attributes that are only referenced by pushed down filters.  We can
@@ -392,8 +395,10 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         relation.output,
         requestedColumns.map(relation.output.indexOf),
         pushedFilters.toSet,
+        handledFilters,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, relation.catalogTable.map(_.identifier))
+        relation.relation,
+        relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
     }
