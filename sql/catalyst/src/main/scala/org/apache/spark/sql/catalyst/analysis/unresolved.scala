@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.parser.ParserUtils
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -123,7 +124,10 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
 
   override def toString: String = s"'$name"
 
-  override def sql: String = quoteIdentifier(name)
+  override def sql: String = name match {
+    case ParserUtils.escapedIdentifier(_) | ParserUtils.qualifiedEscapedIdentifier(_, _) => name
+    case _ => quoteIdentifier(name)
+  }
 }
 
 object UnresolvedAttribute {
@@ -304,6 +308,29 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
   }
 
   override def toString: String = target.map(_ + ".").getOrElse("") + "*"
+}
+
+/**
+ * Represents all of the input attributes to a given relational operator, for example in
+ * "SELECT `(id)?+.+` FROM ...".
+ *
+ * @param table an optional table that should be the target of the expansion.  If omitted all
+ *              tables' columns are produced.
+ */
+case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSensitive: Boolean)
+  extends Star with Unevaluable {
+  override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
+    val pattern = if (caseSensitive) regexPattern else s"(?i)$regexPattern"
+    table match {
+      // If there is no table specified, use all input attributes that match expr
+      case None => input.output.filter(_.name.matches(pattern))
+      // If there is a table, pick out attributes that are part of this table that match expr
+      case Some(t) => input.output.filter(_.qualifier.exists(resolver(_, t)))
+        .filter(_.name.matches(pattern))
+    }
+  }
+
+  override def toString: String = table.map(_ + "." + regexPattern).getOrElse(regexPattern)
 }
 
 /**

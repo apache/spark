@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -247,32 +248,34 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
     assert(expectedSchema == spark.table("tableWithSchema").schema)
 
-    checkAnswer(
-      sql(
-        """SELECT
-          | `string$%Field`,
-          | cast(binaryField as string),
-          | booleanField,
-          | byteField,
-          | shortField,
-          | int_Field,
-          | `longField_:,<>=+/~^`,
-          | floatField,
-          | doubleField,
-          | decimalField1,
-          | decimalField2,
-          | dateField,
-          | timestampField,
-          | varcharField,
-          | charField,
-          | arrayFieldSimple,
-          | arrayFieldComplex,
-          | mapFieldSimple,
-          | mapFieldComplex,
-          | structFieldSimple,
-          | structFieldComplex FROM tableWithSchema""".stripMargin),
-      tableWithSchemaExpected
-    )
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+        checkAnswer(
+          sql(
+            """SELECT
+            | `string$%Field`,
+            | cast(binaryField as string),
+            | booleanField,
+            | byteField,
+            | shortField,
+            | int_Field,
+            | `longField_:,<>=+/~^`,
+            | floatField,
+            | doubleField,
+            | decimalField1,
+            | decimalField2,
+            | dateField,
+            | timestampField,
+            | varcharField,
+            | charField,
+            | arrayFieldSimple,
+            | arrayFieldComplex,
+            | mapFieldSimple,
+            | mapFieldComplex,
+            | structFieldSimple,
+            | structFieldComplex FROM tableWithSchema""".stripMargin),
+        tableWithSchemaExpected
+      )
+    }
   }
 
   sqlTest(

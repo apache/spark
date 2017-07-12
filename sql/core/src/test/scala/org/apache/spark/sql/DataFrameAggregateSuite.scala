@@ -543,10 +543,12 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-17237 remove backticks in a pivot result schema") {
     val df = Seq((2, 3, 4), (3, 4, 5)).toDF("a", "x", "y")
-    checkAnswer(
-      df.groupBy("a").pivot("x").agg(count("y"), avg("y")).na.fill(0),
-      Seq(Row(3, 0, 0.0, 1, 5.0), Row(2, 1, 4.0, 0, 0.0))
-    )
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      checkAnswer(
+        df.groupBy("a").pivot("x").agg(count("y"), avg("y")).na.fill(0),
+        Seq(Row(3, 0, 0.0, 1, 5.0), Row(2, 1, 4.0, 0, 0.0))
+      )
+    }
   }
 
   test("aggregate function in GROUP BY") {
