@@ -31,7 +31,46 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashMap
 
-
+/**
+ * Feature hashing projects a set of categorical or numerical features into a feature vector of
+ * specified dimension (typically substantially smaller than that of the original feature
+ * space). This is done using the hashing trick (https://en.wikipedia.org/wiki/Feature_hashing)
+ * to map features to indices in the feature vector.
+ *
+ * The [[FeatureHasher]] transformer operates on multiple columns. Each column may be numeric
+ * (representing a real feature) or string (representing a categorical feature). Boolean columns
+ * are also supported, and treated as categorical features. For numeric features, the hash value of
+ * the column name is used to map the feature value to its index in the feature vector.
+ * For categorical features, the hash value of the string "column_name=value" is used to map to the
+ * vector index, with an indicator value of `1.0`. Thus, categorical features are "one-hot" encoded
+ * (similarly to using [[OneHotEncoder]] with `dropLast=false`).
+ *
+ * Null (missing) values are ignored (implicitly zero in the resulting feature vector).
+ *
+ * Since a simple modulo is used to transform the hash function to a vector index,
+ * it is advisable to use a power of two as the numFeatures parameter;
+ * otherwise the features will not be mapped evenly to the vector indices.
+ *
+ * {{{
+ *   val df = Seq(
+ *    (2.0, true, "1", "foo"),
+ *    (3.0, false, "2", "bar")
+ *   ).toDF("real", "bool", "stringNum", "string")
+ *
+ *   val hasher = new FeatureHasher()
+ *    .setInputCols("real", "bool", "stringNum", "num")
+ *    .setOutputCol("features")
+ *
+ *   hasher.transform(df).show()
+ *
+ *   +----+-----+---------+------+--------------------+
+ *   |real| bool|stringNum|string|            features|
+ *   +----+-----+---------+------+--------------------+
+ *   | 2.0| true|        1|   foo|(262144,[51871,63...|
+ *   | 3.0|false|        2|   bar|(262144,[6031,806...|
+ *   +----+-----+---------+------+--------------------+
+ * }}}
+ */
 @Since("2.3.0")
 class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transformer
   with HasInputCols with HasOutputCol with DefaultParamsWritable {
@@ -40,7 +79,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
   def this() = this(Identifiable.randomUID("featureHasher"))
 
   /**
-   * Number of features. Should be > 0.
+   * Number of features. Should be greater than 0.
    * (default = 2^18^)
    * @group param
    */
@@ -74,29 +113,35 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
     val hashFunc: Any => Int = OldHashingTF.murmur3Hash
     val n = $(numFeatures)
 
-    val os = transformSchema(dataset.schema)
+    val outputSchema = transformSchema(dataset.schema)
+    val realFields = outputSchema.fields.filter { f =>
+      f.dataType.isInstanceOf[NumericType]
+    }.map(_.name).toSet
 
-    val featureCols = $(inputCols).map { colName =>
-      val field = dataset.schema(colName)
-      field.dataType match {
-        case DoubleType | StringType => dataset(field.name)
-        case _: NumericType | BooleanType => dataset(field.name).cast(DoubleType).alias(field.name)
+    def getDouble(x: Any): Double = {
+      x match {
+        case n: java.lang.Number =>
+          n.doubleValue()
+        case other =>
+          // will throw ClassCastException if it cannot be cast, as would row.getDouble
+          other.asInstanceOf[Double]
       }
     }
 
-    val realFields = os.fields.filter(f => f.dataType.isInstanceOf[NumericType]).map(_.name).toSet
-
-    def hashFeatures = udf { row: Row =>
+    val hashFeatures = udf { row: Row =>
       val map = new OpenHashMap[Int, Double]()
       $(inputCols).foreach { case colName =>
         val fieldIndex = row.fieldIndex(colName)
         if (!row.isNullAt(fieldIndex)) {
           val (rawIdx, value) = if (realFields(colName)) {
-            val value = row.getDouble(fieldIndex)
+            // numeric values are kept as is, with vector index based on hash of "column_name"
+            val value = getDouble(row.get(fieldIndex))
             val hash = hashFunc(colName)
             (hash, value)
           } else {
-            val value = row.getString(fieldIndex)
+            // string and boolean values are treated as categorical, with an indicator value of 1.0
+            // and vector index based on hash of "column_name=value"
+            val value = row.get(fieldIndex).toString
             val fieldName = s"$colName=$value"
             val hash = hashFunc(fieldName)
             (hash, 1.0)
@@ -108,19 +153,25 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
       Vectors.sparse(n, map.toSeq)
     }
 
-    val metadata = os($(outputCol)).metadata
+    val metadata = outputSchema($(outputCol)).metadata
     dataset.select(
       col("*"),
-      hashFeatures(struct(featureCols: _*)).as($(outputCol), metadata))
+      hashFeatures(struct($(inputCols).map(col(_)): _*)).as($(outputCol), metadata))
   }
 
   override def copy(extra: ParamMap): FeatureHasher = defaultCopy(extra)
 
   override def transformSchema(schema: StructType): StructType = {
     val fields = schema($(inputCols).toSet)
-    require(fields.map(_.dataType).forall { case dt =>
-      dt.isInstanceOf[NumericType] || dt.isInstanceOf[StringType]
-    })
+    fields.foreach { case fieldSchema =>
+      val dataType = fieldSchema.dataType
+      val fieldName = fieldSchema.name
+      require(dataType.isInstanceOf[NumericType] ||
+        dataType.isInstanceOf[StringType] ||
+        dataType.isInstanceOf[BooleanType],
+        s"FeatureHasher requires columns to be of NumericType, BooleanType or StringType. " +
+          s"Column $fieldName was $dataType")
+    }
     val attrGroup = new AttributeGroup($(outputCol), $(numFeatures))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }

@@ -25,12 +25,15 @@ import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types._
 
 class FeatureHasherSuite extends SparkFunSuite
   with MLlibTestSparkContext
   with DefaultReadWriteTest {
 
   import testImplicits._
+
   import HashingTFSuite.murmur3FeatureIdx
 
   implicit val vectorEncoder = ExpressionEncoder[Vector]()
@@ -49,16 +52,16 @@ class FeatureHasherSuite extends SparkFunSuite
 
   test("feature hashing") {
     val df = Seq(
-      (3, 4.0, 5.0f, "1", "foo"),
-      (6, 7.0, 8.0f, "2", "bar")
-    ).toDF("int", "double", "float", "stringNum", "string")
+      (2.0, true, "1", "foo"),
+      (3.0, false, "2", "bar")
+    ).toDF("real", "bool", "stringNum", "string")
 
     val n = 100
-    val featureHasher = new FeatureHasher()
-      .setInputCols("int", "double", "float", "stringNum", "string")
+    val hasher = new FeatureHasher()
+      .setInputCols("real", "bool", "stringNum", "string")
       .setOutputCol("features")
       .setNumFeatures(n)
-    val output = featureHasher.transform(df)
+    val output = hasher.transform(df)
     val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
     require(attrGroup.numAttributes === Some(n))
 
@@ -67,31 +70,63 @@ class FeatureHasherSuite extends SparkFunSuite
     def idx: Any => Int = murmur3FeatureIdx(n)
     // check expected indices
     val expected = Seq(
-      Vectors.sparse(n, Seq((idx("int"), 3.0), (idx("double"), 4.0), (idx("float"), 5.0),
+      Vectors.sparse(n, Seq((idx("real"), 2.0), (idx("bool=true"), 1.0),
         (idx("stringNum=1"), 1.0), (idx("string=foo"), 1.0))),
-      Vectors.sparse(n, Seq((idx("int"), 6.0), (idx("double"), 7.0), (idx("float"), 8.0),
+      Vectors.sparse(n, Seq((idx("real"), 3.0), (idx("bool=false"), 1.0),
         (idx("stringNum=2"), 1.0), (idx("string=bar"), 1.0)))
     )
     assert(features.zip(expected).forall { case (e, a) => e ~== a absTol 1e-14 })
+  }
+
+  test("hashing works for all numeric types") {
+    val df = Seq(5.0, 10.0, 15.0).toDF("real")
+
+    val hasher = new FeatureHasher()
+      .setInputCols("real")
+      .setOutputCol("features")
+
+    val expectedResult = hasher.transform(df).select("features").as[Vector].collect()
+    // check all numeric types work as expected. String & boolean types are tested in default case
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+    types.foreach { t =>
+      val castDF = df.select(col("real").cast(t))
+      val castResult = hasher.transform(castDF).select("features").as[Vector].collect()
+      withClue(s"FeatureHasher works for all numeric types (testing $t): ") {
+        assert(castResult.zip(expectedResult).forall { case (actual, expected) =>
+          actual ~== expected absTol 1e-14
+        })
+      }
+    }
+  }
+
+  test("invalid input type should fail") {
+    val df = Seq(
+      Vectors.dense(1),
+      Vectors.dense(2)
+    ).toDF("vec")
+
+    intercept[IllegalArgumentException] {
+      new FeatureHasher().setInputCols("vec").transform(df)
+    }
   }
 
   test("hash collisions sum feature values") {
     val df = Seq(
       (1.0, "foo", "foo"),
       (2.0, "bar", "baz")
-    ).toDF("double", "string1", "string2")
+    ).toDF("real", "string1", "string2")
 
     val n = 1
-    val featureHasher = new FeatureHasher()
-      .setInputCols("double", "string1", "string2")
+    val hasher = new FeatureHasher()
+      .setInputCols("real", "string1", "string2")
       .setOutputCol("features")
       .setNumFeatures(n)
-    val output = featureHasher.transform(df)
 
-    val features = output.select("features").as[Vector].collect()
+    val features = hasher.transform(df).select("features").as[Vector].collect()
     def idx: Any => Int = murmur3FeatureIdx(n)
     // everything should hash into one field
-    assert(idx("double") === idx("string1=foo"))
+    assert(idx("real") === idx("string1=foo"))
     assert(idx("string1=foo") === idx("string2=foo"))
     assert(idx("string2=foo") === idx("string1=bar"))
     assert(idx("string1=bar") === idx("string2=baz"))
@@ -108,26 +143,44 @@ class FeatureHasherSuite extends SparkFunSuite
     val df = Seq(
       (2.0, "foo", null),
       (3.0, "bar", "baz")
-    ).toDF("double", "string1", "string2").select(
-      when(col("double") === 3.0, null).otherwise(col("double")).alias("double"),
+    ).toDF("real", "string1", "string2").select(
+      when(col("real") === 3.0, null).otherwise(col("real")).alias("real"),
       col("string1"),
       col("string2")
     )
 
     val n = 100
-    val featureHasher = new FeatureHasher()
-      .setInputCols("double", "string1", "string2")
+    val hasher = new FeatureHasher()
+      .setInputCols("real", "string1", "string2")
       .setOutputCol("features")
       .setNumFeatures(n)
-    val output = featureHasher.transform(df)
 
-    val features = output.select("features").as[Vector].collect()
+    val features = hasher.transform(df).select("features").as[Vector].collect()
     def idx: Any => Int = murmur3FeatureIdx(n)
     val expected = Seq(
-      Vectors.sparse(n, Seq((idx("double"), 2.0), (idx("string1=foo"), 1.0))),
+      Vectors.sparse(n, Seq((idx("real"), 2.0), (idx("string1=foo"), 1.0))),
       Vectors.sparse(n, Seq((idx("string1=bar"), 1.0), (idx("string2=baz"), 1.0)))
     )
     assert(features.zip(expected).forall { case (e, a) => e ~== a absTol 1e-14 })
+  }
+
+  test("unicode column names and values") {
+    // scalastyle:off nonascii
+    val df = Seq((2.0, "中文")).toDF("中文", "unicode")
+
+    val n = 100
+    val hasher = new FeatureHasher()
+      .setInputCols("中文", "unicode")
+      .setOutputCol("features")
+      .setNumFeatures(n)
+
+    val features = hasher.transform(df).select("features").as[Vector].collect()
+    def idx: Any => Int = murmur3FeatureIdx(n)
+    val expected = Seq(
+      Vectors.sparse(n, Seq((idx("中文"), 2.0), (idx("unicode=中文"), 1.0)))
+    )
+    assert(features.zip(expected).forall { case (e, a) => e ~== a absTol 1e-14 })
+    // scalastyle:on nonascii
   }
 
   test("read/write") {
