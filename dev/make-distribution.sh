@@ -163,7 +163,7 @@ echo -e "\$ ${BUILD_COMMAND[@]}\n"
 rm -rf "$DISTDIR"
 mkdir -p "$DISTDIR/jars"
 echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
-echo "Build flags: "$@"" >> "$DISTDIR/RELEASE"
+echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
 # Copy jars
 cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
