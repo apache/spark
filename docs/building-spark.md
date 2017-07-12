@@ -97,7 +97,7 @@ To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` prop
     ./dev/change-scala-version.sh 2.10
     ./build/mvn -Pyarn -Dscala-2.10 -DskipTests clean package
 
-Note that support for Scala 2.10 is deprecated as of Spark 2.1.0 and may be removed in Spark 2.2.0.
+Note that support for Scala 2.10 is deprecated as of Spark 2.1.0 and may be removed in Spark 2.3.0.
 
 ## Building submodules individually
 
