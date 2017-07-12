@@ -197,7 +197,7 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
     FileCommitProtocol.instantiate(
       className = classOf[HadoopMapRedCommitProtocol].getName,
       jobId = jobId.toString,
-      outputPath = getConf.get("mapred.output.dir"),
+      outputPath = getConf.get("mapreduce.output.fileoutputformat.outputdir"),
       isAppend = false).asInstanceOf[HadoopMapReduceCommitProtocol]
   }
 
