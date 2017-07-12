@@ -356,6 +356,42 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
     spark.catalog.dropTempView("nums")
   }
 
+  test("window function: mutiple window expressions specified by range in a single expression") {
+    val nums = sparkContext.parallelize(1 to 10).map(x => (x, x % 2)).toDF("x", "y")
+    nums.createOrReplaceTempView("nums")
+
+    val expected =
+      Row(1, 1, 1, 4, 25) ::
+        Row(1, 3, 4, 9, 24) ::
+        Row(1, 5, 9, 15, 21) ::
+        Row(1, 7, 16, 21, 16) ::
+        Row(1, 9, 25, 16, 9) ::
+        Row(0, 2, 2, 6, 30) ::
+        Row(0, 4, 6, 12, 28) ::
+        Row(0, 6, 12, 18, 24) ::
+        Row(0, 8, 20, 24, 18) ::
+        Row(0, 10, 30, 18, 10) ::
+        Nil
+
+    val actual = sql(
+      """
+        |SELECT
+        |  y,
+        |  x,
+        |  sum(x) over w1 as history_sum,
+        |  sum(x) over w2 as period_sum,
+        |  sum(x) over w3 as future_sum
+        |FROM nums
+        |WINDOW w1 AS (PARTITION BY y ORDER BY x RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+        |       w2 AS (PARTITION BY y ORDER BY x RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING),
+        |       w3 AS (PARTITION BY y ORDER BY x RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+      """.stripMargin
+    )
+
+    checkAnswer(actual, expected)
+    spark.catalog.dropTempView("nums")
+  }
+
   test("SPARK-7595: Window will cause resolve failed with self join") {
     checkAnswer(sql(
       """
