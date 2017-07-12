@@ -208,9 +208,6 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
       throw new IllegalStateException(s"Attempted to stop $name that has not yet started!")
     }
     if (stopped.compareAndSet(false, true)) {
-
-      eventQueue.clear()
-
       // Call eventLock.release() so that listenerThread will poll `null` from `eventQueue` and know
       // `stop` is called.
       eventLock.release()
