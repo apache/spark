@@ -70,6 +70,10 @@ class HistoryServer(
 
   private[history] var metricsRegistry = metricsSystem.getMetricRegistry
 
+  def cacheMetrics(): CacheMetrics = {
+   appCache.metrics
+  }
+
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
       // Parse the URI created by getAttemptURI(). It contains an app ID and an optional
