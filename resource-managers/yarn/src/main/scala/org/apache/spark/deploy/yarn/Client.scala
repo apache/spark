@@ -1202,7 +1202,7 @@ private object Client extends Logging {
 
   // Name of the file containing the gateway's Hadoop configuration, to be overlayed on top of the
   // cluster's Hadoop config.
-  val SPARK_HADOOP_CONF_FILE = "__spark_conf__.xml"
+  val SPARK_HADOOP_CONF_FILE = "__spark_hadoop_conf__.xml"
 
   // Subdirectory where the user's python files (not archives) will be placed.
   val LOCALIZED_PYTHON_DIR = "__pyfiles__"
