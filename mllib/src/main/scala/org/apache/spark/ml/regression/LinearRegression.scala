@@ -48,12 +48,12 @@ import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
 /**
- * Params for linear regression.
+ * Params for linear regression model.
  */
-private[regression] trait LinearRegressionParams extends PredictorParams
-    with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
-    with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-    with HasAggregationDepth {
+private[regression] trait LinearRegressionModelParams extends PredictorParams
+  with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
+  with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
+  with HasAggregationDepth {
 
   import LinearRegression._
 
@@ -69,6 +69,22 @@ private[regression] trait LinearRegressionParams extends PredictorParams
     "The solver algorithm for optimization. Supported options: " +
       s"${supportedSolvers.mkString(", ")}. (Default auto)",
     ParamValidators.inArray[String](supportedSolvers))
+}
+
+/**
+ * Params for linear regression.
+ */
+private[regression] trait LinearRegressionParams extends LinearRegressionModelParams
+    with HasInitialModel[LinearRegressionModel] {
+
+  /**
+   * A LinearRegressionModel to use for warm start.
+   *
+   * @group param
+   */
+  @Since("2.3.0")
+  final val initialModel: Param[LinearRegressionModel] = new Param[LinearRegressionModel](
+    this, "initialModel", "A LinearRegressionModel to use for warm start.")
 }
 
 /**
@@ -208,6 +224,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /** @group setParam */
+  @Since("2.3.0")
+  def setInitialModel(value: LinearRegressionModel): this.type = set(initialModel, value)
+
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
@@ -226,6 +246,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     if (($(solver) == Auto &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == Normal) {
+
+      if (isSet(initialModel)) {
+        logWarning("Initial model will be ignored if fitting by normal solver. " +
+          "Set solver with l-bfgs to make it take effect.")
+      }
+
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 
@@ -249,6 +275,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       lrModel.setSummary(Some(trainingSummary))
       instr.logSuccess(lrModel)
       return lrModel
+    }
+
+    if (isSet(initialModel)) {
+      val dimOfInitialModel = $(initialModel).coefficients.size
+      require(numFeatures == dimOfInitialModel,
+        s"The number of features in training dataset is $numFeatures, " +
+          s"which mismatched with dimension of initial model: $dimOfInitialModel.")
     }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -365,7 +398,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, effectiveL1RegFun, $(tol))
     }
 
-    val initialCoefficients = Vectors.zeros(numFeatures)
+    val initialCoefficients = if (isSet(initialModel)) {
+      $(initialModel).coefficients
+    } else {
+      Vectors.zeros(numFeatures)
+    }
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
       initialCoefficients.asBreeze.toDenseVector)
 
@@ -441,15 +478,46 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     model
   }
 
+  @Since("1.6.0")
+  override def write: MLWriter = new LinearRegression.LinearRegressionWriter(this)
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
 }
 
 @Since("1.6.0")
-object LinearRegression extends DefaultParamsReadable[LinearRegression] {
+object LinearRegression extends MLReadable[LinearRegression] {
 
   @Since("1.6.0")
   override def load(path: String): LinearRegression = super.load(path)
+
+  @Since("1.6.0")
+  override def read: MLReader[LinearRegression] = new LinearRegressionReader
+
+  /** [[MLWriter]] instance for [[LinearRegression]] */
+  private[LinearRegression] class LinearRegressionWriter(instance: LinearRegression)
+    extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveInitialModel(instance, path)
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+    }
+  }
+
+  private class LinearRegressionReader extends MLReader[LinearRegression] {
+
+    override def load(path: String): LinearRegression = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, classOf[LinearRegression].getName)
+      val instance = new LinearRegression(metadata.uid)
+
+      DefaultParamsReader.getAndSetParams(instance, metadata)
+      DefaultParamsReader.loadInitialModel[LinearRegressionModel](path, sc) match {
+        case Some(m) => instance.setInitialModel(m)
+        case None => // initialModel doesn't exist, do nothing
+      }
+      instance
+    }
+  }
 
   /**
    * When using `LinearRegression.solver` == "normal", the solver must limit the number of
@@ -481,7 +549,7 @@ class LinearRegressionModel private[ml] (
     @Since("2.0.0") val coefficients: Vector,
     @Since("1.3.0") val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
-  with LinearRegressionParams with MLWritable {
+  with LinearRegressionModelParams with MLWritable {
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 

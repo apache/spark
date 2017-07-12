@@ -32,6 +32,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param.{ParamPair, Params}
+import org.apache.spark.ml.param.shared.HasInitialModel
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.util.Utils
@@ -282,6 +283,8 @@ private[ml] object DefaultParamsWriter {
    * Helper for [[saveMetadata()]] which extracts the JSON to save.
    * This is useful for ensemble models which need to save metadata for many sub-models.
    *
+   * Note: This function does not handle param `initialModel`, see [[saveInitialModel()]].
+   *
    * @see [[saveMetadata()]] for details on what this includes.
    */
   def getMetadataToSave(
@@ -291,7 +294,8 @@ private[ml] object DefaultParamsWriter {
       paramMap: Option[JValue] = None): String = {
     val uid = instance.uid
     val cls = instance.getClass.getName
-    val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
+    val params = instance.extractParamMap().toSeq
+      .filter(_.param.name != "initialModel").asInstanceOf[Seq[ParamPair[Any]]]
     val jsonParams = paramMap.getOrElse(render(params.map { case ParamPair(p, v) =>
       p.name -> parse(p.jsonEncode(v))
     }.toList))
@@ -308,6 +312,23 @@ private[ml] object DefaultParamsWriter {
     }
     val metadataJson: String = compact(render(metadata))
     metadataJson
+  }
+
+  /**
+   * Save estimator's `initialModel` to corresponding path.
+   */
+  def saveInitialModel[T <: HasInitialModel[_ <: MLWritable with Params]](
+      instance: T, path: String): Unit = {
+    if (instance.isDefined(instance.initialModel)) {
+      val initialModelPath = new Path(path, "initialModel").toString
+      val initialModel = instance.getOrDefault(instance.initialModel)
+      // When saving, only keep the direct initialModel by eliminating possible initialModels of the
+      // direct initialModel, to avoid unnecessary deep recursion of initialModel.
+      if (initialModel.hasParam("initialModel")) {
+        initialModel.clear(initialModel.getParam("initialModel"))
+      }
+      initialModel.save(initialModelPath)
+    }
   }
 }
 
@@ -436,6 +457,23 @@ private[ml] object DefaultParamsReader {
     val metadata = DefaultParamsReader.loadMetadata(path, sc)
     val cls = Utils.classForName(metadata.className)
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
+  }
+
+  /**
+   * Load estimator's `initialModel` instance from the given path, and return it.
+   * If the `initialModel` path does not exist, it means the estimator does not have or
+   * set param `initialModel`, then return None.
+   * This assumes the model implements [[MLReadable]].
+   */
+  def loadInitialModel[M <: Model[M]](path: String, sc: SparkContext): Option[M] = {
+    val hadoopConf = sc.hadoopConfiguration
+    val initialModelPath = new Path(path, "initialModel")
+    val fs = initialModelPath.getFileSystem(hadoopConf)
+    if (fs.exists(initialModelPath)) {
+      Some(loadParamsInstance[M](initialModelPath.toString, sc))
+    } else {
+      None
+    }
   }
 }
 

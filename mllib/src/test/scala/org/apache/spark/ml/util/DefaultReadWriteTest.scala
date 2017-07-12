@@ -59,15 +59,17 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     assert(newInstance.uid === instance.uid)
     if (testParams) {
       instance.params.foreach { p =>
-        if (instance.isDefined(p)) {
-          (instance.getOrDefault(p), newInstance.getOrDefault(p)) match {
-            case (Array(values), Array(newValues)) =>
-              assert(values === newValues, s"Values do not match on param ${p.name}.")
-            case (value, newValue) =>
-              assert(value === newValue, s"Values do not match on param ${p.name}.")
+        if (p.name != "initialModel") {
+          if (instance.isDefined(p)) {
+            (instance.getOrDefault(p), newInstance.getOrDefault(p)) match {
+              case (Array(values), Array(newValues)) =>
+                assert(values === newValues, s"Values do not match on param ${p.name}.")
+              case (value, newValue) =>
+                assert(value === newValue, s"Values do not match on param ${p.name}.")
+            }
+          } else {
+            assert(!newInstance.isDefined(p), s"Param ${p.name} shouldn't be defined.")
           }
-        } else {
-          assert(!newInstance.isDefined(p), s"Param ${p.name} shouldn't be defined.")
         }
       }
     }
@@ -113,7 +115,14 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     val estimator2 = testDefaultReadWrite(estimator)
     testEstimatorParams.foreach { case (p, v) =>
       val param = estimator.getParam(p)
-      assert(estimator.get(param).get === estimator2.get(param).get)
+      if (param.name == "initialModel") {
+        // Estimator's `initialModel` has same type as the model produced by this estimator.
+        // So we can use `checkModelData` to check equality of `initialModel` as well.
+        checkModelData(estimator.get(param).get.asInstanceOf[M],
+          estimator2.get(param).get.asInstanceOf[M])
+      } else {
+        assert(estimator.get(param).get === estimator2.get(param).get)
+      }
     }
 
     // Test Model save/load

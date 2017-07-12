@@ -984,8 +984,9 @@ class LinearRegressionSuite
       assert(model.coefficients === model2.coefficients)
     }
     val lr = new LinearRegression()
-    testEstimatorAndModelReadWrite(lr, datasetWithWeight, LinearRegressionSuite.allParamSettings,
-      LinearRegressionSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(
+      lr, datasetWithWeight, LinearRegressionSuite.estimatorParamSettings,
+      LinearRegressionSuite.modelParamSettings, checkModelData)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {
@@ -998,16 +999,45 @@ class LinearRegressionSuite
       }
     }
   }
+
+  test("training with initial model") {
+    val trainer1 = new LinearRegression()
+      .setRegParam(2.3)
+      .setFitIntercept(false)
+      .setSolver("l-bfgs")
+
+    val model1 = trainer1.fit(datasetWithSparseFeature)
+    val model2 = trainer1.setInitialModel(model1).fit(datasetWithSparseFeature)
+
+    assert(model1.coefficients ~== model2.coefficients absTol 1E-3)
+    assert(model1.intercept === model2.intercept)
+    assert(model1.summary.objectiveHistory.length < model2.summary.objectiveHistory.length)
+
+    // Initial model will be ignored if fitting by normal solver.
+    val trainer2 = new LinearRegression().setRegParam(2.3).setFitIntercept(false)
+    val model3 = trainer2.fit(datasetWithDenseFeature)
+    val model4 = trainer2.setInitialModel(model3).fit(datasetWithDenseFeature)
+
+    assert(model3.coefficients ~== model4.coefficients absTol 1E-3)
+    assert(model3.intercept === model4.intercept)
+    assert(model3.summary.objectiveHistory.length === model4.summary.objectiveHistory.length)
+
+    // Training dataset dimension mismatched.
+    intercept[IllegalArgumentException] {
+      val initialModel = new LinearRegressionModel("linReg", Vectors.dense(1.0), 1.0)
+      new LinearRegression().setInitialModel(initialModel).fit(datasetWithSparseFeature)
+    }
+  }
 }
 
 object LinearRegressionSuite {
 
   /**
-   * Mapping from all Params to valid settings which differ from the defaults.
+   * Mapping from estimator Params to valid settings which differ from the defaults.
    * This is useful for tests which need to exercise all Params, such as save/load.
    * This excludes input columns to simplify some tests.
    */
-  val allParamSettings: Map[String, Any] = Map(
+  val estimatorParamSettings: Map[String, Any] = Map(
     "predictionCol" -> "myPrediction",
     "regParam" -> 0.01,
     "elasticNetParam" -> 0.1,
@@ -1015,6 +1045,14 @@ object LinearRegressionSuite {
     "fitIntercept" -> true,
     "tol" -> 0.8,
     "standardization" -> false,
-    "solver" -> "l-bfgs"
+    "solver" -> "l-bfgs",
+    "initialModel" -> new LinearRegressionModel("linReg", Vectors.dense(1.0, 1.0), 1.0)
   )
+
+  /**
+   * Mapping from model Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val modelParamSettings: Map[String, Any] = Map("predictionCol" -> "myPrediction")
 }
