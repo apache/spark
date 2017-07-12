@@ -214,7 +214,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * The lower bounds on intercepts if fitting under bound constrained optimization.
-   * The bounds vector size must be equal with 1 for binomial regression, or the number
+   * The bounds vector size must be equal to 1 for binomial regression, or the number
    * of classes for multinomial regression. Otherwise, it throws exception.
    * Default is none.
    *
@@ -230,7 +230,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * The upper bounds on intercepts if fitting under bound constrained optimization.
-   * The bound vector size must be equal with 1 for binomial regression, or the number
+   * The bound vector size must be equal to 1 for binomial regression, or the number
    * of classes for multinomial regression. Otherwise, it throws exception.
    * Default is none.
    *
@@ -451,12 +451,12 @@ class LogisticRegression @Since("1.2.0") (
     }
     if (isSet(lowerBoundsOnIntercepts)) {
       require($(lowerBoundsOnIntercepts).size == numCoefficientSets, "The size of " +
-        "lowerBoundsOnIntercepts must be equal with 1 for binomial regression, or the number of " +
+        "lowerBoundsOnIntercepts must be equal to 1 for binomial regression, or the number of " +
         s"classes for multinomial regression, but found: ${getLowerBoundsOnIntercepts.size}.")
     }
     if (isSet(upperBoundsOnIntercepts)) {
       require($(upperBoundsOnIntercepts).size == numCoefficientSets, "The size of " +
-        "upperBoundsOnIntercepts must be equal with 1 for binomial regression, or the number of " +
+        "upperBoundsOnIntercepts must be equal to 1 for binomial regression, or the number of " +
         s"classes for multinomial regression, but found: ${getUpperBoundsOnIntercepts.size}.")
     }
     if (isSet(lowerBoundsOnCoefficients) && isSet(upperBoundsOnCoefficients)) {

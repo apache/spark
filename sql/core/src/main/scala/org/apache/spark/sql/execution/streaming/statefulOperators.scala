@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.rdd.RDD
@@ -36,20 +37,22 @@ import org.apache.spark.util.{CompletionIterator, NextIterator}
 
 
 /** Used to identify the state store for a given operator. */
-case class OperatorStateId(
+case class StatefulOperatorStateInfo(
     checkpointLocation: String,
+    queryRunId: UUID,
     operatorId: Long,
-    batchId: Long)
+    storeVersion: Long)
 
 /**
- * An operator that reads or writes state from the [[StateStore]].  The [[OperatorStateId]] should
- * be filled in by `prepareForExecution` in [[IncrementalExecution]].
+ * An operator that reads or writes state from the [[StateStore]].
+ * The [[StatefulOperatorStateInfo]] should be filled in by `prepareForExecution` in
+ * [[IncrementalExecution]].
  */
 trait StatefulOperator extends SparkPlan {
-  def stateId: Option[OperatorStateId]
+  def stateInfo: Option[StatefulOperatorStateInfo]
 
-  protected def getStateId: OperatorStateId = attachTree(this) {
-    stateId.getOrElse {
+  protected def getStateInfo: StatefulOperatorStateInfo = attachTree(this) {
+    stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
   }
@@ -140,7 +143,7 @@ trait WatermarkSupport extends UnaryExecNode {
  */
 case class StateStoreRestoreExec(
     keyExpressions: Seq[Attribute],
-    stateId: Option[OperatorStateId],
+    stateInfo: Option[StatefulOperatorStateInfo],
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader {
 
@@ -148,10 +151,7 @@ case class StateStoreRestoreExec(
     val numOutputRows = longMetric("numOutputRows")
 
     child.execute().mapPartitionsWithStateStore(
-      getStateId.checkpointLocation,
-      operatorId = getStateId.operatorId,
-      storeName = "default",
-      storeVersion = getStateId.batchId,
+      getStateInfo,
       keyExpressions.toStructType,
       child.output.toStructType,
       indexOrdinal = None,
@@ -177,7 +177,7 @@ case class StateStoreRestoreExec(
  */
 case class StateStoreSaveExec(
     keyExpressions: Seq[Attribute],
-    stateId: Option[OperatorStateId] = None,
+    stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None,
     child: SparkPlan)
@@ -189,10 +189,7 @@ case class StateStoreSaveExec(
       "Incorrect planning in IncrementalExecution, outputMode has not been set")
 
     child.execute().mapPartitionsWithStateStore(
-      getStateId.checkpointLocation,
-      getStateId.operatorId,
-      storeName = "default",
-      getStateId.batchId,
+      getStateInfo,
       keyExpressions.toStructType,
       child.output.toStructType,
       indexOrdinal = None,
@@ -319,7 +316,7 @@ case class StateStoreSaveExec(
 case class StreamingDeduplicateExec(
     keyExpressions: Seq[Attribute],
     child: SparkPlan,
-    stateId: Option[OperatorStateId] = None,
+    stateInfo: Option[StatefulOperatorStateInfo] = None,
     eventTimeWatermark: Option[Long] = None)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
@@ -331,10 +328,7 @@ case class StreamingDeduplicateExec(
     metrics // force lazy init at driver
 
     child.execute().mapPartitionsWithStateStore(
-      getStateId.checkpointLocation,
-      getStateId.operatorId,
-      storeName = "default",
-      getStateId.batchId,
+      getStateInfo,
       keyExpressions.toStructType,
       child.output.toStructType,
       indexOrdinal = None,

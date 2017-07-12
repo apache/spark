@@ -35,7 +35,6 @@ class ConstantPropagationSuite extends PlanTest {
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
         Batch("ConstantPropagation", FixedPoint(10),
-          ColumnPruning,
           ConstantPropagation,
           ConstantFolding,
           BooleanSimplification) :: Nil
@@ -43,9 +42,9 @@ class ConstantPropagationSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  private val columnA = 'a.int
-  private val columnB = 'b.int
-  private val columnC = 'c.int
+  private val columnA = 'a
+  private val columnB = 'b
+  private val columnC = 'c
 
   test("basic test") {
     val query = testRelation
@@ -160,7 +159,7 @@ class ConstantPropagationSuite extends PlanTest {
 
     val correctAnswer = testRelation
       .select(columnA)
-      .where(columnA === Literal(1) && columnA === Literal(2) && columnB === Literal(5))
+      .where(columnA === Literal(1) && columnA === Literal(2) && columnB === Literal(5)).analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
   }

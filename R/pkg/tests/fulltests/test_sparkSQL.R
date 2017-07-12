@@ -146,6 +146,13 @@ test_that("structType and structField", {
   expect_is(testSchema, "structType")
   expect_is(testSchema$fields()[[2]], "structField")
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
+
+  testSchema <- structType("a STRING, b INT")
+  expect_is(testSchema, "structType")
+  expect_is(testSchema$fields()[[2]], "structField")
+  expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
+
+  expect_error(structType("A stri"), "DataType stri is not supported.")
 })
 
 test_that("structField type strings", {
@@ -1480,13 +1487,15 @@ test_that("column functions", {
   j <- collect(select(df, alias(to_json(df$info), "json")))
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
   df <- as.DataFrame(j)
-  schema <- structType(structField("age", "integer"),
-                       structField("height", "double"))
-  s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
-  expect_equal(ncol(s), 1)
-  expect_equal(nrow(s), 3)
-  expect_is(s[[1]][[1]], "struct")
-  expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 } )))
+  schemas <- list(structType(structField("age", "integer"), structField("height", "double")),
+                  "age INT, height DOUBLE")
+  for (schema in schemas) {
+    s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
+    expect_equal(ncol(s), 1)
+    expect_equal(nrow(s), 3)
+    expect_is(s[[1]][[1]], "struct")
+    expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 } )))
+  }
 
   # passing option
   df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
@@ -1504,14 +1513,15 @@ test_that("column functions", {
   # check if array type in string is correctly supported.
   jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
   df <- as.DataFrame(list(list("people" = jsonArr)))
-  schema <- structType(structField("name", "string"))
-  arr <- collect(select(df, alias(from_json(df$people, schema, as.json.array = TRUE), "arrcol")))
-  expect_equal(ncol(arr), 1)
-  expect_equal(nrow(arr), 1)
-  expect_is(arr[[1]][[1]], "list")
-  expect_equal(length(arr$arrcol[[1]]), 2)
-  expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
-  expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
+  for (schema in list(structType(structField("name", "string")), "name STRING")) {
+    arr <- collect(select(df, alias(from_json(df$people, schema, as.json.array = TRUE), "arrcol")))
+    expect_equal(ncol(arr), 1)
+    expect_equal(nrow(arr), 1)
+    expect_is(arr[[1]][[1]], "list")
+    expect_equal(length(arr$arrcol[[1]]), 2)
+    expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
+    expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
+  }
 
   # Test create_array() and create_map()
   df <- as.DataFrame(data.frame(
@@ -2885,30 +2895,33 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
   expect_identical(ldf, result)
 
   # Filter and add a column
-  schema <- structType(structField("a", "integer"), structField("b", "double"),
-                       structField("c", "string"), structField("d", "integer"))
-  df1 <- dapply(
-           df,
-           function(x) {
-             y <- x[x$a > 1, ]
-             y <- cbind(y, y$a + 1L)
-           },
-           schema)
-  result <- collect(df1)
-  expected <- ldf[ldf$a > 1, ]
-  expected$d <- expected$a + 1L
-  rownames(expected) <- NULL
-  expect_identical(expected, result)
+  schemas <- list(structType(structField("a", "integer"), structField("b", "double"),
+                             structField("c", "string"), structField("d", "integer")),
+                  "a INT, b DOUBLE, c STRING, d INT")
+  for (schema in schemas) {
+    df1 <- dapply(
+             df,
+             function(x) {
+               y <- x[x$a > 1, ]
+               y <- cbind(y, y$a + 1L)
+             },
+             schema)
+    result <- collect(df1)
+    expected <- ldf[ldf$a > 1, ]
+    expected$d <- expected$a + 1L
+    rownames(expected) <- NULL
+    expect_identical(expected, result)
 
-  result <- dapplyCollect(
-              df,
-              function(x) {
-                y <- x[x$a > 1, ]
-                y <- cbind(y, y$a + 1L)
-              })
-  expected1 <- expected
-  names(expected1) <- names(result)
-  expect_identical(expected1, result)
+    result <- dapplyCollect(
+                df,
+                function(x) {
+                  y <- x[x$a > 1, ]
+                  y <- cbind(y, y$a + 1L)
+                })
+    expected1 <- expected
+    names(expected1) <- names(result)
+    expect_identical(expected1, result)
+  }
 
   # Remove the added column
   df2 <- dapply(
@@ -3020,28 +3033,31 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
 
   # Computes the sum of second column by grouping on the first and third columns
   # and checks if the sum is larger than 2
-  schema <- structType(structField("a", "integer"), structField("e", "boolean"))
-  df2 <- gapply(
-    df,
-    c(df$"a", df$"c"),
-    function(key, x) {
-      y <- data.frame(key[1], sum(x$b) > 2)
-    },
-    schema)
-  actual <- collect(df2)$e
-  expected <- c(TRUE, TRUE)
-  expect_identical(actual, expected)
-
-  df2Collect <- gapplyCollect(
-    df,
-    c(df$"a", df$"c"),
-    function(key, x) {
-      y <- data.frame(key[1], sum(x$b) > 2)
-      colnames(y) <- c("a", "e")
-      y
-    })
-    actual <- df2Collect$e
+  schemas <- list(structType(structField("a", "integer"), structField("e", "boolean")),
+                  "a INT, e BOOLEAN")
+  for (schema in schemas) {
+    df2 <- gapply(
+      df,
+      c(df$"a", df$"c"),
+      function(key, x) {
+        y <- data.frame(key[1], sum(x$b) > 2)
+      },
+      schema)
+    actual <- collect(df2)$e
+    expected <- c(TRUE, TRUE)
     expect_identical(actual, expected)
+
+    df2Collect <- gapplyCollect(
+      df,
+      c(df$"a", df$"c"),
+      function(key, x) {
+        y <- data.frame(key[1], sum(x$b) > 2)
+        colnames(y) <- c("a", "e")
+        y
+      })
+      actual <- df2Collect$e
+      expect_identical(actual, expected)
+  }
 
   # Computes the arithmetic mean of the second column by grouping
   # on the first and third columns. Output the groupping value and the average.
@@ -3248,9 +3264,9 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   # It makes sure that we can omit path argument in read.df API and then it calls
   # DataFrameWriter.load() without path.
   expect_error(read.df(source = "json"),
-               paste("Error in loadDF : analysis error - Unable to infer schema for JSON.",
+               paste("Error in load : analysis error - Unable to infer schema for JSON.",
                      "It must be specified manually"))
-  expect_error(read.df("arbitrary_path"), "Error in loadDF : analysis error - Path does not exist")
+  expect_error(read.df("arbitrary_path"), "Error in load : analysis error - Path does not exist")
   expect_error(read.json("arbitrary_path"), "Error in json : analysis error - Path does not exist")
   expect_error(read.text("arbitrary_path"), "Error in text : analysis error - Path does not exist")
   expect_error(read.orc("arbitrary_path"), "Error in orc : analysis error - Path does not exist")
@@ -3266,6 +3282,22 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
 
   expect_warning(read.json(jsonPath, a = 1, 2, 3, "a"),
                  "Unnamed arguments ignored: 2, 3, a.")
+})
+
+test_that("Specify a schema by using a DDL-formatted string when reading", {
+  # Test read.df with a user defined schema in a DDL-formatted string.
+  df1 <- read.df(jsonPath, "json", "name STRING, age DOUBLE")
+  expect_is(df1, "SparkDataFrame")
+  expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
+
+  expect_error(read.df(jsonPath, "json", "name stri"), "DataType stri is not supported.")
+
+  # Test loadDF with a user defined schema in a DDL-formatted string.
+  df2 <- loadDF(jsonPath, "json", "name STRING, age DOUBLE")
+  expect_is(df2, "SparkDataFrame")
+  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
+
+  expect_error(loadDF(jsonPath, "json", "name stri"), "DataType stri is not supported.")
 })
 
 test_that("Collect on DataFrame when NAs exists at the top of a timestamp column", {

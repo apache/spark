@@ -26,22 +26,9 @@ import org.apache.spark.sql.SparkSession
 class SQLExecutionSuite extends SparkFunSuite {
 
   test("concurrent query execution (SPARK-10548)") {
-    // Try to reproduce the issue with the old SparkContext
     val conf = new SparkConf()
       .setMaster("local[*]")
       .setAppName("test")
-    val badSparkContext = new BadSparkContext(conf)
-    try {
-      testConcurrentQueryExecution(badSparkContext)
-      fail("unable to reproduce SPARK-10548")
-    } catch {
-      case e: IllegalArgumentException =>
-        assert(e.getMessage.contains(SQLExecution.EXECUTION_ID_KEY))
-    } finally {
-      badSparkContext.stop()
-    }
-
-    // Verify that the issue is fixed with the latest SparkContext
     val goodSparkContext = new SparkContext(conf)
     try {
       testConcurrentQueryExecution(goodSparkContext)
@@ -131,17 +118,6 @@ class SQLExecutionSuite extends SparkFunSuite {
     assert(df.queryExecution === queryExecution)
 
     spark.stop()
-  }
-}
-
-/**
- * A bad [[SparkContext]] that does not clone the inheritable thread local properties
- * when passing them to children threads.
- */
-private class BadSparkContext(conf: SparkConf) extends SparkContext(conf) {
-  protected[spark] override val localProperties = new InheritableThreadLocal[Properties] {
-    override protected def childValue(parent: Properties): Properties = new Properties(parent)
-    override protected def initialValue(): Properties = new Properties()
   }
 }
 

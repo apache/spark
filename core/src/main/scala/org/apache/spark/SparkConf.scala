@@ -373,6 +373,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
   }
 
+  /** Get an optional value, applying variable substitution. */
+  private[spark] def getWithSubstitution(key: String): Option[String] = {
+    getOption(key).map(reader.substitute(_))
+  }
+
   /** Get all parameters as a list of pairs */
   def getAll: Array[(String, String)] = {
     settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
@@ -540,6 +545,17 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
         case "cluster" | "client" =>
         case e => throw new SparkException("spark.submit.deployMode can only be \"cluster\" or " +
           "\"client\".")
+      }
+    }
+
+    if (contains("spark.cores.max") && contains("spark.executor.cores")) {
+      val totalCores = getInt("spark.cores.max", 1)
+      val executorCores = getInt("spark.executor.cores", 1)
+      val leftCores = totalCores % executorCores
+      if (leftCores != 0) {
+        logWarning(s"Total executor cores: ${totalCores} is not " +
+          s"divisible by cores per executor: ${executorCores}, " +
+          s"the left cores: ${leftCores} will not be allocated")
       }
     }
 

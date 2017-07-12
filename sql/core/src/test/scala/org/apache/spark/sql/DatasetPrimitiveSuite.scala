@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.immutable.{HashSet => HSet}
 import scala.collection.immutable.Queue
 import scala.collection.mutable.{LinkedHashMap => LHMap}
 import scala.collection.mutable.ArrayBuffer
@@ -38,6 +39,9 @@ case class LHMapClass(m: LHMap[Int, Int])
 case class ComplexClass(seq: SeqClass, list: ListClass, queue: QueueClass)
 
 case class ComplexMapClass(map: MapClass, lhmap: LHMapClass)
+
+case class InnerData(name: String, value: Int)
+case class NestedData(id: Int, param: Map[String, InnerData])
 
 package object packageobject {
   case class PackageClass(value: Int)
@@ -339,6 +343,31 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
       LHMapClass(LHMap(1 -> 2)) -> LHMap("test" -> MapClass(Map(3 -> 4))))
   }
 
+  test("arbitrary sets") {
+    checkDataset(Seq(Set(1, 2, 3, 4)).toDS(), Set(1, 2, 3, 4))
+    checkDataset(Seq(Set(1.toLong, 2.toLong)).toDS(), Set(1.toLong, 2.toLong))
+    checkDataset(Seq(Set(1.toDouble, 2.toDouble)).toDS(), Set(1.toDouble, 2.toDouble))
+    checkDataset(Seq(Set(1.toFloat, 2.toFloat)).toDS(), Set(1.toFloat, 2.toFloat))
+    checkDataset(Seq(Set(1.toByte, 2.toByte)).toDS(), Set(1.toByte, 2.toByte))
+    checkDataset(Seq(Set(1.toShort, 2.toShort)).toDS(), Set(1.toShort, 2.toShort))
+    checkDataset(Seq(Set(true, false)).toDS(), Set(true, false))
+    checkDataset(Seq(Set("test1", "test2")).toDS(), Set("test1", "test2"))
+    checkDataset(Seq(Set(Tuple1(1), Tuple1(2))).toDS(), Set(Tuple1(1), Tuple1(2)))
+
+    checkDataset(Seq(HSet(1, 2)).toDS(), HSet(1, 2))
+    checkDataset(Seq(HSet(1.toLong, 2.toLong)).toDS(), HSet(1.toLong, 2.toLong))
+    checkDataset(Seq(HSet(1.toDouble, 2.toDouble)).toDS(), HSet(1.toDouble, 2.toDouble))
+    checkDataset(Seq(HSet(1.toFloat, 2.toFloat)).toDS(), HSet(1.toFloat, 2.toFloat))
+    checkDataset(Seq(HSet(1.toByte, 2.toByte)).toDS(), HSet(1.toByte, 2.toByte))
+    checkDataset(Seq(HSet(1.toShort, 2.toShort)).toDS(), HSet(1.toShort, 2.toShort))
+    checkDataset(Seq(HSet(true, false)).toDS(), HSet(true, false))
+    checkDataset(Seq(HSet("test1", "test2")).toDS(), HSet("test1", "test2"))
+    checkDataset(Seq(HSet(Tuple1(1), Tuple1(2))).toDS(), HSet(Tuple1(1), Tuple1(2)))
+
+    checkDataset(Seq(Seq(Some(1), None), Seq(Some(2))).toDF("c").as[Set[Integer]],
+      Seq(Set[Integer](1, null), Set[Integer](2)): _*)
+  }
+
   test("nested sequences") {
     checkDataset(Seq(Seq(Seq(1))).toDS(), Seq(Seq(1)))
     checkDataset(Seq(List(Queue(1))).toDS(), List(Queue(1)))
@@ -349,9 +378,19 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(LHMap(Map(1 -> 2) -> 3)).toDS(), LHMap(Map(1 -> 2) -> 3))
   }
 
+  test("nested set") {
+    checkDataset(Seq(Set(HSet(1, 2), HSet(3, 4))).toDS(), Set(HSet(1, 2), HSet(3, 4)))
+    checkDataset(Seq(HSet(Set(1, 2), Set(3, 4))).toDS(), HSet(Set(1, 2), Set(3, 4)))
+  }
+
   test("package objects") {
     import packageobject._
     checkDataset(Seq(PackageClass(1)).toDS(), PackageClass(1))
   }
 
+  test("SPARK-19104: Lambda variables in ExternalMapToCatalyst should be global") {
+    val data = Seq.tabulate(10)(i => NestedData(1, Map("key" -> InnerData("name", i + 100))))
+    val ds = spark.createDataset(data)
+    checkDataset(ds, data: _*)
+  }
 }
