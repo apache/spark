@@ -1012,6 +1012,13 @@ object MimaExcludes {
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.classification.RandomForestClassificationModel.setFeatureSubsetStrategy"),
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.regression.RandomForestRegressionModel.numTrees"),
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.regression.RandomForestRegressionModel.setFeatureSubsetStrategy")
+    ) ++ Seq(
+      // [SPARK-21386] ML LinearRegression supports warm start from user provided initial model.
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.regression.LinearRegressionModelParams.org$apache$spark$ml$regression$LinearRegressionModelParams$_setter_$solver_="),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasInitialModel.initialModel"),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasInitialModel.getInitialModel"),
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.regression.LinearRegression$"),
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.regression.LinearRegressionModel")
     )
   }
 

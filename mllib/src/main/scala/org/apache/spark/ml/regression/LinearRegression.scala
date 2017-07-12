@@ -51,9 +51,9 @@ import org.apache.spark.storage.StorageLevel
  * Params for linear regression model.
  */
 private[regression] trait LinearRegressionModelParams extends PredictorParams
-  with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
-  with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-  with HasAggregationDepth {
+    with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
+    with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
+    with HasAggregationDepth {
 
   import LinearRegression._
 
