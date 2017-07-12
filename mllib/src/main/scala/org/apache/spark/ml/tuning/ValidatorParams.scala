@@ -198,8 +198,9 @@ private[ml] object ValidatorParams {
           val paramPairs = pMap.map { case pInfo: Map[String, String] =>
             val est = uidToParams(pInfo("parent"))
             val param = est.getParam(pInfo("name"))
+            // [Spark-21221] introduced the isJson field
             if (!pInfo.contains("isJson") ||
-               (pInfo.contains("isJson") && pInfo("isJson").toBoolean.booleanValue())) {
+                (pInfo.contains("isJson") && pInfo("isJson").toBoolean.booleanValue())) {
               val value = param.jsonDecode(pInfo("value"))
               param -> value
             } else {
