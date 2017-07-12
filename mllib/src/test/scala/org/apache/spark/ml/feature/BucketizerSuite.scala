@@ -187,6 +187,24 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       }
     }
   }
+
+  test("string params should be case-insensitive") {
+    val splits = Array(-0.5, 0.0, 0.5)
+    val validData = Array(-0.5, -0.3, 0.0, 0.2)
+    val expectedBuckets = Array(0.0, 0.0, 1.0, 1.0)
+    val dataFrame: DataFrame = validData.zip(expectedBuckets).toSeq.toDF("feature", "expected")
+
+    val bucketizer: Bucketizer = new Bucketizer()
+      .setInputCol("feature")
+      .setOutputCol("result")
+      .setSplits(splits)
+
+    Seq("sKiP", "eRRor", "kEEp").foreach { handleInvalid =>
+      bucketizer.setHandleInvalid(handleInvalid)
+      assert(bucketizer.getHandleInvalid === handleInvalid)
+      bucketizer.transform(dataFrame)
+    }
+  }
 }
 
 private object BucketizerSuite extends SparkFunSuite {

@@ -119,11 +119,10 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
     "useful in cross-validation or production scenarios, for handling user/item ids the model " +
     "has not seen in the training data. Supported values: " +
     s"${ALSModel.supportedColdStartStrategies.mkString(",")}.",
-    (s: String) =>
-      ALSModel.supportedColdStartStrategies.contains(s.toLowerCase(Locale.ROOT)))
+    ParamValidators.inStringArray(ALSModel.supportedColdStartStrategies))
 
   /** @group expertGetParam */
-  def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase(Locale.ROOT)
+  def getColdStartStrategy: String = $(coldStartStrategy)
 }
 
 /**
@@ -215,7 +214,8 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    */
   val intermediateStorageLevel = new Param[String](this, "intermediateStorageLevel",
     "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
-    (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
+    (value: String) => Try(StorageLevel.fromString(value.toUpperCase(Locale.ROOT))).isSuccess &&
+      value.toUpperCase(Locale.ROOT) != "NONE")
 
   /** @group expertGetParam */
   def getIntermediateStorageLevel: String = $(intermediateStorageLevel)
@@ -229,7 +229,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    */
   val finalStorageLevel = new Param[String](this, "finalStorageLevel",
     "StorageLevel for ALS model factors.",
-    (s: String) => Try(StorageLevel.fromString(s)).isSuccess)
+    (value: String) => Try(StorageLevel.fromString(value.toUpperCase(Locale.ROOT))).isSuccess)
 
   /** @group expertGetParam */
   def getFinalStorageLevel: String = $(finalStorageLevel)
@@ -308,7 +308,7 @@ class ALSModel private[ml] (
         checkedCast(dataset($(itemCol))) === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
-    getColdStartStrategy match {
+    getColdStartStrategy.toLowerCase(Locale.ROOT) match {
       case ALSModel.Drop =>
         predictions.na.drop("all", Seq($(predictionCol)))
       case ALSModel.NaN =>
@@ -623,8 +623,10 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
-      intermediateRDDStorageLevel = StorageLevel.fromString($(intermediateStorageLevel)),
-      finalRDDStorageLevel = StorageLevel.fromString($(finalStorageLevel)),
+      intermediateRDDStorageLevel = StorageLevel.fromString(getIntermediateStorageLevel
+        .toUpperCase(Locale.ROOT)),
+      finalRDDStorageLevel = StorageLevel.fromString(getFinalStorageLevel
+        .toUpperCase(Locale.ROOT)),
       checkpointInterval = $(checkpointInterval), seed = $(seed))
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")

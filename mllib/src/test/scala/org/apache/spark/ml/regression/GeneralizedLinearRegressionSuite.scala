@@ -491,8 +491,6 @@ class GeneralizedLinearRegressionSuite
       Vectors.dense(0.0, -0.0457441, -0.6833928),
       Vectors.dense(1.8121235, -0.1747493, -0.5815417))
 
-    import GeneralizedLinearRegression._
-
     var idx = 0
     val link = "log"
     val dataset = datasetPoissonLogWithZero
@@ -554,7 +552,7 @@ class GeneralizedLinearRegressionSuite
     for ((link, dataset) <- Seq(("inverse", datasetGammaInverse),
       ("identity", datasetGammaIdentity), ("log", datasetGammaLog))) {
       for (fitIntercept <- Seq(false, true)) {
-        val trainer = new GeneralizedLinearRegression().setFamily("Gamma").setLink(link)
+        val trainer = new GeneralizedLinearRegression().setFamily("gamma").setLink(link)
           .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
@@ -1059,7 +1057,7 @@ class GeneralizedLinearRegressionSuite
       0.0010324375 -0.0013110318  0.0060225522 -0.0009832738
     */
     val trainer = new GeneralizedLinearRegression()
-      .setFamily("Binomial")
+      .setFamily("binomial")
       .setWeightCol("weight")
       .setOffsetCol("offset")
 
@@ -1174,7 +1172,7 @@ class GeneralizedLinearRegressionSuite
       -4.433948  2.216974  1.477983 -1.108487
      */
     val trainer = new GeneralizedLinearRegression()
-      .setFamily("Poisson")
+      .setFamily("poisson")
       .setWeightCol("weight")
       .setOffsetCol("offset")
 
@@ -1289,7 +1287,7 @@ class GeneralizedLinearRegressionSuite
       -0.1923918  0.2565224 -0.1496381  0.0320653
      */
     val trainer = new GeneralizedLinearRegression()
-      .setFamily("Gamma")
+      .setFamily("gamma")
       .setWeightCol("weight")
       .setOffsetCol("offset")
 
@@ -1586,6 +1584,37 @@ class GeneralizedLinearRegressionSuite
     assert(evalSummary.nullDeviance === summary.nullDeviance)
     assert(evalSummary.deviance === summary.deviance)
     assert(evalSummary.aic === summary.aic)
+  }
+
+  test("string params should be case-insensitive") {
+    val df = Seq(
+      Instance(1.0, 1.0, Vectors.zeros(0)),
+      Instance(0.5, 2.0, Vectors.zeros(0)),
+      Instance(0.7, 3.0, Vectors.zeros(0)),
+      Instance(0.3, 4.0, Vectors.zeros(0))
+    ).toDF()
+
+    val glr = new GeneralizedLinearRegression().setMaxIter(1)
+
+    Seq(("gauSSian", "identITY"), ("GaussiAn", "LOG"), ("GAUssIan", "inVersE"),
+      ("binOMial", "lOgIt"), ("bInoMial", "ProbiT"), ("bInOmial", "CLOGlog"),
+      ("poisSON", "loG"), ("poiSSon", "IdeNtity"), ("pOissOn", "SQrT"),
+      ("GammA", "InversE"), ("GAmmA", "IdEntity"), ("gaMMa", "loG")).foreach {
+      case (family, link) =>
+        glr.setFamily(family).setLink(link)
+        assert(glr.getFamily === family)
+        assert(glr.getLink === link)
+        val model = glr.fit(df)
+        assert(model.getFamily === family)
+        assert(model.getLink === link)
+    }
+
+    Seq("IRlS").foreach { solver =>
+      glr.setSolver(solver)
+      assert(glr.getSolver === solver)
+      val model = glr.fit(df)
+      assert(model.getSolver === solver)
+    }
   }
 }
 

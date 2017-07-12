@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -45,7 +47,7 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
   final val strategy: Param[String] = new Param(this, "strategy", s"strategy for imputation. " +
     s"If ${Imputer.mean}, then replace missing values using the mean value of the feature. " +
     s"If ${Imputer.median}, then replace missing values using the median value of the feature.",
-    ParamValidators.inArray[String](Array(Imputer.mean, Imputer.median)))
+    ParamValidators.inStringArray(Imputer.supportedStrategies))
 
   /** @group getParam */
   def getStrategy: String = $(strategy)
@@ -142,7 +144,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         throw new SparkException(s"surrogate cannot be computed. " +
           s"All the values in $inputCol are Null, Nan or missingValue(${$(missingValue)})")
       }
-      val surrogate = $(strategy) match {
+      val surrogate = $(strategy).toLowerCase(Locale.ROOT) match {
         case Imputer.mean => filtered.select(avg(inputCol)).as[Double].first()
         case Imputer.median => filtered.stat.approxQuantile(inputCol, Array(0.5), 0.001).head
       }
@@ -168,6 +170,7 @@ object Imputer extends DefaultParamsReadable[Imputer] {
   /** strategy names that Imputer currently supports. */
   private[feature] val mean = "mean"
   private[feature] val median = "median"
+  private[feature] val supportedStrategies = Array(mean, median)
 
   @Since("2.2.0")
   override def load(path: String): Imputer = super.load(path)

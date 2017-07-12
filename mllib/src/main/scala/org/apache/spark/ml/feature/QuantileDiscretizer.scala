@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.Locale
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
@@ -77,7 +79,7 @@ private[feature] trait QuantileDiscretizerBase extends Params
   val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
+    ParamValidators.inStringArray(Bucketizer.supportedHandleInvalids))
   setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
 
   /** @group getParam */
@@ -160,7 +162,7 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     }
     val bucketizer = new Bucketizer(uid)
       .setSplits(distinctSplits.sorted)
-      .setHandleInvalid($(handleInvalid))
+      .setHandleInvalid($(handleInvalid).toLowerCase(Locale.ROOT))
     copyValues(bucketizer.setParent(this))
   }
 

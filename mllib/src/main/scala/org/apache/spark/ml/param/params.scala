@@ -19,6 +19,7 @@ package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
 import java.util.{List => JList}
+import java.util.Locale
 import java.util.NoSuchElementException
 
 import scala.annotation.varargs
@@ -228,6 +229,16 @@ object ParamValidators {
   /** Check that the array length is greater than lowerBound. */
   def arrayLengthGt[T](lowerBound: Double): Array[T] => Boolean = { (value: Array[T]) =>
     value.length > lowerBound
+  }
+
+  /** Check for value in an allowed set of string values. */
+  def inStringArray(allowed: Array[String]): String => Boolean = { (value: String) =>
+    allowed.map(_.toLowerCase(Locale.ROOT)).contains(value.toLowerCase(Locale.ROOT))
+  }
+
+  /** Check for value in an allowed set of string values. */
+  def inStringArray(allowed: java.util.List[String]): String => Boolean = { (value: String) =>
+    allowed.asScala.map(_.toLowerCase(Locale.ROOT)).contains(value.toLowerCase(Locale.ROOT))
   }
 }
 

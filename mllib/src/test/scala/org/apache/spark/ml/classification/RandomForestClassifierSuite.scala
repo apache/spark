@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Locale
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -220,6 +222,25 @@ class RandomForestClassifierSuite
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
       allParamSettings, checkModelData)
   }
+
+  test("string params should be case-insensitive") {
+    val df: DataFrame = TreeTests.setMetadata(orderedLabeledPoints5_20, Map.empty[Int, Int], 2)
+    val rf = new RandomForestClassifier().setNumTrees(1).setMaxDepth(0)
+
+    Seq("enTropy", "gInI").foreach { impurity =>
+      rf.setImpurity(impurity)
+      assert(rf.getImpurity === impurity)
+      val model = rf.fit(df)
+      assert(model.getImpurity === impurity)
+    }
+
+    Seq("aUtO", "ALL", "oneThird", "sQrt", "lOG2").foreach { strategy =>
+      rf.setFeatureSubsetStrategy(strategy)
+      assert(rf.getFeatureSubsetStrategy === strategy)
+      val model = rf.fit(df)
+      assert(model.getFeatureSubsetStrategy === strategy)
+    }
+  }
 }
 
 private object RandomForestClassifierSuite extends SparkFunSuite {
@@ -237,8 +258,8 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
-      data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
-      rf.getSeed.toInt)
+      data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees,
+      rf.getFeatureSubsetStrategy.toLowerCase(Locale.ROOT), rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.

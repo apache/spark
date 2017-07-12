@@ -233,11 +233,11 @@ private[ml] trait TreeClassifierParams extends Params {
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
+  final def getImpurity: String = $(impurity)
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
-    getImpurity match {
+    getImpurity.toLowerCase(Locale.ROOT) match {
       case "entropy" => OldEntropy
       case "gini" => OldGini
       case _ =>
@@ -284,11 +284,11 @@ private[ml] trait TreeRegressorParams extends Params {
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
+  final def getImpurity: String = $(impurity)
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
-    getImpurity match {
+    getImpurity.toLowerCase(Locale.ROOT) match {
       case "variance" => OldVariance
       case _ =>
         // Should never happen because of check in setter method.
@@ -438,7 +438,7 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
 
   /** @group getParam */
-  final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
+  final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy)
 }
 
 private[spark] object RandomForestParams {
@@ -537,11 +537,11 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
   setDefault(lossType -> "logistic")
 
   /** @group getParam */
-  def getLossType: String = $(lossType).toLowerCase(Locale.ROOT)
+  def getLossType: String = $(lossType)
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldClassificationLoss = {
-    getLossType match {
+    getLossType.toLowerCase(Locale.ROOT) match {
       case "logistic" => OldLogLoss
       case _ =>
         // Should never happen because of check in setter method.
@@ -574,11 +574,11 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
   setDefault(lossType -> "squared")
 
   /** @group getParam */
-  def getLossType: String = $(lossType).toLowerCase(Locale.ROOT)
+  def getLossType: String = $(lossType)
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
-    getLossType match {
+    getLossType.toLowerCase(Locale.ROOT) match {
       case "squared" => OldSquaredError
       case "absolute" => OldAbsoluteError
       case _ =>

@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature
 
 import java.{util => ju}
+import java.util.Locale
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
@@ -89,7 +90,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
+    ParamValidators.inStringArray(Bucketizer.supportedHandleInvalids))
 
   /** @group getParam */
   @Since("2.1.0")
@@ -104,11 +105,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
     val (filteredDataset, keepInvalid) = {
-      if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
+      if (getHandleInvalid.toLowerCase(Locale.ROOT) == Bucketizer.SKIP_INVALID) {
         // "skip" NaN option is set, will filter out NaN values in the dataset
         (dataset.na.drop().toDF(), false)
       } else {
-        (dataset.toDF(), getHandleInvalid == Bucketizer.KEEP_INVALID)
+        (dataset.toDF(), getHandleInvalid.toLowerCase(Locale.ROOT) == Bucketizer.KEEP_INVALID)
       }
     }
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Locale
+
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
@@ -136,8 +138,8 @@ class RandomForestClassifier @Since("1.4.0") (
       minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
 
     val trees = RandomForest
-      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
-      .map(_.asInstanceOf[DecisionTreeClassificationModel])
+      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy.toLowerCase(Locale.ROOT),
+        getSeed, Some(instr)).map(_.asInstanceOf[DecisionTreeClassificationModel])
 
     val numFeatures = oldDataset.first().features.size
     val m = new RandomForestClassificationModel(uid, trees, numFeatures, numClasses)

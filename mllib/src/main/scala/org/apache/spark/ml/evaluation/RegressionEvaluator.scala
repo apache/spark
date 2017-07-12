@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.evaluation
 
+import java.util.Locale
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
@@ -38,6 +40,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("regEval"))
 
+  import RegressionEvaluator._
+
   /**
    * Param for metric name in evaluation. Supports:
    *  - `"rmse"` (default): root mean squared error
@@ -48,10 +52,9 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
    * @group param
    */
   @Since("1.4.0")
-  val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("mse", "rmse", "r2", "mae"))
-    new Param(this, "metricName", "metric name in evaluation (mse|rmse|r2|mae)", allowedParams)
-  }
+  val metricName: Param[String] = new Param[String](this, "metricName", "metric name in" +
+    s" evaluation ${supportedMetricNames.mkString("(", ",", ")")}",
+    ParamValidators.inStringArray(supportedMetricNames))
 
   /** @group getParam */
   @Since("1.4.0")
@@ -69,7 +72,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("1.4.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  setDefault(metricName -> "rmse")
+  setDefault(metricName -> RMSE)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
@@ -82,22 +85,23 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
       .rdd
       .map { case Row(prediction: Double, label: Double) => (prediction, label) }
     val metrics = new RegressionMetrics(predictionAndLabels)
-    val metric = $(metricName) match {
-      case "rmse" => metrics.rootMeanSquaredError
-      case "mse" => metrics.meanSquaredError
-      case "r2" => metrics.r2
-      case "mae" => metrics.meanAbsoluteError
+    val metric = $(metricName).toLowerCase(Locale.ROOT) match {
+      case RMSE => metrics.rootMeanSquaredError
+      case MSE => metrics.meanSquaredError
+      case R2 => metrics.r2
+      case MAE => metrics.meanAbsoluteError
     }
     metric
   }
 
   @Since("1.4.0")
-  override def isLargerBetter: Boolean = $(metricName) match {
-    case "rmse" => false
-    case "mse" => false
-    case "r2" => true
-    case "mae" => false
-  }
+  override def isLargerBetter: Boolean =
+    $(metricName).toLowerCase(Locale.ROOT) match {
+      case RMSE => false
+      case MSE => false
+      case R2 => true
+      case MAE => false
+    }
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): RegressionEvaluator = defaultCopy(extra)
@@ -108,4 +112,19 @@ object RegressionEvaluator extends DefaultParamsReadable[RegressionEvaluator] {
 
   @Since("1.6.0")
   override def load(path: String): RegressionEvaluator = super.load(path)
+
+  /** String name for `rmse` metric name. */
+  private[RegressionEvaluator] val RMSE: String = "rmse"
+
+  /** String name for `mse` metric name. */
+  private[RegressionEvaluator] val MSE: String = "mse"
+
+  /** String name for `r2` metric name. */
+  private[RegressionEvaluator] val R2: String = "r2"
+
+  /** String name for `mae` metric name. */
+  private[RegressionEvaluator] val MAE: String = "mae"
+
+  /** Set of metric names that RegressionEvaluator supports. */
+  private[RegressionEvaluator] val supportedMetricNames = Array(RMSE, MSE, R2, MAE)
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import java.util.Locale
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.tree.impl.TreeTests
@@ -129,6 +131,25 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
       allParamSettings, checkModelData)
   }
+
+  test("string params should be case-insensitive") {
+    val df: DataFrame = TreeTests.setMetadata(orderedLabeledPoints50_1000, Map.empty[Int, Int], 0)
+    val rf = new RandomForestRegressor().setNumTrees(1).setMaxDepth(0)
+
+    Seq("varIAnce").foreach { impurity =>
+      rf.setImpurity(impurity)
+      assert(rf.getImpurity === impurity)
+      val model = rf.fit(df)
+      assert(model.getImpurity === impurity)
+    }
+
+    Seq("aUtO", "ALL", "oneThird", "sQrt", "lOG2").foreach { strategy =>
+      rf.setFeatureSubsetStrategy(strategy)
+      assert(rf.getFeatureSubsetStrategy === strategy)
+      val model = rf.fit(df)
+      assert(model.getFeatureSubsetStrategy === strategy)
+    }
+  }
 }
 
 private object RandomForestRegressorSuite extends SparkFunSuite {
@@ -145,7 +166,7 @@ private object RandomForestRegressorSuite extends SparkFunSuite {
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainRegressor(data.map(OldLabeledPoint.fromML), oldStrategy,
-      rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
+      rf.getNumTrees, rf.getFeatureSubsetStrategy.toLowerCase(Locale.ROOT), rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.
