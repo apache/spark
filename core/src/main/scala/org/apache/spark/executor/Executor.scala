@@ -56,7 +56,7 @@ private[spark] class Executor(
     env: SparkEnv,
     userClassPath: Seq[URL] = Nil,
     isLocal: Boolean = false,
-    uncaughtExceptionHandler: UncaughtExceptionHandler = SparkUncaughtExceptionHandler)
+    uncaughtExceptionHandler: UncaughtExceptionHandler = new SparkUncaughtExceptionHandler)
   extends Logging {
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
