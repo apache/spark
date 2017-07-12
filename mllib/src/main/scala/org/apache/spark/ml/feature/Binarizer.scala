@@ -49,7 +49,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * @group param
    */
   @Since("1.4.0")
-  final override val threshold: DoubleParam =
+  override val threshold: DoubleParam =
     new DoubleParam(this, "threshold", "threshold used to binarize continuous features")
 
   /** @group setParam */
