@@ -200,6 +200,7 @@ object JdbcDialects {
   registerDialect(DerbyDialect)
   registerDialect(OracleDialect)
   registerDialect(TeradataDialect)
+  registerDialect(ApacheDrillDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
