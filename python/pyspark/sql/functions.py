@@ -2087,10 +2087,13 @@ class UserDefinedFunction(object):
         """
         Wrap this udf with a function and attach docstring from func
         """
-        @functools.wraps(self.func)
+        assignments = tuple(a for a in functools.WRAPPER_ASSIGNMENTS if a != "__name__")
+
+        @functools.wraps(self.func, assigned=assignments)
         def wrapper(*args):
             return self(*args)
 
+        wrapper.__name__ = self._name
         wrapper.func = self.func
         wrapper.returnType = self.returnType
 
