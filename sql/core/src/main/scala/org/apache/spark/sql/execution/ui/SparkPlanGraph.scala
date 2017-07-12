@@ -113,7 +113,7 @@ object SparkPlanGraph {
         }
         val node = new SparkPlanGraphNode(
           nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
-          planInfo.simpleString, planInfo.metadata, metrics)
+          planInfo.simpleString, metrics)
         if (subgraph == null) {
           nodes += node
         } else {
@@ -143,7 +143,6 @@ private[ui] class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
-    val metadata: Map[String, String],
     val metrics: Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
@@ -177,7 +176,7 @@ private[ui] class SparkPlanGraphCluster(
     desc: String,
     val nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
     metrics: Seq[SQLPlanMetric])
-  extends SparkPlanGraphNode(id, name, desc, Map.empty, metrics) {
+  extends SparkPlanGraphNode(id, name, desc, metrics) {
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
