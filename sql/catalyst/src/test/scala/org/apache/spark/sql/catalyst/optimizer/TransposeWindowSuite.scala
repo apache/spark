@@ -19,11 +19,10 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{RowFrame, SpecifiedWindowFrame, UnboundedFollowing, UnboundedPreceding, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.expressions.Rand
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-
 
 class TransposeWindowSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -82,6 +81,28 @@ class TransposeWindowSuite extends PlanTest {
   test("don't transpose two adjacent windows with incompatible partitions") {
     val query = testRelation
       .window(Seq(sum(c).as('sum_a_2)), partitionSpec3, Seq.empty)
+      .window(Seq(sum(c).as('sum_a_1)), partitionSpec1, Seq.empty)
+
+    val analyzed = query.analyze
+    val optimized = Optimize.execute(analyzed)
+
+    comparePlans(optimized, analyzed)
+  }
+
+  test("don't transpose two adjacent windows with intersection of partition and output set") {
+    val query = testRelation
+      .window(Seq(('a + 'b).as('e), sum(c).as('sum_a_2)), partitionSpec3, Seq.empty)
+      .window(Seq(sum(c).as('sum_a_1)), Seq(a, 'e), Seq.empty)
+
+    val analyzed = query.analyze
+    val optimized = Optimize.execute(analyzed)
+
+    comparePlans(optimized, analyzed)
+  }
+
+  test("don't transpose two adjacent windows with non-deterministic expressions") {
+    val query = testRelation
+      .window(Seq(Rand(0).as('e), sum(c).as('sum_a_2)), partitionSpec3, Seq.empty)
       .window(Seq(sum(c).as('sum_a_1)), partitionSpec1, Seq.empty)
 
     val analyzed = query.analyze
