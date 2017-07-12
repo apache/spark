@@ -406,21 +406,4 @@ private[ml] trait HasAggregationDepth extends Params {
   /** @group expertGetParam */
   final def getAggregationDepth: Int = $(aggregationDepth)
 }
-
-/**
- * Trait for shared param numFeatures (default: 1<<18).
- */
-private[ml] trait HasNumFeatures extends Params {
-
-  /**
-   * Param for number of features (&gt; 0).
-   * @group param
-   */
-  final val numFeatures: IntParam = new IntParam(this, "numFeatures", "number of features (> 0)", ParamValidators.gt(0))
-
-  setDefault(numFeatures, 1<<18)
-
-  /** @group getParam */
-  final def getNumFeatures: Int = $(numFeatures)
-}
 // scalastyle:on
