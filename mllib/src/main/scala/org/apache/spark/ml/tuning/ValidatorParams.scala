@@ -198,7 +198,8 @@ private[ml] object ValidatorParams {
           val paramPairs = pMap.map { case pInfo: Map[String, String] =>
             val est = uidToParams(pInfo("parent"))
             val param = est.getParam(pInfo("name"))
-            if (pInfo("isJson").toBoolean.booleanValue()) {
+            if (!pInfo.contains("isJson") ||
+               (pInfo.contains("isJson") && pInfo("isJson").toBoolean.booleanValue())) {
               val value = param.jsonDecode(pInfo("value"))
               param -> value
             } else {
