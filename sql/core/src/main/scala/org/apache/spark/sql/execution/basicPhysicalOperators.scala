@@ -46,7 +46,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   var FPGARowNumber = 0
 
   val CMCCInputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(24)(1)
-  val CMCCOutputSchema = Array(2, 3, 3, 3, 1, 1, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(132)(1)
+  val CMCCOutputSchema = Array(2, 3, 3, 3, 1, 1, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(156)(1)
   val testOutputSchema = CMCCOutputSchema
 
   // Another hacker way to deal with 8 chars String => as Int, is this better?
@@ -141,6 +141,11 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     buffer.put(tmpBuffer)
   }
 
+  def readLongsFromBuffer(howManyLong: Int, buffer: ByteBuffer): Unit = {
+    for(i <- 0 until howManyLong)
+      buffer.getLong()
+  }
+
   def toFPGABatch (iter: Iterator[InternalRow]): ByteBuffer = {
     val originBuffer = mockGetByteBuffer(0)
     while(iter.hasNext) {
@@ -191,7 +196,10 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
             stringIndex += 1
           }
         }
+        // For FPGA aligning issue
+        readLongsFromBuffer(4, buffer)
         rowCount -= 1
+        row.setTotalSize(holder.totalSize())
         row
       }
     }
