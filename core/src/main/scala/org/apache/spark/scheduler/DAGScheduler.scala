@@ -281,8 +281,18 @@ class DAGScheduler(
     eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
   }
 
-  def speculativeTaskAdded(task: Task[_]): Unit = {
-    eventProcessLoop.post(SpeculativeTaskAdded(task))
+  /**
+   * Called by the TaskSetManager when it needs a speculative task is needed.
+   */
+  def speculativeTaskSubmitted(task: Task[_]): Unit = {
+    eventProcessLoop.post(SpeculativeTaskSubmitted(task))
+  }
+
+  /**
+   * Called by the TaskSetManager when it decides an extra executor is needed (See SPARK-19326)
+   */
+  def extraExecutorNeeded(): Unit = {
+    eventProcessLoop.post(ExtraExecutorNeeded)
   }
 
   private[scheduler]
@@ -816,8 +826,12 @@ class DAGScheduler(
     listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
   }
 
-  private[scheduler] def handleSpeculativeTaskAdded(task: Task[_]): Unit = {
-    listenerBus.post(SparkListenerSpeculativeTaskAdd(task.stageId))
+  private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_]): Unit = {
+    listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId))
+  }
+
+  private[scheduler] def handleExtraExecutorNeeded(): Unit = {
+    listenerBus.post(SparkListenerExtraExecutorNeeded())
   }
 
   private[scheduler] def handleTaskSetFailed(
@@ -1786,8 +1800,11 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
 
-    case SpeculativeTaskAdded(task) =>
-      dagScheduler.handleSpeculativeTaskAdded(task)
+    case SpeculativeTaskSubmitted(task) =>
+      dagScheduler.handleSpeculativeTaskSubmitted(task)
+
+    case ExtraExecutorNeeded =>
+      dagScheduler.handleExtraExecutorNeeded()
 
     case GettingResultEvent(taskInfo) =>
       dagScheduler.handleGetTaskResult(taskInfo)

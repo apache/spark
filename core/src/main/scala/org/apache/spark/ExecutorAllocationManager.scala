@@ -572,6 +572,18 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
+   * Callback invokded when an extra executor is needed (See SPARK-19326)
+   */
+  private def onExtraExecutorNeeded(): Unit = synchronized {
+    val maxNeeded = math.max(math.min(maxNumExecutorsNeeded + 1, maxNumExecutors), minNumExecutors)
+    val addRequestAcknowledged = testing ||
+      client.requestTotalExecutors(maxNeeded, localityAwareTasks, hostToLocalTaskCount)
+    if (addRequestAcknowledged) {
+      logInfo(s"Requesting one new executor because speculative tasks are backlogged")
+    }
+  }
+
+  /**
    * A listener that notifies the given allocation manager of when to add and remove executors.
    *
    * This class is intentionally conservative in its assumptions about the relative ordering
@@ -727,7 +739,7 @@ private[spark] class ExecutorAllocationManager(
       allocationManager.onExecutorRemoved(executorRemoved.executorId)
     }
 
-    override def onSpeculativeTaskAdded(speculativeTask: SparkListenerSpeculativeTaskAdd)
+    override def onSpeculativeTaskSubmitted(speculativeTask: SparkListenerSpeculativeTaskSubmitted)
       : Unit = {
        val stageId = speculativeTask.stageId
 
@@ -736,6 +748,10 @@ private[spark] class ExecutorAllocationManager(
           stageIdToNumSpeculativeTasks.getOrElse(stageId, 0) + 1
         allocationManager.onSchedulerBacklogged()
       }
+    }
+
+    override def onExtraExecutorNeeded(): Unit = {
+      allocationManager.onExtraExecutorNeeded
     }
 
     /**

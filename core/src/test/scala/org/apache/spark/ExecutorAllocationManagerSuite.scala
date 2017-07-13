@@ -185,6 +185,8 @@ class ExecutorAllocationManagerSuite
     // Verify that running a task once we're at our limit doesn't blow things up
     sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, createTaskInfo(0, 1, "executor-1")))
     assert(addExecutors(manager) === 0)
+    sc.listenerBus.postToAll(SparkListenerExtraExecutorNeeded())
+    assert(numExecutorsToAdd(manager) === 1)
     assert(numExecutorsTarget(manager) === 10)
   }
 
@@ -193,12 +195,12 @@ class ExecutorAllocationManagerSuite
     val manager = sc.executorAllocationManager.get
 
     // Verify that we're capped at number of tasks including the speculative ones in the stage
-    sc.listenerBus.postToAll(SparkListenerSpeculativeTaskAdd(1))
+    sc.listenerBus.postToAll(SparkListenerSpeculativeTaskSubmitted(1))
     assert(numExecutorsTarget(manager) === 0)
     assert(numExecutorsToAdd(manager) === 1)
     assert(addExecutors(manager) === 1)
-    sc.listenerBus.postToAll(SparkListenerSpeculativeTaskAdd(1))
-    sc.listenerBus.postToAll(SparkListenerSpeculativeTaskAdd(1))
+    sc.listenerBus.postToAll(SparkListenerSpeculativeTaskSubmitted(1))
+    sc.listenerBus.postToAll(SparkListenerSpeculativeTaskSubmitted(1))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, 2)))
     assert(numExecutorsTarget(manager) === 1)
     assert(numExecutorsToAdd(manager) === 2)
@@ -1046,7 +1048,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _onExecutorBusy = PrivateMethod[Unit]('onExecutorBusy)
   private val _localityAwareTasks = PrivateMethod[Int]('localityAwareTasks)
   private val _hostToLocalTaskCount = PrivateMethod[Map[String, Int]]('hostToLocalTaskCount)
-  private val _onSpeculativeTaskAdded = PrivateMethod[Unit]('onSpeculativeTaskAdded)
+  private val _onSpeculativeTaskSubmitted = PrivateMethod[Unit]('onSpeculativeTaskSubmitted)
 
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsToAdd()
@@ -1122,8 +1124,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _onExecutorBusy(id)
   }
 
-  private def onSpeculativeTaskAdded(manager: ExecutorAllocationManager, id: String) : Unit = {
-    manager invokePrivate _onSpeculativeTaskAdded(id)
+  private def onSpeculativeTaskSubmitted(manager: ExecutorAllocationManager, id: String) : Unit = {
+    manager invokePrivate _onSpeculativeTaskSubmitted(id)
   }
 
   private def localityAwareTasks(manager: ExecutorAllocationManager): Int = {

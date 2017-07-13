@@ -53,7 +53,10 @@ case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: T
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerSpeculativeTaskAdd(stageId: Int) extends SparkListenerEvent
+case class SparkListenerSpeculativeTaskSubmitted(stageId: Int) extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerExtraExecutorNeeded() extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerTaskEnd(
@@ -294,9 +297,14 @@ private[spark] trait SparkListenerInterface {
   def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit
 
   /**
-   * Called when a speculative task is added
+   * Called when a speculative task is submitted
    */
-  def onSpeculativeTaskAdded(speculativeTask: SparkListenerSpeculativeTaskAdd): Unit
+  def onSpeculativeTaskSubmitted(speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit
+
+  /**
+   * Called when an extra executor is needed
+   */
+  def onExtraExecutorNeeded(): Unit
 
   /**
    * Called when other events like SQL-specific events are posted.
@@ -362,7 +370,10 @@ abstract class SparkListener extends SparkListenerInterface {
 
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = { }
 
-  override def onSpeculativeTaskAdded(speculativeTask: SparkListenerSpeculativeTaskAdd): Unit = { }
+  override def onSpeculativeTaskSubmitted(
+      speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit = { }
+
+  override def onExtraExecutorNeeded(): Unit = { }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = { }
 }
