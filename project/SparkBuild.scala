@@ -92,11 +92,7 @@ object SparkBuild extends PomBuild {
   val projectsMap: mutable.Map[String, Seq[Setting[_]]] = mutable.Map.empty
 
   override val profiles = {
-<<<<<<< HEAD
-    val profiles = Properties.propOrNone("sbt.maven.profiles") orElse Properties.envOrNone("SBT_MAVEN_PROFILES") match {
-=======
     Properties.envOrNone("SBT_MAVEN_PROFILES") match {
->>>>>>> master
       case None => Seq("sbt")
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq

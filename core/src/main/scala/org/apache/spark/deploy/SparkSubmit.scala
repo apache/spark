@@ -277,6 +277,10 @@ object SparkSubmit extends CommandLineUtils {
 
     // Fail fast, the following modes are not supported or applicable
     (clusterManager, deployMode) match {
+      case (KUBERNETES, CLIENT) =>
+        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
+      case (KUBERNETES, CLUSTER) if args.isPython || args.isR =>
+        printErrorAndExit("Kubernetes does not currently support python or R applications.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
@@ -350,29 +354,6 @@ object SparkSubmit extends CommandLineUtils {
     })
     // scalastyle:on runtimeaddshutdownhook
 
-<<<<<<< HEAD
-    // The following modes are not supported or applicable
-    (clusterManager, deployMode) match {
-      case (KUBERNETES, CLIENT) =>
-        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
-      case (KUBERNETES, CLUSTER) if args.isPython || args.isR =>
-        printErrorAndExit("Kubernetes does not currently support python or R applications.")
-      case (STANDALONE, CLUSTER) if args.isPython =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for python " +
-          "applications on standalone clusters.")
-      case (STANDALONE, CLUSTER) if args.isR =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for R " +
-          "applications on standalone clusters.")
-      case (LOCAL, CLUSTER) =>
-        printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
-      case (_, CLUSTER) if isShell(args.primaryResource) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
-      case (_, CLUSTER) if isSqlShell(args.mainClass) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark SQL shell.")
-      case (_, CLUSTER) if isThriftServer(args.mainClass) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark Thrift server.")
-      case _ =>
-=======
     // Resolve glob path for different resources.
     args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
     args.files = Option(args.files).map(resolveGlobPaths(_, hadoopConf)).orNull
@@ -390,7 +371,6 @@ object SparkSubmit extends CommandLineUtils {
       args.pyFiles = Option(args.pyFiles).map {
         downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
->>>>>>> master
     }
 
 
