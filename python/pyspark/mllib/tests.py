@@ -280,6 +280,15 @@ class VectorTests(MLlibTestCase):
         self.assertListEqual(list(SparseVector(3, [], [])), [0.0, 0.0, 0.0])
         self.assertListEqual(list(SparseVector(5, [0, 3], [1.0, 2.0])), [1.0, 0.0, 0.0, 2.0, 0.0])
 
+    def test_negation(self):
+        self.assertListEqual(
+            list(-DenseVector([1.0, 2.0, 3.0])),
+            list(DenseVector([-1.0, -2.0, -3.0])))
+
+        self.assertListEqual(
+            list(-SparseVector(10, [0, 3, 5], [1.0, 2.0, 3.0])),
+            list(SparseVector(10, [0, 3, 5], [-1.0, -2.0, -3.0])))
+
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
         expected = [[0, 6], [1, 8], [4, 10]]

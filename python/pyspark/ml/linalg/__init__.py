@@ -437,10 +437,18 @@ class DenseVector(Vector):
         return getattr(self.array, item)
 
     def _delegate(op):
-        def func(self, other):
+        unary_ops = set(["__neg__"])
+
+        def func(self, other=None):
+            # Unary operator
+            if other is None and op in unary_ops:
+                return getattr(self.array, op)()
+
+            # Binary operator
             if isinstance(other, DenseVector):
                 other = other.array
             return DenseVector(getattr(self.array, op)(other))
+
         return func
 
     __neg__ = _delegate("__neg__")
@@ -744,6 +752,9 @@ class SparseVector(Vector):
                 nnz += 1
             i += 1
         return result
+
+    def __neg__(self):
+        return SparseVector(self.size, self.indices, -self.values)
 
 
 class Vectors(object):
