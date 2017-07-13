@@ -483,6 +483,18 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
+  test("SortMergeJoin(left-anti) metrics") {
+    val anti = testData2.filter("a > 2")
+    withTempView("antiData") {
+      anti.createOrReplaceTempView("antiData")
+      val df = spark.sql(
+        "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a")
+      testSparkPlanMetrics(df, 1, Map(
+        0L -> ("SortMergeJoin", Map("number of output rows" -> 4L)))
+      )
+    }
+  }
+
   test("save metrics") {
     withTempPath { file =>
       // person creates a temporary view. get the DF before listing previous execution IDs

@@ -627,8 +627,9 @@ case class MapObjects private(
 
     val (initCollection, addElement, getResult): (String, String => String, String) =
       customCollectionCls match {
-        case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-          // Scala sequence
+        case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) ||
+          classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
+          // Scala sequence or set
           val getBuilder = s"${cls.getName}$$.MODULE$$.newBuilder()"
           val builder = ctx.freshName("collectionBuilder")
           (

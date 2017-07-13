@@ -309,7 +309,10 @@ object ScalaReflection extends ScalaReflection {
           Invoke(arrayData, primitiveMethod, arrayCls, returnNullable = false)
         }
 
-      case t if t <:< localTypeOf[Seq[_]] =>
+      // We serialize a `Set` to Catalyst array. When we deserialize a Catalyst array
+      // to a `Set`, if there are duplicated elements, the elements will be de-duplicated.
+      case t if t <:< localTypeOf[Seq[_]] ||
+          t <:< localTypeOf[scala.collection.Set[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, elementNullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
@@ -327,8 +330,10 @@ object ScalaReflection extends ScalaReflection {
         }
 
         val companion = t.normalize.typeSymbol.companionSymbol.typeSignature
-        val cls = companion.declaration(newTermName("newBuilder")) match {
-          case NoSymbol => classOf[Seq[_]]
+        val cls = companion.member(newTermName("newBuilder")) match {
+          case NoSymbol if t <:< localTypeOf[Seq[_]] => classOf[Seq[_]]
+          case NoSymbol if t <:< localTypeOf[scala.collection.Set[_]] =>
+            classOf[scala.collection.Set[_]]
           case _ => mirror.runtimeClass(t.typeSymbol.asClass)
         }
         UnresolvedMapObjects(mapFunction, getPath, Some(cls))
@@ -501,6 +506,19 @@ object ScalaReflection extends ScalaReflection {
           dataTypeFor(valueType),
           serializerFor(_, valueType, valuePath, seenTypeSet),
           valueNullable = !valueType.typeSymbol.asClass.isPrimitive)
+
+      case t if t <:< localTypeOf[scala.collection.Set[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+
+        // There's no corresponding Catalyst type for `Set`, we serialize a `Set` to Catalyst array.
+        // Note that the property of `Set` is only kept when manipulating the data as domain object.
+        val newInput =
+          Invoke(
+           inputObject,
+           "toSeq",
+           ObjectType(classOf[Seq[_]]))
+
+        toCatalystArray(newInput, elementType)
 
       case t if t <:< localTypeOf[String] =>
         StaticInvoke(
@@ -713,6 +731,10 @@ object ScalaReflection extends ScalaReflection {
         val Schema(valueDataType, valueNullable) = schemaFor(valueType)
         Schema(MapType(schemaFor(keyType).dataType,
           valueDataType, valueContainsNull = valueNullable), nullable = true)
+      case t if t <:< localTypeOf[Set[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType)
+        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Date] => Schema(DateType, nullable = true)

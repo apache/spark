@@ -32,6 +32,7 @@ if sys.version >= "3":
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
 
+from pyspark import SparkContext
 from pyspark.serializers import CloudPickleSerializer
 
 __all__ = [
@@ -727,18 +728,6 @@ _FIXED_DECIMAL = re.compile("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)")
 _BRACKETS = {'(': ')', '[': ']', '{': '}'}
 
 
-def _parse_basic_datatype_string(s):
-    if s in _all_atomic_types.keys():
-        return _all_atomic_types[s]()
-    elif s == "int":
-        return IntegerType()
-    elif _FIXED_DECIMAL.match(s):
-        m = _FIXED_DECIMAL.match(s)
-        return DecimalType(int(m.group(1)), int(m.group(2)))
-    else:
-        raise ValueError("Could not parse datatype: %s" % s)
-
-
 def _ignore_brackets_split(s, separator):
     """
     Splits the given string by given separator, but ignore separators inside brackets pairs, e.g.
@@ -771,32 +760,23 @@ def _ignore_brackets_split(s, separator):
     return parts
 
 
-def _parse_struct_fields_string(s):
-    parts = _ignore_brackets_split(s, ",")
-    fields = []
-    for part in parts:
-        name_and_type = _ignore_brackets_split(part, ":")
-        if len(name_and_type) != 2:
-            raise ValueError("The strcut field string format is: 'field_name:field_type', " +
-                             "but got: %s" % part)
-        field_name = name_and_type[0].strip()
-        field_type = _parse_datatype_string(name_and_type[1])
-        fields.append(StructField(field_name, field_type))
-    return StructType(fields)
-
-
 def _parse_datatype_string(s):
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
     to :class:`DataType.simpleString`, except that top level struct type can omit
     the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use ``byte`` instead
     of ``tinyint`` for :class:`ByteType`. We can also use ``int`` as a short name
-    for :class:`IntegerType`.
+    for :class:`IntegerType`. Since Spark 2.3, this also supports a schema in a DDL-formatted
+    string and case-insensitive strings.
 
     >>> _parse_datatype_string("int ")
     IntegerType
+    >>> _parse_datatype_string("INT ")
+    IntegerType
     >>> _parse_datatype_string("a: byte, b: decimal(  16 , 8   ) ")
     StructType(List(StructField(a,ByteType,true),StructField(b,DecimalType(16,8),true)))
+    >>> _parse_datatype_string("a DOUBLE, b STRING")
+    StructType(List(StructField(a,DoubleType,true),StructField(b,StringType,true)))
     >>> _parse_datatype_string("a: array< short>")
     StructType(List(StructField(a,ArrayType(ShortType,true),true)))
     >>> _parse_datatype_string(" map<string , string > ")
@@ -806,43 +786,43 @@ def _parse_datatype_string(s):
     >>> _parse_datatype_string("blabla") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     >>> _parse_datatype_string("a: int,") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     >>> _parse_datatype_string("array<int") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     >>> _parse_datatype_string("map<int, boolean>>") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     """
-    s = s.strip()
-    if s.startswith("array<"):
-        if s[-1] != ">":
-            raise ValueError("'>' should be the last char, but got: %s" % s)
-        return ArrayType(_parse_datatype_string(s[6:-1]))
-    elif s.startswith("map<"):
-        if s[-1] != ">":
-            raise ValueError("'>' should be the last char, but got: %s" % s)
-        parts = _ignore_brackets_split(s[4:-1], ",")
-        if len(parts) != 2:
-            raise ValueError("The map type string format is: 'map<key_type,value_type>', " +
-                             "but got: %s" % s)
-        kt = _parse_datatype_string(parts[0])
-        vt = _parse_datatype_string(parts[1])
-        return MapType(kt, vt)
-    elif s.startswith("struct<"):
-        if s[-1] != ">":
-            raise ValueError("'>' should be the last char, but got: %s" % s)
-        return _parse_struct_fields_string(s[7:-1])
-    elif ":" in s:
-        return _parse_struct_fields_string(s)
-    else:
-        return _parse_basic_datatype_string(s)
+    sc = SparkContext._active_spark_context
+
+    def from_ddl_schema(type_str):
+        return _parse_datatype_json_string(
+            sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json())
+
+    def from_ddl_datatype(type_str):
+        return _parse_datatype_json_string(
+            sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json())
+
+    try:
+        # DDL format, "fieldname datatype, fieldname datatype".
+        return from_ddl_schema(s)
+    except Exception as e:
+        try:
+            # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
+            return from_ddl_datatype(s)
+        except:
+            try:
+                # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
+                return from_ddl_datatype("struct<%s>" % s.strip())
+            except:
+                raise e
 
 
 def _parse_datatype_json_string(json_string):
