@@ -347,7 +347,8 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
         output(i) = (value._2._1(i), factors)
         i += 1
       }
-      output.toSeq})
+      output.toSeq
+    })
   }
 
   private def mergeFunc(rateSum: (Array[Int], Array[Int], DenseMatrix),
