@@ -193,12 +193,15 @@ private[spark] class Client(
    * Cleanup application staging directory.
    */
   private def cleanupStagingDir(appId: ApplicationId): Unit = {
+    if (sparkConf.get(PRESERVE_STAGING_FILES)) {
+      return
+    }
+
     def cleanupStagingDirInternal(): Unit = {
       val stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
       try {
-        val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
         val fs = stagingDirPath.getFileSystem(hadoopConf)
-        if (!preserveFiles && fs.delete(stagingDirPath, true)) {
+        if (fs.delete(stagingDirPath, true)) {
           logInfo(s"Deleted staging directory $stagingDirPath")
         }
       } catch {
