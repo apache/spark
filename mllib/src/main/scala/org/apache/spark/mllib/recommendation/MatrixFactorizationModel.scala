@@ -359,7 +359,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       val row = rateSum._3.numRows
       var i = 0
       val tempIdMatrix = new Array[Int](row * num)
-      val tempScoreMatrix = new Array[Double](row * num)
+      val tempScoreMatrix = Array.fill[Double](row * num)(Double.MinValue)
       while (i < row) {
         var j = 0
         var sum_index = 0
