@@ -1260,8 +1260,8 @@ class OneVsRestTests(SparkSessionTestCase):
                                          (1.0, Vectors.sparse(2, [], []), 1.0),
                                          (2.0, Vectors.dense(0.5, 0.5), 1.0)],
                                         ["label", "features", "weight"])
-        lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
-        ovr = OneVsRest(classifier=lr)
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr, weightCol="weight")
         model = ovr.fit(df)
         self.assertIsNotNone(model)
 

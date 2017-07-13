@@ -1447,7 +1447,7 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaPredictionModel, Ja
         return self._call_java("weights")
 
 
-class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
+class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCol):
     """
     Parameters for OneVsRest and OneVsRestModel.
     """
@@ -1517,10 +1517,10 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 classifier=None):
+                 weightCol=None, classifier=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 classifier=None)
+                 weightCol=None, classifier=None)
         """
         super(OneVsRest, self).__init__()
         kwargs = self._input_kwargs
@@ -1528,9 +1528,11 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
+    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None,
+                  weightCol=None, classifier=None):
         """
-        setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
+        setParams(self, featuresCol=None, labelCol=None, predictionCol=None, \
+                  weightCol=None, classifier=None):
         Sets params for OneVsRest.
         """
         kwargs = self._input_kwargs
@@ -1546,10 +1548,17 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
         numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
 
-        if (isinstance(classifier, HasWeightCol)
-                and classifier.isDefined(classifier.weightCol)
-                and classifier.getWeightCol()):
-            multiclassLabeled = dataset.select(labelCol, featuresCol, classifier.getWeightCol())
+        # SPARK - 21306: cache weightCol if necessary
+        weightCol = None
+        if (self.isDefined(self.weightCol) and self.getWeightCol()):
+            if isinstance(classifier, HasWeightCol):
+                weightCol = self.getWeightCol()
+            else:
+                warnings.warn("weightCol is ignored, "
+                              "as it is not supported by {} now.".format(classifier))
+
+        if weightCol:
+            multiclassLabeled = dataset.select(labelCol, featuresCol, weightCol)
         else:
             multiclassLabeled = dataset.select(labelCol, featuresCol)
 
@@ -1567,6 +1576,8 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
             paramMap = dict([(classifier.labelCol, binaryLabelCol),
                             (classifier.featuresCol, featuresCol),
                             (classifier.predictionCol, predictionCol)])
+            if weightCol:
+                paramMap[classifier.weightCol] = weightCol
             return classifier.fit(trainingDataset, paramMap)
 
         # TODO: Parallel training for all classes.
