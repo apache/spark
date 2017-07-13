@@ -660,6 +660,12 @@ case class ExternalMapToCatalyst private(
     val entry = ctx.freshName("entry")
     val entries = ctx.freshName("entries")
 
+    val keyElementJavaType = ctx.javaType(keyType)
+    val valueElementJavaType = ctx.javaType(valueType)
+    ctx.addMutableState(keyElementJavaType, key, "")
+    ctx.addMutableState("boolean", valueIsNull, "")
+    ctx.addMutableState(valueElementJavaType, value, "")
+
     val (defineEntries, defineKeyValue) = child.dataType match {
       case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
         val javaIteratorCls = classOf[java.util.Iterator[_]].getName
@@ -671,8 +677,8 @@ case class ExternalMapToCatalyst private(
         val defineKeyValue =
           s"""
             final $javaMapEntryCls $entry = ($javaMapEntryCls) $entries.next();
-            ${ctx.javaType(keyType)} $key = (${ctx.boxedType(keyType)}) $entry.getKey();
-            ${ctx.javaType(valueType)} $value = (${ctx.boxedType(valueType)}) $entry.getValue();
+            $key = (${ctx.boxedType(keyType)}) $entry.getKey();
+            $value = (${ctx.boxedType(valueType)}) $entry.getValue();
           """
 
         defineEntries -> defineKeyValue
@@ -686,17 +692,17 @@ case class ExternalMapToCatalyst private(
         val defineKeyValue =
           s"""
             final $scalaMapEntryCls $entry = ($scalaMapEntryCls) $entries.next();
-            ${ctx.javaType(keyType)} $key = (${ctx.boxedType(keyType)}) $entry._1();
-            ${ctx.javaType(valueType)} $value = (${ctx.boxedType(valueType)}) $entry._2();
+            $key = (${ctx.boxedType(keyType)}) $entry._1();
+            $value = (${ctx.boxedType(valueType)}) $entry._2();
           """
 
         defineEntries -> defineKeyValue
     }
 
     val valueNullCheck = if (ctx.isPrimitiveType(valueType)) {
-      s"boolean $valueIsNull = false;"
+      s"$valueIsNull = false;"
     } else {
-      s"boolean $valueIsNull = $value == null;"
+      s"$valueIsNull = $value == null;"
     }
 
     val arrayCls = classOf[GenericArrayData].getName
