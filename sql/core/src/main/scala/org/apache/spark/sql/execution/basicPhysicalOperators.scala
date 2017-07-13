@@ -141,9 +141,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     buffer.put(tmpBuffer)
   }
 
-  def readLongsFromBuffer(howManyLong: Int, buffer: ByteBuffer): Unit = {
-    for(i <- 0 until howManyLong)
-      buffer.getLong()
+  def readBytesFromBuffer(byteNum: Int, buffer: ByteBuffer): Unit = {
+    val tmpBuffer = new Array[Byte](byteNum)
+    buffer.get(tmpBuffer)
   }
 
   def toFPGABatch (iter: Iterator[InternalRow]): ByteBuffer = {
@@ -197,7 +197,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
           }
         }
         // For FPGA aligning issue
-        readLongsFromBuffer(4, buffer)
+        readBytesFromBuffer(32, buffer)
         rowCount -= 1
         row.setTotalSize(holder.totalSize())
         row
