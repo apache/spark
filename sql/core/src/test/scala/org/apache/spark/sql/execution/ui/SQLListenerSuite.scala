@@ -395,7 +395,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
     }
     // Listener tracks only SQL metrics, not other accumulators
     assert(trackedAccums.size === 1)
-    assert(trackedAccums.head === (sqlMetricInfo.id, sqlMetricInfo.update.get))
+    assert(trackedAccums.head === ((sqlMetricInfo.id, sqlMetricInfo.update.get)))
   }
 
   test("driver side SQL metrics") {

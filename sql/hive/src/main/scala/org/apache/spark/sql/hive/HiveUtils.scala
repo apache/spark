@@ -414,7 +414,7 @@ private[spark] object HiveUtils extends Logging {
   protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -437,7 +437,7 @@ private[spark] object HiveUtils extends Logging {
   protected def toHiveStructString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
