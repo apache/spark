@@ -54,7 +54,8 @@ private[ml] trait ClassifierTypeTrait {
 /**
  * Params for [[OneVsRest]].
  */
-private[ml] trait OneVsRestParams extends PredictorParams with ClassifierTypeTrait {
+private[ml] trait OneVsRestParams extends PredictorParams
+  with ClassifierTypeTrait with HasWeightCol {
 
   /**
    * param for the base binary classifier that we reduce multiclass classification into.
@@ -295,6 +296,10 @@ final class OneVsRest @Since("1.4.0") (
   @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
+  /** @group setParam */
+  @Since("2.3.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
@@ -318,11 +323,20 @@ final class OneVsRest @Since("1.4.0") (
     val numClasses = MetadataUtils.getNumClasses(labelSchema).fold(computeNumClasses())(identity)
     instr.logNumClasses(numClasses)
 
-    val multiclassLabeled = getClassifier match {
-      // SPARK-21306: cache weightCol if necessary
-      case c: HasWeightCol if c.isDefined(c.weightCol) && c.getWeightCol.nonEmpty =>
-        dataset.select($(labelCol), $(featuresCol), c.getWeightCol)
-      case _ => dataset.select($(labelCol), $(featuresCol))
+    // SPARK-21306: cache weightCol if necessary
+    val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
+      getClassifier match {
+        case _: HasWeightCol => true
+        case c =>
+          logWarning(s"weightCol is ignored, as it is not supported by $c now.")
+          false
+      }
+    }
+
+    val multiclassLabeled = if (weightColIsUsed) {
+      dataset.select($(labelCol), $(featuresCol), $(weightCol))
+    } else {
+      dataset.select($(labelCol), $(featuresCol))
     }
 
     // persist if underlying dataset is not persistent.
@@ -343,7 +357,13 @@ final class OneVsRest @Since("1.4.0") (
       paramMap.put(classifier.labelCol -> labelColName)
       paramMap.put(classifier.featuresCol -> getFeaturesCol)
       paramMap.put(classifier.predictionCol -> getPredictionCol)
-      classifier.fit(trainingDataset, paramMap)
+      if (weightColIsUsed) {
+        val classifier_ = classifier.asInstanceOf[ClassifierType with HasWeightCol]
+        paramMap.put(classifier_.weightCol -> getWeightCol)
+        classifier_.fit(trainingDataset, paramMap)
+      } else {
+        classifier.fit(trainingDataset, paramMap)
+      }
     }.toArray[ClassificationModel[_, _]]
     instr.logNumFeatures(models.head.numFeatures)
 
