@@ -295,7 +295,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
         val m = srcIds.length
         val n = dstIds.length
         val dstIdMatrix = new Array[Int](m * num)
-        val scoreMatrix = Array.fill[Double](m * num)(Double.MinValue)
+        val scoreMatrix = Array.fill[Double](m * num)(Double.NegativeInfinity)
         val pq = new BoundedPriorityQueue[(Int, Double)](num)(Ordering.by(_._2))
 
         val ratings = srcFactors.transpose.multiply(dstFactors)
@@ -308,47 +308,42 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
             k += 1
           }
           var size = pq.size
-          while(size > 0) {
+          while (size > 0) {
             size -= 1
-            val factor = pq.poll
+            val factor = pq.poll()
             dstIdMatrix(j + size) = factor._1
             scoreMatrix(j + size) = factor._2
           }
           i += 1
           // pq.size maybe less than num, corner case
           j += num
-          pq.clear
+          pq.clear()
         }
-        (index -> (srcIds, dstIdMatrix, new DenseMatrix(m, num, scoreMatrix)))
+        index -> (srcIds, dstIdMatrix, new DenseMatrix(m, num, scoreMatrix))
     }
     ratings.aggregateByKey(null: Array[Int], null: Array[Int], null: DenseMatrix)(
-      (rateSum, rate) => {
-        mergeFunc(rateSum, rate, num)
-      },
-      (rateSum1, rateSum2) => {
-        mergeFunc(rateSum1, rateSum2, num)
-      }
-    ).flatMap(value => {
+      (rateSum, rate) => mergeFunc(rateSum, rate, num),
+      (rateSum1, rateSum2) => mergeFunc(rateSum1, rateSum2, num)
+    ).flatMap { case (index, (srcIds, dstIdMatrix, scoreMatrix)) =>
       // to avoid corner case that the number of items is less than recommendation num
       var col: Int = 0
-      while (col < num && value._2._3(0, col) > Double.MinValue) {
+      while (col < num && scoreMatrix(0, col) > Double.NegativeInfinity) {
         col += 1
       }
-      val row = value._2._3.numRows
+      val row = scoreMatrix.numRows
       val output = new Array[(Int, Array[(Int, Double)])](row)
       var i = 0
       while (i < row) {
         val factors = new Array[(Int, Double)](col)
         var j = 0
         while (j < col) {
-          factors(j) = (value._2._2(i * num + j), value._2._3(i, j))
+          factors(j) = (dstIdMatrix(i * num + j), scoreMatrix(i, j))
           j += 1
         }
-        output(i) = (value._2._1(i), factors)
+        output(i) = (srcIds(i), factors)
         i += 1
       }
-      output.toSeq
-    })
+     output.toSeq}
   }
 
   private def mergeFunc(rateSum: (Array[Int], Array[Int], DenseMatrix),
@@ -360,19 +355,20 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       val row = rateSum._3.numRows
       var i = 0
       val tempIdMatrix = new Array[Int](row * num)
-      val tempScoreMatrix = Array.fill[Double](row * num)(Double.MinValue)
+      val tempScoreMatrix = Array.fill[Double](row * num)(Double.NegativeInfinity)
       while (i < row) {
         var j = 0
         var sum_index = 0
         var rate_index = 0
+        val matrixIndex = i * num
         while (j < num) {
           if (rate._3(i, rate_index) > rateSum._3(i, sum_index)) {
-            tempIdMatrix(i * num + j) = rate._2(i * num + rate_index)
-            tempScoreMatrix(i * num + j) = rate._3(i, rate_index)
+            tempIdMatrix(matrixIndex + j) = rate._2(matrixIndex + rate_index)
+            tempScoreMatrix(matrixIndex + j) = rate._3(i, rate_index)
             rate_index += 1
           } else if (rate._3(i, rate_index) < rateSum._3(i, sum_index)) {
-            tempIdMatrix(i * num + j) = rateSum._2(i * num + sum_index)
-            tempScoreMatrix(i * num + j) = rateSum._3(i, sum_index)
+            tempIdMatrix(matrixIndex + j) = rateSum._2(matrixIndex + sum_index)
+            tempScoreMatrix(matrixIndex + j) = rateSum._3(i, sum_index)
             sum_index += 1
           }
           j += 1
