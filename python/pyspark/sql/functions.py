@@ -2087,6 +2087,11 @@ class UserDefinedFunction(object):
         """
         Wrap this udf with a function and attach docstring from func
         """
+
+        # It is possible for a callable instance without __name__ attribute to be wrapped here.
+        # In this case, we should avoid wrapping this attribute from the wrapped function to
+        # the wrapper function. So, we take out this attribute name from the default names to
+        # set and then manually assign it after being wrapped.
         assignments = tuple(a for a in functools.WRAPPER_ASSIGNMENTS if a != "__name__")
 
         @functools.wraps(self.func, assigned=assignments)
