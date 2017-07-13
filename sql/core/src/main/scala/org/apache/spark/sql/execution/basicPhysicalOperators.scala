@@ -46,11 +46,12 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   var FPGARowNumber = 0
 
   val CMCCInputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(24)(1)
-  val testOutputSchema = CMCCInputSchema
   val CMCCOutputSchema = Array(2, 3, 3, 3, 1, 1, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(132)(1)
+  val testOutputSchema = CMCCOutputSchema
 
   // Another hacker way to deal with 8 chars String => as Int, is this better?
-  val CMCCCharLength = Array(32, 8, 8, 12, 12, 20, 8, 8)
+  val CMCCInputCharLength = Array(32, 8, 8, 12, 12, 20, 8, 8)
+  val CMCCOutputCharLength = Array(12, 8, 8, 12, 20, 8, 8)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -122,12 +123,12 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       } else if (colType == 2) {
         buffer.putLong(row.getLong(index))
       } else {
-        val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
+        val tmpBuffer = new Array[Byte](CMCCInputCharLength(stringIndex))
         val string = row.getUTF8String(index)
         if (string != null) {
           val bytesOfStr = string.getBytes
           System.arraycopy(
-            bytesOfStr, 0, tmpBuffer, 0, math.min(bytesOfStr.length, CMCCCharLength(stringIndex)));
+            bytesOfStr, 0, tmpBuffer, 0, math.min(bytesOfStr.length, CMCCInputCharLength(stringIndex)));
         }
         buffer.put(tmpBuffer)
         stringIndex += 1
@@ -145,7 +146,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     while(iter.hasNext) {
       loadRowToBuffer(iter.next, originBuffer)
       // FPGA needs this 16 whatever bytes
-//      loadBytesToBuffer(16, originBuffer)
+      loadBytesToBuffer(16, originBuffer)
       FPGARowNumber += 1
     }
     originBuffer.flip()
@@ -175,7 +176,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
           } else if (colType == 2) {
             rowWriter.write(index, buffer.getLong)
           } else {
-            val tmpBuffer = new Array[Byte](CMCCCharLength(stringIndex))
+            val tmpBuffer = new Array[Byte](CMCCOutputCharLength(stringIndex))
             buffer.get(tmpBuffer, 0, tmpBuffer.length)
             val res = tmpBuffer.zipWithIndex.filter(_._1 == 0).headOption
             if (res == None) {
@@ -183,7 +184,6 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
               rowWriter.write(index, string)
             } else if (res.get._2 == 0) {
               rowWriter.setNullAt(index)
-              rowWriter.write(0, null.asInstanceOf[UTF8String])
             } else {
               val string = UTF8String.fromBytes(tmpBuffer, 0, res.get._2)
               rowWriter.write(index, string)

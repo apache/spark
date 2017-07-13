@@ -55,8 +55,8 @@ public static void putBuf(ByteBuffer buf) {
 
 public static ByteBuffer project(ByteBuffer buf, int rowCount) {
   logger.warn("WQF: invoking project");
-  return buf;
-//  return sqlEngineRun(buf, rowCount);
+//  return buf;
+  return sqlEngineRun(buf, rowCount);
 }
 
 
