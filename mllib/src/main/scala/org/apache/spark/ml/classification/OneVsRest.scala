@@ -296,7 +296,15 @@ final class OneVsRest @Since("1.4.0") (
   @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  /** @group setParam */
+  /**
+   * Sets the value of param [[weightCol]].
+   *
+   * This is ignored if weight is not supported by [[classifier]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
+   * Default is not set, so all instances have weight one.
+   *
+   * @group setParam
+   */
   @Since("2.3.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
