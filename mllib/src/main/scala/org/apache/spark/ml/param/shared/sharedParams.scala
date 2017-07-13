@@ -273,7 +273,7 @@ private[ml] trait HasHandleInvalid extends Params {
    * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.
    * @group param
    */
-  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later", ParamValidators.inArray(Array("skip", "error")))
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later", ParamValidators.inArray(Array("skip", "error")))
 
   /** @group getParam */
   final def getHandleInvalid: String = $(handleInvalid)
@@ -374,17 +374,15 @@ private[ml] trait HasWeightCol extends Params {
 }
 
 /**
- * Trait for shared param solver (default: "auto").
+ * Trait for shared param solver.
  */
 private[ml] trait HasSolver extends Params {
 
   /**
-   * Param for the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+   * Param for the solver algorithm for optimization.
    * @group param
    */
-  final val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'")
-
-  setDefault(solver, "auto")
+  val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization")
 
   /** @group getParam */
   final def getSolver: String = $(solver)

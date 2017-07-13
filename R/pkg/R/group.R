@@ -233,6 +233,9 @@ setMethod("gapplyCollect",
           })
 
 gapplyInternal <- function(x, func, schema) {
+  if (is.character(schema)) {
+    schema <- structType(schema)
+  }
   packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                        connection = NULL)
   broadcastArr <- lapply(ls(.broadcastNames),

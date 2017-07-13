@@ -76,6 +76,8 @@ private[spark] object CallSite {
 private[spark] object Utils extends Logging {
   val random = new Random()
 
+  private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
+
   /**
    * Define a default value for driver memory here since this value is referenced across the code
    * base and nearly all files already use Utils.scala
@@ -1003,6 +1005,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Lists files recursively.
+   */
+  def recursiveList(f: File): Array[File] = {
+    require(f.isDirectory)
+    val current = f.listFiles
+    current ++ current.filter(_.isDirectory).flatMap(recursiveList)
+  }
+
+  /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
@@ -1265,7 +1276,7 @@ private[spark] object Utils extends Logging {
       block
     } catch {
       case e: ControlThrowable => throw e
-      case t: Throwable => SparkUncaughtExceptionHandler.uncaughtException(t)
+      case t: Throwable => sparkUncaughtExceptionHandler.uncaughtException(t)
     }
   }
 
@@ -1348,14 +1359,10 @@ private[spark] object Utils extends Logging {
       try {
         finallyBlock
       } catch {
-        case t: Throwable =>
-          if (originalThrowable != null) {
-            originalThrowable.addSuppressed(t)
-            logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
-            throw originalThrowable
-          } else {
-            throw t
-          }
+        case t: Throwable if (originalThrowable != null && originalThrowable != t) =>
+          originalThrowable.addSuppressed(t)
+          logWarning(s"Suppressing exception in finally: ${t.getMessage}", t)
+          throw originalThrowable
       }
     }
   }
@@ -1387,22 +1394,20 @@ private[spark] object Utils extends Logging {
           catchBlock
         } catch {
           case t: Throwable =>
-            originalThrowable.addSuppressed(t)
-            logWarning(s"Suppressing exception in catch: " + t.getMessage, t)
+            if (originalThrowable != t) {
+              originalThrowable.addSuppressed(t)
+              logWarning(s"Suppressing exception in catch: ${t.getMessage}", t)
+            }
         }
         throw originalThrowable
     } finally {
       try {
         finallyBlock
       } catch {
-        case t: Throwable =>
-          if (originalThrowable != null) {
-            originalThrowable.addSuppressed(t)
-            logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
-            throw originalThrowable
-          } else {
-            throw t
-          }
+        case t: Throwable if (originalThrowable != null && originalThrowable != t) =>
+          originalThrowable.addSuppressed(t)
+          logWarning(s"Suppressing exception in finally: ${t.getMessage}", t)
+          throw originalThrowable
       }
     }
   }

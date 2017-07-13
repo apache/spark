@@ -155,7 +155,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     def toHiveStructString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -173,7 +173,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     a match {
       case (struct: Row, StructType(fields)) =>
         struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")

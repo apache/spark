@@ -75,7 +75,7 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     for ((k, v) <- map) {
       set.add((k, v))
     }
-    val expected = (1 to 1000).map(x => (x.toString, x)) :+ (null.asInstanceOf[String], -1)
+    val expected = (1 to 1000).map(x => (x.toString, x)) :+ ((null.asInstanceOf[String], -1))
     assert(set === expected.toSet)
   }
 
@@ -103,7 +103,8 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     for ((k, v) <- map) {
       set.add((k, v))
     }
-    val expected = (1 to 1000).map(_.toString).map(x => (x, x)) :+ (null.asInstanceOf[String], "-1")
+    val expected =
+      (1 to 1000).map(_.toString).map(x => (x, x)) :+ ((null.asInstanceOf[String], "-1"))
     assert(set === expected.toSet)
   }
 

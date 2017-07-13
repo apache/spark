@@ -87,6 +87,14 @@ case class DataSource(
   lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
+  private val equality = sparkSession.sessionState.conf.resolver
+
+  bucketSpec.map { bucket =>
+    SchemaUtils.checkColumnNameDuplication(
+      bucket.bucketColumnNames, "in the bucket definition", equality)
+    SchemaUtils.checkColumnNameDuplication(
+      bucket.sortColumnNames, "in the sort definition", equality)
+  }
 
   /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
@@ -132,7 +140,6 @@ case class DataSource(
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
       val resolved = tempFileIndex.partitionSchema.map { partitionField =>
-        val equality = sparkSession.sessionState.conf.resolver
         // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
         userSpecifiedSchema.flatMap(_.find(f => equality(f.name, partitionField.name))).getOrElse(
           partitionField)
@@ -146,7 +153,6 @@ case class DataSource(
         inferredPartitions
       } else {
         val partitionFields = partitionColumns.map { partitionColumn =>
-          val equality = sparkSession.sessionState.conf.resolver
           userSpecifiedSchema.flatMap(_.find(c => equality(c.name, partitionColumn))).orElse {
             val inferredPartitions = tempFileIndex.partitionSchema
             val inferredOpt = inferredPartitions.find(p => equality(p.name, partitionColumn))
@@ -172,7 +178,6 @@ case class DataSource(
     }
 
     val dataSchema = userSpecifiedSchema.map { schema =>
-      val equality = sparkSession.sessionState.conf.resolver
       StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
     }.orElse {
       format.inferSchema(
@@ -184,9 +189,18 @@ case class DataSource(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
 
-    SchemaUtils.checkColumnNameDuplication(
-      (dataSchema ++ partitionSchema).map(_.name), "in the data schema and the partition schema",
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    // We just print a waring message if the data schema and partition schema have the duplicate
+    // columns. This is because we allow users to do so in the previous Spark releases and
+    // we have the existing tests for the cases (e.g., `ParquetHadoopFsRelationSuite`).
+    // See SPARK-18108 and SPARK-21144 for related discussions.
+    try {
+      SchemaUtils.checkColumnNameDuplication(
+        (dataSchema ++ partitionSchema).map(_.name),
+        "in the data schema and the partition schema",
+        equality)
+    } catch {
+      case e: AnalysisException => logWarning(e.getMessage)
+    }
 
     (dataSchema, partitionSchema)
   }
@@ -389,6 +403,23 @@ case class DataSource(
       case _ =>
         throw new AnalysisException(
           s"$className is not a valid Spark SQL Data Source.")
+    }
+
+    relation match {
+      case hs: HadoopFsRelation =>
+        SchemaUtils.checkColumnNameDuplication(
+          hs.dataSchema.map(_.name),
+          "in the data schema",
+          equality)
+        SchemaUtils.checkColumnNameDuplication(
+          hs.partitionSchema.map(_.name),
+          "in the partition schema",
+          equality)
+      case _ =>
+        SchemaUtils.checkColumnNameDuplication(
+          relation.schema.map(_.name),
+          "in the data schema",
+          equality)
     }
 
     relation

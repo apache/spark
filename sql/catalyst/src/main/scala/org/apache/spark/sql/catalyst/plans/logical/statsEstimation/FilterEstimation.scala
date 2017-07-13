@@ -316,8 +316,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
     // decide if the value is in [min, max] of the column.
     // We currently don't store min/max for binary/string type.
     // Hence, we assume it is in boundary for binary/string type.
-    val statsRange = Range(colStat.min, colStat.max, attr.dataType)
-    if (statsRange.contains(literal)) {
+    val statsInterval = ValueInterval(colStat.min, colStat.max, attr.dataType)
+    if (statsInterval.contains(literal)) {
       if (update) {
         // We update ColumnStat structure after apply this equality predicate:
         // Set distinctCount to 1, nullCount to 0, and min/max values (if exist) to the literal
@@ -388,9 +388,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>
-        val statsRange = Range(colStat.min, colStat.max, dataType).asInstanceOf[NumericRange]
+        val statsInterval =
+          ValueInterval(colStat.min, colStat.max, dataType).asInstanceOf[NumericValueInterval]
         val validQuerySet = hSet.filter { v =>
-          v != null && statsRange.contains(Literal(v, dataType))
+          v != null && statsInterval.contains(Literal(v, dataType))
         }
 
         if (validQuerySet.isEmpty) {
@@ -440,12 +441,13 @@ case class FilterEstimation(plan: Filter) extends Logging {
       update: Boolean): Option[BigDecimal] = {
 
     val colStat = colStatsMap(attr)
-    val statsRange = Range(colStat.min, colStat.max, attr.dataType).asInstanceOf[NumericRange]
-    val max = statsRange.max.toBigDecimal
-    val min = statsRange.min.toBigDecimal
+    val statsInterval =
+      ValueInterval(colStat.min, colStat.max, attr.dataType).asInstanceOf[NumericValueInterval]
+    val max = statsInterval.max.toBigDecimal
+    val min = statsInterval.min.toBigDecimal
     val ndv = BigDecimal(colStat.distinctCount)
 
-    // determine the overlapping degree between predicate range and column's range
+    // determine the overlapping degree between predicate interval and column's interval
     val numericLiteral = if (literal.dataType == BooleanType) {
       if (literal.value.asInstanceOf[Boolean]) BigDecimal(1) else BigDecimal(0)
     } else {
@@ -566,18 +568,18 @@ case class FilterEstimation(plan: Filter) extends Logging {
     }
 
     val colStatLeft = colStatsMap(attrLeft)
-    val statsRangeLeft = Range(colStatLeft.min, colStatLeft.max, attrLeft.dataType)
-      .asInstanceOf[NumericRange]
-    val maxLeft = statsRangeLeft.max
-    val minLeft = statsRangeLeft.min
+    val statsIntervalLeft = ValueInterval(colStatLeft.min, colStatLeft.max, attrLeft.dataType)
+      .asInstanceOf[NumericValueInterval]
+    val maxLeft = statsIntervalLeft.max
+    val minLeft = statsIntervalLeft.min
 
     val colStatRight = colStatsMap(attrRight)
-    val statsRangeRight = Range(colStatRight.min, colStatRight.max, attrRight.dataType)
-      .asInstanceOf[NumericRange]
-    val maxRight = statsRangeRight.max
-    val minRight = statsRangeRight.min
+    val statsIntervalRight = ValueInterval(colStatRight.min, colStatRight.max, attrRight.dataType)
+      .asInstanceOf[NumericValueInterval]
+    val maxRight = statsIntervalRight.max
+    val minRight = statsIntervalRight.min
 
-    // determine the overlapping degree between predicate range and column's range
+    // determine the overlapping degree between predicate interval and column's interval
     val allNotNull = (colStatLeft.nullCount == 0) && (colStatRight.nullCount == 0)
     val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
       // Left < Right or Left <= Right

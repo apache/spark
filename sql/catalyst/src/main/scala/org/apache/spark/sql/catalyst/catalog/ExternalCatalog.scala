@@ -332,6 +332,15 @@ abstract class ExternalCatalog
 
   protected def doDropFunction(db: String, funcName: String): Unit
 
+  final def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = {
+    val name = funcDefinition.identifier.funcName
+    postToAll(AlterFunctionPreEvent(db, name))
+    doAlterFunction(db, funcDefinition)
+    postToAll(AlterFunctionEvent(db, name))
+  }
+
+  protected def doAlterFunction(db: String, funcDefinition: CatalogFunction): Unit
+
   final def renameFunction(db: String, oldName: String, newName: String): Unit = {
     postToAll(RenameFunctionPreEvent(db, oldName, newName))
     doRenameFunction(db, oldName, newName)

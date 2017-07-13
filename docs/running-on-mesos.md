@@ -10,7 +10,7 @@ Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache
 The advantages of deploying Spark with Mesos include:
 
 - dynamic partitioning between Spark and other
-  [frameworks](https://mesos.apache.org/documentation/latest/mesos-frameworks/)
+  [frameworks](https://mesos.apache.org/documentation/latest/frameworks/)
 - scalable partitioning between multiple instances of Spark
 
 # How it Works
@@ -61,7 +61,7 @@ third party projects publish binary releases that may be helpful in setting Meso
 
 One of those is Mesosphere.  To install Mesos using the binary releases provided by Mesosphere:
 
-1. Download Mesos installation package from [downloads page](http://mesosphere.io/downloads/)
+1. Download Mesos installation package from [downloads page](https://open.mesosphere.com/downloads/mesos/)
 2. Follow their instructions for installation and configuration
 
 The Mesosphere installation documents suggest setting up ZooKeeper to handle Mesos master failover,
