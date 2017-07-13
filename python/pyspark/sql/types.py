@@ -445,7 +445,7 @@ class StructType(DataType):
 
     This is the data type representing a :class:`Row`.
 
-    Iterating a :class:`StructType` will iterate its :class:`StructField`s.
+    Iterating a :class:`StructType` will iterate its :class:`StructField`\\s.
     A contained :class:`StructField` can be accessed by name or position.
 
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
@@ -561,6 +561,16 @@ class StructType(DataType):
     @classmethod
     def fromJson(cls, json):
         return StructType([StructField.fromJson(f) for f in json["fields"]])
+
+    def fieldNames(self):
+        """
+        Returns all field names in a tuple.
+
+        >>> struct = StructType([StructField("f1", StringType(), True)])
+        >>> struct.fieldNames()
+        ('f1',)
+        """
+        return tuple(self.names)
 
     def needConversion(self):
         # We need convert Row()/namedtuple into tuple()

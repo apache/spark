@@ -1216,21 +1216,25 @@ class SQLTests(ReusedPySparkTestCase):
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True),
                               StructField("f2", StringType(), True, None)])
+        self.assertEqual(struct1.fieldNames(), tuple(struct2.names))
         self.assertEqual(struct1, struct2)
 
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True)])
+        self.assertNotEqual(struct1.fieldNames(), tuple(struct2.names))
         self.assertNotEqual(struct1, struct2)
 
         struct1 = (StructType().add(StructField("f1", StringType(), True))
                    .add(StructField("f2", StringType(), True, None)))
         struct2 = StructType([StructField("f1", StringType(), True),
                               StructField("f2", StringType(), True, None)])
+        self.assertEqual(struct1.fieldNames(), tuple(struct2.names))
         self.assertEqual(struct1, struct2)
 
         struct1 = (StructType().add(StructField("f1", StringType(), True))
                    .add(StructField("f2", StringType(), True, None)))
         struct2 = StructType([StructField("f1", StringType(), True)])
+        self.assertNotEqual(struct1.fieldNames(), tuple(struct2.names))
         self.assertNotEqual(struct1, struct2)
 
         # Catch exception raised during improper construction
@@ -1249,11 +1253,11 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertIs(struct1[0], struct1.fields[0])
         self.assertEqual(struct1[0:1], StructType(struct1.fields[0:1]))
         with self.assertRaises(KeyError):
-            not_a_field = struct1["f9"]
+            _ = struct1["f9"]
         with self.assertRaises(IndexError):
-            not_a_field = struct1[9]
+            _ = struct1[9]
         with self.assertRaises(TypeError):
-            not_a_field = struct1[9.9]
+            _ = struct1[9.9]
 
     def test_parse_datatype_string(self):
         from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
