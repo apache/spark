@@ -133,7 +133,7 @@
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.8.2</parquet.version>
     <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jetty.version>9.3.11.v20160721</jetty.version>
+    <jetty.version>9.3.20.v20170531</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.0</chill.version>
     <ivy.version>2.4.0</ivy.version>
