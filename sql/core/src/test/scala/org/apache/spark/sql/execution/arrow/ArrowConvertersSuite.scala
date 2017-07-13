@@ -792,6 +792,73 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     collectAndValidate(df, json, "binaryData.json")
   }
 
+  test("date type conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "date",
+         |      "type" : {
+         |        "name" : "date",
+         |        "unit" : "DAY"
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        }, {
+         |          "type" : "DATA",
+         |          "typeBitWidth" : 32
+         |        } ]
+         |      }
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 4,
+         |    "columns" : [ {
+         |      "name" : "date",
+         |      "count" : 4,
+         |      "VALIDITY" : [ 1, 1, 1, 1 ],
+         |      "DATA" : [ -1, -1, 16533, 16930 ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
+
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
+    val d1 = new Date(-1/*sdf.parse("1969-12-31 13:10:15.000 UTC").getTime*/)
+    val d2 = new Date(0/*sdf.parse("1969-12-31 13:10:15.000 UTC").getTime*/)
+    val d3 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
+    val d4 = new Date(sdf.parse("2016-05-09 12:01:01.000 UTC").getTime)
+
+    val df = Seq(d1, d2, d3, d4).toDF("date")
+    df.show()
+    println(s"date: $d2, ${d2.getTime}, ${d2.toGMTString}, ${d1.toGMTString}")
+
+    collectAndValidate(df, json, "dateData.json")
+  }
+
+  ignore("timestamp conversion") {
+    /*val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
+    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
+    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
+    val data = Seq(ts1, ts2)
+
+    val schema = new JSONSchema(Seq(new TimestampType("timestamp")))
+    val us_data = data.map(_.getTime * 1000)  // convert to microseconds
+    val columns = Seq(
+      new PrimitiveColumn("timestamp", data.length, data.map(_ => true), us_data))
+    val batch = new JSONRecordBatch(data.length, columns)
+    val json = new JSONFile(schema, Seq(batch))
+
+    val df = data.toDF("timestamp")
+
+    collectAndValidate(df, json, "timestampData.json")*/
+  }
+
   test("floating-point NaN") {
     val json =
       s"""
@@ -1044,10 +1111,6 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     runUnsupported { complexData.toArrowPayload.collect() }
 
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
-    val d1 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
-    val d2 = new Date(sdf.parse("2016-05-09 13:10:15.000 UTC").getTime)
-    runUnsupported { Seq(d1, d2).toDF("date").toArrowPayload.collect() }
-
     val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
     val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
     runUnsupported { Seq(ts1, ts2).toDF("timestamp").toArrowPayload.collect() }
