@@ -104,21 +104,33 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       val inputTypes = (1 to x).foldRight("Nil")((i, s) => {s"ScalaReflection.schemaFor[A$i].dataType :: $s"})
       println(s"""
         /**
-         * Register a Scala closure of ${x} arguments as user-defined function (UDF).
+         * Registers a Scala closure of ${x} arguments as user-defined function (UDF).
          * @tparam RT return type of UDF.
          * @since 1.3.0
          */
         def register[$typeTags](name: String, func: Function$x[$types]): UserDefinedFunction = {
+          register(name, func, deterministic = true, distinctLike = false)
+        }
+
+        /**
+         * Registers a Scala closure of ${x} arguments as user-defined function (UDF).
+         * @tparam RT return type of UDF.
+         * @since 2.3.0
+         */
+        def register[$typeTags](name: String, func: Function$x[$types], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
           val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
           val inputTypes = Try($inputTypes).toOption
           def builder(e: Seq[Expression]) = if (e.length == $x) {
-            ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+            ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
           } else {
              throw new AnalysisException("Invalid number of arguments for function " + name +
                ". Expected: $x; Found: " + e.length)
           }
           functionRegistry.createOrReplaceTempFunction(name, builder)
-          UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+          val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+          val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+          val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+          withDistinctLike
         }""")
     }
 
@@ -130,442 +142,726 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       val version = if (i == 0) "2.3.0" else "1.3.0"
       val funcCall = if (i == 0) "() => func" else "func"
       println(s"""
-        |/**
-        | * Register a user-defined function with ${i} arguments.
-        | * @since $version
-        | */
-        |def register(name: String, f: UDF$i[$extTypeArgs], returnType: DataType): Unit = {
-        |  val func = f$anyCast.call($anyParams)
-        |  def builder(e: Seq[Expression]) = if (e.length == $i) {
-        |    ScalaUDF($funcCall, returnType, e)
-        |  } else {
-        |    throw new AnalysisException("Invalid number of arguments for function " + name +
-        |      ". Expected: $i; Found: " + e.length)
-        |  }
-        |  functionRegistry.createOrReplaceTempFunction(name, builder)
-        |}""".stripMargin)
+         |/**
+         | * Registers a user-defined function with ${i} arguments.
+         | * @since $version
+         | */
+         |def register(name: String, f: UDF$i[$extTypeArgs], returnType: DataType): Unit = {
+         |  register(name, f, returnType, deterministic = true, distinctLike = false)
+         |}
+         |
+         |/**
+         | * Registers a user-defined function with ${i} arguments.
+         | * @since 2.3.0
+         | */
+         |def register(name: String, f: UDF$i[$extTypeArgs], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
+         |  val func = f$anyCast.call($anyParams)
+         |  def builder(e: Seq[Expression]) = if (e.length == $i) {
+         |    ScalaUDF($funcCall, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
+         |  } else {
+         |    throw new AnalysisException("Invalid number of arguments for function " + name +
+         |      ". Expected: $i; Found: " + e.length)
+         |  }
+         |  functionRegistry.createOrReplaceTempFunction(name, builder)
+         |}""".stripMargin)
     }
     */
 
   /**
-   * Register a Scala closure of 0 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 0 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag](name: String, func: Function0[RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 0 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag](name: String, func: Function0[RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 0) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 0; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 1 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 1 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag](name: String, func: Function1[A1, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 1 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag](name: String, func: Function1[A1, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 1) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 1; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 2 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 2 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag](name: String, func: Function2[A1, A2, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 2 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag](name: String, func: Function2[A1, A2, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 2) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 2; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 3 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 3 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](name: String, func: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 3 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](name: String, func: Function3[A1, A2, A3, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 3) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 3; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 4 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 4 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](name: String, func: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 4 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](name: String, func: Function4[A1, A2, A3, A4, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 4) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 4; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 5 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 5 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](name: String, func: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 5 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](name: String, func: Function5[A1, A2, A3, A4, A5, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 5) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 5; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 6 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 6 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](name: String, func: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 6 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](name: String, func: Function6[A1, A2, A3, A4, A5, A6, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 6) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 6; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 7 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 7 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](name: String, func: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 7 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](name: String, func: Function7[A1, A2, A3, A4, A5, A6, A7, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 7) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 7; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 8 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 8 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](name: String, func: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 8 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](name: String, func: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 8) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 8; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 9 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 9 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](name: String, func: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 9 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](name: String, func: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 9) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 9; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 10 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 10 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](name: String, func: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 10 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](name: String, func: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 10) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 10; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 11 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 11 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag](name: String, func: Function11[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 11 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag](name: String, func: Function11[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 11) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 11; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 12 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 12 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag](name: String, func: Function12[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 12 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag](name: String, func: Function12[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 12) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 12; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 13 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 13 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag](name: String, func: Function13[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 13 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag](name: String, func: Function13[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 13) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 13; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 14 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 14 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag](name: String, func: Function14[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 14 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag](name: String, func: Function14[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 14) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 14; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 15 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 15 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag](name: String, func: Function15[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 15 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag](name: String, func: Function15[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 15) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 15; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 16 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 16 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag](name: String, func: Function16[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 16 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag](name: String, func: Function16[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 16) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 16; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 17 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 17 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag](name: String, func: Function17[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 17 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag](name: String, func: Function17[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 17) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 17; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 18 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 18 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag](name: String, func: Function18[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 18 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag](name: String, func: Function18[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: ScalaReflection.schemaFor[A18].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 18) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 18; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 19 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 19 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag](name: String, func: Function19[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 19 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag](name: String, func: Function19[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: ScalaReflection.schemaFor[A18].dataType :: ScalaReflection.schemaFor[A19].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 19) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 19; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 20 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 20 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag](name: String, func: Function20[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 20 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag](name: String, func: Function20[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: ScalaReflection.schemaFor[A18].dataType :: ScalaReflection.schemaFor[A19].dataType :: ScalaReflection.schemaFor[A20].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 20) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 20; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 21 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 21 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag](name: String, func: Function21[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 21 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag](name: String, func: Function21[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: ScalaReflection.schemaFor[A18].dataType :: ScalaReflection.schemaFor[A19].dataType :: ScalaReflection.schemaFor[A20].dataType :: ScalaReflection.schemaFor[A21].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 21) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 21; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   /**
-   * Register a Scala closure of 22 arguments as user-defined function (UDF).
+   * Registers a Scala closure of 22 arguments as user-defined function (UDF).
    * @tparam RT return type of UDF.
    * @since 1.3.0
    */
   def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag, A22: TypeTag](name: String, func: Function22[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, A22, RT]): UserDefinedFunction = {
+    register(name, func, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a Scala closure of 22 arguments as user-defined function (UDF).
+   * @tparam RT return type of UDF.
+   * @since 2.3.0
+   */
+  def register[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag, A11: TypeTag, A12: TypeTag, A13: TypeTag, A14: TypeTag, A15: TypeTag, A16: TypeTag, A17: TypeTag, A18: TypeTag, A19: TypeTag, A20: TypeTag, A21: TypeTag, A22: TypeTag](name: String, func: Function22[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, A22, RT], deterministic: Boolean, distinctLike: Boolean): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor[A1].dataType :: ScalaReflection.schemaFor[A2].dataType :: ScalaReflection.schemaFor[A3].dataType :: ScalaReflection.schemaFor[A4].dataType :: ScalaReflection.schemaFor[A5].dataType :: ScalaReflection.schemaFor[A6].dataType :: ScalaReflection.schemaFor[A7].dataType :: ScalaReflection.schemaFor[A8].dataType :: ScalaReflection.schemaFor[A9].dataType :: ScalaReflection.schemaFor[A10].dataType :: ScalaReflection.schemaFor[A11].dataType :: ScalaReflection.schemaFor[A12].dataType :: ScalaReflection.schemaFor[A13].dataType :: ScalaReflection.schemaFor[A14].dataType :: ScalaReflection.schemaFor[A15].dataType :: ScalaReflection.schemaFor[A16].dataType :: ScalaReflection.schemaFor[A17].dataType :: ScalaReflection.schemaFor[A18].dataType :: ScalaReflection.schemaFor[A19].dataType :: ScalaReflection.schemaFor[A20].dataType :: ScalaReflection.schemaFor[A21].dataType :: ScalaReflection.schemaFor[A22].dataType :: Nil).toOption
     def builder(e: Seq[Expression]) = if (e.length == 22) {
-      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable)
+      ScalaUDF(func, dataType, e, inputTypes.getOrElse(Nil), Some(name), nullable, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 22; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
-    UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name).withNullability(nullable)
+    val withDeterminism = if (!deterministic) udf.nonDeterministic() else udf
+    val withDistinctLike = if (distinctLike) withDeterminism.withDistinctLike() else withDeterminism
+    withDistinctLike
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Register a Java UDF class using reflection, for use from pyspark
+   * Registers a Java UDF class using reflection, for use from pyspark
    *
    * @param name   udf name
    * @param className   fully qualified class name of udf
@@ -573,7 +869,26 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    *                        via reflection.
    */
   private[sql] def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
-
+    registerJava(name, className, returnDataType, deterministic = true, distinctLike = false)
+  }
+  /**
+   * Registers a Java UDF class using reflection, for use from pyspark
+   *
+   * @param name   udf name
+   * @param className   fully qualified class name of udf
+   * @param returnDataType  return type of udf. If it is null, spark would try to infer
+   *                        via reflection.
+   * @param deterministic  True if the UDF is deterministic. Deterministic UDF returns same result
+   *                       each time it is invoked with a particular input.
+   * @param distinctLike  A UDF is considered distinctLike if the UDF can be evaluated on just the
+   *                      distinct values of a column.
+   */
+  private[sql] def registerJava(
+      name: String,
+      className: String,
+      returnDataType: DataType,
+      deterministic: Boolean,
+      distinctLike: Boolean): Unit = {
     try {
       val clazz = Utils.classForName(className)
       val udfInterfaces = clazz.getGenericInterfaces
@@ -581,9 +896,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         .map(_.asInstanceOf[ParameterizedType])
         .filter(e => e.getRawType.isInstanceOf[Class[_]] && e.getRawType.asInstanceOf[Class[_]].getCanonicalName.startsWith("org.apache.spark.sql.api.java.UDF"))
       if (udfInterfaces.length == 0) {
-        throw new AnalysisException(s"UDF class ${className} doesn't implement any UDF interface")
+        throw new AnalysisException(s"UDF class $className doesn't implement any UDF interface")
       } else if (udfInterfaces.length > 1) {
-        throw new AnalysisException(s"It is invalid to implement multiple UDF interfaces, UDF class ${className}")
+        throw new AnalysisException(s"It is invalid to implement multiple UDF interfaces, UDF class $className")
       } else {
         try {
           val udf = clazz.newInstance()
@@ -594,39 +909,39 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
           }
 
           udfInterfaces(0).getActualTypeArguments.length match {
-            case 1 => register(name, udf.asInstanceOf[UDF0[_]], returnType)
-            case 2 => register(name, udf.asInstanceOf[UDF1[_, _]], returnType)
-            case 3 => register(name, udf.asInstanceOf[UDF2[_, _, _]], returnType)
-            case 4 => register(name, udf.asInstanceOf[UDF3[_, _, _, _]], returnType)
-            case 5 => register(name, udf.asInstanceOf[UDF4[_, _, _, _, _]], returnType)
-            case 6 => register(name, udf.asInstanceOf[UDF5[_, _, _, _, _, _]], returnType)
-            case 7 => register(name, udf.asInstanceOf[UDF6[_, _, _, _, _, _, _]], returnType)
-            case 8 => register(name, udf.asInstanceOf[UDF7[_, _, _, _, _, _, _, _]], returnType)
-            case 9 => register(name, udf.asInstanceOf[UDF8[_, _, _, _, _, _, _, _, _]], returnType)
-            case 10 => register(name, udf.asInstanceOf[UDF9[_, _, _, _, _, _, _, _, _, _]], returnType)
-            case 11 => register(name, udf.asInstanceOf[UDF10[_, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 12 => register(name, udf.asInstanceOf[UDF11[_, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 13 => register(name, udf.asInstanceOf[UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 14 => register(name, udf.asInstanceOf[UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 15 => register(name, udf.asInstanceOf[UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 16 => register(name, udf.asInstanceOf[UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 17 => register(name, udf.asInstanceOf[UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 18 => register(name, udf.asInstanceOf[UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 19 => register(name, udf.asInstanceOf[UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 20 => register(name, udf.asInstanceOf[UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 21 => register(name, udf.asInstanceOf[UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 22 => register(name, udf.asInstanceOf[UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case 23 => register(name, udf.asInstanceOf[UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 1 => register(name, udf.asInstanceOf[UDF0[_]], returnType, deterministic, distinctLike)
+            case 2 => register(name, udf.asInstanceOf[UDF1[_, _]], returnType, deterministic, distinctLike)
+            case 3 => register(name, udf.asInstanceOf[UDF2[_, _, _]], returnType, deterministic, distinctLike)
+            case 4 => register(name, udf.asInstanceOf[UDF3[_, _, _, _]], returnType, deterministic, distinctLike)
+            case 5 => register(name, udf.asInstanceOf[UDF4[_, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 6 => register(name, udf.asInstanceOf[UDF5[_, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 7 => register(name, udf.asInstanceOf[UDF6[_, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 8 => register(name, udf.asInstanceOf[UDF7[_, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 9 => register(name, udf.asInstanceOf[UDF8[_, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 10 => register(name, udf.asInstanceOf[UDF9[_, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 11 => register(name, udf.asInstanceOf[UDF10[_, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 12 => register(name, udf.asInstanceOf[UDF11[_, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 13 => register(name, udf.asInstanceOf[UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 14 => register(name, udf.asInstanceOf[UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 15 => register(name, udf.asInstanceOf[UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 16 => register(name, udf.asInstanceOf[UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 17 => register(name, udf.asInstanceOf[UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 18 => register(name, udf.asInstanceOf[UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 19 => register(name, udf.asInstanceOf[UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 20 => register(name, udf.asInstanceOf[UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 21 => register(name, udf.asInstanceOf[UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 22 => register(name, udf.asInstanceOf[UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
+            case 23 => register(name, udf.asInstanceOf[UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType, deterministic, distinctLike)
             case n =>
-              throw new AnalysisException(s"UDF class with ${n} type arguments is not supported.")
+              throw new AnalysisException(s"UDF class with $n type arguments is not supported.")
           }
         } catch {
           case e @ (_: InstantiationException | _: IllegalArgumentException) =>
-            throw new AnalysisException(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
+            throw new AnalysisException(s"Can not instantiate class $className, please make sure it has public non argument constructor")
         }
       }
     } catch {
-      case e: ClassNotFoundException => throw new AnalysisException(s"Can not load class ${className}, please make sure it is on the classpath")
+      case e: ClassNotFoundException => throw new AnalysisException(s"Can not load class $className, please make sure it is on the classpath")
     }
 
   }
@@ -652,14 +967,23 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     }
   }
 
+
   /**
-   * Register a user-defined function with 0 arguments.
+   * Registers a user-defined function with 0 arguments.
    * @since 2.3.0
    */
   def register(name: String, f: UDF0[_], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 0 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF0[_], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF0[Any]].call()
     def builder(e: Seq[Expression]) = if (e.length == 0) {
-      ScalaUDF(() => func, returnType, e)
+      ScalaUDF(() => func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 0; Found: " + e.length)
@@ -668,13 +992,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 1 arguments.
+   * Registers a user-defined function with 1 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF1[_, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 1 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF1[_, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF1[Any, Any]].call(_: Any)
     def builder(e: Seq[Expression]) = if (e.length == 1) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 1; Found: " + e.length)
@@ -683,13 +1015,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 2 arguments.
+   * Registers a user-defined function with 2 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF2[_, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 2 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF2[_, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 2) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 2; Found: " + e.length)
@@ -698,13 +1038,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 3 arguments.
+   * Registers a user-defined function with 3 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF3[_, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 3 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF3[_, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF3[Any, Any, Any, Any]].call(_: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 3) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 3; Found: " + e.length)
@@ -713,13 +1061,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 4 arguments.
+   * Registers a user-defined function with 4 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF4[_, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 4 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF4[_, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF4[Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 4) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 4; Found: " + e.length)
@@ -728,13 +1084,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 5 arguments.
+   * Registers a user-defined function with 5 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF5[_, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 5 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF5[_, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF5[Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 5) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 5; Found: " + e.length)
@@ -743,13 +1107,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 6 arguments.
+   * Registers a user-defined function with 6 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF6[_, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 6 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF6[_, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF6[Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 6) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 6; Found: " + e.length)
@@ -758,13 +1130,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 7 arguments.
+   * Registers a user-defined function with 7 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 7 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF7[Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 7) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 7; Found: " + e.length)
@@ -773,13 +1153,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 8 arguments.
+   * Registers a user-defined function with 8 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 8 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 8) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 8; Found: " + e.length)
@@ -788,13 +1176,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 9 arguments.
+   * Registers a user-defined function with 9 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 9 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 9) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 9; Found: " + e.length)
@@ -803,13 +1199,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 10 arguments.
+   * Registers a user-defined function with 10 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 10 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 10) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 10; Found: " + e.length)
@@ -818,13 +1222,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 11 arguments.
+   * Registers a user-defined function with 11 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 11 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF11[_, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 11) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 11; Found: " + e.length)
@@ -833,13 +1245,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 12 arguments.
+   * Registers a user-defined function with 12 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 12 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 12) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 12; Found: " + e.length)
@@ -848,13 +1268,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 13 arguments.
+   * Registers a user-defined function with 13 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 13 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 13) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 13; Found: " + e.length)
@@ -863,13 +1291,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 14 arguments.
+   * Registers a user-defined function with 14 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 14 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 14) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 14; Found: " + e.length)
@@ -878,13 +1314,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 15 arguments.
+   * Registers a user-defined function with 15 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 15 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 15) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 15; Found: " + e.length)
@@ -893,13 +1337,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 16 arguments.
+   * Registers a user-defined function with 16 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 16 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 16) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 16; Found: " + e.length)
@@ -908,13 +1360,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 17 arguments.
+   * Registers a user-defined function with 17 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 17 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF17[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 17) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 17; Found: " + e.length)
@@ -923,13 +1383,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 18 arguments.
+   * Registers a user-defined function with 18 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 18 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF18[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 18) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 18; Found: " + e.length)
@@ -938,13 +1406,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 19 arguments.
+   * Registers a user-defined function with 19 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 19 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF19[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 19) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 19; Found: " + e.length)
@@ -953,13 +1429,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 20 arguments.
+   * Registers a user-defined function with 20 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 20 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF20[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 20) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 20; Found: " + e.length)
@@ -968,13 +1452,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 21 arguments.
+   * Registers a user-defined function with 21 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 21 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF21[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 21) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 21; Found: " + e.length)
@@ -983,13 +1475,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
-   * Register a user-defined function with 22 arguments.
+   * Registers a user-defined function with 22 arguments.
    * @since 1.3.0
    */
   def register(name: String, f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType): Unit = {
+    register(name, f, returnType, deterministic = true, distinctLike = false)
+  }
+
+  /**
+   * Registers a user-defined function with 22 arguments.
+   * @since 2.3.0
+   */
+  def register(name: String, f: UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _], returnType: DataType, deterministic: Boolean, distinctLike: Boolean): Unit = {
     val func = f.asInstanceOf[UDF22[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].call(_: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any, _: Any)
     def builder(e: Seq[Expression]) = if (e.length == 22) {
-      ScalaUDF(func, returnType, e)
+      ScalaUDF(func, returnType, e, inputTypes = Nil, udfName = Some(name), nullable = true, deterministic, distinctLike)
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 22; Found: " + e.length)

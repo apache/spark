@@ -69,7 +69,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
 
     // UDF should not be shared
     def myadd(a: Int, b: Int): Int = a + b
-    session1.udf.register[Int, Int, Int]("myadd", myadd)
+    session1.udf.register[Int, Int, Int]("myadd", myadd _)
     session1.sql("select myadd(1, 2)").explain()
     intercept[AnalysisException] {
       session2.sql("select myadd(1, 2)").explain()

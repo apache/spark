@@ -35,10 +35,6 @@ import org.apache.spark.sql.types.DataType
  *   df.select( predict(df("score")) )
  * }}}
  *
- * @note The user-defined functions must be deterministic. Due to optimization,
- * duplicate invocations may be eliminated or the function may even be invoked more times than
- * it is present in the query.
- *
  * @since 1.3.0
  */
 @InterfaceStability.Stable
@@ -49,6 +45,8 @@ case class UserDefinedFunction protected[sql] (
 
   private var _nameOption: Option[String] = None
   private var _nullable: Boolean = true
+  private var _deterministic: Boolean = true
+  private var _distinctLike: Boolean = false
 
   /**
    * Returns true when the UDF can return a nullable value.
@@ -56,6 +54,13 @@ case class UserDefinedFunction protected[sql] (
    * @since 2.3.0
    */
   def nullable: Boolean = _nullable
+
+  /**
+   * Returns true when the UDF is deterministic.
+   *
+   * @since 2.3.0
+   */
+  def deterministic: Boolean = _deterministic
 
   /**
    * Returns an expression that invokes the UDF, using the given arguments.
@@ -69,13 +74,17 @@ case class UserDefinedFunction protected[sql] (
       exprs.map(_.expr),
       inputTypes.getOrElse(Nil),
       udfName = _nameOption,
-      nullable = _nullable))
+      nullable = _nullable,
+      udfDeterministic = _deterministic,
+      distinctLike = _distinctLike))
   }
 
   private def copyAll(): UserDefinedFunction = {
     val udf = copy()
     udf._nameOption = _nameOption
     udf._nullable = _nullable
+    udf._deterministic = _deterministic
+    udf._distinctLike = _distinctLike
     udf
   }
 
@@ -84,9 +93,10 @@ case class UserDefinedFunction protected[sql] (
    *
    * @since 2.3.0
    */
-  def withName(name: String): this.type = {
-    this._nameOption = Option(name)
-    this
+  def withName(name: String): UserDefinedFunction = {
+    val udf = copyAll()
+    udf._nameOption = Option(name)
+    udf
   }
 
   /**
@@ -100,6 +110,36 @@ case class UserDefinedFunction protected[sql] (
     } else {
       val udf = copyAll()
       udf._nullable = nullable
+      udf
+    }
+  }
+
+  /**
+   * Updates UserDefinedFunction to non-deterministic.
+   *
+   * @since 2.3.0
+   */
+  def nonDeterministic(): UserDefinedFunction = {
+    if (!_deterministic) {
+      this
+    } else {
+      val udf = copyAll()
+      udf._deterministic = false
+      udf
+    }
+  }
+
+  /**
+   * Updates UserDefinedFunction to distinctLike.
+   *
+   * @since 2.3.0
+   */
+  def withDistinctLike(): UserDefinedFunction = {
+    if (_distinctLike) {
+      this
+    } else {
+      val udf = copyAll()
+      udf._distinctLike = true
       udf
     }
   }
