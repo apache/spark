@@ -30,7 +30,7 @@ object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
   private[expressions] val jvmId = UUID.randomUUID()
   def newExprId: ExprId = ExprId(curId.getAndIncrement(), jvmId)
-  def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(expr.name, expr.dataType)
+  def unapply(expr: NamedExpression): Option[(String, DataType)] = Some((expr.name, expr.dataType))
 }
 
 /**

@@ -633,22 +633,22 @@ class MatricesSuite extends SparkMLFunSuite {
       dnMap.put((i, j), value)
     }
     assert(dnMap.size === 6)
-    assert(dnMap(0, 0) === 1.0)
-    assert(dnMap(1, 0) === 2.0)
-    assert(dnMap(2, 0) === 0.0)
-    assert(dnMap(0, 1) === 0.0)
-    assert(dnMap(1, 1) === 4.0)
-    assert(dnMap(2, 1) === 5.0)
+    assert(dnMap((0, 0)) === 1.0)
+    assert(dnMap((1, 0)) === 2.0)
+    assert(dnMap((2, 0)) === 0.0)
+    assert(dnMap((0, 1)) === 0.0)
+    assert(dnMap((1, 1)) === 4.0)
+    assert(dnMap((2, 1)) === 5.0)
 
     val spMap = MutableMap[(Int, Int), Double]()
     sp.foreachActive { (i, j, value) =>
       spMap.put((i, j), value)
     }
     assert(spMap.size === 4)
-    assert(spMap(0, 0) === 1.0)
-    assert(spMap(1, 0) === 2.0)
-    assert(spMap(1, 1) === 4.0)
-    assert(spMap(2, 1) === 5.0)
+    assert(spMap((0, 0)) === 1.0)
+    assert(spMap((1, 0)) === 2.0)
+    assert(spMap((1, 1)) === 4.0)
+    assert(spMap((2, 1)) === 5.0)
   }
 
   test("horzcat, vertcat, eye, speye") {
