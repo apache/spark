@@ -2363,6 +2363,7 @@
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
               <include>com.google.guava:guava</include>
+              <include>org.jpmml:*</include>
             </includes>
           </artifactSet>
           <relocations>
@@ -2376,6 +2377,14 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.dmg.pmml</pattern>
+              <shadedPattern>${spark.shade.packageName}.dmg.pmml</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.jpmml</pattern>
+              <shadedPattern>${spark.shade.packageName}.jpmml</shadedPattern>
             </relocation>
           </relocations>
         </configuration>
