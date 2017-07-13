@@ -1548,7 +1548,6 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
         numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
 
-        # SPARK - 21306: cache weightCol if necessary
         weightCol = None
         if (self.isDefined(self.weightCol) and self.getWeightCol()):
             if isinstance(classifier, HasWeightCol):

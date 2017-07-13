@@ -323,7 +323,6 @@ final class OneVsRest @Since("1.4.0") (
     val numClasses = MetadataUtils.getNumClasses(labelSchema).fold(computeNumClasses())(identity)
     instr.logNumClasses(numClasses)
 
-    // SPARK-21306: cache weightCol if necessary
     val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
       getClassifier match {
         case _: HasWeightCol => true
