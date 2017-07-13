@@ -71,6 +71,7 @@ class SparkContext(object):
     _active_spark_context = None
     _lock = RLock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
+    _thread_pool_executor = None
 
     PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
 
@@ -420,6 +421,10 @@ class SparkContext(object):
             self._accumulatorServer = None
         with SparkContext._lock:
             SparkContext._active_spark_context = None
+
+            if SparkContext._thread_pool_executor is not None:
+                SparkContext._thread_pool_executor.shutdown()
+                SparkContext._thread_pool_executor = None
 
     def emptyRDD(self):
         """
@@ -1011,6 +1016,33 @@ class SparkContext(object):
         conf = SparkConf()
         conf.setAll(self._conf.getAll())
         return conf
+
+    def _get_executor(self):
+        """ Return existing thread pool executor
+        or create a new one.
+        """
+        # This would fail anyway, but
+        # we don't want an orphan executor
+        if SparkContext._active_spark_context is None:
+            raise ValueError("No active SparkContext")
+        if SparkContext._thread_pool_executor is None:
+            try:
+                import concurrent.futures
+
+                # Make sure that there is only one executor
+                with SparkContext._lock:
+                    cores = self.getConf().get("spark.driver.cores") or 2
+                    SparkContext._thread_pool_executor = (
+                        SparkContext._thread_pool_executor or
+                        concurrent.futures.ThreadPoolExecutor(max_workers=cores)
+                    )
+
+            # Python 2.7 and not futures backport installed
+            except ImportError as e:
+                msg = "{}. Async actions require Python >= 3.2 or futures package installed"
+                raise ImportError(msg.format(e.message))
+
+        return SparkContext._thread_pool_executor
 
 
 def _test():

@@ -2366,6 +2366,87 @@ class RDD(object):
             port = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
         return _load_from_socket(port, self._jrdd_deserializer)
 
+    def collectAsync(self):
+        """
+        .. note:: Experimental
+
+        Returns a `concurrent.futures.Future` for retrieving all elements of this RDD.
+
+        >>> rdd = sc.parallelize(range(10))  # doctest: +SKIP
+        >>> f = rdd.collectAsync()           # doctest: +SKIP
+        >>> f.result()                       # doctest: +SKIP
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+        .. versionadded:: 2.3.0
+        """
+        executor = self.ctx._get_executor()
+        return executor.submit(self.collect)
+
+    def countAsync(self):
+        """
+        .. note:: Experimental
+
+        >>> rdd = sc.parallelize(range(10))  # doctest: +SKIP
+        >>> f = rdd.countAsync()             # doctest: +SKIP
+        >>> f.result()                       # doctest: +SKIP
+        10
+        """
+        executor = self.ctx._get_executor()
+        return executor.submit(self.count)
+
+    def foreachAsync(self, f):
+        """
+        .. note:: Experimental
+
+        Asynchronously applies a function f to all elements of this RDD
+        and returns a `concurrent.futures.Future` of this action.
+
+        >>> def g(x): print(x)               # doctest: +SKIP
+        >>> rdd = sc.parallelize(range(10))  # doctest: +SKIP
+        >>> f = rdd.foreachAsync(g)          # doctest: +SKIP
+        >>> f.result() is None               # doctest: +SKIP
+        True
+
+        .. versionadded:: 2.3.0
+        """
+        executor = self.ctx._get_executor()
+        return executor.submit(self.foreach, f)
+
+    def foreachPartitionAsync(self, f):
+        """
+        .. note:: Experimental
+
+        Asynchronously applies a function f to each partition of this RDD
+        and returns a `concurrent.futures.Future` of this action.
+
+        >>> def g(xs):                       # doctest: +SKIP
+        ...     for x in xs:
+        ...         print(x)
+        >>> rdd = sc.parallelize(range(10))  # doctest: +SKIP
+        >>> f = rdd.foreachPartitionAsync(g) # doctest: +SKIP
+        >>> f.result() is None               # doctest: +SKIP
+        .. versionadded:: 2.3.0
+        """
+        executor = self.ctx._get_executor()
+        return executor.submit(self.foreachPartition, f)
+
+    def takeAsync(self, num):
+        """
+        .. note:: Experimental
+
+        Returns a `concurrent.futures.Future` for retrieving
+        the first num elements of the RDD.
+
+        >>> rdd = sc.parallelize(range(10))  # doctest: +SKIP
+        >>> f = rdd.takeAsync(3)             # doctest: +SKIP
+        >>> f.result() is None               # doctest: +SKIP
+        [0, 1, 2]
+
+        .. versionadded:: 2.3.0
+        """
+        executor = self.ctx._get_executor()
+        return executor.submit(self.take, num)
+
 
 def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
