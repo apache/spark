@@ -50,7 +50,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
         df = sql_ctx.createDataFrame(scoreAndLabels, schema=StructType([
             StructField("score", DoubleType(), nullable=False),
             StructField("label", DoubleType(), nullable=False)]))
-        java_class = sc._jvm.org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+        java_class = sc._jvm.org.apache.spark.mllib.api.python.BinaryClassificationMetricsWrapper
         java_model = java_class(df._jdf)
         super(BinaryClassificationMetrics, self).__init__(java_model)
 
@@ -77,6 +77,50 @@ class BinaryClassificationMetrics(JavaModelWrapper):
         Unpersists intermediate RDDs used in the computation.
         """
         self.call("unpersist")
+
+    @property
+    def thresholds(self):
+        """
+        Returns thresholds in descending order.
+        """
+        return self.call("thresholds")
+
+    @property
+    def roc(self):
+        """
+        Returns the receiver operating characteristic (ROC) curve,
+        which is an RDD of (false positive rate, true positive rate)
+        with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
+        """
+        return self.call("wrappedRoc")
+
+    @property
+    def pr(self):
+        """
+        Returns the precision-recall curve, which is an RDD of (recall, precision),
+        NOT (precision, recall), with (0.0, 1.0) prepended to it.
+        """
+        return self.call("wrappedPr")
+
+    def fMeasureByThreshold(self, beta=1.0):
+        """
+        Returns the (threshold, F-Measure) curve.
+        """
+        return self.call("wrappedFMeasureByThreshold", beta)
+
+    @property
+    def precisionByThreshold(self):
+        """
+        Returns the (threshold, precision) curve.
+        """
+        return self.call("wrappedPrecisionByThreshold")
+
+    @property
+    def recallByThreshold(self):
+        """
+        Returns the (threshold, recall) curve.
+        """
+        return self.call("wrappedRecallByThreshold")
 
 
 class RegressionMetrics(JavaModelWrapper):
