@@ -73,6 +73,9 @@ private[spark] object SerDeUtil extends Logging {
         // This must be ISO 8859-1 / Latin 1, not UTF-8, to interoperate correctly
         val data = args(1).asInstanceOf[String].getBytes(StandardCharsets.ISO_8859_1)
         if (typecode == 'c') {
+          // It seems like the pickle of pypy uses the similar protocol to Python 2.6, which uses
+          // a string for array data instead of list as Python 2.7, and handles an array of
+          // typecode 'c' as 1-byte character.
           val result = new Array[Char](data.length)
           var i = 0
           while (i < data.length) {
