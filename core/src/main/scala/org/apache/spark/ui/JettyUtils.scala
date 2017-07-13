@@ -54,7 +54,7 @@ private[spark] object JettyUtils extends Logging {
   // implicit conversion from many types of functions to jetty Handlers.
   type Responder[T] = HttpServletRequest => T
 
-  class ServletParams[T <% AnyRef](val responder: Responder[T],
+  class ServletParams[T <: AnyRef](val responder: Responder[T],
     val contentType: String,
     val extractFn: T => String = (in: Any) => in.toString) {}
 
@@ -68,7 +68,7 @@ private[spark] object JettyUtils extends Logging {
   implicit def textResponderToServlet(responder: Responder[String]): ServletParams[String] =
     new ServletParams(responder, "text/plain")
 
-  def createServlet[T <% AnyRef](
+  def createServlet[T <: AnyRef](
       servletParams: ServletParams[T],
       securityMgr: SecurityManager,
       conf: SparkConf): HttpServlet = {
@@ -113,7 +113,7 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /** Create a context handler that responds to a request with the given path prefix */
-  def createServletHandler[T <% AnyRef](
+  def createServletHandler[T <: AnyRef](
       path: String,
       servletParams: ServletParams[T],
       securityMgr: SecurityManager,

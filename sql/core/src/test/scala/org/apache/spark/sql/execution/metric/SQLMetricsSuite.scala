@@ -146,8 +146,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // PhysicalRDD(nodeId = 1) -> Filter(nodeId = 0)
     val df = person.filter('age < 25)
     testSparkPlanMetrics(df, 1, Map(
-      0L -> ("Filter", Map(
-        "number of output rows" -> 1L)))
+      0L -> (("Filter", Map(
+        "number of output rows" -> 1L))))
     )
   }
 
@@ -170,8 +170,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       Map("number of output rows" -> 1L,
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
     testSparkPlanMetrics(df, 1, Map(
-      2L -> ("HashAggregate", expected1(0)),
-      0L -> ("HashAggregate", expected1(1)))
+      2L -> (("HashAggregate", expected1(0))),
+      0L -> (("HashAggregate", expected1(1))))
     )
 
     // 2 partitions and each partition contains 2 keys
@@ -182,8 +182,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       Map("number of output rows" -> 3L,
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
     testSparkPlanMetrics(df2, 1, Map(
-      2L -> ("HashAggregate", expected2(0)),
-      0L -> ("HashAggregate", expected2(1)))
+      2L -> (("HashAggregate", expected2(0))),
+      0L -> (("HashAggregate", expected2(1))))
     )
   }
 
@@ -234,15 +234,15 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // -> ObjectHashAggregate(nodeId = 0)
     val df = testData2.groupBy().agg(collect_set('a)) // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
-      2L -> ("ObjectHashAggregate", Map("number of output rows" -> 2L)),
-      0L -> ("ObjectHashAggregate", Map("number of output rows" -> 1L)))
+      2L -> (("ObjectHashAggregate", Map("number of output rows" -> 2L))),
+      0L -> (("ObjectHashAggregate", Map("number of output rows" -> 1L))))
     )
 
     // 2 partitions and each partition contains 2 keys
     val df2 = testData2.groupBy('a).agg(collect_set('a))
     testSparkPlanMetrics(df2, 1, Map(
-      2L -> ("ObjectHashAggregate", Map("number of output rows" -> 4L)),
-      0L -> ("ObjectHashAggregate", Map("number of output rows" -> 3L)))
+      2L -> (("ObjectHashAggregate", Map("number of output rows" -> 4L))),
+      0L -> (("ObjectHashAggregate", Map("number of output rows" -> 3L))))
     )
   }
 
@@ -264,9 +264,9 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = spark.sql(
         "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
-        0L -> ("SortMergeJoin", Map(
+        0L -> (("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of output rows" -> 4L)))
+          "number of output rows" -> 4L))))
       )
     }
   }
@@ -282,17 +282,17 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = spark.sql(
         "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
-        0L -> ("SortMergeJoin", Map(
+        0L -> (("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of output rows" -> 8L)))
+          "number of output rows" -> 8L))))
       )
 
       val df2 = spark.sql(
         "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df2, 1, Map(
-        0L -> ("SortMergeJoin", Map(
+        0L -> (("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of output rows" -> 8L)))
+          "number of output rows" -> 8L))))
       )
     }
   }
@@ -304,9 +304,9 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // ... -> BroadcastHashJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
     val df = df1.join(broadcast(df2), "key")
     testSparkPlanMetrics(df, 2, Map(
-      1L -> ("BroadcastHashJoin", Map(
+      1L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 2L,
-        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)")))
+        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))))
     )
   }
 
@@ -365,9 +365,9 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = df1.join(df2, "key")
       val metrics = getSparkPlanMetrics(df, 1, Set(1L))
       testSparkPlanMetrics(df, 1, Map(
-        1L -> ("ShuffledHashJoin", Map(
+        1L -> (("ShuffledHashJoin", Map(
           "number of output rows" -> 2L,
-          "avg hash probe (min, med, max)" -> "\n(1, 1, 1)")))
+          "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))))
       )
     }
   }
@@ -426,14 +426,14 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // ... -> BroadcastHashJoin(nodeId = 0)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> ("BroadcastHashJoin", Map(
-        "number of output rows" -> 5L)))
+      0L -> (("BroadcastHashJoin", Map(
+        "number of output rows" -> 5L))))
     )
 
     val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
     testSparkPlanMetrics(df3, 2, Map(
-      0L -> ("BroadcastHashJoin", Map(
-        "number of output rows" -> 6L)))
+      0L -> (("BroadcastHashJoin", Map(
+        "number of output rows" -> 6L))))
     )
   }
 
@@ -448,8 +448,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
           "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
             "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
         testSparkPlanMetrics(df, 3, Map(
-          1L -> ("BroadcastNestedLoopJoin", Map(
-            "number of output rows" -> 12L)))
+          1L -> (("BroadcastNestedLoopJoin", Map(
+            "number of output rows" -> 12L))))
         )
       }
     }
@@ -462,8 +462,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // ... -> BroadcastHashJoin(nodeId = 0)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> ("BroadcastHashJoin", Map(
-        "number of output rows" -> 2L)))
+      0L -> (("BroadcastHashJoin", Map(
+        "number of output rows" -> 2L))))
     )
   }
 
@@ -477,7 +477,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         val df = spark.sql(
           "SELECT * FROM testData2 JOIN testDataForJoin")
         testSparkPlanMetrics(df, 1, Map(
-          0L -> ("CartesianProduct", Map("number of output rows" -> 12L)))
+          0L -> (("CartesianProduct", Map("number of output rows" -> 12L))))
         )
       }
     }
@@ -490,7 +490,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = spark.sql(
         "SELECT * FROM testData2 ANTI JOIN antiData ON testData2.a = antiData.a")
       testSparkPlanMetrics(df, 1, Map(
-        0L -> ("SortMergeJoin", Map("number of output rows" -> 4L)))
+        0L -> (("SortMergeJoin", Map("number of output rows" -> 4L))))
       )
     }
   }

@@ -505,7 +505,7 @@ class Column(val expr: Expression) extends Logging {
    */
   def when(condition: Column, value: Any): Column = this.expr match {
     case CaseWhen(branches, None) =>
-      withExpr { CaseWhen(branches :+ (condition.expr, lit(value).expr)) }
+      withExpr { CaseWhen(branches :+ ((condition.expr, lit(value).expr))) }
     case CaseWhen(branches, Some(_)) =>
       throw new IllegalArgumentException(
         "when() cannot be applied once otherwise() is applied")

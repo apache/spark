@@ -133,20 +133,20 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
       case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _)
         if fsRelation.partitionSchema.nonEmpty =>
         val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
-        Some(AttributeSet(partAttrs), l)
+        Some((AttributeSet(partAttrs), l))
 
       case relation: CatalogRelation if relation.tableMeta.partitionColumnNames.nonEmpty =>
         val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
-        Some(AttributeSet(partAttrs), relation)
+        Some((AttributeSet(partAttrs), relation))
 
       case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>
         unapply(child).flatMap { case (partAttrs, relation) =>
-          if (p.references.subsetOf(partAttrs)) Some(p.outputSet, relation) else None
+          if (p.references.subsetOf(partAttrs)) Some((p.outputSet, relation)) else None
         }
 
       case f @ Filter(condition, child) if condition.deterministic =>
         unapply(child).flatMap { case (partAttrs, relation) =>
-          if (f.references.subsetOf(partAttrs)) Some(partAttrs, relation) else None
+          if (f.references.subsetOf(partAttrs)) Some((partAttrs, relation)) else None
         }
 
       case _ => None

@@ -183,8 +183,6 @@ class SparkContext(config: SparkConf) extends Logging {
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
 
-  warnDeprecatedVersions()
-
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
    | not accessible by the outside world. They're mutable since we want to initialize all  |
@@ -347,13 +345,6 @@ class SparkContext(config: SparkConf) extends Logging {
     logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
       "deprecated, please use spark.executor.memory instead.")
     value
-  }
-
-  private def warnDeprecatedVersions(): Unit = {
-    val javaVersion = System.getProperty("java.version").split("[+.\\-]+", 3)
-    if (scala.util.Properties.releaseVersion.exists(_.startsWith("2.10"))) {
-      logWarning("Support for Scala 2.10 is deprecated as of Spark 2.1.0")
-    }
   }
 
   /** Control our logLevel. This overrides any user-defined log settings.
@@ -1396,6 +1387,8 @@ class SparkContext(config: SparkConf) extends Logging {
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
       (initialValue: R): Accumulable[R, T] = {
+    // TODO the context bound (<%) above should be replaced with simple type bound and implicit
+    // conversion but is a breaking change. This should be fixed in Spark 3.x.
     val param = new GrowableAccumulableParam[R, T]
     val acc = new Accumulable(initialValue, param)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
@@ -2605,9 +2598,9 @@ object SparkContext extends Logging {
    */
   private[spark] val LEGACY_DRIVER_IDENTIFIER = "<driver>"
 
-  private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
+  private implicit def arrayToArrayWritable[T <: Writable : ClassTag](arr: Traversable[T])
     : ArrayWritable = {
-    def anyToWritable[U <% Writable](u: U): Writable = u
+    def anyToWritable[U <: Writable](u: U): Writable = u
 
     new ArrayWritable(classTag[T].runtimeClass.asInstanceOf[Class[Writable]],
         arr.map(x => anyToWritable(x)).toArray)

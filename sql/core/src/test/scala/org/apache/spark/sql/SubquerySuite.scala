@@ -27,23 +27,23 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   val row = identity[(java.lang.Integer, java.lang.Double)](_)
 
   lazy val l = Seq(
-    row(1, 2.0),
-    row(1, 2.0),
-    row(2, 1.0),
-    row(2, 1.0),
-    row(3, 3.0),
-    row(null, null),
-    row(null, 5.0),
-    row(6, null)).toDF("a", "b")
+    row((1, 2.0)),
+    row((1, 2.0)),
+    row((2, 1.0)),
+    row((2, 1.0)),
+    row((3, 3.0)),
+    row((null, null)),
+    row((null, 5.0)),
+    row((6, null))).toDF("a", "b")
 
   lazy val r = Seq(
-    row(2, 3.0),
-    row(2, 3.0),
-    row(3, 2.0),
-    row(4, 1.0),
-    row(null, null),
-    row(null, 5.0),
-    row(6, null)).toDF("c", "d")
+    row((2, 3.0)),
+    row((2, 3.0)),
+    row((3, 2.0)),
+    row((4, 1.0)),
+    row((null, null)),
+    row((null, 5.0)),
+    row((6, null))).toDF("c", "d")
 
   lazy val t = r.filter($"c".isNotNull && $"d".isNotNull)
 

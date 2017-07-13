@@ -31,8 +31,7 @@ uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scal
 ({{site.SCALA_BINARY_VERSION}}.x).
 
 Note that support for Java 7, Python 2.6 and old Hadoop versions before 2.6.5 were removed as of Spark 2.2.0.
-
-Note that support for Scala 2.10 is deprecated as of Spark 2.1.0, and may be removed in Spark 2.3.0.
+Support for Scala 2.10 was removed as of 2.3.0.
 
 # Running the Examples and Shell
 

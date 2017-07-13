@@ -359,7 +359,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("reduce") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
+    assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == (("sum", 6)))
   }
 
   test("joinWith, flat schema") {
@@ -784,7 +784,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-14000: case class with tuple type field") {
     checkDataset(
       Seq(TupleClass((1, "a"))).toDS(),
-      TupleClass(1, "a")
+      TupleClass((1, "a"))
     )
   }
 

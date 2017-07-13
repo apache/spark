@@ -58,10 +58,10 @@ class VersionUtilsSuite extends SparkFunSuite {
   }
 
   test("Parse Spark major and minor versions") {
-    assert(majorMinorVersion("2.0") === (2, 0))
-    assert(majorMinorVersion("12.10.11") === (12, 10))
-    assert(majorMinorVersion("2.0.1-SNAPSHOT") === (2, 0))
-    assert(majorMinorVersion("2.0.x") === (2, 0))
+    assert(majorMinorVersion("2.0") === ((2, 0)))
+    assert(majorMinorVersion("12.10.11") === ((12, 10)))
+    assert(majorMinorVersion("2.0.1-SNAPSHOT") === ((2, 0)))
+    assert(majorMinorVersion("2.0.x") === ((2, 0)))
     withClue("majorMinorVersion parsing should fail for invalid major version number") {
       intercept[IllegalArgumentException] {
         majorMinorVersion("2z.0")

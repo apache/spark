@@ -54,7 +54,8 @@ FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
 
 # Find out where the assembly jars are located.
-for scala in ["2.11", "2.10"]:
+# Later, add back 2.12 to this list:
+for scala in ["2.11"]:
     build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
     if os.path.isdir(build_dir):
         SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")

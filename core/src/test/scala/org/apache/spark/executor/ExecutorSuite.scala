@@ -25,6 +25,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{any, eq => meq}
