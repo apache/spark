@@ -7,7 +7,7 @@ set hive.merge.mapredfiles=false;
 
 set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.exec.dynamic.partition=true;
-set mapred.input.dir.recursive=true;
+set mapreduce.input.fileinputformat.input.dir.recursive=true;
 
 -- This is to test the union->selectstar->filesink optimization
 -- Union of 2 map-reduce subqueries is performed followed by select star and a file sink

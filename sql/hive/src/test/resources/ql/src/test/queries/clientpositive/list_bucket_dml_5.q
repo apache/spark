@@ -4,7 +4,7 @@ set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 set hive.merge.mapfiles=false;	
 set hive.merge.mapredfiles=false; 
-set mapred.input.dir.recursive=true;
+set mapreduce.input.fileinputformat.input.dir.recursive=true;
 
 -- list bucketing DML: multiple skewed columns. 2 stages
 

@@ -2,7 +2,7 @@ set hive.mapred.supports.subdirectories=true;
 set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 set hive.merge.mapfiles=false;	
 set hive.merge.mapredfiles=false; 
-set mapred.input.dir.recursive=true;
+set mapreduce.input.fileinputformat.input.dir.recursive=true;
 
 -- Tests truncating a column from a list bucketing table
 

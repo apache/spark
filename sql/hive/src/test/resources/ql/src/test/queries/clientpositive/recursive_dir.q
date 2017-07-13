@@ -12,7 +12,7 @@ ALTER TABLE fact_daily ADD PARTITION (ds='1')
 LOCATION 'pfile:${system:test.tmp.dir}/fact_tz/ds=1';
 
 set hive.mapred.supports.subdirectories=true;
-set mapred.input.dir.recursive=true;
+set mapreduce.input.fileinputformat.input.dir.recursive=true;
 set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 
 SELECT * FROM fact_daily WHERE ds='1';

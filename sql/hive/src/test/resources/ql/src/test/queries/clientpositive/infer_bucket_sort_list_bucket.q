@@ -1,7 +1,7 @@
 set hive.mapred.supports.subdirectories=true;
 set hive.merge.mapfiles=false;	
 set hive.merge.mapredfiles=false; 
-set mapred.input.dir.recursive=true;
+set mapreduce.input.fileinputformat.input.dir.recursive=true;
 
 -- This tests that bucketing/sorting metadata is not inferred for tables with list bucketing
 

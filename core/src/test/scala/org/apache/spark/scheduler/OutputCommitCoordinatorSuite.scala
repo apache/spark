@@ -265,7 +265,7 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     val committer = FileCommitProtocol.instantiate(
       className = classOf[HadoopMapRedCommitProtocol].getName,
       jobId = jobId.value.getId.toString,
-      outputPath = jobConf.get("mapred.output.dir"),
+      outputPath = jobConf.get("mapreduce.output.fileoutputformat.outputdir"),
       isAppend = false)
 
     // Create TaskAttemptContext.

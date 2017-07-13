@@ -7,7 +7,7 @@ set hive.optimize.union.remove=true;
 
 set hive.merge.mapfiles=false;
 set hive.merge.mapredfiles=false;
-set mapred.input.dir.recursive=true;
+set mapreduce.input.fileinputformat.input.dir.recursive=true;
 
 -- This is to test the union->selectstar->filesink and skewjoin optimization
 -- Union of 2 map-reduce subqueries is performed for the skew join
