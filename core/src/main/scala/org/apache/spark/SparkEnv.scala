@@ -420,7 +420,7 @@ object SparkEnv extends Logging {
       if (!conf.contains("spark.scheduler.mode")) {
         Seq(("spark.scheduler.mode", schedulingMode))
       } else {
-        Seq[(String, String)]()
+        Seq.empty[(String, String)]
       }
     val sparkProperties = (conf.getAll ++ schedulerMode).sorted
 

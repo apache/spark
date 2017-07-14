@@ -35,8 +35,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.streaming.GroupStateTimeout
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
-
 
 /**
  * Physical version of `ObjectProducer`.
@@ -403,8 +401,7 @@ case class FlatMapGroupsInRExec(
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val isSerializedRData =
-      if (outputSchema == SERIALIZED_R_DATA_SCHEMA) true else false
+    val isSerializedRData = outputSchema == SERIALIZED_R_DATA_SCHEMA
     val serializerForR = if (!isSerializedRData) {
       SerializationFormats.ROW
     } else {

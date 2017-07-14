@@ -565,7 +565,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val executorTable = new ExecutorTable(stageId, stageAttemptId, parent)
 
       val maybeAccumulableTable: Seq[Node] =
-        if (hasAccumulators) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
+        if (hasAccumulators) { <h4>Accumulators</h4> ++ accumulableTable } else Seq.empty
 
       val aggMetrics =
         <span class="collapse-aggregated-metrics collapse-table"

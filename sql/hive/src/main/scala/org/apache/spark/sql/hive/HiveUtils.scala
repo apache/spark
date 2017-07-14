@@ -245,7 +245,7 @@ private[spark] object HiveUtils extends Logging {
     val loader = new IsolatedClientLoader(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       sparkConf = conf,
-      execJars = Seq(),
+      execJars = Seq.empty,
       hadoopConf = hadoopConf,
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,

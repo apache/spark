@@ -589,7 +589,7 @@ object PySparkAssembly {
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
       zipFile.delete()
       zipRecursive(src, zipFile)
-      Seq[File]()
+      Seq.empty[File]
     }).value
   )
 
@@ -810,7 +810,7 @@ object TestSettings {
           require(d.mkdir() || d.isDirectory(), s"Failed to create directory $d")
         }
       }
-      Seq[File]()
+      Seq.empty[File]
     }).value,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
     // Remove certain packages from Scaladoc

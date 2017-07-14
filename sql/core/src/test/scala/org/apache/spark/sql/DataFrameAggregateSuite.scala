@@ -65,9 +65,9 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       decimalData.groupBy("a").agg(sum("b")),
-      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(3.0)),
-        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(3.0)),
-        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)))
+      Seq(Row(new java.math.BigDecimal(1), new java.math.BigDecimal(3)),
+        Row(new java.math.BigDecimal(2), new java.math.BigDecimal(3)),
+        Row(new java.math.BigDecimal(3), new java.math.BigDecimal(3)))
     )
 
     val decimalDataWithNulls = spark.sparkContext.parallelize(
@@ -80,10 +80,10 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       DecimalData(null, 2) :: Nil).toDF()
     checkAnswer(
       decimalDataWithNulls.groupBy("a").agg(sum("b")),
-      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.0)),
-        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.0)),
-        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)),
-        Row(null, new java.math.BigDecimal(2.0)))
+      Seq(Row(new java.math.BigDecimal(1), new java.math.BigDecimal(1)),
+        Row(new java.math.BigDecimal(2), new java.math.BigDecimal(1)),
+        Row(new java.math.BigDecimal(3), new java.math.BigDecimal(3)),
+        Row(null, new java.math.BigDecimal(2)))
     )
   }
 
@@ -259,19 +259,19 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       decimalData.agg(avg('a)),
-      Row(new java.math.BigDecimal(2.0)))
+      Row(new java.math.BigDecimal(2)))
 
     checkAnswer(
       decimalData.agg(avg('a), sumDistinct('a)), // non-partial
-      Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
+      Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
 
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2))),
-      Row(new java.math.BigDecimal(2.0)))
+      Row(new java.math.BigDecimal(2)))
     // non-partial
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
-      Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
+      Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
   }
 
   test("null average") {
@@ -520,9 +520,9 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   test("SQL decimal test (used for catching certain decimal handling bugs in aggregates)") {
     checkAnswer(
       decimalData.groupBy('a cast DecimalType(10, 2)).agg(avg('b cast DecimalType(10, 2))),
-      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.5)),
-        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.5)),
-        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(1.5))))
+      Seq(Row(new java.math.BigDecimal(1), new java.math.BigDecimal("1.5")),
+        Row(new java.math.BigDecimal(2), new java.math.BigDecimal("1.5")),
+        Row(new java.math.BigDecimal(3), new java.math.BigDecimal("1.5"))))
   }
 
   test("SPARK-17616: distinct aggregate combined with a non-partial aggregate") {
