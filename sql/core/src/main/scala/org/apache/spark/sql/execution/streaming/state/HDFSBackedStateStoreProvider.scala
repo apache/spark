@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SizeEstimator, Utils}
 
 
 /**
@@ -172,7 +172,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       }
     }
 
-    override def numKeys(): Long = mapToUpdate.size()
+    override def metrics: StateStoreMetrics =
+      StateStoreMetrics(mapToUpdate.size(), SizeEstimator.estimate(mapToUpdate))
 
     /**
      * Whether all updates have been committed

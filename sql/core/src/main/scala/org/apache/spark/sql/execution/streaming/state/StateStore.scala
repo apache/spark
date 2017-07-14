@@ -94,8 +94,8 @@ trait StateStore {
 
   def iterator(): Iterator[UnsafeRowPair]
 
-  /** Number of keys in the state store */
-  def numKeys(): Long
+  /** Current metrics of the state store */
+  def metrics: StateStoreMetrics
 
   /**
    * Whether all updates have been committed
@@ -103,6 +103,8 @@ trait StateStore {
   def hasCommitted: Boolean
 }
 
+
+case class StateStoreMetrics(val numKeys: Long, val memoryUsedBytes: Long)
 
 /**
  * Trait representing a provider that provide [[StateStore]] instances representing
