@@ -187,8 +187,14 @@ class ArrowSerializer(FramedSerializer):
     Serializes an Arrow stream.
     """
 
-    def dumps(self, obj):
-        raise NotImplementedError
+    def dumps(self, batch):
+        import pyarrow as pa
+        import io
+        sink = io.BytesIO()
+        writer = pa.RecordBatchFileWriter(sink, batch.schema)
+        writer.write_batch(batch)
+        writer.close()
+        return sink.getvalue()
 
     def loads(self, obj):
         import pyarrow as pa
@@ -197,6 +203,28 @@ class ArrowSerializer(FramedSerializer):
 
     def __repr__(self):
         return "ArrowSerializer"
+
+
+class ArrowPandasSerializer(ArrowSerializer):
+
+    def __init__(self):
+        super(ArrowPandasSerializer, self).__init__()
+
+    # make an ArrowRecordBatch from a Pandas Series and serialize
+    def dumps(self, series):
+        import pyarrow as pa
+        # TODO: iterator could be a tuple
+        arr = pa.Array.from_pandas(series)
+        batch = pa.RecordBatch.from_arrays([arr], ["_0"])
+        return super(ArrowPandasSerializer, self).dumps(batch)
+
+    # deserialize an ArrowRecordBatch to an Arrow table and return as a list of pandas.Series
+    def loads(self, obj):
+        table = super(ArrowPandasSerializer, self).loads(obj)
+        return [c.to_pandas() for c in table.itercolumns()]
+
+    def __repr__(self):
+        return "ArrowPandasSerializer"
 
 
 class BatchedSerializer(Serializer):

@@ -138,7 +138,8 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
-          val evaluation = BatchEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
+          //val evaluation = BatchEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
+          val evaluation = ArrowEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
           attributeMap ++= validUdfs.zip(resultAttrs)
           evaluation
         } else {
