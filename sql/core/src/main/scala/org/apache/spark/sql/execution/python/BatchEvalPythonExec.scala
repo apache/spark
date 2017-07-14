@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.python
 
 import java.io.File
 
-import net.razorvine.pickle.{Pickler, Unpickler}
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+
+import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonRunner}

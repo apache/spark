@@ -202,20 +202,4 @@ private[sql] object ArrowConverters {
       reader.close()
     }
   }
-
-  private[arrow] def execByteArrayAsVectors(
-     batchBytes: Array[Byte],
-     allocator: BufferAllocator)(block: (VectorSchemaRoot) => Unit): Unit = {
-    val in = new ByteArrayReadableSeekableByteChannel(batchBytes)
-    val reader = new ArrowFileReader(in, allocator)
-
-    // Read a batch from a byte stream, ensure the reader is closed
-    Utils.tryWithSafeFinally {
-      val root = reader.getVectorSchemaRoot  // throws IOException
-      reader.loadNextBatch()  // throws IOException
-      block(root)
-    } {
-      reader.close()
-    }
-  }
 }
