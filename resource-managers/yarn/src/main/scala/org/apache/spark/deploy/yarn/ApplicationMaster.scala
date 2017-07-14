@@ -701,20 +701,6 @@ private[spark] class ApplicationMaster(
     credentialRenewer.scheduleLoginFromKeytab()
   }
 
-  private def startAMCredentialRenewerThread(): Thread = {
-    val thread = new Thread {
-      override def run(): Unit = {
-        startAMCredentialRenewer()
-      }
-    }
-
-    thread.setDaemon(true)
-    thread.setName("AMCredentialRenewerThread")
-    thread.setContextClassLoader(userClassLoader)
-    thread.start()
-    thread
-  }
-
   /**
    * An [[RpcEndpoint]] that communicates with the driver's scheduler backend.
    */
