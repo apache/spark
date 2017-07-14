@@ -302,29 +302,20 @@ class CodegenContext {
   }
 
   /**
-   * Instantiates all nested, private sub-classes as objects to the `OuterClass`
+   * Declares all function code. If the added functions are too many, split them into nested
+   * sub-classes to avoid hitting Java compiler constant pool limitation.
    */
-  private[sql] def initNestedClasses(): String = {
+  def declareAddedFunctions(): String = {
+    val inlinedFunctions = classFunctions(outerClassName).values
+
     // Nested, private sub-classes have no mutable state (though they do reference the outer class'
     // mutable state), so we declare and initialize them inline to the OuterClass.
-    classes.filter(_._1 != outerClassName).map {
+    val initNestedClasses = classes.filter(_._1 != outerClassName).map {
       case (className, classInstance) =>
         s"private $className $classInstance = new $className();"
-    }.mkString("\n")
-  }
+    }
 
-  /**
-   * Declares all function code that should be inlined to the `OuterClass`.
-   */
-  private[sql] def declareAddedFunctions(): String = {
-    classFunctions(outerClassName).values.mkString("\n")
-  }
-
-  /**
-   * Declares all nested, private sub-classes and the function code that should be inlined to them.
-   */
-  private[sql] def declareNestedClasses(): String = {
-    classFunctions.filterKeys(_ != outerClassName).map {
+    val declareNestedClasses = classFunctions.filterKeys(_ != outerClassName).map {
       case (className, functions) =>
         s"""
            |private class $className {
@@ -332,7 +323,9 @@ class CodegenContext {
            |}
            """.stripMargin
     }
-  }.mkString("\n")
+
+    (inlinedFunctions ++ initNestedClasses ++ declareNestedClasses).mkString("\n")
+  }
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -408,9 +401,11 @@ class CodegenContext {
     dataType match {
       case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
-      // The UTF8String may came from UnsafeRow, otherwise clone is cheap (re-use the bytes)
-      case StringType => s"$row.update($ordinal, $value.clone())"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
+      // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
+      // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
+      case StringType | _: StructType | _: ArrayType | _: MapType =>
+        s"$row.update($ordinal, $value.copy())"
       case _ => s"$row.update($ordinal, $value)"
     }
   }

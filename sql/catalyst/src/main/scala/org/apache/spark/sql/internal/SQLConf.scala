@@ -784,6 +784,14 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
+  val AUTO_UPDATE_SIZE =
+    buildConf("spark.sql.statistics.autoUpdate.size")
+      .doc("Enables automatic update for table size once table's data is changed. Note that if " +
+        "the total number of files of the table is very large, this can be expensive and slow " +
+        "down data change commands.")
+      .booleanConf
+      .createWithDefault(false)
+
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
@@ -856,6 +864,30 @@ object SQLConf {
       .doc("Threshold for number of rows buffered in cartesian product operator")
       .intConf
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+
+  val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
+    .doc("When true, quoted Identifiers (using backticks) in SELECT statement are interpreted" +
+      " as regular expressions.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val ARROW_EXECUTION_ENABLE =
+    buildConf("spark.sql.execution.arrow.enable")
+      .internal()
+      .doc("Make use of Apache Arrow for columnar data transfers. Currently available " +
+        "for use with pyspark.sql.DataFrame.toPandas with the following data types: " +
+        "StringType, BinaryType, BooleanType, DoubleType, FloatType, ByteType, IntegerType, " +
+        "LongType, ShortType")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
+      .internal()
+      .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
+        "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
+      .intConf
+      .createWithDefault(10000)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1097,6 +1129,8 @@ class SQLConf extends Serializable with Logging {
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
+  def autoUpdateSize: Boolean = getConf(SQLConf.AUTO_UPDATE_SIZE)
+
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
@@ -1118,6 +1152,12 @@ class SQLConf extends Serializable with Logging {
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
+
+  def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
+
+  def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
+
+  def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
   /** ********************** SQLConf functionality methods ************ */
 

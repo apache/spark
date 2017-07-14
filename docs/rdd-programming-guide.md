@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Spark Programming Guide
+title: RDD Programming Guide
 description: Spark SPARK_VERSION_SHORT programming guide in Java, Scala and Python
 ---
 

@@ -194,6 +194,7 @@
     <paranamer.version>2.6</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
+    <arrow.version>0.4.0</arrow.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -614,7 +615,7 @@
         <groupId>org.slf4j</groupId>
         <artifactId>jcl-over-slf4j</artifactId>
         <version>${slf4j.version}</version>
-        <!-- <scope>runtime</scope> --> <!-- more correct, but scalac 2.10.3 doesn't like it -->
+        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>log4j</groupId>
@@ -2115,9 +2116,9 @@
         <version>${antlr4.version}</version>
       </dependency>
       <dependency>
-        <groupId>${jline.groupid}</groupId>
+        <groupId>jline</groupId>
         <artifactId>jline</artifactId>
-        <version>${jline.version}</version>
+        <version>2.12.1</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -2134,6 +2135,25 @@
         <groupId>com.thoughtworks.paranamer</groupId>
         <artifactId>paranamer</artifactId>
         <version>${paranamer.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-vector</artifactId>
+        <version>${arrow.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -2170,6 +2190,7 @@
                       -->
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
+                      <exclude>*:*_2.10</exclude>
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
@@ -2224,6 +2245,8 @@
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
               <arg>-feature</arg>
+              <arg>-explaintypes</arg>
+              <arg>-Yno-adapted-args</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
@@ -2597,6 +2620,7 @@
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
               <include>com.google.guava:guava</include>
+              <include>org.jpmml:*</include>
             </includes>
           </artifactSet>
           <relocations>
@@ -2610,6 +2634,14 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.dmg.pmml</pattern>
+              <shadedPattern>${spark.shade.packageName}.dmg.pmml</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.jpmml</pattern>
+              <shadedPattern>${spark.shade.packageName}.jpmml</shadedPattern>
             </relocation>
           </relocations>
         </configuration>
@@ -2913,15 +2945,27 @@
     </profile>
 
     <profile>
-      <id>scala-2.10</id>
+      <id>test-java-home</id>
       <activation>
-        <property><name>scala-2.10</name></property>
+        <property><name>env.JAVA_HOME</name></property>
       </activation>
       <properties>
-        <scala.version>2.10.6</scala.version>
-        <scala.binary.version>2.10</scala.binary.version>
-        <jline.version>${scala.version}</jline.version>
-        <jline.groupid>org.scala-lang</jline.groupid>
+        <test.java.home>${env.JAVA_HOME}</test.java.home>
+      </properties>
+    </profile>
+
+    <!-- Exists for backwards compatibility; profile doesn't do anything -->
+    <profile>
+      <id>scala-2.11</id>
+    </profile>
+
+    <!-- Draft of Scala 2.12 profile for later -->
+    <!--
+    <profile>
+      <id>scala-2.12</id>
+      <properties>
+        <scala.version>2.12.1</scala.version>
+        <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>
         <plugins>
@@ -2949,58 +2993,11 @@
         </plugins>
       </build>
     </profile>
-
-    <profile>
-      <id>test-java-home</id>
-      <activation>
-        <property><name>env.JAVA_HOME</name></property>
-      </activation>
-      <properties>
-        <test.java.home>${env.JAVA_HOME}</test.java.home>
-      </properties>
-    </profile>
-
-    <profile>
-      <id>scala-2.11</id>
-      <activation>
-        <property><name>!scala-2.10</name></property>
-      </activation>
-      <properties>
-        <scala.version>2.11.8</scala.version>
-        <scala.binary.version>2.11</scala.binary.version>
-        <jline.version>2.12.1</jline.version>
-        <jline.groupid>jline</jline.groupid>
-      </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-enforcer-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>enforce-versions</id>
-                <goals>
-                  <goal>enforce</goal>
-                </goals>
-                <configuration>
-                  <rules>
-                    <bannedDependencies>
-                      <excludes combine.children="append">
-                        <exclude>*:*_2.10</exclude>
-                      </excludes>
-                    </bannedDependencies>
-                  </rules>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
+    -->
 
     <!--
      This is a profile to enable the use of the ASF snapshot and staging repositories
-     during a build. It is useful when testing againt nightly or RC releases of dependencies.
+     during a build. It is useful when testing against nightly or RC releases of dependencies.
      It MUST NOT be used when building copies of Spark to use in production of for distribution,
      -->
     <profile>

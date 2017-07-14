@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution;
 
 import java.io.IOException;
 
+import scala.collection.AbstractIterator;
 import scala.collection.Iterator;
 import scala.math.Ordering;
 
@@ -28,7 +29,6 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.util.AbstractScalaRowIterator;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
@@ -145,7 +145,7 @@ public final class UnsafeExternalRowSorter {
         // here in order to prevent memory leaks.
         cleanupResources();
       }
-      return new AbstractScalaRowIterator<UnsafeRow>() {
+      return new AbstractIterator<UnsafeRow>() {
 
         private final int numFields = schema.length();
         private UnsafeRow row = new UnsafeRow(numFields);

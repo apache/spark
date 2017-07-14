@@ -173,12 +173,12 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  * 2. Replaces [[In (value, seq[Literal])]] with optimized version
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
-case class OptimizeIn(conf: SQLConf) extends Rule[LogicalPlan] {
+object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
-        if (newList.size > conf.optimizerInSetConversionThreshold) {
+        if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
         } else if (newList.size < list.size) {
@@ -414,7 +414,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
  * equivalent [[Literal]] values. This rule is more specific with
  * Null value propagation from bottom to top of the expression tree.
  */
-case class NullPropagation(conf: SQLConf) extends Rule[LogicalPlan] {
+object NullPropagation extends Rule[LogicalPlan] {
   private def isNullLiteral(e: Expression): Boolean = e match {
     case Literal(null, _) => true
     case _ => false
@@ -423,9 +423,9 @@ case class NullPropagation(conf: SQLConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
-        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
+        Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
       case e @ AggregateExpression(Count(exprs), _, _, _) if exprs.forall(isNullLiteral) =>
-        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
+        Cast(Literal(0L), e.dataType, Option(SQLConf.get.sessionLocalTimeZone))
       case ae @ AggregateExpression(Count(exprs), _, false, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         ae.copy(aggregateFunction = Count(Literal(1)))
@@ -552,14 +552,14 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 /**
  * Optimizes expressions by replacing according to CodeGen configuration.
  */
-case class OptimizeCodegen(conf: SQLConf) extends Rule[LogicalPlan] {
+object OptimizeCodegen extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case e: CaseWhen if canCodegen(e) => e.toCodegen()
   }
 
   private def canCodegen(e: CaseWhen): Boolean = {
     val numBranches = e.branches.size + e.elseValue.size
-    numBranches <= conf.maxCaseBranchesForCodegen
+    numBranches <= SQLConf.get.maxCaseBranchesForCodegen
   }
 }
 

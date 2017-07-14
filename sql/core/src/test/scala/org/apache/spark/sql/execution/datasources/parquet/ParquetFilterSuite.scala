@@ -546,7 +546,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     import testImplicits._
 
     Seq(true, false).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> true.toString,
+          SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
         withTempPath { path =>
           Seq(Some(1), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
           assert(spark.read.parquet(path.getAbsolutePath).where("`col.dots` > 0").count() == 1)

@@ -73,6 +73,16 @@ private[spark] object SerDeUtil extends Logging {
         // This must be ISO 8859-1 / Latin 1, not UTF-8, to interoperate correctly
         val data = args(1).asInstanceOf[String].getBytes(StandardCharsets.ISO_8859_1)
         construct(typecode, machineCodes(typecode), data)
+      } else if (args.length == 2 && args(0) == "l") {
+        // On Python 2, an array of typecode 'l' should be handled as long rather than int.
+        val values = args(1).asInstanceOf[JArrayList[_]]
+        val result = new Array[Long](values.size)
+        var i = 0
+        while (i < values.size) {
+          result(i) = values.get(i).asInstanceOf[Number].longValue()
+          i += 1
+        }
+        result
       } else {
         super.construct(args)
       }

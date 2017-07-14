@@ -198,7 +198,7 @@ private[spark] class TaskSetManager(
   private[scheduler] var emittedTaskSizeWarning = false
 
   /** Add a task to all the pending-task lists that it should be on. */
-  private def addPendingTask(index: Int) {
+  private[spark] def addPendingTask(index: Int) {
     for (loc <- tasks(index).preferredLocations) {
       loc match {
         case e: ExecutorCacheTaskLocation =>
@@ -832,15 +832,6 @@ private[spark] class TaskSetManager(
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
-    if (successful(index)) {
-      logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, but the task will not" +
-        s" be re-executed (either because the task failed with a shuffle data fetch failure," +
-        s" so the previous stage needs to be re-run, or because a different copy of the task" +
-        s" has already succeeded).")
-    } else {
-      addPendingTask(index)
-    }
-
     if (!isZombie && reason.countTowardsTaskFailures) {
       taskSetBlacklistHelperOpt.foreach(_.updateBlacklistForFailedTask(
         info.host, info.executorId, index))
@@ -854,6 +845,16 @@ private[spark] class TaskSetManager(
         return
       }
     }
+
+    if (successful(index)) {
+      logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, but the task will not" +
+        s" be re-executed (either because the task failed with a shuffle data fetch failure," +
+        s" so the previous stage needs to be re-run, or because a different copy of the task" +
+        s" has already succeeded).")
+    } else {
+      addPendingTask(index)
+    }
+
     maybeFinishTaskSet()
   }
 
