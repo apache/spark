@@ -31,8 +31,9 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.execution.vectorized.ArrowUtils
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, Decimal, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 
@@ -389,6 +390,85 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val df = a_d.zip(b_d).toDF("a_d", "b_d")
 
     collectAndValidate(df, json, "floating_point-double_precision.json")
+  }
+
+  ignore("decimal conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "a_d",
+         |      "nullable" : true,
+         |      "type" : {
+         |        "name" : "decimal",
+         |        "precision" : 38,
+         |        "scale" : 18
+         |      },
+         |      "children" : [ ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        }, {
+         |          "type" : "DATA",
+         |          "typeBitWidth" : 64
+         |        } ]
+         |      }
+         |    }, {
+         |      "name" : "b_d",
+         |      "nullable" : true,
+         |      "type" : {
+         |        "name" : "decimal",
+         |        "precision" : 38,
+         |        "scale" : 18
+         |      },
+         |      "children" : [ ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        }, {
+         |          "type" : "DATA",
+         |          "typeBitWidth" : 64
+         |        } ]
+         |      }
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 6,
+         |    "columns" : [ {
+         |      "name" : "a_d",
+         |      "count" : 6,
+         |      "VALIDITY" : [ 1, 1, 1, 1, 1, 1 ],
+         |      "DATA" : [
+         |        1.000000000000000000,
+         |        2.000000000000000000,
+         |        0.010000000000000000,
+         |        200.000000000000000000,
+         |        0.000100000000000000,
+         |        20000.000000000000000000 ]
+         |    }, {
+         |      "name" : "b_d",
+         |      "count" : 6,
+         |      "VALIDITY" : [ 1, 0, 0, 1, 0, 1 ],
+         |      "DATA" : [
+         |        1.100000000000000000,
+         |        0E-18,
+         |        0E-18,
+         |        2.200000000000000000,
+         |        0E-18,
+         |        3.300000000000000000 ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
+
+    val a_d = List(1.0, 2.0, 0.01, 200.0, 0.0001, 20000.0).map(Decimal(_))
+    val b_d = List(Some(Decimal(1.1)), None, None, Some(Decimal(2.2)), None, Some(Decimal(3.3)))
+    val df = a_d.zip(b_d).toDF("a_d", "b_d")
+
+    collectAndValidate(df, json, "decimalData.json")
   }
 
   test("index conversion") {
@@ -857,6 +937,449 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     collectAndValidate(df, json, "nanData-floating_point.json")
   }
 
+  test("array type conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "a_arr",
+         |      "nullable" : true,
+         |      "type" : {
+         |        "name" : "list"
+         |      },
+         |      "children" : [ {
+         |        "name" : "element",
+         |        "nullable" : false,
+         |        "type" : {
+         |          "name" : "int",
+         |          "bitWidth" : 32,
+         |          "isSigned" : true
+         |        },
+         |        "children" : [ ],
+         |        "typeLayout" : {
+         |          "vectors" : [ {
+         |            "type" : "VALIDITY",
+         |            "typeBitWidth" : 1
+         |          }, {
+         |            "type" : "DATA",
+         |            "typeBitWidth" : 32
+         |          } ]
+         |        }
+         |      } ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        }, {
+         |          "type" : "OFFSET",
+         |          "typeBitWidth" : 32
+         |        } ]
+         |      }
+         |    }, {
+         |      "name" : "b_arr",
+         |      "nullable" : true,
+         |      "type" : {
+         |        "name" : "list"
+         |      },
+         |      "children" : [ {
+         |        "name" : "element",
+         |        "nullable" : false,
+         |        "type" : {
+         |          "name" : "int",
+         |          "bitWidth" : 32,
+         |          "isSigned" : true
+         |        },
+         |        "children" : [ ],
+         |        "typeLayout" : {
+         |          "vectors" : [ {
+         |            "type" : "VALIDITY",
+         |            "typeBitWidth" : 1
+         |          }, {
+         |            "type" : "DATA",
+         |            "typeBitWidth" : 32
+         |          } ]
+         |        }
+         |      } ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        }, {
+         |          "type" : "OFFSET",
+         |          "typeBitWidth" : 32
+         |        } ]
+         |      }
+         |    }, {
+         |      "name" : "c_arr",
+         |      "nullable" : true,
+         |      "type" : {
+         |        "name" : "list"
+         |      },
+         |      "children" : [ {
+         |        "name" : "element",
+         |        "nullable" : true,
+         |        "type" : {
+         |          "name" : "int",
+         |          "bitWidth" : 32,
+         |          "isSigned" : true
+         |        },
+         |        "children" : [ ],
+         |        "typeLayout" : {
+         |          "vectors" : [ {
+         |            "type" : "VALIDITY",
+         |            "typeBitWidth" : 1
+         |          }, {
+         |            "type" : "DATA",
+         |            "typeBitWidth" : 32
+         |          } ]
+         |        }
+         |      } ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        }, {
+         |          "type" : "OFFSET",
+         |          "typeBitWidth" : 32
+         |        } ]
+         |      }
+         |    }, {
+         |      "name" : "d_arr",
+         |      "nullable" : true,
+         |      "type" : {
+         |        "name" : "list"
+         |      },
+         |      "children" : [ {
+         |        "name" : "element",
+         |        "nullable" : true,
+         |        "type" : {
+         |          "name" : "list"
+         |        },
+         |        "children" : [ {
+         |          "name" : "element",
+         |          "nullable" : false,
+         |          "type" : {
+         |            "name" : "int",
+         |            "bitWidth" : 32,
+         |            "isSigned" : true
+         |          },
+         |          "children" : [ ],
+         |          "typeLayout" : {
+         |            "vectors" : [ {
+         |              "type" : "VALIDITY",
+         |              "typeBitWidth" : 1
+         |            }, {
+         |              "type" : "DATA",
+         |              "typeBitWidth" : 32
+         |            } ]
+         |          }
+         |        } ],
+         |        "typeLayout" : {
+         |          "vectors" : [ {
+         |            "type" : "VALIDITY",
+         |            "typeBitWidth" : 1
+         |          }, {
+         |            "type" : "OFFSET",
+         |            "typeBitWidth" : 32
+         |          } ]
+         |        }
+         |      } ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        }, {
+         |          "type" : "OFFSET",
+         |          "typeBitWidth" : 32
+         |        } ]
+         |      }
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 4,
+         |    "columns" : [ {
+         |      "name" : "a_arr",
+         |      "count" : 4,
+         |      "VALIDITY" : [ 1, 1, 1, 1 ],
+         |      "OFFSET" : [ 0, 2, 4, 4, 5 ],
+         |      "children" : [ {
+         |        "name" : "element",
+         |        "count" : 5,
+         |        "VALIDITY" : [ 1, 1, 1, 1, 1 ],
+         |        "DATA" : [ 1, 2, 3, 4, 5 ]
+         |      } ]
+         |    }, {
+         |      "name" : "b_arr",
+         |      "count" : 4,
+         |      "VALIDITY" : [ 1, 0, 1, 0 ],
+         |      "OFFSET" : [ 0, 2, 2, 2, 2 ],
+         |      "children" : [ {
+         |        "name" : "element",
+         |        "count" : 2,
+         |        "VALIDITY" : [ 1, 1 ],
+         |        "DATA" : [ 1, 2 ]
+         |      } ]
+         |    }, {
+         |      "name" : "c_arr",
+         |      "count" : 4,
+         |      "VALIDITY" : [ 1, 1, 1, 1 ],
+         |      "OFFSET" : [ 0, 2, 4, 4, 5 ],
+         |      "children" : [ {
+         |        "name" : "element",
+         |        "count" : 5,
+         |        "VALIDITY" : [ 1, 1, 1, 0, 1 ],
+         |        "DATA" : [ 1, 2, 3, 0, 5 ]
+         |      } ]
+         |    }, {
+         |      "name" : "d_arr",
+         |      "count" : 4,
+         |      "VALIDITY" : [ 1, 1, 1, 1 ],
+         |      "OFFSET" : [ 0, 1, 3, 3, 4 ],
+         |      "children" : [ {
+         |        "name" : "element",
+         |        "count" : 4,
+         |        "VALIDITY" : [ 1, 1, 1, 1 ],
+         |        "OFFSET" : [ 0, 2, 3, 3, 4 ],
+         |        "children" : [ {
+         |          "name" : "element",
+         |          "count" : 4,
+         |          "VALIDITY" : [ 1, 1, 1, 1 ],
+         |          "DATA" : [ 1, 2, 3, 5 ]
+         |        } ]
+         |      } ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
+
+    val a_arr = Seq(Seq(1, 2), Seq(3, 4), Seq(), Seq(5))
+    val b_arr = Seq(Some(Seq(1, 2)), None, Some(Seq()), None)
+    val c_arr = Seq(Seq(Some(1), Some(2)), Seq(Some(3), None), Seq(), Seq(Some(5)))
+    val d_arr = Seq(Seq(Seq(1, 2)), Seq(Seq(3), Seq()), Seq(), Seq(Seq(5)))
+
+    val df = a_arr.zip(b_arr).zip(c_arr).zip(d_arr).map {
+      case (((a, b), c), d) => (a, b, c, d)
+    }.toDF("a_arr", "b_arr", "c_arr", "d_arr")
+
+    collectAndValidate(df, json, "arrayData.json")
+  }
+
+  test("struct type conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "a_struct",
+         |      "nullable" : false,
+         |      "type" : {
+         |        "name" : "struct"
+         |      },
+         |      "children" : [ {
+         |        "name" : "i",
+         |        "nullable" : false,
+         |        "type" : {
+         |          "name" : "int",
+         |          "bitWidth" : 32,
+         |          "isSigned" : true
+         |        },
+         |        "children" : [ ],
+         |        "typeLayout" : {
+         |          "vectors" : [ {
+         |            "type" : "VALIDITY",
+         |            "typeBitWidth" : 1
+         |          }, {
+         |            "type" : "DATA",
+         |            "typeBitWidth" : 32
+         |          } ]
+         |        }
+         |      } ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        } ]
+         |      }
+         |    }, {
+         |      "name" : "b_struct",
+         |      "nullable" : true,
+         |      "type" : {
+         |        "name" : "struct"
+         |      },
+         |      "children" : [ {
+         |        "name" : "i",
+         |        "nullable" : false,
+         |        "type" : {
+         |          "name" : "int",
+         |          "bitWidth" : 32,
+         |          "isSigned" : true
+         |        },
+         |        "children" : [ ],
+         |        "typeLayout" : {
+         |          "vectors" : [ {
+         |            "type" : "VALIDITY",
+         |            "typeBitWidth" : 1
+         |          }, {
+         |            "type" : "DATA",
+         |            "typeBitWidth" : 32
+         |          } ]
+         |        }
+         |      } ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        } ]
+         |      }
+         |    }, {
+         |      "name" : "c_struct",
+         |      "nullable" : false,
+         |      "type" : {
+         |        "name" : "struct"
+         |      },
+         |      "children" : [ {
+         |        "name" : "i",
+         |        "nullable" : true,
+         |        "type" : {
+         |          "name" : "int",
+         |          "bitWidth" : 32,
+         |          "isSigned" : true
+         |        },
+         |        "children" : [ ],
+         |        "typeLayout" : {
+         |          "vectors" : [ {
+         |            "type" : "VALIDITY",
+         |            "typeBitWidth" : 1
+         |          }, {
+         |            "type" : "DATA",
+         |            "typeBitWidth" : 32
+         |          } ]
+         |        }
+         |      } ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        } ]
+         |      }
+         |    }, {
+         |      "name" : "d_struct",
+         |      "nullable" : true,
+         |      "type" : {
+         |        "name" : "struct"
+         |      },
+         |      "children" : [ {
+         |        "name" : "nested",
+         |        "nullable" : true,
+         |        "type" : {
+         |          "name" : "struct"
+         |        },
+         |        "children" : [ {
+         |          "name" : "i",
+         |          "nullable" : true,
+         |          "type" : {
+         |            "name" : "int",
+         |            "bitWidth" : 32,
+         |            "isSigned" : true
+         |          },
+         |          "children" : [ ],
+         |          "typeLayout" : {
+         |            "vectors" : [ {
+         |              "type" : "VALIDITY",
+         |              "typeBitWidth" : 1
+         |            }, {
+         |              "type" : "DATA",
+         |              "typeBitWidth" : 32
+         |            } ]
+         |          }
+         |        } ],
+         |        "typeLayout" : {
+         |          "vectors" : [ {
+         |            "type" : "VALIDITY",
+         |            "typeBitWidth" : 1
+         |          } ]
+         |        }
+         |      } ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        } ]
+         |      }
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 3,
+         |    "columns" : [ {
+         |      "name" : "a_struct",
+         |      "count" : 3,
+         |      "VALIDITY" : [ 1, 1, 1 ],
+         |      "children" : [ {
+         |        "name" : "i",
+         |        "count" : 3,
+         |        "VALIDITY" : [ 1, 1, 1 ],
+         |        "DATA" : [ 1, 2, 3 ]
+         |      } ]
+         |    }, {
+         |      "name" : "b_struct",
+         |      "count" : 3,
+         |      "VALIDITY" : [ 1, 0, 1 ],
+         |      "children" : [ {
+         |        "name" : "i",
+         |        "count" : 3,
+         |        "VALIDITY" : [ 1, 1, 1 ],
+         |        "DATA" : [ 1, 2, 3 ]
+         |      } ]
+         |    }, {
+         |      "name" : "c_struct",
+         |      "count" : 3,
+         |      "VALIDITY" : [ 1, 1, 1 ],
+         |      "children" : [ {
+         |        "name" : "i",
+         |        "count" : 3,
+         |        "VALIDITY" : [ 1, 0, 1 ],
+         |        "DATA" : [ 1, 2, 3 ]
+         |      } ]
+         |    }, {
+         |      "name" : "d_struct",
+         |      "count" : 3,
+         |      "VALIDITY" : [ 1, 0, 1 ],
+         |      "children" : [ {
+         |        "name" : "nested",
+         |        "count" : 3,
+         |        "VALIDITY" : [ 1, 1, 0 ],
+         |        "children" : [ {
+         |          "name" : "i",
+         |          "count" : 2,
+         |          "VALIDITY" : [ 1, 1 ],
+         |          "DATA" : [ 1, 2 ]
+         |        } ]
+         |      } ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
+
+    val a_struct = Seq(Row(1), Row(2), Row(3))
+    val b_struct = Seq(Row(1), null, Row(3))
+    val c_struct = Seq(Row(1), Row(null), Row(3))
+    val d_struct = Seq(Row(Row(1)), null, Row(null))
+    val data = a_struct.zip(b_struct).zip(c_struct).zip(d_struct).map {
+      case (((a, b), c), d) => Row(a, b, c, d)
+    }
+
+    val rdd = sparkContext.parallelize(data)
+    val schema = new StructType()
+      .add("a_struct", new StructType().add("i", IntegerType, nullable = false), nullable = false)
+      .add("b_struct", new StructType().add("i", IntegerType, nullable = false), nullable = true)
+      .add("c_struct", new StructType().add("i", IntegerType, nullable = true), nullable = false)
+      .add("d_struct", new StructType().add("nested", new StructType().add("i", IntegerType)))
+    val df = spark.createDataFrame(rdd, schema)
+
+    collectAndValidate(df, json, "structData.json")
+  }
+
   test("partitioned DataFrame") {
     val json1 =
       s"""
@@ -1038,8 +1561,6 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
       assert(msg.getCause.getClass === classOf[UnsupportedOperationException])
     }
 
-    runUnsupported { decimalData.toArrowPayload.collect() }
-    runUnsupported { arrayData.toDF().toArrowPayload.collect() }
     runUnsupported { mapData.toDF().toArrowPayload.collect() }
     runUnsupported { complexData.toArrowPayload.collect() }
 
@@ -1202,7 +1723,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val allocator = new RootAllocator(Long.MaxValue)
     val jsonReader = new JsonFileReader(jsonFile, allocator)
 
-    val arrowSchema = ArrowConverters.schemaToArrowSchema(sparkSchema)
+    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema)
     val jsonSchema = jsonReader.start()
     Validator.compareSchemas(arrowSchema, jsonSchema)
 
