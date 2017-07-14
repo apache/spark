@@ -2363,7 +2363,7 @@ class SQLTests(ReusedPySparkTestCase):
         # integer. Only types with smaller or equal size are supported.
         supported_int_types = list(
             set(_array_int_typecode_ctype_mappings.keys())
-                .intersection(set(_array_type_mappings.keys())))
+            .intersection(set(_array_type_mappings.keys())))
         for t in supported_int_types:
             ctype = _array_int_typecode_ctype_mappings[t]
             if t.isupper():
