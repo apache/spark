@@ -300,8 +300,9 @@ object SparkSubmit extends CommandLineUtils {
     }
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
+    val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
 
-    if (!isMesosCluster) {
+    if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
       // too for packages that include Python code
       val exclusions: Seq[String] =
@@ -473,11 +474,13 @@ object SparkSubmit extends CommandLineUtils {
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.driver.extraLibraryPath"),
 
-      // Mesos only - propagate attributes for dependency resolution at the driver side
-      OptionAssigner(args.packages, MESOS, CLUSTER, sysProp = "spark.jars.packages"),
-      OptionAssigner(args.repositories, MESOS, CLUSTER, sysProp = "spark.jars.repositories"),
-      OptionAssigner(args.ivyRepoPath, MESOS, CLUSTER, sysProp = "spark.jars.ivy"),
-      OptionAssigner(args.packagesExclusions, MESOS, CLUSTER, sysProp = "spark.jars.excludes"),
+      // Propagate attributes for dependency resolution at the driver side
+      OptionAssigner(args.packages, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars.packages"),
+      OptionAssigner(args.repositories, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.jars.repositories"),
+      OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars.ivy"),
+      OptionAssigner(args.packagesExclusions, STANDALONE | MESOS,
+        CLUSTER, sysProp = "spark.jars.excludes"),
 
       // Yarn only
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.queue"),
@@ -780,7 +783,7 @@ object SparkSubmit extends CommandLineUtils {
     }
   }
 
-  private def addJarToClasspath(localJar: String, loader: MutableURLClassLoader) {
+  private[deploy] def addJarToClasspath(localJar: String, loader: MutableURLClassLoader) {
     val uri = Utils.resolveURI(localJar)
     uri.getScheme match {
       case "file" | "local" =>
@@ -845,7 +848,7 @@ object SparkSubmit extends CommandLineUtils {
    * Merge a sequence of comma-separated file lists, some of which may be null to indicate
    * no files, into a single comma-separated string.
    */
-  private def mergeFileLists(lists: String*): String = {
+  private[deploy] def mergeFileLists(lists: String*): String = {
     val merged = lists.filterNot(StringUtils.isBlank)
                       .flatMap(_.split(","))
                       .mkString(",")
@@ -968,7 +971,7 @@ object SparkSubmit extends CommandLineUtils {
     }
   }
 
-  private def resolveGlobPaths(paths: String, hadoopConf: HadoopConfiguration): String = {
+  private[deploy] def resolveGlobPaths(paths: String, hadoopConf: HadoopConfiguration): String = {
     require(paths != null, "paths cannot be null.")
     paths.split(",").map(_.trim).filter(_.nonEmpty).flatMap { path =>
       val uri = Utils.resolveURI(path)
