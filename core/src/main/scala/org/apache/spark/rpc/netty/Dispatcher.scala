@@ -33,7 +33,7 @@ import org.apache.spark.util.ThreadUtils
 /**
  * A message dispatcher, responsible for routing RPC messages to the appropriate endpoint(s).
  */
-private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
+private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
 
   private class EndpointData(
       val name: String,
@@ -189,8 +189,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
 
   /** Thread pool used for dispatching messages. */
   private val threadpool: ThreadPoolExecutor = {
+    val availableCores =
+      if (numUsableCores > 0) numUsableCores else Runtime.getRuntime.availableProcessors()
     val numThreads = nettyEnv.conf.getInt("spark.rpc.netty.dispatcher.numThreads",
-      math.max(2, Runtime.getRuntime.availableProcessors()))
+      math.max(2, availableCores))
     val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop")
     for (i <- 0 until numThreads) {
       pool.execute(new MessageLoop)
