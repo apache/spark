@@ -172,8 +172,9 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       }
     }
 
-    override def metrics: StateStoreMetrics =
-      StateStoreMetrics(mapToUpdate.size(), SizeEstimator.estimate(mapToUpdate))
+    override def metrics: StateStoreMetrics = {
+      StateStoreMetrics(mapToUpdate.size(), SizeEstimator.estimate(mapToUpdate), Map.empty)
+    }
 
     /**
      * Whether all updates have been committed
@@ -229,6 +230,10 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
   override def close(): Unit = {
     loadedMaps.values.foreach(_.clear())
+  }
+
+  override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {
+    Nil
   }
 
   override def toString(): String = {

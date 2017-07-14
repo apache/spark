@@ -1077,7 +1077,7 @@ object FlatMapGroupsWithStateSuite {
     override def abort(): Unit = { }
     override def id: StateStoreId = null
     override def version: Long = 0
-    override def metrics: StateStoreMetrics = new StateStoreMetrics(map.size, 0)
+    override def metrics: StateStoreMetrics = new StateStoreMetrics(map.size, 0, Map.empty)
     override def hasCommitted: Boolean = true
   }
 }

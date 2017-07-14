@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{File, IOException}
 import java.net.URI
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -184,7 +185,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("reports metrics") {
+  test("reports memory usage") {
     val provider = newStoreProvider()
     val store = provider.getStore(0)
     val noDataMemoryUsed = store.metrics.memoryUsedBytes
