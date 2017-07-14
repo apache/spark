@@ -319,7 +319,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
           j += num
           pq.clear()
         }
-        index -> (srcIds, dstIdMatrix, new DenseMatrix(m, num, scoreMatrix))
+        (index, (srcIds, dstIdMatrix, new DenseMatrix(m, num, scoreMatrix)))
     }
     ratings.aggregateByKey(null: Array[Int], null: Array[Int], null: DenseMatrix)(
       (rateSum, rate) => mergeFunc(rateSum, rate, num),
