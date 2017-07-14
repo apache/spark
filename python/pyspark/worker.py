@@ -30,8 +30,8 @@ from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.taskcontext import TaskContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
-    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, BatchedSerializer, \
-    ArrowPandasSerializer
+    write_long, read_int, SpecialLengths, PythonEvalType, UTF8Deserializer, PickleSerializer, \
+    BatchedSerializer, ArrowPandasSerializer
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -86,7 +86,7 @@ def read_single_udf(pickleSer, infile):
     return arg_offsets, wrap_udf(row_func, return_type)
 
 
-def read_udfs(pickleSer, infile):
+def read_udfs(pickleSer, infile, eval_type):
     num_udfs = read_int(infile)
     udfs = {}
     call_udf = []
@@ -102,13 +102,12 @@ def read_udfs(pickleSer, infile):
     mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
     mapper = eval(mapper_str, udfs)
 
-    # Batched Data
-    #func = lambda _, it: map(mapper, it)
-    #ser = BatchedSerializer(PickleSerializer(), 100)
+    func = lambda _, it: map(mapper, it)
 
-    # Arrow Data
-    func = lambda _, series_list_generator: mapper(list(series_list_generator)[0])
-    ser = ArrowPandasSerializer()
+    if eval_type == PythonEvalType.SQL_ARROW_UDF:
+        ser = ArrowPandasSerializer()
+    else:
+        ser = BatchedSerializer(PickleSerializer(), 100)
 
     # profiling is not supported for UDF
     return func, None, ser, ser
@@ -166,11 +165,11 @@ def main(infile, outfile):
                 _broadcastRegistry.pop(bid)
 
         _accumulatorRegistry.clear()
-        is_sql_udf = read_int(infile)
-        if is_sql_udf:
-            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile)
-        else:
+        eval_type = read_int(infile)
+        if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
+        else:
+            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
 
         init_time = time.time()
 

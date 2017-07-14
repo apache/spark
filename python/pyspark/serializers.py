@@ -81,6 +81,12 @@ class SpecialLengths(object):
     NULL = -5
 
 
+class PythonEvalType(object):
+    NON_UDF = 0
+    SQL_BATCHED_UDF = 1
+    SQL_ARROW_UDF = 2
+
+
 class Serializer(object):
 
     def dump_stream(self, iterator, stream):
@@ -216,6 +222,7 @@ class ArrowPandasSerializer(ArrowSerializer):
         # TODO: iterator could be a tuple
         arr = pa.Array.from_pandas(series)
         batch = pa.RecordBatch.from_arrays([arr], ["_0"])
+        #import asdb; asdb.set_trace()
         return super(ArrowPandasSerializer, self).dumps(batch)
 
     # deserialize an ArrowRecordBatch to an Arrow table and return as a list of pandas.Series

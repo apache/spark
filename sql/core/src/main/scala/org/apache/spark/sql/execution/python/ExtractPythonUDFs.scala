@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{FilterExec, SparkPlan}
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -90,7 +90,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
+case class ExtractPythonUDFs(conf: SQLConf) extends Rule[SparkPlan] with PredicateHelper {
 
   private def hasPythonUDF(e: Expression): Boolean = {
     e.find(_.isInstanceOf[PythonUDF]).isDefined
@@ -138,8 +138,11 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
-          //val evaluation = BatchEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
-          val evaluation = ArrowEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
+          val evaluation = if (conf.arrowEnable && conf.arrowVectorizeUDFs) {
+            ArrowEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
+          } else {
+            BatchEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
+          }
           attributeMap ++= validUdfs.zip(resultAttrs)
           evaluation
         } else {

@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{DataOutputStream, File}
+import java.io.File
+import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonRunner}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonRunner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,8 +29,6 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 import org.apache.spark.{SparkEnv, TaskContext}
-
-import scala.collection.mutable.ArrayBuffer
 
 
 /**
@@ -86,7 +85,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
         }.toArray
       }.toArray
       val projection = newMutableProjection(allInputs, child.output)
-      val schema = StructType(dataTypes.map(dt => StructField("", dt)))
+      val schema = StructType(dataTypes.map(dt => StructField("_", dt)))
 
       // Input iterator to Python: input rows are grouped so we send them in batches to Python.
       // For each row, add it to the queue.
@@ -95,13 +94,15 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
         projection(inputRow)
       }
 
-      val inputIterator = ArrowConverters.toPayloadIterator(projectedRowIter, schema, 0).
+      val inputIterator = ArrowConverters.toPayloadIterator(
+          projectedRowIter, schema, conf.arrowMaxRecordsPerBatch).
         map(_.asPythonSerializable)
 
       val context = TaskContext.get()
 
       // Output iterator for results from Python.
-      val outputIterator = new PythonRunner(pyFuncs, bufferSize, reuseWorker, true, argOffsets).
+      val outputIterator = new PythonRunner(
+          pyFuncs, bufferSize, reuseWorker, PythonEvalType.SQL_ARROW_UDF, argOffsets).
         compute(inputIterator, context.partitionId(), context)
 
       val joined = new JoinedRow
