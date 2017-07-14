@@ -959,7 +959,6 @@ def _int_size_to_type(size):
         return IntegerType
     if size <= 64:
         return LongType
-    raise TypeError("not supported type: integer size too large.")
 
 # The list of all supported array typecodes is stored here
 _array_type_mappings = {
@@ -976,29 +975,18 @@ for _typecode in _array_int_typecode_ctype_mappings.keys():
     size = ctypes.sizeof(_array_int_typecode_ctype_mappings[_typecode]) * 8
     if _typecode.isupper():  # 1 extra bit is required to store unsigned types
         size += 1
-    try:
-        _array_type_mappings.update({
-            _typecode: _int_size_to_type(size)
-        })
-    except TypeError:
-        # In case when the integer size is too large to be supported by Scala,
-        # the typecode will be marked as unsupported.
-        # Exception raised by _int_size_to_type will be catched and ignored here.
-        # And users will get an exception during the infer.
-        pass
+    dt = _int_size_to_type(size)
+    if dt is not None:
+        _array_type_mappings[_typecode] = dt
 
 # Type code 'u' in Python's array is deprecated since version 3.3, and will be
 # removed in version 4.0. See: https://docs.python.org/3/library/array.html
 if sys.version_info[0] < 4:
-    _array_type_mappings.update({
-        'u': StringType
-    })
+    _array_type_mappings['u'] = StringType
 
 # Type code 'c' are only available at python 2
 if sys.version_info[0] < 3:
-    _array_type_mappings.update({
-        'c': StringType
-    })
+    _array_type_mappings['c'] = StringType
 
 
 def _infer_type(obj):

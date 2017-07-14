@@ -2327,23 +2327,29 @@ class SQLTests(ReusedPySparkTestCase):
         # See: https://docs.python.org/2/library/array.html
 
         def assertCollectSuccess(typecode, value):
-            a = array.array(typecode, [value])
-            row = Row(myarray=a)
+            row = Row(myarray=array.array(typecode, [value]))
             df = self.spark.createDataFrame([row])
-            self.assertEqual(df.collect()[0]["myarray"][0], value)
+            self.assertEqual(df.first()["myarray"][0], value)
 
-        supported_types = []
-
-        # test string types
+        # supported string types
+        #
+        # String types in python's array are "u" for Py_UNICODE and "c" for char.
+        # "u" will be removed in python 4, and "c" is not supported in python 3.
+        supported_string_types = []
         if sys.version_info[0] < 4:
-            supported_types += ['u']
-            assertCollectSuccess('u', u"a")
+            supported_string_types += ['u']
+            # test unicode
+            assertCollectSuccess('u', u'a')
         if sys.version_info[0] < 3:
-            supported_types += ['c']
-            assertCollectSuccess('c', "a")
+            supported_string_types += ['c']
+            # test string
+            assertCollectSuccess('c', 'a')
 
-        # test float and double, assuming IEEE 754 floating-point format
-        supported_types += ['f', 'd']
+        # supported float and double
+        #
+        # Test max, min, and precision for float and double, assuming IEEE 754
+        # floating-point format.
+        supported_fractional_types = ['f', 'd']
         assertCollectSuccess('f', ctypes.c_float(1e+38).value)
         assertCollectSuccess('f', ctypes.c_float(1e-38).value)
         assertCollectSuccess('f', ctypes.c_float(1.123456).value)
@@ -2351,28 +2357,45 @@ class SQLTests(ReusedPySparkTestCase):
         assertCollectSuccess('d', sys.float_info.min)
         assertCollectSuccess('d', sys.float_info.epsilon)
 
-        # test int types
-        supported_int = list(set(_array_int_typecode_ctype_mappings.keys()).
-                             intersection(set(_array_type_mappings.keys())))
-        supported_types += supported_int
-        for i in supported_int:
-            ctype = _array_int_typecode_ctype_mappings[i]
-            if i.isupper():  # unsigned
-                assertCollectSuccess(i, 2 ** (ctypes.sizeof(ctype) * 8) - 1)
-            else:  # signed
+        # supported int types
+        #
+        # The Largest integral type supported in Scala is Long, a 64-bit signed
+        # integer. Only types with smaller or equal size are supported.
+        supported_int_types = list(
+            set(_array_int_typecode_ctype_mappings.keys())
+                .intersection(set(_array_type_mappings.keys())))
+        for t in supported_int_types:
+            ctype = _array_int_typecode_ctype_mappings[t]
+            if t.isupper():
+                # test unsigned int types
+                assertCollectSuccess(t, 2 ** (ctypes.sizeof(ctype) * 8) - 1)
+            else:
+                # test signed int types
                 max_val = 2 ** (ctypes.sizeof(ctype) * 8 - 1)
-                assertCollectSuccess(i, max_val - 1)
-                assertCollectSuccess(i, -max_val)
+                assertCollectSuccess(t, max_val - 1)
+                assertCollectSuccess(t, -max_val)
 
-        # make sure that the test case cover all supported types
+        # all supported types
+        #
+        # Make sure the types tested above:
+        # 1. are all supported types
+        # 2. cover all supported types
+        supported_types = (supported_string_types +
+                           supported_fractional_types +
+                           supported_int_types)
         self.assertEqual(set(supported_types), set(_array_type_mappings.keys()))
 
-        # test unsupported types
+        # all unsupported types
+        #
+        # Keys in _array_type_mappings is a complete list of all supported types,
+        # and types not in _array_type_mappings are considered unsupported.
+        # `array.typecodes` are not supported in python 2.
         if sys.version_info[0] < 3:
-            all_type_codes = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
+            all_types = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
         else:
-            all_type_codes = set(array.typecodes)
-        unsupported_types = all_type_codes - set(supported_types)
+            all_types = set(array.typecodes)
+        unsupported_types = all_types - set(supported_types)
+        # test unsupported types
         for t in unsupported_types:
             with self.assertRaises(TypeError):
                 a = array.array(t)
