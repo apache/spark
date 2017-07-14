@@ -76,6 +76,50 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }
   }
 
+  test("additionalData") {
+
+    val spark = this.spark
+    import spark.implicits._
+
+    val sentence = "a b " * 100 + "a c " * 10
+    val additionalData = "a b c a c" * 100
+    val numOfWords = (sentence + additionalData).split(" ").length
+    val doc = sc.parallelize(Seq(sentence, sentence))
+      .map(line => line.split(" "))
+
+    val codes = Map(
+      "a" -> Array(-0.2811822295188904, -0.6356269121170044, -0.3020961284637451),
+      "b" -> Array(1.0309048891067505, -1.29472815990448, 0.22276712954044342),
+      "c" -> Array(-0.08456747233867645, 0.5137411952018738, 0.11731560528278351)
+    )
+
+    val expected = doc.map { sentence =>
+      Vectors.dense(sentence.map(codes.apply).reduce((word1, word2) =>
+        word1.zip(word2).map { case (v1, v2) => v1 + v2 }
+      ).map(_ / numOfWords))
+    }
+
+    val docDF = doc.zip(expected).toDF("text", "expected")
+
+    val w2v = new Word2Vec()
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setSupplementaryWords(additionalData.split(" "))
+      .setOutputCol("result")
+      .setSeed(42L)
+    val model = w2v.fit(docDF)
+
+    MLTestingUtils.checkCopyAndUids(w2v, model)
+
+    // These expectations are just magic values, characterizing the current
+    // behavior.  The test needs to be updated to be more general, see SPARK-11502
+    val magicExp = Vectors.dense(0.6622298123653639, -0.4716927178881385, 0.1346504972739653)
+    model.transform(docDF).select("result", "expected").collect().foreach {
+      case Row(vector1: Vector, vector2: Vector) =>
+        assert(vector1 ~== magicExp absTol 1E-5, "Transformed vector is different with expected.")
+    }
+  }
+
   test("getVectors") {
 
     val spark = this.spark
