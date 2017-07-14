@@ -938,7 +938,8 @@ _array_int_typecode_ctype_mappings = {
     'L': ctypes.c_ulong
 }
 
-# TODO: Uncomment this when 'q' and 'Q' are supported by net.razorvine.pickle
+# TODO: [SPARK-21420]
+# Uncomment this when 'q' and 'Q' are supported by net.razorvine.pickle
 # Type code 'q' and 'Q' are not available at python 2
 # if sys.version_info[0] >= 3:
 #     _array_int_typecode_ctype_mappings.update({
