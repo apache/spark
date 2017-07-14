@@ -145,13 +145,10 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, -1))
       )
     data.foreach { case (b1, b2) =>
-      val rowOrdering = InterpretedOrdering.forSchema(Seq(BinaryType, BinaryType))
+      val rowOrdering = InterpretedOrdering.forSchema(Seq(BinaryType))
       val genOrdering = GenerateOrdering.generate(
-        BoundReference(0, BinaryType, nullable = true).asc ::
-          BoundReference(1, BinaryType, nullable = true).asc :: Nil)
-      val rowType = StructType(
-        StructField("b1", BinaryType, nullable = true) ::
-          StructField("b2", BinaryType, nullable = true) :: Nil)
+        BoundReference(0, BinaryType, nullable = true).asc :: Nil)
+      val rowType = StructType(StructField("b", BinaryType, nullable = true) :: Nil)
       val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
       val rowB1 = toCatalyst(Row(b1)).asInstanceOf[InternalRow]
       val rowB2 = toCatalyst(Row(b2)).asInstanceOf[InternalRow]

@@ -82,6 +82,19 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
         (prefixComparisonResult > 0 && compareBinary(x, y) > 0))
     }
 
+    val binaryRegressionTests = Seq(
+      (Array[Byte](1), Array[Byte](-1)),
+      (Array[Byte](1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, -1)),
+      (Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, -1)),
+      (Array[Byte](1), Array[Byte](1, 1, 1, 1)),
+      (Array[Byte](1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1)),
+      (Array[Byte](-1), Array[Byte](-1, -1, -1, -1)),
+      (Array[Byte](-1, -1, -1, -1, -1), Array[Byte](-1, -1, -1, -1, -1, -1, -1, -1, -1))
+    )
+    binaryRegressionTests.foreach { case (b1, b2) =>
+      testPrefixComparison(b1, b2)
+    }
+
     // scalastyle:off
     val regressionTests = Table(
       ("s1", "s2"),
