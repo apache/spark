@@ -62,7 +62,8 @@ from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
-from pyspark.sql.types import _array_int_typecode_ctype_mappings, _array_type_mappings
+from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_type_mappings
+from pyspark.sql.types import _array_unsigned_int_typecode_ctype_mappings
 from pyspark.tests import QuietTest, ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
@@ -2357,23 +2358,29 @@ class SQLTests(ReusedPySparkTestCase):
         assertCollectSuccess('d', sys.float_info.min)
         assertCollectSuccess('d', sys.float_info.epsilon)
 
-        # supported int types
+        # supported signed int types
         #
-        # The Largest integral type supported in Scala is Long, a 64-bit signed
-        # integer. Only types with smaller or equal size are supported.
-        supported_int_types = list(
-            set(_array_int_typecode_ctype_mappings.keys())
+        # The size of C types changes with implementation, we need to make sure
+        # that there is no overflow error on the platform running this test.
+        supported_signed_int_types = list(
+            set(_array_signed_int_typecode_ctype_mappings.keys())
             .intersection(set(_array_type_mappings.keys())))
-        for t in supported_int_types:
-            ctype = _array_int_typecode_ctype_mappings[t]
-            if t.isupper():
-                # test unsigned int types
-                assertCollectSuccess(t, 2 ** (ctypes.sizeof(ctype) * 8) - 1)
-            else:
-                # test signed int types
-                max_val = 2 ** (ctypes.sizeof(ctype) * 8 - 1)
-                assertCollectSuccess(t, max_val - 1)
-                assertCollectSuccess(t, -max_val)
+        for t in supported_signed_int_types:
+            ctype = _array_signed_int_typecode_ctype_mappings[t]
+            max_val = 2 ** (ctypes.sizeof(ctype) * 8 - 1)
+            assertCollectSuccess(t, max_val - 1)
+            assertCollectSuccess(t, -max_val)
+
+        # supported unsigned int types
+        #
+        # JVM does not have unsigned types. We need to be very careful to make
+        # sure that there is no overflow error.
+        supported_unsigned_int_types = list(
+            set(_array_unsigned_int_typecode_ctype_mappings.keys())
+            .intersection(set(_array_type_mappings.keys())))
+        for t in supported_unsigned_int_types:
+            ctype = _array_unsigned_int_typecode_ctype_mappings[t]
+            assertCollectSuccess(t, 2 ** (ctypes.sizeof(ctype) * 8) - 1)
 
         # all supported types
         #
@@ -2382,7 +2389,8 @@ class SQLTests(ReusedPySparkTestCase):
         # 2. cover all supported types
         supported_types = (supported_string_types +
                            supported_fractional_types +
-                           supported_int_types)
+                           supported_signed_int_types +
+                           supported_unsigned_int_types)
         self.assertEqual(set(supported_types), set(_array_type_mappings.keys()))
 
         # all unsupported types

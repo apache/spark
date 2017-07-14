@@ -919,22 +919,28 @@ if sys.version < "3":
 # Mapping Python array types to Spark SQL DataType
 # We should be careful here. The size of these types in python depends on C
 # implementation. We need to make sure that this conversion does not lose any
-# precision.
+# precision. Also, JVM only support signed types, when converting unsigned types,
+# keep in mind that it required 1 more bit when stored as singed types.
 #
 # Reference for C integer size, see:
 # ISO/IEC 9899:201x specification, chapter 5.2.4.2.1 Sizes of integer types <limits.h>.
 # Reference for python array typecode, see:
 # https://docs.python.org/2/library/array.html
 # https://docs.python.org/3.6/library/array.html
+# Reference for JVM's supported integral types:
+# http://docs.oracle.com/javase/specs/jvms/se8/html/jvms-2.html#jvms-2.3.1
 
-_array_int_typecode_ctype_mappings = {
+_array_signed_int_typecode_ctype_mappings = {
     'b': ctypes.c_byte,
-    'B': ctypes.c_ubyte,
     'h': ctypes.c_short,
-    'H': ctypes.c_ushort,
     'i': ctypes.c_int,
-    'I': ctypes.c_uint,
     'l': ctypes.c_long,
+}
+
+_array_unsigned_int_typecode_ctype_mappings = {
+    'B': ctypes.c_ubyte,
+    'H': ctypes.c_ushort,
+    'I': ctypes.c_uint,
     'L': ctypes.c_ulong
 }
 
@@ -942,10 +948,8 @@ _array_int_typecode_ctype_mappings = {
 # Uncomment this when 'q' and 'Q' are supported by net.razorvine.pickle
 # Type code 'q' and 'Q' are not available at python 2
 # if sys.version_info[0] >= 3:
-#     _array_int_typecode_ctype_mappings.update({
-#         'q': ctypes.c_longlong,
-#         'Q': ctypes.c_ulonglong
-#     })
+#     _array_signed_int_typecode_ctype_mappings['q'] = ctypes.c_longlong
+#     _array_unsigned_int_typecode_ctype_mappings['Q'] = ctypes.c_ulonglong
 
 
 def _int_size_to_type(size):
@@ -971,11 +975,18 @@ _array_type_mappings = {
     'd': DoubleType
 }
 
-# compute array typecode mappings for integer types
-for _typecode in _array_int_typecode_ctype_mappings.keys():
-    size = ctypes.sizeof(_array_int_typecode_ctype_mappings[_typecode]) * 8
-    if _typecode.isupper():  # 1 extra bit is required to store unsigned types
-        size += 1
+# compute array typecode mappings for signed integer types
+for _typecode in _array_signed_int_typecode_ctype_mappings.keys():
+    size = ctypes.sizeof(_array_signed_int_typecode_ctype_mappings[_typecode]) * 8
+    dt = _int_size_to_type(size)
+    if dt is not None:
+        _array_type_mappings[_typecode] = dt
+
+# compute array typecode mappings for unsigned integer types
+for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
+    # JVM does not have unsigned types, so use signed types that is at list 1
+    # bit larger to store
+    size = ctypes.sizeof(_array_unsigned_int_typecode_ctype_mappings[_typecode]) * 8 + 1
     dt = _int_size_to_type(size)
     if dt is not None:
         _array_type_mappings[_typecode] = dt
