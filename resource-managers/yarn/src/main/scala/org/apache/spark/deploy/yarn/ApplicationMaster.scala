@@ -270,7 +270,7 @@ private[spark] class ApplicationMaster(
             val credentialManager = new YARNHadoopDelegationTokenManager(
               sparkConf,
               yarnConf,
-              YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, yarnConf))
+              () => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, yarnConf))
 
             val credentialRenewer =
               new AMCredentialRenewer(sparkConf, yarnConf, credentialManager)

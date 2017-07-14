@@ -110,7 +110,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     creds.getAllTokens.size should be (0)
   }
 
-  private[spark] def hadoopFSsToAccess(hadoopConf: Configuration): Set[FileSystem] = {
-    Set(FileSystem.get(hadoopConf))
+  private[spark] def hadoopFSsToAccess(hadoopConf: Configuration): () => Set[FileSystem] = {
+    () => Set(FileSystem.get(hadoopConf))
   }
 }

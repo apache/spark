@@ -29,7 +29,7 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 
-private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Set[FileSystem])
+private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: () => Set[FileSystem])
     extends HadoopDelegationTokenProvider with Logging {
 
   // This tokenRenewalInterval will be set in the first call to obtainDelegationTokens.
@@ -45,11 +45,11 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Set[FileSyste
 
     val newCreds = fetchDelegationTokens(
       getTokenRenewer(hadoopConf),
-      fileSystems)
+      fileSystems())
 
     // Get the token renewal interval if it is not set. It will only be called once.
     if (tokenRenewalInterval == null) {
-      tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, fileSystems)
+      tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, fileSystems())
     }
 
     // Get the time of next renewal.

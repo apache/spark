@@ -125,7 +125,7 @@ private[spark] class Client(
   private val credentialManager = new YARNHadoopDelegationTokenManager(
     sparkConf,
     hadoopConf,
-    YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, hadoopConf))
+    () => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, hadoopConf))
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
