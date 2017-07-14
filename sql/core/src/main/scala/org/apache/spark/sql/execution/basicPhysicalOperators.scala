@@ -153,6 +153,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       // FPGA needs this 16 whatever bytes
       loadBytesToBuffer(16, originBuffer)
       FPGARowNumber += 1
+      // Test convert speed
+//      if (FPGARowNumber % 10000 == 0)
+//        log.warn(s"Now rows: $FPGARowNumber")
     }
     originBuffer.flip()
     originBuffer
