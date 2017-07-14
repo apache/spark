@@ -33,8 +33,6 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.ui.JettyUtils
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
-
-
 /**
  * Abstract Yarn scheduler backend that contains common logic
  * between the client and cluster Yarn scheduler backends.
