@@ -63,17 +63,14 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
       // Try creating spnego UGI if it is configured.
       val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL)
       val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB)
-      if (principal.isEmpty || keyTabFile.isEmpty) {
-        getAncestorField[Log](this, 3, "LOG").info(
-          s"SPNego httpUGI not created, spNegoPrincipal: $principal , ketabFile: $keyTabFile")
-      } else {
+      if (principal.nonEmpty && keyTabFile.nonEmpty) {
         try {
           httpUGI = HiveAuthFactory.loginFromSpnegoKeytabAndReturnUGI(hiveConf)
           setSuperField(this, "httpUGI", httpUGI)
-          getAncestorField[Log](this, 3, "LOG").info("SPNego httpUGI successfully created.")
         } catch {
           case e: IOException =>
-            getAncestorField[Log](this, 3, "LOG").warn(s"SPNego httpUGI creation failed: $e")
+            throw new ServiceException("Unable to login to spnego with given principal/keytab " +
+              s"$principal/$keyTabFile", e)
         }
       }
     }
