@@ -443,11 +443,11 @@ private[spark] class ApplicationMaster(
 
     // If the credentials file config is present, we must periodically renew tokens. So create
     // a new AMDelegationTokenRenewer
-    if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
+    if (sparkConf.contains(CREDENTIALS_FILE_PATH)) {
       // Start a short-lived thread for AMCredentialRenewer, the only purpose is to set the
       // classloader so that main jar and secondary jars could be used by AMCredentialRenewer.
       val credentialRenewerThread = new Thread {
-        setName("AMCredentialRenewerThread")
+        setName("AMCredentialRenewerStarter")
         setContextClassLoader(userClassLoader)
 
         override def run(): Unit = {
@@ -647,7 +647,7 @@ private[spark] class ApplicationMaster(
         try {
           // If the credentials file config is present, we must periodically renew tokens. So create
           // a new AMDelegationTokenRenewer
-          if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
+          if (sparkConf.contains(CREDENTIALS_FILE_PATH)) {
             startAMCredentialRenewer()
           }
           mainMethod.invoke(null, userArgs.toArray)
