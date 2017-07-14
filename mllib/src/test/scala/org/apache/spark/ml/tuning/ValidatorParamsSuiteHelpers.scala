@@ -17,10 +17,14 @@
 
 package org.apache.spark.ml.tuning
 
+import java.io.File
+import java.nio.file.{Files, StandardCopyOption}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLReader, MLWritable}
 
-object ValidatorParamsSuiteHelpers extends SparkFunSuite {
+object ValidatorParamsSuiteHelpers extends SparkFunSuite with DefaultReadWriteTest {
   /**
    * Assert sequences of estimatorParamMaps are identical.
    * If the values for a parameter are not directly comparable with ===
@@ -50,5 +54,34 @@ object ValidatorParamsSuiteHelpers extends SparkFunSuite {
         }
       }
     }
+  }
+
+  /**
+   * When nested estimators (ex. OneVsRest) are saved within meta-algorithms such as
+   * CrossValidator and TrainValidationSplit, relative paths should be used to store
+   * the path of the estimator so that if the parent directory changes, loading the
+   * model still works.
+   */
+  def testFileMove[T <: Params with MLWritable](instance: T): Unit = {
+    val uid = instance.uid
+    val subdirName = Identifiable.randomUID("test")
+
+    val subdir = new File(tempDir, subdirName)
+    val subDirWithUid = new File(subdir, uid)
+
+    instance.save(subDirWithUid.getPath)
+
+    val newSubdirName = Identifiable.randomUID("test_moved")
+    val newSubdir = new File(tempDir, newSubdirName)
+    val newSubdirWithUid = new File(newSubdir, uid)
+
+    Files.createDirectory(newSubdir.toPath)
+    Files.createDirectory(newSubdirWithUid.toPath)
+    Files.move(subDirWithUid.toPath, newSubdirWithUid.toPath, StandardCopyOption.ATOMIC_MOVE)
+
+    val loader = instance.getClass.getMethod("read")
+                  .invoke(null).asInstanceOf[MLReader[T]]
+    val newInstance = loader.load(newSubdirWithUid.getPath)
+    assert(uid == newInstance.uid)
   }
 }

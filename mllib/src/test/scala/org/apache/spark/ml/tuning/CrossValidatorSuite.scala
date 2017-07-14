@@ -23,8 +23,8 @@ import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressio
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, MulticlassClassificationEvaluator, RegressionEvaluator}
 import org.apache.spark.ml.feature.HashingTF
-import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
-import org.apache.spark.ml.param.{ParamMap, ParamPair}
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -204,6 +204,25 @@ class CrossValidatorSuite
 
     ValidatorParamsSuiteHelpers
       .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+  }
+
+  test("read/write: Persistence of nested estimator works if parent directory changes") {
+    val ova = new OneVsRest().setClassifier(new LogisticRegression)
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setMetricName("accuracy")
+    val classifier1 = new LogisticRegression().setRegParam(2.0)
+    val classifier2 = new LogisticRegression().setRegParam(3.0)
+    // params that are not JSON serializable must inherit from Params
+    val paramMaps = new ParamGridBuilder()
+      .addGrid(ova.classifier, Array(classifier1, classifier2))
+      .build()
+    val cv = new CrossValidator()
+      .setEstimator(ova)
+      .setEvaluator(evaluator)
+      .setNumFolds(20)
+      .setEstimatorParamMaps(paramMaps)
+
+    ValidatorParamsSuiteHelpers.testFileMove(cv)
   }
 
   test("read/write: CrossValidator with complex estimator") {
