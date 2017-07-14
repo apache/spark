@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.util
+package org.apache.spark.ml.param.shared
 
 import scala.concurrent.ExecutionContext
 
-import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{IntParam, Params, ParamValidators}
 import org.apache.spark.util.ThreadUtils
 
@@ -29,27 +28,25 @@ import org.apache.spark.util.ThreadUtils
 private[ml] trait HasParallelism extends Params {
 
   /**
-   * param for the number of threads to use when running parallel one vs. rest
+   * param for the number of threads to use when running parallel meta-algorithms
    * The implementation of parallel one vs. rest runs the classification for
    * each class in a separate threads.
    * @group expertParam
    */
-  @Since("2.3.0")
   val parallelism = new IntParam(this, "parallelism",
     "the number of threads to use when running parallel algorithms", ParamValidators.gtEq(1))
 
   setDefault(parallelism -> 1)
 
-  /** @group getParam */
+  /** @group expertGetParam */
   def getParallelism: Int = $(parallelism)
 
-  /** @group setParam */
-  @Since("2.3.0")
+  /** @group expertSetParam */
   def setParallelism(value: Int): this.type = {
     set(parallelism, value)
   }
 
-  protected def getExecutionContext: ExecutionContext = {
+  private[ml] def getExecutionContext: ExecutionContext = {
     getParallelism match {
       case 1 =>
         ThreadUtils.sameThread

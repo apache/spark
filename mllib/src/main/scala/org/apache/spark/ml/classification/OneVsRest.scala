@@ -33,6 +33,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
+import org.apache.spark.ml.param.shared.HasParallelism
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -305,7 +306,7 @@ final class OneVsRest @Since("1.4.0") (
     transformSchema(dataset.schema)
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, predictionCol)
+    instr.logParams(labelCol, featuresCol, predictionCol, parallelism)
     instr.logNamedValue("classifier", $(classifier).getClass.getCanonicalName)
 
     // determine number of classes either from metadata if provided, or via computation.
@@ -327,7 +328,6 @@ final class OneVsRest @Since("1.4.0") (
     }
 
     val executionContext = getExecutionContext
-    instr.logParams(parallelism)
 
     // create k columns, one for each binary classifier.
     val modelFutures = Range(0, numClasses).map { index =>

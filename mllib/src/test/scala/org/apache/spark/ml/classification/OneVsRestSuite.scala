@@ -133,10 +133,10 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     for (i <- 0 until ovaModelPar1.models.length) {
       var foundCloseCoeffs = false
       val currentCoeffs = ovaModelPar1.models(i)
-                          .asInstanceOf[LogisticRegressionModel].coefficients
+                                      .asInstanceOf[LogisticRegressionModel].coefficients
       for (j <- 0 until ovaModelPar2.models.length) {
         val otherCoeffs = ovaModelPar2.models(i)
-                      .asInstanceOf[LogisticRegressionModel].coefficients
+                                      .asInstanceOf[LogisticRegressionModel].coefficients
         if (currentCoeffs == otherCoeffs) {
           foundCloseCoeffs = true
         }

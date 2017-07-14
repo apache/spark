@@ -1444,7 +1444,7 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaPredictionModel, Ja
         return self._call_java("weights")
 
 
-class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
+class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasParallelism, HasPredictionCol):
     """
     Parameters for OneVsRest and OneVsRestModel.
     """
@@ -1512,16 +1512,12 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     .. versionadded:: 2.0.0
     """
 
-    parallelism = Param(Params._dummy(), "parallelism",
-                        "number of threads to use when fitting models in parallel",
-                        typeConverter=TypeConverters.toInt)
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  classifier=None, parallelism=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 classifier=None)
+                 classifier=None, parallelism=1)
         """
         super(OneVsRest, self).__init__()
         self._setDefault(parallelism=1)
@@ -1533,25 +1529,12 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   classifier=None, parallelism=1):
         """
-        setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
+        setParams(self, featuresCol=None, labelCol=None, predictionCol=None,
+                  classifier=None, parallelism=1):
         Sets params for OneVsRest.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
-
-    @since("2.3.0")
-    def setParallelism(self, value):
-        """
-        Sets the value of :py:attr:`parallelism`.
-        """
-        return self._set(parallelism=value)
-
-    @since("2.3.0")
-    def getParallelism(self):
-        """
-        Gets the value of parallelism or its default value.
-        """
-        return self.getOrDefault(self.parallelism)
 
     def _fit(self, dataset):
         labelCol = self.getLabelCol()
