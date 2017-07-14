@@ -327,7 +327,7 @@ package object config {
         " from a given host port. When a large number of blocks are being requested from a given" +
         " address in a single fetch or simultaneously, this could crash the serving executor or" +
         " Node Manager. This is especially useful to reduce the load on the Node Manager when" +
-        "external shuffle is enabled. You can mitigate the issue by setting it to a lower value.")
+        " external shuffle is enabled. You can mitigate the issue by setting it to a lower value.")
       .intConf
       .checkValue(_ > 0, "The max no. of blocks in flight cannot be non-positive.")
       .createWithDefault(Int.MaxValue)

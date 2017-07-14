@@ -114,7 +114,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] val fetchRequests = new Queue[FetchRequest]
 
   /**
-   * Queue of fetch requests which could not be issued the first time they were dequed. These
+   * Queue of fetch requests which could not be issued the first time they were dequeued. These
    * requests are tried again when the fetch constraints are satisfied.
    */
   private[this] val deferredFetchRequests = new HashMap[BlockManagerId, Queue[FetchRequest]]()
