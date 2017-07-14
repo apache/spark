@@ -200,7 +200,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
   private def queueIsEmpty: Boolean = synchronized { eventQueue.isEmpty && !processingEvent }
 
   /**
-   * Stop the listener bus. It will clear the queued events for faster shutdown and drop the
+   * Stop the listener bus. It will wait until the queued events have been processed, but drop the
    * new events after stopping.
    */
   def stop(): Unit = {
