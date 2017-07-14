@@ -101,13 +101,7 @@
     <dependency>
       <groupId>org.jpmml</groupId>
       <artifactId>pmml-model</artifactId>
-      <version>1.2.15</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.jpmml</groupId>
-          <artifactId>pmml-agent</artifactId>
-        </exclusion>
-      </exclusions>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
