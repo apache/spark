@@ -80,7 +80,7 @@ object ValidatorParamsSuiteHelpers extends SparkFunSuite with DefaultReadWriteTe
     Files.move(subDirWithUid.toPath, newSubdirWithUid.toPath, StandardCopyOption.ATOMIC_MOVE)
 
     val loader = instance.getClass.getMethod("read")
-                  .invoke(null).asInstanceOf[MLReader[T]]
+                         .invoke(null).asInstanceOf[MLReader[T]]
     val newInstance = loader.load(newSubdirWithUid.getPath)
     assert(uid == newInstance.uid)
   }
