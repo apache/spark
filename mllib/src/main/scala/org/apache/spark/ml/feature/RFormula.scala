@@ -134,16 +134,16 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   def getFormula: String = $(formula)
 
   /**
-   * Param for how to handle invalid data (unseen labels or NULL values).
-   * Options are 'skip' (filter out rows with invalid data),
+   * Param for how to handle invalid data (unseen or NULL values) in features and label column
+   * of string type. Options are 'skip' (filter out rows with invalid data),
    * 'error' (throw an error), or 'keep' (put invalid data in a special additional
    * bucket, at index numLabels).
    * Default: "error"
    * @group param
    */
   @Since("2.3.0")
-  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
-    "How to handle invalid data (unseen labels or NULL values). " +
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "How to " +
+    "handle invalid data (unseen or NULL values) in features and label column of string type. " +
     "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
     ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
@@ -265,6 +265,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       encoderStages += new StringIndexer()
         .setInputCol(resolvedFormula.label)
         .setOutputCol($(labelCol))
+        .setHandleInvalid($(handleInvalid))
     }
 
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
