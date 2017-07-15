@@ -225,7 +225,7 @@ test_that("spark.randomForest", {
   expect_error(collect(predictions))
   model <- spark.randomForest(traindf, clicked ~ ., type = "classification",
                              maxDepth = 10, maxBins = 10, numTrees = 10,
-                             handleInvalid = "skip")
+                             handleInvalid = "keep")
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "character")
 
