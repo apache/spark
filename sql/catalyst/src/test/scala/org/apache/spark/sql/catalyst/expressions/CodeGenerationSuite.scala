@@ -342,6 +342,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     projection(row)
   }
 
+<<<<<<< HEAD
   test("SPARK-21720: split large predications into blocks due to JVM code size limit") {
     val length = 600
 
@@ -378,6 +379,24 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     if (!checkResult(actualAnd.head, expectedAnd, exprAnd.dataType)) {
       fail(
         s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
+    }
+  }
+
+  test("SPARK-21413: split large case when into blocks due to JVM code size limit") {
+    val expected = 2
+    var expr: Expression = BoundReference(0, IntegerType, true)
+    for (_ <- 1 to 10) {
+      expr = CaseWhen(Seq((EqualTo(expr, Literal(0)), Literal(-1))), expr)
+        .toCodegen()
+    }
+    val plan = GenerateMutableProjection.generate(Seq(expr))
+    val row = new GenericInternalRow(Array[Any](1))
+    row.setInt(0, expected)
+    val actual = plan(row).toSeq(Seq(expr.dataType))
+    assert(actual.length == 1)
+
+    if (!checkResult(actual(0), expected, expr.dataType)) {
+      fail(s"Incorrect Evaluation: expressions: $expr, actual: ${actual(0)}, expected: $expected")
     }
   }
 }

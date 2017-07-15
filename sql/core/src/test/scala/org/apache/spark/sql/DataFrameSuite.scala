@@ -2132,6 +2132,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+<<<<<<< HEAD
   test("order-by ordinal.") {
     checkAnswer(
       testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
@@ -2157,5 +2158,22 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .select(col("DecimalCol")).describe()
     val mean = result.select("DecimalCol").where($"summary" === "mean")
     assert(mean.collect().toSet === Set(Row("0.0345678900000000000000000000000000000")))
+  }
+
+  testQuietly("SPARK-21413: Multiple projections with CASE WHEN fails") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val df = spark.createDataFrame(sparkContext.parallelize(Seq(Row(1))), schema)
+    val df1 =
+      df.withColumn("a", when($"a" === 0, null).otherwise($"a"))
+        .withColumn("a", when($"a" === 0, null).otherwise($"a"))
+        .withColumn("a", when($"a" === 0, null).otherwise($"a"))
+        .withColumn("a", when($"a" === 0, null).otherwise($"a"))
+        .withColumn("a", when($"a" === 0, null).otherwise($"a"))
+        .withColumn("a", when($"a" === 0, null).otherwise($"a"))
+        .withColumn("a", when($"a" === 0, null).otherwise($"a"))
+        .withColumn("a", when($"a" === 0, null).otherwise($"a"))
+        .withColumn("a", when($"a" === 0, null).otherwise($"a"))
+        .withColumn("a", when($"a" === 0, null).otherwise($"a"))
+    checkAnswer(df1, Row(1))
   }
 }

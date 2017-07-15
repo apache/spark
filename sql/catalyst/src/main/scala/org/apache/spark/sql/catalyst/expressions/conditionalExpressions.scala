@@ -111,7 +111,6 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
     ev.copy(code = generatedCode)
   }
-
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
 
   override def sql: String = s"(IF(${predicate.sql}, ${trueValue.sql}, ${falseValue.sql}))"
@@ -265,12 +264,31 @@ case class CaseWhenCodegen(
     val cases = branches.map { case (condExpr, valueExpr) =>
       val cond = condExpr.genCode(ctx)
       val res = valueExpr.genCode(ctx)
+      val (condFunc, condIsNull, condValue) = if ((cond.code.length >= 512) &&
+        // Split these expressions only if they are created from a row object
+        (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+        val (funcName, globalIsNull, globalValue) =
+          CondExpression.createAndAddFunction(ctx, cond, condExpr.dataType, "caseWhenCondExpr")
+        (s"$funcName(${ctx.INPUT_ROW});", globalIsNull, globalValue)
+      } else {
+        (cond.code, cond.isNull, cond.value)
+      }
+      val (resFunc, resIsNull, resValue) = if ((res.code.length >= 512) &&
+        // Split these expressions only if they are created from a row object
+        (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+        val (funcName, globalIsNull, globalValue) =
+          CondExpression.createAndAddFunction(ctx, res, valueExpr.dataType, "caseWhenResExpr")
+        (s"$funcName(${ctx.INPUT_ROW});", globalIsNull, globalValue)
+      } else {
+        (res.code, res.isNull, res.value)
+      }
+
       s"""
-        ${cond.code}
-        if (!${cond.isNull} && ${cond.value}) {
-          ${res.code}
-          ${ev.isNull} = ${res.isNull};
-          ${ev.value} = ${res.value};
+        ${condFunc}
+        if (!${condIsNull} && ${condValue}) {
+          ${resFunc}
+          ${ev.isNull} = ${resIsNull};
+          ${ev.value} = ${resValue};
         }
       """
     }
