@@ -2132,7 +2132,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-<<<<<<< HEAD
   test("order-by ordinal.") {
     checkAnswer(
       testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
