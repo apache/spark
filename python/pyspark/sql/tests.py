@@ -1216,30 +1216,29 @@ class SQLTests(ReusedPySparkTestCase):
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True),
                               StructField("f2", StringType(), True, None)])
-        self.assertEqual(struct1.fieldNames(), tuple(struct2.names))
+        self.assertEqual(struct1.fieldNames(), struct2.names)
         self.assertEqual(struct1, struct2)
 
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True)])
-        self.assertNotEqual(struct1.fieldNames(), tuple(struct2.names))
+        self.assertNotEqual(struct1.fieldNames(), struct2.names)
         self.assertNotEqual(struct1, struct2)
 
         struct1 = (StructType().add(StructField("f1", StringType(), True))
                    .add(StructField("f2", StringType(), True, None)))
         struct2 = StructType([StructField("f1", StringType(), True),
                               StructField("f2", StringType(), True, None)])
-        self.assertEqual(struct1.fieldNames(), tuple(struct2.names))
+        self.assertEqual(struct1.fieldNames(), struct2.names)
         self.assertEqual(struct1, struct2)
 
         struct1 = (StructType().add(StructField("f1", StringType(), True))
                    .add(StructField("f2", StringType(), True, None)))
         struct2 = StructType([StructField("f1", StringType(), True)])
-        self.assertNotEqual(struct1.fieldNames(), tuple(struct2.names))
+        self.assertNotEqual(struct1.fieldNames(), struct2.names)
         self.assertNotEqual(struct1, struct2)
 
         # Catch exception raised during improper construction
-        with self.assertRaises(ValueError):
-            struct1 = StructType().add("name")
+        self.assertRaises(ValueError, lambda: StructType().add("name"))
 
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         for field in struct1:
@@ -1252,12 +1251,9 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertIs(struct1["f1"], struct1.fields[0])
         self.assertIs(struct1[0], struct1.fields[0])
         self.assertEqual(struct1[0:1], StructType(struct1.fields[0:1]))
-        with self.assertRaises(KeyError):
-            _ = struct1["f9"]
-        with self.assertRaises(IndexError):
-            _ = struct1[9]
-        with self.assertRaises(TypeError):
-            _ = struct1[9.9]
+        self.assertRaises(KeyError, lambda: struct1["f9"])
+        self.assertRaises(IndexError, lambda: struct1[9])
+        self.assertRaises(TypeError, lambda: struct1[9.9])
 
     def test_parse_datatype_string(self):
         from pyspark.sql.types import _all_atomic_types, _parse_datatype_string

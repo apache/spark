@@ -564,13 +564,13 @@ class StructType(DataType):
 
     def fieldNames(self):
         """
-        Returns all field names in a tuple.
+        Returns all field names in a list.
 
         >>> struct = StructType([StructField("f1", StringType(), True)])
         >>> struct.fieldNames()
-        ('f1',)
+        ['f1']
         """
-        return tuple(self.names)
+        return list(self.names)
 
     def needConversion(self):
         # We need convert Row()/namedtuple into tuple()
