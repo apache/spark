@@ -264,7 +264,7 @@ SPARK_WORKER_OPTS supports the following system properties:
 # Connecting an Application to the Cluster
 
 To run an application on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
-constructor](programming-guide.html#initializing-spark).
+constructor](rdd-programming-guide.html#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
 
