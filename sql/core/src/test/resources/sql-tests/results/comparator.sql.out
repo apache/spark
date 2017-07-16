@@ -5,14 +5,26 @@
 -- !query 0
 select x'00' < x'0f'
 -- !query 0 schema
-struct<(X'00' < X'0F'):boolean>
+struct<>
 -- !query 0 output
-true
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Literals of type 'X' are currently not supported.(line 1, pos 7)
+
+== SQL ==
+select x'00' < x'0f'
+-------^^^
 
 
 -- !query 1
 select x'00' < x'ff'
 -- !query 1 schema
-struct<(X'00' < X'FF'):boolean>
+struct<>
 -- !query 1 output
-true
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Literals of type 'X' are currently not supported.(line 1, pos 7)
+
+== SQL ==
+select x'00' < x'ff'
+-------^^^
