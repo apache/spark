@@ -30,7 +30,7 @@ object MathUtils {
    *                 to the minimum end point of the acceptable range for expr
    * @param maxValue is an expression that resolves
    *                 to the maximum end point of the acceptable range for expr
-   * @param numBucket is an An expression that resolves to
+   * @param numBucket is an expression that resolves to
    *                  a constant indicating the number of buckets
    * @return Returns an long between 0 and numBucket+1 by mapping the expr into buckets defined by
    *         the range [minValue, maxValue].

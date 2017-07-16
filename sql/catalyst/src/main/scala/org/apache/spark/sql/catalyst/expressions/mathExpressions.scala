@@ -1196,7 +1196,7 @@ case class BRound(child: Expression, scale: Expression)
  *                 to the minimum end point of the acceptable range for expr
  * @param maxValue is an expression that resolves
  *                 to the maximum end point of the acceptable range for expr
- * @param numBucket is an An expression that resolves to
+ * @param numBucket is an expression that resolves to
  *                  a constant indicating the number of buckets
  */
 // scalastyle:off line.size.limit
