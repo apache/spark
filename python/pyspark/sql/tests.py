@@ -844,16 +844,6 @@ class SQLTests(ReusedPySparkTestCase):
 
         self.assertEqual((126, -127, -32767, 32766, 2147483646, 2.5), tuple(r))
 
-        from pyspark.sql.types import _parse_schema_abstract, _infer_schema_type
-        rdd = self.sc.parallelize([(127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1),
-                                    {"a": 1}, (2,), [1, 2, 3])])
-        abstract = "byte1 short1 float1 time1 map1{} struct1(b) list1[]"
-        schema = _parse_schema_abstract(abstract)
-        typedSchema = _infer_schema_type(rdd.first(), schema)
-        df = self.spark.createDataFrame(rdd, typedSchema)
-        r = (127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1), {"a": 1}, Row(b=2), [1, 2, 3])
-        self.assertEqual(r, tuple(df.first()))
-
     def test_struct_in_map(self):
         d = [Row(m={Row(i=1): Row(s="")})]
         df = self.sc.parallelize(d).toDF()
