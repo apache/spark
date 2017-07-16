@@ -26,10 +26,11 @@ import org.apache.spark.sql.types._
 // $example off:data_types$
 // $example off:programmatic_schema$
 
+case class Person(name: String, age: Long)
+
 object SparkSQLExample {
 
   // $example on:create_ds$
-  case class Person(name: String, age: Long)
   // $example off:create_ds$
 
   def main(args: Array[String]) {
