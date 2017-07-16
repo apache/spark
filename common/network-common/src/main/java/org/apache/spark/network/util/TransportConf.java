@@ -257,4 +257,7 @@ public class TransportConf {
     return CryptoUtils.toCryptoConf("spark.network.crypto.config.", conf.getAll());
   }
 
+  public long maxChunksBeingTransferred() {
+    return conf.getLong("spark.network.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);
+  }
 }
