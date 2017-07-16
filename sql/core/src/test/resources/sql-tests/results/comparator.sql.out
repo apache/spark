@@ -3,16 +3,16 @@
 
 
 -- !query 0
-select x'00' < x'0f'
+select hex('00') < hex('0f')
 -- !query 0 schema
-struct<(X'00' < X'0F'):boolean>
+struct<(hex(00) < hex(0f)):boolean>
 -- !query 0 output
 true
 
 
 -- !query 1
-select x'00' < x'ff'
+select hex('00') < hex('ff')
 -- !query 1 schema
-struct<(X'00' < X'FF'):boolean>
+struct<(hex(00) < hex(ff)):boolean>
 -- !query 1 output
 true

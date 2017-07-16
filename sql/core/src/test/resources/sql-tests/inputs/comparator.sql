@@ -1,3 +1,3 @@
 -- binary type
-select x'00' < x'0f';
-select x'00' < x'ff';
+select hex('00') < hex('0f');
+select hex('00') < hex('ff');
