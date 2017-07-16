@@ -28,20 +28,19 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.util.{Random, Try}
-
+import scala.collection.JavaConverters._
 import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.GetInfoType
 import org.apache.hive.service.cli.thrift.TCLIService.Client
-import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
+import org.apache.hive.service.cli.thrift.{TProtocolVersion, ThriftCLIServiceClient}
 import org.apache.hive.service.cli.FetchOrientation
 import org.apache.hive.service.cli.FetchType
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
@@ -599,6 +598,48 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       bufferSrc.close()
     }
   }
+
+  test("SPARK-21395 registerCurrentOperationLog before execute sql statement") {
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+
+      withJdbcStatement("test_21395") { statement =>
+        val queries = Seq(
+          "CREATE TABLE test_21395(key INT, val STRING)",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_21395")
+        queries.foreach(statement.execute)
+
+        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+        val operationHandle = client.executeStatementAsync(
+          sessionHandle,
+          "SELECT * FROM test_21395",
+          confOverlay)
+        assertResult(true, "Fetching OperationLog from HiveServer2") {
+          while (!client.getOperationStatus(operationHandle).getState().isTerminal()) {
+            Thread.sleep(3.seconds.toMillis)
+          }
+          val rows_next = client.fetchResults(
+            operationHandle,
+            FetchOrientation.FETCH_FIRST,
+            1000,
+            FetchType.LOG
+          )
+
+          val version = operationHandle.getProtocolVersion()
+          if (version.getValue() >= TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V6.getValue()) {
+            val lines = rows_next.toTRowSet().getColumns().get(0)
+              .getStringVal().getValues().asScala
+            lines.exists(_.length > 0)
+          } else {
+            val lines = rows_next.toTRowSet().getRows().asScala
+              .map(_.getColVals().get(0).getStringVal().getValue)
+            lines.exists(_.length > 0)
+          }
+        }
+      }
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
@@ -827,6 +868,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
+       |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LEVEL}=VERBOSE
        |  --hiveconf $portConf=$port
        |  --driver-class-path $driverClassPath
        |  --driver-java-options -Dlog4j.debug
