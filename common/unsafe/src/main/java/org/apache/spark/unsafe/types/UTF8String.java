@@ -518,7 +518,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @param trimString the trim character string
    */
   public UTF8String trim(UTF8String trimString) {
-    return trimLeft(trimString).trimRight(trimString);
+    if (trimString != null) {
+      return trimLeft(trimString).trimRight(trimString);
+    } else {
+      return null;
+    }
   }
 
   public UTF8String trimLeft() {

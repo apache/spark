@@ -524,6 +524,11 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   }
 }
 
+object StringTrim {
+  def apply(str: Expression, trimStr: Expression) : StringTrim = StringTrim(str, Some(trimStr))
+  def apply(str: Expression) : StringTrim = StringTrim(str, None)
+}
+
 /**
  * A function that takes a character string, removes the leading and trailing characters matching with the characters
  * in the trim string, returns the new string.
@@ -552,47 +557,74 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
        parkSQ
   """)
-case class StringTrim(children: Seq[Expression])
+case class StringTrim(
+    srcStr: Expression,
+    trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  require(children.size <= 2 && children.nonEmpty,
-    s"$prettyName requires at least one argument and no more than two.")
+  def this (srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+
+  def this(srcStr: Expression) = this(srcStr, None)
 
   override def prettyName: String = "trim"
 
+  override def children: Seq[Expression] = if (trimStr.isDefined) {
+    srcStr :: trimStr.get :: Nil
+  } else {
+    srcStr :: Nil
+  }
   override def eval(input: InternalRow): Any = {
-    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String]).reverse
-    if (inputs(0) != null) {
-      if (children.size == 1) {
-        return inputs(0).trim()
-      } else if (inputs(1) != null) {
-        return inputs(1).trim(inputs(0))
+    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
+    if (srcString != null) {
+      if (trimStr.isDefined) {
+        return srcString.trim(trimStr.get.eval(input).asInstanceOf[UTF8String])
+      } else {
+        return srcString.trim()
       }
     }
     null
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.size == 2 && !children(0).isInstanceOf[Literal]) {
-      throw new AnalysisException(s"The trimming parameter should be Literal.")}
-
     val evals = children.map(_.genCode(ctx))
-    val inputs = evals.map { eval =>
-      s"${eval.isNull} ? null : ${eval.value}"
-    }.reverse
-    val getTrimFunction = if (children.size == 1) {
-      s"UTF8String ${ev.value} = ${inputs(0)}.trim();"
+    val srcString = evals(0)
+
+    if (evals.length == 1) {
+      ev.copy(evals.map(_.code).mkString("\n") + s"""
+        boolean ${ev.isNull} = false;
+        UTF8String ${ev.value} = null;
+        if (${srcString.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${srcString.value}.trim();
+        }
+         """.stripMargin)
     } else {
-      s"UTF8String ${ev.value} = ${inputs(1)}.trim(${inputs(0)});"
-    }
-    ev.copy(evals.map(_.code).mkString("\n") + s"""
+      val trimString = evals(1)
+      val getTrimFunction =
+        s"""
+        if (${trimString.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${srcString.value}.trim(${trimString.value});
+      }""".stripMargin
+      ev.copy(evals.map(_.code).mkString("\n") +
+        s"""
       boolean ${ev.isNull} = false;
-      $getTrimFunction
-      if (${ev.value} == null) {
+      UTF8String ${ev.value} = null;
+      if (${srcString.isNull}) {
         ${ev.isNull} = true;
+      } else {
+        $getTrimFunction
       }
-    """)
+    """.stripMargin)
+    }
   }
+}
+
+object StringTrimLeft {
+  def apply(str: Expression, trimStr: Expression) : StringTrimLeft = StringTrimLeft(str, Some(trimStr))
+  def apply(str: Expression) : StringTrimLeft = StringTrimLeft(str, None)
 }
 
 /**
@@ -620,48 +652,74 @@ case class StringTrim(children: Seq[Expression])
       > SELECT _FUNC_('Sp', 'SSparkSQLS');
        arkSQLS
   """)
-case class StringTrimLeft(children: Seq[Expression])
+case class StringTrimLeft(
+    srcStr: Expression,
+    trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  require (children.size <= 2 && children.nonEmpty,
-    "$prettyName requires at least one argument and no more than two.")
+  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+
+  def this(srcStr: Expression) = this(srcStr, None)
 
   override def prettyName: String = "ltrim"
 
+  override def children: Seq[Expression] = if (trimStr.isDefined) {
+    srcStr :: trimStr.get :: Nil
+  } else {
+    srcStr :: Nil
+  }
+
   override def eval(input: InternalRow): Any = {
-    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-    if (inputs(0) != null) {
-      if (children.size == 1) {
-        return inputs(0).trimLeft()
-      } else if (inputs(1) != null) {
-        return inputs(1).trimLeft(inputs(0))
+    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
+    if (srcString != null) {
+      if (trimStr.isDefined) {
+        return srcString.trimLeft(trimStr.get.eval(input).asInstanceOf[UTF8String])
+      } else {
+        return srcString.trimLeft()
       }
     }
     null
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.size == 2 && !children(0).isInstanceOf[Literal]) {
-      throw new AnalysisException(s"The trimming parameter should be Literal.")}
-
     val evals = children.map(_.genCode(ctx))
-    val inputs = evals.map { eval =>
-      s"${eval.isNull} ? null : ${eval.value}"
-    }
-    val getTrimLeftFunction = if (children.size == 1) {
-      s"UTF8String ${ev.value} = ${inputs(0)}.trimLeft();"
-    } else {
-      s"UTF8String ${ev.value} = ${inputs(1)}.trimLeft(${inputs(0)});"
-    }
+    val srcString = evals(0)
 
-    ev.copy(evals.map(_.code).mkString("\n") + s"""
-      boolean ${ev.isNull} = false;
-      $getTrimLeftFunction
-      if (${ev.value} == null) {
-        ${ev.isNull} = true;
-      }
-    """)
+    if (evals.length == 1) {
+      ev.copy(evals.map(_.code).mkString("\n") + s"""
+        boolean ${ev.isNull} = false;
+        UTF8String ${ev.value} = null;
+        if (${srcString.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${srcString.value}.trimLeft();
+        }""".stripMargin)
+    } else {
+      val trimString = evals(1)
+      val getTrimLeftFunction =
+        s"""
+        if (${trimString.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${srcString.value}.trimLeft(${trimString.value});
+        }""".stripMargin
+      ev.copy(evals.map(_.code).mkString("\n") +
+        s"""
+        boolean ${ev.isNull} = false;
+        UTF8String ${ev.value} = null;
+        if (${srcString.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          $getTrimLeftFunction
+        }
+        """.stripMargin )
+    }
   }
+}
+
+object StringTrimRight {
+  def apply(str: Expression, trimStr: Expression) : StringTrimRight = StringTrimRight(str, Some(trimStr))
+  def apply(str: Expression) : StringTrimRight = StringTrimRight(str, None)
 }
 
 /**
@@ -689,46 +747,68 @@ case class StringTrimLeft(children: Seq[Expression])
       > SELECT _FUNC_('LQSa', 'SSparkSQLS');
        SSpark
   """)
-case class StringTrimRight(children: Seq[Expression])
+case class StringTrimRight(
+    srcStr: Expression,
+    trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  require (children.size <= 2 && children.nonEmpty,
-    "$prettyName requires at least one argument and no more than two.")
+  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+
+  def this(srcStr: Expression) = this(srcStr, None)
 
   override def prettyName: String = "rtrim"
 
+  override def children: Seq[Expression] = if (trimStr.isDefined) {
+    srcStr :: trimStr.get :: Nil
+  } else {
+    srcStr :: Nil
+  }
+
   override def eval(input: InternalRow): Any = {
-    val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-    if (inputs(0) != null) {
-      if (children.size == 1) {
-        return inputs(0).trimRight()
-      } else if (inputs(1) != null) {
-        return inputs(1).trimRight(inputs(0))
+    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
+    if (srcString != null) {
+      if (trimStr.isDefined) {
+        return srcString.trimRight(trimStr.get.eval(input).asInstanceOf[UTF8String])
+      } else {
+        return srcString.trimRight()
         }
       }
     null
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (children.size == 2 && !children(0).isInstanceOf[Literal]) {
-      throw new AnalysisException(s"The trimming parameter should be Literal.")}
-
     val evals = children.map(_.genCode(ctx))
-    val inputs = evals.map { eval =>
-      s"${eval.isNull} ? null : ${eval.value}"
-    }
-    val getTrimRightFunction = if (children.size == 1) {
-      s"UTF8String ${ev.value} = ${inputs(0)}.trimRight();"
+    val srcString = evals(0)
+
+    if (evals.length == 1) {
+      ev.copy(evals.map(_.code).mkString("\n") + s"""
+        boolean ${ev.isNull} = false;
+        UTF8String ${ev.value} = null;
+        if (${srcString.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${srcString.value}.trimRight();
+        }""".stripMargin)
     } else {
-      s"UTF8String ${ev.value} = ${inputs(1)}.trimRight(${inputs(0)});"
+      val trimString = evals(1)
+      val getTrimRightFunction =
+        s"""
+        if (${trimString.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${srcString.value}.trimRight(${trimString.value});
+        }""".stripMargin
+      ev.copy(evals.map(_.code).mkString("\n") +
+        s"""
+        boolean ${ev.isNull} = false;
+        UTF8String ${ev.value} = null;
+        if (${srcString.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          $getTrimRightFunction
+        }
+        """.stripMargin )
     }
-    ev.copy(evals.map(_.code).mkString("\n") + s"""
-      boolean ${ev.isNull} = false;
-      $getTrimRightFunction
-      if (${ev.value} == null) {
-        ${ev.isNull} = true;
-      }
-    """)
   }
 }
 
