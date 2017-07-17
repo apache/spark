@@ -69,10 +69,11 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
 #'                         or the number of partitions are large, this param could be adjusted to a larger size.
 #'                         This is an expert parameter. Default value should be good for most cases.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in classification model.
-#'        Supported options: "skip" (filter out rows with invalid data),
-#'                           "error" (throw an error), "keep" (put invalid data in a special additional
-#'                           bucket, at index numLabels). Default is "error".
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.svmLinear} returns a fitted linear SVM model.
 #' @rdname spark.svmLinear
@@ -225,10 +226,11 @@ function(object, path, overwrite = FALSE) {
 #' @param upperBoundsOnIntercepts The upper bounds on intercepts if fitting under bound constrained optimization.
 #'                                The bound vector size must be equal to 1 for binomial regression, or the number
 #'                                of classes for multinomial regression.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in classification model.
-#'        Supported options: "skip" (filter out rows with invalid data),
-#'                           "error" (throw an error), "keep" (put invalid data in a special additional
-#'                           bucket, at index numLabels). Default is "error".
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.logit} returns a fitted logistic regression model.
 #' @rdname spark.logit
@@ -410,10 +412,11 @@ setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "char
 #' @param seed seed parameter for weights initialization.
 #' @param initialWeights initialWeights parameter for weights initialization, it should be a
 #'        numeric vector.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in classification model.
-#'        Supported options: "skip" (filter out rows with invalid data),
-#'                           "error" (throw an error), "keep" (put invalid data in a special additional
-#'                           bucket, at index numLabels). Default is "error".
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
 #' @rdname spark.mlp
@@ -535,10 +538,11 @@ setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationMode
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param smoothing smoothing parameter.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in classification model.
-#'        Supported options: "skip" (filter out rows with invalid data),
-#'                           "error" (throw an error), "keep" (put invalid data in a special additional
-#'                           bucket, at index numLabels). Default is "error".
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional argument(s) passed to the method. Currently only \code{smoothing}.
 #' @return \code{spark.naiveBayes} returns a fitted naive Bayes model.
 #' @rdname spark.naiveBayes

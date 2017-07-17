@@ -164,10 +164,11 @@ print.summary.decisionTree <- function(x) {
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in classification model.
-#'        Supported options: "skip" (filter out rows with invalid data),
-#'                           "error" (throw an error), "keep" (put invalid data in a special additional
-#'                           bucket, at index numLabels). Default is "error".
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.gbt,SparkDataFrame,formula-method
 #' @return \code{spark.gbt} returns a fitted Gradient Boosted Tree model.
@@ -381,10 +382,11 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in classification model.
-#'        Supported options: "skip" (filter out rows with invalid data),
-#'                           "error" (throw an error), "keep" (put invalid data in a special additional
-#'                           bucket, at index numLabels). Default is "error".
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.randomForest,SparkDataFrame,formula-method
 #' @return \code{spark.randomForest} returns a fitted Random Forest model.
@@ -590,10 +592,11 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in classification model.
-#'        Supported options: "skip" (filter out rows with invalid data),
-#'                           "error" (throw an error), "keep" (put invalid data in a special additional
-#'                           bucket, at index numLabels). Default is "error".
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.decisionTree,SparkDataFrame,formula-method
 #' @return \code{spark.decisionTree} returns a fitted Decision Tree model.
