@@ -47,7 +47,7 @@ private[shared] object SharedParamsCodeGen {
         Some("\"probability\"")),
       ParamDesc[String]("varianceCol", "Column name for the biased sample variance of prediction"),
       ParamDesc[Double]("threshold",
-        "threshold in binary classification prediction, in range [0, 1]", Some("0.5"),
+        "threshold in binary classification prediction, in range [0, 1]",
         isValid = "ParamValidators.inRange(0, 1)", finalMethods = false, finalFields = false),
       ParamDesc[Array[Double]]("thresholds", "Thresholds in multi-class classification" +
         " to adjust the probability of predicting each class." +
