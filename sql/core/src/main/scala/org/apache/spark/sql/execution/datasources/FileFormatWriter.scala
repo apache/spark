@@ -236,7 +236,7 @@ object FileFormatWriter extends Logging {
     committer.setupTask(taskAttemptContext)
 
     val writeTask =
-      if (!iterator.hasNext) {
+      if (sparkPartitionId != 0 && !iterator.hasNext) {
         new EmptyDirectoryWriteTask
       } else if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
         new SingleDirectoryWriteTask(description, taskAttemptContext, committer)
