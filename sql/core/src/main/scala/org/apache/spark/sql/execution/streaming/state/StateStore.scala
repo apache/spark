@@ -94,8 +94,8 @@ trait StateStore {
 
   def iterator(): Iterator[UnsafeRowPair]
 
-  /** Number of keys in the state store */
-  def numKeys(): Long
+  /** Current metrics of the state store */
+  def metrics: StateStoreMetrics
 
   /**
    * Whether all updates have been committed
@@ -103,6 +103,24 @@ trait StateStore {
   def hasCommitted: Boolean
 }
 
+/**
+ * Metrics reported by a state store
+ * @param numKeys         Number of keys in the state store
+ * @param memoryUsedBytes Memory used by the state store
+ * @param customMetrics   Custom implementation-specific metrics
+ *                        The metrics reported through this must have the same `name` as those
+ *                        reported by `StateStoreProvider.customMetrics`.
+ */
+case class StateStoreMetrics(
+    numKeys: Long,
+    memoryUsedBytes: Long,
+    customMetrics: Map[StateStoreCustomMetric, Long])
+
+/**
+ * Name and description of custom implementation-specific metrics that a
+ * state store may wish to expose.
+ */
+case class StateStoreCustomMetric(name: String, desc: String)
 
 /**
  * Trait representing a provider that provide [[StateStore]] instances representing
@@ -158,22 +176,36 @@ trait StateStoreProvider {
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
+
+  /**
+   * Optional custom metrics that the implementation may want to report.
+   * @note The StateStore objects created by this provider must report the same custom metrics
+   * (specifically, same names) through `StateStore.metrics`.
+   */
+  def supportedCustomMetrics: Seq[StateStoreCustomMetric] = Nil
 }
 
 object StateStoreProvider {
+
   /**
-   * Return a provider instance of the given provider class.
-   * The instance will be already initialized.
+   * Return a instance of the given provider class name. The instance will not be initialized.
    */
-  def instantiate(
+  def create(providerClassName: String): StateStoreProvider = {
+    val providerClass = Utils.classForName(providerClassName)
+    providerClass.newInstance().asInstanceOf[StateStoreProvider]
+  }
+
+  /**
+   * Return a instance of the required provider, initialized with the given configurations.
+   */
+  def createAndInit(
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
       indexOrdinal: Option[Int], // for sorting the data
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
-    val providerClass = Utils.classForName(storeConf.providerClass)
-    val provider = providerClass.newInstance().asInstanceOf[StateStoreProvider]
+    val provider = create(storeConf.providerClass)
     provider.init(stateStoreId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
     provider
   }
@@ -298,7 +330,7 @@ object StateStore extends Logging {
       startMaintenanceIfNeeded()
       val provider = loadedProviders.getOrElseUpdate(
         storeProviderId,
-        StateStoreProvider.instantiate(
+        StateStoreProvider.createAndInit(
           storeProviderId.storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
       )
       reportActiveStoreInstance(storeProviderId)
