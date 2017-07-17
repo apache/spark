@@ -1915,32 +1915,22 @@ class Analyzer(
 
       case j: Join if j.condition.isDefined && !j.condition.get.deterministic =>
         j match {
-          // We can push down non-deterministic predicates in a join only if:
-          // 1. Empty joining keys.
-          // 2. Non-deterministic joining keys && empty/deterministic conditions.
+          // We can push down non-deterministic joining keys.
+          // We can't push down non-deterministic conditions.
           case ExtractEquiJoinKeys(_, leftKeys, rightKeys, conditions, _, _)
-              if (leftKeys.forall(_.deterministic) && rightKeys.forall(_.deterministic)) ||
-                conditions.map(!_.deterministic).getOrElse(false) => j
-          case _ =>
+              if (leftKeys.exists(!_.deterministic) || rightKeys.exists(!_.deterministic)) &&
+                conditions.map(_.deterministic).getOrElse(true) =>
             val nondeterToAttr = getNondeterToAttr(Seq(j.condition.get))
-            // Check if all non-deterministic expressions are either belonging to left or right side
-            val eligibleJoin = nondeterToAttr.keys.forall { nonDeter =>
-              nonDeter.references.subsetOf(j.left.outputSet) ||
-                nonDeter.references.subsetOf(j.right.outputSet)
+            val newCondition = j.condition.map(_.transform { case e =>
+              nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
+            })
+            val (inLeft, inRight) = nondeterToAttr.keys.partition { nonDeter =>
+              nonDeter.references.subsetOf(j.left.outputSet)
             }
-            if (eligibleJoin) {
-              val newCondition = j.condition.map(_.transform { case e =>
-                nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
-              })
-              val (inLeft, inRight) = nondeterToAttr.keys.partition { nonDeter =>
-                nonDeter.references.subsetOf(j.left.outputSet)
-              }
-              val newLeft = Project(j.left.output ++ inLeft.map(nondeterToAttr), j.left)
-              val newRight = Project(j.right.output ++ inRight.map(nondeterToAttr), j.right)
-              Project(j.output, Join(newLeft, newRight, j.joinType, newCondition))
-            } else {
-              j
-            }
+            val newLeft = Project(j.left.output ++ inLeft.map(nondeterToAttr), j.left)
+            val newRight = Project(j.right.output ++ inRight.map(nondeterToAttr), j.right)
+            Project(j.output, Join(newLeft, newRight, j.joinType, newCondition))
+          case _ => j
         }
 
       // todo: It's hard to write a general rule to pull out nondeterministic expressions

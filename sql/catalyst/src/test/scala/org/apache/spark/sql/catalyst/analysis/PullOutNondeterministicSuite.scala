@@ -64,7 +64,8 @@ class PullOutNondeterministicSuite extends AnalysisTest {
     val rnd = Rand(a).as('_nondeterministic)
     val rndref = rnd.toAttribute
 
-    // Deterministic joining keys and non-deterministic conditions: not push down
+    // Don't pull non-deterministic conditions:
+    // Deterministic joining keys
     val m1 = intercept[AnalysisException] {
       val plan = left.join(right,
         Inner, Some(And(EqualTo(Ceil(c), a), EqualTo(Rand(a), Literal(10.1))))).analyze
@@ -72,7 +73,7 @@ class PullOutNondeterministicSuite extends AnalysisTest {
     }.getMessage
     assert(m1.contains("nondeterministic expressions are only allowed in"))
 
-    // Non-determinstic joining keys and non-determinstic conditions: not push down
+    // Non-determinstic joining keys
     val m2 = intercept[AnalysisException] {
       val plan = left.join(right,
         Inner, Some(And(EqualTo(c, Rand(a)), EqualTo(Rand(a), Literal(10.1)))))
@@ -80,13 +81,21 @@ class PullOutNondeterministicSuite extends AnalysisTest {
     }.getMessage
     assert(m2.contains("nondeterministic expressions are only allowed in"))
 
-    // Non-determinstic joining keys and empty conditions: push down
+    // Empty joining keys
+    val m3 = intercept[AnalysisException] {
+      val plan = left.join(right, Inner, Some(GreaterThan(c, Rand(a))))
+      SimpleAnalyzer.checkAnalysis(plan)
+    }.getMessage
+    assert(m3.contains("nondeterministic expressions are only allowed in"))
+
+    // Pull non-determinstic joining keys:
+    // Empty conditions
     checkAnalysis(
       left.join(right, Inner, Some(EqualTo(c, Rand(a)))),
       left.select(c).join(right.select(a, rnd), Inner, Some(EqualTo(c, rndref)))
        .select(c, a)
     )
-    // Non-determinstic joining keys and deterministic conditions: push down
+    // Deterministic conditions
     checkAnalysis(
       left.join(right, Inner, Some(And(EqualTo(c, Rand(a)), EqualTo(a, Literal(10))))),
       left.select(c).join(
@@ -94,12 +103,6 @@ class PullOutNondeterministicSuite extends AnalysisTest {
         Inner,
         Some(And(EqualTo(c, rndref), EqualTo(a, Literal(10)))))
       .select(c, a)
-    )
-    // Empty joining keys and non-deterministic conditions: push down
-    checkAnalysis(
-      left.join(right, Inner, Some(GreaterThan(c, Rand(a)))),
-      left.select(c).join(right.select(a, rnd), Inner, Some(GreaterThan(c, rndref)))
-       .select(c, a)
     )
   }
 }
