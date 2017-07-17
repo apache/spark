@@ -69,8 +69,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
           setSuperField(this, "httpUGI", httpUGI)
         } catch {
           case e: IOException =>
-            throw new ServiceException("Unable to login to spnego with given principal/keytab " +
-              s"$principal/$keyTabFile", e)
+            throw new ServiceException("Unable to login to spnego with given principal/keytab", e)
         }
       }
     }
