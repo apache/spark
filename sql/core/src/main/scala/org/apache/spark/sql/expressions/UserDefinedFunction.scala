@@ -46,7 +46,6 @@ case class UserDefinedFunction protected[sql] (
   private var _nameOption: Option[String] = None
   private var _nullable: Boolean = true
   private var _deterministic: Boolean = true
-  private var _distinctLike: Boolean = false
 
   /**
    * Returns true when the UDF can return a nullable value.
@@ -75,8 +74,7 @@ case class UserDefinedFunction protected[sql] (
       inputTypes.getOrElse(Nil),
       udfName = _nameOption,
       nullable = _nullable,
-      udfDeterministic = _deterministic,
-      distinctLike = _distinctLike))
+      udfDeterministic = _deterministic))
   }
 
   private def copyAll(): UserDefinedFunction = {
@@ -84,7 +82,6 @@ case class UserDefinedFunction protected[sql] (
     udf._nameOption = _nameOption
     udf._nullable = _nullable
     udf._deterministic = _deterministic
-    udf._distinctLike = _distinctLike
     udf
   }
 
@@ -125,21 +122,6 @@ case class UserDefinedFunction protected[sql] (
     } else {
       val udf = copyAll()
       udf._deterministic = false
-      udf
-    }
-  }
-
-  /**
-   * Updates UserDefinedFunction to distinctLike.
-   *
-   * @since 2.3.0
-   */
-  def withDistinctLike(): UserDefinedFunction = {
-    if (_distinctLike) {
-      this
-    } else {
-      val udf = copyAll()
-      udf._distinctLike = true
       udf
     }
   }

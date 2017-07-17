@@ -208,8 +208,7 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(2.1)
-    def registerJavaFunction(self, name, javaClassName, returnType=None, deterministic=True,
-                             distinctLike=False):
+    def registerJavaFunction(self, name, javaClassName, returnType=None, deterministic=True):
         """Register a java UDF so it can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
@@ -220,8 +219,6 @@ class SQLContext(object):
         :param returnType: a :class:`pyspark.sql.types.DataType` object.
         :param deterministic: a flag indicating if the UDF is deterministic.  Deterministic UDF
             returns same result each time it is invoked with a particular input.
-        :param distinctLike: a UDF is considered distinctLike if the UDF can be evaluated on just
-            the distinct values of a column.
 
         >>> sqlContext.registerJavaFunction("javaStringLength",
         ...   "test.org.apache.spark.sql.JavaStringLength", IntegerType())
@@ -241,7 +238,7 @@ class SQLContext(object):
         if returnType is not None:
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(
-            name, javaClassName, jdt, deterministic, distinctLike)
+            name, javaClassName, jdt, deterministic)
 
     @ignore_unicode_prefix
     @since(2.3)

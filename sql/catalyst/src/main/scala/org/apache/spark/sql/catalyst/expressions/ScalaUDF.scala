@@ -38,8 +38,6 @@ import org.apache.spark.sql.types.DataType
  * @param nullable  True if the UDF can return null value.
  * @param udfDeterministic  True if the UDF is deterministic. Deterministic UDF returns same result
  *                          each time it is invoked with a particular input.
- * @param distinctLike  A UDF is considered distinctLike if the UDF can be evaluated on just the
- *                      distinct values of a column.
  */
 case class ScalaUDF(
     function: AnyRef,
@@ -48,8 +46,7 @@ case class ScalaUDF(
     inputTypes: Seq[DataType] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,
-    udfDeterministic: Boolean = true,
-    distinctLike: Boolean = false)
+    udfDeterministic: Boolean = true)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression {
 
   override def deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
