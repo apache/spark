@@ -30,6 +30,8 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
@@ -63,8 +65,14 @@ class HistoryServer(
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
 
-  // and its metrics, for testing as well as monitoring
-  val cacheMetrics = appCache.metrics
+  private val metricsSystem = MetricsSystem.createMetricsSystem("history",
+    conf, securityManager)
+
+  private[history] var metricsRegistry = metricsSystem.getMetricRegistry
+
+  def cacheMetrics(): CacheMetrics = {
+   appCache.metrics
+  }
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
@@ -110,6 +118,8 @@ class HistoryServer(
     appCache.getSparkUI(appKey)
   }
 
+  private val historyMetrics = new HistoryMetrics(this, "history.server")
+
   initialize()
 
   /**
@@ -131,15 +141,53 @@ class HistoryServer(
     attachHandler(contextHandler)
   }
 
-  /** Bind to the HTTP server behind this web interface. */
+  /**
+   * Startup Actions.
+   * 1. Call `start()` on the provider (and maybe get some metrics back).
+   * 2. Start the metrics.
+   * 3. Bind to the HTTP server behind this web interface.
+   */
   override def bind() {
+    val providerMetrics = provider.start()
+    startMetrics(providerMetrics)
     super.bind()
   }
 
-  /** Stop the server and close the file system. */
+  /**
+   * Start up the metrics.
+   * This includes registering any metrics defined in `providerMetrics`; the provider
+   * needs its `start()` method to be invoked to get these metric *prior to this method
+   * being invoked*.
+   * @param providerMetrics optional provider metrics
+   */
+  private def startMetrics(providerMetrics: Option[Source]): Unit = {
+    // hook up metrics
+    metricsSystem.registerSource(historyMetrics)
+    metricsSystem.registerSource(appCache.metrics)
+    providerMetrics.foreach(metricsSystem.registerSource)
+    metricsSystem.start()
+    metricsSystem.getServletHandlers.foreach(attachHandler)
+  }
+
+  /**
+   * Stop the server.
+   * And:
+   * 1. Stop the application cache.
+   * 2. Stop the history provider.
+   * 3. Stop the metrics system.
+   */
   override def stop() {
-    super.stop()
-    provider.stop()
+    Utils.tryLog {
+      super.stop()
+    }
+    Utils.tryLog {
+      if (provider != null) {
+        provider.stop()
+      }
+    }
+    Utils.tryLog {
+      metricsSystem.stop()
+    }
     appCache.stop()
   }
 
@@ -247,6 +295,15 @@ class HistoryServer(
       | cache = $appCache
     """.stripMargin
   }
+}
+
+/**
+ * History system metrics independent of providers go in here.
+ * @param owner owning instance
+ */
+private[history] class HistoryMetrics(val owner: HistoryServer, prefix: String)
+    extends HistoryMetricSource(prefix) {
+  override val sourceName = "history"
 }
 
 /**

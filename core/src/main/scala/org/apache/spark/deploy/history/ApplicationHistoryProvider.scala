@@ -21,7 +21,9 @@ import java.util.zip.ZipOutputStream
 
 import scala.xml.Node
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFirehoseListener}
+import org.apache.spark.metrics.source.Source
+import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 
 private[spark] case class ApplicationAttemptInfo(
@@ -100,6 +102,13 @@ private[history] abstract class ApplicationHistoryProvider {
   }
 
   /**
+   * @return None
+   */
+  def start(): Option[Source] = {
+    None
+  }
+
+  /**
    * Returns a list of applications available for the history server to show.
    *
    * @return List of all know applications.
@@ -145,4 +154,16 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return html text to display when the application list is empty
    */
   def getEmptyListingHtml(): Seq[Node] = Seq.empty
+}
+
+/**
+ * A simple counter of events.
+ * There is no concurrency support here: all events must come in sequentially.
+ */
+private[history] class EventCountListener extends SparkFirehoseListener {
+  var eventCount = 0L
+
+  override def onEvent(event: SparkListenerEvent): Unit = {
+    eventCount += 1
+  }
 }

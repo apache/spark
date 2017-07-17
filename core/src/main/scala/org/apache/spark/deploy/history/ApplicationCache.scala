@@ -24,12 +24,11 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import com.codahale.metrics.{Counter, MetricRegistry, Timer}
+import com.codahale.metrics.{Counter, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 import org.eclipse.jetty.servlet.FilterHolder
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Clock
 
@@ -388,7 +387,7 @@ private[history] final case class CacheKey(appId: String, attemptId: Option[Stri
  * Metrics of the cache
  * @param prefix prefix to register all entries under
  */
-private[history] class CacheMetrics(prefix: String) extends Source {
+private[history] class CacheMetrics(prefix: String) extends HistoryMetricSource(prefix) {
 
   /* metrics: counters and timers */
   val lookupCount = new Counter()
@@ -417,27 +416,18 @@ private[history] class CacheMetrics(prefix: String) extends Source {
   /**
    * Name of metric source
    */
-  override val sourceName = "ApplicationCache"
-
-  override val metricRegistry: MetricRegistry = new MetricRegistry
+  override val sourceName = "application.cache"
 
   /**
    * Startup actions.
    * This includes registering metrics with [[metricRegistry]]
    */
   private def init(): Unit = {
-    allMetrics.foreach { case (name, metric) =>
-      metricRegistry.register(MetricRegistry.name(prefix, name), metric)
-    }
+    register(allMetrics)
   }
 
-  override def toString: String = {
-    val sb = new StringBuilder()
-    counters.foreach { case (name, counter) =>
-      sb.append(name).append(" = ").append(counter.getCount).append('\n')
-    }
-    sb.toString()
-  }
+  init()
+
 }
 
 /**

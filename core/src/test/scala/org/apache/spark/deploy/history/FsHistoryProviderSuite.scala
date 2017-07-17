@@ -66,9 +66,29 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     new File(logPath)
   }
 
+  /**
+   * Create and configure a new history provider.
+   * @return a filesystem history provider ready for use
+   */
+  private def createHistoryProvider(): FsHistoryProvider = {
+    val provider = new FsHistoryProvider(createTestConf())
+    provider.start()
+    provider
+  }
+
+  /**
+   * Create and configure a new history provider.
+   * @return a filesystem history provider ready for use
+   */
+  private def createHistoryProvider(clock: Clock): FsHistoryProvider = {
+    val provider = new FsHistoryProvider(createTestConf(), clock)
+    provider.start()
+    provider
+  }
+
   test("Parse application logs") {
     val clock = new ManualClock(12345678)
-    val provider = new FsHistoryProvider(createTestConf(), clock)
+    val provider = createHistoryProvider(clock)
 
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", None, inProgress = false)
@@ -142,6 +162,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       }
     }
     val provider = new TestFsHistoryProvider
+    provider.start()
 
     val logFile1 = newLogFile("new1", None, inProgress = false)
     writeFile(logFile1, true, None,
@@ -163,7 +184,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("history file is renamed from inprogress to completed") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
 
     val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
@@ -197,7 +218,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("SPARK-5582: empty log directory") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
 
     val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
@@ -213,7 +234,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("apps with multiple attempts with order") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
 
     val attempt1 = newLogFile("app1", Some("attempt1"), inProgress = true)
     writeFile(attempt1, true, None,
@@ -358,7 +379,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("Event log copy") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
     val logs = (1 to 2).map { i =>
       val log = newLogFile("downloadApp1", Some(s"attempt$i"), inProgress = false)
       writeFile(log, true, None,
@@ -393,7 +414,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("SPARK-8372: new logs with no app ID are ignored") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
 
     // Write a new log file without an app id, to make sure it's ignored.
     val logFile1 = newLogFile("app1", None, inProgress = true)
