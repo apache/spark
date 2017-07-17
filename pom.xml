@@ -179,6 +179,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.5</commons-lang3.version>
     <commons-compress.version>1.8.1</commons-compress.version>
+    <commons-pool.version>1.6</commons-pool.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <javax-activation.version>1.1.1</javax-activation.version>
     <objenesis.version>2.5.1</objenesis.version>
@@ -189,6 +190,7 @@
     <jsr305.version>3.0.1</jsr305.version>
     <libthrift.version>0.9.3</libthrift.version>
     <antlr4.version>4.7</antlr4.version>
+    <antlr.version>3.4</antlr.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
     <paranamer.version>2.6</paranamer.version>
@@ -494,6 +496,11 @@
         <groupId>commons-beanutils</groupId>
         <artifactId>commons-beanutils</artifactId>
         <version>${commons-beanutils.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-pool</groupId>
+        <artifactId>commons-pool</artifactId>
+        <version>${commons-pool.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -2114,6 +2121,11 @@
         <groupId>org.antlr</groupId>
         <artifactId>antlr4-runtime</artifactId>
         <version>${antlr4.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.antlr</groupId>
+        <artifactId>antlr-runtime</artifactId>
+        <version>${antlr.version}</version>
       </dependency>
       <dependency>
         <groupId>jline</groupId>
