@@ -1524,7 +1524,6 @@ class GeneralizedLinearRegressionSuite
       .fit(datasetGaussianIdentity.as[LabeledPoint])
   }
 
-
   test("glm summary: feature name") {
     // dataset1 with no attribute
     val dataset1 = Seq(
@@ -1557,7 +1556,7 @@ class GeneralizedLinearRegressionSuite
     }
   }
 
-  test("glm summary: summaryTable") {
+  test("glm summary: coefficient matrix") {
     /*
       R code:
 
@@ -1587,10 +1586,6 @@ class GeneralizedLinearRegressionSuite
       Vectors.dense(0.7903, 0.2258, 0.4677))
     val expectedStdError = Seq(Vectors.dense(1.724, 0.3787),
       Vectors.dense(4.0129, 2.1153, 0.5815))
-    val expectedTValue = Seq(Vectors.dense(0.1673, 1.4205),
-      Vectors.dense(0.1969, 0.1067, 0.8043))
-    val expectedPValue = Seq(Vectors.dense(0.8778, 0.2506),
-      Vectors.dense(0.8621, 0.9247, 0.5056))
 
     var idx = 0
     for (fitIntercept <- Seq(false, true)) {
@@ -1598,20 +1593,14 @@ class GeneralizedLinearRegressionSuite
         .setFamily("gaussian")
         .setFitIntercept(fitIntercept)
       val model = trainer.fit(dataset)
-      val summaryTable = model.summary.summaryTable
+      val coefficientMatrix = model.summary.coefficientMatrix
 
-      summaryTable.select("Feature").collect.map(_.getString(0))
-        .zip(expectedFeature(idx)).foreach{ x => assert(x._1 === x._2,
+      coefficientMatrix.map(_._1).zip(expectedFeature(idx)).foreach{ x => assert(x._1 === x._2,
         "Feature name mismatch in summaryTable") }
-      assert(Vectors.dense(summaryTable.select("Coefficient").collect.map(_.getDouble(0)))
+      assert(Vectors.dense(coefficientMatrix.map(_._2))
         ~== expectedEstimate(idx) absTol 1E-3, "Coefficient mismatch in summaryTable")
-      assert(Vectors.dense(summaryTable.select("StdError").collect.map(_.getDouble(0)))
+      assert(Vectors.dense(coefficientMatrix.map(_._3))
         ~== expectedStdError(idx) absTol 1E-3, "Standard error mismatch in summaryTable")
-      assert(Vectors.dense(summaryTable.select("TValue").collect.map(_.getDouble(0)))
-        ~== expectedTValue(idx) absTol 1E-3, "TValue mismatch in summaryTable")
-      assert(Vectors.dense(summaryTable.select("PValue").collect.map(_.getDouble(0)))
-        ~== expectedPValue(idx) absTol 1E-3, "PValue mismatch in summaryTable")
-
       idx += 1
     }
   }

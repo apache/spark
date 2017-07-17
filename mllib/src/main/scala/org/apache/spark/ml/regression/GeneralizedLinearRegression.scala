@@ -20,6 +20,9 @@ package org.apache.spark.ml.regression
 import java.util.Locale
 
 import breeze.stats.{distributions => dist}
+
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -34,7 +37,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -1211,8 +1214,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
    * Name of features. If the name cannot be retrieved from attributes,
    * set default names to feature column name with numbered suffix "_0", "_1", and so on.
    */
-  @Since("2.2.0")
-  lazy val featureNames: Array[String] = {
+  private[ml] lazy val featureNames: Array[String] = {
     val featureAttrs = AttributeGroup.fromStructField(
       dataset.schema(model.getFeaturesCol)).attributes
     if (featureAttrs == None) {
@@ -1479,31 +1481,165 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   }
 
   /**
-   * Summary table with feature name, coefficient, standard error,
+   * Coefficient matrix with feature name, coefficient, standard error,
    * tValue and pValue.
    */
-  @Since("2.2.0")
-  lazy val summaryTable: DataFrame = {
+  @Since("2.3.0")
+  lazy val coefficientMatrix: Array[(String, Double, Double, Double, Double)] = {
     if (isNormalSolver) {
       var featureNamesLocal = featureNames
       var coefficients = model.coefficients.toArray
       var idx = Array.range(0, coefficients.length)
       if (model.getFitIntercept) {
-        featureNamesLocal = featureNamesLocal :+ Intercept
+        featureNamesLocal = featureNamesLocal :+ "(Intercept)"
         coefficients = coefficients :+ model.intercept
         // Reorder so that intercept comes first
         idx = (coefficients.length - 1) +: idx
       }
-      val result = for (i <- idx.toSeq) yield
+      val result = for (i <- idx) yield
         (featureNamesLocal(i), coefficients(i), coefficientStandardErrors(i),
         tValues(i), pValues(i))
-
-      val spark = SparkSession.builder().getOrCreate()
-      import spark.implicits._
-      result.toDF("Feature", "Coefficient", "StdError", "TValue", "PValue").repartition(1)
+      result
     } else {
       throw new UnsupportedOperationException(
         "No summary table available for this GeneralizedLinearRegressionModel")
     }
   }
+
+  private def round(x: Double, digit: Int): String = {
+    BigDecimal(x).setScale(digit, BigDecimal.RoundingMode.HALF_UP).toString()
+  }
+
+  private[regression] def showString(_numRows: Int, truncate: Int = 20,
+                                     numDigits: Int = 3): String = {
+    val numRows = _numRows.max(1)
+    val data = coefficientMatrix.take(numRows)
+    val hasMoreData = coefficientMatrix.size > numRows
+
+    val colNames = Array("Feature", "Estimate", "StdError", "TValue", "PValue")
+    val numCols = colNames.size
+
+    val rows = colNames +: data.map( row => {
+      val mrow = for (cell <- row.productIterator) yield {
+        val str = cell match {
+          case s: String => s
+          case n: Double => round(n, numDigits).toString
+        }
+        if (truncate > 0 && str.length > truncate) {
+          // do not show ellipses for strings shorter than 4 characters.
+          if (truncate < 4) str.substring(0, truncate)
+          else str.substring(0, truncate - 3) + "..."
+        } else {
+          str
+        }
+      }
+      mrow.toArray
+    })
+
+    val sb = new StringBuilder
+    val colWidths = Array.fill(numCols)(3)
+
+    // Compute the width of each column
+    for (row <- rows) {
+      for ((cell, i) <- row.zipWithIndex) {
+        colWidths(i) = math.max(colWidths(i), cell.length)
+      }
+    }
+
+    // Create SeparateLine
+    val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+
+    // column names
+    rows.head.zipWithIndex.map { case (cell, i) =>
+      if (truncate > 0) {
+        StringUtils.leftPad(cell, colWidths(i))
+      } else {
+        StringUtils.rightPad(cell, colWidths(i))
+      }
+    }.addString(sb, "|", "|", "|\n")
+    sb.append(sep)
+
+    // data
+    rows.tail.map {
+      _.zipWithIndex.map { case (cell, i) =>
+        if (truncate > 0) {
+          StringUtils.leftPad(cell.toString, colWidths(i))
+        } else {
+          StringUtils.rightPad(cell.toString, colWidths(i))
+        }
+      }.addString(sb, "|", "|", "|\n")
+    }
+
+    // For Data that has more than "numRows" records
+    if (hasMoreData) {
+      sb.append("...\n")
+      sb.append(sep)
+      val rowsString = if (numRows == 1) "row" else "rows"
+      sb.append(s"only showing top $numRows $rowsString\n")
+    } else {
+      sb.append(sep)
+    }
+
+    sb.append("\n")
+    sb.append(s"(Dispersion parameter for ${family.name} family taken to be " +
+      round(dispersion, numDigits) + ")")
+
+    sb.append("\n")
+    val nd = "Null deviance: " + round(nullDeviance, numDigits) +
+      s" on $degreesOfFreedom degrees of freedom"
+    val rd = "Residual deviance: " + round(deviance, numDigits) +
+      s" on $residualDegreeOfFreedom degrees of freedom"
+    val l = math.max(nd.length, rd.length)
+    sb.append(StringUtils.leftPad(nd, l))
+    sb.append("\n")
+    sb.append(StringUtils.leftPad(rd, l))
+
+    if (family.name != "tweedie") {
+      sb.append("\n")
+      sb.append(s"AIC: " + round(aic, numDigits))
+    }
+
+    sb.toString()
+  }
+
+  /**
+   * Displays the summary of a GeneralizedLinearModel fit.
+   *
+   * @since 2.3.0
+   */
+  def show(): Unit = {
+    val numRows = coefficientMatrix.size
+    show(numRows, true, 3)
+  }
+
+  /**
+   * Displays the top numRows rows of the summary of a GeneralizedLinearModel fit.
+   *
+   * @param numRows Number of rows to show
+   *
+   * @since 2.3.0
+   */
+  @Since("2.3.0")
+  def show(numRows: Int): Unit = {
+    show(numRows, true, 3)
+  }
+
+  /**
+   * Displays the summary of a GeneralizedLinearModel fit. Strings more than 20 characters
+   * will be truncated, and all cells will be aligned right.
+   *
+   * @param numRows Number of rows to show
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *              be truncated and all cells will be aligned right
+   * @param numDigits Number of decimal places used to round numerical values.
+   *
+   * @since 2.3.0
+   */
+  // scalastyle:off println
+  def show(numRows: Int, truncate: Boolean, numDigits: Int): Unit = if (truncate) {
+    println(showString(numRows, truncate = 20, numDigits))
+  } else {
+    println(showString(numRows, truncate = 0, numDigits))
+  }
+  // scalastyle:on println
 }
