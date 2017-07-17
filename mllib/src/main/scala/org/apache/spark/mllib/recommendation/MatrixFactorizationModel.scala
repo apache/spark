@@ -307,16 +307,15 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
             pq += dstIds(k) -> ratings(i, k)
             k += 1
           }
-          var size = pq.size
-          while (size > 0) {
-            size -= 1
-            val factor = pq.poll()
-            dstIdMatrix(j + size) = factor._1
-            scoreMatrix(j + size) = factor._2
+          k = 0
+          pq.toArray.sortBy(-_._2).foreach { case (id, score) =>
+            dstIdMatrix(j + k) = id
+            scoreMatrix(j + k) = score
+            k += 1
           }
-          i += 1
           // pq.size maybe less than num, corner case
           j += num
+          i += 1
           pq.clear()
         }
         (index, (srcIds, dstIdMatrix, new DenseMatrix(m, num, scoreMatrix, true)))
