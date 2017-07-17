@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.cli.CliSessionState
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.session.SessionState
 
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.QueryTest
@@ -32,5 +37,48 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
       assert(conf(ConfVars.METASTORE_EVENT_LISTENERS.varname) === "")
       assert(conf(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname) === "")
     }
+  }
+
+  test("CliSessionState will be reused") {
+    val hiveConf = new HiveConf(classOf[SessionState])
+    val sessionState: SessionState = new CliSessionState(hiveConf)
+    SessionState.start(sessionState)
+    val s1 = SessionState.get()
+    assert(s1.isInstanceOf[CliSessionState])
+
+    val sparkConf = new SparkConf()
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val metaHive = HiveUtils.newClientForMetadata(sparkConf, hadoopConf)
+    assert(metaHive.getConf("spark.sql.hive.jars", "builtin") === "builtin")
+
+    val s2 = SessionState.get()
+    assert(s2.isInstanceOf[CliSessionState])
+    assert(s1 === s2, "CliSessionState should be reused")
+  }
+
+  test("SessionState will not be reused") {
+    val hiveConf = new HiveConf(classOf[SessionState])
+    val sessionState: SessionState = new SessionState(hiveConf)
+    SessionState.start(sessionState)
+
+    val s1 = SessionState.get()
+    assert(!s1.isInstanceOf[CliSessionState])
+
+    val sparkConf = new SparkConf().set("spark.sql.hive.jars", "builtin")
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val metaHive = HiveUtils.newClientForMetadata(sparkConf, hadoopConf)
+
+    assert(metaHive.getConf("spark.sql.hive.jars", "builtin") === "builtin")
+    val s2 = SessionState.get()
+    assert(s1 !== s2)
+
+    val sparkConf2 = sparkConf.set("spark.sql.hive.jars", "maven")
+    val hadoopConf2 = SparkHadoopUtil.get.newConfiguration(sparkConf2)
+    val metaHive2 = HiveUtils.newClientForMetadata(sparkConf2, hadoopConf2)
+
+    assert(metaHive2.getConf("spark.sql.hive.jars", "builtin") === "maven")
+    val s3 = SessionState.get()
+    assert(s1 !== s3)
+    assert(s2 !== s3)
   }
 }
