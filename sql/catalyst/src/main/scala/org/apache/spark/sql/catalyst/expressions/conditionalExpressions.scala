@@ -264,23 +264,18 @@ case class CaseWhenCodegen(
     val cases = branches.map { case (condExpr, valueExpr) =>
       val cond = condExpr.genCode(ctx)
       val res = valueExpr.genCode(ctx)
-      val (condFunc, condIsNull, condValue) = if ((cond.code.length >= 512) &&
+      val (condFunc, condIsNull, condValue, resFunc, resIsNull, resValue ) =
+        if ((cond.code.length + res.code.length) > 1024 &&
         // Split these expressions only if they are created from a row object
         (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
-        val (funcName, globalIsNull, globalValue) =
+        val (condFuncName, condGlobalIsNull, condGlobalValue) =
           CondExpression.createAndAddFunction(ctx, cond, condExpr.dataType, "caseWhenCondExpr")
-        (s"$funcName(${ctx.INPUT_ROW});", globalIsNull, globalValue)
-      } else {
-        (cond.code, cond.isNull, cond.value)
-      }
-      val (resFunc, resIsNull, resValue) = if ((res.code.length >= 512) &&
-        // Split these expressions only if they are created from a row object
-        (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
-        val (funcName, globalIsNull, globalValue) =
+        val (resFuncName, resGlobalIsNull, resGlobalValue) =
           CondExpression.createAndAddFunction(ctx, res, valueExpr.dataType, "caseWhenResExpr")
-        (s"$funcName(${ctx.INPUT_ROW});", globalIsNull, globalValue)
+        (s"$condFuncName(${ctx.INPUT_ROW});", condGlobalIsNull, condGlobalValue,
+         s"$resFuncName(${ctx.INPUT_ROW});", resGlobalIsNull, resGlobalValue)
       } else {
-        (res.code, res.isNull, res.value)
+        (cond.code, cond.isNull, cond.value, res.code, res.isNull, res.value)
       }
 
       s"""
