@@ -71,7 +71,7 @@ class PullOutNondeterministicSuite extends AnalysisTest {
         Inner, Some(And(EqualTo(Ceil(c), a), EqualTo(Rand(a), Literal(10.1))))).analyze
       SimpleAnalyzer.checkAnalysis(plan)
     }.getMessage
-    assert(m1.contains("nondeterministic expressions are only allowed in"))
+    assert(m1.contains("For Join, nondeterministic expressions are only allowed in joining keys"))
 
     // Non-determinstic joining keys
     val m2 = intercept[AnalysisException] {
@@ -79,14 +79,14 @@ class PullOutNondeterministicSuite extends AnalysisTest {
         Inner, Some(And(EqualTo(c, Rand(a)), EqualTo(Rand(a), Literal(10.1)))))
       SimpleAnalyzer.checkAnalysis(plan)
     }.getMessage
-    assert(m2.contains("nondeterministic expressions are only allowed in"))
+    assert(m2.contains("For Join, nondeterministic expressions are only allowed in joining keys"))
 
     // Empty joining keys
     val m3 = intercept[AnalysisException] {
       val plan = left.join(right, Inner, Some(GreaterThan(c, Rand(a))))
       SimpleAnalyzer.checkAnalysis(plan)
     }.getMessage
-    assert(m3.contains("nondeterministic expressions are only allowed in"))
+    assert(m3.contains("For Join, nondeterministic expressions are only allowed in joining keys"))
 
     // Pull non-determinstic joining keys:
     // Empty conditions
