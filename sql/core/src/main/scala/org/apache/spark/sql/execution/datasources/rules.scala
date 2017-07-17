@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -408,6 +408,42 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
     }
   }
 }
+
+
+/**
+ * A rule to do various checks before reading a table.
+ */
+object PreReadCheck extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case operator: LogicalPlan =>
+        operator transformExpressionsUp {
+          case e @ (_: InputFileName | _: InputFileBlockLength | _: InputFileBlockStart) =>
+            checkNumInputFileBlockSources(e, operator)
+            e
+        }
+    }
+  }
+
+  private def checkNumInputFileBlockSources(e: Expression, operator: LogicalPlan): Int = {
+    operator match {
+      case _: CatalogRelation => 1
+      case _ @ LogicalRelation(_: HadoopFsRelation, _, _) => 1
+      case _: LeafNode => 0
+      // UNION ALL has multiple children, but these children do not concurrently use InputFileBlock.
+      case u: Union =>
+        if (u.children.map(checkNumInputFileBlockSources(e, _)).sum >= 1) 1 else 0
+      case o =>
+        val numInputFileBlockSources = o.children.map(checkNumInputFileBlockSources(e, _)).sum
+        if (numInputFileBlockSources > 1) {
+          e.failAnalysis(s"'${e.prettyName}' does not support more than one sources")
+        } else {
+          numInputFileBlockSources
+        }
+    }
+  }
+}
+
 
 /**
  * A rule to do various checks before inserting into or writing to a data source table.

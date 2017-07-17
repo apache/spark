@@ -74,15 +74,6 @@ trait CheckAnalysis extends PredicateHelper {
     }
   }
 
-  private def getNumInputFileBlockSources(operator: LogicalPlan): Int = {
-    operator match {
-      case _: LeafNode => 1
-      // UNION ALL has multiple children, but these children do not concurrently use InputFileBlock.
-      case u: Union => u.children.map(getNumInputFileBlockSources).sum - u.children.length + 1
-      case o => o.children.map(getNumInputFileBlockSources).sum
-    }
-  }
-
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
@@ -108,10 +99,6 @@ trait CheckAnalysis extends PredicateHelper {
           case c: Cast if !c.resolved =>
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
-
-          case e @ (_: InputFileName | _: InputFileBlockLength | _: InputFileBlockStart)
-              if getNumInputFileBlockSources(operator) > 1 =>
-            e.failAnalysis(s"'${e.prettyName}' does not support more than one sources")
 
           case g: Grouping =>
             failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")
