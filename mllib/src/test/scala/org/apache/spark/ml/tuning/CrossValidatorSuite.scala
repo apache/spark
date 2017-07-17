@@ -58,8 +58,7 @@ class CrossValidatorSuite
       .setNumFolds(3)
     val cvModel = cv.fit(dataset)
 
-    // copied model must have the same paren.
-    MLTestingUtils.checkCopy(cvModel)
+    MLTestingUtils.checkCopyAndUids(cv, cvModel)
 
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(parent.getRegParam === 0.001)

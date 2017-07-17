@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
  * logging messages at different levels using methods that only evaluate parameters lazily if the
  * log level is enabled.
  */
-private[spark] trait Logging {
+trait Logging {
 
   // Make the log field transient so that objects with Logging can
   // be serialized and used on another machine

@@ -35,14 +35,14 @@ trait PartitionCoalescer {
    * @param maxPartitions the maximum number of partitions to have after coalescing
    * @param parent the parent RDD whose partitions to coalesce
    * @return an array of [[PartitionGroup]]s, where each element is itself an array of
-   * [[Partition]]s and represents a partition after coalescing is performed.
+   * `Partition`s and represents a partition after coalescing is performed.
    */
   def coalesce(maxPartitions: Int, parent: RDD[_]): Array[PartitionGroup]
 }
 
 /**
  * ::DeveloperApi::
- * A group of [[Partition]]s
+ * A group of `Partition`s
  * @param prefLoc preferred location for the partition group
  */
 @DeveloperApi

@@ -88,6 +88,16 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     // Make sure this doesn't trigger if there is a non-foldable branch before the true branch
     assertEquivalent(
       CaseWhen(normalBranch :: trueBranch :: normalBranch :: Nil, None),
-      CaseWhen(normalBranch :: trueBranch :: normalBranch :: Nil, None))
+      CaseWhen(normalBranch :: trueBranch :: Nil, None))
+  }
+
+  test("simplify CaseWhen, prune branches following a definite true") {
+    assertEquivalent(
+      CaseWhen(normalBranch :: unreachableBranch ::
+        unreachableBranch :: nullBranch ::
+        trueBranch :: normalBranch ::
+        Nil,
+        None),
+      CaseWhen(normalBranch :: trueBranch :: Nil, None))
   }
 }

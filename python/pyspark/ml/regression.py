@@ -95,6 +95,9 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     .. versionadded:: 1.4.0
     """
 
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: auto, normal, l-bfgs.", typeConverter=TypeConverters.toString)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
@@ -108,7 +111,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid)
         self._setDefault(maxIter=100, regParam=0.0, tol=1e-6)
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -122,7 +125,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2)
         Sets params for linear regression.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -160,8 +163,12 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, Java
         training set. An exception is thrown if
         `trainingSummary is None`.
         """
-        java_lrt_summary = self._call_java("summary")
-        return LinearRegressionTrainingSummary(java_lrt_summary)
+        if self.hasSummary:
+            java_lrt_summary = self._call_java("summary")
+            return LinearRegressionTrainingSummary(java_lrt_summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
     @property
     @since("2.0.0")
@@ -241,9 +248,9 @@ class LinearRegressionSummary(JavaWrapper):
         .. seealso:: `Wikipedia explain variation \
         <http://en.wikipedia.org/wiki/Explained_variation>`_
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("explainedVariance")
 
@@ -255,9 +262,9 @@ class LinearRegressionSummary(JavaWrapper):
         corresponding to the expected value of the absolute error
         loss or l1-norm loss.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("meanAbsoluteError")
 
@@ -269,9 +276,9 @@ class LinearRegressionSummary(JavaWrapper):
         corresponding to the expected value of the squared error
         loss or quadratic loss.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("meanSquaredError")
 
@@ -282,9 +289,9 @@ class LinearRegressionSummary(JavaWrapper):
         Returns the root mean squared error, which is defined as the
         square root of the mean squared error.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("rootMeanSquaredError")
 
@@ -297,9 +304,9 @@ class LinearRegressionSummary(JavaWrapper):
         .. seealso:: `Wikipedia coefficient of determination \
         <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LinearRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("r2")
 
@@ -318,6 +325,14 @@ class LinearRegressionSummary(JavaWrapper):
         Number of instances in DataFrame predictions
         """
         return self._call_java("numInstances")
+
+    @property
+    @since("2.2.0")
+    def degreesOfFreedom(self):
+        """
+        Degrees of freedom.
+        """
+        return self._call_java("degreesOfFreedom")
 
     @property
     @since("2.0.0")
@@ -460,7 +475,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.IsotonicRegression", self.uid)
         self._setDefault(isotonic=True, featureIndex=0)
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -471,7 +486,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                  weightCol=None, isotonic=True, featureIndex=0):
         Set the params for IsotonicRegression.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -700,7 +715,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="variance")
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -716,7 +731,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   impurity="variance", seed=None, varianceCol=None)
         Sets params for the DecisionTreeRegressor.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -818,7 +833,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
             where gain is scaled by the number of instances passing through node
           - Normalize importances for tree to sum to 1.
 
-        Note: Feature importance for single decision trees can have high variance due to
+        .. note:: Feature importance for single decision trees can have high variance due to
               correlated predictor variables. Consider using a :py:class:`RandomForestRegressor`
               to determine feature importance instead.
         """
@@ -891,7 +906,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="variance", subsamplingRate=1.0, numTrees=20,
                          featureSubsetStrategy="auto")
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -909,7 +924,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   featureSubsetStrategy="auto")
         Sets params for linear regression.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -1018,7 +1033,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
                          impurity="variance")
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -1036,7 +1051,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                   impurity="variance")
         Sets params for Gradient Boosted Tree Regression.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -1167,7 +1182,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._setDefault(censorCol="censor",
                          quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
                          maxIter=100, tol=1E-6)
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -1182,7 +1197,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
                   quantilesCol=None, aggregationDepth=2):
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -1290,8 +1305,8 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
     Fit a Generalized Linear Model specified by giving a symbolic description of the linear
     predictor (link function) and a description of the error distribution (family). It supports
-    "gaussian", "binomial", "poisson" and "gamma" as family. Valid link functions for each family
-    is listed below. The first link function of each family is the default one.
+    "gaussian", "binomial", "poisson", "gamma" and "tweedie" as family. Valid link functions for
+    each family is listed below. The first link function of each family is the default one.
 
     * "gaussian" -> "identity", "log", "inverse"
 
@@ -1300,6 +1315,9 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     * "poisson"  -> "log", "identity", "sqrt"
 
     * "gamma"    -> "inverse", "identity", "log"
+
+    * "tweedie"  -> power link function specified through "linkPower". \
+                    The default link power in the tweedie family is 1 - variancePower.
 
     .. seealso:: `GLM <https://en.wikipedia.org/wiki/Generalized_linear_model>`_
 
@@ -1340,7 +1358,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
     family = Param(Params._dummy(), "family", "The name of family which is a description of " +
                    "the error distribution to be used in the model. Supported options: " +
-                   "gaussian (default), binomial, poisson and gamma.",
+                   "gaussian (default), binomial, poisson, gamma and tweedie.",
                    typeConverter=TypeConverters.toString)
     link = Param(Params._dummy(), "link", "The name of link function which provides the " +
                  "relationship between the linear predictor and the mean of the distribution " +
@@ -1348,35 +1366,54 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
                  "and sqrt.", typeConverter=TypeConverters.toString)
     linkPredictionCol = Param(Params._dummy(), "linkPredictionCol", "link prediction (linear " +
                               "predictor) column name", typeConverter=TypeConverters.toString)
+    variancePower = Param(Params._dummy(), "variancePower", "The power in the variance function " +
+                          "of the Tweedie distribution which characterizes the relationship " +
+                          "between the variance and mean of the distribution. Only applicable " +
+                          "for the Tweedie family. Supported values: 0 and [1, Inf).",
+                          typeConverter=TypeConverters.toFloat)
+    linkPower = Param(Params._dummy(), "linkPower", "The index in the power link function. " +
+                      "Only applicable to the Tweedie family.",
+                      typeConverter=TypeConverters.toFloat)
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: irls.", typeConverter=TypeConverters.toString)
+    offsetCol = Param(Params._dummy(), "offsetCol", "The offset column name. If this is not set " +
+                      "or empty, we treat all instance offsets as 0.0",
+                      typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
-                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None):
+                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None,
+                 variancePower=0.0, linkPower=None, offsetCol=None):
         """
         __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
-                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None)
+                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
+                 variancePower=0.0, linkPower=None, offsetCol=None)
         """
         super(GeneralizedLinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid)
-        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls")
-        kwargs = self.__init__._input_kwargs
+        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls",
+                         variancePower=0.0)
+        kwargs = self._input_kwargs
+
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
     def setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction",
                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
-                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None):
+                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None,
+                  variancePower=0.0, linkPower=None, offsetCol=None):
         """
         setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
-                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None)
+                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
+                  variancePower=0.0, linkPower=None, offsetCol=None)
         Sets params for generalized linear regression.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -1424,6 +1461,48 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         """
         return self.getOrDefault(self.link)
 
+    @since("2.2.0")
+    def setVariancePower(self, value):
+        """
+        Sets the value of :py:attr:`variancePower`.
+        """
+        return self._set(variancePower=value)
+
+    @since("2.2.0")
+    def getVariancePower(self):
+        """
+        Gets the value of variancePower or its default value.
+        """
+        return self.getOrDefault(self.variancePower)
+
+    @since("2.2.0")
+    def setLinkPower(self, value):
+        """
+        Sets the value of :py:attr:`linkPower`.
+        """
+        return self._set(linkPower=value)
+
+    @since("2.2.0")
+    def getLinkPower(self):
+        """
+        Gets the value of linkPower or its default value.
+        """
+        return self.getOrDefault(self.linkPower)
+
+    @since("2.3.0")
+    def setOffsetCol(self, value):
+        """
+        Sets the value of :py:attr:`offsetCol`.
+        """
+        return self._set(offsetCol=value)
+
+    @since("2.3.0")
+    def getOffsetCol(self):
+        """
+        Gets the value of offsetCol or its default value.
+        """
+        return self.getOrDefault(self.offsetCol)
+
 
 class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable,
                                        JavaMLReadable):
@@ -1459,8 +1538,12 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWri
         training set. An exception is thrown if
         `trainingSummary is None`.
         """
-        java_glrt_summary = self._call_java("summary")
-        return GeneralizedLinearRegressionTrainingSummary(java_glrt_summary)
+        if self.hasSummary:
+            java_glrt_summary = self._call_java("summary")
+            return GeneralizedLinearRegressionTrainingSummary(java_glrt_summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
     @property
     @since("2.0.0")
@@ -1511,6 +1594,14 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
         This is set to a new column name if the original model's `predictionCol` is not set.
         """
         return self._call_java("predictionCol")
+
+    @property
+    @since("2.2.0")
+    def numInstances(self):
+        """
+        Number of instances in DataFrame predictions.
+        """
+        return self._call_java("numInstances")
 
     @property
     @since("2.0.0")

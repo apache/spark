@@ -45,7 +45,8 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.scheduler.{ExecutorAllocationManager, JobScheduler, StreamingListener}
+import org.apache.spark.streaming.scheduler.
+    {ExecutorAllocationManager, JobScheduler, StreamingListener, StreamingListenerStreamingStarted}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
 import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
@@ -421,11 +422,11 @@ class StreamingContext private[streaming] (
    * by "moving" them from another location within the same file system. File names
    * starting with . are ignored.
    *
-   * '''Note:''' We ensure that the byte array for each record in the
-   * resulting RDDs of the DStream has the provided record length.
-   *
    * @param directory HDFS directory to monitor for new file
    * @param recordLength length of each record in bytes
+   *
+   * @note We ensure that the byte array for each record in the
+   * resulting RDDs of the DStream has the provided record length.
    */
   def binaryRecordsStream(
       directory: String,
@@ -434,25 +435,24 @@ class StreamingContext private[streaming] (
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
       directory, FileInputDStream.defaultFilter: Path => Boolean, newFilesOnly = true, conf)
-    val data = br.map { case (k, v) =>
-      val bytes = v.getBytes
+    br.map { case (k, v) =>
+      val bytes = v.copyBytes()
       require(bytes.length == recordLength, "Byte array does not have correct length. " +
         s"${bytes.length} did not equal recordLength: $recordLength")
       bytes
     }
-    data
   }
 
   /**
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
-   * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
-   * those RDDs, so `queueStream` doesn't support checkpointing.
-   *
    * @param queue      Queue of RDDs. Modifications to this data structure must be synchronized.
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @tparam T         Type of objects in the RDD
+   *
+   * @note Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * those RDDs, so `queueStream` doesn't support checkpointing.
    */
   def queueStream[T: ClassTag](
       queue: Queue[RDD[T]],
@@ -465,14 +465,14 @@ class StreamingContext private[streaming] (
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
-   * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
-   * those RDDs, so `queueStream` doesn't support checkpointing.
-   *
    * @param queue      Queue of RDDs. Modifications to this data structure must be synchronized.
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @param defaultRDD Default RDD is returned by the DStream when the queue is empty.
    *                   Set as null if no RDD should be returned when empty
    * @tparam T         Type of objects in the RDD
+   *
+   * @note Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * those RDDs, so `queueStream` doesn't support checkpointing.
    */
   def queueStream[T: ClassTag](
       queue: Queue[RDD[T]],
@@ -583,6 +583,8 @@ class StreamingContext private[streaming] (
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE
+            scheduler.listenerBus.post(
+              StreamingListenerStreamingStarted(System.currentTimeMillis()))
           } catch {
             case NonFatal(e) =>
               logError("Error starting the context, marking it as stopped", e)

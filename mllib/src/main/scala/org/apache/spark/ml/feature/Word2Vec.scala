@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
@@ -30,6 +31,7 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.{Utils, VersionUtils}
 
 /**
  * Params for [[Word2Vec]] and [[Word2VecModel]].
@@ -43,7 +45,8 @@ private[feature] trait Word2VecBase extends Params
    * @group param
    */
   final val vectorSize = new IntParam(
-    this, "vectorSize", "the dimension of codes after transforming from words")
+    this, "vectorSize", "the dimension of codes after transforming from words (> 0)",
+    ParamValidators.gt(0))
   setDefault(vectorSize -> 100)
 
   /** @group getParam */
@@ -55,7 +58,8 @@ private[feature] trait Word2VecBase extends Params
    * @group expertParam
    */
   final val windowSize = new IntParam(
-    this, "windowSize", "the window size (context words from [-window, window])")
+    this, "windowSize", "the window size (context words from [-window, window]) (> 0)",
+    ParamValidators.gt(0))
   setDefault(windowSize -> 5)
 
   /** @group expertGetParam */
@@ -67,7 +71,8 @@ private[feature] trait Word2VecBase extends Params
    * @group param
    */
   final val numPartitions = new IntParam(
-    this, "numPartitions", "number of partitions for sentences of words")
+    this, "numPartitions", "number of partitions for sentences of words (> 0)",
+    ParamValidators.gt(0))
   setDefault(numPartitions -> 1)
 
   /** @group getParam */
@@ -80,7 +85,7 @@ private[feature] trait Word2VecBase extends Params
    * @group param
    */
   final val minCount = new IntParam(this, "minCount", "the minimum number of times a token must " +
-    "appear to be included in the word2vec model's vocabulary")
+    "appear to be included in the word2vec model's vocabulary (>= 0)", ParamValidators.gtEq(0))
   setDefault(minCount -> 5)
 
   /** @group getParam */
@@ -95,7 +100,7 @@ private[feature] trait Word2VecBase extends Params
    */
   final val maxSentenceLength = new IntParam(this, "maxSentenceLength", "Maximum length " +
     "(in words) of each sentence in the input data. Any sentence longer than this threshold will " +
-    "be divided into chunks up to the size.")
+    "be divided into chunks up to the size (> 0)", ParamValidators.gt(0))
   setDefault(maxSentenceLength -> 1000)
 
   /** @group getParam */
@@ -223,25 +228,50 @@ class Word2VecModel private[ml] (
 
   /**
    * Find "num" number of words closest in similarity to the given word, not
-   * including the word itself. Returns a dataframe with the words and the
-   * cosine similarities between the synonyms and the given word.
+   * including the word itself.
+   * @return a dataframe with columns "word" and "similarity" of the word and the cosine
+   * similarities between the synonyms and the given word vector.
    */
   @Since("1.5.0")
   def findSynonyms(word: String, num: Int): DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
-    spark.createDataFrame(wordVectors.findSynonyms(word, num)).toDF("word", "similarity")
+    spark.createDataFrame(findSynonymsArray(word, num)).toDF("word", "similarity")
   }
 
   /**
-   * Find "num" number of words whose vector representation most similar to the supplied vector.
+   * Find "num" number of words whose vector representation is most similar to the supplied vector.
    * If the supplied vector is the vector representation of a word in the model's vocabulary,
-   * that word will be in the results.  Returns a dataframe with the words and the cosine
+   * that word will be in the results.
+   * @return a dataframe with columns "word" and "similarity" of the word and the cosine
    * similarities between the synonyms and the given word vector.
    */
   @Since("2.0.0")
   def findSynonyms(vec: Vector, num: Int): DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
-    spark.createDataFrame(wordVectors.findSynonyms(vec, num)).toDF("word", "similarity")
+    spark.createDataFrame(findSynonymsArray(vec, num)).toDF("word", "similarity")
+  }
+
+  /**
+   * Find "num" number of words whose vector representation is most similar to the supplied vector.
+   * If the supplied vector is the vector representation of a word in the model's vocabulary,
+   * that word will be in the results.
+   * @return an array of the words and the cosine similarities between the synonyms given
+   * word vector.
+   */
+  @Since("2.2.0")
+  def findSynonymsArray(vec: Vector, num: Int): Array[(String, Double)] = {
+    wordVectors.findSynonyms(vec, num)
+  }
+
+  /**
+   * Find "num" number of words closest in similarity to the given word, not
+   * including the word itself.
+   * @return an array of the words and the cosine similarities between the synonyms given
+   * word vector.
+   */
+  @Since("2.2.0")
+  def findSynonymsArray(word: String, num: Int): Array[(String, Double)] = {
+    wordVectors.findSynonyms(word, num)
   }
 
   /** @group setParam */
@@ -299,16 +329,53 @@ class Word2VecModel private[ml] (
 @Since("1.6.0")
 object Word2VecModel extends MLReadable[Word2VecModel] {
 
+  private case class Data(word: String, vector: Array[Float])
+
   private[Word2VecModel]
   class Word2VecModelWriter(instance: Word2VecModel) extends MLWriter {
 
-    private case class Data(wordIndex: Map[String, Int], wordVectors: Seq[Float])
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.wordVectors.wordIndex, instance.wordVectors.wordVectors.toSeq)
+
+      val wordVectors = instance.wordVectors.getVectors
+      val dataSeq = wordVectors.toSeq.map { case (word, vector) => Data(word, vector) }
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      val bufferSizeInBytes = Utils.byteStringAsBytes(
+        sc.conf.get("spark.kryoserializer.buffer.max", "64m"))
+      val numPartitions = Word2VecModelWriter.calculateNumberOfPartitions(
+        bufferSizeInBytes, instance.wordVectors.wordIndex.size, instance.getVectorSize)
+      sparkSession.createDataFrame(dataSeq)
+        .repartition(numPartitions)
+        .write
+        .parquet(dataPath)
+    }
+  }
+
+  private[feature]
+  object Word2VecModelWriter {
+    /**
+     * Calculate the number of partitions to use in saving the model.
+     * [SPARK-11994] - We want to partition the model in partitions smaller than
+     * spark.kryoserializer.buffer.max
+     * @param bufferSizeInBytes  Set to spark.kryoserializer.buffer.max
+     * @param numWords  Vocab size
+     * @param vectorSize  Vector length for each word
+     */
+    def calculateNumberOfPartitions(
+        bufferSizeInBytes: Long,
+        numWords: Int,
+        vectorSize: Int): Int = {
+      val floatSize = 4L  // Use Long to help avoid overflow
+      val averageWordSize = 15
+      // Calculate the approximate size of the model.
+      // Assuming an average word size of 15 bytes, the formula is:
+      // (floatSize * vectorSize + 15) * numWords
+      val approximateSizeInBytes = (floatSize * vectorSize + averageWordSize) * numWords
+      val numPartitions = (approximateSizeInBytes / bufferSizeInBytes) + 1
+      require(numPartitions < 10e8, s"Word2VecModel calculated that it needs $numPartitions " +
+        s"partitions to save this model, which is too large.  Try increasing " +
+        s"spark.kryoserializer.buffer.max so that Word2VecModel can use fewer partitions.")
+      numPartitions.toInt
     }
   }
 
@@ -317,14 +384,29 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
     private val className = classOf[Word2VecModel].getName
 
     override def load(path: String): Word2VecModel = {
+      val spark = sparkSession
+      import spark.implicits._
+
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
+
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("wordIndex", "wordVectors")
-        .head()
-      val wordIndex = data.getAs[Map[String, Int]](0)
-      val wordVectors = data.getAs[Seq[Float]](1).toArray
-      val oldModel = new feature.Word2VecModel(wordIndex, wordVectors)
+
+      val oldModel = if (major < 2 || (major == 2 && minor < 2)) {
+        val data = spark.read.parquet(dataPath)
+          .select("wordIndex", "wordVectors")
+          .head()
+        val wordIndex = data.getAs[Map[String, Int]](0)
+        val wordVectors = data.getAs[Seq[Float]](1).toArray
+        new feature.Word2VecModel(wordIndex, wordVectors)
+      } else {
+        val wordVectorsMap = spark.read.parquet(dataPath).as[Data]
+          .collect()
+          .map(wordVector => (wordVector.word, wordVector.vector))
+          .toMap
+        new feature.Word2VecModel(wordVectorsMap)
+      }
+
       val model = new Word2VecModel(metadata.uid, oldModel)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

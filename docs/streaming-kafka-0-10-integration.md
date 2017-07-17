@@ -12,6 +12,8 @@ For Scala/Java applications using SBT/Maven project definitions, link your strea
 	artifactId = spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}}
 	version = {{site.SPARK_VERSION_SHORT}}
 
+**Do not** manually add dependencies on `org.apache.kafka` artifacts (e.g. `kafka-clients`).  The `spark-streaming-kafka-0-10` artifact has the appropriate transitive dependencies already, and different versions may be incompatible in hard to diagnose ways.
+
 ### Creating a Direct Stream
  Note that the namespace for the import includes the version, org.apache.spark.streaming.kafka010
 
@@ -68,20 +70,14 @@ kafkaParams.put("enable.auto.commit", false);
 
 Collection<String> topics = Arrays.asList("topicA", "topicB");
 
-final JavaInputDStream<ConsumerRecord<String, String>> stream =
+JavaInputDStream<ConsumerRecord<String, String>> stream =
   KafkaUtils.createDirectStream(
     streamingContext,
     LocationStrategies.PreferConsistent(),
     ConsumerStrategies.<String, String>Subscribe(topics, kafkaParams)
   );
 
-stream.mapToPair(
-  new PairFunction<ConsumerRecord<String, String>, String, String>() {
-    @Override
-    public Tuple2<String, String> call(ConsumerRecord<String, String> record) {
-      return new Tuple2<>(record.key(), record.value());
-    }
-  })
+stream.mapToPair(record -> new Tuple2<>(record.key(), record.value()));
 {% endhighlight %}
 </div>
 </div>
@@ -95,7 +91,9 @@ The new Kafka consumer API will pre-fetch messages into buffers.  Therefore it i
 
 In most cases, you should use `LocationStrategies.PreferConsistent` as shown above.  This will distribute partitions evenly across available executors.  If your executors are on the same hosts as your Kafka brokers, use `PreferBrokers`, which will prefer to schedule partitions on the Kafka leader for that partition.  Finally, if you have a significant skew in load among partitions, use `PreferFixed`. This allows you to specify an explicit mapping of partitions to hosts (any unspecified partitions will use a consistent location).
 
-The cache for consumers has a default maximum size of 64.  If you expect to be handling more than (64 * number of executors) Kafka partitions, you can change this setting via `spark.streaming.kafka.consumer.cache.maxCapacity`
+The cache for consumers has a default maximum size of 64.  If you expect to be handling more than (64 * number of executors) Kafka partitions, you can change this setting via `spark.streaming.kafka.consumer.cache.maxCapacity`.
+
+If you would like to disable the caching for Kafka consumers, you can set `spark.streaming.kafka.consumer.cache.enabled` to `false`. Disabling the cache may be needed to workaround the problem described in SPARK-19185. This property may be removed in later versions of Spark, once SPARK-19185 is resolved.
 
 The cache is keyed by topicpartition and group.id, so use a **separate** `group.id` for each call to `createDirectStream`.
 
@@ -162,19 +160,13 @@ stream.foreachRDD { rdd =>
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
-stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
-  @Override
-  public void call(JavaRDD<ConsumerRecord<String, String>> rdd) {
-    final OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
-    rdd.foreachPartition(new VoidFunction<Iterator<ConsumerRecord<String, String>>>() {
-      @Override
-      public void call(Iterator<ConsumerRecord<String, String>> consumerRecords) {
-        OffsetRange o = offsetRanges[TaskContext.get().partitionId()];
-        System.out.println(
-          o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset());
-      }
-    });
-  }
+stream.foreachRDD(rdd -> {
+  OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+  rdd.foreachPartition(consumerRecords -> {
+    OffsetRange o = offsetRanges[TaskContext.get().partitionId()];
+    System.out.println(
+      o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset());
+  });
 });
 {% endhighlight %}
 </div>
@@ -183,7 +175,7 @@ stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
 Note that the typecast to `HasOffsetRanges` will only succeed if it is done in the first method called on the result of `createDirectStream`, not later down a chain of methods. Be aware that the one-to-one mapping between RDD partition and Kafka partition does not remain after any methods that shuffle or repartition, e.g. reduceByKey() or window().
 
 ### Storing Offsets
-Kafka delivery semantics in the case of failure depend on how and when offsets are stored.  Spark output operations are [at-least-once](streaming-programming-guide.html#semantics-of-output-operations).  So if you want the equivalent of exactly-once semantics, you must either store offsets after an idempotent output, or store offsets in an atomic transaction alongside output. With this integration, you have 3 options, in order of increasing reliablity (and code complexity), for how to store offsets.
+Kafka delivery semantics in the case of failure depend on how and when offsets are stored.  Spark output operations are [at-least-once](streaming-programming-guide.html#semantics-of-output-operations).  So if you want the equivalent of exactly-once semantics, you must either store offsets after an idempotent output, or store offsets in an atomic transaction alongside output. With this integration, you have 3 options, in order of increasing reliability (and code complexity), for how to store offsets.
 
 #### Checkpoints
 If you enable Spark [checkpointing](streaming-programming-guide.html#checkpointing), offsets will be stored in the checkpoint.  This is easy to enable, but there are drawbacks. Your output operation must be idempotent, since you will get repeated outputs; transactions are not an option.  Furthermore, you cannot recover from a checkpoint if your application code has changed.  For planned upgrades, you can mitigate this by running the new code at the same time as the old code (since outputs need to be idempotent anyway, they should not clash).  But for unplanned failures that require code changes, you will lose data unless you have another way to identify known good starting offsets.
@@ -205,14 +197,11 @@ As with HasOffsetRanges, the cast to CanCommitOffsets will only succeed if calle
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
-stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
-  @Override
-  public void call(JavaRDD<ConsumerRecord<String, String>> rdd) {
-    OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+stream.foreachRDD(rdd -> {
+  OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
 
-    // some time later, after outputs have completed
-    ((CanCommitOffsets) stream.inputDStream()).commitAsync(offsetRanges);
-  }
+  // some time later, after outputs have completed
+  ((CanCommitOffsets) stream.inputDStream()).commitAsync(offsetRanges);
 });
 {% endhighlight %}
 </div>
@@ -268,21 +257,18 @@ JavaInputDStream<ConsumerRecord<String, String>> stream = KafkaUtils.createDirec
   ConsumerStrategies.<String, String>Assign(fromOffsets.keySet(), kafkaParams, fromOffsets)
 );
 
-stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
-  @Override
-  public void call(JavaRDD<ConsumerRecord<String, String>> rdd) {
-    OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
-    
-    Object results = yourCalculation(rdd);
+stream.foreachRDD(rdd -> {
+  OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+  
+  Object results = yourCalculation(rdd);
 
-    // begin your transaction
+  // begin your transaction
 
-    // update results
-    // update offsets where the end of existing offsets matches the beginning of this batch of offsets
-    // assert that offsets were updated correctly
+  // update results
+  // update offsets where the end of existing offsets matches the beginning of this batch of offsets
+  // assert that offsets were updated correctly
 
-    // end your transaction
-  }
+  // end your transaction
 });
 {% endhighlight %}
 </div>

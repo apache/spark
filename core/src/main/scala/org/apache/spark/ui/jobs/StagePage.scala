@@ -70,8 +70,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   // if we find that it's okay.
   private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
 
-  private val displayPeakExecutionMemory = parent.conf.getBoolean("spark.sql.unsafe.enabled", true)
-
   private def getLocalitySummaryString(stageData: StageUIData): String = {
     val localities = stageData.taskData.values.map(_.taskInfo.taskLocality)
     val localityCounts = localities.groupBy(identity).mapValues(_.size)
@@ -89,17 +87,18 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
-      val parameterId = request.getParameter("id")
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
+      val parameterId = UIUtils.stripXSS(request.getParameter("id"))
       require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-      val parameterAttempt = request.getParameter("attempt")
+      val parameterAttempt = UIUtils.stripXSS(request.getParameter("attempt"))
       require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
 
-      val parameterTaskPage = request.getParameter("task.page")
-      val parameterTaskSortColumn = request.getParameter("task.sort")
-      val parameterTaskSortDesc = request.getParameter("task.desc")
-      val parameterTaskPageSize = request.getParameter("task.pageSize")
-      val parameterTaskPrevPageSize = request.getParameter("task.prevPageSize")
+      val parameterTaskPage = UIUtils.stripXSS(request.getParameter("task.page"))
+      val parameterTaskSortColumn = UIUtils.stripXSS(request.getParameter("task.sort"))
+      val parameterTaskSortDesc = UIUtils.stripXSS(request.getParameter("task.desc"))
+      val parameterTaskPageSize = UIUtils.stripXSS(request.getParameter("task.pageSize"))
+      val parameterTaskPrevPageSize = UIUtils.stripXSS(request.getParameter("task.prevPageSize"))
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
       val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
@@ -144,7 +143,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val allAccumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
       val externalAccumulables = allAccumulables.values.filter { acc => !acc.internal }
-      val hasAccumulators = externalAccumulables.size > 0
+      val hasAccumulators = externalAccumulables.nonEmpty
 
       val summary =
         <div>
@@ -252,15 +251,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                   <span class="additional-metric-title">Getting Result Time</span>
                 </span>
               </li>
-              {if (displayPeakExecutionMemory) {
-                <li>
-                  <span data-toggle="tooltip"
-                        title={ToolTips.PEAK_EXECUTION_MEMORY} data-placement="right">
-                    <input type="checkbox" name={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}/>
-                    <span class="additional-metric-title">Peak Execution Memory</span>
-                  </span>
-                </li>
-              }}
+              <li>
+                <span data-toggle="tooltip"
+                      title={ToolTips.PEAK_EXECUTION_MEMORY} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}/>
+                  <span class="additional-metric-title">Peak Execution Memory</span>
+                </span>
+              </li>
             </ul>
           </div>
         </div>
@@ -343,7 +340,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.metrics.isDefined)
 
       val summaryTable: Option[Seq[Node]] =
-        if (validTasks.size == 0) {
+        if (validTasks.isEmpty) {
           None
         }
         else {
@@ -532,13 +529,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               {serializationQuantiles}
             </tr>,
             <tr class={TaskDetailsClassNames.GETTING_RESULT_TIME}>{gettingResultQuantiles}</tr>,
-            if (displayPeakExecutionMemory) {
-              <tr class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
-                {peakExecutionMemoryQuantiles}
-              </tr>
-            } else {
-              Nil
-            },
+            <tr class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
+              {peakExecutionMemoryQuantiles}
+            </tr>,
             if (stageData.hasInput) <tr>{inputQuantiles}</tr> else Nil,
             if (stageData.hasOutput) <tr>{outputQuantiles}</tr> else Nil,
             if (stageData.hasShuffleRead) {
@@ -794,8 +787,8 @@ private[ui] object StagePage {
       info: TaskInfo, metrics: TaskMetricsUIData, currentTime: Long): Long = {
     if (info.finished) {
       val totalExecutionTime = info.finishTime - info.launchTime
-      val executorOverhead = (metrics.executorDeserializeTime +
-        metrics.resultSerializationTime)
+      val executorOverhead = metrics.executorDeserializeTime +
+        metrics.resultSerializationTime
       math.max(
         0,
         totalExecutionTime - metrics.executorRunTime - executorOverhead -
@@ -880,7 +873,7 @@ private[ui] class TaskDataSource(
   // so that we can avoid creating duplicate contents during sorting the data
   private val data = tasks.map(taskRow).sorted(ordering(sortColumn, desc))
 
-  private var _slicedTaskIds: Set[Long] = null
+  private var _slicedTaskIds: Set[Long] = _
 
   override def dataSize: Int = data.size
 
@@ -895,10 +888,8 @@ private[ui] class TaskDataSource(
   private def taskRow(taskData: TaskUIData): TaskTableRowData = {
     val info = taskData.taskInfo
     val metrics = taskData.metrics
-    val duration = if (info.status == "RUNNING") info.timeRunning(currentTime)
-      else metrics.map(_.executorRunTime).getOrElse(1L)
-    val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
-      else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
+    val duration = taskData.taskDuration.getOrElse(1L)
+    val formatDuration = taskData.taskDuration.map(d => UIUtils.formatDuration(d)).getOrElse("")
     val schedulerDelay = metrics.map(getSchedulerDelay(info, _, currentTime)).getOrElse(0L)
     val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
     val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
@@ -1166,9 +1157,6 @@ private[ui] class TaskPagedTable(
     desc: Boolean,
     executorsListener: ExecutorsListener) extends PagedTable[TaskTableRowData] {
 
-  // We only track peak memory used for unsafe operators
-  private val displayPeakExecutionMemory = conf.getBoolean("spark.sql.unsafe.enabled", true)
-
   override def tableId: String = "task-table"
 
   override def tableCssClass: String =
@@ -1217,14 +1205,8 @@ private[ui] class TaskPagedTable(
         ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
         ("GC Time", ""),
         ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
-        ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
-        {
-          if (displayPeakExecutionMemory) {
-            Seq(("Peak Execution Memory", TaskDetailsClassNames.PEAK_EXECUTION_MEMORY))
-          } else {
-            Nil
-          }
-        } ++
+        ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME),
+        ("Peak Execution Memory", TaskDetailsClassNames.PEAK_EXECUTION_MEMORY)) ++
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
         {if (hasInput) Seq(("Input Size / Records", "")) else Nil} ++
         {if (hasOutput) Seq(("Output Size / Records", "")) else Nil} ++
@@ -1316,11 +1298,9 @@ private[ui] class TaskPagedTable(
       <td class={TaskDetailsClassNames.GETTING_RESULT_TIME}>
         {UIUtils.formatDuration(task.gettingResultTime)}
       </td>
-      {if (displayPeakExecutionMemory) {
-        <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
-          {Utils.bytesToString(task.peakExecutionMemoryUsed)}
-        </td>
-      }}
+      <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
+        {Utils.bytesToString(task.peakExecutionMemoryUsed)}
+      </td>
       {if (task.accumulators.nonEmpty) {
         <td>{Unparsed(task.accumulators.get)}</td>
       }}

@@ -44,12 +44,7 @@ class OutputRedirector {
   OutputRedirector(InputStream in, String loggerName, ThreadFactory tf) {
     this.active = true;
     this.reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-    this.thread = tf.newThread(new Runnable() {
-      @Override
-      public void run() {
-        redirect();
-      }
-    });
+    this.thread = tf.newThread(this::redirect);
     this.sink = Logger.getLogger(loggerName);
     thread.start();
   }

@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -36,7 +36,8 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  */
 @Since("1.4.0")
 final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Model[Bucketizer] with HasInputCol with HasOutputCol with DefaultParamsWritable {
+  extends Model[Bucketizer] with HasHandleInvalid with HasInputCol with HasOutputCol
+    with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("bucketizer"))
@@ -44,7 +45,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   /**
    * Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets.
    * A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which
-   * also includes y. Splits should be of length >= 3 and strictly increasing.
+   * also includes y. Splits should be of length greater than or equal to 3 and strictly increasing.
    * Values at -inf, inf must be explicitly provided to cover all Double values;
    * otherwise, values outside the splits specified will be treated as errors.
    *
@@ -78,21 +79,17 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Param for how to handle invalid entries. Options are skip (filter out rows with
-   * invalid values), error (throw an error), or keep (keep invalid values in a special additional
-   * bucket).
+   * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
+   * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
+   * additional bucket).
    * Default: "error"
    * @group param
    */
   @Since("2.1.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle" +
-    "invalid entries. Options are skip (filter out rows with invalid values), " +
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "how to handle invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    ParamValidators.inArray(Bucketizer.supportedHandleInvalid))
-
-  /** @group getParam */
-  @Since("2.1.0")
-  def getHandleInvalid: String = $(handleInvalid)
+    ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
 
   /** @group setParam */
   @Since("2.1.0")
@@ -113,9 +110,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
     val bucketizer: UserDefinedFunction = udf { (feature: Double) =>
       Bucketizer.binarySearchForBuckets($(splits), feature, keepInvalid)
-    }
+    }.withName("bucketizer")
 
-    val newCol = bucketizer(filteredDataset($(inputCol)))
+    val newCol = bucketizer(filteredDataset($(inputCol)).cast(DoubleType))
     val newField = prepOutputField(filteredDataset.schema)
     filteredDataset.withColumn($(outputCol), newCol, newField.metadata)
   }
@@ -129,7 +126,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(inputCol))
     SchemaUtils.appendColumn(schema, prepOutputField(schema))
   }
 
@@ -145,7 +142,7 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
   private[feature] val SKIP_INVALID: String = "skip"
   private[feature] val ERROR_INVALID: String = "error"
   private[feature] val KEEP_INVALID: String = "keep"
-  private[feature] val supportedHandleInvalid: Array[String] =
+  private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
 
   /**

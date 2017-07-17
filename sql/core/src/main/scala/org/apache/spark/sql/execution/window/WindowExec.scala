@@ -20,15 +20,13 @@ package org.apache.spark.sql.execution.window
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 /**
  * This class calculates and outputs (windowed) aggregates over the rows in a single (sorted)
@@ -155,8 +153,8 @@ case class WindowExec(
   }
 
   /**
-   * Collection containing an entry for each window frame to process. Each entry contains a frames'
-   * WindowExpressions and factory function for the WindowFrameFunction.
+   * Collection containing an entry for each window frame to process. Each entry contains a frame's
+   * [[WindowExpression]]s and factory function for the WindowFrameFunction.
    */
   private[this] lazy val windowFrameExpressionFactoryPairs = {
     type FrameKey = (String, FrameType, Option[Int], Option[Int])
@@ -284,6 +282,7 @@ case class WindowExec(
     // Unwrap the expressions and factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
+    val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
 
     // Start processing.
     child.execute().mapPartitions { stream =>
@@ -310,10 +309,12 @@ case class WindowExec(
         fetchNextRow()
 
         // Manage the current partition.
-        val rows = ArrayBuffer.empty[UnsafeRow]
         val inputFields = child.output.length
-        var sorter: UnsafeExternalSorter = null
-        var rowBuffer: RowBuffer = null
+
+        val buffer: ExternalAppendOnlyUnsafeRowArray =
+          new ExternalAppendOnlyUnsafeRowArray(spillThreshold)
+        var bufferIterator: Iterator[UnsafeRow] = _
+
         val windowFunctionResult = new SpecificInternalRow(expressions.map(_.dataType))
         val frames = factories.map(_(windowFunctionResult))
         val numFrames = frames.length
@@ -323,78 +324,43 @@ case class WindowExec(
           val currentGroup = nextGroup.copy()
 
           // clear last partition
-          if (sorter != null) {
-            // the last sorter of this task will be cleaned up via task completion listener
-            sorter.cleanupResources()
-            sorter = null
-          } else {
-            rows.clear()
-          }
+          buffer.clear()
 
           while (nextRowAvailable && nextGroup == currentGroup) {
-            if (sorter == null) {
-              rows += nextRow.copy()
-
-              if (rows.length >= 4096) {
-                // We will not sort the rows, so prefixComparator and recordComparator are null.
-                sorter = UnsafeExternalSorter.create(
-                  TaskContext.get().taskMemoryManager(),
-                  SparkEnv.get.blockManager,
-                  SparkEnv.get.serializerManager,
-                  TaskContext.get(),
-                  null,
-                  null,
-                  1024,
-                  SparkEnv.get.memoryManager.pageSizeBytes,
-                  SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
-                    UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
-                  false)
-                rows.foreach { r =>
-                  sorter.insertRecord(r.getBaseObject, r.getBaseOffset, r.getSizeInBytes, 0, false)
-                }
-                rows.clear()
-              }
-            } else {
-              sorter.insertRecord(nextRow.getBaseObject, nextRow.getBaseOffset,
-                nextRow.getSizeInBytes, 0, false)
-            }
+            buffer.add(nextRow)
             fetchNextRow()
-          }
-          if (sorter != null) {
-            rowBuffer = new ExternalRowBuffer(sorter, inputFields)
-          } else {
-            rowBuffer = new ArrayRowBuffer(rows)
           }
 
           // Setup the frames.
           var i = 0
           while (i < numFrames) {
-            frames(i).prepare(rowBuffer.copy())
+            frames(i).prepare(buffer)
             i += 1
           }
 
           // Setup iteration
           rowIndex = 0
-          rowsSize = rowBuffer.size
+          bufferIterator = buffer.generateIterator()
         }
 
         // Iteration
         var rowIndex = 0
-        var rowsSize = 0L
 
-        override final def hasNext: Boolean = rowIndex < rowsSize || nextRowAvailable
+        override final def hasNext: Boolean =
+          (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
 
         val join = new JoinedRow
         override final def next(): InternalRow = {
           // Load the next partition if we need to.
-          if (rowIndex >= rowsSize && nextRowAvailable) {
+          if ((bufferIterator == null || !bufferIterator.hasNext) && nextRowAvailable) {
             fetchNextPartition()
           }
 
-          if (rowIndex < rowsSize) {
+          if (bufferIterator.hasNext) {
+            val current = bufferIterator.next()
+
             // Get the results for the window frames.
             var i = 0
-            val current = rowBuffer.next()
             while (i < numFrames) {
               frames(i).write(rowIndex, current)
               i += 1
@@ -406,7 +372,9 @@ case class WindowExec(
 
             // Return the projection.
             result(join)
-          } else throw new NoSuchElementException
+          } else {
+            throw new NoSuchElementException
+          }
         }
       }
     }

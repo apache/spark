@@ -86,15 +86,8 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     echo("Type :help for more information.")
   }
 
-  /** Add repl commands that needs to be blocked. e.g. reset */
-  private val blockedCommands = Set[String]()
-
-  /** Standard commands */
-  lazy val sparkStandardCommands: List[SparkILoop.this.LoopCommand] =
-    standardCommands.filter(cmd => !blockedCommands(cmd.name))
-
   /** Available commands */
-  override def commands: List[LoopCommand] = sparkStandardCommands
+  override def commands: List[LoopCommand] = standardCommands
 
   /**
    * We override `loadFiles` because we need to initialize Spark *before* the REPL

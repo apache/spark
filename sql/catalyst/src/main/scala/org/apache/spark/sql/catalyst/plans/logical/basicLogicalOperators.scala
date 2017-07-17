@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+import org.apache.spark.util.random.RandomSampler
 
 /**
  * When planning take() or collect() operations, this special node that is inserted at the top of
@@ -34,6 +35,14 @@ import org.apache.spark.sql.types._
  * at the top of the logical query plan.
  */
 case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * This node is inserted at the top of a subquery when it is optimized. This makes sure we can
+ * recognize a subquery as such, and it allows us to write subquery aware transformations.
+ */
+case class Subquery(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
@@ -66,7 +75,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
  * @param outer when true, each input row will be output at least once, even if the output of the
- *              given `generator` is empty. `outer` has no effect when `join` is false.
+ *              given `generator` is empty.
  * @param qualifier Qualifier for the attributes of generator(UDTF)
  * @param generatorOutput The output schema of the Generator.
  * @param child Children logical plan node
@@ -92,13 +101,20 @@ case class Generate(
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
-  def output: Seq[Attribute] = {
-    val qualified = qualifier.map(q =>
+  def qualifiedGeneratorOutput: Seq[Attribute] = {
+    val qualifiedOutput = qualifier.map { q =>
       // prepend the new qualifier to the existed one
       generatorOutput.map(a => a.withQualifier(Some(q)))
-    ).getOrElse(generatorOutput)
+    }.getOrElse(generatorOutput)
+    val nullableOutput = qualifiedOutput.map {
+      // if outer, make all attributes nullable, otherwise keep existing nullability
+      a => a.withNullability(outer || a.nullable)
+    }
+    nullableOutput
+  }
 
-    if (join) child.output ++ qualified else qualified
+  def output: Seq[Attribute] = {
+    if (join) child.output ++ qualifiedGeneratorOutput else qualifiedGeneratorOutput
   }
 }
 
@@ -133,7 +149,7 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) =>
-        l.dataType.asNullable == r.dataType.asNullable
+        l.dataType.sameType(r.dataType)
       } && duplicateResolved
 }
 
@@ -158,15 +174,6 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       Some(children.flatMap(_.maxRows).min)
     }
   }
-
-  override lazy val statistics: Statistics = {
-    val leftSize = left.statistics.sizeInBytes
-    val rightSize = right.statistics.sizeInBytes
-    val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    val isBroadcastable = left.statistics.isBroadcastable || right.statistics.isBroadcastable
-
-    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = isBroadcastable)
-  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
@@ -175,10 +182,6 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   override def output: Seq[Attribute] = left.output
 
   override protected def validConstraints: Set[Expression] = leftConstraints
-
-  override lazy val statistics: Statistics = {
-    left.statistics.copy()
-  }
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -210,14 +213,9 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
         child.output.length == children.head.output.length &&
         // compare the data types with the first child
         child.output.zip(children.head.output).forall {
-          case (l, r) => l.dataType.asNullable == r.dataType.asNullable }
-      )
+          case (l, r) => l.dataType.sameType(r.dataType)
+        })
     children.length > 1 && childrenResolved && allChildrenCompatible
-  }
-
-  override lazy val statistics: Statistics = {
-    val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
-    Statistics(sizeInBytes = sizeInBytes)
   }
 
   /**
@@ -323,46 +321,11 @@ case class Join(
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
   }
-
-  override lazy val statistics: Statistics = joinType match {
-    case LeftAnti | LeftSemi =>
-      // LeftSemi and LeftAnti won't ever be bigger than left
-      left.statistics.copy()
-    case _ =>
-      // make sure we don't propagate isBroadcastable in other joins, because
-      // they could explode the size.
-      super.statistics.copy(isBroadcastable = false)
-  }
 }
 
 /**
- * A hint for the optimizer that we should broadcast the `child` if used in a join operator.
- */
-case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-
-  // set isBroadcastable to true so the child will be broadcasted
-  override lazy val statistics: Statistics = super.statistics.copy(isBroadcastable = true)
-}
-
-/**
- * Options for writing new data into a table.
- *
- * @param enabled whether to overwrite existing data in the table.
- * @param staticPartitionKeys if non-empty, specifies that we only want to overwrite partitions
- *                            that match this partial partition spec. If empty, all partitions
- *                            will be overwritten.
- */
-case class OverwriteOptions(
-    enabled: Boolean,
-    staticPartitionKeys: CatalogTypes.TablePartitionSpec = Map.empty) {
-  if (staticPartitionKeys.nonEmpty) {
-    assert(enabled, "Overwrite must be enabled when specifying specific partitions.")
-  }
-}
-
-/**
- * Insert some data into a table.
+ * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
+ * concrete implementations during analysis.
  *
  * @param table the logical plan representing the table. In the future this should be a
  *              [[org.apache.spark.sql.catalyst.catalog.CatalogTable]] once we converge Hive tables
@@ -373,25 +336,56 @@ case class OverwriteOptions(
  *                  Map('a' -> Some('1'), 'b' -> Some('2')),
  *                  and `INSERT INTO tbl PARTITION (a=1, b) AS ...`
  *                  would have Map('a' -> Some('1'), 'b' -> None).
- * @param child the logical plan representing data to write to.
+ * @param query the logical plan representing data to write to.
  * @param overwrite overwrite existing table or partitions.
- * @param ifNotExists If true, only write if the table or partition does not exist.
+ * @param ifPartitionNotExists If true, only write if the partition does not exist.
+ *                             Only valid for static partitions.
  */
 case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
-    child: LogicalPlan,
-    overwrite: OverwriteOptions,
-    ifNotExists: Boolean)
+    query: LogicalPlan,
+    overwrite: Boolean,
+    ifPartitionNotExists: Boolean)
   extends LogicalPlan {
+  // IF NOT EXISTS is only valid in INSERT OVERWRITE
+  assert(overwrite || !ifPartitionNotExists)
+  // IF NOT EXISTS is only valid in static partitions
+  assert(partition.values.forall(_.nonEmpty) || !ifPartitionNotExists)
+
+  // We don't want `table` in children as sometimes we don't want to transform it.
+  override def children: Seq[LogicalPlan] = query :: Nil
+  override def output: Seq[Attribute] = Seq.empty
+  override lazy val resolved: Boolean = false
+}
+
+/**
+ * A container for holding the view description(CatalogTable), and the output of the view. The
+ * child should be a logical plan parsed from the `CatalogTable.viewText`, should throw an error
+ * if the `viewText` is not defined.
+ * This operator will be removed at the end of analysis stage.
+ *
+ * @param desc A view description(CatalogTable) that provides necessary information to resolve the
+ *             view.
+ * @param output The output of a view operator, this is generated during planning the view, so that
+ *               we are able to decouple the output from the underlying structure.
+ * @param child The logical plan of a view operator, it should be a logical plan parsed from the
+ *              `CatalogTable.viewText`, should throw an error if the `viewText` is not defined.
+ */
+case class View(
+    desc: CatalogTable,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
+
+  override lazy val resolved: Boolean = child.resolved
 
   override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = Seq.empty
 
-  assert(overwrite.enabled || !ifNotExists)
-  assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
+  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
-  override lazy val resolved: Boolean = childrenResolved && table.resolved
+  override def simpleString: String = {
+    s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
+  }
 }
 
 /**
@@ -404,6 +398,13 @@ case class InsertIntoTable(
  */
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override def simpleString: String = {
+    val cteAliases = Utils.truncatedString(cteRelations.map(_._1), "[", ", ", "]")
+    s"CTE $cteAliases"
+  }
+
+  override def innerChildren: Seq[LogicalPlan] = cteRelations.map(_._2)
 }
 
 case class WithWindowDefinition(
@@ -468,13 +469,12 @@ case class Range(
 
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override lazy val statistics: Statistics = {
-    val sizeInBytes = LongType.defaultSize * numElements
-    Statistics( sizeInBytes = sizeInBytes )
-  }
-
   override def simpleString: String = {
     s"Range ($start, $end, step=$step, splits=$numSlices)"
+  }
+
+  override def computeStats(): Statistics = {
+    Statistics(sizeInBytes = LongType.defaultSize * numElements)
   }
 }
 
@@ -499,14 +499,6 @@ case class Aggregate(
   override def validConstraints: Set[Expression] = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     child.constraints.union(getAliasedConstraints(nonAgg))
-  }
-
-  override lazy val statistics: Statistics = {
-    if (groupingExpressions.isEmpty) {
-      super.statistics.copy(sizeInBytes = 1)
-    } else {
-      super.statistics
-    }
   }
 }
 
@@ -606,11 +598,6 @@ case class Expand(
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  override lazy val statistics: Statistics = {
-    val sizeInBytes = super.statistics.sizeInBytes * projections.length
-    Statistics(sizeInBytes = sizeInBytes)
-  }
-
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
   override protected def validConstraints: Set[Expression] = Set.empty[Expression]
@@ -623,7 +610,7 @@ case class Expand(
  * We will transform GROUPING SETS into logical plan Aggregate(.., Expand) in Analyzer
  *
  * @param selectedGroupByExprs A sequence of selected GroupBy expressions, all exprs should
- *                     exists in groupByExprs.
+ *                     exist in groupByExprs.
  * @param groupByExprs The Group By expressions candidates.
  * @param child        Child operator
  * @param aggregations The Aggregation expressions, those non selected group by expressions
@@ -677,17 +664,6 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
       case _ => None
     }
   }
-  override lazy val statistics: Statistics = {
-    val limit = limitExpr.eval().asInstanceOf[Int]
-    val sizeInBytes = if (limit == 0) {
-      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
-      // (product of children).
-      1
-    } else {
-      (limit: Long) * output.map(a => a.dataType.defaultSize).sum
-    }
-    child.statistics.copy(sizeInBytes = sizeInBytes)
-  }
 }
 
 case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
@@ -698,24 +674,20 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
       case _ => None
     }
   }
-  override lazy val statistics: Statistics = {
-    val limit = limitExpr.eval().asInstanceOf[Int]
-    val sizeInBytes = if (limit == 0) {
-      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
-      // (product of children).
-      1
-    } else {
-      (limit: Long) * output.map(a => a.dataType.defaultSize).sum
-    }
-    child.statistics.copy(sizeInBytes = sizeInBytes)
-  }
 }
 
+/**
+ * Aliased subquery.
+ *
+ * @param alias the alias name for this subquery.
+ * @param child the logical plan of this subquery.
+ */
 case class SubqueryAlias(
     alias: String,
-    child: LogicalPlan,
-    view: Option[TableIdentifier])
+    child: LogicalPlan)
   extends UnaryNode {
+
+  override lazy val canonicalized: LogicalPlan = child.canonicalized
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
@@ -729,29 +701,27 @@ case class SubqueryAlias(
  * @param withReplacement Whether to sample with replacement.
  * @param seed the random seed
  * @param child the LogicalPlan
- * @param isTableSample Is created from TABLESAMPLE in the parser.
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
-    child: LogicalPlan)(
-    val isTableSample: java.lang.Boolean = false) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output
-
-  override lazy val statistics: Statistics = {
-    val ratio = upperBound - lowerBound
-    // BigInt can't multiply with Double
-    var sizeInBytes = child.statistics.sizeInBytes * (ratio * 100).toInt / 100
-    if (sizeInBytes == 0) {
-      sizeInBytes = 1
-    }
-    child.statistics.copy(sizeInBytes = sizeInBytes)
+  val eps = RandomSampler.roundingEpsilon
+  val fraction = upperBound - lowerBound
+  if (withReplacement) {
+    require(
+      fraction >= 0.0 - eps,
+      s"Sampling fraction ($fraction) must be nonnegative with replacement")
+  } else {
+    require(
+      fraction >= 0.0 - eps && fraction <= 1.0 + eps,
+      s"Sampling fraction ($fraction) must be on interval [0, 1] without replacement")
   }
 
-  override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
+  override def output: Seq[Attribute] = child.output
 }
 
 /**
@@ -763,15 +733,40 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 }
 
 /**
+ * A base interface for [[RepartitionByExpression]] and [[Repartition]]
+ */
+abstract class RepartitionOperation extends UnaryNode {
+  def shuffle: Boolean
+  def numPartitions: Int
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
  * Returns a new RDD that has exactly `numPartitions` partitions. Differs from
  * [[RepartitionByExpression]] as this method is called directly by DataFrame's, because the user
  * asked for `coalesce` or `repartition`. [[RepartitionByExpression]] is used when the consumer
  * of the output requires some specific ordering or distribution of the data.
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
-  extends UnaryNode {
+  extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
-  override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * This method repartitions data using [[Expression]]s into `numPartitions`, and receives
+ * information about the number of partitions during execution. Used when a specific ordering or
+ * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
+ * `coalesce` and `repartition`.
+ */
+case class RepartitionByExpression(
+    partitionExpressions: Seq[Expression],
+    child: LogicalPlan,
+    numPartitions: Int) extends RepartitionOperation {
+
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+
+  override def maxRows: Option[Long] = child.maxRows
+  override def shuffle: Boolean = true
 }
 
 /**
@@ -780,13 +775,14 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 case object OneRowRelation extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
+  override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
+}
 
-  /**
-   * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
-   * of cartesian joins.
-   *
-   * [[LeafNode]]s must override this.
-   */
-  override lazy val statistics: Statistics = Statistics(sizeInBytes = 1)
+/** A logical plan for `dropDuplicates`. */
+case class Deduplicate(
+    keys: Seq[Attribute],
+    child: LogicalPlan,
+    streaming: Boolean) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output
 }

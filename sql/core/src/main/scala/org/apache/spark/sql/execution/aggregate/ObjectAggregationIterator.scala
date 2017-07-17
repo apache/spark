@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.{BaseOrdering, GenerateOrdering}
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
@@ -39,7 +40,8 @@ class ObjectAggregationIterator(
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     originalInputAttributes: Seq[Attribute],
     inputRows: Iterator[InternalRow],
-    fallbackCountThreshold: Int)
+    fallbackCountThreshold: Int,
+    numOutputRows: SQLMetric)
   extends AggregationIterator(
     groupingExpressions,
     originalInputAttributes,
@@ -83,7 +85,9 @@ class ObjectAggregationIterator(
 
   override final def next(): UnsafeRow = {
     val entry = aggBufferIterator.next()
-    generateOutput(entry.groupingKey, entry.aggregationBuffer)
+    val res = generateOutput(entry.groupingKey, entry.aggregationBuffer)
+    numOutputRows += 1
+    res
   }
 
   /**
@@ -262,7 +266,9 @@ class SortBasedAggregator(
           // Firstly, update the aggregation buffer with input rows.
           while (hasNextInput &&
             groupingKeyOrdering.compare(inputIterator.getKey, groupingKey) == 0) {
-            processRow(result.aggregationBuffer, inputIterator.getValue)
+            // Since `inputIterator.getValue` is an `UnsafeRow` whose underlying buffer will be
+            // overwritten when `inputIterator` steps forward, we need to do a deep copy here.
+            processRow(result.aggregationBuffer, inputIterator.getValue.copy())
             hasNextInput = inputIterator.next()
           }
 
@@ -271,7 +277,12 @@ class SortBasedAggregator(
           // be called after calling processRow.
           while (hasNextAggBuffer &&
             groupingKeyOrdering.compare(initialAggBufferIterator.getKey, groupingKey) == 0) {
-            mergeAggregationBuffers(result.aggregationBuffer, initialAggBufferIterator.getValue)
+            mergeAggregationBuffers(
+              result.aggregationBuffer,
+              // Since `inputIterator.getValue` is an `UnsafeRow` whose underlying buffer will be
+              // overwritten when `inputIterator` steps forward, we need to do a deep copy here.
+              initialAggBufferIterator.getValue.copy()
+            )
             hasNextAggBuffer = initialAggBufferIterator.next()
           }
 

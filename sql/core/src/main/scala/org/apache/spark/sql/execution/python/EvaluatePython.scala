@@ -112,6 +112,8 @@ object EvaluatePython {
     case (c: Int, DateType) => c
 
     case (c: Long, TimestampType) => c
+    // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
+    case (c: Int, TimestampType) => c.toLong
 
     case (c, StringType) => UTF8String.fromString(c.toString)
 

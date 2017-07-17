@@ -74,15 +74,23 @@ However, it is also a well-established method for choosing parameters which is m
 
 <div class="codetabs">
 
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
+
+Refer to the [`CrossValidator` Scala docs](api/scala/index.html#org.apache.spark.ml.tuning.CrossValidator) for details on the API.
+
 {% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaCrossValidationExample.scala %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
+
+Refer to the [`CrossValidator` Java docs](api/java/org/apache/spark/ml/tuning/CrossValidator.html) for details on the API.
+
 {% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaCrossValidationExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
+
+Refer to the [`CrossValidator` Python docs](api/python/pyspark.ml.html#pyspark.ml.tuning.CrossValidator) for more details on the API.
 
 {% include_example python/ml/cross_validator.py %}
 </div>
@@ -107,14 +115,23 @@ Like `CrossValidator`, `TrainValidationSplit` finally fits the `Estimator` using
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+
+Refer to the [`TrainValidationSplit` Scala docs](api/scala/index.html#org.apache.spark.ml.tuning.TrainValidationSplit) for details on the API.
+
 {% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaTrainValidationSplitExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
+
+Refer to the [`TrainValidationSplit` Java docs](api/java/org/apache/spark/ml/tuning/TrainValidationSplit.html) for details on the API.
+
 {% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaTrainValidationSplitExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
+
+Refer to the [`TrainValidationSplit` Python docs](api/python/pyspark.ml.html#pyspark.ml.tuning.TrainValidationSplit) for more details on the API.
+
 {% include_example python/ml/train_validation_split.py %}
 </div>
 

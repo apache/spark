@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object JoinType {
-  def apply(typ: String): JoinType = typ.toLowerCase.replace("_", "") match {
+  def apply(typ: String): JoinType = typ.toLowerCase(Locale.ROOT).replace("_", "") match {
     case "inner" => Inner
     case "outer" | "full" | "fullouter" => FullOuter
     case "leftouter" | "left" => LeftOuter
@@ -100,7 +101,7 @@ case class NaturalJoin(tpe: JoinType) extends JoinType {
   override def sql: String = "NATURAL " + tpe.sql
 }
 
-case class UsingJoin(tpe: JoinType, usingColumns: Seq[UnresolvedAttribute]) extends JoinType {
+case class UsingJoin(tpe: JoinType, usingColumns: Seq[String]) extends JoinType {
   require(Seq(Inner, LeftOuter, LeftSemi, RightOuter, FullOuter, LeftAnti).contains(tpe),
     "Unsupported using join type " + tpe)
   override def sql: String = "USING " + tpe.sql

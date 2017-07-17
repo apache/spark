@@ -60,7 +60,11 @@ case class TableIdentifier(table: String, database: Option[String])
   override val identifier: String = table
 
   def this(table: String) = this(table, None)
+}
 
+/** A fully qualified identifier for a table (i.e., database.tableName) */
+case class QualifiedTableName(database: String, name: String) {
+  override def toString: String = s"$database.$name"
 }
 
 object TableIdentifier {

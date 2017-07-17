@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
 private[sql] class JacksonGenerator(
     schema: StructType,
     writer: Writer,
-    options: JSONOptions = new JSONOptions(Map.empty[String, String])) {
+    options: JSONOptions) {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
@@ -37,6 +37,10 @@ private[sql] class JacksonGenerator(
 
   // `ValueWriter`s for all fields of the schema
   private val rootFieldWriters: Array[ValueWriter] = schema.map(_.dataType).map(makeWriter).toArray
+  // `ValueWriter` for array data storing rows of the schema.
+  private val arrElementWriter: ValueWriter = (arr: SpecializedGetters, i: Int) => {
+    writeObject(writeFields(arr.getStruct(i, schema.length), schema, rootFieldWriters))
+  }
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 
@@ -185,13 +189,18 @@ private[sql] class JacksonGenerator(
   def flush(): Unit = gen.flush()
 
   /**
-   * Transforms a single InternalRow to JSON using Jackson
+   * Transforms a single `InternalRow` to JSON object using Jackson
    *
    * @param row The row to convert
    */
-  def write(row: InternalRow): Unit = {
-    writeObject {
-      writeFields(row, schema, rootFieldWriters)
-    }
-  }
+  def write(row: InternalRow): Unit = writeObject(writeFields(row, schema, rootFieldWriters))
+
+  /**
+   * Transforms multiple `InternalRow`s to JSON array using Jackson
+   *
+   * @param array The array of rows to convert
+   */
+  def write(array: ArrayData): Unit = writeArray(writeArrayData(array, arrElementWriter))
+
+  def writeLineEnding(): Unit = gen.writeRaw('\n')
 }

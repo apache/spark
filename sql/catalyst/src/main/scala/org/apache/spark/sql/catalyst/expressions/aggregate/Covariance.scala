@@ -25,7 +25,8 @@ import org.apache.spark.sql.types._
  * Compute the covariance between two expressions.
  * When applied on empty data (i.e., count is zero), it returns NULL.
  */
-abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggregate {
+abstract class Covariance(x: Expression, y: Expression)
+  extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(x, y)
   override def nullable: Boolean = true

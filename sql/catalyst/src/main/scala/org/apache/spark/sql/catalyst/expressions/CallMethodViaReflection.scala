@@ -65,6 +65,10 @@ case class CallMethodViaReflection(children: Seq[Expression])
       TypeCheckFailure("first two arguments should be string literals")
     } else if (!classExists) {
       TypeCheckFailure(s"class $className not found")
+    } else if (children.slice(2, children.length)
+        .exists(e => !CallMethodViaReflection.typeMapping.contains(e.dataType))) {
+      TypeCheckFailure("arguments from the third require boolean, byte, short, " +
+        "integer, long, float, double or string expressions")
     } else if (method == null) {
       TypeCheckFailure(s"cannot find a static method that matches the argument types in $className")
     } else {

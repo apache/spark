@@ -80,7 +80,7 @@ private[sql] object TypeCollection {
 
   /**
    * Types that can be ordered/compared. In the long run we should probably make this a trait
-   * that can be mixed into each data type, and perhaps create an [[AbstractDataType]].
+   * that can be mixed into each data type, and perhaps create an `AbstractDataType`.
    */
   // TODO: Should we consolidate this with RowOrdering.isOrderable?
   val Ordered = TypeCollection(
@@ -106,7 +106,7 @@ private[sql] object TypeCollection {
 
 
 /**
- * An [[AbstractDataType]] that matches any concrete data types.
+ * An `AbstractDataType` that matches any concrete data types.
  */
 protected[sql] object AnyDataType extends AbstractDataType {
 
@@ -127,6 +127,17 @@ protected[sql] abstract class AtomicType extends DataType {
   private[sql] type InternalType
   private[sql] val tag: TypeTag[InternalType]
   private[sql] val ordering: Ordering[InternalType]
+}
+
+object AtomicType {
+  /**
+   * Enables matching against AtomicType for expressions:
+   * {{{
+   *   case Cast(child @ AtomicType(), StringType) =>
+   *     ...
+   * }}}
+   */
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[AtomicType]
 }
 
 

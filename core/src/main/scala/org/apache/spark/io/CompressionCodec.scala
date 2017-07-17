@@ -18,6 +18,7 @@
 package org.apache.spark.io
 
 import java.io._
+import java.util.Locale
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import net.jpountz.lz4.LZ4BlockOutputStream
@@ -32,9 +33,8 @@ import org.apache.spark.util.Utils
  * CompressionCodec allows the customization of choosing different compression implementations
  * to be used in block storage.
  *
- * Note: The wire protocol for a codec is not guaranteed compatible across versions of Spark.
- *       This is intended for use as an internal compression utility within a single
- *       Spark application.
+ * @note The wire protocol for a codec is not guaranteed compatible across versions of Spark.
+ * This is intended for use as an internal compression utility within a single Spark application.
  */
 @DeveloperApi
 trait CompressionCodec {
@@ -67,13 +67,13 @@ private[spark] object CompressionCodec {
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
-    val codecClass = shortCompressionCodecNames.getOrElse(codecName.toLowerCase, codecName)
+    val codecClass =
+      shortCompressionCodecNames.getOrElse(codecName.toLowerCase(Locale.ROOT), codecName)
     val codec = try {
       val ctor = Utils.classForName(codecClass).getConstructor(classOf[SparkConf])
       Some(ctor.newInstance(conf).asInstanceOf[CompressionCodec])
     } catch {
-      case e: ClassNotFoundException => None
-      case e: IllegalArgumentException => None
+      case _: ClassNotFoundException | _: IllegalArgumentException => None
     }
     codec.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
       s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
@@ -103,9 +103,9 @@ private[spark] object CompressionCodec {
  * LZ4 implementation of [[org.apache.spark.io.CompressionCodec]].
  * Block size can be configured by `spark.io.compression.lz4.blockSize`.
  *
- * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
- *       of Spark. This is intended for use as an internal compression utility within a single Spark
- *       application.
+ * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+ * of Spark. This is intended for use as an internal compression utility within a single Spark
+ * application.
  */
 @DeveloperApi
 class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
@@ -123,9 +123,9 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
  * :: DeveloperApi ::
  * LZF implementation of [[org.apache.spark.io.CompressionCodec]].
  *
- * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
- *       of Spark. This is intended for use as an internal compression utility within a single Spark
- *       application.
+ * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+ * of Spark. This is intended for use as an internal compression utility within a single Spark
+ * application.
  */
 @DeveloperApi
 class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
@@ -143,9 +143,9 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
  * Block size can be configured by `spark.io.compression.snappy.blockSize`.
  *
- * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
- *       of Spark. This is intended for use as an internal compression utility within a single Spark
- *       application.
+ * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+ * of Spark. This is intended for use as an internal compression utility within a single Spark
+ * application.
  */
 @DeveloperApi
 class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
@@ -173,7 +173,7 @@ private final object SnappyCompressionCodec {
 }
 
 /**
- * Wrapper over [[SnappyOutputStream]] which guards against write-after-close and double-close
+ * Wrapper over `SnappyOutputStream` which guards against write-after-close and double-close
  * issues. See SPARK-7660 for more details. This wrapping can be removed if we upgrade to a version
  * of snappy-java that contains the fix for https://github.com/xerial/snappy-java/issues/107.
  */

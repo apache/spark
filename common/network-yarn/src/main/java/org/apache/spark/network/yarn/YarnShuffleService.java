@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 
@@ -45,7 +44,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
-import org.apache.spark.network.sasl.SaslServerBootstrap;
+import org.apache.spark.network.crypto.AuthServerBootstrap;
 import org.apache.spark.network.sasl.ShuffleSecretManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
@@ -172,7 +171,7 @@ public class YarnShuffleService extends AuxiliaryService {
       boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
       if (authEnabled) {
         createSecretManager();
-        bootstraps.add(new SaslServerBootstrap(transportConf, secretManager));
+        bootstraps.add(new AuthServerBootstrap(transportConf, secretManager));
       }
 
       int port = conf.getInt(
@@ -340,9 +339,9 @@ public class YarnShuffleService extends AuxiliaryService {
    * when it previously was not. If YARN NM recovery is enabled it uses that path, otherwise
    * it will uses a YARN local dir.
    */
-  protected File initRecoveryDb(String dbFileName) {
+  protected File initRecoveryDb(String dbName) {
     if (_recoveryPath != null) {
-        File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbFileName);
+        File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbName);
         if (recoveryFile.exists()) {
           return recoveryFile;
         }
@@ -350,7 +349,7 @@ public class YarnShuffleService extends AuxiliaryService {
     // db doesn't exist in recovery path go check local dirs for it
     String[] localDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
     for (String dir : localDirs) {
-      File f = new File(new Path(dir).toUri().getPath(), dbFileName);
+      File f = new File(new Path(dir).toUri().getPath(), dbName);
       if (f.exists()) {
         if (_recoveryPath == null) {
           // If NM recovery is not enabled, we should specify the recovery path using NM local
@@ -363,17 +362,21 @@ public class YarnShuffleService extends AuxiliaryService {
           // make sure to move all DBs to the recovery path from the old NM local dirs.
           // If another DB was initialized first just make sure all the DBs are in the same
           // location.
-          File newLoc = new File(_recoveryPath.toUri().getPath(), dbFileName);
-          if (!newLoc.equals(f)) {
+          Path newLoc = new Path(_recoveryPath, dbName);
+          Path copyFrom = new Path(f.toURI());
+          if (!newLoc.equals(copyFrom)) {
+            logger.info("Moving " + copyFrom + " to: " + newLoc);
             try {
-              Files.move(f.toPath(), newLoc.toPath());
+              // The move here needs to handle moving non-empty directories across NFS mounts
+              FileSystem fs = FileSystem.getLocal(_conf);
+              fs.rename(copyFrom, newLoc);
             } catch (Exception e) {
               // Fail to move recovery file to new path, just continue on with new DB location
               logger.error("Failed to move recovery file {} to the path {}",
-                dbFileName, _recoveryPath.toString(), e);
+                dbName, _recoveryPath.toString(), e);
             }
           }
-          return newLoc;
+          return new File(newLoc.toUri().getPath());
         }
       }
     }
@@ -381,7 +384,7 @@ public class YarnShuffleService extends AuxiliaryService {
       _recoveryPath = new Path(localDirs[0]);
     }
 
-    return new File(_recoveryPath.toUri().getPath(), dbFileName);
+    return new File(_recoveryPath.toUri().getPath(), dbName);
   }
 
   /**

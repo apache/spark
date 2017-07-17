@@ -21,13 +21,11 @@ import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
-
 
 /**
  * A date type, supporting "0001-01-01" through "9999-12-31".
  *
- * Please use the singleton [[DataTypes.DateType]].
+ * Please use the singleton `DataTypes.DateType`.
  *
  * Internally, this is represented as the number of days from 1970-01-01.
  *
@@ -40,7 +38,7 @@ class DateType private() extends AtomicType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Int
 
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 

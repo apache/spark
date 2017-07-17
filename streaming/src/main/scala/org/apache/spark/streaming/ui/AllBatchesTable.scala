@@ -97,7 +97,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
         completed = batch.numCompletedOutputOp,
         failed = batch.numFailedOutputOp,
         skipped = 0,
-        killed = 0,
+        reasonToNumKilled = Map.empty,
         total = batch.outputOperations.size)
       }
     </td>

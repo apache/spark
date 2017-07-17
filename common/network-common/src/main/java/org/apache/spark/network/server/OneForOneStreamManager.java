@@ -95,6 +95,20 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   @Override
+  public ManagedBuffer openStream(String streamChunkId) {
+    String[] array = streamChunkId.split("_");
+    assert array.length == 2:
+      "Stream id and chunk index should be specified when open stream for fetching block.";
+    long streamId = Long.valueOf(array[0]);
+    int chunkIndex = Integer.valueOf(array[1]);
+    return getChunk(streamId, chunkIndex);
+  }
+
+  public static String genStreamChunkId(long streamId, int chunkId) {
+    return String.format("%d_%d", streamId, chunkId);
+  }
+
+  @Override
   public void connectionTerminated(Channel channel) {
     // Close all streams which have been associated with the channel.
     for (Map.Entry<Long, StreamState> entry: streams.entrySet()) {

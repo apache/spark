@@ -113,7 +113,7 @@ case class Abs(child: Expression)
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator {
+abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
   override def dataType: DataType = left.dataType
 
@@ -146,7 +146,7 @@ object BinaryArithmetic {
       > SELECT 1 _FUNC_ 2;
        3
   """)
-case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
+case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -182,8 +182,7 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
       > SELECT 2 _FUNC_ 1;
        1
   """)
-case class Subtract(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -219,8 +218,7 @@ case class Subtract(left: Expression, right: Expression)
       > SELECT 2 _FUNC_ 3;
        6
   """)
-case class Multiply(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
 
@@ -243,8 +241,7 @@ case class Multiply(left: Expression, right: Expression)
        1.0
   """)
 // scalastyle:on line.size.limit
-case class Divide(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
@@ -323,9 +320,10 @@ case class Divide(left: Expression, right: Expression)
     Examples:
       > SELECT 2 _FUNC_ 1.8;
        0.2
+      > SELECT MOD(2, 1.8);
+       0.2
   """)
-case class Remainder(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
 
@@ -412,7 +410,7 @@ case class Remainder(left: Expression, right: Expression)
       > SELECT _FUNC_(-10, 3);
        2
   """)
-case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
+case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def toString: String = s"pmod($left, $right)"
 
@@ -529,13 +527,14 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(s"LEAST requires at least 2 arguments")
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least two arguments")
     } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
           s" got LEAST(${children.map(_.dataType.simpleString).mkString(", ")}).")
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
+      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
   }
 
@@ -594,13 +593,14 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(s"GREATEST requires at least 2 arguments")
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least two arguments")
     } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
           s" got GREATEST(${children.map(_.dataType.simpleString).mkString(", ")}).")
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
+      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
   }
 

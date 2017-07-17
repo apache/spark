@@ -18,34 +18,127 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
+import java.net.URI
+import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogStorageFormat}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
-  private val escapedIdentifier = "`(.+)`".r
 
+class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with BeforeAndAfterEach {
   override def afterEach(): Unit = {
     try {
       // drop all databases, tables and functions after each test
       spark.sessionState.catalog.reset()
     } finally {
-      Utils.deleteRecursively(new File("spark-warehouse"))
+      Utils.deleteRecursively(new File(spark.sessionState.conf.warehousePath))
       super.afterEach()
     }
+  }
+
+  protected override def generateTable(
+      catalog: SessionCatalog,
+      name: TableIdentifier,
+      isDataSource: Boolean = true): CatalogTable = {
+    val storage =
+      CatalogStorageFormat.empty.copy(locationUri = Some(catalog.defaultTablePath(name)))
+    val metadata = new MetadataBuilder()
+      .putString("key", "value")
+      .build()
+    CatalogTable(
+      identifier = name,
+      tableType = CatalogTableType.EXTERNAL,
+      storage = storage,
+      schema = new StructType()
+        .add("col1", "int", nullable = true, metadata = metadata)
+        .add("col2", "string")
+        .add("a", "int")
+        .add("b", "int"),
+      provider = Some("parquet"),
+      partitionColumnNames = Seq("a", "b"),
+      createTime = 0L,
+      tracksPartitionsInCatalog = true)
+  }
+
+  test("create a managed Hive source table") {
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    val tabName = "tbl"
+    withTable(tabName) {
+      val e = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $tabName (i INT, j STRING)")
+      }.getMessage
+      assert(e.contains("Hive support is required to CREATE Hive TABLE"))
+    }
+  }
+
+  test("create an external Hive source table") {
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    withTempDir { tempDir =>
+      val tabName = "tbl"
+      withTable(tabName) {
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE $tabName (i INT, j STRING)
+               |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+               |LOCATION '${tempDir.toURI}'
+             """.stripMargin)
+        }.getMessage
+        assert(e.contains("Hive support is required to CREATE Hive TABLE"))
+      }
+    }
+  }
+
+  test("Create Hive Table As Select") {
+    import testImplicits._
+    withTable("t", "t1") {
+      var e = intercept[AnalysisException] {
+        sql("CREATE TABLE t SELECT 1 as a, 1 as b")
+      }.getMessage
+      assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
+
+      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+      e = intercept[AnalysisException] {
+        sql("CREATE TABLE t SELECT a, b from t1")
+      }.getMessage
+      assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
+    }
+  }
+
+}
+
+abstract class DDLSuite extends QueryTest with SQLTestUtils {
+
+  protected def isUsingHiveMetastore: Boolean = {
+    spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
+  }
+
+  protected def generateTable(
+      catalog: SessionCatalog,
+      name: TableIdentifier,
+      isDataSource: Boolean = true): CatalogTable
+
+  private val escapedIdentifier = "`(.+)`".r
+
+  protected def normalizeCatalogTable(table: CatalogTable): CatalogTable = table
+
+  private def normalizeSerdeProp(props: Map[String, String]): Map[String, String] = {
+    props.filterNot(p => Seq("serialization.format", "path").contains(p._1))
+  }
+
+  private def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
+    assert(normalizeCatalogTable(actual) == normalizeCatalogTable(expected))
   }
 
   /**
@@ -62,7 +155,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val e = intercept[AnalysisException] {
       sql(query)
     }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
   }
 
   private def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
@@ -71,36 +164,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(
-      CatalogDatabase(name, "", spark.sessionState.conf.warehousePath, Map()),
+      CatalogDatabase(
+        name, "", CatalogUtils.stringToURI(spark.sessionState.conf.warehousePath), Map()),
       ignoreIfExists = false)
   }
 
-  private def generateTable(catalog: SessionCatalog, name: TableIdentifier): CatalogTable = {
-    val storage =
-      CatalogStorageFormat(
-        locationUri = Some(catalog.defaultTablePath(name)),
-        inputFormat = None,
-        outputFormat = None,
-        serde = None,
-        compressed = false,
-        properties = Map())
-    CatalogTable(
-      identifier = name,
-      tableType = CatalogTableType.EXTERNAL,
-      storage = storage,
-      schema = new StructType()
-        .add("col1", "int")
-        .add("col2", "string")
-        .add("a", "int")
-        .add("b", "int"),
-      provider = Some("hive"),
-      partitionColumnNames = Seq("a", "b"),
-      createTime = 0L,
-      tracksPartitionsInCatalog = true)
-  }
-
-  private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
-    catalog.createTable(generateTable(catalog, name), ignoreIfExists = false)
+  private def createTable(
+      catalog: SessionCatalog,
+      name: TableIdentifier,
+      isDataSource: Boolean = true): Unit = {
+    catalog.createTable(generateTable(catalog, name, isDataSource), ignoreIfExists = false)
   }
 
   private def createTablePartition(
@@ -110,6 +183,51 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val part = CatalogTablePartition(
       spec, CatalogStorageFormat(None, None, None, None, false, Map()))
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
+  }
+
+  private def getDBPath(dbName: String): URI = {
+    val warehousePath = makeQualifiedPath(spark.sessionState.conf.warehousePath)
+    new Path(CatalogUtils.URIToString(warehousePath), s"$dbName.db").toUri
+  }
+
+  test("alter table: set location (datasource table)") {
+    testSetLocation(isDatasourceTable = true)
+  }
+
+  test("alter table: set properties (datasource table)") {
+    testSetProperties(isDatasourceTable = true)
+  }
+
+  test("alter table: unset properties (datasource table)") {
+    testUnsetProperties(isDatasourceTable = true)
+  }
+
+  test("alter table: set serde (datasource table)") {
+    testSetSerde(isDatasourceTable = true)
+  }
+
+  test("alter table: set serde partition (datasource table)") {
+    testSetSerdePartition(isDatasourceTable = true)
+  }
+
+  test("alter table: change column (datasource table)") {
+    testChangeColumn(isDatasourceTable = true)
+  }
+
+  test("alter table: add partition (datasource table)") {
+    testAddPartitions(isDatasourceTable = true)
+  }
+
+  test("alter table: drop partition (datasource table)") {
+    testDropPartitions(isDatasourceTable = true)
+  }
+
+  test("alter table: rename partition (datasource table)") {
+    testRenamePartitions(isDatasourceTable = true)
+  }
+
+  test("drop table - data source table") {
+    testDropTable(isDatasourceTable = true)
   }
 
   test("the qualified path of a database is stored in the catalog") {
@@ -125,76 +243,25 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert("file" === pathInCatalog.getScheme)
       val expectedPath = new Path(path).toUri
       assert(expectedPath.getPath === pathInCatalog.getPath)
-
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        sql(s"CREATE DATABASE db2")
-        val pathInCatalog2 = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
-        assert("file" === pathInCatalog2.getScheme)
-        val expectedPath2 = new Path(spark.sessionState.conf.warehousePath + "/" + "db2.db").toUri
-        assert(expectedPath2.getPath === pathInCatalog2.getPath)
-      }
-
       sql("DROP DATABASE db1")
-      sql("DROP DATABASE db2")
-    }
-  }
-
-  private def makeQualifiedPath(path: String): String = {
-    // copy-paste from SessionCatalog
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(sparkContext.hadoopConfiguration)
-    fs.makeQualified(hadoopPath).toString
-  }
-
-  test("Create/Drop Database") {
-    withTempDir { tmpDir =>
-      val path = tmpDir.getCanonicalPath
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = spark.sessionState.catalog
-        val databaseNames = Seq("db1", "`database`")
-
-        databaseNames.foreach { dbName =>
-          try {
-            val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-
-            sql(s"CREATE DATABASE $dbName")
-            val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
-            assert(db1 == CatalogDatabase(
-              dbNameWithoutBackTicks,
-              "",
-              expectedLocation,
-              Map.empty))
-            sql(s"DROP DATABASE $dbName CASCADE")
-            assert(!catalog.databaseExists(dbNameWithoutBackTicks))
-          } finally {
-            catalog.reset()
-          }
-        }
-      }
     }
   }
 
   test("Create Database using Default Warehouse Path") {
-    withSQLConf(SQLConf.WAREHOUSE_PATH.key -> "") {
-      // Will use the default location if and only if we unset the conf
-      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      val catalog = spark.sessionState.catalog
-      val dbName = "db1"
-      try {
-        sql(s"CREATE DATABASE $dbName")
-        val db1 = catalog.getDatabaseMetadata(dbName)
-        val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbName.db")
-        assert(db1 == CatalogDatabase(
-          dbName,
-          "",
-          expectedLocation,
-          Map.empty))
-        sql(s"DROP DATABASE $dbName CASCADE")
-        assert(!catalog.databaseExists(dbName))
-      } finally {
-        catalog.reset()
-      }
+    val catalog = spark.sessionState.catalog
+    val dbName = "db1"
+    try {
+      sql(s"CREATE DATABASE $dbName")
+      val db1 = catalog.getDatabaseMetadata(dbName)
+      assert(db1 == CatalogDatabase(
+        dbName,
+        "",
+        getDBPath(dbName),
+        Map.empty))
+      sql(s"DROP DATABASE $dbName CASCADE")
+      assert(!catalog.databaseExists(dbName))
+    } finally {
+      catalog.reset()
     }
   }
 
@@ -224,31 +291,27 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("Create Database - database already exists") {
-    withTempDir { tmpDir =>
-      val path = tmpDir.getCanonicalPath
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = spark.sessionState.catalog
-        val databaseNames = Seq("db1", "`database`")
+    val catalog = spark.sessionState.catalog
+    val databaseNames = Seq("db1", "`database`")
 
-        databaseNames.foreach { dbName =>
-          try {
-            val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-            sql(s"CREATE DATABASE $dbName")
-            val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
-            assert(db1 == CatalogDatabase(
-              dbNameWithoutBackTicks,
-              "",
-              expectedLocation,
-              Map.empty))
+    databaseNames.foreach { dbName =>
+      try {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+        sql(s"CREATE DATABASE $dbName")
+        val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+        assert(db1 == CatalogDatabase(
+          dbNameWithoutBackTicks,
+          "",
+          getDBPath(dbNameWithoutBackTicks),
+          Map.empty))
 
-            intercept[DatabaseAlreadyExistsException] {
-              sql(s"CREATE DATABASE $dbName")
-            }
-          } finally {
-            catalog.reset()
-          }
-        }
+        // TODO: HiveExternalCatalog should throw DatabaseAlreadyExistsException
+        val e = intercept[AnalysisException] {
+          sql(s"CREATE DATABASE $dbName")
+        }.getMessage
+        assert(e.contains(s"already exists"))
+      } finally {
+        catalog.reset()
       }
     }
   }
@@ -322,7 +385,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           pathToPartitionedTable,
           userSpecifiedSchema = Option("num int, str string"),
           userSpecifiedPartitionCols = partitionCols,
-          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedSchema = new StructType().add("str", StringType).add("num", IntegerType),
           expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
       }
     }
@@ -360,23 +423,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           pathToNonPartitionedTable,
           userSpecifiedSchema = Option("num int, str string"),
           userSpecifiedPartitionCols = partitionCols,
-          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedSchema = if (partitionCols.isDefined) {
+            // we skipped inference, so the partition col is ordered at the end
+            new StructType().add("str", StringType).add("num", IntegerType)
+          } else {
+            // no inferred partitioning, so schema is in original order
+            new StructType().add("num", IntegerType).add("str", StringType)
+          },
           expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
       }
     }
   }
 
   test("create table - duplicate column names in the table definition") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int, a string) USING json")
-    }
-    assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
-
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val e2 = intercept[AnalysisException] {
-        sql("CREATE TABLE tbl(a int, A string) USING json")
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING parquet")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the table definition of `t`"))
       }
-      assert(e2.message == "Found duplicate column(s) in table definition of `tbl`: a")
     }
   }
 
@@ -384,7 +450,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
     }
-    assert(e.message == "partition column c is not defined in table `tbl`, " +
+    assert(e.message == "partition column c is not defined in table tbl, " +
       "defined table columns are: a, b")
   }
 
@@ -392,22 +458,38 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
     }
-    assert(e.message == "bucket column c is not defined in table `tbl`, " +
+    assert(e.message == "bucket column c is not defined in table tbl, " +
       "defined table columns are: a, b")
   }
 
   test("create table - column repeated in partition columns") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int) USING json PARTITIONED BY (a, a)")
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t($c0 INT) USING parquet PARTITIONED BY ($c0, $c1)")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the partition schema"))
+      }
     }
-    assert(e.message == "Found duplicate column(s) in partition: a")
   }
 
-  test("create table - column repeated in bucket columns") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int) USING json CLUSTERED BY (a, a) INTO 4 BUCKETS")
+  test("create table - column repeated in bucket/sort columns") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        var errMsg = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t($c0 INT) USING parquet CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the bucket definition"))
+
+        errMsg = intercept[AnalysisException] {
+          sql(s"""
+              |CREATE TABLE t($c0 INT, col INT) USING parquet CLUSTERED BY (col)
+              |  SORTED BY ($c0, $c1) INTO 2 BUCKETS
+             """.stripMargin)
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the sort definition"))
+      }
     }
-    assert(e.message == "Found duplicate column(s) in bucket: a")
   }
 
   test("Refresh table after changing the data source table partitioning") {
@@ -459,61 +541,54 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("desc table for parquet data source table using in-memory catalog") {
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
-    val tabName = "tab1"
-    withTable(tabName) {
-      sql(s"CREATE TABLE $tabName(a int comment 'test') USING parquet ")
-
-      checkAnswer(
-        sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
-        Row("a", "int", "test")
-      )
+  test("create view - duplicate column names in the view definition") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"CREATE VIEW t AS SELECT * FROM VALUES (1, 1) AS t($c0, $c1)")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the view definition"))
+      }
     }
   }
 
   test("Alter/Describe Database") {
-    withTempDir { tmpDir =>
-      val path = tmpDir.getCanonicalPath
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = spark.sessionState.catalog
-        val databaseNames = Seq("db1", "`database`")
+    val catalog = spark.sessionState.catalog
+    val databaseNames = Seq("db1", "`database`")
 
-        databaseNames.foreach { dbName =>
-          try {
-            val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-            val location = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
+    databaseNames.foreach { dbName =>
+      try {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+        val location = getDBPath(dbNameWithoutBackTicks)
 
-            sql(s"CREATE DATABASE $dbName")
+        sql(s"CREATE DATABASE $dbName")
 
-            checkAnswer(
-              sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-              Row("Database Name", dbNameWithoutBackTicks) ::
-                Row("Description", "") ::
-                Row("Location", location) ::
-                Row("Properties", "") :: Nil)
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", CatalogUtils.URIToString(location)) ::
+            Row("Properties", "") :: Nil)
 
-            sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
-            checkAnswer(
-              sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-              Row("Database Name", dbNameWithoutBackTicks) ::
-                Row("Description", "") ::
-                Row("Location", location) ::
-                Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", CatalogUtils.URIToString(location)) ::
+            Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
 
-            sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
 
-            checkAnswer(
-              sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-              Row("Database Name", dbNameWithoutBackTicks) ::
-                Row("Description", "") ::
-                Row("Location", location) ::
-                Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
-          } finally {
-            catalog.reset()
-          }
-        }
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", CatalogUtils.URIToString(location)) ::
+            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
+      } finally {
+        catalog.reset()
       }
     }
   }
@@ -528,7 +603,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       var message = intercept[AnalysisException] {
         sql(s"DROP DATABASE $dbName")
       }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
+      // TODO: Unify the exception.
+      if (isUsingHiveMetastore) {
+        assert(message.contains(s"NoSuchObjectException: $dbNameWithoutBackTicks"))
+      } else {
+        assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
+      }
 
       message = intercept[AnalysisException] {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
@@ -557,7 +637,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val message = intercept[AnalysisException] {
       sql(s"DROP DATABASE $dbName RESTRICT")
     }.getMessage
-    assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
+    assert(message.contains(s"Database $dbName is not empty. One or more tables exist"))
+
 
     catalog.dropTable(tableIdent1, ignoreIfNotExists = false, purge = false)
 
@@ -588,7 +669,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     createTable(catalog, tableIdent1)
     val expectedTableIdent = tableIdent1.copy(database = Some("default"))
     val expectedTable = generateTable(catalog, expectedTableIdent)
-    assert(catalog.getTableMetadata(tableIdent1) === expectedTable)
+    checkCatalogTables(expectedTable, catalog.getTableMetadata(tableIdent1))
   }
 
   test("create table in a specific db") {
@@ -597,7 +678,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
     createTable(catalog, tableIdent1)
     val expectedTable = generateTable(catalog, tableIdent1)
-    assert(catalog.getTableMetadata(tableIdent1) === expectedTable)
+    checkCatalogTables(expectedTable, catalog.getTableMetadata(tableIdent1))
   }
 
   test("create table using") {
@@ -618,7 +699,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.provider == Some("parquet"))
-      assert(table.schema == new StructType().add("a", IntegerType).add("b", IntegerType))
+      // a is ordered last since it is a user-specified partitioning column
+      assert(table.schema == new StructType().add("b", IntegerType).add("a", IntegerType))
       assert(table.partitionColumnNames == Seq("a"))
     }
   }
@@ -637,21 +719,28 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("create temporary view using") {
-    val csvFile =
-      Thread.currentThread().getContextClassLoader.getResource("test-data/cars.csv").toString
-    withView("testview") {
-      sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
-        "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
-        s"OPTIONS (PATH '$csvFile')")
+    // when we test the HiveCatalogedDDLSuite, it will failed because the csvFile path above
+    // starts with 'jar:', and it is an illegal parameter for Path, so here we copy it
+    // to a temp file by withResourceTempPath
+    withResourceTempPath("test-data/cars.csv") { tmpFile =>
+      withView("testview") {
+        sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
+          "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
+          s"OPTIONS (PATH '${tmpFile.toURI}')")
 
-      checkAnswer(
-        sql("select c1, c2 from testview order by c1 limit 1"),
+        checkAnswer(
+          sql("select c1, c2 from testview order by c1 limit 1"),
           Row("1997", "Ford") :: Nil)
 
-      // Fails if creating a new view with the same name
-      intercept[TempTableAlreadyExistsException] {
-        sql(s"CREATE TEMPORARY VIEW testview USING " +
-          s"org.apache.spark.sql.execution.datasources.csv.CSVFileFormat OPTIONS (PATH '$csvFile')")
+        // Fails if creating a new view with the same name
+        intercept[TempTableAlreadyExistsException] {
+          sql(
+            s"""
+               |CREATE TEMPORARY VIEW testview
+               |USING org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+               |OPTIONS (PATH '${tmpFile.toURI}')
+             """.stripMargin)
+        }
       }
     }
   }
@@ -777,46 +866,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("alter table: set location") {
-    testSetLocation(isDatasourceTable = false)
-  }
-
-  test("alter table: set location (datasource table)") {
-    testSetLocation(isDatasourceTable = true)
-  }
-
-  test("alter table: set properties") {
-    testSetProperties(isDatasourceTable = false)
-  }
-
-  test("alter table: set properties (datasource table)") {
-    testSetProperties(isDatasourceTable = true)
-  }
-
-  test("alter table: unset properties") {
-    testUnsetProperties(isDatasourceTable = false)
-  }
-
-  test("alter table: unset properties (datasource table)") {
-    testUnsetProperties(isDatasourceTable = true)
-  }
-
-  test("alter table: set serde") {
-    testSetSerde(isDatasourceTable = false)
-  }
-
-  test("alter table: set serde (datasource table)") {
-    testSetSerde(isDatasourceTable = true)
-  }
-
-  test("alter table: set serde partition") {
-    testSetSerdePartition(isDatasourceTable = false)
-  }
-
-  test("alter table: set serde partition (datasource table)") {
-    testSetSerdePartition(isDatasourceTable = true)
-  }
-
   test("alter table: bucketing is not supported") {
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
@@ -841,14 +890,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES")
   }
 
-  test("alter table: add partition") {
-    testAddPartitions(isDatasourceTable = false)
-  }
-
-  test("alter table: add partition (datasource table)") {
-    testAddPartitions(isDatasourceTable = true)
-  }
-
   test("alter table: recover partitions (sequential)") {
     withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
       testRecoverPartitions()
@@ -861,7 +902,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  private def testRecoverPartitions() {
+  protected def testRecoverPartitions() {
     val catalog = spark.sessionState.catalog
     // table to alter does not exist
     intercept[AnalysisException] {
@@ -900,8 +941,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("ALTER TABLE tab1 RECOVER PARTITIONS")
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
         Set(part1, part2))
-      assert(catalog.getPartition(tableIdent, part1).parameters("numFiles") == "1")
-      assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
+      if (!isUsingHiveMetastore) {
+        assert(catalog.getPartition(tableIdent, part1).parameters("numFiles") == "1")
+        assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
+      } else {
+        // After ALTER TABLE, the statistics of the first partition is removed by Hive megastore
+        assert(catalog.getPartition(tableIdent, part1).parameters.get("numFiles").isEmpty)
+        assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
+      }
     } finally {
       fs.delete(root, true)
     }
@@ -911,69 +958,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("ALTER VIEW dbx.tab1 ADD IF NOT EXISTS PARTITION (b='2')")
   }
 
-  test("alter table: drop partition") {
-    testDropPartitions(isDatasourceTable = false)
-  }
-
-  test("alter table: drop partition (datasource table)") {
-    testDropPartitions(isDatasourceTable = true)
-  }
-
   test("alter table: drop partition is not supported for views") {
     assertUnsupported("ALTER VIEW dbx.tab1 DROP IF EXISTS PARTITION (b='2')")
   }
 
-  test("alter table: rename partition") {
-    testRenamePartitions(isDatasourceTable = false)
-  }
-
-  test("alter table: rename partition (datasource table)") {
-    testRenamePartitions(isDatasourceTable = true)
-  }
-
-  test("show tables") {
-    withTempView("show1a", "show2b") {
-      sql(
-        """
-          |CREATE TEMPORARY TABLE show1a
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |
-          |)
-        """.stripMargin)
-      sql(
-        """
-          |CREATE TEMPORARY TABLE show2b
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |)
-        """.stripMargin)
-      checkAnswer(
-        sql("SHOW TABLES IN default 'show1*'"),
-        Row("", "show1a", true) :: Nil)
-
-      checkAnswer(
-        sql("SHOW TABLES IN default 'show1*|show2*'"),
-        Row("", "show1a", true) ::
-          Row("", "show2b", true) :: Nil)
-
-      checkAnswer(
-        sql("SHOW TABLES 'show1*|show2*'"),
-        Row("", "show1a", true) ::
-          Row("", "show2b", true) :: Nil)
-
-      assert(
-        sql("SHOW TABLES").count() >= 2)
-      assert(
-        sql("SHOW TABLES IN default").count() >= 2)
-    }
-  }
 
   test("show databases") {
     sql("CREATE DATABASE showdb2B")
@@ -1000,39 +988,31 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Nil)
   }
 
-  test("drop table - temporary table") {
+  test("drop view - temporary view") {
     val catalog = spark.sessionState.catalog
     sql(
       """
-        |CREATE TEMPORARY TABLE tab1
-        |USING org.apache.spark.sql.sources.DDLScanSource
-        |OPTIONS (
-        |  From '1',
-        |  To '10',
-        |  Table 'test1'
-        |)
+       |CREATE TEMPORARY VIEW tab1
+       |USING org.apache.spark.sql.sources.DDLScanSource
+       |OPTIONS (
+       |  From '1',
+       |  To '10',
+       |  Table 'test1'
+       |)
       """.stripMargin)
     assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
-    sql("DROP TABLE tab1")
+    sql("DROP VIEW tab1")
     assert(catalog.listTables("default") == Nil)
   }
 
-  test("drop table") {
-    testDropTable(isDatasourceTable = false)
-  }
-
-  test("drop table - data source table") {
-    testDropTable(isDatasourceTable = true)
-  }
-
-  private def testDropTable(isDatasourceTable: Boolean): Unit = {
+  protected def testDropTable(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
+    createTable(catalog, tableIdent, isDatasourceTable)
     assert(catalog.listTables("dbx") == Seq(tableIdent))
     sql("DROP TABLE dbx.tab1")
     assert(catalog.listTables("dbx") == Nil)
@@ -1056,23 +1036,20 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       e.getMessage.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
   }
 
-  private def convertToDatasourceTable(
-      catalog: SessionCatalog,
-      tableIdent: TableIdentifier): Unit = {
-    catalog.alterTable(catalog.getTableMetadata(tableIdent).copy(
-      provider = Some("csv")))
-  }
-
-  private def testSetProperties(isDatasourceTable: Boolean): Unit = {
+  protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
+    createTable(catalog, tableIdent, isDatasourceTable)
     def getProps: Map[String, String] = {
-      catalog.getTableMetadata(tableIdent).properties
+      if (isUsingHiveMetastore) {
+        normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
+      } else {
+        catalog.getTableMetadata(tableIdent).properties
+      }
     }
     assert(getProps.isEmpty)
     // set table properties
@@ -1088,16 +1065,20 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  private def testUnsetProperties(isDatasourceTable: Boolean): Unit = {
+  protected def testUnsetProperties(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
+    createTable(catalog, tableIdent, isDatasourceTable)
     def getProps: Map[String, String] = {
-      catalog.getTableMetadata(tableIdent).properties
+      if (isUsingHiveMetastore) {
+        normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
+      } else {
+        catalog.getTableMetadata(tableIdent).properties
+      }
     }
     // unset table properties
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
@@ -1121,49 +1102,46 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(getProps == Map("x" -> "y"))
   }
 
-  private def testSetLocation(isDatasourceTable: Boolean): Unit = {
+  protected def testSetLocation(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val partSpec = Map("a" -> "1", "b" -> "2")
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
     createTablePartition(catalog, partSpec, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
     assert(catalog.getTableMetadata(tableIdent).storage.locationUri.isDefined)
-    assert(catalog.getTableMetadata(tableIdent).storage.properties.isEmpty)
+    assert(normalizeSerdeProp(catalog.getTableMetadata(tableIdent).storage.properties).isEmpty)
     assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isDefined)
-    assert(catalog.getPartition(tableIdent, partSpec).storage.properties.isEmpty)
+    assert(
+      normalizeSerdeProp(catalog.getPartition(tableIdent, partSpec).storage.properties).isEmpty)
+
     // Verify that the location is set to the expected string
-    def verifyLocation(expected: String, spec: Option[TablePartitionSpec] = None): Unit = {
+    def verifyLocation(expected: URI, spec: Option[TablePartitionSpec] = None): Unit = {
       val storageFormat = spec
         .map { s => catalog.getPartition(tableIdent, s).storage }
         .getOrElse { catalog.getTableMetadata(tableIdent).storage }
-      if (isDatasourceTable) {
-        if (spec.isDefined) {
-          assert(storageFormat.properties.isEmpty)
-          assert(storageFormat.locationUri === Some(expected))
-        } else {
-          assert(storageFormat.locationUri === Some(expected))
-        }
-      } else {
-        assert(storageFormat.locationUri === Some(expected))
-      }
+      // TODO(gatorsmile): fix the bug in alter table set location.
+      // if (isUsingHiveMetastore) {
+      //  assert(storageFormat.properties.get("path") === expected)
+      // }
+      assert(storageFormat.locationUri === Some(expected))
     }
     // set table location
     sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
-    verifyLocation("/path/to/your/lovely/heart")
+    verifyLocation(new URI("/path/to/your/lovely/heart"))
     // set table partition location
     sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'")
-    verifyLocation("/path/to/part/ways", Some(partSpec))
+    verifyLocation(new URI("/path/to/part/ways"), Some(partSpec))
     // set table location without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
-    verifyLocation("/swanky/steak/place")
+    verifyLocation(new URI("/swanky/steak/place"))
     // set table partition location without explicitly specifying database
     sql("ALTER TABLE tab1 PARTITION (a='1', b='2') SET LOCATION 'vienna'")
-    verifyLocation("vienna", Some(partSpec))
+    verifyLocation(new URI("vienna"), Some(partSpec))
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")
@@ -1174,16 +1152,33 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  private def testSetSerde(isDatasourceTable: Boolean): Unit = {
+  protected def testSetSerde(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
+    def checkSerdeProps(expectedSerdeProps: Map[String, String]): Unit = {
+      val serdeProp = catalog.getTableMetadata(tableIdent).storage.properties
+      if (isUsingHiveMetastore) {
+        assert(normalizeSerdeProp(serdeProp) == expectedSerdeProps)
+      } else {
+        assert(serdeProp == expectedSerdeProps)
+      }
     }
-    assert(catalog.getTableMetadata(tableIdent).storage.serde.isEmpty)
-    assert(catalog.getTableMetadata(tableIdent).storage.properties.isEmpty)
+    if (isUsingHiveMetastore) {
+      val expectedSerde = if (isDatasourceTable) {
+        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+      } else {
+        "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+      }
+      assert(catalog.getTableMetadata(tableIdent).storage.serde == Some(expectedSerde))
+    } else {
+      assert(catalog.getTableMetadata(tableIdent).storage.serde.isEmpty)
+    }
+    checkSerdeProps(Map.empty[String, String])
     // set table serde and/or properties (should fail on datasource tables)
     if (isDatasourceTable) {
       val e1 = intercept[AnalysisException] {
@@ -1196,45 +1191,61 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(e1.getMessage.contains("datasource"))
       assert(e2.getMessage.contains("datasource"))
     } else {
-      sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.jadoop'")
-      assert(catalog.getTableMetadata(tableIdent).storage.serde == Some("org.apache.jadoop"))
-      assert(catalog.getTableMetadata(tableIdent).storage.properties.isEmpty)
-      sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.madoop' " +
+      val newSerde = "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+      sql(s"ALTER TABLE dbx.tab1 SET SERDE '$newSerde'")
+      assert(catalog.getTableMetadata(tableIdent).storage.serde == Some(newSerde))
+      checkSerdeProps(Map.empty[String, String])
+      val serde2 = "org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"
+      sql(s"ALTER TABLE dbx.tab1 SET SERDE '$serde2' " +
         "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
-      assert(catalog.getTableMetadata(tableIdent).storage.serde == Some("org.apache.madoop"))
-      assert(catalog.getTableMetadata(tableIdent).storage.properties ==
-        Map("k" -> "v", "kay" -> "vee"))
+      assert(catalog.getTableMetadata(tableIdent).storage.serde == Some(serde2))
+      checkSerdeProps(Map("k" -> "v", "kay" -> "vee"))
     }
     // set serde properties only
     sql("ALTER TABLE dbx.tab1 SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
-    assert(catalog.getTableMetadata(tableIdent).storage.properties ==
-      Map("k" -> "vvv", "kay" -> "vee"))
+    checkSerdeProps(Map("k" -> "vvv", "kay" -> "vee"))
     // set things without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET SERDEPROPERTIES ('kay' = 'veee')")
-    assert(catalog.getTableMetadata(tableIdent).storage.properties ==
-      Map("k" -> "vvv", "kay" -> "veee"))
+    checkSerdeProps(Map("k" -> "vvv", "kay" -> "veee"))
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
     }
   }
 
-  private def testSetSerdePartition(isDatasourceTable: Boolean): Unit = {
+  protected def testSetSerdePartition(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val spec = Map("a" -> "1", "b" -> "2")
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
     createTablePartition(catalog, spec, tableIdent)
     createTablePartition(catalog, Map("a" -> "1", "b" -> "3"), tableIdent)
     createTablePartition(catalog, Map("a" -> "2", "b" -> "2"), tableIdent)
     createTablePartition(catalog, Map("a" -> "2", "b" -> "3"), tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
+    def checkPartitionSerdeProps(expectedSerdeProps: Map[String, String]): Unit = {
+      val serdeProp = catalog.getPartition(tableIdent, spec).storage.properties
+      if (isUsingHiveMetastore) {
+        assert(normalizeSerdeProp(serdeProp) == expectedSerdeProps)
+      } else {
+        assert(serdeProp == expectedSerdeProps)
+      }
     }
-    assert(catalog.getPartition(tableIdent, spec).storage.serde.isEmpty)
-    assert(catalog.getPartition(tableIdent, spec).storage.properties.isEmpty)
+    if (isUsingHiveMetastore) {
+      val expectedSerde = if (isDatasourceTable) {
+        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+      } else {
+        "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+      }
+      assert(catalog.getPartition(tableIdent, spec).storage.serde == Some(expectedSerde))
+    } else {
+      assert(catalog.getPartition(tableIdent, spec).storage.serde.isEmpty)
+    }
+    checkPartitionSerdeProps(Map.empty[String, String])
     // set table serde and/or properties (should fail on datasource tables)
     if (isDatasourceTable) {
       val e1 = intercept[AnalysisException] {
@@ -1249,26 +1260,23 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     } else {
       sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) SET SERDE 'org.apache.jadoop'")
       assert(catalog.getPartition(tableIdent, spec).storage.serde == Some("org.apache.jadoop"))
-      assert(catalog.getPartition(tableIdent, spec).storage.properties.isEmpty)
+      checkPartitionSerdeProps(Map.empty[String, String])
       sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
         "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
       assert(catalog.getPartition(tableIdent, spec).storage.serde == Some("org.apache.madoop"))
-      assert(catalog.getPartition(tableIdent, spec).storage.properties ==
-        Map("k" -> "v", "kay" -> "vee"))
+      checkPartitionSerdeProps(Map("k" -> "v", "kay" -> "vee"))
     }
     // set serde properties only
     maybeWrapException(isDatasourceTable) {
       sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) " +
         "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
-      assert(catalog.getPartition(tableIdent, spec).storage.properties ==
-        Map("k" -> "vvv", "kay" -> "vee"))
+      checkPartitionSerdeProps(Map("k" -> "vvv", "kay" -> "vee"))
     }
     // set things without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     maybeWrapException(isDatasourceTable) {
       sql("ALTER TABLE tab1 PARTITION (a=1, b=2) SET SERDEPROPERTIES ('kay' = 'veee')")
-      assert(catalog.getPartition(tableIdent, spec).storage.properties ==
-        Map("k" -> "vvv", "kay" -> "veee"))
+      checkPartitionSerdeProps(Map("k" -> "vvv", "kay" -> "veee"))
     }
     // table to alter does not exist
     intercept[AnalysisException] {
@@ -1276,7 +1284,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  private def testAddPartitions(isDatasourceTable: Boolean): Unit = {
+  protected def testAddPartitions(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val part1 = Map("a" -> "1", "b" -> "5")
@@ -1285,11 +1296,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val part4 = Map("a" -> "4", "b" -> "8")
     val part5 = Map("a" -> "9", "b" -> "9")
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
     createTablePartition(catalog, part1, tableIdent)
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
 
     // basic add partition
@@ -1297,7 +1305,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       "PARTITION (a='2', b='6') LOCATION 'paris' PARTITION (a='3', b='7')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
     assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isDefined)
-    assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option("paris"))
+    val partitionLocation = if (isUsingHiveMetastore) {
+      val tableLocation = catalog.getTableMetadata(tableIdent).storage.locationUri
+      assert(tableLocation.isDefined)
+      makeQualifiedPath(new Path(tableLocation.get.toString, "paris").toString)
+    } else {
+      new URI("paris")
+    }
+
+    assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option(partitionLocation))
     assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isDefined)
 
     // add partitions without explicitly specifying database
@@ -1327,33 +1343,35 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Set(part1, part2, part3, part4, part5))
   }
 
-  private def testDropPartitions(isDatasourceTable: Boolean): Unit = {
+  protected def testDropPartitions(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val part1 = Map("a" -> "1", "b" -> "5")
     val part2 = Map("a" -> "2", "b" -> "6")
     val part3 = Map("a" -> "3", "b" -> "7")
     val part4 = Map("a" -> "4", "b" -> "8")
+    val part5 = Map("a" -> "9", "b" -> "9")
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
     createTablePartition(catalog, part1, tableIdent)
     createTablePartition(catalog, part2, tableIdent)
     createTablePartition(catalog, part3, tableIdent)
     createTablePartition(catalog, part4, tableIdent)
+    createTablePartition(catalog, part5, tableIdent)
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4))
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
+      Set(part1, part2, part3, part4, part5))
 
     // basic drop partition
     sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (a='4', b='8'), PARTITION (a='3', b='7')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2))
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part5))
 
     // drop partitions without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='2', b ='6')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part5))
 
     // table to alter does not exist
     intercept[AnalysisException] {
@@ -1367,28 +1385,32 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
     // partition to drop does not exist when using IF EXISTS
     sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='300')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part5))
 
     // partition spec in DROP PARTITION should be case insensitive by default
     sql("ALTER TABLE tab1 DROP PARTITION (A='1', B='5')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part5))
+
+    // use int literal as partition value for int type partition column
+    sql("ALTER TABLE tab1 DROP PARTITION (a=9, b=9)")
     assert(catalog.listPartitions(tableIdent).isEmpty)
   }
 
-  private def testRenamePartitions(isDatasourceTable: Boolean): Unit = {
+  protected def testRenamePartitions(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val part1 = Map("a" -> "1", "b" -> "q")
     val part2 = Map("a" -> "2", "b" -> "c")
     val part3 = Map("a" -> "3", "b" -> "p")
     createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
+    createTable(catalog, tableIdent, isDatasourceTable)
     createTablePartition(catalog, part1, tableIdent)
     createTablePartition(catalog, part2, tableIdent)
     createTablePartition(catalog, part3, tableIdent)
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
-    if (isDatasourceTable) {
-      convertToDatasourceTable(catalog, tableIdent)
-    }
 
     // basic rename partition
     sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')")
@@ -1416,6 +1438,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("ALTER TABLE tab1 PARTITION (A='10', B='p') RENAME TO PARTITION (A='1', B='p')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(Map("a" -> "1", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
+  }
+
+  protected def testChangeColumn(isDatasourceTable: Boolean): Unit = {
+    if (!isUsingHiveMetastore) {
+      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
+    }
+    val catalog = spark.sessionState.catalog
+    val resolver = spark.sessionState.conf.resolver
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent, isDatasourceTable)
+    def getMetadata(colName: String): Metadata = {
+      val column = catalog.getTableMetadata(tableIdent).schema.fields.find { field =>
+        resolver(field.name, colName)
+      }
+      column.map(_.metadata).getOrElse(Metadata.empty)
+    }
+    // Ensure that change column will preserve other metadata fields.
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
+    assert(getMetadata("col1").getString("key") == "value")
   }
 
   test("drop build-in function") {
@@ -1479,8 +1521,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("DESCRIBE FUNCTION 'concat'"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
         Row("Function: concat") ::
-        Row("Usage: concat(str1, str2, ..., strN) " +
-          "- Returns the concatenation of `str1`, `str2`, ..., `strN`.") :: Nil
+        Row("Usage: concat(str1, str2, ..., strN) - " +
+            "Returns the concatenation of str1, str2, ..., strN.") :: Nil
     )
     // extended mode
     checkAnswer(
@@ -1498,49 +1540,17 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     )
   }
 
-  test("select/insert into the managed table") {
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
-    val tabName = "tbl"
-    withTable(tabName) {
-      sql(s"CREATE TABLE $tabName (i INT, j STRING)")
-      val catalogTable =
-        spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
-      assert(catalogTable.tableType == CatalogTableType.MANAGED)
+  test("create a data source table without schema") {
+    import testImplicits._
+    withTempPath { tempDir =>
+      withTable("tab1", "tab2") {
+        (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-      var message = intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
-      }.getMessage
-      assert(message.contains("Hive support is required to insert into the following tables"))
-      message = intercept[AnalysisException] {
-        sql(s"SELECT * FROM $tabName")
-      }.getMessage
-      assert(message.contains("Hive support is required to select over the following tables"))
-    }
-  }
+        val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") }.getMessage
+        assert(e.contains("Unable to infer schema for JSON. It must be specified manually"))
 
-  test("select/insert into external table") {
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
-    withTempDir { tempDir =>
-      val tabName = "tbl"
-      withTable(tabName) {
-        sql(
-          s"""
-             |CREATE EXTERNAL TABLE $tabName (i INT, j STRING)
-             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-             |LOCATION '$tempDir'
-           """.stripMargin)
-        val catalogTable =
-          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
-        assert(catalogTable.tableType == CatalogTableType.EXTERNAL)
-
-        var message = intercept[AnalysisException] {
-          sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
-        }.getMessage
-        assert(message.contains("Hive support is required to insert into the following tables"))
-        message = intercept[AnalysisException] {
-          sql(s"SELECT * FROM $tabName")
-        }.getMessage
-        assert(message.contains("Hive support is required to select over the following tables"))
+        sql(s"CREATE TABLE tab2 using json location '${tempDir.toURI}'")
+        checkAnswer(spark.table("tab2"), Row("a", "b"))
       }
     }
   }
@@ -1568,22 +1578,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("Create Hive Table As Select") {
-    import testImplicits._
-    withTable("t", "t1") {
-      var e = intercept[AnalysisException] {
-        sql("CREATE TABLE t SELECT 1 as a, 1 as b")
-      }.getMessage
-      assert(e.contains("Hive support is required to use CREATE Hive TABLE AS SELECT"))
-
-      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
-      e = intercept[AnalysisException] {
-        sql("CREATE TABLE t SELECT a, b from t1")
-      }.getMessage
-      assert(e.contains("Hive support is required to use CREATE Hive TABLE AS SELECT"))
-    }
-  }
-
   test("Create Data Source Table As Select") {
     import testImplicits._
     withTable("t", "t1", "t2") {
@@ -1597,17 +1591,20 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("drop current database") {
-    sql("CREATE DATABASE temp")
-    sql("USE temp")
-    sql("DROP DATABASE temp")
-    val e = intercept[AnalysisException] {
-        sql("CREATE TABLE t (a INT, b INT)")
+    withDatabase("temp") {
+      sql("CREATE DATABASE temp")
+      sql("USE temp")
+      sql("DROP DATABASE temp")
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t (a INT, b INT) USING parquet")
       }.getMessage
-    assert(e.contains("Database 'temp' not found"))
+      assert(e.contains("Database 'temp' not found"))
+    }
   }
 
   test("drop default database") {
-    Seq("true", "false").foreach { caseSensitive =>
+    val caseSensitiveOptions = if (isUsingHiveMetastore) Seq("false") else Seq("true", "false")
+    caseSensitiveOptions.foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
         var message = intercept[AnalysisException] {
           sql("DROP DATABASE default")
@@ -1709,22 +1706,39 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("block creating duplicate temp table") {
+    withView("t_temp") {
+      sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
+      val e = intercept[TempTableAlreadyExistsException] {
+        sql("CREATE TEMPORARY TABLE t_temp (c3 int, c4 string) USING JSON")
+      }.getMessage
+      assert(e.contains("Temporary table 't_temp' already exists"))
+    }
+  }
+
   test("truncate table - external table, temporary table, view (not allowed)") {
     import testImplicits._
-    val path = Utils.createTempDir().getAbsolutePath
-    (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
-    sql(s"CREATE EXTERNAL TABLE my_ext_tab LOCATION '$path'")
-    sql(s"CREATE VIEW my_view AS SELECT 1")
-    intercept[NoSuchTableException] {
-      sql("TRUNCATE TABLE my_temp_tab")
+    withTempPath { tempDir =>
+      withTable("my_ext_tab") {
+        (("a", "b") :: Nil).toDF().write.parquet(tempDir.getCanonicalPath)
+        (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
+        sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '${tempDir.toURI}'")
+        sql(s"CREATE VIEW my_view AS SELECT 1")
+        intercept[NoSuchTableException] {
+          sql("TRUNCATE TABLE my_temp_tab")
+        }
+        assertUnsupported("TRUNCATE TABLE my_ext_tab")
+        assertUnsupported("TRUNCATE TABLE my_view")
+      }
     }
-    assertUnsupported("TRUNCATE TABLE my_ext_tab")
-    assertUnsupported("TRUNCATE TABLE my_view")
   }
 
   test("truncate table - non-partitioned table (not allowed)") {
-    sql("CREATE TABLE my_tab (age INT, name STRING)")
-    assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
+    withTable("my_tab") {
+      sql("CREATE TABLE my_tab (age INT, name STRING) using parquet")
+      sql("INSERT INTO my_tab values (10, 'a')")
+      assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
+    }
   }
 
   test("SPARK-16034 Partition columns should match when appending to existing data source tables") {
@@ -1792,7 +1806,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         withTable(tabName) {
           sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
           val message = intercept[AnalysisException] {
-            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase}")
+            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
           }.getMessage
           assert(message.contains("SHOW COLUMNS with conflicting databases"))
         }
@@ -1805,5 +1819,577 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val df = sql("show databases")
     val rows: Seq[Row] = df.toLocalIterator().asScala.toSeq
     assert(rows.length > 0)
+  }
+
+  test("SET LOCATION for managed table") {
+    withTable("tbl") {
+      withTempDir { dir =>
+        sql("CREATE TABLE tbl(i INT) USING parquet")
+        sql("INSERT INTO tbl SELECT 1")
+        checkAnswer(spark.table("tbl"), Row(1))
+        val defaultTablePath = spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
+        try {
+          sql(s"ALTER TABLE tbl SET LOCATION '${dir.toURI}'")
+          spark.catalog.refreshTable("tbl")
+          // SET LOCATION won't move data from previous table path to new table path.
+          assert(spark.table("tbl").count() == 0)
+          // the previous table path should be still there.
+          assert(new File(defaultTablePath).exists())
+
+          sql("INSERT INTO tbl SELECT 2")
+          checkAnswer(spark.table("tbl"), Row(2))
+          // newly inserted data will go to the new table path.
+          assert(dir.listFiles().nonEmpty)
+
+          sql("DROP TABLE tbl")
+          // the new table path will be removed after DROP TABLE.
+          assert(!dir.exists())
+        } finally {
+          Utils.deleteRecursively(new File(defaultTablePath))
+        }
+      }
+    }
+  }
+
+  test("insert data to a data source table which has a non-existing location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string, b int)
+             |USING parquet
+             |OPTIONS(path "${dir.toURI}")
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        dir.delete
+        assert(!dir.exists)
+        spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+        assert(dir.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+
+        Utils.deleteRecursively(dir)
+        assert(!dir.exists)
+        spark.sql("INSERT OVERWRITE TABLE t SELECT 'c', 1")
+        assert(dir.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+
+        val newDirFile = new File(dir, "x")
+        val newDir = newDirFile.toURI
+        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+        spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
+
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table1.location == newDir)
+        assert(!newDirFile.exists)
+
+        spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+        assert(newDirFile.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+      }
+    }
+  }
+
+  test("insert into a data source table with a non-existing partition location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |LOCATION "${dir.toURI}"
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
+        checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
+
+        val partLoc = new File(s"${dir.getAbsolutePath}/a=1")
+        Utils.deleteRecursively(partLoc)
+        assert(!partLoc.exists())
+        // insert overwrite into a partition which location has been deleted.
+        spark.sql("INSERT OVERWRITE TABLE t PARTITION(a=1, b=2) SELECT 7, 8")
+        assert(partLoc.exists())
+        checkAnswer(spark.table("t"), Row(7, 8, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("read data from a data source table which has a non-existing location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string, b int)
+             |USING parquet
+             |OPTIONS(path "${dir.toURI}")
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        dir.delete()
+        checkAnswer(spark.table("t"), Nil)
+
+        val newDirFile = new File(dir, "x")
+        val newDir = newDirFile.toURI
+        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table1.location == newDir)
+        assert(!newDirFile.exists())
+        checkAnswer(spark.table("t"), Nil)
+      }
+    }
+  }
+
+  test("read data from a data source table with non-existing partition location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |LOCATION "${dir.toURI}"
+           """.stripMargin)
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
+        checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
+
+        // select from a partition which location has been deleted.
+        Utils.deleteRecursively(dir)
+        assert(!dir.exists())
+        spark.sql("REFRESH TABLE t")
+        checkAnswer(spark.sql("select * from t where a=1 and b=2"), Nil)
+      }
+    }
+  }
+
+  test("create datasource table with a non-existing location") {
+    withTable("t", "t1") {
+      withTempPath { dir =>
+        spark.sql(s"CREATE TABLE t(a int, b int) USING parquet LOCATION '${dir.toURI}'")
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        spark.sql("INSERT INTO TABLE t SELECT 1, 2")
+        assert(dir.exists())
+
+        checkAnswer(spark.table("t"), Row(1, 2))
+      }
+      // partition table
+      withTempPath { dir =>
+        spark.sql(
+          s"CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '${dir.toURI}'")
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        spark.sql("INSERT INTO TABLE t1 PARTITION(a=1) SELECT 2")
+
+        val partDir = new File(dir, "a=1")
+        assert(partDir.exists())
+
+        checkAnswer(spark.table("t1"), Row(2, 1))
+      }
+    }
+  }
+
+  Seq(true, false).foreach { shouldDelete =>
+    val tcName = if (shouldDelete) "non-existing" else "existed"
+    test(s"CTAS for external data source table with a $tcName location") {
+      withTable("t", "t1") {
+        withTempDir { dir =>
+          if (shouldDelete) dir.delete()
+          spark.sql(
+            s"""
+               |CREATE TABLE t
+               |USING parquet
+               |LOCATION '${dir.toURI}'
+               |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+             """.stripMargin)
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+          checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+        }
+        // partition table
+        withTempDir { dir =>
+          if (shouldDelete) dir.delete()
+          spark.sql(
+            s"""
+               |CREATE TABLE t1
+               |USING parquet
+               |PARTITIONED BY(a, b)
+               |LOCATION '${dir.toURI}'
+               |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+             """.stripMargin)
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+          val partDir = new File(dir, "a=3")
+          assert(partDir.exists())
+
+          checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+        }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b", "a,b").foreach { specialChars =>
+    test(s"data source table:partition column name containing $specialChars") {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
+      withTable("t") {
+        withTempDir { dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a string, `$specialChars` string)
+               |USING parquet
+               |PARTITIONED BY(`$specialChars`)
+               |LOCATION '${dir.toURI}'
+             """.stripMargin)
+
+          assert(dir.listFiles().isEmpty)
+          spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`=2) SELECT 1")
+          val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialChars)}=2"
+          val partFile = new File(dir, partEscaped)
+          assert(partFile.listFiles().nonEmpty)
+          checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
+        }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"location uri contains $specialChars for datasource table") {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
+      withTable("t", "t1") {
+        withTempDir { dir =>
+          val loc = new File(dir, specialChars)
+          loc.mkdir()
+          // The parser does not recognize the backslashes on Windows as they are.
+          // These currently should be escaped.
+          val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a string)
+               |USING parquet
+               |LOCATION '$escapedLoc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.location == makeQualifiedPath(loc.getAbsolutePath))
+          assert(new Path(table.location).toString.contains(specialChars))
+
+          assert(loc.listFiles().isEmpty)
+          spark.sql("INSERT INTO TABLE t SELECT 1")
+          assert(loc.listFiles().nonEmpty)
+          checkAnswer(spark.table("t"), Row("1") :: Nil)
+        }
+
+        withTempDir { dir =>
+          val loc = new File(dir, specialChars)
+          loc.mkdir()
+          // The parser does not recognize the backslashes on Windows as they are.
+          // These currently should be escaped.
+          val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
+          spark.sql(
+            s"""
+               |CREATE TABLE t1(a string, b string)
+               |USING parquet
+               |PARTITIONED BY(b)
+               |LOCATION '$escapedLoc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          assert(table.location == makeQualifiedPath(loc.getAbsolutePath))
+          assert(new Path(table.location).toString.contains(specialChars))
+
+          assert(loc.listFiles().isEmpty)
+          spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
+          val partFile = new File(loc, "b=2")
+          assert(partFile.listFiles().nonEmpty)
+          checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
+
+          spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
+          val partFile1 = new File(loc, "b=2017-03-03 12:13%3A14")
+          assert(!partFile1.exists())
+
+          if (!Utils.isWindows) {
+            // Actual path becomes "b=2017-03-03%2012%3A13%253A14" on Windows.
+            val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
+            assert(partFile2.listFiles().nonEmpty)
+            checkAnswer(
+              spark.table("t1"), Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+          }
+        }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"location uri contains $specialChars for database") {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
+      withDatabase ("tmpdb") {
+        withTable("t") {
+          withTempDir { dir =>
+            val loc = new File(dir, specialChars)
+            // The parser does not recognize the backslashes on Windows as they are.
+            // These currently should be escaped.
+            val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
+            spark.sql(s"CREATE DATABASE tmpdb LOCATION '$escapedLoc'")
+            spark.sql("USE tmpdb")
+
+            import testImplicits._
+            Seq(1).toDF("a").write.saveAsTable("t")
+            val tblloc = new File(loc, "t")
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.location == makeQualifiedPath(tblloc.getAbsolutePath))
+            assert(tblloc.listFiles().nonEmpty)
+          }
+        }
+      }
+    }
+  }
+
+  test("the qualified path of a datasource table is stored in the catalog") {
+    withTable("t", "t1") {
+      withTempDir { dir =>
+        assert(!dir.getAbsolutePath.startsWith("file:/"))
+        // The parser does not recognize the backslashes on Windows as they are.
+        // These currently should be escaped.
+        val escapedDir = dir.getAbsolutePath.replace("\\", "\\\\")
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string)
+             |USING parquet
+             |LOCATION '$escapedDir'
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location.toString.startsWith("file:/"))
+      }
+
+      withTempDir { dir =>
+        assert(!dir.getAbsolutePath.startsWith("file:/"))
+        // The parser does not recognize the backslashes on Windows as they are.
+        // These currently should be escaped.
+        val escapedDir = dir.getAbsolutePath.replace("\\", "\\\\")
+        spark.sql(
+          s"""
+             |CREATE TABLE t1(a string, b string)
+             |USING parquet
+             |PARTITIONED BY(b)
+             |LOCATION '$escapedDir'
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        assert(table.location.toString.startsWith("file:/"))
+      }
+    }
+  }
+
+  val supportedNativeFileFormatsForAlterTableAddColumns = Seq("parquet", "json", "csv")
+
+  supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
+    test(s"alter datasource table add columns - $provider") {
+      withTable("t1") {
+        sql(s"CREATE TABLE t1 (c1 int) USING $provider")
+        sql("INSERT INTO t1 VALUES (1)")
+        sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
+        checkAnswer(
+          spark.table("t1"),
+          Seq(Row(1, null))
+        )
+        checkAnswer(
+          sql("SELECT * FROM t1 WHERE c2 is null"),
+          Seq(Row(1, null))
+        )
+
+        sql("INSERT INTO t1 VALUES (3, 2)")
+        checkAnswer(
+          sql("SELECT * FROM t1 WHERE c2 = 2"),
+          Seq(Row(3, 2))
+        )
+      }
+    }
+  }
+
+  supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
+    test(s"alter datasource table add columns - partitioned - $provider") {
+      withTable("t1") {
+        sql(s"CREATE TABLE t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
+        sql("INSERT INTO t1 PARTITION(c2 = 2) VALUES (1)")
+        sql("ALTER TABLE t1 ADD COLUMNS (c3 int)")
+        checkAnswer(
+          spark.table("t1"),
+          Seq(Row(1, null, 2))
+        )
+        checkAnswer(
+          sql("SELECT * FROM t1 WHERE c3 is null"),
+          Seq(Row(1, null, 2))
+        )
+        sql("INSERT INTO t1 PARTITION(c2 =1) VALUES (2, 3)")
+        checkAnswer(
+          sql("SELECT * FROM t1 WHERE c3 = 3"),
+          Seq(Row(2, 3, 1))
+        )
+        checkAnswer(
+          sql("SELECT * FROM t1 WHERE c2 = 1"),
+          Seq(Row(2, 3, 1))
+        )
+      }
+    }
+  }
+
+  test("alter datasource table add columns - text format not supported") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c1 int) USING text")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
+      }.getMessage
+      assert(e.contains("ALTER ADD COLUMNS does not support datasource table with type"))
+    }
+  }
+
+  test("alter table add columns -- not support temp view") {
+    withTempView("tmp_v") {
+      sql("CREATE TEMPORARY VIEW tmp_v AS SELECT 1 AS c1, 2 AS c2")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
+      }
+      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
+    }
+  }
+
+  test("alter table add columns -- not support view") {
+    withView("v1") {
+      sql("CREATE VIEW v1 AS SELECT 1 AS c1, 2 AS c2")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
+      }
+      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
+    }
+  }
+
+  test("alter table add columns with existing column name") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c1 int) USING PARQUET")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t1 ADD COLUMNS (c1 string)")
+      }.getMessage
+      assert(e.contains("Found duplicate column(s)"))
+    }
+  }
+
+  test("create temporary function with if not exists") {
+    withUserDefinedFunction("func1" -> true) {
+      val sql1 =
+        """
+          |CREATE TEMPORARY FUNCTION IF NOT EXISTS func1 as
+          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+          |JAR '/path/to/jar2'
+        """.stripMargin
+      val e = intercept[AnalysisException] {
+        sql(sql1)
+      }.getMessage
+      assert(e.contains("It is not allowed to define a TEMPORARY function with IF NOT EXISTS"))
+    }
+  }
+
+  test("create function with both if not exists and replace") {
+    withUserDefinedFunction("func1" -> false) {
+      val sql1 =
+        """
+          |CREATE OR REPLACE FUNCTION IF NOT EXISTS func1 as
+          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+          |JAR '/path/to/jar2'
+        """.stripMargin
+      val e = intercept[AnalysisException] {
+        sql(sql1)
+      }.getMessage
+      assert(e.contains("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed"))
+    }
+  }
+
+  test("create temporary function by specifying a database") {
+    val dbName = "mydb"
+    withDatabase(dbName) {
+      sql(s"CREATE DATABASE $dbName")
+      sql(s"USE $dbName")
+      withUserDefinedFunction("func1" -> true) {
+        val sql1 =
+          s"""
+             |CREATE TEMPORARY FUNCTION $dbName.func1 as
+             |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+             |JAR '/path/to/jar2'
+            """.stripMargin
+        val e = intercept[AnalysisException] {
+          sql(sql1)
+        }.getMessage
+        assert(e.contains(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
+          s"is not allowed: '$dbName'"))
+      }
+    }
+  }
+
+  Seq(true, false).foreach { caseSensitive =>
+    test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
+        withTable("t1") {
+          sql("CREATE TABLE t1 (c1 int) USING PARQUET")
+          if (!caseSensitive) {
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            }.getMessage
+            assert(e.contains("Found duplicate column(s)"))
+          } else {
+            if (isUsingHiveMetastore) {
+              // hive catalog will still complains that c1 is duplicate column name because hive
+              // identifiers are case insensitive.
+              val e = intercept[AnalysisException] {
+                sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+              }.getMessage
+              assert(e.contains("HiveException"))
+            } else {
+              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+              assert(spark.table("t1").schema
+                .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
+            }
+          }
+        }
+      }
+    }
+
+    test(s"basic DDL using locale tr - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
+        withLocale("tr") {
+          val dbName = "DaTaBaSe_I"
+          withDatabase(dbName) {
+            sql(s"CREATE DATABASE $dbName")
+            sql(s"USE $dbName")
+
+            val tabName = "tAb_I"
+            withTable(tabName) {
+              sql(s"CREATE TABLE $tabName(col_I int) USING PARQUET")
+              sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1")
+              checkAnswer(sql(s"SELECT col_I FROM $tabName"), Row(1) :: Nil)
+            }
+          }
+        }
+      }
+    }
   }
 }

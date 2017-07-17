@@ -90,7 +90,7 @@ trait FileFormat {
    * @param options A set of string -> string configuration options.
    * @return
    */
-  def buildReader(
+  protected def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -98,8 +98,6 @@ trait FileFormat {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    // TODO: Remove this default implementation when the other formats have been ported
-    // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
     throw new UnsupportedOperationException(s"buildReader is not supported for $this")
   }
 
@@ -148,7 +146,8 @@ trait FileFormat {
  * The base class file format that is based on text file.
  */
 abstract class TextBasedFileFormat extends FileFormat {
-  private var codecFactory: CompressionCodecFactory = null
+  private var codecFactory: CompressionCodecFactory = _
+
   override def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],

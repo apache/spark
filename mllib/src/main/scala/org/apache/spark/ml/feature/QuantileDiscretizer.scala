@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
@@ -31,11 +31,11 @@ import org.apache.spark.sql.types.StructType
  * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params
-  with HasInputCol with HasOutputCol {
+  with HasHandleInvalid with HasInputCol with HasOutputCol {
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
-   * be >= 2.
+   * be greater than or equal to 2.
    *
    * See also [[handleInvalid]], which can optionally create an additional bucket for NaN values.
    *
@@ -52,7 +52,7 @@ private[feature] trait QuantileDiscretizerBase extends Params
 
   /**
    * Relative error (see documentation for
-   * [[org.apache.spark.sql.DataFrameStatFunctions.approxQuantile approxQuantile]] for description)
+   * `org.apache.spark.sql.DataFrameStatFunctions.approxQuantile` for description)
    * Must be in the range [0, 1].
    * default: 0.001
    * @group param
@@ -66,22 +66,18 @@ private[feature] trait QuantileDiscretizerBase extends Params
   def getRelativeError: Double = getOrDefault(relativeError)
 
   /**
-   * Param for how to handle invalid entries. Options are skip (filter out rows with
-   * invalid values), error (throw an error), or keep (keep invalid values in a special additional
-   * bucket).
+   * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
+   * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
+   * additional bucket).
    * Default: "error"
    * @group param
    */
   @Since("2.1.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle" +
-    "invalid entries. Options are skip (filter out rows with invalid values), " +
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "how to handle invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
-    ParamValidators.inArray(Bucketizer.supportedHandleInvalid))
+    ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
   setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
-
-  /** @group getParam */
-  @Since("2.1.0")
-  def getHandleInvalid: String = $(handleInvalid)
 
 }
 
@@ -91,15 +87,17 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * possible that the number of buckets used will be smaller than this value, for example, if there
  * are too few distinct values of the input to create enough distinct quantiles.
  *
- * NaN handling: Note also that
- * QuantileDiscretizer will raise an error when it finds NaN values in the dataset, but the user can
+ * NaN handling:
+ * null and NaN values will be ignored from the column during `QuantileDiscretizer` fitting. This
+ * will produce a `Bucketizer` model for making predictions. During the transformation,
+ * `Bucketizer` will raise an error when it finds NaN values in the dataset, but the user can
  * also choose to either keep or remove NaN values within the dataset by setting `handleInvalid`.
  * If the user chooses to keep NaN values, they will be handled specially and placed into their own
  * bucket, for example, if 4 buckets are used, then non-NaN data will be put into buckets[0-3],
  * but NaNs will be counted in a special bucket[4].
  *
  * Algorithm: The bin ranges are chosen using an approximate algorithm (see the documentation for
- * [[org.apache.spark.sql.DataFrameStatFunctions.approxQuantile approxQuantile]]
+ * `org.apache.spark.sql.DataFrameStatFunctions.approxQuantile`
  * for a detailed description). The precision of the approximation can be controlled with the
  * `relativeError` parameter. The lower and upper bin bounds will be `-Infinity` and `+Infinity`,
  * covering all real values.

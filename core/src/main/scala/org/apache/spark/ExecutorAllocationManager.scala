@@ -331,7 +331,7 @@ private[spark] class ExecutorAllocationManager(
       val delta = addExecutors(maxNeeded)
       logDebug(s"Starting timer to add more executors (to " +
         s"expire in $sustainedSchedulerBacklogTimeoutS seconds)")
-      addTime += sustainedSchedulerBacklogTimeoutS * 1000
+      addTime = now + (sustainedSchedulerBacklogTimeoutS * 1000)
       delta
     } else {
       0
@@ -439,7 +439,7 @@ private[spark] class ExecutorAllocationManager(
       executorsRemoved
     } else {
       logWarning(s"Unable to reach the cluster manager to kill executor/s " +
-        "executorIdsToBeRemoved.mkString(\",\") or no executor eligible to kill!")
+        s"${executorIdsToBeRemoved.mkString(",")} or no executor eligible to kill!")
       Seq.empty[String]
     }
   }

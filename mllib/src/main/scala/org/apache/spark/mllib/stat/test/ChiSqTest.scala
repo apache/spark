@@ -41,7 +41,7 @@ import org.apache.spark.rdd.RDD
  *
  * More information on Chi-squared test: http://en.wikipedia.org/wiki/Chi-squared_test
  */
-private[stat] object ChiSqTest extends Logging {
+private[spark] object ChiSqTest extends Logging {
 
   /**
    * @param name String name for the method.
@@ -71,6 +71,11 @@ private[stat] object ChiSqTest extends Logging {
   }
 
   /**
+   * Max number of categories when indexing labels and features
+   */
+  private[spark] val maxCategories: Int = 10000
+
+  /**
    * Conduct Pearson's independence test for each feature against the label across the input RDD.
    * The contingency table is constructed from the raw (feature, label) pairs and used to conduct
    * the independence test.
@@ -78,7 +83,6 @@ private[stat] object ChiSqTest extends Logging {
    */
   def chiSquaredFeatures(data: RDD[LabeledPoint],
       methodName: String = PEARSON.name): Array[ChiSqTestResult] = {
-    val maxCategories = 10000
     val numCols = data.first().features.size
     val results = new Array[ChiSqTestResult](numCols)
     var labels: Map[Double, Int] = null

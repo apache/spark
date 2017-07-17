@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{MLTestingUtils, SchemaUtils}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DataTypes
@@ -29,8 +29,10 @@ private[ml] object LSHTest {
    * the following property is satisfied.
    *
    * There exist dist1, dist2, p1, p2, so that for any two elements e1 and e2,
-   * If dist(e1, e2) <= dist1, then Pr{h(x) == h(y)} >= p1
-   * If dist(e1, e2) >= dist2, then Pr{h(x) == h(y)} <= p2
+   * If dist(e1, e2) is less than or equal to dist1, then Pr{h(x) == h(y)} is greater than
+   * or equal to p1
+   * If dist(e1, e2) is greater than or equal to dist2, then Pr{h(x) == h(y)} is less than
+   * or equal to p2
    *
    * This is called locality sensitive property. This method checks the property on an
    * existing dataset and calculate the probabilities.
@@ -38,8 +40,10 @@ private[ml] object LSHTest {
    *
    * This method hashes each elements to hash buckets using LSH, and calculate the false positive
    * and false negative:
-   * False positive: Of all (e1, e2) sharing any bucket, the probability of dist(e1, e2) > distFP
-   * False negative: Of all (e1, e2) not sharing buckets, the probability of dist(e1, e2) < distFN
+   * False positive: Of all (e1, e2) sharing any bucket, the probability of dist(e1, e2) is greater
+   * than distFP
+   * False negative: Of all (e1, e2) not sharing buckets, the probability of dist(e1, e2) is less
+   * than distFN
    *
    * @param dataset The dataset to verify the locality sensitive hashing property.
    * @param lsh The lsh instance to perform the hashing
@@ -58,12 +62,20 @@ private[ml] object LSHTest {
     val outputCol = model.getOutputCol
     val transformedData = model.transform(dataset)
 
-    SchemaUtils.checkColumnType(transformedData.schema, model.getOutputCol, new VectorUDT)
+    MLTestingUtils.checkCopyAndUids(lsh, model)
+
+    // Check output column type
+    SchemaUtils.checkColumnType(
+      transformedData.schema, model.getOutputCol, DataTypes.createArrayType(new VectorUDT))
+
+    // Check output column dimensions
+    val headHashValue = transformedData.select(outputCol).head().get(0).asInstanceOf[Seq[Vector]]
+    assert(headHashValue.length == model.getNumHashTables)
 
     // Perform a cross join and label each pair of same_bucket and distance
     val pairs = transformedData.as("a").crossJoin(transformedData.as("b"))
     val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y), DataTypes.DoubleType)
-    val sameBucket = udf((x: Vector, y: Vector) => model.hashDistance(x, y) == 0.0,
+    val sameBucket = udf((x: Seq[Vector], y: Seq[Vector]) => model.hashDistance(x, y) == 0.0,
       DataTypes.BooleanType)
     val result = pairs
       .withColumn("same_bucket", sameBucket(col(s"a.$outputCol"), col(s"b.$outputCol")))
@@ -83,6 +95,7 @@ private[ml] object LSHTest {
    * @param dataset the dataset to look for the key
    * @param key The key to hash for the item
    * @param k The maximum number of items closest to the key
+   * @param singleProbe True for using single-probe; false for multi-probe
    * @tparam T The class type of lsh
    * @return A tuple of two doubles, representing precision and recall rate
    */
@@ -91,7 +104,7 @@ private[ml] object LSHTest {
       dataset: Dataset[_],
       key: Vector,
       k: Int,
-      singleProbing: Boolean): (Double, Double) = {
+      singleProbe: Boolean): (Double, Double) = {
     val model = lsh.fit(dataset)
 
     // Compute expected
@@ -99,14 +112,14 @@ private[ml] object LSHTest {
     val expected = dataset.sort(distUDF(col(model.getInputCol))).limit(k)
 
     // Compute actual
-    val actual = model.approxNearestNeighbors(dataset, key, k, singleProbing, "distCol")
+    val actual = model.approxNearestNeighbors(dataset, key, k, singleProbe, "distCol")
 
     assert(actual.schema.sameType(model
       .transformSchema(dataset.schema)
       .add("distCol", DataTypes.DoubleType))
     )
 
-    if (!singleProbing) {
+    if (!singleProbe) {
       assert(actual.count() == k)
     }
 

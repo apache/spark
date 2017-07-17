@@ -19,6 +19,7 @@ package org.apache.spark.serializer
 
 import java.io._
 import java.nio.ByteBuffer
+import java.util.Locale
 import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
@@ -43,9 +44,10 @@ import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, S
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
- * A Spark serializer that uses the [[https://code.google.com/p/kryo/ Kryo serialization library]].
+ * A Spark serializer that uses the <a href="https://code.google.com/p/kryo/">
+ * Kryo serialization library</a>.
  *
- * Note that this serializer is not guaranteed to be wire-compatible across different versions of
+ * @note This serializer is not guaranteed to be wire-compatible across different versions of
  * Spark. It is intended to be used to serialize/de-serialize data within a single
  * Spark application.
  */
@@ -173,6 +175,7 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(None.getClass)
     kryo.register(Nil.getClass)
     kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
+    kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
     kryo.register(classOf[ArrayBuffer[Any]])
 
     kryo.setClassLoader(classLoader)
@@ -243,7 +246,8 @@ class KryoDeserializationStream(
       kryo.readClassAndObject(input).asInstanceOf[T]
     } catch {
       // DeserializationStream uses the EOF exception to indicate stopping condition.
-      case e: KryoException if e.getMessage.toLowerCase.contains("buffer underflow") =>
+      case e: KryoException
+        if e.getMessage.toLowerCase(Locale.ROOT).contains("buffer underflow") =>
         throw new EOFException
     }
   }
@@ -312,7 +316,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boole
     } catch {
       case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
         throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
-          "increase spark.kryoserializer.buffer.max value.")
+          "increase spark.kryoserializer.buffer.max value.", e)
     } finally {
       releaseKryo(kryo)
     }
@@ -383,9 +387,16 @@ private[serializer] object KryoSerializer {
     classOf[HighlyCompressedMapStatus],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
+    classOf[Array[Boolean]],
     classOf[Array[Byte]],
     classOf[Array[Short]],
+    classOf[Array[Int]],
     classOf[Array[Long]],
+    classOf[Array[Float]],
+    classOf[Array[Double]],
+    classOf[Array[Char]],
+    classOf[Array[String]],
+    classOf[Array[Array[String]]],
     classOf[BoundedPriorityQueue[_]],
     classOf[SparkConf]
   )

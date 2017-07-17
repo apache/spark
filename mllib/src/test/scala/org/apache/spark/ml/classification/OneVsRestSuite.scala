@@ -22,7 +22,7 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.feature.StringIndexer
-import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MetadataUtils, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -33,6 +33,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.Metadata
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -75,8 +76,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(ova.getPredictionCol === "prediction")
     val ovaModel = ova.fit(dataset)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(ovaModel)
+    MLTestingUtils.checkCopyAndUids(ova, ovaModel)
 
     assert(ovaModel.models.length === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
@@ -134,6 +134,17 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val transformedDataset = ovaModel.transform(indexedDataset)
     val outputFields = transformedDataset.schema.fieldNames.toSet
     assert(outputFields.contains("p"))
+  }
+
+  test("SPARK-18625 : OneVsRestModel should support setFeaturesCol and setPredictionCol") {
+    val ova = new OneVsRest().setClassifier(new LogisticRegression)
+    val ovaModel = ova.fit(dataset)
+    val dataset2 = dataset.select(col("label").as("y"), col("features").as("fea"))
+    ovaModel.setFeaturesCol("fea")
+    ovaModel.setPredictionCol("pred")
+    val transformedDataset = ovaModel.transform(dataset2)
+    val outputFields = transformedDataset.schema.fieldNames.toSet
+    assert(outputFields === Set("y", "fea", "pred"))
   }
 
   test("SPARK-8049: OneVsRest shouldn't output temp columns") {

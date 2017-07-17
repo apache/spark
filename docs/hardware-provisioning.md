@@ -15,8 +15,8 @@ possible**. We recommend the following:
 * If at all possible, run Spark on the same nodes as HDFS. The simplest way is to set up a Spark
 [standalone mode cluster](spark-standalone.html) on the same nodes, and configure Spark and
 Hadoop's memory and CPU usage to avoid interference (for Hadoop, the relevant options are
-`mapred.child.java.opts` for the per-task memory and `mapred.tasktracker.map.tasks.maximum`
-and `mapred.tasktracker.reduce.tasks.maximum` for number of tasks). Alternatively, you can run
+`mapred.child.java.opts` for the per-task memory and `mapreduce.tasktracker.map.tasks.maximum`
+and `mapreduce.tasktracker.reduce.tasks.maximum` for number of tasks). Alternatively, you can run
 Hadoop and Spark on a common cluster manager like [Mesos](running-on-mesos.html) or
 [Hadoop YARN](running-on-yarn.html).
 

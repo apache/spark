@@ -38,18 +38,22 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   import testImplicits._
 
   @transient var dataset: Dataset[_] = _
+  @transient var bernoulliDataset: Dataset[_] = _
+
+  private val seed = 42
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    val pi = Array(0.5, 0.1, 0.4).map(math.log)
+    val pi = Array(0.3, 0.3, 0.4).map(math.log)
     val theta = Array(
-      Array(0.70, 0.10, 0.10, 0.10), // label 0
-      Array(0.10, 0.70, 0.10, 0.10), // label 1
-      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+      Array(0.30, 0.30, 0.30, 0.30), // label 0
+      Array(0.30, 0.30, 0.30, 0.30), // label 1
+      Array(0.40, 0.40, 0.40, 0.40)  // label 2
     ).map(_.map(math.log))
 
-    dataset = generateNaiveBayesInput(pi, theta, 100, 42).toDF()
+    dataset = generateNaiveBayesInput(pi, theta, 100, seed).toDF()
+    bernoulliDataset = generateNaiveBayesInput(pi, theta, 100, seed, "bernoulli").toDF()
   }
 
   def validatePrediction(predictionAndLabels: DataFrame): Unit = {
@@ -139,12 +143,13 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
 
     val testDataset =
-      generateNaiveBayesInput(piArray, thetaArray, nPoints, 42, "multinomial").toDF()
+      generateNaiveBayesInput(piArray, thetaArray, nPoints, seed, "multinomial").toDF()
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
     val model = nb.fit(testDataset)
 
     validateModelFit(pi, theta, model)
     assert(model.hasParent)
+    MLTestingUtils.checkCopyAndUids(nb, model)
 
     val validationDataset =
       generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
@@ -157,50 +162,27 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     validateProbabilities(featureAndProbabilities, model, "multinomial")
   }
 
-  test("Naive Bayes Multinomial with weighted samples") {
-    val nPoints = 1000
-    val piArray = Array(0.5, 0.1, 0.4).map(math.log)
-    val thetaArray = Array(
-      Array(0.70, 0.10, 0.10, 0.10), // label 0
-      Array(0.10, 0.70, 0.10, 0.10), // label 1
-      Array(0.10, 0.10, 0.70, 0.10) // label 2
-    ).map(_.map(math.log))
-
-    val testData = generateNaiveBayesInput(piArray, thetaArray, nPoints, 42, "multinomial").toDF()
-    val (overSampledData, weightedData) =
-      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(testData,
-        "label", "features", 42L)
-    val nb = new NaiveBayes().setModelType("multinomial")
-    val unweightedModel = nb.fit(weightedData)
-    val overSampledModel = nb.fit(overSampledData)
-    val weightedModel = nb.setWeightCol("weight").fit(weightedData)
-    assert(weightedModel.theta ~== overSampledModel.theta relTol 0.001)
-    assert(weightedModel.pi ~== overSampledModel.pi relTol 0.001)
-    assert(unweightedModel.theta !~= overSampledModel.theta relTol 0.001)
-    assert(unweightedModel.pi !~= overSampledModel.pi relTol 0.001)
-  }
-
-  test("Naive Bayes Bernoulli with weighted samples") {
-    val nPoints = 10000
-    val piArray = Array(0.5, 0.3, 0.2).map(math.log)
-    val thetaArray = Array(
-      Array(0.50, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.40), // label 0
-      Array(0.02, 0.70, 0.10, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02), // label 1
-      Array(0.02, 0.02, 0.60, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.30)  // label 2
-    ).map(_.map(math.log))
-
-    val testData = generateNaiveBayesInput(piArray, thetaArray, nPoints, 42, "bernoulli").toDF()
-    val (overSampledData, weightedData) =
-      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(testData,
-        "label", "features", 42L)
-    val nb = new NaiveBayes().setModelType("bernoulli")
-    val unweightedModel = nb.fit(weightedData)
-    val overSampledModel = nb.fit(overSampledData)
-    val weightedModel = nb.setWeightCol("weight").fit(weightedData)
-    assert(weightedModel.theta ~== overSampledModel.theta relTol 0.001)
-    assert(weightedModel.pi ~== overSampledModel.pi relTol 0.001)
-    assert(unweightedModel.theta !~= overSampledModel.theta relTol 0.001)
-    assert(unweightedModel.pi !~= overSampledModel.pi relTol 0.001)
+  test("Naive Bayes with weighted samples") {
+    val numClasses = 3
+    def modelEquals(m1: NaiveBayesModel, m2: NaiveBayesModel): Unit = {
+      assert(m1.pi ~== m2.pi relTol 0.01)
+      assert(m1.theta ~== m2.theta relTol 0.01)
+    }
+    val testParams = Seq[(String, Dataset[_])](
+      ("bernoulli", bernoulliDataset),
+      ("multinomial", dataset)
+    )
+    testParams.foreach { case (family, dataset) =>
+      // NaiveBayes is sensitive to constant scaling of the weights unless smoothing is set to 0
+      val estimatorNoSmoothing = new NaiveBayes().setSmoothing(0.0).setModelType(family)
+      val estimatorWithSmoothing = new NaiveBayes().setModelType(family)
+      MLTestingUtils.testArbitrarilyScaledWeights[NaiveBayesModel, NaiveBayes](
+        dataset.as[LabeledPoint], estimatorNoSmoothing, modelEquals)
+      MLTestingUtils.testOutliersWithSmallWeights[NaiveBayesModel, NaiveBayes](
+        dataset.as[LabeledPoint], estimatorWithSmoothing, numClasses, modelEquals, outlierRatio = 3)
+      MLTestingUtils.testOversamplingVsWeighting[NaiveBayesModel, NaiveBayes](
+        dataset.as[LabeledPoint], estimatorWithSmoothing, modelEquals, seed)
+    }
   }
 
   test("Naive Bayes Bernoulli") {
@@ -299,10 +281,11 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       assert(model.theta === model2.theta)
     }
     val nb = new NaiveBayes()
-    testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings,
+      NaiveBayesSuite.allParamSettings, checkModelData)
   }
 
-  test("should support all NumericType labels and not support other types") {
+  test("should support all NumericType labels and weights, and not support other types") {
     val nb = new NaiveBayes()
     MLTestingUtils.checkNumericTypes[NaiveBayesModel, NaiveBayes](
       nb, spark) { (expected, actual) =>
@@ -343,8 +326,8 @@ object NaiveBayesSuite {
     sample: Int = 10): Seq[LabeledPoint] = {
     val D = theta(0).length
     val rnd = new Random(seed)
-    val _pi = pi.map(math.pow(math.E, _))
-    val _theta = theta.map(row => row.map(math.pow(math.E, _)))
+    val _pi = pi.map(math.exp)
+    val _theta = theta.map(row => row.map(math.exp))
 
     for (i <- 0 until nPoints) yield {
       val y = calcLabel(rnd.nextDouble(), _pi)

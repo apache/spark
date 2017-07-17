@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.util.concurrent.{Executors, TimeUnit}
 
 import org.scalatest.BeforeAndAfterEach
 
@@ -57,7 +58,12 @@ class PartitionedTablePerfStatsSuite
   }
 
   private def setupPartitionedHiveTable(tableName: String, dir: File): Unit = {
-    spark.range(5).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
+    setupPartitionedHiveTable(tableName, dir, 5)
+  }
+
+  private def setupPartitionedHiveTable(
+      tableName: String, dir: File, scale: Int, repair: Boolean = true): Unit = {
+    spark.range(scale).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
       .partitionBy("partCol1", "partCol2")
       .mode("overwrite")
       .parquet(dir.getAbsolutePath)
@@ -66,12 +72,19 @@ class PartitionedTablePerfStatsSuite
       |create external table $tableName (fieldOne long)
       |partitioned by (partCol1 int, partCol2 int)
       |stored as parquet
-      |location "${dir.getAbsolutePath}"""".stripMargin)
-    spark.sql(s"msck repair table $tableName")
+      |location "${dir.toURI}"""".stripMargin)
+    if (repair) {
+      spark.sql(s"msck repair table $tableName")
+    }
   }
 
   private def setupPartitionedDatasourceTable(tableName: String, dir: File): Unit = {
-    spark.range(5).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
+    setupPartitionedDatasourceTable(tableName, dir, 5)
+  }
+
+  private def setupPartitionedDatasourceTable(
+      tableName: String, dir: File, scale: Int, repair: Boolean = true): Unit = {
+    spark.range(scale).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
       .partitionBy("partCol1", "partCol2")
       .mode("overwrite")
       .parquet(dir.getAbsolutePath)
@@ -79,9 +92,11 @@ class PartitionedTablePerfStatsSuite
     spark.sql(s"""
       |create table $tableName (fieldOne long, partCol1 int, partCol2 int)
       |using parquet
-      |options (path "${dir.getAbsolutePath}")
+      |options (path "${dir.toURI}")
       |partitioned by (partCol1, partCol2)""".stripMargin)
-    spark.sql(s"msck repair table $tableName")
+    if (repair) {
+      spark.sql(s"msck repair table $tableName")
+    }
   }
 
   genericTest("partitioned pruned table reports only selected files") { spec =>
@@ -242,6 +257,78 @@ class PartitionedTablePerfStatsSuite
     }
   }
 
+  test("datasource table: table setup does not scan filesystem") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          HiveCatalogMetrics.reset()
+          setupPartitionedDatasourceTable("test", dir, scale = 10, repair = false)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+        }
+      }
+    }
+  }
+
+  test("hive table: table setup does not scan filesystem") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          HiveCatalogMetrics.reset()
+          setupPartitionedHiveTable("test", dir, scale = 10, repair = false)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+        }
+      }
+    }
+  }
+
+  test("hive table: num hive client calls does not scale with partition count") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedHiveTable("test", dir, scale = 100)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test where partCol1 = 1").count() == 1)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() > 0)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test").count() == 100)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("show partitions test").count() == 100)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+        }
+      }
+    }
+  }
+
+  test("datasource table: num hive client calls does not scale with partition count") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedDatasourceTable("test", dir, scale = 100)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test where partCol1 = 1").count() == 1)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() > 0)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test").count() == 100)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("show partitions test").count() == 100)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+        }
+      }
+    }
+  }
+
   test("hive table: files read and cached when filesource partition management is off") {
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
       withTable("test") {
@@ -296,6 +383,43 @@ class PartitionedTablePerfStatsSuite
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
         }
       }
+    }
+  }
+
+  test("SPARK-18700: table loaded only once even when resolved concurrently") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
+      withTable("test") {
+        withTempDir { dir =>
+          HiveCatalogMetrics.reset()
+          setupPartitionedHiveTable("test", dir, 50)
+          // select the table in multi-threads
+          val executorPool = Executors.newFixedThreadPool(10)
+          (1 to 10).map(threadId => {
+            val runnable = new Runnable {
+              override def run(): Unit = {
+                spark.sql("select * from test where partCol1 = 999").count()
+              }
+            }
+            executorPool.execute(runnable)
+            None
+          })
+          executorPool.shutdown()
+          executorPool.awaitTermination(30, TimeUnit.SECONDS)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 50)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
+        }
+      }
+    }
+  }
+
+  test("resolveRelation for a FileFormat DataSource without userSchema scan filesystem only once") {
+    withTempDir { dir =>
+      import spark.implicits._
+      Seq(1).toDF("a").write.mode("overwrite").save(dir.getAbsolutePath)
+      HiveCatalogMetrics.reset()
+      spark.read.parquet(dir.getAbsolutePath)
+      assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 1)
+      assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 1)
     }
   }
 }

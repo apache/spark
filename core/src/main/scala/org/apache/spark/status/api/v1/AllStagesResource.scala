@@ -142,8 +142,10 @@ private[v1] object AllStagesResource {
       index = uiData.taskInfo.index,
       attempt = uiData.taskInfo.attemptNumber,
       launchTime = new Date(uiData.taskInfo.launchTime),
+      duration = uiData.taskDuration,
       executorId = uiData.taskInfo.executorId,
       host = uiData.taskInfo.host,
+      status = uiData.taskInfo.status,
       taskLocality = uiData.taskInfo.taskLocality.toString(),
       speculative = uiData.taskInfo.speculative,
       accumulatorUpdates = uiData.taskInfo.accumulables.map { convertAccumulableInfo },
@@ -198,6 +200,7 @@ private[v1] object AllStagesResource {
           readBytes = submetricQuantiles(_.totalBytesRead),
           readRecords = submetricQuantiles(_.recordsRead),
           remoteBytesRead = submetricQuantiles(_.remoteBytesRead),
+          remoteBytesReadToDisk = submetricQuantiles(_.remoteBytesReadToDisk),
           remoteBlocksFetched = submetricQuantiles(_.remoteBlocksFetched),
           localBlocksFetched = submetricQuantiles(_.localBlocksFetched),
           totalBlocksFetched = submetricQuantiles(_.totalBlocksFetched),
@@ -279,6 +282,7 @@ private[v1] object AllStagesResource {
       localBlocksFetched = internal.localBlocksFetched,
       fetchWaitTime = internal.fetchWaitTime,
       remoteBytesRead = internal.remoteBytesRead,
+      remoteBytesReadToDisk = internal.remoteBytesReadToDisk,
       localBytesRead = internal.localBytesRead,
       recordsRead = internal.recordsRead
     )

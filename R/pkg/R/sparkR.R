@@ -113,7 +113,7 @@ sparkR.stop <- function() {
 #'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("one.jar", "two.jar", "three.jar"),
-#'                  c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                  c("com.databricks:spark-avro_2.11:2.0.1"))
 #'}
 #' @note sparkR.init since 1.4.0
 sparkR.init <- function(
@@ -323,6 +323,18 @@ sparkRHive.init <- function(jsc = NULL) {
 #' Additional Spark properties can be set in \code{...}, and these named parameters take priority
 #' over values in \code{master}, \code{appName}, named lists of \code{sparkConfig}.
 #'
+#' When called in an interactive session, this method checks for the Spark installation, and, if not
+#' found, it will be downloaded and cached automatically. Alternatively, \code{install.spark} can
+#' be called manually.
+#'
+#' A default warehouse is created automatically in the current directory when a managed table is
+#' created via \code{sql} statement \code{CREATE TABLE}, for example. To change the location of the
+#' warehouse, set the named parameter \code{spark.sql.warehouse.dir} to the SparkSession. Along with
+#' the warehouse, an accompanied metastore may also be automatically created in the current
+#' directory when a new SparkSession is initialized with \code{enableHiveSupport} set to
+#' \code{TRUE}, which is the default. For more details, refer to Hive configuration at
+#' \url{http://spark.apache.org/docs/latest/sql-programming-guide.html#hive-tables}.
+#'
 #' For details on how to initialize and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
 #'
@@ -345,7 +357,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' sparkR.session("yarn-client", "SparkR", "/home/spark",
 #'                list(spark.executor.memory="4g"),
 #'                c("one.jar", "two.jar", "three.jar"),
-#'                c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                c("com.databricks:spark-avro_2.11:2.0.1"))
 #' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
 #' @note sparkR.session since 2.0.0
@@ -373,8 +385,17 @@ sparkR.session <- function(
     overrideEnvs(sparkConfigMap, paramMap)
   }
 
+  deployMode <- ""
+  if (exists("spark.submit.deployMode", envir = sparkConfigMap)) {
+    deployMode <- sparkConfigMap[["spark.submit.deployMode"]]
+  }
+
+  if (!exists("spark.r.sql.derby.temp.dir", envir = sparkConfigMap)) {
+    sparkConfigMap[["spark.r.sql.derby.temp.dir"]] <- tempdir()
+  }
+
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
-    retHome <- sparkCheckInstall(sparkHome, master)
+    retHome <- sparkCheckInstall(sparkHome, master, deployMode)
     if (!is.null(retHome)) sparkHome <- retHome
     sparkExecutorEnvMap <- new.env()
     sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
@@ -402,6 +423,30 @@ sparkR.session <- function(
   sparkSession
 }
 
+#' Get the URL of the SparkUI instance for the current active SparkSession
+#'
+#' Get the URL of the SparkUI instance for the current active SparkSession.
+#'
+#' @return the SparkUI URL, or NA if it is disabled, or not started.
+#' @rdname sparkR.uiWebUrl
+#' @name sparkR.uiWebUrl
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' url <- sparkR.uiWebUrl()
+#' }
+#' @note sparkR.uiWebUrl since 2.1.1
+sparkR.uiWebUrl <- function() {
+  sc <- sparkR.callJMethod(getSparkContext(), "sc")
+  u <- callJMethod(sc, "uiWebUrl")
+  if (callJMethod(u, "isDefined")) {
+    callJMethod(u, "get")
+  } else {
+    NA
+  }
+}
+
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
 #' different value or cleared.
 #'
@@ -419,7 +464,7 @@ sparkR.session <- function(
 #' @method setJobGroup default
 setJobGroup.default <- function(groupId, description, interruptOnCancel) {
   sc <- getSparkContext()
-  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+  invisible(callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel))
 }
 
 setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
@@ -449,7 +494,7 @@ setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
 #' @method clearJobGroup default
 clearJobGroup.default <- function() {
   sc <- getSparkContext()
-  callJMethod(sc, "clearJobGroup")
+  invisible(callJMethod(sc, "clearJobGroup"))
 }
 
 clearJobGroup <- function(sc) {
@@ -476,7 +521,7 @@ clearJobGroup <- function(sc) {
 #' @method cancelJobGroup default
 cancelJobGroup.default <- function(groupId) {
   sc <- getSparkContext()
-  callJMethod(sc, "cancelJobGroup", groupId)
+  invisible(callJMethod(sc, "cancelJobGroup", groupId))
 }
 
 cancelJobGroup <- function(sc, groupId) {
@@ -488,6 +533,23 @@ cancelJobGroup <- function(sc, groupId) {
     groupIdToUse <- sc
     cancelJobGroup.default(groupIdToUse)
   }
+}
+
+#' Set a human readable description of the current job.
+#'
+#' Set a description that is shown as a job description in UI.
+#'
+#' @param value The job description of the current job.
+#' @rdname setJobDescription
+#' @name setJobDescription
+#' @examples
+#'\dontrun{
+#' setJobDescription("This is an example job.")
+#'}
+#' @note setJobDescription since 2.3.0
+setJobDescription <- function(value) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setJobDescription", value))
 }
 
 sparkConfToSubmitOps <- new.env()
@@ -550,24 +612,25 @@ processSparkPackages <- function(packages) {
 #
 # @param sparkHome directory to find Spark package.
 # @param master the Spark master URL, used to check local or remote mode.
+# @param deployMode whether to deploy your driver on the worker nodes (cluster)
+#        or locally as an external client (client).
 # @return NULL if no need to update sparkHome, and new sparkHome otherwise.
-sparkCheckInstall <- function(sparkHome, master) {
+sparkCheckInstall <- function(sparkHome, master, deployMode) {
   if (!isSparkRShell()) {
     if (!is.na(file.info(sparkHome)$isdir)) {
-      msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
-      message(msg)
+      message("Spark package found in SPARK_HOME: ", sparkHome)
       NULL
     } else {
-      if (!nzchar(master) || isMasterLocal(master)) {
-        msg <- paste0("Spark not found in SPARK_HOME: ",
-                      sparkHome)
-        message(msg)
+      if (interactive() || isMasterLocal(master)) {
+        message("Spark not found in SPARK_HOME: ", sparkHome)
         packageLocalDir <- install.spark()
         packageLocalDir
-      } else {
+      } else if (isClientMode(master) || deployMode == "client") {
         msg <- paste0("Spark not found in SPARK_HOME: ",
                       sparkHome, "\n", installInstruction("remote"))
         stop(msg)
+      } else {
+        NULL
       }
     }
   } else {

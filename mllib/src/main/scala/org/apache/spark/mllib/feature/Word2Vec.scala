@@ -30,6 +30,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -314,6 +315,20 @@ class Word2Vec extends Serializable with Logging {
     val expTable = sc.broadcast(createExpTable())
     val bcVocab = sc.broadcast(vocab)
     val bcVocabHash = sc.broadcast(vocabHash)
+    try {
+      doFit(dataset, sc, expTable, bcVocab, bcVocabHash)
+    } finally {
+      expTable.destroy(blocking = false)
+      bcVocab.destroy(blocking = false)
+      bcVocabHash.destroy(blocking = false)
+    }
+  }
+
+  private def doFit[S <: Iterable[String]](
+    dataset: RDD[S], sc: SparkContext,
+    expTable: Broadcast[Array[Float]],
+    bcVocab: Broadcast[Array[VocabWord]],
+    bcVocabHash: Broadcast[mutable.HashMap[String, Int]]) = {
     // each partition is a collection of sentences,
     // will be translated into arrays of Index integer
     val sentences: RDD[Array[Int]] = dataset.mapPartitions { sentenceIter =>
@@ -435,9 +450,6 @@ class Word2Vec extends Serializable with Logging {
       bcSyn1Global.destroy(false)
     }
     newSentences.unpersist()
-    expTable.destroy(false)
-    bcVocab.destroy(false)
-    bcVocabHash.destroy(false)
 
     val wordArray = vocab.map(_.word)
     new Word2VecModel(wordArray.zipWithIndex.toMap, syn0Global)
@@ -479,8 +491,8 @@ class Word2VecModel private[spark] (
 
   // wordVecNorms: Array of length numWords, each value being the Euclidean norm
   //               of the wordVector.
-  private val wordVecNorms: Array[Double] = {
-    val wordVecNorms = new Array[Double](numWords)
+  private val wordVecNorms: Array[Float] = {
+    val wordVecNorms = new Array[Float](numWords)
     var i = 0
     while (i < numWords) {
       val vec = wordVectors.slice(i * vectorSize, i * vectorSize + vectorSize)
@@ -558,7 +570,7 @@ class Word2VecModel private[spark] (
     require(num > 0, "Number of similar words should > 0")
 
     val fVector = vector.toArray.map(_.toFloat)
-    val cosineVec = Array.fill[Float](numWords)(0)
+    val cosineVec = new Array[Float](numWords)
     val alpha: Float = 1
     val beta: Float = 0
     // Normalize input vector before blas.sgemv to avoid Inf value
@@ -569,22 +581,23 @@ class Word2VecModel private[spark] (
     blas.sgemv(
       "T", vectorSize, numWords, alpha, wordVectors, vectorSize, fVector, 1, beta, cosineVec, 1)
 
-    val cosVec = cosineVec.map(_.toDouble)
-    var ind = 0
-    while (ind < numWords) {
-      val norm = wordVecNorms(ind)
-      if (norm == 0.0) {
-        cosVec(ind) = 0.0
+    var i = 0
+    while (i < numWords) {
+      val norm = wordVecNorms(i)
+      if (norm == 0.0f) {
+        cosineVec(i) = 0.0f
       } else {
-        cosVec(ind) /= norm
+        cosineVec(i) /= norm
       }
-      ind += 1
+      i += 1
     }
 
-    val pq = new BoundedPriorityQueue[(String, Double)](num + 1)(Ordering.by(_._2))
+    val pq = new BoundedPriorityQueue[(String, Float)](num + 1)(Ordering.by(_._2))
 
-    for(i <- cosVec.indices) {
-      pq += Tuple2(wordList(i), cosVec(i))
+    var j = 0
+    while (j < numWords) {
+      pq += Tuple2(wordList(j), cosineVec(j))
+      j += 1
     }
 
     val scored = pq.toSeq.sortBy(-_._2)
@@ -594,7 +607,10 @@ class Word2VecModel private[spark] (
       case None => scored
     }
 
-    filtered.take(num).toArray
+    filtered
+      .take(num)
+      .map { case (word, score) => (word, score.toDouble) }
+      .toArray
   }
 
   /**

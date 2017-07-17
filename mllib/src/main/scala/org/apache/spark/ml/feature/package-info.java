@@ -61,12 +61,12 @@
  *      createStructField("id", IntegerType, false),
  *      createStructField("text", StringType, false),
  *      createStructField("rating", DoubleType, false)));
- *  JavaRDD<Row> rowRDD = jsc.parallelize(
+ *  JavaRDD&lt;Row&gt; rowRDD = jsc.parallelize(
  *    Arrays.asList(
  *      RowFactory.create(0, "Hi I heard about Spark", 3.0),
  *      RowFactory.create(1, "I wish Java could use case classes", 4.0),
  *      RowFactory.create(2, "Logistic regression models are neat", 4.0)));
- *  Dataset<Row> dataset = jsql.createDataFrame(rowRDD, schema);
+ *  Dataset&lt;Row&gt; dataset = jsql.createDataFrame(rowRDD, schema);
  *  // define feature transformers
  *  RegexTokenizer tok = new RegexTokenizer()
  *    .setInputCol("text")

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -52,10 +52,11 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children == Nil) {
-      TypeCheckResult.TypeCheckFailure("input to function coalesce cannot be empty")
+    if (children.length < 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least one argument")
     } else {
-      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function coalesce")
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
     }
   }
 
@@ -116,9 +117,9 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
   extended = """
-   Examples:
-     > SELECT _FUNC_(2, 2);
-      NULL
+    Examples:
+      > SELECT _FUNC_(2, 2);
+       NULL
   """)
 case class NullIf(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
@@ -206,9 +207,8 @@ case class IsNaN(child: Expression) extends UnaryExpression
       case DoubleType | FloatType =>
         ev.copy(code = s"""
           ${eval.code}
-          boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""")
+          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = "false")
     }
   }
 }
@@ -383,7 +383,6 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     ev.copy(code = s"""
       int $nonnull = 0;
       $code
-      boolean ${ev.isNull} = false;
-      boolean ${ev.value} = $nonnull >= $n;""")
+      boolean ${ev.value} = $nonnull >= $n;""", isNull = "false")
   }
 }

@@ -30,7 +30,7 @@ import org.apache.spark.util.ClosureCleaner
  * `mapWithState` operation of a
  * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
  * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
- * Use [[org.apache.spark.streaming.StateSpec.function() StateSpec.function]] factory methods
+ * Use `org.apache.spark.streaming.StateSpec.function()` factory methods
  * to create instances of this class.
  *
  * Example in Scala:
@@ -70,10 +70,14 @@ import org.apache.spark.util.ClosureCleaner
 @Experimental
 sealed abstract class StateSpec[KeyType, ValueType, StateType, MappedType] extends Serializable {
 
-  /** Set the RDD containing the initial states that will be used by `mapWithState` */
+  /**
+   * Set the RDD containing the initial states that will be used by `mapWithState`
+   */
   def initialState(rdd: RDD[(KeyType, StateType)]): this.type
 
-  /** Set the RDD containing the initial states that will be used by `mapWithState` */
+  /**
+   * Set the RDD containing the initial states that will be used by `mapWithState`
+   */
   def initialState(javaPairRDD: JavaPairRDD[KeyType, StateType]): this.type
 
   /**
@@ -100,7 +104,7 @@ sealed abstract class StateSpec[KeyType, ValueType, StateType, MappedType] exten
 
 /**
  * :: Experimental ::
- * Builder object for creating instances of [[org.apache.spark.streaming.StateSpec StateSpec]]
+ * Builder object for creating instances of `org.apache.spark.streaming.StateSpec`
  * that is used for specifying the parameters of the DStream transformation `mapWithState`
  * that is used for specifying the parameters of the DStream transformation
  * `mapWithState` operation of a

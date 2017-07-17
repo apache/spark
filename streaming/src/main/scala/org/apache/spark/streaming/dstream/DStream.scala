@@ -69,13 +69,13 @@ abstract class DStream[T: ClassTag] (
   // Methods that should be implemented by subclasses of DStream
   // =======================================================================
 
-  /** Time interval after which the DStream generates a RDD */
+  /** Time interval after which the DStream generates an RDD */
   def slideDuration: Duration
 
   /** List of parent DStreams on which this DStream depends on */
   def dependencies: List[DStream[_]]
 
-  /** Method that generates a RDD for the given time */
+  /** Method that generates an RDD for the given time */
   def compute(validTime: Time): Option[RDD[T]]
 
   // =======================================================================

@@ -200,7 +200,17 @@ This file is divided into 3 sections:
       // scalastyle:off awaitresult
       Await.result(...)
       // scalastyle:on awaitresult
-      If your codes use ThreadLocal and may run in threads created by the user, use ThreadUtils.awaitResultInForkJoinSafely instead.
+    ]]></customMessage>
+  </check>
+
+  <check customId="awaitready" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Await\.ready</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use Await.ready? In most cases, you should use ThreadUtils.awaitReady instead.
+      If you must use Await.ready, wrap the code block with
+      // scalastyle:off awaitready
+      Await.ready(...)
+      // scalastyle:on awaitready
     ]]></customMessage>
   </check>
 

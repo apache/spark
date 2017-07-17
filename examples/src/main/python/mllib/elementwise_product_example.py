@@ -45,7 +45,7 @@ if __name__ == "__main__":
         print(each)
 
     print("transformedData2:")
-    for each in transformedData2.collect():
+    for each in transformedData2:
         print(each)
 
     sc.stop()
