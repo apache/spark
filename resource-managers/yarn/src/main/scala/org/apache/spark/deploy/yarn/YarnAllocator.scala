@@ -82,6 +82,8 @@ private[yarn] class YarnAllocator(
 
   @volatile private var numExecutorsRunning = 0
 
+  @volatile private var numExecutorToBeLaunched = 0
+
   /**
    * Used to generate a unique ID per executor
    *
@@ -294,7 +296,8 @@ private[yarn] class YarnAllocator(
   def updateResourceRequests(): Unit = {
     val pendingAllocate = getPendingAllocate
     val numPendingAllocate = pendingAllocate.size
-    val missing = targetNumExecutors - numPendingAllocate - numExecutorsRunning
+    val missing = targetNumExecutors - numPendingAllocate -
+      numExecutorToBeLaunched - numExecutorsRunning
 
     if (missing > 0) {
       logInfo(s"Will request $missing executor container(s), each with " +
@@ -505,32 +508,37 @@ private[yarn] class YarnAllocator(
 
       if (numExecutorsRunning < targetNumExecutors) {
         if (launchContainers) {
-          launcherPool.execute(new Runnable {
-            override def run(): Unit = {
-              try {
-                new ExecutorRunnable(
-                  Some(container),
-                  conf,
-                  sparkConf,
-                  driverUrl,
-                  executorId,
-                  executorHostname,
-                  executorMemory,
-                  executorCores,
-                  appAttemptId.getApplicationId.toString,
-                  securityMgr,
-                  localResources
-                ).run()
-                updateInternalState()
-              } catch {
-                case NonFatal(e) =>
-                  logError(s"Failed to launch executor $executorId on container $containerId", e)
-                  // Assigned container should be released immediately to avoid unnecessary resource
-                  // occupation.
-                  amClient.releaseAssignedContainer(containerId)
+          try {
+            numExecutorToBeLaunched += 1
+            launcherPool.execute(new Runnable {
+              override def run(): Unit = {
+                try {
+                  new ExecutorRunnable(
+                    Some(container),
+                    conf,
+                    sparkConf,
+                    driverUrl,
+                    executorId,
+                    executorHostname,
+                    executorMemory,
+                    executorCores,
+                    appAttemptId.getApplicationId.toString,
+                    securityMgr,
+                    localResources
+                  ).run()
+                  updateInternalState()
+                } catch {
+                  case NonFatal(e) =>
+                    logError(s"Failed to launch executor $executorId on container $containerId", e)
+                    // Assigned container should be released immediately
+                    // to avoid unnecessary resource occupation.
+                    amClient.releaseAssignedContainer(containerId)
+                }
               }
-            }
-          })
+            })
+          } finally {
+            numExecutorToBeLaunched -= 1
+          }
         } else {
           // For test only
           updateInternalState()
