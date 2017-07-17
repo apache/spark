@@ -58,8 +58,7 @@ private[spark] class YarnRMClient extends Logging {
       uiAddress: Option[String],
       uiHistoryAddress: String,
       securityMgr: SecurityManager,
-      localResources: Map[String, LocalResource],
-      executorIdCounter: Int
+      localResources: Map[String, LocalResource]
     ): YarnAllocator = {
     amClient = AMRMClient.createAMRMClient()
     amClient.init(conf)
@@ -76,7 +75,7 @@ private[spark] class YarnRMClient extends Logging {
       registered = true
     }
     new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), securityMgr,
-      localResources, new SparkRackResolver(), executorIdCounter)
+      localResources, new SparkRackResolver())
   }
 
   /**

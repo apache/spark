@@ -69,15 +69,6 @@ private[spark] abstract class YarnSchedulerBackend(
   /** Scheduler extension services. */
   private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
 
-  // Flag to specify whether this schedulerBackend should be reset.
-  private var shouldResetOnAmRegister = false
-
-  private val currentState = new CurrentAMState(0,
-    RequestExecutors(Utils.getDynamicAllocationInitialExecutors(conf), 0, Map.empty, Set.empty))
-
-  protected class CurrentAMState(
-    var executorIdCounter: Int,
-    var requestExecutors: RequestExecutors)
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
    *
@@ -146,20 +137,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
-    val requestExecutors = prepareRequestExecutors(requestedTotal)
-    val future = yarnSchedulerEndpointRef.ask[Boolean](requestExecutors)
-    setCurrentRequestExecutors(requestExecutors)
-    future
-  }
-
-  override def setCurrentExecutorIdCounter(executorId: Int): Unit = synchronized {
-    if (currentState.executorIdCounter < executorId.toInt) {
-      currentState.executorIdCounter = executorId.toInt
-    }
-  }
-
-  def setCurrentRequestExecutors(requestExecutors: RequestExecutors): Unit = synchronized {
-    currentState.requestExecutors = requestExecutors
+    yarnSchedulerEndpointRef.ask[Boolean](prepareRequestExecutors(requestedTotal))
   }
 
   /**
@@ -281,13 +259,7 @@ private[spark] abstract class YarnSchedulerBackend(
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
         amEndpoint = Option(am)
-        if (!shouldResetOnAmRegister) {
-          shouldResetOnAmRegister = true
-        } else {
-          // AM is already registered before, this potentially means that AM failed and
-          // a new one registered after the failure. This will only happen in yarn-client mode.
-          reset()
-        }
+        reset()
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
@@ -331,8 +303,8 @@ private[spark] abstract class YarnSchedulerBackend(
             context.reply(false)
         }
 
-      case GetAMInitialState =>
-        context.reply((currentState.executorIdCounter, currentState.requestExecutors))
+      case RetrieveLastAllocatedExecutorId =>
+        context.reply(currentExecutorIdCounter)
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
