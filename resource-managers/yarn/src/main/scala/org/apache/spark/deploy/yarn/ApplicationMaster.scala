@@ -257,6 +257,31 @@ private[spark] class ApplicationMaster(
       // doAs in order for the credentials to be passed on to the executor containers.
       val securityMgr = new SecurityManager(sparkConf)
 
+      // If the credentials file config is present, we must periodically renew tokens. So create
+      // a new AMDelegationTokenRenewer
+      if (sparkConf.contains(CREDENTIALS_FILE_PATH)) {
+        // Start a short-lived thread for AMCredentialRenewer, the only purpose is to set the
+        // classloader so that main jar and secondary jars could be used by AMCredentialRenewer.
+        val credentialRenewerThread = new Thread {
+          setName("AMCredentialRenewerStarter")
+          setContextClassLoader(userClassLoader)
+
+          override def run(): Unit = {
+            val credentialManager = new YARNHadoopDelegationTokenManager(
+              sparkConf,
+              yarnConf,
+              YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, yarnConf))
+
+            val credentialRenewer =
+              new AMCredentialRenewer(sparkConf, yarnConf, credentialManager)
+            credentialRenewer.scheduleLoginFromKeytab()
+          }
+        }
+
+        credentialRenewerThread.start()
+        credentialRenewerThread.join()
+      }
+
       if (isClusterMode) {
         runDriver(securityMgr)
       } else {
@@ -440,24 +465,6 @@ private[spark] class ApplicationMaster(
     addAmIpFilter()
     registerAM(sparkConf, rpcEnv, driverRef, sparkConf.getOption("spark.driver.appUIAddress"),
       securityMgr)
-
-    // If the credentials file config is present, we must periodically renew tokens. So create
-    // a new AMDelegationTokenRenewer
-    if (sparkConf.contains(CREDENTIALS_FILE_PATH)) {
-      // Start a short-lived thread for AMCredentialRenewer, the only purpose is to set the
-      // classloader so that main jar and secondary jars could be used by AMCredentialRenewer.
-      val credentialRenewerThread = new Thread {
-        setName("AMCredentialRenewerStarter")
-        setContextClassLoader(userClassLoader)
-
-        override def run(): Unit = {
-          startAMCredentialRenewer()
-        }
-      }
-
-      credentialRenewerThread.start()
-      credentialRenewerThread.join()
-    }
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
@@ -645,11 +652,6 @@ private[spark] class ApplicationMaster(
     val userThread = new Thread {
       override def run() {
         try {
-          // If the credentials file config is present, we must periodically renew tokens. So create
-          // a new AMDelegationTokenRenewer
-          if (sparkConf.contains(CREDENTIALS_FILE_PATH)) {
-            startAMCredentialRenewer()
-          }
           mainMethod.invoke(null, userArgs.toArray)
           finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
           logDebug("Done running users class")
@@ -687,18 +689,6 @@ private[spark] class ApplicationMaster(
   private def resetAllocatorInterval(): Unit = allocatorLock.synchronized {
     nextAllocationInterval = initialAllocationInterval
     allocatorLock.notifyAll()
-  }
-
-  private def startAMCredentialRenewer(): Unit = {
-    // If a principal and keytab have been set, use that to create new credentials for executors
-    // periodically
-    val credentialManager = new YARNHadoopDelegationTokenManager(
-      sparkConf,
-      yarnConf,
-      YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, yarnConf))
-
-    val credentialRenewer = new AMCredentialRenewer(sparkConf, yarnConf, credentialManager)
-    credentialRenewer.scheduleLoginFromKeytab()
   }
 
   /**
