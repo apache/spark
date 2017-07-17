@@ -470,8 +470,6 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[regression] val epsilon: Double = 1E-16
 
-  private[regression] val Intercept: String = "(Intercept)"
-
   /**
    * Wrapper of family and link combination used in the model.
    */
