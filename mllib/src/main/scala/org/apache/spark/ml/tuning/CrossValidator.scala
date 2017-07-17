@@ -91,6 +91,15 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /**
+   * Optional parameter. If set, all the trained models during cross validation will be
+   * saved in the specific path. By default the models will not be preserved.
+   *
+   * @group expertSetParam
+   */
+  @Since("2.3.0")
+  def setModelPreservePath(value: String): this.type = set(modelPreservePath, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CrossValidatorModel = {
     val schema = dataset.schema
@@ -113,15 +122,28 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
       val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
-      trainingDataset.unpersist()
+
       var i = 0
       while (i < numModels) {
         // TODO: duplicate evaluator to take extra params from input
         val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
         logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
+        if (isDefined(modelPreservePath)) {
+          models(i) match {
+            case w: MLWritable =>
+              // e.g. maxIter-5-regParam-0.001-split0-0.859
+              val fileName = epm(i).toSeq.map(p => p.param.name + "-" + p.value).sorted
+                .mkString("-") + s"-split$splitIndex-${math.rint(metric * 1000) / 1000}"
+              w.save(new Path($(modelPreservePath), fileName).toString)
+            case _ =>
+              // for third-party algorithms
+              logWarning(models(i).uid + " did not implement MLWritable. Serialization omitted.")
+          }
+        }
         metrics(i) += metric
         i += 1
       }
+      trainingDataset.unpersist()
       validationDataset.unpersist()
     }
     f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)

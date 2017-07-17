@@ -22,6 +22,7 @@ import org.json4s.{DefaultFormats, _}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
@@ -66,6 +67,21 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
 
   /** @group getParam */
   def getEvaluator: Evaluator = $(evaluator)
+
+
+  /**
+   * Optional parameter. If set, all the models trained during the tuning grid search will be
+   * saved in the specific path. By default the models will not be preserved.
+   *
+   * @group expertParam
+   */
+  val modelPreservePath: Param[String] = new Param(this, "modelPath",
+    "Optional parameter. If set, all the models fitted during the cross validation will be" +
+      " saved in the path")
+
+  /** @group expertGetParam */
+  @Since("2.3.0")
+  def getModelPreservePath: String = $(modelPreservePath)
 
   protected def transformSchemaImpl(schema: StructType): StructType = {
     require($(estimatorParamMaps).nonEmpty, s"Validator requires non-empty estimatorParamMaps")
