@@ -20,7 +20,6 @@ package org.apache.spark.deploy
 import java.io._
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
-import java.nio.file.Files
 import java.security.{KeyStore, PrivilegedExceptionAction}
 import java.security.cert.X509Certificate
 import java.text.ParseException
@@ -31,7 +30,6 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.Properties
 
 import com.google.common.io.ByteStreams
-import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -305,24 +303,9 @@ object SparkSubmit extends CommandLineUtils {
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
       // too for packages that include Python code
-      val exclusions: Seq[String] =
-      if (!StringUtils.isBlank(args.packagesExclusions)) {
-        args.packagesExclusions.split(",")
-      } else {
-        Nil
-      }
-
-      // Create the IvySettings, either load from file or build defaults
-      val ivySettings = args.sparkProperties.get("spark.jars.ivySettings").map { ivySettingsFile =>
-        SparkSubmitUtils.loadIvySettings(ivySettingsFile, Option(args.repositories),
-          Option(args.ivyRepoPath))
-      }.getOrElse {
-        SparkSubmitUtils.buildIvySettings(Option(args.repositories), Option(args.ivyRepoPath))
-      }
-
-      val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
-        ivySettings, exclusions = exclusions)
-
+      val resolvedMavenCoordinates =
+      DependencyUtils.resolveMavenDependencies(args.packagesExclusions, args.packages,
+        args.repositories, args.ivyRepoPath)
 
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
         args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
@@ -339,14 +322,7 @@ object SparkSubmit extends CommandLineUtils {
     }
 
     val hadoopConf = new HadoopConfiguration()
-    val targetDir = Files.createTempDirectory("tmp").toFile
-    // scalastyle:off runtimeaddshutdownhook
-    Runtime.getRuntime.addShutdownHook(new Thread() {
-      override def run(): Unit = {
-        FileUtils.deleteQuietly(targetDir)
-      }
-    })
-    // scalastyle:on runtimeaddshutdownhook
+    val targetDir = DependencyUtils.createTempDir()
 
     // Resolve glob path for different resources.
     args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull

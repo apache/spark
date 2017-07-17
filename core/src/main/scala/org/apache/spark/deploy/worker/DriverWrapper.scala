@@ -18,17 +18,11 @@
 package org.apache.spark.deploy.worker
 
 import java.io.File
-import java.nio.file.Files
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.StringUtils
-import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{SparkSubmit, SparkSubmitUtils}
+import org.apache.spark.deploy.{DependencyUtils, SparkSubmit}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
@@ -52,7 +46,7 @@ object DriverWrapper {
         rpcEnv.setupEndpoint("workerWatcher", new WorkerWatcher(rpcEnv, workerUrl))
 
         val currentLoader = Thread.currentThread.getContextClassLoader
-        val userJarUrl = new File(userJar).toURI.toURL
+        val userJarUrl = new File(userJar).toURI().toURL()
         val loader =
           if (sys.props.getOrElse("spark.driver.userClassPathFirst", "false").toBoolean) {
             new ChildFirstURLClassLoader(Array(userJarUrl), currentLoader)
@@ -60,7 +54,6 @@ object DriverWrapper {
             new MutableURLClassLoader(Array(userJarUrl), currentLoader)
           }
         Thread.currentThread.setContextClassLoader(loader)
-
         setupDependencies(loader, userJar)
 
         // Delegate to supplied main class
@@ -78,67 +71,22 @@ object DriverWrapper {
     }
   }
 
-  // R or Python are not supported in cluster mode so download the jars to the driver side
   private def setupDependencies(loader: MutableURLClassLoader, userJar: String): Unit = {
-    val packagesExclusions = sys.props.get("spark.jars.excludes").orNull
-    val packages = sys.props.get("spark.jars.packages").orNull
-    val repositories = sys.props.get("spark.jars.repositories").orNull
-    val hadoopConf = new HadoopConfiguration()
-    val childClasspath = new ArrayBuffer[String]()
-    val ivyRepoPath = sys.props.get("spark.jars.ivy").orNull
-    var jars = sys.props.get("spark.jars").orNull
+    val Seq(packagesExclusions, packages, repositories, ivyRepoPath) =
+      Seq("spark.jars.excludes", "spark.jars.packages", "spark.jars.repositories", "spark.jars.ivy")
+        .map(sys.props.get(_).orNull)
 
-    val exclusions: Seq[String] =
-      if (!StringUtils.isBlank(packagesExclusions)) {
-        packagesExclusions.split(",")
+    val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(packagesExclusions,
+      packages, repositories, ivyRepoPath)
+    val jars = {
+      val jarsProp = sys.props.get("spark.jars").orNull
+      if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
+        SparkSubmit.mergeFileLists(jarsProp, resolvedMavenCoordinates)
       } else {
-        Nil
+        jarsProp
       }
-
-    // Create the IvySettings, either load from file or build defaults
-    val ivySettings = sys.props.get("spark.jars.ivySettings").map { ivySettingsFile =>
-      SparkSubmitUtils.loadIvySettings(ivySettingsFile, Option(repositories),
-        Option(ivyRepoPath))
-    }.getOrElse {
-      SparkSubmitUtils.buildIvySettings(Option(repositories), Option(ivyRepoPath))
     }
-
-    val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(packages,
-      ivySettings, exclusions = exclusions)
-
-    if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
-      jars = SparkSubmit.mergeFileLists(jars, resolvedMavenCoordinates)
-    }
-
-    val targetDir = Files.createTempDirectory("tmp").toFile
-    // scalastyle:off runtimeaddshutdownhook
-    Runtime.getRuntime.addShutdownHook(new Thread() {
-      override def run(): Unit = {
-        FileUtils.deleteQuietly(targetDir)
-      }
-    })
-    // scalastyle:on runtimeaddshutdownhook
-
-    val sparkProperties = new mutable.HashMap[String, String]()
-    val securityProperties = List("spark.ssl.fs.trustStore", "spark.ssl.trustStore",
-      "spark.ssl.fs.trustStorePassword", "spark.ssl.trustStorePassword",
-      "spark.ssl.fs.protocol", "spark.ssl.protocol")
-
-    securityProperties
-      .map {pName => sys.props.get(pName)
-        .map{pValue => sparkProperties.put(pName, pValue)}}
-
-    jars = Option(jars).map(SparkSubmit.resolveGlobPaths(_, hadoopConf)).orNull
-    
-    // filter out the user jar
-    jars = jars.split(",").filterNot(_.contains(userJar.split("/").last)).mkString(",")
-    jars = Option(jars)
-      .map(SparkSubmit.downloadFileList(_, targetDir, sparkProperties, hadoopConf)).orNull
-
-    if (jars != null) {childClasspath ++= jars.split(",")}
-
-    for (jar <- childClasspath) {
-        SparkSubmit.addJarToClasspath(jar, loader)
-    }
+    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar)
+    DependencyUtils.addJarsToClassPath(localJars, loader)
   }
 }
