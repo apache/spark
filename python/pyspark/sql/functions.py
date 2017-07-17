@@ -2089,7 +2089,7 @@ class UserDefinedFunction(object):
         """
 
         # It is possible for a callable instance without __name__ attribute or/and
-        # __module__ attribute to be wrapped here For example, functools.partial. In this case,
+        # __module__ attribute to be wrapped here. For example, functools.partial. In this case,
         # we should avoid wrapping the attributes from the wrapped function to the wrapper
         # function. So, we take out these attribute names from the default names to set and
         # then manually assign it after being wrapped.
