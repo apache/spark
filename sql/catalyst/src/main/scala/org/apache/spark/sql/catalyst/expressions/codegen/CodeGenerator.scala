@@ -1037,12 +1037,10 @@ object CodeGenerator extends Logging {
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
-    lazy val formatted = CodeFormatter.format(code)
-
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      s"\n$formatted"
+      s"\n${CodeFormatter.format(code)}"
     })
 
     try {
@@ -1050,11 +1048,11 @@ object CodeGenerator extends Logging {
       recordCompilationStats(evaluator)
     } catch {
       case e: JaninoRuntimeException =>
-        val msg = s"failed to compile: $e\n$formatted"
+        val msg = s"failed to compile: $e"
         logError(msg, e)
         throw new JaninoRuntimeException(msg, e)
       case e: CompileException =>
-        val msg = s"failed to compile: $e\n$formatted"
+        val msg = s"failed to compile: $e"
         logError(msg, e)
         throw new CompileException(msg, e.getLocation)
     }
