@@ -98,7 +98,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     val credentialManager = new YARNHadoopDelegationTokenManager(
       sparkConf,
       hadoopConf,
-      () => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, hadoopConf))
+      conf => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, conf))
     credentialUpdater = new CredentialUpdater(sparkConf, hadoopConf, credentialManager)
     credentialUpdater.start()
   }
