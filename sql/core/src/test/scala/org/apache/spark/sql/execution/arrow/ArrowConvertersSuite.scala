@@ -1538,6 +1538,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", maxRecordsPerBatch)
     val df = spark.sparkContext.parallelize(1 to totalRecords, 2).toDF("i")
     val arrowPayloads = df.toArrowPayload.collect()
+    assert(arrowPayloads.length >= 4)
     val allocator = new RootAllocator(Long.MaxValue)
     val arrowRecordBatches = arrowPayloads.map(_.loadBatch(allocator))
     var recordCount = 0

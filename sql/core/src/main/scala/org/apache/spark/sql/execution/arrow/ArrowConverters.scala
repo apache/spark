@@ -26,6 +26,7 @@ import org.apache.arrow.vector.file._
 import org.apache.arrow.vector.schema.ArrowRecordBatch
 import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.{ArrowUtils, ArrowWriter}
 import org.apache.spark.sql.types._
@@ -59,22 +60,24 @@ private[sql] object ArrowConverters {
   private[sql] def toPayloadIterator(
       rowIter: Iterator[InternalRow],
       schema: StructType,
-      maxRecordsPerBatch: Int): Iterator[ArrowPayload] = {
+      maxRecordsPerBatch: Int,
+      context: TaskContext): Iterator[ArrowPayload] = {
+
+    val arrowSchema = ArrowUtils.toArrowSchema(schema)
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator("toPayloadIterator", 0, Long.MaxValue)
+
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val arrowWriter = ArrowWriter.create(root)
+
+    context.addTaskCompletionListener { _ =>
+      root.close()
+      allocator.close()
+    }
 
     new Iterator[ArrowPayload] {
 
-      private val arrowSchema = ArrowUtils.toArrowSchema(schema)
-      private val allocator =
-        ArrowUtils.rootAllocator.newChildAllocator("toPayloadIterator", 0, Long.MaxValue)
-
-      private val root = VectorSchemaRoot.create(arrowSchema, allocator)
-      private val arrowWriter = ArrowWriter.create(root)
-
-      override def hasNext: Boolean = rowIter.hasNext || {
-        root.close()
-        allocator.close()
-        false
-      }
+      override def hasNext: Boolean = rowIter.hasNext
 
       override def next(): ArrowPayload = {
         val out = new ByteArrayOutputStream()
