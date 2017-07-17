@@ -15,12 +15,10 @@
 # limitations under the License.
 #
 
-import warnings
-
 from pyspark import since, keyword_only
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 
@@ -34,6 +32,17 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
            'RandomForestRegressor', 'RandomForestRegressionModel']
+
+
+@inherit_doc
+class JavaRegressionModel(JavaPredictionModel):
+    """
+    (Private) Java Model produced by a ``Regressor``.
+    To be mixed in with class:`pyspark.ml.JavaModel`
+
+    .. versionadded:: 2.2.0
+    """
+    pass
 
 
 @inherit_doc
@@ -63,6 +72,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     ...     (0.0, 2.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
     >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
     >>> model = lr.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
     True
@@ -132,7 +142,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return LinearRegressionModel(java_model)
 
 
-class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class LinearRegressionModel(JavaModel, JavaRegressionModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`LinearRegression`.
 
@@ -434,6 +444,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -517,7 +528,8 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.featureIndex)
 
 
-class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class IsotonicRegressionModel(JavaModel, HasFeaturesCol, HasPredictionCol,
+                              JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`IsotonicRegression`.
 
@@ -666,6 +678,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance")
     >>> model = dt.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.depth
     1
     >>> model.numNodes
@@ -856,6 +869,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42)
     >>> model = rf.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0])
@@ -979,6 +993,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> print(gbt.getImpurity())
     variance
     >>> model = gbt.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> model.numFeatures
@@ -1121,17 +1136,19 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
     >>> aftsr = AFTSurvivalRegression()
     >>> model = aftsr.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setQuantilesCol("quantiles")
     >>> model.predict(Vectors.dense(6.3))
     1.0
     >>> model.predictQuantiles(Vectors.dense(6.3))
     DenseVector([0.0101, 0.0513, 0.1054, 0.2877, 0.6931, 1.3863, 2.3026, 2.9957, 4.6052])
     >>> model.transform(df).show()
-    +-----+---------+------+----------+
-    |label| features|censor|prediction|
-    +-----+---------+------+----------+
-    |  1.0|    [1.0]|   1.0|       1.0|
-    |  0.0|(1,[],[])|   0.0|       1.0|
-    +-----+---------+------+----------+
+    +-----+---------+------+----------+--------------------+
+    |label| features|censor|prediction|           quantiles|
+    +-----+---------+------+----------+--------------------+
+    |  1.0|    [1.0]|   1.0|       1.0|[0.01005033585350...|
+    |  0.0|(1,[],[])|   0.0|       1.0|[0.01005033585350...|
+    +-----+---------+------+----------+--------------------+
     ...
     >>> aftsr_path = temp_path + "/aftsr"
     >>> aftsr.save(aftsr_path)
@@ -1246,7 +1263,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self.getOrDefault(self.quantilesCol)
 
 
-class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegressionModel(JavaModel, HasFeaturesCol, HasPredictionCol,
+                                 JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -1293,6 +1311,21 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("predict", features)
 
+    @since("2.2.0")
+    def setQuantilesCol(self, value):
+        """
+        Sets the value of quantilesColumn.
+        """
+        self._call_java("setQuantilesCol", value)
+        return self
+
+    @since("2.2.0")
+    def getQuantilesCol(self):
+        """
+        Gets the value of quantilesColumn.
+        """
+        return self._call_java("getQuantilesCol")
+
 
 @inherit_doc
 class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, HasPredictionCol,
@@ -1329,6 +1362,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     ...     (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
     >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
     >>> model = glr.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> transformed = model.transform(df)
     >>> abs(transformed.head().prediction - 1.5) < 0.001
     True
@@ -1504,7 +1538,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self.getOrDefault(self.offsetCol)
 
 
-class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable,
+class GeneralizedLinearRegressionModel(JavaModel, JavaRegressionModel, JavaMLWritable,
                                        JavaMLReadable):
     """
     .. note:: Experimental

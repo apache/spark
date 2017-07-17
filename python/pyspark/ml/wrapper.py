@@ -20,12 +20,14 @@ import sys
 if sys.version >= '3':
     xrange = range
 
+from pyspark import since, keyword_only
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.param import Params
 from pyspark.ml.util import _jvm
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
+from pyspark.ml.param.shared import HasFeaturesCol, HasPredictionCol
 
 
 class JavaWrapper(object):
@@ -308,3 +310,19 @@ class JavaModel(JavaTransformer, Model):
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
             self._resetUid(java_model.uid())
+
+
+@inherit_doc
+class JavaPredictionModel(HasFeaturesCol, HasPredictionCol):
+    """
+    (Private) Java Model for prediction tasks (regression and classification).
+    To be mixed in with class:`pyspark.ml.JavaModel`
+    """
+
+    @property
+    @since("2.1.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        return self._call_java("numFeatures")

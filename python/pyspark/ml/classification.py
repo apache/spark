@@ -18,12 +18,12 @@
 import operator
 
 from pyspark import since, keyword_only
-from pyspark.ml import Estimator, Model
+from pyspark.ml import Estimator
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel, \
     RandomForestParams, TreeEnsembleModel, TreeEnsembleParams
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaPredictionModel
 from pyspark.ml.wrapper import JavaWrapper
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
@@ -44,7 +44,7 @@ __all__ = ['LinearSVC', 'LinearSVCModel',
 
 
 @inherit_doc
-class JavaClassificationModel(JavaPredictionModel):
+class JavaClassificationModel(JavaPredictionModel, HasRawPredictionCol):
     """
     (Private) Java Model produced by a ``Classifier``.
     Classes are indexed {0, 1, ..., numClasses - 1}.
@@ -58,6 +58,18 @@ class JavaClassificationModel(JavaPredictionModel):
         Number of classes (values which the label can take).
         """
         return self._call_java("numClasses")
+
+
+@inherit_doc
+class JavaProbabilisticClassificationModel(JavaClassificationModel, HasProbabilityCol):
+    """
+    (Private) Java Model produced by a ``ProbabilisticClassifier``.
+    Classes are indexed {0, 1, ..., numClasses - 1}.
+    To be mixed in with class:`pyspark.ml.JavaModel`
+
+    .. versionadded:: 2.2.0
+    """
+    pass
 
 
 @inherit_doc
@@ -79,6 +91,7 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     ...     Row(label=0.0, features=Vectors.dense(1.0, 2.0, 3.0))]).toDF()
     >>> svm = LinearSVC(maxIter=5, regParam=0.01)
     >>> model = svm.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.coefficients
     DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
@@ -210,6 +223,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     Row(label=0.0, weight=4.0, features=Vectors.dense(3.0, 3.0))]).toDF()
     >>> blor = LogisticRegression(regParam=0.01, weightCol="weight")
     >>> blorModel = blor.fit(bdf)
+    >>> blorModel = blorModel.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> blorModel.coefficients
     DenseVector([-1.080..., -0.646...])
     >>> blorModel.intercept
@@ -394,7 +409,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.family)
 
 
-class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+class LogisticRegressionModel(JavaModel, JavaProbabilisticClassificationModel,
+                              JavaMLWritable, JavaMLReadable):
     """
     Model fitted by LogisticRegression.
 
@@ -719,6 +735,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> td = si_model.transform(df)
     >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
     >>> model = dt.fit(td)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> model.numNodes
     3
     >>> model.depth
@@ -802,8 +820,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 
 @inherit_doc
-class DecisionTreeClassificationModel(DecisionTreeModel, JavaClassificationModel, JavaMLWritable,
-                                      JavaMLReadable):
+class DecisionTreeClassificationModel(DecisionTreeModel, JavaProbabilisticClassificationModel,
+                                      JavaMLWritable, JavaMLReadable):
     """
     Model fitted by DecisionTreeClassifier.
 
@@ -855,6 +873,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> td = si_model.transform(df)
     >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = rf.fit(td)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0, 1.0])
@@ -867,6 +887,10 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     0
     >>> numpy.argmax(result.rawPrediction)
     0
+    >>> result.rawPrediction
+    DenseVector([2.0, 0.0])
+    >>> result.probability
+    DenseVector([1.0, 0.0])
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -931,8 +955,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return RandomForestClassificationModel(java_model)
 
 
-class RandomForestClassificationModel(TreeEnsembleModel, JavaClassificationModel, JavaMLWritable,
-                                      JavaMLReadable):
+class RandomForestClassificationModel(TreeEnsembleModel, JavaProbabilisticClassificationModel,
+                                      JavaMLWritable, JavaMLReadable):
     """
     Model fitted by RandomForestClassifier.
 
@@ -993,13 +1017,20 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> td = si_model.transform(df)
     >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = gbt.fit(td)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
     0.0
+    >>> result.probability
+    DenseVector([0.91..., 0.08...])
+    >>> result.rawPrediction
+    DenseVector([1.16..., -1.16...])
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -1084,8 +1115,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self.getOrDefault(self.lossType)
 
 
-class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
-                             JavaMLReadable):
+class GBTClassificationModel(TreeEnsembleModel, JavaProbabilisticClassificationModel,
+                             JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTClassifier.
 
@@ -1135,6 +1166,8 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     ...     Row(label=1.0, weight=1.0, features=Vectors.dense([1.0, 0.0]))])
     >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial", weightCol="weight")
     >>> model = nb.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction") \
+            .setProbabilityCol("probability").setRawPredictionCol("rawPrediction")
     >>> model.pi
     DenseVector([-0.81..., -0.58...])
     >>> model.theta
@@ -1239,7 +1272,8 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         return self.getOrDefault(self.modelType)
 
 
-class NaiveBayesModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+class NaiveBayesModel(JavaModel, JavaProbabilisticClassificationModel,
+                      JavaMLWritable, JavaMLReadable):
     """
     Model fitted by NaiveBayes.
 
@@ -1281,6 +1315,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     ...     (0.0, Vectors.dense([1.0, 1.0]))], ["label", "features"])
     >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[2, 2, 2], blockSize=1, seed=123)
     >>> model = mlp.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.layers
     [2, 2, 2]
     >>> model.weights.size
@@ -1489,6 +1524,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     >>> lr = LogisticRegression(regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.models[0].coefficients
     DenseVector([0.5..., -1.0..., 3.4..., 4.2...])
     >>> model.models[1].coefficients
@@ -1635,7 +1671,8 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         return _java_obj
 
 
-class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
+class OneVsRestModel(JavaModel, OneVsRestParams, HasFeaturesCol, HasPredictionCol,
+                     MLReadable, MLWritable):
     """
     .. note:: Experimental
 
