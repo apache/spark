@@ -237,6 +237,7 @@ object FileFormatWriter extends Logging {
 
     val writeTask =
       if (sparkPartitionId != 0 && !iterator.hasNext) {
+        // In case of empty job, leave first partition to save meta for file format like parquet.
         new EmptyDirectoryWriteTask
       } else if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
         new SingleDirectoryWriteTask(description, taskAttemptContext, committer)

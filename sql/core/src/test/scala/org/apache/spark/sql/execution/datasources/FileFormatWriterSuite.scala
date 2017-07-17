@@ -27,8 +27,14 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
   test("empty file should be skipped while write to file") {
     withTempDir { dir =>
       dir.delete()
-      spark.range(1000).repartition(2).write.parquet(dir.toString)
+      spark.range(10000).repartition(10).write.parquet(dir.toString)
       val df = spark.read.parquet(dir.toString)
+      val allFiles = dir.listFiles(new FilenameFilter {
+        override def accept(dir: File, name: String): Boolean = {
+          !name.startsWith(".") && !name.startsWith("_")
+        }
+      })
+      assert(allFiles.length == 10)
 
       withTempDir { dst_dir =>
         dst_dir.delete()
@@ -38,7 +44,8 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
             !name.startsWith(".") && !name.startsWith("_")
           }
         })
-        assert(allFiles.length == 1)
+        // First partition file and the data file
+        assert(allFiles.length == 2)
       }
     }
   }
