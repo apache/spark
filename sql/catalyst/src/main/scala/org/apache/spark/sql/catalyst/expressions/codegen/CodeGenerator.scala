@@ -1050,10 +1050,12 @@ object CodeGenerator extends Logging {
       case e: JaninoRuntimeException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
+        logInfo(s"\n${CodeFormatter.format(code, 1000)}")
         throw new JaninoRuntimeException(msg, e)
       case e: CompileException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
+        logInfo(s"\n${CodeFormatter.format(code, 1000)}")
         throw new CompileException(msg, e.getLocation)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
