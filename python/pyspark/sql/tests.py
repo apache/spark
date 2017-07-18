@@ -31,11 +31,9 @@ import functools
 import time
 import datetime
 import array
-import math
 import ctypes
-
-
 import py4j
+
 try:
     import xmlrunner
 except ImportError:

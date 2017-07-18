@@ -55,7 +55,6 @@ private[spark] object SerDeUtil extends Logging {
     //    {'d', sizeof(double), d_getitem, d_setitem},
     //    {'\0', 0, 0, 0} /* Sentinel */
     //  };
-    // TODO: support Py_UNICODE with 2 bytes
     val machineCodes: Map[Char, Int] = if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
       Map('B' -> 0, 'b' -> 1, 'H' -> 3, 'h' -> 5, 'I' -> 7, 'i' -> 9,
         'L' -> 11, 'l' -> 13, 'f' -> 15, 'd' -> 17, 'u' -> 21
