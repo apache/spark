@@ -81,7 +81,7 @@ private[spark] object ClosureCleaner extends Logging {
     val stack = Stack[Class[_]](obj.getClass)
     while (!stack.isEmpty) {
       val cr = getClassReader(stack.pop())
-      val set = Set[Class[_]]()
+      val set = Set.empty[Class[_]]
       cr.accept(new InnerClosureFinder(set), 0)
       for (cls <- set -- seen) {
         seen += cls
@@ -180,16 +180,18 @@ private[spark] object ClosureCleaner extends Logging {
     val declaredFields = func.getClass.getDeclaredFields
     val declaredMethods = func.getClass.getDeclaredMethods
 
-    logDebug(" + declared fields: " + declaredFields.size)
-    declaredFields.foreach { f => logDebug("     " + f) }
-    logDebug(" + declared methods: " + declaredMethods.size)
-    declaredMethods.foreach { m => logDebug("     " + m) }
-    logDebug(" + inner classes: " + innerClasses.size)
-    innerClasses.foreach { c => logDebug("     " + c.getName) }
-    logDebug(" + outer classes: " + outerClasses.size)
-    outerClasses.foreach { c => logDebug("     " + c.getName) }
-    logDebug(" + outer objects: " + outerObjects.size)
-    outerObjects.foreach { o => logDebug("     " + o) }
+    if (log.isDebugEnabled) {
+      logDebug(" + declared fields: " + declaredFields.size)
+      declaredFields.foreach { f => logDebug("     " + f) }
+      logDebug(" + declared methods: " + declaredMethods.size)
+      declaredMethods.foreach { m => logDebug("     " + m) }
+      logDebug(" + inner classes: " + innerClasses.size)
+      innerClasses.foreach { c => logDebug("     " + c.getName) }
+      logDebug(" + outer classes: " + outerClasses.size)
+      outerClasses.foreach { c => logDebug("     " + c.getName) }
+      logDebug(" + outer objects: " + outerObjects.size)
+      outerObjects.foreach { o => logDebug("     " + o) }
+    }
 
     // Fail fast if we detect return statements in closures
     getClassReader(func.getClass).accept(new ReturnStatementFinder(), 0)
@@ -201,7 +203,7 @@ private[spark] object ClosureCleaner extends Logging {
       // Initialize accessed fields with the outer classes first
       // This step is needed to associate the fields to the correct classes later
       for (cls <- outerClasses) {
-        accessedFields(cls) = Set[String]()
+        accessedFields(cls) = Set.empty[String]
       }
       // Populate accessed fields by visiting all fields and methods accessed by this and
       // all of its inner closures. If transitive cleaning is enabled, this may recursively
