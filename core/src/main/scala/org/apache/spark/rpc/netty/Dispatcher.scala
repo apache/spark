@@ -32,6 +32,9 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * A message dispatcher, responsible for routing RPC messages to the appropriate endpoint(s).
+ *
+ * @param numUsableCores Number of CPU cores allocated to the process, for sizing the thread pool.
+ *                       If 0, will consider the available CPUs on the host.
  */
 private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
 
