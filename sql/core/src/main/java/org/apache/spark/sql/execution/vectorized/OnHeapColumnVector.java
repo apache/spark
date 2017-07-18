@@ -137,7 +137,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     for (int i = 0; i < count; ++i) {
       array[i] = (byteData[rowId + i] == 1);
     }
-    return array;
+   return array;
   }
 
   //
