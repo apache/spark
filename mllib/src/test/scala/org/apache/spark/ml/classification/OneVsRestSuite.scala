@@ -130,18 +130,13 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val metricsPar2 = new MulticlassMetrics(ovaResultsPar2)
     assert(metricsPar1.confusionMatrix == metricsPar2.confusionMatrix)
 
-    for (i <- 0 until ovaModelPar1.models.length) {
-      var foundCloseCoeffs = false
-      val currentCoeffs = ovaModelPar1.models(i)
-                                      .asInstanceOf[LogisticRegressionModel].coefficients
-      for (j <- 0 until ovaModelPar2.models.length) {
-        val otherCoeffs = ovaModelPar2.models(i)
-                                      .asInstanceOf[LogisticRegressionModel].coefficients
-        if (currentCoeffs == otherCoeffs) {
-          foundCloseCoeffs = true
-        }
-      }
-      assert(foundCloseCoeffs)
+    ovaModelPar1.models.zip(ovaModelPar2.models).foreach {
+      case (lrModel1: LogisticRegressionModel, lrModel2: LogisticRegressionModel) =>
+        assert(lrModel1.coefficients === lrModel2.coefficients)
+        assert(lrModel1.intercept === lrModel2.intercept)
+      case other =>
+        throw new AssertionError(s"Loaded OneVsRestModel expected model of type" +
+          s" LogisticRegressionModel but found ${other.getClass.getName}")
     }
   }
 

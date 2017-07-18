@@ -29,8 +29,6 @@ private[ml] trait HasParallelism extends Params {
 
   /**
    * param for the number of threads to use when running parallel meta-algorithms
-   * The implementation of parallel one vs. rest runs the classification for
-   * each class in a separate threads.
    * @group expertParam
    */
   val parallelism = new IntParam(this, "parallelism",
