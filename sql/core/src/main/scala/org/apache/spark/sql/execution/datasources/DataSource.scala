@@ -349,10 +349,10 @@ case class DataSource(
             caseInsensitiveOptions.get("path").toSeq ++ paths,
             sparkSession.sessionState.newHadoopConf()) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val tempFileCatalog = MetadataLogFileIndex(sparkSession, basePath)
+        val tempFileCatalog = new MetadataLogFileIndex(sparkSession, basePath, None)
         val fileCatalog = if (userSpecifiedSchema.nonEmpty) {
           val partitionSchema = combineInferredAndUserSpecifiedPartitionSchema(tempFileCatalog)
-          tempFileCatalog.withPartitionSchema(partitionSchema)
+          new MetadataLogFileIndex(sparkSession, basePath, Option(partitionSchema))
         } else {
           tempFileCatalog
         }
