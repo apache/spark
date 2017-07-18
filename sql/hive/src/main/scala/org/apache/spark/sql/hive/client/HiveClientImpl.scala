@@ -391,7 +391,7 @@ private[hive] class HiveClientImpl(
         val sortColumnNames = if (allAscendingSorted) {
           sortColumnOrders.map(_.getCol)
         } else {
-          Seq()
+          Seq.empty
         }
         Option(BucketSpec(h.getNumBuckets, h.getBucketCols.asScala, sortColumnNames))
       } else {

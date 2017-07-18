@@ -21,12 +21,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EmptyRow, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, In, InSet, LessThan, LessThanOrEqual, Like, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{EmptyRow, Expression, In, InSet}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.types.{ByteType, IntegerType, StringType}
 
 // TODO: Refactor this to `HivePartitionFilteringSuite`
 class HiveClientSuite(version: String)
@@ -146,7 +143,7 @@ class HiveClientSuite(version: String)
       0 to 23,
       "aa" :: "ab" :: "ba" :: "bb" :: Nil, {
         case expr @ In(v, list) if expr.inSetConvertible =>
-          InSet(v, Set() ++ list.map(_.eval(EmptyRow)))
+          InSet(v, list.map(_.eval(EmptyRow)).toSet)
       })
   }
 
@@ -165,7 +162,7 @@ class HiveClientSuite(version: String)
       0 to 23,
       "ab" :: "ba" :: Nil, {
         case expr @ In(v, list) if expr.inSetConvertible =>
-          InSet(v, Set() ++ list.map(_.eval(EmptyRow)))
+          InSet(v, list.map(_.eval(EmptyRow)).toSet)
       })
   }
 

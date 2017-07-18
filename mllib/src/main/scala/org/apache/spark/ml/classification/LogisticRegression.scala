@@ -736,7 +736,7 @@ class LogisticRegression @Since("1.2.0") (
                b_k' = b_k - \mean(b_k)
              }}}
            */
-          val rawIntercepts = histogram.map(c => math.log(c + 1)) // add 1 for smoothing
+          val rawIntercepts = histogram.map(math.log1p) // add 1 for smoothing (log1p(x) = log(1+x))
           val rawMean = rawIntercepts.sum / rawIntercepts.length
           rawIntercepts.indices.foreach { i =>
             initialCoefWithInterceptMatrix.update(i, numFeatures, rawIntercepts(i) - rawMean)
@@ -820,7 +820,7 @@ class LogisticRegression @Since("1.2.0") (
         val interceptVec = if ($(fitIntercept) || !isMultinomial) {
           Vectors.zeros(numCoefficientSets)
         } else {
-          Vectors.sparse(numCoefficientSets, Seq())
+          Vectors.sparse(numCoefficientSets, Seq.empty)
         }
         // separate intercepts and coefficients from the combined matrix
         allCoefMatrix.foreachActive { (classIndex, featureIndex, value) =>

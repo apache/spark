@@ -109,8 +109,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("small decimals represented as unscaled long") {
     checkCompact(new Decimal(), true)
-    checkCompact(Decimal(BigDecimal(10.03)), false)
-    checkCompact(Decimal(BigDecimal(1e20)), false)
+    checkCompact(Decimal(BigDecimal("10.03")), false)
+    checkCompact(Decimal(BigDecimal("100000000000000000000")), false)
     checkCompact(Decimal(17L), true)
     checkCompact(Decimal(17), true)
     checkCompact(Decimal(17L, 2, 1), true)

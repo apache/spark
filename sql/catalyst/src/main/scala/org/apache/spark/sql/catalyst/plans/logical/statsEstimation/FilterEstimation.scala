@@ -47,7 +47,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
     // Estimate selectivity of this filter predicate, and update column stats if needed.
     // For not-supported condition, set filter selectivity to a conservative estimate 100%
-    val filterSelectivity = calculateFilterSelectivity(plan.condition).getOrElse(BigDecimal(1.0))
+    val filterSelectivity = calculateFilterSelectivity(plan.condition).getOrElse(BigDecimal(1))
 
     val filteredRowCount: BigInt = ceil(BigDecimal(childStats.rowCount.get) * filterSelectivity)
     val newColStats = if (filteredRowCount == 0) {
@@ -83,13 +83,13 @@ case class FilterEstimation(plan: Filter) extends Logging {
     : Option[BigDecimal] = {
     condition match {
       case And(cond1, cond2) =>
-        val percent1 = calculateFilterSelectivity(cond1, update).getOrElse(BigDecimal(1.0))
-        val percent2 = calculateFilterSelectivity(cond2, update).getOrElse(BigDecimal(1.0))
+        val percent1 = calculateFilterSelectivity(cond1, update).getOrElse(BigDecimal(1))
+        val percent2 = calculateFilterSelectivity(cond2, update).getOrElse(BigDecimal(1))
         Some(percent1 * percent2)
 
       case Or(cond1, cond2) =>
-        val percent1 = calculateFilterSelectivity(cond1, update = false).getOrElse(BigDecimal(1.0))
-        val percent2 = calculateFilterSelectivity(cond2, update = false).getOrElse(BigDecimal(1.0))
+        val percent1 = calculateFilterSelectivity(cond1, update = false).getOrElse(BigDecimal(1))
+        val percent2 = calculateFilterSelectivity(cond2, update = false).getOrElse(BigDecimal(1))
         Some(percent1 + percent2 - (percent1 * percent2))
 
       // Not-operator pushdown
@@ -464,7 +464,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
         (numericLiteral > max, numericLiteral <= min)
     }
 
-    var percent = BigDecimal(1.0)
+    var percent = BigDecimal(1)
     if (noOverlap) {
       percent = 0.0
     } else if (completeOverlap) {
@@ -630,7 +630,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
         )
     }
 
-    var percent = BigDecimal(1.0)
+    var percent = BigDecimal(1)
     if (noOverlap) {
       percent = 0.0
     } else if (completeOverlap) {

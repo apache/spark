@@ -228,10 +228,10 @@ case class ArrayContains(left: Expression, right: Expression)
   override def dataType: DataType = BooleanType
 
   override def inputTypes: Seq[AbstractDataType] = right.dataType match {
-    case NullType => Seq()
+    case NullType => Seq.empty
     case _ => left.dataType match {
       case n @ ArrayType(element, _) => Seq(n, element)
-      case _ => Seq()
+      case _ => Seq.empty
     }
   }
 

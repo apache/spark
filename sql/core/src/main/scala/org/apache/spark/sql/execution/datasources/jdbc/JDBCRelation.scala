@@ -23,7 +23,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -81,7 +80,7 @@ private[sql] object JDBCRelation extends Logging {
     val column = partitioning.column
     var i: Int = 0
     var currentValue: Long = lowerBound
-    var ans = new ArrayBuffer[Partition]()
+    val ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
       val lBound = if (i != 0) s"$column >= $currentValue" else null
       currentValue += stride

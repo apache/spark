@@ -112,7 +112,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
         <td>Last Task Status</td>
         <td>{state.mesosTaskStatus.map(_.toString).getOrElse("")}</td>
       </tr>
-    }.getOrElse(Seq[Node]())
+    }.getOrElse(Seq.empty[Node])
   }
 
   private def propertiesRow(properties: collection.Map[String, String]): Seq[Node] = {
@@ -175,6 +175,6 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
           {state.retries}
         </td>
       </tr>
-    }.getOrElse(Seq[Node]())
+    }.getOrElse(Seq.empty[Node])
   }
 }

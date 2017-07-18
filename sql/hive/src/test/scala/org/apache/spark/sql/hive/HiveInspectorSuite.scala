@@ -90,7 +90,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     Literal(0.asInstanceOf[Double]) ::
     Literal("0") ::
     Literal(java.sql.Date.valueOf("2014-09-23")) ::
-    Literal(Decimal(BigDecimal(123.123))) ::
+    Literal(Decimal(BigDecimal("123.123"))) ::
     Literal(new java.sql.Timestamp(123123)) ::
     Literal(Array[Byte](1, 2, 3)) ::
     Literal.create(Seq[Int](1, 2, 3), ArrayType(IntegerType)) ::

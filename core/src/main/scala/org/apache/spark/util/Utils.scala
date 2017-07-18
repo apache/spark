@@ -1443,7 +1443,7 @@ private[spark] object Utils extends Logging {
     var firstUserFile = "<unknown>"
     var firstUserLine = 0
     var insideSpark = true
-    var callStack = new ArrayBuffer[String]() :+ "<unknown>"
+    val callStack = new ArrayBuffer[String]() :+ "<unknown>"
 
     Thread.currentThread.getStackTrace().foreach { ste: StackTraceElement =>
       // When running under some profilers, the current stack trace might contain some bogus
@@ -2438,7 +2438,7 @@ private[spark] object Utils extends Logging {
       .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
   }
 
-  val EMPTY_USER_GROUPS = Set[String]()
+  val EMPTY_USER_GROUPS = Set.empty[String]
 
   // Returns the groups to which the current user belongs.
   def getCurrentUserGroups(sparkConf: SparkConf, username: String): Set[String] = {
@@ -2587,7 +2587,7 @@ private[spark] object Utils extends Logging {
    * Unions two comma-separated lists of files and filters out empty strings.
    */
   def unionFileLists(leftList: Option[String], rightList: Option[String]): Set[String] = {
-    var allFiles = Set[String]()
+    var allFiles = Set.empty[String]
     leftList.foreach { value => allFiles ++= value.split(",") }
     rightList.foreach { value => allFiles ++= value.split(",") }
     allFiles.filter { _.nonEmpty }
