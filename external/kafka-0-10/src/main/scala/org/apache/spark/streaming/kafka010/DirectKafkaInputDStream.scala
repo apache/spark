@@ -130,8 +130,15 @@ private[spark] class DirectKafkaInputDStream[K, V](
     offsets: Map[TopicPartition, Long]): Option[Map[TopicPartition, Long]] = {
     val estimatedRateLimit = rateController.map(_.getLatestRate())
 
+    // TODO: Fix in rate controller (need SparkConf or initial rate member value)
+    // Fix: Rate controller first value is -1, if -1 return use the default rate
+    val fixedEstimatedRateLimit = estimatedRateLimit match {
+      case Some(-1) => Some(ssc.conf.getLong("spark.streaming.backpressure.initialRate", -1L))
+      case _ => estimatedRateLimit
+    }
+
     // calculate a per-partition rate limit based on current lag
-    val effectiveRateLimitPerPartition = estimatedRateLimit.filter(_ > 0) match {
+    val effectiveRateLimitPerPartition = fixedEstimatedRateLimit.filter(_ > 0) match {
       case Some(rate) =>
         val lagPerPartition = offsets.map { case (tp, offset) =>
           tp -> Math.max(offset - currentOffsets(tp), 0)
