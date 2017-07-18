@@ -404,6 +404,13 @@ private[spark] object HiveUtils extends Logging {
     propMap.put(ConfVars.METASTORE_EVENT_LISTENERS.varname, "")
     propMap.put(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname, "")
 
+    // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
+    sys.props.foreach { case (key, value) =>
+      if (key.startsWith("spark.hadoop.")) {
+        propMap.put(key.substring("spark.hadoop.".length), value)
+      }
+    }
+
     propMap.toMap
   }
 
