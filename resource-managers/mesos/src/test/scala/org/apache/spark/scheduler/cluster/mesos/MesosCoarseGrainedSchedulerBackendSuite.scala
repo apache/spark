@@ -369,6 +369,41 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend.start()
   }
 
+  test("failover timeout is set in created scheduler driver") {
+    val failoverTimeoutIn = 3600.0
+    initializeSparkConf(Map("spark.mesos.driver.failoverTimeout" -> failoverTimeoutIn.toString))
+    sc = new SparkContext(sparkConf)
+
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+
+    val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
+
+    val securityManager = mock[SecurityManager]
+
+    val backend = new MesosCoarseGrainedSchedulerBackend(
+      taskScheduler, sc, "master", securityManager) {
+      override protected def createSchedulerDriver(
+          masterUrl: String,
+          scheduler: Scheduler,
+          sparkUser: String,
+          appName: String,
+          conf: SparkConf,
+          webuiUrl: Option[String] = None,
+          checkpoint: Option[Boolean] = None,
+          failoverTimeout: Option[Double] = None,
+          frameworkId: Option[String] = None): SchedulerDriver = {
+        markRegistered()
+        assert(failoverTimeout.isDefined)
+        assert(failoverTimeout.get.equals(failoverTimeoutIn))
+        driver
+      }
+    }
+
+    backend.start()
+  }
+
   test("honors unset spark.mesos.containerizer") {
     setBackend(Map("spark.mesos.executor.docker.image" -> "test"))
 
