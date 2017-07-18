@@ -63,8 +63,19 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * A Hive client used to interact with the metastore.
    */
   lazy val client: HiveClient = {
+    clientInited = true
     HiveUtils.newClientForMetadata(conf, hadoopConf)
   }
+
+  override def close(): Unit = {
+    if (clientInited) {
+      client.close()
+      clientInited = false
+    } else {
+      logInfo("No need to Close HiveClient since it hasn't been initialized.")
+    }
+  }
+
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(

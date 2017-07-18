@@ -705,6 +705,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def stop(): Unit = {
+    sessionState.catalog.externalCatalog.close()
     sparkContext.stop()
   }
 

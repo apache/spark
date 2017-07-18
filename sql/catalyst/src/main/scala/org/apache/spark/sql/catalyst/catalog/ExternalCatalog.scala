@@ -35,6 +35,8 @@ abstract class ExternalCatalog
   extends ListenerBus[ExternalCatalogEventListener, ExternalCatalogEvent] {
   import CatalogTypes.TablePartitionSpec
 
+  protected var clientInited = false
+
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
@@ -385,4 +387,6 @@ abstract class ExternalCatalog
       event: ExternalCatalogEvent): Unit = {
     listener.onEvent(event)
   }
+
+  def close(): Unit = {}
 }

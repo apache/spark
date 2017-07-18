@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.client
 
+import java.io.{File, IOException, PrintStream}
+import java.util.Locale
 import java.io.{File, PrintStream}
 import java.lang.{Iterable => JIterable}
 import java.util.{Locale, Map => JMap}
@@ -185,6 +187,21 @@ private[hive] class HiveClientImpl(
     state.err = new PrintStream(outputBuffer, true, "UTF-8")
     state
   }
+
+  def close(): Unit = withHiveState {
+    Hive.closeCurrent()
+    try {
+      state.close()
+    } catch {
+      case ioe: IOException =>
+        ioe.printStackTrace()
+    }
+  }
+
+  // Log the default warehouse location.
+  logInfo(
+    s"Warehouse location for Hive client " +
+      s"(version ${version.fullVersion}) is ${conf.get("hive.metastore.warehouse.dir")}")
 
   /** Returns the configuration for the current session. */
   def conf: HiveConf = state.getConf

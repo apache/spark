@@ -71,10 +71,12 @@ private[hive] class TestHiveExternalCatalog(
     hiveClient: Option[HiveClient] = None)
   extends HiveExternalCatalog(conf, hadoopConf) with Logging {
 
-  override lazy val client: HiveClient =
+  override lazy val client: HiveClient = {
+    clientInited = true
     hiveClient.getOrElse {
       HiveUtils.newClientForMetadata(conf, hadoopConf)
     }
+  }
 }
 
 

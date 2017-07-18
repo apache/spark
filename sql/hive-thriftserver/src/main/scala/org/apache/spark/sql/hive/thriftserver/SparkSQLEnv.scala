@@ -62,7 +62,11 @@ private[hive] object SparkSQLEnv extends Logging {
   def stop() {
     logDebug("Shutting down Spark SQL Environment")
     // Stop the SparkContext
-    if (SparkSQLEnv.sparkContext != null) {
+    if (sqlContext != null) {
+      sqlContext.sparkSession.stop()
+      sparkContext = null
+      sqlContext = null
+    } else if (SparkSQLEnv.sparkContext != null) {
       sparkContext.stop()
       sparkContext = null
       sqlContext = null
