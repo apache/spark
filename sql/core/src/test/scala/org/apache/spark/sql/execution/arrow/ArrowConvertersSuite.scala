@@ -31,6 +31,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -822,27 +823,29 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |      "name" : "date",
          |      "count" : 4,
          |      "VALIDITY" : [ 1, 1, 1, 1 ],
-         |      "DATA" : [ -1, -1, 16533, 16930 ]
+         |      "DATA" : [ -1, 0, 16533, 16930 ]
          |    } ]
          |  } ]
          |}
        """.stripMargin
 
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
-    val d1 = new Date(-1/*sdf.parse("1969-12-31 13:10:15.000 UTC").getTime*/)
-    val d2 = new Date(0/*sdf.parse("1969-12-31 13:10:15.000 UTC").getTime*/)
+    val d1 = new Date(-1)  // "1969-12-31 13:10:15.000 UTC"
+    val d2 = new Date(0)  // "1970-01-01 13:10:15.000 UTC"
     val d3 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
     val d4 = new Date(sdf.parse("2016-05-09 12:01:01.000 UTC").getTime)
 
+    // Date is created unaware of timezone, but DateTimeUtils force defaultTimeZone()
+    assert(DateTimeUtils.toJavaDate(DateTimeUtils.fromJavaDate(d2)).getTime == d2.getTime)
+
     val df = Seq(d1, d2, d3, d4).toDF("date")
-    df.show()
-    println(s"date: $d2, ${d2.getTime}, ${d2.toGMTString}, ${d1.toGMTString}")
 
     collectAndValidate(df, json, "dateData.json")
   }
 
   ignore("timestamp conversion") {
-    /*val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
+    /*
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
     val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
     val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
     val data = Seq(ts1, ts2)
@@ -856,7 +859,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
     val df = data.toDF("timestamp")
 
-    collectAndValidate(df, json, "timestampData.json")*/
+    collectAndValidate(df, json, "timestampData.json")
+    */
   }
 
   test("floating-point NaN") {
