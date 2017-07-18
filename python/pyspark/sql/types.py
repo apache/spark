@@ -944,13 +944,6 @@ _array_unsigned_int_typecode_ctype_mappings = {
     'L': ctypes.c_ulong
 }
 
-# TODO: [SPARK-21420]
-# Uncomment this when 'q' and 'Q' are supported by net.razorvine.pickle
-# Type code 'q' and 'Q' are not available at python 2
-# if sys.version_info[0] >= 3:
-#     _array_signed_int_typecode_ctype_mappings['q'] = ctypes.c_longlong
-#     _array_unsigned_int_typecode_ctype_mappings['Q'] = ctypes.c_ulonglong
-
 
 def _int_size_to_type(size):
     """
