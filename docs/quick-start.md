@@ -377,7 +377,7 @@ If you are building a packaged PySpark application or library you can add it to 
 
 {% highlight python %}
     install_requires=[
-        'pyspark==2.2.0'
+        'pyspark=={site.SPARK_VERSION}'
     ]
 {% endhighlight %}
 
