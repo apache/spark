@@ -23,21 +23,11 @@ import org.apache.spark.sql.test.SharedSQLContext
 class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
 
   test("empty file should be skipped while write to file") {
-    withTempPath { dir =>
-      dir.delete()
-      // make sure the input dir has 10 files
-      spark.range(10000).repartition(10).write.parquet(dir.toString)
-      val df = spark.read.parquet(dir.toString)
-
-      withTempPath { dst_dir =>
-        dst_dir.delete()
-        df.where("id = 50").write.parquet(dst_dir.toString)
-        val allFiles = dst_dir.listFiles().filter { f =>
-          f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_")
-        }
-        // First partition file and the data file
-        assert(allFiles.length == 2)
-      }
+    withTempPath { path =>
+      spark.range(100).repartition(10).where("id = 50").write.parquet(path.toString)
+      val partFiles = path.listFiles()
+        .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+      assert(partFiles.length === 2)
     }
   }
 }
