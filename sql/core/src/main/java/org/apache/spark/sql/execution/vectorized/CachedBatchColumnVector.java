@@ -26,23 +26,22 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * A column backed by an in memory JVM array.
  */
-public final class CachedBatchColumnVector extends ColumnVector implements java.io.Serializable {
+public final class CachedBatchColumnVector extends ColumnVector {
 
   // keep compressed data
   private byte[] buffer;
 
-  // whether a row is already extracted or not. If extractTo() is called, set true
-  // e.g. when isNullAt() and getInt() ara called, extractTo() must be called only once
-  private boolean[] calledExtractTo;
-
   // accessor for a column
-  private transient ColumnAccessor columnAccessor;
+  private ColumnAccessor columnAccessor;
 
   // a row where the compressed data is extracted
-  private transient ColumnVector columnVector;
+  private ColumnVector columnVector;
 
   // an accessor uses only row 0 in columnVector
   private final int ROWID = 0;
+
+  // Keep row id that was previously accessed
+  private int previousRowId = -1;
 
 
   public CachedBatchColumnVector(byte[] buffer, int numRows, DataType type) {
@@ -68,15 +67,17 @@ public final class CachedBatchColumnVector extends ColumnVector implements java.
   private void setColumnAccessor() {
     ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
     columnAccessor = ColumnAccessor$.MODULE$.apply(type, byteBuffer);
-    calledExtractTo = new boolean[capacity];
   }
 
   // call extractTo() before getting actual data
   private void prepareAccess(int rowId) {
-    if (!calledExtractTo[rowId]) {
+    if (previousRowId + 1 == rowId) {
       assert (columnAccessor.hasNext());
       columnAccessor.extractTo(columnVector, ROWID);
-      calledExtractTo[rowId] = true;
+      previousRowId = rowId;
+    } else if (previousRowId != rowId) {
+      throw new UnsupportedOperationException("Row access order must be sequentially ascending." +
+        " Internal row " + rowId + "is accessed after internal row "+ previousRowId + "was accessed.");
     }
   }
 
@@ -386,12 +387,6 @@ public final class CachedBatchColumnVector extends ColumnVector implements java.
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    boolean[] newCalledExtractTo = new boolean[newCapacity];
-    if (this.calledExtractTo != null) {
-      System.arraycopy(this.calledExtractTo, 0, newCalledExtractTo, 0, capacity);
-    }
-    calledExtractTo = newCalledExtractTo;
-
     capacity = newCapacity;
   }
 

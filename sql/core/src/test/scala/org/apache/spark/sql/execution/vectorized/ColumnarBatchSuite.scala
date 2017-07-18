@@ -353,6 +353,34 @@ class ColumnarBatchSuite extends SparkFunSuite {
           case _ : DoubleType => assert(column.getDouble(i) == i.toDouble)
         }
       }
+
+      /* check row access order */
+      val column2 = new CachedBatchColumnVector(
+        JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+      dataType match {
+        case _: BooleanType =>
+          /* Row access must start with 0 */
+          val e = intercept[UnsupportedOperationException] {
+            column2.getBoolean(1)
+          }
+          assert(e.getMessage.startsWith("Row access order must be sequentially ascending."))
+        case _: IntegerType =>
+          /* Row access order must be sequential */
+          assert(column2.getInt(0) == 0)
+          val e = intercept[UnsupportedOperationException] {
+            column2.getInt(2)
+          }
+          assert(e.getMessage.startsWith("Row access order must be sequentially ascending."))
+        case _: DoubleType =>
+          /* Row access order must be ascending */
+          assert(column2.getDouble(0) == 0)
+          assert(column2.getDouble(1) == 1.0)
+          val e = intercept[UnsupportedOperationException] {
+            column2.getDouble(0)
+          }
+          assert(e.getMessage.startsWith("Row access order must be sequentially ascending."))
+      }
+
       column.close
     }}
   }
