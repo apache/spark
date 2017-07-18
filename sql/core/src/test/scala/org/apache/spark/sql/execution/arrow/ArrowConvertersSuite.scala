@@ -823,20 +823,17 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |      "name" : "date",
          |      "count" : 4,
          |      "VALIDITY" : [ 1, 1, 1, 1 ],
-         |      "DATA" : [ -1, 0, 16533, 16930 ]
+         |      "DATA" : [ -1, 0, 16533, 382607 ]
          |    } ]
          |  } ]
          |}
        """.stripMargin
 
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
-    val d1 = new Date(-1)  // "1969-12-31 13:10:15.000 UTC"
-    val d2 = new Date(0)  // "1970-01-01 13:10:15.000 UTC"
+    val d1 = DateTimeUtils.toJavaDate(-1)  // "1969-12-31"
+    val d2 = DateTimeUtils.toJavaDate(0)  // "1970-01-01"
     val d3 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
-    val d4 = new Date(sdf.parse("2016-05-09 12:01:01.000 UTC").getTime)
-
-    // Date is created unaware of timezone, but DateTimeUtils force defaultTimeZone()
-    assert(DateTimeUtils.toJavaDate(DateTimeUtils.fromJavaDate(d2)).getTime == d2.getTime)
+    val d4 = new Date(sdf.parse("3017-07-18 14:55:00.000 UTC").getTime)
 
     val df = Seq(d1, d2, d3, d4).toDF("date")
 
