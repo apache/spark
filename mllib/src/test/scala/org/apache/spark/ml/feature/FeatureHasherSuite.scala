@@ -36,7 +36,7 @@ class FeatureHasherSuite extends SparkFunSuite
 
   import HashingTFSuite.murmur3FeatureIdx
 
-  implicit val vectorEncoder = ExpressionEncoder[Vector]()
+  implicit private val vectorEncoder = ExpressionEncoder[Vector]()
 
   test("params") {
     ParamsSuite.checkParams(new FeatureHasher)
@@ -63,7 +63,7 @@ class FeatureHasherSuite extends SparkFunSuite
       .setNumFeatures(n)
     val output = hasher.transform(df)
     val attrGroup = AttributeGroup.fromStructField(output.schema("features"))
-    require(attrGroup.numAttributes === Some(n))
+    assert(attrGroup.numAttributes === Some(n))
 
     val features = output.select("features").as[Vector].collect()
     // Assume perfect hash on field names

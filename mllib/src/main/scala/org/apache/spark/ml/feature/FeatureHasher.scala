@@ -109,9 +109,11 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
   @Since("2.3.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("2.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val hashFunc: Any => Int = OldHashingTF.murmur3Hash
     val n = $(numFeatures)
+    val localInputCols = $(inputCols)
 
     val outputSchema = transformSchema(dataset.schema)
     val realFields = outputSchema.fields.filter { f =>
@@ -130,7 +132,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
 
     val hashFeatures = udf { row: Row =>
       val map = new OpenHashMap[Int, Double]()
-      $(inputCols).foreach { case colName =>
+      localInputCols.foreach { colName =>
         val fieldIndex = row.fieldIndex(colName)
         if (!row.isNullAt(fieldIndex)) {
           val (rawIdx, value) = if (realFields(colName)) {
@@ -156,14 +158,16 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(
       col("*"),
-      hashFeatures(struct($(inputCols).map(col(_)): _*)).as($(outputCol), metadata))
+      hashFeatures(struct($(inputCols).map(col): _*)).as($(outputCol), metadata))
   }
 
+  @Since("2.3.0")
   override def copy(extra: ParamMap): FeatureHasher = defaultCopy(extra)
 
+  @Since("2.3.0")
   override def transformSchema(schema: StructType): StructType = {
     val fields = schema($(inputCols).toSet)
-    fields.foreach { case fieldSchema =>
+    fields.foreach { fieldSchema =>
       val dataType = fieldSchema.dataType
       val fieldName = fieldSchema.name
       require(dataType.isInstanceOf[NumericType] ||
