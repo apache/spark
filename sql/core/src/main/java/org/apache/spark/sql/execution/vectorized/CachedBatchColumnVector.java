@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution.vectorized;
 import java.nio.ByteBuffer;
 
 import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.execution.columnar.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -29,7 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * A column backed by an in memory JVM array.
  */
-public final class OnHeapCachedBatch extends ColumnVector implements java.io.Serializable {
+public final class CachedBatchColumnVector extends ColumnVector implements java.io.Serializable {
 
   // keep compressed data
   private byte[] buffer;
@@ -48,9 +45,10 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
   private final int ROWID = 0;
 
 
-  protected OnHeapCachedBatch(int capacity, DataType type) {
-    super(capacity, type, VectorType.Compressible, MemoryMode.ON_HEAP);
-    reserveInternal(capacity);
+  public CachedBatchColumnVector(byte[] buffer, int numRows, DataType type) {
+    super(numRows, DataTypes.NullType, MemoryMode.ON_HEAP);
+    initialize(buffer, type);
+    reserveInternal(numRows);
     reset();
   }
 
@@ -67,15 +65,6 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
   public void close() {
   }
 
-  private void initialize() {
-    if (columnAccessor == null) {
-      setColumnAccessor();
-    }
-    if (columnVector == null) {
-      columnVector = new OnHeapColumnVector(1, type);
-    }
-  }
-
   private void setColumnAccessor() {
     ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
     columnAccessor = ColumnAccessor$.MODULE$.apply(type, byteBuffer);
@@ -89,24 +78,6 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
       columnAccessor.extractTo(columnVector, ROWID);
       calledExtractTo[rowId] = true;
     }
-  }
-
-  // put compressed binary data using CompressibleColumnAccessor
-  public void putByteArray(byte[] buffer) {
-    if (type instanceof ArrayType) {
-      throw new UnsupportedOperationException();
-    } else if (type instanceof BinaryType) {
-      throw new UnsupportedOperationException();
-    } else if (type instanceof StructType) {
-      throw new UnsupportedOperationException();
-    } else if (type instanceof MapType) {
-      throw new UnsupportedOperationException();
-    } else if (type instanceof DecimalType && ((DecimalType) type).precision() > Decimal.MAX_LONG_DIGITS()) {
-      throw new UnsupportedOperationException();
-    }
-
-    this.buffer = buffer;
-    initialize();
   }
 
   //
@@ -407,7 +378,7 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
     throw new UnsupportedOperationException();
   }
 
-  public final UTF8String getUTF8StringFromCompressible(int rowId) {
+  public final UTF8String getUTF8String(int rowId) {
     prepareAccess(rowId);
     return columnVector.getUTF8String(ROWID);
   }
@@ -422,5 +393,29 @@ public final class OnHeapCachedBatch extends ColumnVector implements java.io.Ser
     calledExtractTo = newCalledExtractTo;
 
     capacity = newCapacity;
+  }
+
+  private void initialize(byte[] buffer, DataType type) {
+    this.buffer = buffer;
+    this.type = type;
+
+    if (columnAccessor == null) {
+      setColumnAccessor();
+    }
+    if (columnVector == null) {
+      columnVector = new OnHeapColumnVector(1, type);
+    }
+
+    if (type instanceof ArrayType) {
+      throw new UnsupportedOperationException();
+    } else if (type instanceof BinaryType) {
+      throw new UnsupportedOperationException();
+    } else if (type instanceof StructType) {
+      throw new UnsupportedOperationException();
+    } else if (type instanceof MapType) {
+      throw new UnsupportedOperationException();
+    } else if (type instanceof DecimalType && ((DecimalType) type).precision() > Decimal.MAX_LONG_DIGITS()) {
+      throw new UnsupportedOperationException();
+    }
   }
 }

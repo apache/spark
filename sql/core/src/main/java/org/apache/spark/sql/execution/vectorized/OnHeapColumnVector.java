@@ -52,7 +52,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   private int[] arrayOffsets;
 
   protected OnHeapColumnVector(int capacity, DataType type) {
-    super(capacity, type, VectorType.NonCompressible, MemoryMode.ON_HEAP);
+    super(capacity, type, MemoryMode.ON_HEAP);
     reserveInternal(capacity);
     reset();
   }

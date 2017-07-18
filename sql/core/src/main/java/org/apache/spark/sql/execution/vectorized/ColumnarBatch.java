@@ -46,7 +46,6 @@ import org.apache.spark.unsafe.types.UTF8String;
 public final class ColumnarBatch {
   private static final int DEFAULT_BATCH_SIZE = 4 * 1024;
   private static MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
-  private static VectorType DEFAULT_VECTOR_TYPE = VectorType.NonCompressible;
 
   private final StructType schema;
   private final int capacity;
@@ -65,20 +64,16 @@ public final class ColumnarBatch {
   // Staging row returned from getRow.
   final Row row;
 
-  public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
-    return new ColumnarBatch(schema, maxRows, DEFAULT_VECTOR_TYPE,  memMode);
-  }
-
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode) {
-    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, DEFAULT_VECTOR_TYPE,  memMode);
+    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode);
   }
 
   public static ColumnarBatch allocate(StructType type) {
-    return new ColumnarBatch(type, DEFAULT_BATCH_SIZE, DEFAULT_VECTOR_TYPE, DEFAULT_MEMORY_MODE);
+    return new ColumnarBatch(type, DEFAULT_BATCH_SIZE, DEFAULT_MEMORY_MODE);
   }
 
-  public static ColumnarBatch allocate(StructType schema, VectorType vector, MemoryMode memMode, int maxRows) {
-    return new ColumnarBatch(schema, maxRows, vector, memMode);
+  public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
+    return new ColumnarBatch(schema, maxRows, memMode);
   }
 
   /**
@@ -510,7 +505,7 @@ public final class ColumnarBatch {
     nullFilteredColumns.add(ordinal);
   }
 
-  private ColumnarBatch(StructType schema, int maxRows, VectorType vector, MemoryMode memMode) {
+  private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode) {
     this.schema = schema;
     this.capacity = maxRows;
     this.columns = new ColumnVector[schema.size()];
@@ -519,7 +514,7 @@ public final class ColumnarBatch {
 
     for (int i = 0; i < schema.fields().length; ++i) {
       StructField field = schema.fields()[i];
-      columns[i] = ColumnVector.allocate(maxRows, field.dataType(), vector, memMode);
+      columns[i] = ColumnVector.allocate(maxRows, field.dataType(), memMode);
     }
 
     this.row = new Row(this);

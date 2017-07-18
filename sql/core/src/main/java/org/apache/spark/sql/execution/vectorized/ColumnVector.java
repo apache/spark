@@ -61,24 +61,12 @@ public abstract class ColumnVector implements AutoCloseable {
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
    * in number of elements, not number of bytes.
    */
-  public static ColumnVector allocate(int capacity, DataType type, VectorType vector, MemoryMode mode) {
-    if (mode == MemoryMode.OFF_HEAP) {
-      if (vector == VectorType.NonCompressible) {
-        return new OffHeapColumnVector(capacity, type);
-      } else {
-        throw new UnsupportedOperationException();
-      }
-    } else {
-      if (vector == VectorType.NonCompressible) {
-        return new OnHeapColumnVector(capacity, type);
-      } else {
-        return new OnHeapCachedBatch(capacity, type);
-      }
-    }
-  }
-
   public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
-    return allocate(capacity, type, VectorType.NonCompressible, mode);
+    if (mode == MemoryMode.OFF_HEAP) {
+      return new OffHeapColumnVector(capacity, type);
+    } else {
+      return new OnHeapColumnVector(capacity, type);
+    }
   }
 
   /**
@@ -698,11 +686,6 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the UTF8String from a compressed column
-   */
-  public UTF8String getUTF8StringFromCompressible(int rowId) { return null; }
-
-  /**
    * Returns the byte array for rowId.
    */
   public byte[] getBinary(int rowId) {
@@ -971,11 +954,6 @@ public abstract class ColumnVector implements AutoCloseable {
   protected int MAX_CAPACITY = Integer.MAX_VALUE;
 
   /**
-   * Vector type for this column.
-   */
-  private VectorType vector;
-
-  /**
    * Data type for this column.
    */
   protected DataType type;
@@ -1071,16 +1049,9 @@ public abstract class ColumnVector implements AutoCloseable {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected ColumnVector(int capacity, DataType type, VectorType vector, MemoryMode memMode) {
+  protected ColumnVector(int capacity, DataType type, MemoryMode memMode) {
     this.capacity = capacity;
     this.type = type;
-    this.vector = vector;
-    if (vector == VectorType.Compressible && type instanceof StringType) {
-      this.childColumns = null;
-      this.resultArray = null;
-      this.resultStruct = null;
-      return;
-    }
 
     if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
         || DecimalType.isByteArrayDecimalType(type)) {
