@@ -134,7 +134,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def collectGroupingExpressions(plan: LogicalPlan): ExpressionSet = plan match {
     case Aggregate(groupingExpressions, aggregateExpressions, child) =>
       ExpressionSet.apply(groupingExpressions)
-    case _ => ExpressionSet(Seq())
+    case _ => ExpressionSet(Seq.empty)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
