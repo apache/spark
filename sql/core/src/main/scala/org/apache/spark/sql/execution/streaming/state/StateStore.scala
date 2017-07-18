@@ -92,6 +92,10 @@ trait StateStore {
    */
   def abort(): Unit
 
+  /**
+   * Return an iterator containing all the key-value pairs in the SateStore. Implementations must
+   * ensure that updates (puts, removes) can be made while iterating over this iterator.
+   */
   def iterator(): Iterator[UnsafeRowPair]
 
   /** Current metrics of the state store */
@@ -120,7 +124,12 @@ case class StateStoreMetrics(
  * Name and description of custom implementation-specific metrics that a
  * state store may wish to expose.
  */
-case class StateStoreCustomMetric(name: String, desc: String)
+trait StateStoreCustomMetric {
+  def name: String
+  def desc: String
+}
+case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric
+case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric
 
 /**
  * Trait representing a provider that provide [[StateStore]] instances representing
