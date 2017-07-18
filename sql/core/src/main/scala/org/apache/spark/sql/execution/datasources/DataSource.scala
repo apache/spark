@@ -371,7 +371,7 @@ case class DataSource(
         HadoopFsRelation(
           fileCatalog,
           partitionSchema = resolvedPartitionSchema,
-          dataSchema = StructType(dataSchema),
+          dataSchema = dataSchema,
           bucketSpec = None,
           format,
           caseInsensitiveOptions)(sparkSession)
