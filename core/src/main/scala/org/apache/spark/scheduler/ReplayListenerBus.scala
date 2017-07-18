@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{InputStream, IOException}
+import java.io.{EOFException, InputStream, IOException}
 
 import scala.io.Source
 
@@ -107,6 +107,16 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
         }
       }
     } catch {
+      case eofe: EOFException =>
+        // If the history event file is compressed and inprogress, the compressor will throw an
+        // EOFException if there is not enough to decompress a proper frame.  This indicates
+        // we're at the end of the file so we treat similarly to the JsonParseException case above.
+        if (!maybeTruncated) {
+          throw eofe
+        } else {
+          logWarning(s"Got EOFException from log file $sourceName" +
+            s" at line $lineNumber, the file might not have finished writing cleanly.")
+        }
       case ioe: IOException =>
         throw ioe
       case e: Exception =>
