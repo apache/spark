@@ -17,33 +17,24 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{File, FilenameFilter}
-
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSQLContext
 
 class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
 
   test("empty file should be skipped while write to file") {
-    withTempDir { dir =>
+    withTempPath { dir =>
       dir.delete()
+      // make sure the input dir has 10 files
       spark.range(10000).repartition(10).write.parquet(dir.toString)
       val df = spark.read.parquet(dir.toString)
-      val allFiles = dir.listFiles(new FilenameFilter {
-        override def accept(dir: File, name: String): Boolean = {
-          !name.startsWith(".") && !name.startsWith("_")
-        }
-      })
-      assert(allFiles.length == 10)
 
-      withTempDir { dst_dir =>
+      withTempPath { dst_dir =>
         dst_dir.delete()
         df.where("id = 50").write.parquet(dst_dir.toString)
-        val allFiles = dst_dir.listFiles(new FilenameFilter {
-          override def accept(dir: File, name: String): Boolean = {
-            !name.startsWith(".") && !name.startsWith("_")
-          }
-        })
+        val allFiles = dst_dir.listFiles().filter { f =>
+          f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_")
+        }
         // First partition file and the data file
         assert(allFiles.length == 2)
       }
