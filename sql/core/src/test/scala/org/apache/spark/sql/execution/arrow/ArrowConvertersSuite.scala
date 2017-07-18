@@ -840,24 +840,52 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     collectAndValidate(df, json, "dateData.json")
   }
 
-  ignore("timestamp conversion") {
-    /*
-    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
-    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
-    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
-    val data = Seq(ts1, ts2)
+  test("timestamp type conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "timestamp",
+         |      "type" : {
+         |        "name" : "timestamp",
+         |        "unit" : "MICROSECOND"
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ],
+         |      "typeLayout" : {
+         |        "vectors" : [ {
+         |          "type" : "VALIDITY",
+         |          "typeBitWidth" : 1
+         |        }, {
+         |          "type" : "DATA",
+         |          "typeBitWidth" : 64
+         |        } ]
+         |      }
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 4,
+         |    "columns" : [ {
+         |      "name" : "timestamp",
+         |      "count" : 4,
+         |      "VALIDITY" : [ 1, 1, 1, 1 ],
+         |      "DATA" : [ -1234, 0, 1365383415567000, 33057298500000000 ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
 
-    val schema = new JSONSchema(Seq(new TimestampType("timestamp")))
-    val us_data = data.map(_.getTime * 1000)  // convert to microseconds
-    val columns = Seq(
-      new PrimitiveColumn("timestamp", data.length, data.map(_ => true), us_data))
-    val batch = new JSONRecordBatch(data.length, columns)
-    val json = new JSONFile(schema, Seq(batch))
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
+    val ts1 = DateTimeUtils.toJavaTimestamp(-1234L)
+    val ts2 = DateTimeUtils.toJavaTimestamp(0L)
+    val ts3 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
+    val ts4 = new Timestamp(sdf.parse("3017-07-18 14:55:00.000 UTC").getTime)
+    val data = Seq(ts1, ts2, ts3, ts4)
 
     val df = data.toDF("timestamp")
 
     collectAndValidate(df, json, "timestampData.json")
-    */
   }
 
   test("floating-point NaN") {

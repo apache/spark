@@ -28,7 +28,7 @@ import org.apache.arrow.vector._
 import org.apache.arrow.vector.BaseValueVector.BaseMutator
 import org.apache.arrow.vector.file._
 import org.apache.arrow.vector.schema.{ArrowFieldNode, ArrowRecordBatch}
-import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision}
+import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
 
@@ -85,6 +85,7 @@ private[sql] object ArrowConverters {
       case StringType => ArrowType.Utf8.INSTANCE
       case BinaryType => ArrowType.Binary.INSTANCE
       case DateType => new ArrowType.Date(DateUnit.DAY)
+      case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
       case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dataType")
     }
   }
