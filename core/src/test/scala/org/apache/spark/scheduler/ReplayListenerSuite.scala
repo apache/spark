@@ -74,12 +74,12 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   }
 
   /**
-    * Test replaying compressed spark history file that internally throws an EOFException.  To
-    * avoid sensitivity to the compression specifics the test forces an EOFException to occur
-    * while reading bytes from the underlying stream (such as observed in actual history files
-    * in some cases) and forces specific failure handling.  This validates correctness in both
-    * cases when maybeTruncated is true or false.
-    */
+   * Test replaying compressed spark history file that internally throws an EOFException.  To
+   * avoid sensitivity to the compression specifics the test forces an EOFException to occur
+   * while reading bytes from the underlying stream (such as observed in actual history files
+   * in some cases) and forces specific failure handling.  This validates correctness in both
+   * cases when maybeTruncated is true or false.
+   */
   test("Replay compressed inprogress log file succeeding on partial read") {
     val buffered = new ByteArrayOutputStream
     val codec = new LZ4CompressionCodec(new SparkConf())
@@ -93,7 +93,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     // scalastyle:off println
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
-    // scalastyle:on printlnø
+    // scalastyle:on println
     writer.close()
 
     val logFilePath = Utils.getFilePath(testDir, "events.lz4.inprogress")
