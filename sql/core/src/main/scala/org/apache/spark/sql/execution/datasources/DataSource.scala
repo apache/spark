@@ -366,7 +366,7 @@ case class DataSource(
           throw new AnalysisException(
             s"Unable to infer schema for $format at ${fileCatalog.allFiles().mkString(",")}. " +
                 "It must be specified manually")
-        }.filterNot(field => resolvedPartitionSchema.exists(pf => equality(field.name, pf.name)))
+        }
 
         HadoopFsRelation(
           fileCatalog,
