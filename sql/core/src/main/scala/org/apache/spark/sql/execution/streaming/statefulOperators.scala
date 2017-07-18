@@ -87,8 +87,7 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     new StateOperatorProgress(
       numRowsTotal = longMetric("numTotalStateRows").value,
       numRowsUpdated = longMetric("numUpdatedStateRows").value,
-      memoryUsedBytes = longMetric("stateMemory").value,
-      numPartitions = this.sqlContext.conf.numShufflePartitions)
+      memoryUsedBytes = longMetric("stateMemory").value)
   }
 
   /** Records the duration of running `body` for the next query progress update. */
