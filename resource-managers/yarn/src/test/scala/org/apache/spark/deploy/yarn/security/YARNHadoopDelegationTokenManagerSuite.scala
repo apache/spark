@@ -48,7 +48,7 @@ class YARNHadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers 
     credentialManager = new YARNHadoopDelegationTokenManager(
       sparkConf,
       hadoopConf,
-      YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, hadoopConf))
+      conf => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, conf))
 
     credentialManager.credentialProviders.get("yarn-test") should not be (None)
   }

@@ -42,7 +42,7 @@ import org.apache.spark.internal.Logging
 private[spark] class HadoopDelegationTokenManager(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    fileSystems: Set[FileSystem])
+    fileSystems: Configuration => Set[FileSystem])
   extends Logging {
 
   private val deprecatedProviderEnabledConfigs = List(

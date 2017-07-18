@@ -40,7 +40,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager = new HadoopDelegationTokenManager(
       sparkConf,
       hadoopConf,
-      hadoopFSsToAccess(hadoopConf))
+      hadoopFSsToAccess)
 
     delegationTokenManager.getServiceDelegationTokenProvider("hadoopfs") should not be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hbase") should not be (None)
@@ -53,7 +53,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager = new HadoopDelegationTokenManager(
       sparkConf,
       hadoopConf,
-      hadoopFSsToAccess(hadoopConf))
+      hadoopFSsToAccess)
 
     delegationTokenManager.getServiceDelegationTokenProvider("hadoopfs") should not be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hbase") should not be (None)
@@ -66,7 +66,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager = new HadoopDelegationTokenManager(
       sparkConf,
       hadoopConf,
-      hadoopFSsToAccess(hadoopConf))
+      hadoopFSsToAccess)
 
     delegationTokenManager.getServiceDelegationTokenProvider("hadoopfs") should be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hive") should be (None)
@@ -77,7 +77,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager = new HadoopDelegationTokenManager(
       sparkConf,
       hadoopConf,
-      hadoopFSsToAccess(hadoopConf))
+      hadoopFSsToAccess)
     val creds = new Credentials()
 
     // Tokens cannot be obtained from HDFS, Hive, HBase in unit tests.
