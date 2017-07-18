@@ -120,7 +120,7 @@ test_that("spark.gbt", {
   model <- spark.gbt(traindf, clicked ~ ., type = "classification")
   predictions <- predict(model, testdf)
   expect_error(collect(predictions))
-  model <- spark.gbt(traindf, clicked ~ ., type = "classification", handleInvalid = "skip")
+  model <- spark.gbt(traindf, clicked ~ ., type = "classification", handleInvalid = "keep")
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "character")
 })
@@ -355,7 +355,7 @@ test_that("spark.decisionTree", {
   predictions <- predict(model, testdf)
   expect_error(collect(predictions))
   model <- spark.decisionTree(traindf, clicked ~ ., type = "classification",
-                              maxDepth = 5, maxBins = 16, handleInvalid = "skip")
+                              maxDepth = 5, maxBins = 16, handleInvalid = "keep")
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "character")
 })

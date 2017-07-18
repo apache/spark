@@ -288,7 +288,7 @@ test_that("spark.logit", {
   model <- spark.logit(traindf, clicked ~ ., regParam = 0.5)
   predictions <- predict(model, testdf)
   expect_error(collect(predictions))
-  model <- spark.logit(traindf, clicked ~ ., regParam = 0.5, handleInvalid = "skip")
+  model <- spark.logit(traindf, clicked ~ ., regParam = 0.5, handleInvalid = "keep")
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "character")
 
@@ -386,7 +386,7 @@ test_that("spark.mlp", {
   expect_error(collect(predictions))
   model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 3), handleInvalid = "skip")
   predictions <- predict(model, testdf)
-  expect_equal(class(collect(predictions)$clicked[1]), "character")
+  expect_equal(class(collect(predictions)$clicked[1]), "list")
 
 })
 
@@ -482,7 +482,7 @@ test_that("spark.naiveBayes", {
   model <- spark.naiveBayes(traindf, clicked ~ ., smoothing = 0.0)
   predictions <- predict(model, testdf)
   expect_error(collect(predictions))
-  model <- spark.naiveBayes(traindf, clicked ~ ., smoothing = 0.0, handleInvalid = "skip")
+  model <- spark.naiveBayes(traindf, clicked ~ ., smoothing = 0.0, handleInvalid = "keep")
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "character")
 })
