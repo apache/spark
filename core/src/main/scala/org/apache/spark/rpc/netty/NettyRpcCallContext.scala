@@ -49,6 +49,10 @@ private[netty] class LocalNettyRpcCallContext(
   override protected def send(message: Any): Unit = {
     p.success(message)
   }
+
+  override def sendFailure(e: Throwable): Unit = {
+    p.failure(e)
+  }
 }
 
 /**
@@ -63,5 +67,9 @@ private[netty] class RemoteNettyRpcCallContext(
   override protected def send(message: Any): Unit = {
     val reply = nettyEnv.serialize(message)
     callback.onSuccess(reply)
+  }
+
+  override def sendFailure(e: Throwable): Unit = {
+    callback.onFailure(e)
   }
 }

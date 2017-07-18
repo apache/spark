@@ -31,7 +31,7 @@ import scala.language.postfixOps
 import com.google.common.io.Files
 import org.mockito.Matchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, ShouldMatchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, SparkFunSuite}
@@ -41,7 +41,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * Common tests for an RpcEnv implementation.
  */
-abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
+abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll with ShouldMatchers{
 
   var env: RpcEnv = _
 
@@ -478,7 +478,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       val e = intercept[SparkException] {
         ThreadUtils.awaitResult(f, 5 seconds)
       }
-      assert("Oops" === e.getCause.getMessage)
+      e.getCause.getMessage should include ("Oops")
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
@@ -611,7 +611,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       override val rpcEnv = env
 
       override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-        case msg: String => context.sendFailure(new UnserializableException)
+        case msg: String => context.reply(new UnserializableException)
       }
     })
 
@@ -624,7 +624,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       val e = intercept[SparkException] {
         ThreadUtils.awaitResult(f, 1 seconds)
       }
-      assert(e.getCause.isInstanceOf[NotSerializableException])
+      assert(e.getCause.isInstanceOf[RuntimeException])
+      e.getCause.getMessage should include ("java.io.NotSerializableException")
+      e.getCause.getMessage should include ("org.apache.spark.rpc.UnserializableClass")
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
