@@ -97,6 +97,24 @@ case class DataSource(
   }
 
   /**
+   * In the read path, only managed tables by Hive provide the partition columns properly when
+   * initializing this class. All other file based data sources will try to infer the partitioning,
+   * and then cast the inferred types to user specified dataTypes if the partition columns exist
+   * inside `userSpecifiedSchema`, otherwise we can hit data corruption bugs like SPARK-18510, or
+   * inconsistent data types as reported in SPARK-21463.
+   * @param fileIndex A FileIndex that will perform partition inference
+   * @return The PartitionSchema resolved from inference and cast according to `userSpecifiedSchema`
+   */
+  private def combineInferredAndUserSpecifiedPartitionSchema(fileIndex: FileIndex): StructType = {
+    val resolved = fileIndex.partitionSchema.map { partitionField =>
+      // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
+      userSpecifiedSchema.flatMap(_.find(f => equality(f.name, partitionField.name))).getOrElse(
+        partitionField)
+    }
+    StructType(resolved)
+  }
+
+  /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
    * it. In the read path, only managed tables by Hive provide the partition columns properly when
    * initializing this class. All other file based data sources will try to infer the partitioning,
@@ -139,12 +157,7 @@ case class DataSource(
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
-      val resolved = tempFileIndex.partitionSchema.map { partitionField =>
-        // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
-        userSpecifiedSchema.flatMap(_.find(f => equality(f.name, partitionField.name))).getOrElse(
-          partitionField)
-      }
-      StructType(resolved)
+      combineInferredAndUserSpecifiedPartitionSchema(tempFileIndex)
     } else {
       // maintain old behavior before SPARK-18510. If userSpecifiedSchema is empty used inferred
       // partitioning
@@ -336,7 +349,14 @@ case class DataSource(
             caseInsensitiveOptions.get("path").toSeq ++ paths,
             sparkSession.sessionState.newHadoopConf()) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath)
+        val tempFileCatalog = MetadataLogFileIndex(sparkSession, basePath)
+        val fileCatalog = if (userSpecifiedSchema.nonEmpty) {
+          val partitionSchema = combineInferredAndUserSpecifiedPartitionSchema(tempFileCatalog)
+          tempFileCatalog.withPartitionSchema(partitionSchema)
+        } else {
+          tempFileCatalog
+        }
+        val resolvedPartitionSchema = fileCatalog.partitionSchema
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
@@ -346,12 +366,12 @@ case class DataSource(
           throw new AnalysisException(
             s"Unable to infer schema for $format at ${fileCatalog.allFiles().mkString(",")}. " +
                 "It must be specified manually")
-        }
+        }.filterNot(field => resolvedPartitionSchema.exists(pf => equality(field.name, pf.name)))
 
         HadoopFsRelation(
           fileCatalog,
-          partitionSchema = fileCatalog.partitionSchema,
-          dataSchema = dataSchema,
+          partitionSchema = resolvedPartitionSchema,
+          dataSchema = StructType(dataSchema),
           bucketSpec = None,
           format,
           caseInsensitiveOptions)(sparkSession)
