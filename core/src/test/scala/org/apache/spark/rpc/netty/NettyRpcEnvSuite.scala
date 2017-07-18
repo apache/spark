@@ -31,7 +31,7 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar {
       port: Int,
       clientMode: Boolean = false): RpcEnv = {
     val config = RpcEnvConfig(conf, "test", "localhost", "localhost", port,
-      new SecurityManager(conf), clientMode)
+      new SecurityManager(conf), 0, clientMode)
     new NettyRpcEnvFactory().create(config)
   }
 
@@ -47,7 +47,7 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar {
   test("advertise address different from bind address") {
     val sparkConf = new SparkConf()
     val config = RpcEnvConfig(sparkConf, "test", "localhost", "example.com", 0,
-      new SecurityManager(sparkConf), false)
+      new SecurityManager(sparkConf), 0, false)
     val env = new NettyRpcEnvFactory().create(config)
     try {
       assert(env.address.hostPort.startsWith("example.com:"))
