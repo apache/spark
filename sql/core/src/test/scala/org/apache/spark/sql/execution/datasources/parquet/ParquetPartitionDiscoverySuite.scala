@@ -1048,7 +1048,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
         checkAnswer(
           readBack,
-          Seq(Row(1, "2017-01-01-00"), Row(2, "2017-01-01-01"))
+          Seq(Row("2017-01-01-00", 1), Row("2017-01-01-01", 2))
         )
       } finally {
         spark.streams.active.foreach(_.stop())
