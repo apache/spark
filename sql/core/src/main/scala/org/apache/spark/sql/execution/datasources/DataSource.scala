@@ -356,7 +356,6 @@ case class DataSource(
         } else {
           tempFileCatalog
         }
-        val resolvedPartitionSchema = fileCatalog.partitionSchema
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
@@ -370,7 +369,7 @@ case class DataSource(
 
         HadoopFsRelation(
           fileCatalog,
-          partitionSchema = resolvedPartitionSchema,
+          partitionSchema = fileCatalog.partitionSchema,
           dataSchema = dataSchema,
           bucketSpec = None,
           format,
