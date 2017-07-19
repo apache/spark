@@ -997,9 +997,11 @@ if sys.version_info[0] < 3:
 # In python2, array of 'L' happened to be mistakenly partially supported. To
 # avoid breaking user's code, we should keep this partial support. Below is a
 # dirty hacking to keep this partial support and make the unit test passes
-if sys.version_info[0] < 3 and 'L' not in _array_type_mappings.keys():
-    _array_type_mappings['L'] = LongType
-    _array_unsigned_int_typecode_ctype_mappings['L'] = ctypes.c_uint
+import platform
+if sys.version_info[0] < 3 and platform.python_implementation() != 'PyPy':
+    if 'L' not in _array_type_mappings.keys():
+        _array_type_mappings['L'] = LongType
+        _array_unsigned_int_typecode_ctype_mappings['L'] = ctypes.c_uint
 
 
 def _infer_type(obj):
