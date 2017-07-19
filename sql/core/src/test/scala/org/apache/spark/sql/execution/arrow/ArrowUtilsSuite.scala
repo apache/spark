@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.vectorized
+package org.apache.spark.sql.execution.arrow
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._

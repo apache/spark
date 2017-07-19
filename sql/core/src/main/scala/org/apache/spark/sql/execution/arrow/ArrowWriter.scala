@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.vectorized
+package org.apache.spark.sql.execution.arrow
 
 import scala.collection.JavaConverters._
 
@@ -111,7 +111,7 @@ class ArrowWriter(
   }
 }
 
-private[sql] abstract class ArrowFieldWriter {
+private[arrow] abstract class ArrowFieldWriter {
 
   def valueVector: ValueVector
   def valueMutator: ValueVector.Mutator
@@ -150,7 +150,7 @@ private[sql] abstract class ArrowFieldWriter {
   }
 }
 
-private[sql] class BooleanWriter(val valueVector: NullableBitVector) extends ArrowFieldWriter {
+private[arrow] class BooleanWriter(val valueVector: NullableBitVector) extends ArrowFieldWriter {
 
   override def valueMutator: NullableBitVector#Mutator = valueVector.getMutator()
 
@@ -167,7 +167,7 @@ private[sql] class BooleanWriter(val valueVector: NullableBitVector) extends Arr
   }
 }
 
-private[sql] class ByteWriter(val valueVector: NullableTinyIntVector) extends ArrowFieldWriter {
+private[arrow] class ByteWriter(val valueVector: NullableTinyIntVector) extends ArrowFieldWriter {
 
   override def valueMutator: NullableTinyIntVector#Mutator = valueVector.getMutator()
 
@@ -184,7 +184,7 @@ private[sql] class ByteWriter(val valueVector: NullableTinyIntVector) extends Ar
   }
 }
 
-private[sql] class ShortWriter(val valueVector: NullableSmallIntVector) extends ArrowFieldWriter {
+private[arrow] class ShortWriter(val valueVector: NullableSmallIntVector) extends ArrowFieldWriter {
 
   override def valueMutator: NullableSmallIntVector#Mutator = valueVector.getMutator()
 
@@ -201,7 +201,7 @@ private[sql] class ShortWriter(val valueVector: NullableSmallIntVector) extends 
   }
 }
 
-private[sql] class IntegerWriter(val valueVector: NullableIntVector) extends ArrowFieldWriter {
+private[arrow] class IntegerWriter(val valueVector: NullableIntVector) extends ArrowFieldWriter {
 
   override def valueMutator: NullableIntVector#Mutator = valueVector.getMutator()
 
@@ -218,7 +218,7 @@ private[sql] class IntegerWriter(val valueVector: NullableIntVector) extends Arr
   }
 }
 
-private[sql] class LongWriter(val valueVector: NullableBigIntVector) extends ArrowFieldWriter {
+private[arrow] class LongWriter(val valueVector: NullableBigIntVector) extends ArrowFieldWriter {
 
   override def valueMutator: NullableBigIntVector#Mutator = valueVector.getMutator()
 
@@ -235,7 +235,7 @@ private[sql] class LongWriter(val valueVector: NullableBigIntVector) extends Arr
   }
 }
 
-private[sql] class FloatWriter(val valueVector: NullableFloat4Vector) extends ArrowFieldWriter {
+private[arrow] class FloatWriter(val valueVector: NullableFloat4Vector) extends ArrowFieldWriter {
 
   override def valueMutator: NullableFloat4Vector#Mutator = valueVector.getMutator()
 
@@ -252,7 +252,7 @@ private[sql] class FloatWriter(val valueVector: NullableFloat4Vector) extends Ar
   }
 }
 
-private[sql] class DoubleWriter(val valueVector: NullableFloat8Vector) extends ArrowFieldWriter {
+private[arrow] class DoubleWriter(val valueVector: NullableFloat8Vector) extends ArrowFieldWriter {
 
   override def valueMutator: NullableFloat8Vector#Mutator = valueVector.getMutator()
 
@@ -269,7 +269,7 @@ private[sql] class DoubleWriter(val valueVector: NullableFloat8Vector) extends A
   }
 }
 
-private[sql] class DecimalWriter(
+private[arrow] class DecimalWriter(
     val valueVector: NullableDecimalVector,
     precision: Int,
     scale: Int) extends ArrowFieldWriter {
@@ -292,7 +292,7 @@ private[sql] class DecimalWriter(
   }
 }
 
-private[sql] class StringWriter(val valueVector: NullableVarCharVector) extends ArrowFieldWriter {
+private[arrow] class StringWriter(val valueVector: NullableVarCharVector) extends ArrowFieldWriter {
 
   override def valueMutator: NullableVarCharVector#Mutator = valueVector.getMutator()
 
@@ -311,7 +311,8 @@ private[sql] class StringWriter(val valueVector: NullableVarCharVector) extends 
   }
 }
 
-private[sql] class BinaryWriter(val valueVector: NullableVarBinaryVector) extends ArrowFieldWriter {
+private[arrow] class BinaryWriter(
+    val valueVector: NullableVarBinaryVector) extends ArrowFieldWriter {
 
   override def valueMutator: NullableVarBinaryVector#Mutator = valueVector.getMutator()
 
@@ -329,7 +330,7 @@ private[sql] class BinaryWriter(val valueVector: NullableVarBinaryVector) extend
   }
 }
 
-private[sql] class ArrayWriter(
+private[arrow] class ArrayWriter(
     val valueVector: ListVector,
     val elementWriter: ArrowFieldWriter) extends ArrowFieldWriter {
 
@@ -364,7 +365,7 @@ private[sql] class ArrayWriter(
   }
 }
 
-private[sql] class StructWriter(
+private[arrow] class StructWriter(
     val valueVector: NullableMapVector,
     children: Array[ArrowFieldWriter]) extends ArrowFieldWriter {
 

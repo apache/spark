@@ -28,7 +28,6 @@ import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.vectorized.{ArrowUtils, ArrowWriter}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 

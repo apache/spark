@@ -31,7 +31,6 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.execution.vectorized.ArrowUtils
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, Decimal, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
