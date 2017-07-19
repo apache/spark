@@ -64,12 +64,16 @@ public final class CachedBatchColumnVector extends ColumnVector {
 
   // call extractTo() for rowId only once before getting actual data
   private void prepareAccess(int rowId) {
-    if (previousRowId + 1 == rowId) {
-      assert (columnAccessor.hasNext());
-      columnAccessor.extractTo(columnVector, ROWID);
+    if (previousRowId == rowId) {
+      // do nothing
+    } else if (previousRowId < rowId) {
+      for (int i = previousRowId + 1; i <= rowId; i++) {
+        assert (columnAccessor.hasNext());
+        columnAccessor.extractTo(columnVector, ROWID);
+      }
       previousRowId = rowId;
-    } else if (previousRowId != rowId) {
-      throw new UnsupportedOperationException("Row access order must be sequentially ascending." +
+    } else {
+      throw new UnsupportedOperationException("Row access order must be ascending." +
         " Internal row " + rowId + "is accessed after internal row "+ previousRowId + "was accessed.");
     }
   }
