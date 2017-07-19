@@ -15,17 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.repl
+package org.apache.spark.sql.execution.datasources
 
-import scala.tools.nsc.Settings
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.test.SharedSQLContext
 
-/**
- * <i>scala.tools.nsc.Settings</i> implementation adding Spark-specific REPL
- * command line options.
- */
-private[repl] class SparkRunnerSettings(error: String => Unit) extends Settings(error) {
-  val loadfiles = MultiStringSetting(
-      "-i",
-      "file",
-      "load a file (assumes the code is given interactively)")
+class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
+
+  test("empty file should be skipped while write to file") {
+    withTempPath { path =>
+      spark.range(100).repartition(10).where("id = 50").write.parquet(path.toString)
+      val partFiles = path.listFiles()
+        .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+      assert(partFiles.length === 2)
+    }
+  }
 }

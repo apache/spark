@@ -31,8 +31,7 @@ uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scal
 ({{site.SCALA_BINARY_VERSION}}.x).
 
 Note that support for Java 7, Python 2.6 and old Hadoop versions before 2.6.5 were removed as of Spark 2.2.0.
-
-Note that support for Scala 2.10 is deprecated as of Spark 2.1.0, and may be removed in Spark 2.3.0.
+Support for Scala 2.10 was removed as of 2.3.0.
 
 # Running the Examples and Shell
 
@@ -88,7 +87,7 @@ options for deployment:
 **Programming Guides:**
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [RDD Programming Guide](programming-guide.html): overview of Spark basics - RDDs (core but old API), accumulators, and broadcast variables  
+* [RDD Programming Guide](rdd-programming-guide.html): overview of Spark basics - RDDs (core but old API), accumulators, and broadcast variables  
 * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): processing structured data with relational queries (newer API than RDDs)
 * [Structured Streaming](structured-streaming-programming-guide.html): processing structured data streams with relation queries (using Datasets and DataFrames, newer API than DStreams)
 * [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams (old API)

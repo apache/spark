@@ -333,7 +333,7 @@ trait MesosSchedulerUtils extends Logging {
       try {
         splitter.split(constraintsVal).asScala.toMap.mapValues(v =>
           if (v == null || v.isEmpty) {
-            Set[String]()
+            Set.empty[String]
           } else {
             v.split(',').toSet
           }

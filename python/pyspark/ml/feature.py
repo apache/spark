@@ -2107,8 +2107,9 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
                             typeConverter=TypeConverters.toString)
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
-                          "labels or NULL values). Options are 'skip' (filter out rows with " +
-                          "invalid data), error (throw an error), or 'keep' (put invalid data " +
+                          "or NULL values) in features and label column of string type. " +
+                          "Options are 'skip' (filter out rows with invalid data), " +
+                          "error (throw an error), or 'keep' (put invalid data " +
                           "in a special additional bucket, at index numLabels).",
                           typeConverter=TypeConverters.toString)
 
