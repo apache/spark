@@ -286,7 +286,7 @@ private[jdbc] class JDBCRDD(
     conn = getConnection()
     val dialect = JdbcDialects.get(url)
     import scala.collection.JavaConverters._
-    dialect.beforeFetch(conn, options.asConnectionProperties.asScala.toMap)
+    dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
 
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
