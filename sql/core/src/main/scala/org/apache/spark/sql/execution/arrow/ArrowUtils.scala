@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.types.FloatingPointPrecision
-import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
 import org.apache.spark.sql.types._
 
@@ -64,15 +64,17 @@ object ArrowUtils {
   def toArrowField(name: String, dt: DataType, nullable: Boolean): Field = {
     dt match {
       case ArrayType(elementType, containsNull) =>
-        new Field(name, nullable, ArrowType.List.INSTANCE,
-          Seq(toArrowField("element", elementType, containsNull)).asJava)
+        val fieldType = new FieldType(nullable, ArrowType.List.INSTANCE, null)
+        new Field(name, fieldType, Seq(toArrowField("element", elementType, containsNull)).asJava)
       case StructType(fields) =>
-        new Field(name, nullable, ArrowType.Struct.INSTANCE,
+        val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
+        new Field(name, fieldType,
           fields.map { field =>
             toArrowField(field.name, field.dataType, field.nullable)
           }.toSeq.asJava)
       case dataType =>
-        new Field(name, nullable, toArrowType(dataType), Seq.empty[Field].asJava)
+        val fieldType = new FieldType(nullable, toArrowType(dataType), null)
+        new Field(name, fieldType, Seq.empty[Field].asJava)
     }
   }
 
