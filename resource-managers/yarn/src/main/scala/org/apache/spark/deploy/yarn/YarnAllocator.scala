@@ -269,10 +269,12 @@ private[yarn] class YarnAllocator(
     val allocatedContainers = allocateResponse.getAllocatedContainers()
 
     if (allocatedContainers.size > 0) {
-      logDebug("Allocated containers: %d. Current executor count: %d. Cluster resources: %s."
+      logDebug(("Allocated containers: %d. Current executor count: %d. " +
+        "Launching executor count: %d. Cluster resources: %s.")
         .format(
           allocatedContainers.size,
           numExecutorsRunning.get,
+          numExecutorsStarting.get,
           allocateResponse.getAvailableResources))
 
       handleAllocatedContainers(allocatedContainers.asScala)
@@ -298,6 +300,9 @@ private[yarn] class YarnAllocator(
     val numPendingAllocate = pendingAllocate.size
     val missing = targetNumExecutors - numPendingAllocate -
       numExecutorsStarting.get - numExecutorsRunning.get
+    logDebug(s"Updating resource requests, target: $targetNumExecutors, " +
+      s"pending: $numPendingAllocate, running: ${numExecutorsRunning.get}, " +
+      s"executorsStarting: ${numExecutorsStarting.get}")
 
     if (missing > 0) {
       logInfo(s"Will request $missing executor container(s), each with " +
