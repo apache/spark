@@ -50,6 +50,8 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     }
     assert(columnVector.isNullAt(10))
 
+    assert(columnVector.getBooleans(0, 10) === (0 until 10).map(i => (i % 2 == 0)))
+
     columnVector.close()
     allocator.close()
   }
@@ -76,6 +78,8 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
       assert(columnVector.getByte(i) === i.toByte)
     }
     assert(columnVector.isNullAt(10))
+
+    assert(columnVector.getBytes(0, 10) === (0 until 10).map(i => i.toByte))
 
     columnVector.close()
     allocator.close()
@@ -104,6 +108,8 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     }
     assert(columnVector.isNullAt(10))
 
+    assert(columnVector.getShorts(0, 10) === (0 until 10).map(i => i.toShort))
+
     columnVector.close()
     allocator.close()
   }
@@ -130,6 +136,8 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
       assert(columnVector.getInt(i) === i)
     }
     assert(columnVector.isNullAt(10))
+
+    assert(columnVector.getInts(0, 10) === (0 until 10))
 
     columnVector.close()
     allocator.close()
@@ -158,6 +166,8 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     }
     assert(columnVector.isNullAt(10))
 
+    assert(columnVector.getLongs(0, 10) === (0 until 10).map(i => i.toLong))
+
     columnVector.close()
     allocator.close()
   }
@@ -185,6 +195,8 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     }
     assert(columnVector.isNullAt(10))
 
+    assert(columnVector.getFloats(0, 10) === (0 until 10).map(i => i.toFloat))
+
     columnVector.close()
     allocator.close()
   }
@@ -211,6 +223,8 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
       assert(columnVector.getDouble(i) === i.toDouble)
     }
     assert(columnVector.isNullAt(10))
+
+    assert(columnVector.getDoubles(0, 10) === (0 until 10).map(i => i.toDouble))
 
     columnVector.close()
     allocator.close()
