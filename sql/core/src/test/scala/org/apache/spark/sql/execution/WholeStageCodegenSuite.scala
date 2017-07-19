@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Add, Literal, Stack}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -26,6 +25,7 @@ import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions.{avg, broadcast, col, max}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -137,7 +137,6 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
       val df1 = Seq((1, 1), (2, 2), (3, 3)).toDF("key", "int")
       val df2 = Seq((1, "1"), (2, "2"), (3, "3")).toDF("key", "str")
 
-      // join condition contains CodegenFallback expression (i.e., reflect)
       val df = df1.join(df2, df1("key") === df2("key"))
         .filter("int = 2 or reflect('java.lang.Integer', 'valueOf', str) = 1")
         .select("int")
