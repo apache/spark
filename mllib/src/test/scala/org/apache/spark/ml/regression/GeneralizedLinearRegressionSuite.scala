@@ -1593,13 +1593,13 @@ class GeneralizedLinearRegressionSuite
         .setFamily("gaussian")
         .setFitIntercept(fitIntercept)
       val model = trainer.fit(dataset)
-      val coefficientMatrix = model.summary.coefficientMatrix
+      val coefficients = model.summary.coefficientCollection
 
-      coefficientMatrix.map(_._1).zip(expectedFeature(idx)).foreach{ x => assert(x._1 === x._2,
+      coefficients.map(_._1).zip(expectedFeature(idx)).foreach{ x => assert(x._1 === x._2,
         "Feature name mismatch in summaryTable") }
-      assert(Vectors.dense(coefficientMatrix.map(_._2))
+      assert(Vectors.dense(coefficients.map(_._2))
         ~== expectedEstimate(idx) absTol 1E-3, "Coefficient mismatch in summaryTable")
-      assert(Vectors.dense(coefficientMatrix.map(_._3))
+      assert(Vectors.dense(coefficients.map(_._3))
         ~== expectedStdError(idx) absTol 1E-3, "Standard error mismatch in summaryTable")
       idx += 1
     }

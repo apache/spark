@@ -1477,11 +1477,10 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   }
 
   /**
-   * Coefficient matrix with feature name, coefficient, standard error,
+   * Collection of feature name, coefficient, standard error,
    * tValue and pValue.
    */
-  @Since("2.3.0")
-  lazy val coefficientMatrix: Array[(String, Double, Double, Double, Double)] = {
+  private[ml] lazy val coefficientCollection: Array[(String, Double, Double, Double, Double)] = {
     if (isNormalSolver) {
       var featureNamesLocal = featureNames
       var coefficients = model.coefficients.toArray
@@ -1498,7 +1497,7 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
       result
     } else {
       throw new UnsupportedOperationException(
-        "No summary table available for this GeneralizedLinearRegressionModel")
+        "No summary available for this GeneralizedLinearRegressionModel")
     }
   }
 
@@ -1509,8 +1508,8 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   private[regression] def showString(_numRows: Int, truncate: Int = 20,
                                      numDigits: Int = 3): String = {
     val numRows = _numRows.max(1)
-    val data = coefficientMatrix.take(numRows)
-    val hasMoreData = coefficientMatrix.size > numRows
+    val data = coefficientCollection.take(numRows)
+    val hasMoreData = coefficientCollection.size > numRows
 
     val colNames = Array("Feature", "Estimate", "StdError", "TValue", "PValue")
     val numCols = colNames.size
@@ -1599,43 +1598,16 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   }
 
   /**
-   * Displays the summary of a GeneralizedLinearModel fit.
-   *
-   * @since 2.3.0
-   */
-  def show(): Unit = {
-    val numRows = coefficientMatrix.size
-    show(numRows, true, 3)
-  }
-
-  /**
-   * Displays the top numRows rows of the summary of a GeneralizedLinearModel fit.
-   *
-   * @param numRows Number of rows to show
-   *
-   * @since 2.3.0
-   */
-  @Since("2.3.0")
-  def show(numRows: Int): Unit = {
-    show(numRows, true, 3)
-  }
-
-  /**
    * Displays the summary of a GeneralizedLinearModel fit. Strings more than 20 characters
-   * will be truncated, and all cells will be aligned right.
-   *
-   * @param numRows Number of rows to show
-   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
-   *              be truncated and all cells will be aligned right
-   * @param numDigits Number of decimal places used to round numerical values.
+   * will be truncated, and all cells will be aligned right. Numbers are rounded to three
+   * decimal places.
    *
    * @since 2.3.0
    */
   // scalastyle:off println
-  def show(numRows: Int, truncate: Boolean, numDigits: Int): Unit = if (truncate) {
-    println(showString(numRows, truncate = 20, numDigits))
-  } else {
-    println(showString(numRows, truncate = 0, numDigits))
+  def show(): Unit = {
+    println(showString(coefficientCollection.size, truncate = 20, 3))
   }
   // scalastyle:on println
+
 }
