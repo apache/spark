@@ -29,7 +29,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * A column backed by Apache Arrow.
  */
-public final class ArrowColumnVector extends ColumnVector {
+public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private ValueVector vector;
   private ValueVector.Accessor nulls;
@@ -51,7 +51,7 @@ public final class ArrowColumnVector extends ColumnVector {
   private UInt4Vector listOffsetData;
 
   public ArrowColumnVector(ValueVector vector) {
-    super(vector.getValueCapacity(), DataTypes.NullType, MemoryMode.OFF_HEAP);
+    super(vector.getValueCapacity(), MemoryMode.OFF_HEAP);
     initialize(vector);
   }
 
@@ -80,26 +80,6 @@ public final class ArrowColumnVector extends ColumnVector {
   //
 
   @Override
-  public void putNotNull(int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putNull(int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putNulls(int rowId, int count) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putNotNulls(int rowId, int count) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public boolean isNullAt(int rowId) {
     return nulls.isNull(rowId);
   }
@@ -107,16 +87,6 @@ public final class ArrowColumnVector extends ColumnVector {
   //
   // APIs dealing with Booleans
   //
-
-  @Override
-  public void putBoolean(int rowId, boolean value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putBooleans(int rowId, int count, boolean value) {
-    throw new UnsupportedOperationException();
-  }
 
   @Override
   public boolean getBoolean(int rowId) {
@@ -139,21 +109,6 @@ public final class ArrowColumnVector extends ColumnVector {
   //
 
   @Override
-  public void putByte(int rowId, byte value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putBytes(int rowId, int count, byte value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putBytes(int rowId, int count, byte[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public byte getByte(int rowId) {
     return byteData.getAccessor().get(rowId);
   }
@@ -174,21 +129,6 @@ public final class ArrowColumnVector extends ColumnVector {
   //
 
   @Override
-  public void putShort(int rowId, short value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putShorts(int rowId, int count, short value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putShorts(int rowId, int count, short[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public short getShort(int rowId) {
     return shortData.getAccessor().get(rowId);
   }
@@ -207,26 +147,6 @@ public final class ArrowColumnVector extends ColumnVector {
   //
   // APIs dealing with Ints
   //
-
-  @Override
-  public void putInt(int rowId, int value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putInts(int rowId, int count, int value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putInts(int rowId, int count, int[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
 
   @Override
   public int getInt(int rowId) {
@@ -254,26 +174,6 @@ public final class ArrowColumnVector extends ColumnVector {
   //
 
   @Override
-  public void putLong(int rowId, long value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putLongs(int rowId, int count, long value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putLongs(int rowId, int count, long[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public long getLong(int rowId) {
     return longData.getAccessor().get(rowId);
   }
@@ -294,26 +194,6 @@ public final class ArrowColumnVector extends ColumnVector {
   //
 
   @Override
-  public void putFloat(int rowId, float value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putFloats(int rowId, int count, float value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putFloats(int rowId, int count, float[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public float getFloat(int rowId) {
     return floatData.getAccessor().get(rowId);
   }
@@ -332,26 +212,6 @@ public final class ArrowColumnVector extends ColumnVector {
   //
   // APIs dealing with doubles
   //
-
-  @Override
-  public void putDouble(int rowId, double value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putDoubles(int rowId, int count, double value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putDoubles(int rowId, int count, double[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
 
   @Override
   public double getDouble(int rowId) {
@@ -384,21 +244,7 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
-  public void putArray(int rowId, int offset, int length) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public void loadBytes(Array array) {
-    throw new UnsupportedOperationException();
-  }
-
-  //
-  // APIs dealing with Byte Arrays
-  //
-
-  @Override
-  public int putByteArray(int rowId, byte[] value, int offset, int count) {
     throw new UnsupportedOperationException();
   }
 
@@ -410,11 +256,6 @@ public final class ArrowColumnVector extends ColumnVector {
   public Decimal getDecimal(int rowId, int precision, int scale) {
     if (isNullAt(rowId)) return null;
     return Decimal.apply(decimalData.getAccessor().getObject(rowId), precision, scale);
-  }
-
-  @Override
-  public final void putDecimal(int rowId, Decimal value, int precision) {
-    throw new UnsupportedOperationException();
   }
 
   //
@@ -442,14 +283,6 @@ public final class ArrowColumnVector extends ColumnVector {
   @Override
   public byte[] getBinary(int rowId) {
     return binaryData.getAccessor().getObject(rowId);
-  }
-
-  @Override
-  protected void reserveInternal(int newCapacity) {
-    while (vector.getValueCapacity() <= newCapacity) {
-      vector.reAlloc();
-    }
-    capacity = vector.getValueCapacity();
   }
 
   private void initialize(ValueVector vector) {
@@ -505,6 +338,5 @@ public final class ArrowColumnVector extends ColumnVector {
     }
     numNulls = nulls.getNullCount();
     anyNullsSet = numNulls > 0;
-    isConstant = true;
   }
 }
