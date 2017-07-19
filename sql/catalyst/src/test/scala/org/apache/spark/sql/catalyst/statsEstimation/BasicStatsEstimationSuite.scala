@@ -54,6 +54,29 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     )
   }
 
+  test("range") {
+    val range = Range(1, 5, 1, None)
+    val rangeStats = Statistics(sizeInBytes = 4 * 8)
+    checkStats(
+      range,
+      expectedStatsCboOn = rangeStats,
+      expectedStatsCboOff = rangeStats)
+  }
+
+  test("windows") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    import org.apache.spark.sql.catalyst.dsl.plans._
+
+    val windows = plan.window(Seq(min(attribute).as('sum_attr)), Seq(attribute), Nil)
+    // val windows = plan.select(windowExpr(sum(attribute), spec).as('sum_attr)).analyze
+    val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
+
+    checkStats(
+      windows,
+      expectedStatsCboOn = windowsStats,
+      expectedStatsCboOff = windowsStats)
+  }
+
   test("limit estimation: limit < child's rowCount") {
     val localLimit = LocalLimit(Literal(2), plan)
     val globalLimit = GlobalLimit(Literal(2), plan)
