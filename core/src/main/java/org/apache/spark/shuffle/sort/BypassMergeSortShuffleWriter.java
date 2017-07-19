@@ -18,9 +18,9 @@
 package org.apache.spark.shuffle.sort;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import static java.nio.file.StandardOpenOption.*;
 import javax.annotation.Nullable;
 
 import scala.None$;
@@ -30,6 +30,7 @@ import scala.Tuple2;
 import scala.collection.Iterator;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -188,17 +189,20 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       return lengths;
     }
 
-    final FileOutputStream out = new FileOutputStream(outputFile, true);
+    final FileChannel out = FileChannel.open(outputFile.toPath(),
+    ImmutableSet.of(WRITE, APPEND, CREATE));
     final long writeStartTime = System.nanoTime();
     boolean threwException = true;
     try {
       for (int i = 0; i < numPartitions; i++) {
         final File file = partitionWriterSegments[i].file();
         if (file.exists()) {
-          final FileInputStream in = new FileInputStream(file);
+          final FileChannel in = FileChannel.open(file.toPath(), ImmutableSet.of(READ));
           boolean copyThrewException = true;
           try {
-            lengths[i] = Utils.copyStream(in, out, false, transferToEnabled);
+            final long size = in.size();
+            Utils.copyFileStreamNIO(in, out, 0, size);
+            lengths[i] = size;
             copyThrewException = false;
           } finally {
             Closeables.close(in, copyThrewException);
