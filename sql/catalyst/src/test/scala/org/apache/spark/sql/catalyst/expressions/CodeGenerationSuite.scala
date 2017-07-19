@@ -403,7 +403,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       fail(s"Incorrect Evaluation: expressions: $expr1, actual: $result1, expected: $expectedInt")
     }
 
-    // Code size of condition or then expression is large
+    // Code size of else expression is large
     var expr2 = exprStr
     for (i <- 1 to 512) {
       expr2 = CaseWhen(Seq((EqualTo(exprStr, Literal(s"def$i")), Literal(s"xyz$i"))), expr2)
@@ -419,7 +419,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       fail(s"Incorrect Evaluation: expressions: $expr2, actual: $result2, expected: $expectedStr")
     }
 
-    // Code size of total conditional branches is large
+    // total code size of conditional branches is large
     val cases = (1 to 512).map(i => (EqualTo(exprStr, Literal(s"def$i")), Literal(s"xyz$i")))
     val expr3 = CaseWhen(cases, exprStr).toCodegen()
     val plan3 = GenerateMutableProjection.generate(Seq(expr3))
