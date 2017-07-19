@@ -383,20 +383,53 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-21413: split large case when into blocks due to JVM code size limit") {
-    val expected = 2
-    var expr: Expression = BoundReference(0, IntegerType, true)
-    for (_ <- 1 to 10) {
-      expr = CaseWhen(Seq((EqualTo(expr, Literal(0)), Literal(-1))), expr)
+    val expectedInt = -2
+    var exprInt: Expression = BoundReference(0, IntegerType, true)
+    val expectedStr = UTF8String.fromString("abc")
+    val exprStr: Expression = BoundReference(0, StringType, true)
+
+    // Code size of condition or then expression is large
+    var expr1 = exprInt
+    for (i <- 1 to 10) {
+      expr1 = CaseWhen(Seq((EqualTo(expr1, Literal(i)), Literal(-1))), expr1).toCodegen()
+    }
+    val plan1 = GenerateMutableProjection.generate(Seq(expr1))
+    val row1 = new GenericInternalRow(Array[Any](1))
+    row1.setInt(0, expectedInt)
+    val actual1 = plan1(row1).toSeq(Seq(expr1.dataType))
+    assert(actual1.length == 1)
+    val result1 = actual1(0)
+    if (!checkResult(result1, expectedInt, expr1.dataType)) {
+      fail(s"Incorrect Evaluation: expressions: $expr1, actual: $result1, expected: $expectedInt")
+    }
+
+    // Code size of condition or then expression is large
+    var expr2 = exprStr
+    for (i <- 1 to 512) {
+      expr2 = CaseWhen(Seq((EqualTo(exprStr, Literal(s"def$i")), Literal(s"xyz$i"))), expr2)
         .toCodegen()
     }
-    val plan = GenerateMutableProjection.generate(Seq(expr))
-    val row = new GenericInternalRow(Array[Any](1))
-    row.setInt(0, expected)
-    val actual = plan(row).toSeq(Seq(expr.dataType))
-    assert(actual.length == 1)
+    val plan2 = GenerateMutableProjection.generate(Seq(expr2))
+    val row2 = new GenericInternalRow(Array[Any](1))
+    row2.update(0, expectedStr)
+    val actual2 = plan2(row2).toSeq(Seq(expr2.dataType))
+    assert(actual2.length == 1)
+    val result2 = actual2(0)
+    if (!checkResult(result2, expectedStr, expr2.dataType)) {
+      fail(s"Incorrect Evaluation: expressions: $expr2, actual: $result2, expected: $expectedStr")
+    }
 
-    if (!checkResult(actual(0), expected, expr.dataType)) {
-      fail(s"Incorrect Evaluation: expressions: $expr, actual: ${actual(0)}, expected: $expected")
+    // Code size of total conditional branches is large
+    val cases = (1 to 512).map(i => (EqualTo(exprStr, Literal(s"def$i")), Literal(s"xyz$i")))
+    val expr3 = CaseWhen(cases, exprStr).toCodegen()
+    val plan3 = GenerateMutableProjection.generate(Seq(expr3))
+    val row3 = new GenericInternalRow(Array[Any](1))
+    row3.update(0, expectedStr)
+    val actual3 = plan3(row3).toSeq(Seq(expr3.dataType))
+    assert(actual3.length == 1)
+    val result3 = actual3(0)
+    if (!checkResult(result3, expectedStr, expr3.dataType)) {
+      fail(s"Incorrect Evaluation: expressions: $expr3, actual: $result3, expected: $expectedStr")
     }
   }
 }
