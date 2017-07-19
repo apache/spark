@@ -667,6 +667,13 @@ class CloudPickler(Pickler):
     else:
         dispatch[file] = save_file
 
+    # WeakSet was added in 2.7.
+    if hasattr(weakref, 'WeakSet'):
+        def save_weakset(self, obj):
+            self.save_reduce(weakref.WeakSet, (list(obj),))
+
+        dispatch[weakref.WeakSet] = save_weakset
+      
     """Special functions for Add-on libraries"""
 
     def inject_numpy(self):
