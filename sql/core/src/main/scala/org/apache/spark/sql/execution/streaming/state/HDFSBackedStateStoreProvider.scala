@@ -350,24 +350,21 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
           throw new IOException(
             s"Error reading delta file $fileToRead of $this: key size cannot be $keySize")
         } else {
-          // If key size in an existing file is not a multiple of 8, round it to multiple of 8
-          val keyAllocationSize = ((keySize + 7) / 8) * 8
-          val keyRowBuffer = new Array[Byte](keyAllocationSize)
+          val keyRowBuffer = new Array[Byte](keySize)
           ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
 
           val keyRow = new UnsafeRow(keySchema.fields.length)
-          keyRow.pointTo(keyRowBuffer, keyAllocationSize)
+          keyRow.pointTo(keyRowBuffer, keySize)
 
           val valueSize = input.readInt()
           if (valueSize < 0) {
             map.remove(keyRow)
           } else {
-            // If value size in an existing file is not a multiple of 8, round it to multiple of 8
-            val valueAllocationSize = ((valueSize + 7) / 8) * 8
-            val valueRowBuffer = new Array[Byte](valueAllocationSize)
+            val valueRowBuffer = new Array[Byte](valueSize)
             ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
-            valueRow.pointTo(valueRowBuffer, valueAllocationSize)
+            // If valueSize in existing file is not multiple of 8, round it down to multiple of 8
+            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             map.put(keyRow, valueRow)
           }
         }
@@ -417,25 +414,22 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
           throw new IOException(
             s"Error reading snapshot file $fileToRead of $this: key size cannot be $keySize")
         } else {
-          // If key size in an existing file is not a multiple of 8, round it to multiple of 8
-          val keyAllocationSize = ((keySize + 7) / 8) * 8
-          val keyRowBuffer = new Array[Byte](keyAllocationSize)
+          val keyRowBuffer = new Array[Byte](keySize)
           ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
 
           val keyRow = new UnsafeRow(keySchema.fields.length)
-          keyRow.pointTo(keyRowBuffer, keyAllocationSize)
+          keyRow.pointTo(keyRowBuffer, keySize)
 
           val valueSize = input.readInt()
           if (valueSize < 0) {
             throw new IOException(
               s"Error reading snapshot file $fileToRead of $this: value size cannot be $valueSize")
           } else {
-            // If value size in an existing file is not a multiple of 8, round it to multiple of 8
-            val valueAllocationSize = ((valueSize + 7) / 8) * 8
-            val valueRowBuffer = new Array[Byte](valueAllocationSize)
+            val valueRowBuffer = new Array[Byte](valueSize)
             ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
-            valueRow.pointTo(valueRowBuffer, valueAllocationSize)
+            // If valueSize in existing file is not multiple of 8, round it down to multiple of 8
+            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             map.put(keyRow, valueRow)
           }
         }

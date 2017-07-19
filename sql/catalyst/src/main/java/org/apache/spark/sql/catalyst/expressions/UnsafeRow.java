@@ -540,7 +540,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       row.baseObject, row.baseOffset, this.baseObject, this.baseOffset, row.sizeInBytes);
     // update the sizeInBytes.
     this.sizeInBytes = row.sizeInBytes;
-    assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
   }
 
   /**
@@ -667,7 +666,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     this.baseOffset = BYTE_ARRAY_OFFSET;
     this.sizeInBytes = in.readInt();
-    assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
     this.numFields = in.readInt();
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
     this.baseObject = new byte[sizeInBytes];
@@ -686,7 +684,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void read(Kryo kryo, Input in) {
     this.baseOffset = BYTE_ARRAY_OFFSET;
     this.sizeInBytes = in.readInt();
-    assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
     this.numFields = in.readInt();
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
     this.baseObject = new byte[sizeInBytes];
