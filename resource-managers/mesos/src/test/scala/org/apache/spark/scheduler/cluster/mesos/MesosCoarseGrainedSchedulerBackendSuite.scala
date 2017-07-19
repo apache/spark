@@ -33,6 +33,7 @@ import org.scalatest.mock.MockitoSugar
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
@@ -371,7 +372,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("failover timeout is set in created scheduler driver") {
     val failoverTimeoutIn = 3600.0
-    initializeSparkConf(Map("spark.mesos.driver.failoverTimeout" -> failoverTimeoutIn.toString))
+    initializeSparkConf(Map(DRIVER_FAILOVER_TIMEOUT.key -> failoverTimeoutIn.toString))
     sc = new SparkContext(sparkConf)
 
     val taskScheduler = mock[TaskSchedulerImpl]

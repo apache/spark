@@ -549,10 +549,11 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.driver.failoverTimeout</code></td>
   <td><code>0.0</code></td>
   <td>
-    The amount of time (in seconds) that the master will wait for the
+    The amount of time (in seconds) that the master will wait for the 
     driver to reconnect, after being temporarily disconnected, before 
     it tears down the driver framework by killing all its 
-    executors.
+    executors. The default value is zero, meaning no timeout: if the 
+    driver disconnects, the master immediately tears down the framework.
   </td>
 </tr>
 </table>
