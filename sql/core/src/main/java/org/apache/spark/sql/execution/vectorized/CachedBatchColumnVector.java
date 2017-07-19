@@ -36,10 +36,10 @@ public final class CachedBatchColumnVector extends ColumnVector {
   private ColumnAccessor columnAccessor;
 
   // a row where the compressed data is extracted
-  private transient UnsafeRow unsafeRow;
-  private transient BufferHolder bufferHolder;
-  private transient UnsafeRowWriter rowWriter;
-  private transient MutableUnsafeRow mutableRow;
+  private UnsafeRow unsafeRow;
+  private BufferHolder bufferHolder;
+  private UnsafeRowWriter rowWriter;
+  private MutableUnsafeRow mutableRow;
 
   // an accessor uses only column 0
   private final int ORDINAL = 0;
@@ -81,7 +81,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
       }
     } else {
       throw new UnsupportedOperationException("Row access order must be equal or ascending." +
-        " Internal row " + rowId + "is accessed after internal row "+ previousRowId + "was accessed.");
+        " Row " + rowId + "is accessed after internal row "+ previousRowId + "was accessed.");
     }
   }
 
