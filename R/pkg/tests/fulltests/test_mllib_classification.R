@@ -82,7 +82,7 @@ test_that("spark.svmLinear", {
   expect_error(collect(predictions))
   model <- spark.svmLinear(traindf, clicked ~ ., regParam = 0.1, handleInvalid = "skip")
   predictions <- predict(model, testdf)
-  expect_equal(class(collect(predictions)$clicked[1]), "character")
+  expect_equal(class(collect(predictions)$clicked[1]), "list")
 
 })
 
