@@ -1803,6 +1803,8 @@ def _to_corrected_pandas_type(dt):
         return np.int32
     elif type(dt) == FloatType:
         return np.float32
+    elif type(dt) == DateType or type(dt) == TimestampType:
+        return 'datetime64[ns]'
     else:
         return None
 

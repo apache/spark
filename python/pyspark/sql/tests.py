@@ -2882,6 +2882,7 @@ class ArrowTests(ReusedPySparkTestCase):
 
     @classmethod
     def setUpClass(cls):
+        from datetime import datetime
         ReusedPySparkTestCase.setUpClass()
         cls.spark = SparkSession(cls.sc)
         cls.spark.conf.set("spark.sql.execution.arrow.enable", "true")
@@ -2890,10 +2891,12 @@ class ArrowTests(ReusedPySparkTestCase):
             StructField("2_int_t", IntegerType(), True),
             StructField("3_long_t", LongType(), True),
             StructField("4_float_t", FloatType(), True),
-            StructField("5_double_t", DoubleType(), True)])
-        cls.data = [("a", 1, 10, 0.2, 2.0),
-                    ("b", 2, 20, 0.4, 4.0),
-                    ("c", 3, 30, 0.8, 6.0)]
+            StructField("5_double_t", DoubleType(), True),
+            StructField("6_date_t", DateType(), True),
+            StructField("7_timestamp_t", TimestampType(), True)])
+        cls.data = [("a", 1, 10, 0.2, 2.0, datetime(2011, 1, 1), datetime(1970, 1, 1, 0, 0, 0)),
+                    ("b", 2, 20, 0.4, 4.0, datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                    ("c", 3, 30, 0.8, 6.0, datetime(2013, 3, 3), datetime(2013, 3, 3, 3, 3, 3))]
 
     def assertFramesEqual(self, df_with_arrow, df_without):
         msg = ("DataFrame from Arrow is not equal" +
