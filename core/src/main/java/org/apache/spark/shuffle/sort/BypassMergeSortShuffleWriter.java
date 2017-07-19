@@ -190,7 +190,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
 
     final FileChannel out = FileChannel.open(outputFile.toPath(),
-    ImmutableSet.of(WRITE, APPEND, CREATE));
+      ImmutableSet.of(WRITE, APPEND, CREATE));
     final long writeStartTime = System.nanoTime();
     boolean threwException = true;
     try {
@@ -200,7 +200,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           final FileChannel in = FileChannel.open(file.toPath(), ImmutableSet.of(READ));
           boolean copyThrewException = true;
           try {
-            final long size = in.size();
+            long size = in.size();
             Utils.copyFileStreamNIO(in, out, 0, size);
             lengths[i] = size;
             copyThrewException = false;
