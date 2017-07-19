@@ -680,7 +680,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         .flatMapGroupsWithState(Update, ProcessingTimeTimeout)(stateFunc)
 
     testStream(result, Update)(
-      StartStream(ProcessingTime("1 second"), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
       AddData(inputData, "a"),
       AdvanceManualClock(1 * 1000),
       CheckLastBatch(("a", "1")),
@@ -745,7 +745,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
 
     testStream(result, Update)(
-      StartStream(ProcessingTime("1 second")),
+      StartStream(Trigger.ProcessingTime("1 second")),
       AddData(inputData, ("a", 11), ("a", 13), ("a", 15)), // Set timeout timestamp of ...
       CheckLastBatch(("a", 15)),                           // "a" to 15 + 5 = 20s, watermark to 5s
       AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
@@ -917,7 +917,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
           .flatMapGroupsWithState(Update, ProcessingTimeTimeout)(stateFunc)
 
       testStream(result, Update)(
-        StartStream(ProcessingTime("1 second"), triggerClock = clock),
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, ("a", 1L)),
         AdvanceManualClock(1 * 1000),
         CheckLastBatch(("a", "1"))
