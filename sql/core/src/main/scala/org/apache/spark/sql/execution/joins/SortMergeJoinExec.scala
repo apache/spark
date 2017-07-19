@@ -560,9 +560,6 @@ case class SortMergeJoinExec(
     val rightRow = ctx.freshName("rightRow")
     val rightVars = createRightVar(ctx, rightRow)
 
-    // Create variable for joinned row
-    val joinedRow = ctx.freshName("joinedRow")
-
     val iterator = ctx.freshName("iterator")
     val numOutput = metricTerm(ctx, "numOutputRows")
     val (beforeLoop, condCheck) = if (condition.isDefined) {
@@ -572,7 +569,6 @@ case class SortMergeJoinExec(
       val (rightBefore, rightAfter) = splitVarsByCondition(right.output, rightVars)
       // Generate code for condition
       ctx.currentVars = leftVars ++ rightVars
-      ctx.INPUT_ROW = joinedRow
       val cond = BindReferences.bindReference(condition.get, output).genCode(ctx)
       // evaluate the columns those used by condition before loop
       val before = s"""
@@ -601,7 +597,6 @@ case class SortMergeJoinExec(
        |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
        |  while ($iterator.hasNext()) {
        |    InternalRow $rightRow = (InternalRow) $iterator.next();
-       |    InternalRow $joinedRow = new JoinedRow($leftRow, $rightRow);
        |    ${condCheck.trim}
        |    $numOutput.add(1);
        |    ${consume(ctx, leftVars ++ rightVars)}
