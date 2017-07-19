@@ -136,10 +136,6 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitProject(p: Project): Statistics = visitUnaryNode(p)
 
-  override def visitRange(p: logical.Range): Statistics = {
-    p.computeStats()
-  }
-
   override def visitRepartition(p: Repartition): Statistics = default(p)
 
   override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = default(p)
@@ -160,4 +156,6 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitUnion(p: Union): Statistics = {
     Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).sum)
   }
+
+  override def visitWindow(p: Window): Statistics = visitUnaryNode(p)
 }
