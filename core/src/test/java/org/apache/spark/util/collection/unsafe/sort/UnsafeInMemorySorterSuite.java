@@ -54,7 +54,7 @@ public class UnsafeInMemorySorterSuite {
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
     final UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer,
       memoryManager,
-      mock(RecordComparator.class),
+      mock(RecordComparator.Factory.class),
       mock(PrefixComparator.class),
       100,
       shouldUseRadixSort());
@@ -92,14 +92,15 @@ public class UnsafeInMemorySorterSuite {
     }
     // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
     // use a dummy comparator
-    final RecordComparator recordComparator = new RecordComparator() {
+    final RecordComparator.Factory recordComparator = new RecordComparator.Factory() {
       @Override
-      public int compare(
-        Object leftBaseObject,
-        long leftBaseOffset,
-        Object rightBaseObject,
-        long rightBaseOffset) {
-        return 0;
+      public RecordComparator create() {
+        return new RecordComparator() {
+          @Override
+          public int compare(Object leftBaseObject, long leftBaseOffset, Object rightBaseObject, long rightBaseOffset) {
+            return 0;
+          }
+        };
       }
     };
     // Compute key prefixes based on the records' partition ids

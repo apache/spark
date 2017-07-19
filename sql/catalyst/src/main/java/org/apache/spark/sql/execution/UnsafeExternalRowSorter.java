@@ -83,8 +83,7 @@ public final class UnsafeExternalRowSorter {
       taskContext.taskMemoryManager(),
       sparkEnv.blockManager(),
       sparkEnv.serializerManager(),
-      taskContext,
-      new RowComparator(ordering, schema.length()),
+      taskContext, new RowComparatorFactory(ordering, schema.length()),
       prefixComparator,
       sparkEnv.conf().getInt("spark.shuffle.sort.initialBufferSize",
                              DEFAULT_INITIAL_SORT_BUFFER_SIZE),
@@ -193,6 +192,21 @@ public final class UnsafeExternalRowSorter {
     return sort();
   }
 
+  private static final class RowComparatorFactory implements RecordComparator.Factory {
+    private final Ordering<InternalRow> ordering;
+    private final int numFields;
+
+    private RowComparatorFactory(Ordering<InternalRow> ordering, int numFields) {
+      this.ordering = ordering;
+      this.numFields = numFields;
+    }
+
+    @Override
+    public RecordComparator create() {
+      return new RowComparator(ordering, numFields);
+    }
+  }
+
   private static final class RowComparator extends RecordComparator {
     private final Ordering<InternalRow> ordering;
     private final int numFields;
@@ -211,10 +225,7 @@ public final class UnsafeExternalRowSorter {
       // TODO: Why are the sizes -1?
       row1.pointTo(baseObj1, baseOff1, -1);
       row2.pointTo(baseObj2, baseOff2, -1);
-      int comparison = ordering.compare(row1, row2);
-      row1.pointTo(null, 0L, -1);
-      row2.pointTo(null, 0L, -1);
-      return comparison;
+      return ordering.compare(row1, row2);
     }
   }
 }

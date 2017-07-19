@@ -65,14 +65,15 @@ public class UnsafeExternalSorterSuite {
   final PrefixComparator prefixComparator = PrefixComparators.LONG;
   // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
   // use a dummy comparator
-  final RecordComparator recordComparator = new RecordComparator() {
+  final RecordComparator.Factory recordComparatorFactory = new RecordComparator.Factory() {
     @Override
-    public int compare(
-      Object leftBaseObject,
-      long leftBaseOffset,
-      Object rightBaseObject,
-      long rightBaseOffset) {
-      return 0;
+    public RecordComparator create() {
+      return new RecordComparator() {
+        @Override
+        public int compare(Object leftBaseObject, long leftBaseOffset, Object rightBaseObject, long rightBaseOffset) {
+          return 0;
+        }
+      };
     }
   };
 
@@ -154,7 +155,7 @@ public class UnsafeExternalSorterSuite {
       blockManager,
       serializerManager,
       taskContext,
-      recordComparator,
+      recordComparatorFactory,
       prefixComparator,
       /* initialSize */ 1024,
       pageSizeBytes,
@@ -415,7 +416,7 @@ public class UnsafeExternalSorterSuite {
       blockManager,
       serializerManager,
       taskContext,
-      recordComparator,
+      recordComparatorFactory,
       prefixComparator,
       1024,
       pageSizeBytes,

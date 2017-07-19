@@ -34,4 +34,8 @@ public abstract class RecordComparator {
     long leftBaseOffset,
     Object rightBaseObject,
     long rightBaseOffset);
+
+  public interface Factory {
+    RecordComparator create();
+  }
 }
