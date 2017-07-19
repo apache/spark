@@ -24,12 +24,10 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A column backed by an in memory JVM array.
+ * A column backed by data compressed thru ColumnAccessor
+ * this is a wrapper to read compressed data for table cache
  */
 public final class CachedBatchColumnVector extends ColumnVector {
-
-  // keep compressed data
-  private byte[] buffer;
 
   // accessor for a column
   private ColumnAccessor columnAccessor;
@@ -64,12 +62,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
   public void close() {
   }
 
-  private void setColumnAccessor() {
-    ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
-    columnAccessor = ColumnAccessor$.MODULE$.apply(type, byteBuffer);
-  }
-
-  // call extractTo() before getting actual data
+  // call extractTo() for rowId only once before getting actual data
   private void prepareAccess(int rowId) {
     if (previousRowId + 1 == rowId) {
       assert (columnAccessor.hasNext());
@@ -233,11 +226,6 @@ public final class CachedBatchColumnVector extends ColumnVector {
     throw new UnsupportedOperationException();
   }
 
-  /**
-   * Returns the dictionary Id for rowId.
-   * This should only be called when the ColumnVector is dictionaryIds.
-   * We have this separate method for dictionaryIds as per SPARK-16928.
-   */
   public int getDictId(int rowId) {
     throw new UnsupportedOperationException();
   }
@@ -384,18 +372,17 @@ public final class CachedBatchColumnVector extends ColumnVector {
     return columnVector.getUTF8String(ROWID);
   }
 
-  // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
     capacity = newCapacity;
   }
 
   private void initialize(byte[] buffer, DataType type) {
-    this.buffer = buffer;
     this.type = type;
 
     if (columnAccessor == null) {
-      setColumnAccessor();
+      ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
+      columnAccessor = ColumnAccessor$.MODULE$.apply(type, byteBuffer);
     }
     if (columnVector == null) {
       columnVector = new OnHeapColumnVector(1, type);
