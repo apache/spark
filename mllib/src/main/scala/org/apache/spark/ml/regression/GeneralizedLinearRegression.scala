@@ -1505,7 +1505,8 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
     BigDecimal(x).setScale(digit, BigDecimal.RoundingMode.HALF_UP).toString()
   }
 
-  private[regression] def showString(_numRows: Int, truncate: Int = 20,
+  private[regression] def showString(_numRows: Int,
+                                     truncate: Int = 20,
                                      numDigits: Int = 3): String = {
     val numRows = _numRows.max(1)
     val data = coefficientCollection.take(numRows)
