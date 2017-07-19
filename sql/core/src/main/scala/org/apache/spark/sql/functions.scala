@@ -3188,7 +3188,7 @@ object functions {
      * Defines a deterministic user-defined function of ${x} arguments as user-defined
      * function (UDF). The data types are automatically inferred based on the function's
      * signature. To change a UDF to nondeterministic, call the API
-     * [[UserDefinedFunction.asNondeterministic()]].
+     * `UserDefinedFunction.asNondeterministic()`.
      *
      * @group udf_funcs
      * @since 1.3.0
@@ -3207,7 +3207,7 @@ object functions {
    * Defines a deterministic user-defined function of 0 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3223,7 +3223,7 @@ object functions {
    * Defines a deterministic user-defined function of 1 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3239,7 +3239,7 @@ object functions {
    * Defines a deterministic user-defined function of 2 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3255,7 +3255,7 @@ object functions {
    * Defines a deterministic user-defined function of 3 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3271,7 +3271,7 @@ object functions {
    * Defines a deterministic user-defined function of 4 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3287,7 +3287,7 @@ object functions {
    * Defines a deterministic user-defined function of 5 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3303,7 +3303,7 @@ object functions {
    * Defines a deterministic user-defined function of 6 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3319,7 +3319,7 @@ object functions {
    * Defines a deterministic user-defined function of 7 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3335,7 +3335,7 @@ object functions {
    * Defines a deterministic user-defined function of 8 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3351,7 +3351,7 @@ object functions {
    * Defines a deterministic user-defined function of 9 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3367,7 +3367,7 @@ object functions {
    * Defines a deterministic user-defined function of 10 arguments as user-defined
    * function (UDF). The data types are automatically inferred based on the function's
    * signature. To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3385,7 +3385,7 @@ object functions {
   /**
    * Defines a deterministic user-defined function (UDF) using a Scala closure. For this variant,
    * the caller must specify the output data type, and there is no automatic input type coercion.
-   * To change a UDF to nondeterministic, call the API [[UserDefinedFunction.asNondeterministic()]].
+   * To change a UDF to nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @param f  A closure in Scala
    * @param dataType  The output data type of the UDF
