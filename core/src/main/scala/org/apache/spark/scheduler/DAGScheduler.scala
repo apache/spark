@@ -282,7 +282,7 @@ class DAGScheduler(
   }
 
   /**
-   * Called by the TaskSetManager when it needs a speculative task is needed.
+   * Called by the TaskSetManager when it decides a speculative task is needed.
    */
   def speculativeTaskSubmitted(task: Task[_]): Unit = {
     eventProcessLoop.post(SpeculativeTaskSubmitted(task))

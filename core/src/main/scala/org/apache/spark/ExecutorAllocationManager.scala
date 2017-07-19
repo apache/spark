@@ -572,7 +572,7 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * Callback invokded when an extra executor is needed (See SPARK-19326)
+   * Callback invoked when an extra executor is needed (See SPARK-19326)
    */
   private def onExtraExecutorNeeded(): Unit = synchronized {
     val maxNeeded = math.max(math.min(maxNumExecutorsNeeded + 1, maxNumExecutors), minNumExecutors)
