@@ -1793,6 +1793,7 @@ def _to_corrected_pandas_type(dt):
     """
     When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
     This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
+    NOTE: DateType is inferred incorrectly as 'object', TimestampType is correct with datetime64[ns]
     """
     import numpy as np
     if type(dt) == ByteType:
@@ -1803,7 +1804,7 @@ def _to_corrected_pandas_type(dt):
         return np.int32
     elif type(dt) == FloatType:
         return np.float32
-    elif type(dt) == DateType or type(dt) == TimestampType:
+    elif type(dt) == DateType:
         return 'datetime64[ns]'
     else:
         return None
