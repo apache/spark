@@ -536,6 +536,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+    <td><code>spark.reducer.maxBlocksInFlightPerAddress</code></td>
+    <td>Int.MaxValue</td>
+    <td>
+      This configuration limits the number of remote blocks being fetched per reduce task from a
+      given host port. When a large number of blocks are being requested from a given address in a
+      single fetch or simultaneously, this could crash the serving executor or Node Manager. This
+      is especially useful to reduce the load on the Node Manager when external shuffle is enabled.
+      You can mitigate this issue by setting it to a lower value.
+    </td>
   <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
   <td>Long.MaxValue</td>
   <td>
