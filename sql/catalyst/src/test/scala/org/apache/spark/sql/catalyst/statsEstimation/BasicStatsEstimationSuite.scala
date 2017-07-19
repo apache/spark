@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -64,13 +66,8 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("windows") {
-    import org.apache.spark.sql.catalyst.dsl.expressions._
-    import org.apache.spark.sql.catalyst.dsl.plans._
-
     val windows = plan.window(Seq(min(attribute).as('sum_attr)), Seq(attribute), Nil)
-    // val windows = plan.select(windowExpr(sum(attribute), spec).as('sum_attr)).analyze
     val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
-
     checkStats(
       windows,
       expectedStatsCboOn = windowsStats,
