@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution.vectorized;
 import java.nio.ByteBuffer;
 
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.execution.columnar.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -33,10 +36,13 @@ public final class CachedBatchColumnVector extends ColumnVector {
   private ColumnAccessor columnAccessor;
 
   // a row where the compressed data is extracted
-  private ColumnVector columnVector;
+  private transient UnsafeRow unsafeRow;
+  private transient BufferHolder bufferHolder;
+  private transient UnsafeRowWriter rowWriter;
+  private transient MutableUnsafeRow mutableRow;
 
-  // an accessor uses only row 0 in columnVector
-  private final int ROWID = 0;
+  // an accessor uses only column 0
+  private final int ORDINAL = 0;
 
   // Keep row id that was previously accessed
   private int previousRowId = -1;
@@ -67,13 +73,14 @@ public final class CachedBatchColumnVector extends ColumnVector {
     if (previousRowId == rowId) {
       // do nothing
     } else if (previousRowId < rowId) {
-      for (int i = previousRowId + 1; i <= rowId; i++) {
+      for (; previousRowId < rowId; previousRowId++) {
         assert (columnAccessor.hasNext());
-        columnAccessor.extractTo(columnVector, ROWID);
+        bufferHolder.reset();
+        rowWriter.zeroOutNullBytes();
+        columnAccessor.extractTo(mutableRow, ORDINAL);
       }
-      previousRowId = rowId;
     } else {
-      throw new UnsupportedOperationException("Row access order must be ascending." +
+      throw new UnsupportedOperationException("Row access order must be equal or ascending." +
         " Internal row " + rowId + "is accessed after internal row "+ previousRowId + "was accessed.");
     }
   }
@@ -105,7 +112,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
   @Override
   public boolean isNullAt(int rowId) {
     prepareAccess(rowId);
-    return columnVector.isNullAt(ROWID);
+    return unsafeRow.isNullAt(ORDINAL);
   }
 
   //
@@ -125,7 +132,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
   @Override
   public boolean getBoolean(int rowId) {
     prepareAccess(rowId);
-    return columnVector.getBoolean(ROWID);
+    return unsafeRow.getBoolean(ORDINAL);
   }
 
   @Override
@@ -157,7 +164,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
   @Override
   public byte getByte(int rowId) {
     prepareAccess(rowId);
-    return columnVector.getByte(ROWID);
+    return unsafeRow.getByte(ORDINAL);
   }
 
   @Override
@@ -187,7 +194,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
   @Override
   public short getShort(int rowId) {
     prepareAccess(rowId);
-    return columnVector.getShort(ROWID);
+    return unsafeRow.getShort(ORDINAL);
   }
 
   @Override
@@ -222,7 +229,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
   @Override
   public int getInt(int rowId) {
     prepareAccess(rowId);
-    return columnVector.getInt(ROWID);
+    return unsafeRow.getInt(ORDINAL);
   }
 
   @Override
@@ -261,7 +268,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
   @Override
   public long getLong(int rowId) {
     prepareAccess(rowId);
-    return columnVector.getLong(ROWID);
+    return unsafeRow.getLong(ORDINAL);
   }
 
   @Override
@@ -296,7 +303,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
   @Override
   public float getFloat(int rowId) {
     prepareAccess(rowId);
-    return columnVector.getFloat(ROWID);
+    return unsafeRow.getFloat(ORDINAL);
   }
 
   @Override
@@ -331,7 +338,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
   @Override
   public double getDouble(int rowId) {
     prepareAccess(rowId);
-    return columnVector.getDouble(ROWID);
+    return unsafeRow.getDouble(ORDINAL);
   }
 
   @Override
@@ -373,7 +380,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
 
   public final UTF8String getUTF8String(int rowId) {
     prepareAccess(rowId);
-    return columnVector.getUTF8String(ROWID);
+    return unsafeRow.getUTF8String(ORDINAL);
   }
 
   @Override
@@ -388,8 +395,11 @@ public final class CachedBatchColumnVector extends ColumnVector {
       ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
       columnAccessor = ColumnAccessor$.MODULE$.apply(type, byteBuffer);
     }
-    if (columnVector == null) {
-      columnVector = new OnHeapColumnVector(1, type);
+    if (mutableRow == null) {
+      unsafeRow = new UnsafeRow(1);
+      bufferHolder = new BufferHolder(unsafeRow);
+      rowWriter = new UnsafeRowWriter(bufferHolder, 1);
+      mutableRow = new MutableUnsafeRow(rowWriter);
     }
 
     if (type instanceof ArrayType) {
