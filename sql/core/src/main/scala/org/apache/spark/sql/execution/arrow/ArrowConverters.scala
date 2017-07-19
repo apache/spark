@@ -84,11 +84,11 @@ private[sql] object ArrowConverters {
         val writer = new ArrowFileWriter(root, null, Channels.newChannel(out))
 
         Utils.tryWithSafeFinally {
-          var rowId = 0
-          while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowId < maxRecordsPerBatch)) {
+          var rowCount = 0
+          while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
             val row = rowIter.next()
             arrowWriter.write(row)
-            rowId += 1
+            rowCount += 1
           }
           arrowWriter.finish()
           writer.writeBatch()
