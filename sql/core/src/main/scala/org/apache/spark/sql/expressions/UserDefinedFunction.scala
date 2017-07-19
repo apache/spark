@@ -20,7 +20,6 @@ package org.apache.spark.sql.expressions
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.ScalaUDF
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.functions
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -55,7 +54,8 @@ case class UserDefinedFunction protected[sql] (
   def nullable: Boolean = _nullable
 
   /**
-   * Returns true when the UDF is deterministic.
+   * Returns true iff the UDF is deterministic, i.e. the UDF produces the same output given the same
+   * input.
    *
    * @since 2.3.0
    */
@@ -97,26 +97,26 @@ case class UserDefinedFunction protected[sql] (
   }
 
   /**
-   * Updates UserDefinedFunction with a given nullability.
+   * Updates UserDefinedFunction to non-nullable.
    *
    * @since 2.3.0
    */
-  def withNullability(nullable: Boolean): UserDefinedFunction = {
+  def asNonNullabe(): UserDefinedFunction = {
     if (nullable == _nullable) {
       this
     } else {
       val udf = copyAll()
-      udf._nullable = nullable
+      udf._nullable = false
       udf
     }
   }
 
   /**
-   * Updates UserDefinedFunction to non-deterministic.
+   * Updates UserDefinedFunction to nondeterministic.
    *
    * @since 2.3.0
    */
-  def nonDeterministic(): UserDefinedFunction = {
+  def asNondeterministic(): UserDefinedFunction = {
     if (!_deterministic) {
       this
     } else {
