@@ -81,7 +81,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   /**
    * Registers a user-defined function (UDF), for a UDF that's already defined using the Dataset
    * API (i.e. of type UserDefinedFunction). To change a UDF to nondeterministic, call the API
-   * [[UserDefinedFunction.asNondeterministic()]].
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * Example:
    * {{{
