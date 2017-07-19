@@ -286,7 +286,7 @@ case class CaseWhenCodegen(
       generatedCode += ifthen + "\nelse {\n"
       numIfthen += 1
 
-      if (generatedCode.length > 1024) {
+      if (generatedCode.length > 1024 && (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
         val flag = "flag"
         generatedCode += s" $flag = false;\n" + "}\n" * numIfthen
         val funcName = ctx.freshName("caseWhenNestedIf")
