@@ -1444,7 +1444,7 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaPredictionModel, Ja
         return self._call_java("weights")
 
 
-class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasParallelism, HasPredictionCol):
+class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
     """
     Parameters for OneVsRest and OneVsRestModel.
     """
@@ -1469,7 +1469,7 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasParallelism, HasPrediction
 
 
 @inherit_doc
-class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
+class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1590,22 +1590,6 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
             newOvr.setClassifier(self.getClassifier().copy(extra))
         return newOvr
 
-    @since("2.0.0")
-    def write(self):
-        """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
-    @classmethod
-    @since("2.0.0")
-    def read(cls):
-        """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
-
     @classmethod
     def _from_java(cls, java_stage):
         """
@@ -1638,7 +1622,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         return _java_obj
 
 
-class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
+class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1717,22 +1701,6 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
         newModel = Params.copy(self, extra)
         newModel.models = [model.copy(extra) for model in self.models]
         return newModel
-
-    @since("2.0.0")
-    def write(self):
-        """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
-    @classmethod
-    @since("2.0.0")
-    def read(cls):
-        """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):
