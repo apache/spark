@@ -77,6 +77,8 @@ public final class UnsafeInMemorySorter {
   private final TaskMemoryManager memoryManager;
 
   private final PrefixComparator prefixComparator;
+
+  @Nullable
   private final RecordComparator.Factory recordComparatorFactory;
 
   /**
