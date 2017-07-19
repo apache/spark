@@ -84,8 +84,6 @@ private[yarn] class YarnAllocator(
 
   private val numExecutorsStarting = new AtomicInteger(0)
 
-  @volatile private var numExecutorToBeLaunched = 0
-
   /**
    * Used to generate a unique ID per executor
    *
