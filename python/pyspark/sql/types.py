@@ -947,7 +947,7 @@ _array_unsigned_int_typecode_ctype_mappings = {
 
 def _int_size_to_type(size):
     """
-    Return the Scala type from the size of integers.
+    Return the Catalyst datatype from the size of integers.
     """
     if size <= 8:
         return ByteType
@@ -977,7 +977,7 @@ for _typecode in _array_signed_int_typecode_ctype_mappings.keys():
 
 # compute array typecode mappings for unsigned integer types
 for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
-    # JVM does not have unsigned types, so use signed types that is at list 1
+    # JVM does not have unsigned types, so use signed types that is at least 1
     # bit larger to store
     size = ctypes.sizeof(_array_unsigned_int_typecode_ctype_mappings[_typecode]) * 8 + 1
     dt = _int_size_to_type(size)
