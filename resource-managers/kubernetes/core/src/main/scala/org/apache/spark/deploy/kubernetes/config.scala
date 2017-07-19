@@ -485,6 +485,20 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
+  private[spark] val KUBERNETES_DRIVER_LIMIT_CORES =
+    ConfigBuilder("spark.kubernetes.driver.limit.cores")
+      .doc("Specify the hard cpu limit for the driver pod")
+      .stringConf
+      .createOptional
+
+  private[spark] val KUBERNETES_EXECUTOR_LIMIT_CORES =
+    ConfigBuilder("spark.kubernetes.executor.limit.cores")
+      .doc("Specify the hard cpu limit for a single executor pod")
+      .stringConf
+      .createOptional
+
+  private[spark] val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
+
   private[spark] def resolveK8sMaster(rawMasterString: String): String = {
     if (!rawMasterString.startsWith("k8s://")) {
       throw new IllegalArgumentException("Master URL should start with k8s:// in Kubernetes mode.")

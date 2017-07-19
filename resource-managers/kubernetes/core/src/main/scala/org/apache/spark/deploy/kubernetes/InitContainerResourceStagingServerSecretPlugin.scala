@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.kubernetes
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder, Secret}
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Pod, PodBuilder, Secret}
 
 import org.apache.spark.deploy.kubernetes.constants._
 
@@ -27,13 +27,13 @@ private[spark] trait InitContainerResourceStagingServerSecretPlugin {
    * from a resource staging server.
    */
   def mountResourceStagingServerSecretIntoInitContainer(
-      initContainer: ContainerBuilder): ContainerBuilder
+      initContainer: Container): Container
 
   /**
    * Configure the pod to attach a Secret volume which hosts secret files allowing the
    * init-container to retrieve dependencies from the resource staging server.
    */
-  def addResourceStagingServerSecretVolumeToPod(basePod: PodBuilder): PodBuilder
+  def addResourceStagingServerSecretVolumeToPod(basePod: Pod): Pod
 }
 
 private[spark] class InitContainerResourceStagingServerSecretPluginImpl(
@@ -42,21 +42,25 @@ private[spark] class InitContainerResourceStagingServerSecretPluginImpl(
     extends InitContainerResourceStagingServerSecretPlugin {
 
   override def mountResourceStagingServerSecretIntoInitContainer(
-      initContainer: ContainerBuilder): ContainerBuilder = {
-    initContainer.addNewVolumeMount()
-      .withName(INIT_CONTAINER_SECRET_VOLUME_NAME)
-      .withMountPath(initContainerSecretMountPath)
-      .endVolumeMount()
+      initContainer: Container): Container = {
+    new ContainerBuilder(initContainer)
+      .addNewVolumeMount()
+        .withName(INIT_CONTAINER_SECRET_VOLUME_NAME)
+        .withMountPath(initContainerSecretMountPath)
+        .endVolumeMount()
+      .build()
   }
 
-  override def addResourceStagingServerSecretVolumeToPod(basePod: PodBuilder): PodBuilder = {
-    basePod.editSpec()
-      .addNewVolume()
-        .withName(INIT_CONTAINER_SECRET_VOLUME_NAME)
-        .withNewSecret()
-          .withSecretName(initContainerSecretName)
-          .endSecret()
-        .endVolume()
-      .endSpec()
+  override def addResourceStagingServerSecretVolumeToPod(basePod: Pod): Pod = {
+    new PodBuilder(basePod)
+      .editSpec()
+        .addNewVolume()
+          .withName(INIT_CONTAINER_SECRET_VOLUME_NAME)
+          .withNewSecret()
+            .withSecretName(initContainerSecretName)
+            .endSecret()
+          .endVolume()
+        .endSpec()
+      .build()
   }
 }

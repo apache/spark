@@ -37,7 +37,8 @@ private[spark] class ShufflePodCache (
 
   def start(): Unit = {
     // seed the initial cache.
-    val pods = client.pods().withLabels(dsLabels.asJava).list()
+    val pods = client.pods()
+      .inNamespace(dsNamespace).withLabels(dsLabels.asJava).list()
     pods.getItems.asScala.foreach {
       pod =>
         if (Readiness.isReady(pod)) {
@@ -50,6 +51,7 @@ private[spark] class ShufflePodCache (
 
     watcher = client
       .pods()
+      .inNamespace(dsNamespace)
       .withLabels(dsLabels.asJava)
       .watch(new Watcher[Pod] {
         override def eventReceived(action: Watcher.Action, p: Pod): Unit = {

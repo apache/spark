@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.kubernetes.submit
 
+import java.io.File
+
 import org.apache.spark.util.Utils
 
 private[spark] object KubernetesFileUtils {
@@ -33,6 +35,10 @@ private[spark] object KubernetesFileUtils {
     filterUriStringsByScheme(uris, _ == "local")
   }
 
+  def getNonContainerLocalFiles(uris: Iterable[String]): Iterable[String] = {
+    filterUriStringsByScheme(uris, _ != "local")
+  }
+
   def getOnlySubmitterLocalFiles(uris: Iterable[String]): Iterable[String] = {
     filterUriStringsByScheme(uris, _ == "file")
   }
@@ -43,5 +49,48 @@ private[spark] object KubernetesFileUtils {
 
   def getOnlyRemoteFiles(uris: Iterable[String]): Iterable[String] = {
     filterUriStringsByScheme(uris, scheme => scheme != "file" && scheme != "local")
+  }
+
+  /**
+   * For the collection of uris, resolves any files as follows:
+   * - Files with scheme file:// are resolved to the given download path
+   * - Files with scheme local:// resolve to just the path of the URI
+   * - Otherwise, the URI is returned as-is.
+   */
+  def resolveSubmittedUris(fileUris: Iterable[String], fileDownloadPath: String)
+      : Iterable[String] = {
+    fileUris.map { uri =>
+      val fileUri = Utils.resolveURI(uri)
+      val fileScheme = Option(fileUri.getScheme).getOrElse("file")
+      fileScheme match {
+        case "file" =>
+          val fileName = new File(fileUri.getPath).getName
+          s"$fileDownloadPath/$fileName"
+        case "local" =>
+          fileUri.getPath
+        case _ => uri
+      }
+    }
+  }
+
+  /**
+   * If any file uri has any scheme other than local:// it is mapped as if the file
+   * was downloaded to the file download path. Otherwise, it is mapped to the path
+   * part of the URI.
+   */
+  def resolveFilePaths(fileUris: Iterable[String], fileDownloadPath: String): Iterable[String] = {
+    fileUris.map { uri =>
+      resolveFilePath(uri, fileDownloadPath)
+    }
+  }
+
+  def resolveFilePath(uri: String, fileDownloadPath: String): String = {
+    val fileUri = Utils.resolveURI(uri)
+    if (Option(fileUri.getScheme).getOrElse("file") == "local") {
+      fileUri.getPath
+    } else {
+      val fileName = new File(fileUri.getPath).getName
+      s"$fileDownloadPath/$fileName"
+    }
   }
 }

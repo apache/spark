@@ -70,8 +70,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         sparkConf.get(INIT_CONTAINER_FILES_DOWNLOAD_LOCATION),
         sparkConf.get(INIT_CONTAINER_MOUNT_TIMEOUT),
         configMap,
-        configMapKey,
-        executorInitContainerSecretVolumePlugin)
+        configMapKey)
     }
     if (maybeConfigMap.isEmpty) {
       logWarning("The executor's init-container config map was not specified. Executors will" +
@@ -89,7 +88,11 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
     new KubernetesClusterSchedulerBackend(
-      sc.taskScheduler.asInstanceOf[TaskSchedulerImpl], sc, bootStrap, kubernetesClient)
+        sc.taskScheduler.asInstanceOf[TaskSchedulerImpl],
+        sc,
+        bootStrap,
+        executorInitContainerSecretVolumePlugin,
+        kubernetesClient)
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {

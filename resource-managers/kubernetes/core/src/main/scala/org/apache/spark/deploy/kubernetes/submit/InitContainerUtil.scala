@@ -18,19 +18,18 @@ package org.apache.spark.deploy.kubernetes.submit
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import io.fabric8.kubernetes.api.model.{Container, PodBuilder}
+import io.fabric8.kubernetes.api.model.{Container, Pod, PodBuilder}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.kubernetes.constants._
 
 private[spark] object InitContainerUtil {
 
-  private val OBJECT_MAPPER = new ObjectMapper().registerModule(new DefaultScalaModule)
+  private val OBJECT_MAPPER = new ObjectMapper().registerModule(DefaultScalaModule)
 
-  def appendInitContainer(
-    originalPodSpec: PodBuilder, initContainer: Container): PodBuilder = {
+  def appendInitContainer(originalPodSpec: Pod, initContainer: Container): Pod = {
     val resolvedInitContainers = originalPodSpec
-      .editMetadata()
+      .getMetadata
       .getAnnotations
       .asScala
       .get(INIT_CONTAINER_ANNOTATION)
@@ -40,10 +39,11 @@ private[spark] object InitContainerUtil {
         existingInitContainers ++ Seq(initContainer)
       }.getOrElse(Seq(initContainer))
     val resolvedSerializedInitContainers = OBJECT_MAPPER.writeValueAsString(resolvedInitContainers)
-    originalPodSpec
+    new PodBuilder(originalPodSpec)
       .editMetadata()
-      .removeFromAnnotations(INIT_CONTAINER_ANNOTATION)
-      .addToAnnotations(INIT_CONTAINER_ANNOTATION, resolvedSerializedInitContainers)
-      .endMetadata()
+        .removeFromAnnotations(INIT_CONTAINER_ANNOTATION)
+        .addToAnnotations(INIT_CONTAINER_ANNOTATION, resolvedSerializedInitContainers)
+        .endMetadata()
+      .build()
   }
 }

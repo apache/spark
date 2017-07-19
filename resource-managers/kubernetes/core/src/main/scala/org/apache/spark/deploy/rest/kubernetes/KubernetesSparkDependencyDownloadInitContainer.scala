@@ -76,7 +76,6 @@ private[spark] class KubernetesSparkDependencyDownloadInitContainer(
     fileFetcher: FileFetcher,
     resourceStagingServerSslOptions: SSLOptions) extends Logging {
 
-
   private implicit val downloadExecutor = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("download-executor"))
   private val maybeResourceStagingServerUri = sparkConf.get(RESOURCE_STAGING_SERVER_URI)

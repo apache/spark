@@ -67,6 +67,8 @@ package object constants {
   private[spark] val ENV_DRIVER_ARGS = "SPARK_DRIVER_ARGS"
   private[spark] val ENV_DRIVER_JAVA_OPTS = "SPARK_DRIVER_JAVA_OPTS"
   private[spark] val ENV_MOUNTED_FILES_DIR = "SPARK_MOUNTED_FILES_DIR"
+  private[spark] val ENV_PYSPARK_FILES = "PYSPARK_FILES"
+  private[spark] val ENV_PYSPARK_PRIMARY = "PYSPARK_PRIMARY"
 
   // Bootstrapping dependencies with the init-container
   private[spark] val INIT_CONTAINER_ANNOTATION = "pod.beta.kubernetes.io/init-containers"

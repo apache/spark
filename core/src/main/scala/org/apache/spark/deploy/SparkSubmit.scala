@@ -279,8 +279,8 @@ object SparkSubmit extends CommandLineUtils {
     (clusterManager, deployMode) match {
       case (KUBERNETES, CLIENT) =>
         printErrorAndExit("Client mode is currently not supported for Kubernetes.")
-      case (KUBERNETES, CLUSTER) if args.isPython || args.isR =>
-        printErrorAndExit("Kubernetes does not currently support python or R applications.")
+      case (KUBERNETES, CLUSTER) if args.isR =>
+        printErrorAndExit("Kubernetes does not currently support R applications.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
@@ -372,7 +372,6 @@ object SparkSubmit extends CommandLineUtils {
         downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
     }
-
 
     // If we're running a python app, set the main class to our specific python runner
     if (args.isPython && deployMode == CLIENT) {
@@ -651,9 +650,18 @@ object SparkSubmit extends CommandLineUtils {
 
     if (isKubernetesCluster) {
       childMainClass = "org.apache.spark.deploy.kubernetes.submit.Client"
-      childArgs += args.primaryResource
-      childArgs += args.mainClass
-      childArgs ++= args.childArgs
+      if (args.isPython) {
+        childArgs ++= Array("--primary-py-file", args.primaryResource)
+        childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
+        childArgs ++= Array("--other-py-files", args.pyFiles)
+      } else {
+        childArgs ++= Array("--primary-java-resource", args.primaryResource)
+        childArgs ++= Array("--main-class", args.mainClass)
+      }
+      args.childArgs.foreach { arg =>
+        childArgs += "--arg"
+        childArgs += arg
+      }
     }
 
     // Load any properties specified through --conf and the default properties file

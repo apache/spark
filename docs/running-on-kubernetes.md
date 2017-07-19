@@ -182,6 +182,32 @@ The above mechanism using `kubectl proxy` can be used when we have authenticatio
 kubernetes-client library does not support. Authentication using X509 Client Certs and OAuth tokens
 is currently supported.
 
+### Running PySpark
+
+Running PySpark on Kubernetes leverages the same spark-submit logic when launching on Yarn and Mesos. 
+Python files can be distributed by including, in the conf, `--py-files` 
+
+Below is an example submission: 
+
+
+```
+    bin/spark-submit \
+      --deploy-mode cluster \
+      --master k8s://http://127.0.0.1:8001 \
+      --kubernetes-namespace default \
+      --conf spark.executor.memory=500m \
+      --conf spark.driver.memory=1G \
+      --conf spark.driver.cores=1 \
+      --conf spark.executor.cores=1 \
+      --conf spark.executor.instances=1 \
+      --conf spark.app.name=spark-pi \
+      --conf spark.kubernetes.driver.docker.image=spark-driver-py:latest \
+      --conf spark.kubernetes.executor.docker.image=spark-executor-py:latest \
+      --conf spark.kubernetes.initcontainer.docker.image=spark-init:latest \
+      --py-files local:///opt/spark/examples/src/main/python/sort.py \
+      local:///opt/spark/examples/src/main/python/pi.py 100
+```
+
 ## Dynamic Executor Scaling
 
 Spark on Kubernetes supports Dynamic Allocation with cluster mode. This mode requires running
@@ -718,6 +744,30 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td><code>IfNotPresent</code></td>
   <td>
     Docker image pull policy used when pulling Docker images with Kubernetes.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.limit.cores</code></td>
+  <td>(none)</td>
+  <td>
+    Specify the hard cpu limit for the driver pod
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.limit.cores</code></td>
+  <td>(none)</td>
+  <td>
+    Specify the hard cpu limit for a single executor pod
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.node.selector.[labelKey]</code></td> 
+  <td>(none)</td>
+  <td>
+    Adds to the node selector of the driver pod and executor pods, with key <code>labelKey</code> and the value as the 
+    configuration's value. For example, setting <code>spark.kubernetes.node.selector.identifier</code> to <code>myIdentifier</code>
+    will result in the driver pod and executors having a node selector with key <code>identifier</code> and value 
+    <code>myIdentifier</code>. Multiple node selector keys can be added by setting multiple configurations with this prefix.
   </td>
 </tr>
 </table>
