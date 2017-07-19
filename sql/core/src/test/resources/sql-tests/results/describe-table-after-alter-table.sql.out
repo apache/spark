@@ -57,7 +57,7 @@ Last Access [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	modified comment    	                    
-Properties          	[type=parquet]      	                    
+Table Properties    	[type=parquet]      	                    
 Location [not included in comparison]sql/core/spark-warehouse/table_with_comment
 
 

@@ -35,9 +35,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{UninterruptibleThread, Utils}
 
 /**
@@ -53,7 +55,8 @@ import org.apache.spark.util.{UninterruptibleThread, Utils}
 private[sql] trait SQLTestUtils
   extends SparkFunSuite with Eventually
   with BeforeAndAfterAll
-  with SQLTestData { self =>
+  with SQLTestData
+  with PlanTest { self =>
 
   protected def sparkContext = spark.sparkContext
 
@@ -89,28 +92,9 @@ private[sql] trait SQLTestUtils
     }
   }
 
-  /**
-   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
-   * configurations.
-   *
-   * @todo Probably this method should be moved to a more general place
-   */
-  protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map { key =>
-      if (spark.conf.contains(key)) {
-        Some(spark.conf.get(key))
-      } else {
-        None
-      }
-    }
-    (keys, values).zipped.foreach(spark.conf.set)
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => spark.conf.set(key, value)
-        case (key, None) => spark.conf.unset(key)
-      }
-    }
+  protected override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    SparkSession.setActiveSession(spark)
+    super.withSQLConf(pairs: _*)(f)
   }
 
   /**
@@ -149,6 +133,7 @@ private[sql] trait SQLTestUtils
         .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
     }
   }
+
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
    * returns.
@@ -161,6 +146,19 @@ private[sql] trait SQLTestUtils
       // wait for all tasks to finish before deleting files
       waitForTasksToFinish()
       Utils.deleteRecursively(dir)
+    }
+  }
+
+  /**
+   * Creates the specified number of temporary directories, which is then passed to `f` and will be
+   * deleted after `f` returns.
+   */
+  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
+    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
+    try f(files) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      files.foreach(Utils.deleteRecursively)
     }
   }
 

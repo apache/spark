@@ -251,6 +251,7 @@ private[spark] object UIData {
       remoteBlocksFetched: Long,
       localBlocksFetched: Long,
       remoteBytesRead: Long,
+      remoteBytesReadToDisk: Long,
       localBytesRead: Long,
       fetchWaitTime: Long,
       recordsRead: Long,
@@ -274,6 +275,7 @@ private[spark] object UIData {
           remoteBlocksFetched = metrics.remoteBlocksFetched,
           localBlocksFetched = metrics.localBlocksFetched,
           remoteBytesRead = metrics.remoteBytesRead,
+          remoteBytesReadToDisk = metrics.remoteBytesReadToDisk,
           localBytesRead = metrics.localBytesRead,
           fetchWaitTime = metrics.fetchWaitTime,
           recordsRead = metrics.recordsRead,
@@ -282,7 +284,7 @@ private[spark] object UIData {
         )
       }
     }
-    private val EMPTY = ShuffleReadMetricsUIData(0, 0, 0, 0, 0, 0, 0, 0)
+    private val EMPTY = ShuffleReadMetricsUIData(0, 0, 0, 0, 0, 0, 0, 0, 0)
   }
 
   case class ShuffleWriteMetricsUIData(
