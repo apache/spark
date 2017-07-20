@@ -36,11 +36,6 @@ object MathUtils {
    *         the range [minValue, maxValue].
    */
   def widthBucket(expr: Double, minValue: Double, maxValue: Double, numBucket: Long): Long = {
-
-    if (numBucket <= 0) {
-      throw new AnalysisException(s"The num of bucket must be greater than 0, but got ${numBucket}")
-    }
-
     val lower: Double = Math.min(minValue, maxValue)
     val upper: Double = Math.max(minValue, maxValue)
 

@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts.implicitCast
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -664,18 +663,49 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     test(3.14, 0, 4, 3, 3)
     test(2, 0, 4, 3, 2)
-    test(-1, 0, 3.2, 4, 0)
 
     test(3.14, 4, 0, 3, 1)
     test(2, 4, 0, 3, 2)
-    test(-1, 3.2, 0, 4, 5)
 
-    // numBucket <= 0
-    intercept[AnalysisException]{
+    // an underflow bucket numbered 0
+    test(-1, 0, 3.2, 4, 0)
+    test(1, 2, 3, 4, 0)
+
+    // an overflow bucket numbered num_buckets + 1
+    test(-1, 3.2, 0, 4, 5)
+    test(3, 2, 3, 2, 3)
+
+    // invalid argument
+    val e1 = intercept[RuntimeException] {
+      WidthBucket(Literal.create(1.0, DoubleType),
+        Literal.create(null, DoubleType),
+        Literal.create(2.0, DoubleType),
+        Literal.create(5L, LongType)).eval(EmptyRow)
+    }
+    assert(e1.getMessage.contains("The argument [2] of WIDTH_BUCKET function is NULL or invalid."))
+
+    val e2 = intercept[RuntimeException] {
+      WidthBucket(Literal.create(1.0, DoubleType),
+        Literal.create(1.0, DoubleType),
+        Literal.create(null, DoubleType),
+        Literal.create(5L, LongType)).eval(EmptyRow)
+    }
+    assert(e2.getMessage.contains("The argument [3] of WIDTH_BUCKET function is NULL or invalid."))
+
+    val e3 = intercept[RuntimeException] {
       WidthBucket(Literal.create(1.0, DoubleType),
         Literal.create(1.0, DoubleType),
         Literal.create(2.0, DoubleType),
-        Literal.create(-1L, LongType)).eval()
+        Literal.create(null, LongType)).eval(EmptyRow)
     }
+    assert(e3.getMessage.contains("The argument [4] of WIDTH_BUCKET function is NULL or invalid."))
+
+    val e4 = intercept[RuntimeException] {
+      WidthBucket(Literal.create(1.0, DoubleType),
+        Literal.create(1.0, DoubleType),
+        Literal.create(2.0, DoubleType),
+        Literal.create(-1L, LongType)).eval(EmptyRow)
+    }
+    assert(e4.getMessage.contains("The argument [4] of WIDTH_BUCKET function is NULL or invalid."))
   }
 }

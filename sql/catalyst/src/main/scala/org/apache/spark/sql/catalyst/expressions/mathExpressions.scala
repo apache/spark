@@ -1201,7 +1201,7 @@ case class BRound(child: Expression, scale: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, min_value, max_value, num_bucket) - Returns an long between 0 and `num_buckets`+1 by mapping the `expr` into buckets defined by the range [`min_value`, `max_value`].",
+  usage = "_FUNC_(expr, min_value, max_value, num_bucket) - Returns the `bucket` to which operand would be assigned in an equidepth histogram with `num_bucket` buckets, in the range `min_value` to `max_value`.",
   extended = """
     Examples:
       > SELECT _FUNC_(5.35, 0.024, 10.06, 5);
@@ -1219,18 +1219,44 @@ case class WidthBucket(
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
 
-  override def nullSafeEval(ex: Any, min: Any, max: Any, num: Any): Any = {
-    MathUtils.widthBucket(
-      ex.asInstanceOf[Double],
-      min.asInstanceOf[Double],
-      max.asInstanceOf[Double],
-      num.asInstanceOf[Long])
+  private val errMsg = "The argument [%d] of WIDTH_BUCKET function is NULL or invalid."
+
+  override def eval(input: InternalRow): Any = {
+
+    children.map(_.eval(input)).zipWithIndex.foreach { case (e, i) =>
+      if ((i > 0 && null == e) || (i == 3 && e.asInstanceOf[Long] < 0)) {
+        throw new RuntimeException(errMsg.format(i + 1))
+      }
+    }
+
+    if (null == expr.eval(input)) {
+      null
+    } else {
+      MathUtils.widthBucket(
+        expr.eval(input).asInstanceOf[Double],
+        minValue.eval(input).asInstanceOf[Double],
+        maxValue.eval(input).asInstanceOf[Double],
+        numBucket.eval(input).asInstanceOf[Long])
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mathUtils = MathUtils.getClass.getName.stripSuffix("$")
-    nullSafeCodeGen(ctx, ev, (ex, min, max, num) =>
-      s"${ev.value} = $mathUtils.widthBucket($ex, $min, $max, $num);"
-    )
+    val evals = children.map(_.genCode(ctx))
+    val inputs = evals.zipWithIndex.map { case (e, i) =>
+      s"""
+        if (($i > 0 && ${e.isNull}) || ($i == 3 && ${e.value} < 0)) {
+          throw new RuntimeException(String.format("$errMsg", $i + 1));
+        }
+      """
+    }
+    ev.copy(inputs.map(_.stripMargin).mkString("\n") + s"""
+      boolean ${ev.isNull} = ${evals(0).isNull};
+      long ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${evals(0).isNull}) {
+        ${ev.value} = $mathUtils.widthBucket(
+          ${evals(0).value}, ${evals(1).value}, ${evals(2).value}, ${evals(3).value});
+      }
+    """)
   }
 }
