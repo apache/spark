@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * A column backed by data compressed thru ColumnAccessor
  * this is a wrapper to read compressed data for table cache
  */
-public final class CachedBatchColumnVector extends ColumnVector {
+public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
 
   // accessor for a column
   private ColumnAccessor columnAccessor;
@@ -49,7 +49,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
 
 
   public CachedBatchColumnVector(byte[] buffer, int numRows, DataType type) {
-    super(numRows, DataTypes.NullType, MemoryMode.ON_HEAP);
+    super(numRows, type, MemoryMode.ON_HEAP);
     initialize(buffer, type);
     reserveInternal(numRows);
     reset();
@@ -90,26 +90,6 @@ public final class CachedBatchColumnVector extends ColumnVector {
   //
 
   @Override
-  public void putNotNull(int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putNull(int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putNulls(int rowId, int count) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putNotNulls(int rowId, int count) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public boolean isNullAt(int rowId) {
     prepareAccess(rowId);
     return unsafeRow.isNullAt(ORDINAL);
@@ -118,16 +98,6 @@ public final class CachedBatchColumnVector extends ColumnVector {
   //
   // APIs dealing with Booleans
   //
-
-  @Override
-  public void putBoolean(int rowId, boolean value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putBooleans(int rowId, int count, boolean value) {
-    throw new UnsupportedOperationException();
-  }
 
   @Override
   public boolean getBoolean(int rowId) {
@@ -147,21 +117,6 @@ public final class CachedBatchColumnVector extends ColumnVector {
   //
 
   @Override
-  public void putByte(int rowId, byte value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putBytes(int rowId, int count, byte value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putBytes(int rowId, int count, byte[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public byte getByte(int rowId) {
     prepareAccess(rowId);
     return unsafeRow.getByte(ORDINAL);
@@ -177,21 +132,6 @@ public final class CachedBatchColumnVector extends ColumnVector {
   //
 
   @Override
-  public void putShort(int rowId, short value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putShorts(int rowId, int count, short value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putShorts(int rowId, int count, short[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public short getShort(int rowId) {
     prepareAccess(rowId);
     return unsafeRow.getShort(ORDINAL);
@@ -205,26 +145,6 @@ public final class CachedBatchColumnVector extends ColumnVector {
   //
   // APIs dealing with Ints
   //
-
-  @Override
-  public void putInt(int rowId, int value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putInts(int rowId, int count, int value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putInts(int rowId, int count, int[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
 
   @Override
   public int getInt(int rowId) {
@@ -246,26 +166,6 @@ public final class CachedBatchColumnVector extends ColumnVector {
   //
 
   @Override
-  public void putLong(int rowId, long value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putLongs(int rowId, int count, long value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putLongs(int rowId, int count, long[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public long getLong(int rowId) {
     prepareAccess(rowId);
     return unsafeRow.getLong(ORDINAL);
@@ -281,26 +181,6 @@ public final class CachedBatchColumnVector extends ColumnVector {
   //
 
   @Override
-  public void putFloat(int rowId, float value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putFloats(int rowId, int count, float value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putFloats(int rowId, int count, float[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public float getFloat(int rowId) {
     prepareAccess(rowId);
     return unsafeRow.getFloat(ORDINAL);
@@ -314,26 +194,6 @@ public final class CachedBatchColumnVector extends ColumnVector {
   //
   // APIs dealing with doubles
   //
-
-  @Override
-  public void putDouble(int rowId, double value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putDoubles(int rowId, int count, double value) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putDoubles(int rowId, int count, double[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
-    throw new UnsupportedOperationException();
-  }
 
   @Override
   public double getDouble(int rowId) {
@@ -360,11 +220,6 @@ public final class CachedBatchColumnVector extends ColumnVector {
   }
 
   @Override
-  public void putArray(int rowId, int offset, int length) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public void loadBytes(ColumnVector.Array array) {
     throw new UnsupportedOperationException();
   }
@@ -373,24 +228,12 @@ public final class CachedBatchColumnVector extends ColumnVector {
   // APIs dealing with Byte Arrays
   //
 
-  @Override
-  public int putByteArray(int rowId, byte[] value, int offset, int length) {
-    throw new UnsupportedOperationException();
-  }
-
   public final UTF8String getUTF8String(int rowId) {
     prepareAccess(rowId);
     return unsafeRow.getUTF8String(ORDINAL);
   }
 
-  @Override
-  protected void reserveInternal(int newCapacity) {
-    capacity = newCapacity;
-  }
-
   private void initialize(byte[] buffer, DataType type) {
-    this.type = type;
-
     if (columnAccessor == null) {
       ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
       columnAccessor = ColumnAccessor$.MODULE$.apply(type, byteBuffer);
