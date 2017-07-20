@@ -159,9 +159,13 @@ private[sql] object Dataset {
 @InterfaceStability.Stable
 class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
-    @DeveloperApi @InterfaceStability.Unstable @transient val queryExecution: QueryExecution,
+    @transient private var _queryExecution: QueryExecution,
     encoder: Encoder[T])
   extends Serializable {
+
+  @DeveloperApi
+  @InterfaceStability.Unstable
+  def queryExecution: QueryExecution = _queryExecution
 
   queryExecution.assertAnalyzed()
 
@@ -2701,6 +2705,7 @@ class Dataset[T] private[sql](
    */
   def persist(): this.type = {
     sparkSession.sharedState.cacheManager.cacheQuery(this)
+    this._queryExecution = sparkSession.sessionState.executePlan(logicalPlan)
     this
   }
 
@@ -2748,6 +2753,7 @@ class Dataset[T] private[sql](
    */
   def unpersist(blocking: Boolean): this.type = {
     sparkSession.sharedState.cacheManager.uncacheQuery(this, blocking)
+    this._queryExecution = sparkSession.sessionState.executePlan(logicalPlan)
     this
   }
 

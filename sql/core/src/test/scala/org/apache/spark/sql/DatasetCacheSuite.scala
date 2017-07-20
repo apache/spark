@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.storage.StorageLevel
@@ -95,5 +96,21 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assert(ds.storageLevel == StorageLevel.NONE, "The Dataset ds should not be cached.")
     agged.unpersist()
     assert(agged.storageLevel == StorageLevel.NONE, "The Dataset agged should not be cached.")
+  }
+
+  test("Correct query plans after persist/unpersist") {
+    val ds = Seq(1).toDS()
+    assert(ds.queryExecution.executedPlan.collect {
+      case i: InMemoryTableScanExec => i
+    }.isEmpty, "The query plan should not contain cached relation before persist.")
+    ds.persist()
+    ds.count()
+    assert(ds.queryExecution.executedPlan.collect {
+      case i: InMemoryTableScanExec => i
+    }.nonEmpty, "The query plan should contain cached relation after persist.")
+    ds.unpersist()
+    assert(ds.queryExecution.executedPlan.collect {
+      case i: InMemoryTableScanExec => i
+    }.isEmpty, "The query plan should not contain cached relation after unpersist.")
   }
 }
