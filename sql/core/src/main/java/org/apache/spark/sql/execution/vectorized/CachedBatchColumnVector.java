@@ -81,7 +81,7 @@ public final class CachedBatchColumnVector extends ColumnVector {
       }
     } else {
       throw new UnsupportedOperationException("Row access order must be equal or ascending." +
-        " Row " + rowId + "is accessed after internal row "+ previousRowId + "was accessed.");
+        " Row " + rowId + "is accessed after row "+ previousRowId + "was accessed.");
     }
   }
 
