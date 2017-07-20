@@ -93,6 +93,6 @@ public abstract class StreamManager {
   /**
    * Called when a chunk is successfully sent.
    */
-  public void chunkSent(Object streamId) { }
+  public void chunkSent(long streamId) { }
 
 }

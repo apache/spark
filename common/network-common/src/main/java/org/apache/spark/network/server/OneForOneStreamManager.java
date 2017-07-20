@@ -153,19 +153,10 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   @Override
-  public void chunkSent(Object streamId) {
-    if (streamId instanceof Long) {
-      StreamState streamState = streams.get(streamId);
-      if (streamState != null) {
-        streamState.chunksBeingTransferred.decrementAndGet();
-      }
-    } else if (streamId instanceof String) {
-      StreamState streamState = streams.get(parseStreamChunkId((String) streamId).getLeft());
-      if (streamState != null) {
-        streamState.chunksBeingTransferred.decrementAndGet();
-      }
-    } else {
-      throw new IllegalArgumentException("A streamId should either be String or Long.");
+  public void chunkSent(long streamId) {
+    StreamState streamState = streams.get(streamId);
+    if (streamState != null) {
+      streamState.chunksBeingTransferred.decrementAndGet();
     }
   }
 
