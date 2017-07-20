@@ -32,6 +32,21 @@ import org.apache.spark.unsafe.types.UTF8String;
 public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   private final ArrowVectorAccessor accessor;
+  private final int valueCount;
+
+  private void ensureAccessible(int index) {
+    if (index < 0 || index >= valueCount) {
+      throw new IndexOutOfBoundsException(
+        String.format("index: %d, valueCount: %d", index, valueCount));
+    }
+  }
+
+  private void ensureAccessible(int index, int count) {
+    if (index < 0 || index + count > valueCount) {
+      throw new IndexOutOfBoundsException(
+        String.format("index range: [%d, %d), valueCount: %d", index, index + count, valueCount));
+    }
+  }
 
   @Override
   public long nullsNativeAddress() {
@@ -59,6 +74,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
+    ensureAccessible(rowId);
     return accessor.isNullAt(rowId);
   }
 
@@ -68,11 +84,13 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public boolean getBoolean(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getBoolean(rowId);
   }
 
   @Override
   public boolean[] getBooleans(int rowId, int count) {
+    ensureAccessible(rowId, count);
     boolean[] array = new boolean[count];
     for (int i = 0; i < count; ++i) {
       array[i] = accessor.getBoolean(rowId + i);
@@ -86,11 +104,13 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public byte getByte(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getByte(rowId);
   }
 
   @Override
   public byte[] getBytes(int rowId, int count) {
+    ensureAccessible(rowId, count);
     byte[] array = new byte[count];
     for (int i = 0; i < count; ++i) {
       array[i] = accessor.getByte(rowId + i);
@@ -104,11 +124,13 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public short getShort(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getShort(rowId);
   }
 
   @Override
   public short[] getShorts(int rowId, int count) {
+    ensureAccessible(rowId, count);
     short[] array = new short[count];
     for (int i = 0; i < count; ++i) {
       array[i] = accessor.getShort(rowId + i);
@@ -122,11 +144,13 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public int getInt(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getInt(rowId);
   }
 
   @Override
   public int[] getInts(int rowId, int count) {
+    ensureAccessible(rowId, count);
     int[] array = new int[count];
     for (int i = 0; i < count; ++i) {
       array[i] = accessor.getInt(rowId + i);
@@ -145,11 +169,13 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public long getLong(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getLong(rowId);
   }
 
   @Override
   public long[] getLongs(int rowId, int count) {
+    ensureAccessible(rowId, count);
     long[] array = new long[count];
     for (int i = 0; i < count; ++i) {
       array[i] = accessor.getLong(rowId + i);
@@ -163,11 +189,13 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public float getFloat(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getFloat(rowId);
   }
 
   @Override
   public float[] getFloats(int rowId, int count) {
+    ensureAccessible(rowId, count);
     float[] array = new float[count];
     for (int i = 0; i < count; ++i) {
       array[i] = accessor.getFloat(rowId + i);
@@ -181,11 +209,13 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public double getDouble(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getDouble(rowId);
   }
 
   @Override
   public double[] getDoubles(int rowId, int count) {
+    ensureAccessible(rowId, count);
     double[] array = new double[count];
     for (int i = 0; i < count; ++i) {
       array[i] = accessor.getDouble(rowId + i);
@@ -199,11 +229,13 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public int getArrayLength(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getArrayLength(rowId);
   }
 
   @Override
   public int getArrayOffset(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getArrayOffset(rowId);
   }
 
@@ -218,6 +250,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
+    ensureAccessible(rowId);
     return accessor.getDecimal(rowId, precision, scale);
   }
 
@@ -227,6 +260,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public UTF8String getUTF8String(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getUTF8String(rowId);
   }
 
@@ -236,6 +270,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
   @Override
   public byte[] getBinary(int rowId) {
+    ensureAccessible(rowId);
     return accessor.getBinary(rowId);
   }
 
@@ -282,6 +317,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     } else {
       throw new UnsupportedOperationException();
     }
+    valueCount = accessor.getValueCount();
     numNulls = accessor.getNullCount();
     anyNullsSet = numNulls > 0;
   }
@@ -291,17 +327,26 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     private final ValueVector vector;
     private final ValueVector.Accessor nulls;
 
+    private final int valueCount;
+    private final int nullCount;
+
     ArrowVectorAccessor(ValueVector vector) {
       this.vector = vector;
       this.nulls = vector.getAccessor();
+      this.valueCount = nulls.getValueCount();
+      this.nullCount = nulls.getNullCount();
     }
 
     final boolean isNullAt(int rowId) {
       return nulls.isNull(rowId);
     }
 
+    final int getValueCount() {
+      return valueCount;
+    }
+
     final int getNullCount() {
-      return nulls.getNullCount();
+      return nullCount;
     }
 
     final void close() {
