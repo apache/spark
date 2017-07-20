@@ -42,10 +42,5 @@ class MathUtilsSuite extends SparkFunSuite {
 
     // minValue == maxValue
     assert(widthBucket(10, 4, 4, 15) === 16)
-
-    // numBucket <= 0
-    intercept[AnalysisException]{
-      assert(widthBucket(100, 100, 5000, -1) === 1)
-    }
   }
 }
