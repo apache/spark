@@ -169,11 +169,12 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
       override def hasNext: Boolean = rowCount != 0
 
+      val row: UnsafeRow = new UnsafeRow(numFields)
+      val holder: BufferHolder = new BufferHolder(row, 0)
+      val rowWriter = new UnsafeRowWriter(holder, numFields)
+
       override def next(): InternalRow = {
 
-        val row: UnsafeRow = new UnsafeRow(numFields)
-        val holder: BufferHolder = new BufferHolder(row, 0)
-        val rowWriter = new UnsafeRowWriter(holder, numFields)
         holder.reset()
 
         var stringIndex = 0
