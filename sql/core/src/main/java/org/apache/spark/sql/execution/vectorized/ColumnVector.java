@@ -646,7 +646,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the decimal for rowId.
    */
-  public final Decimal getDecimal(int rowId, int precision, int scale) {
+  public Decimal getDecimal(int rowId, int precision, int scale) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       return Decimal.createUnsafe(getInt(rowId), precision, scale);
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
@@ -661,7 +661,7 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
 
-  public final void putDecimal(int rowId, Decimal value, int precision) {
+  public void putDecimal(int rowId, Decimal value, int precision) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       putInt(rowId, (int) value.toUnscaledLong());
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
@@ -675,7 +675,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the UTF8String for rowId.
    */
-  public final UTF8String getUTF8String(int rowId) {
+  public UTF8String getUTF8String(int rowId) {
     if (dictionary == null) {
       ColumnVector.Array a = getByteArray(rowId);
       return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
@@ -688,7 +688,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the byte array for rowId.
    */
-  public final byte[] getBinary(int rowId) {
+  public byte[] getBinary(int rowId) {
     if (dictionary == null) {
       ColumnVector.Array array = getByteArray(rowId);
       byte[] bytes = new byte[array.length];
@@ -956,7 +956,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Data type for this column.
    */
-  protected final DataType type;
+  protected DataType type;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
@@ -988,17 +988,17 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * If this is a nested type (array or struct), the column for the child data.
    */
-  protected final ColumnVector[] childColumns;
+  protected ColumnVector[] childColumns;
 
   /**
    * Reusable Array holder for getArray().
    */
-  protected final Array resultArray;
+  protected Array resultArray;
 
   /**
    * Reusable Struct holder for getStruct().
    */
-  protected final ColumnarBatch.Row resultStruct;
+  protected ColumnarBatch.Row resultStruct;
 
   /**
    * The Dictionary for this column.

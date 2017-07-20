@@ -1202,7 +1202,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val allocator = new RootAllocator(Long.MaxValue)
     val jsonReader = new JsonFileReader(jsonFile, allocator)
 
-    val arrowSchema = ArrowConverters.schemaToArrowSchema(sparkSchema)
+    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema)
     val jsonSchema = jsonReader.start()
     Validator.compareSchemas(arrowSchema, jsonSchema)
 
