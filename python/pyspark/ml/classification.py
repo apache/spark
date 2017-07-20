@@ -1533,7 +1533,7 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   classifier=None, parallelism=1):
         """
-        setParams(self, featuresCol=None, labelCol=None, predictionCol=None,
+        setParams(self, featuresCol=None, labelCol=None, predictionCol=None, \
                   classifier=None, parallelism=1):
         Sets params for OneVsRest.
         """
