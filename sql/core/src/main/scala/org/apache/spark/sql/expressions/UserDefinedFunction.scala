@@ -102,7 +102,7 @@ case class UserDefinedFunction protected[sql] (
    * @since 2.3.0
    */
   def asNonNullabe(): UserDefinedFunction = {
-    if (nullable == _nullable) {
+    if (!nullable) {
       this
     } else {
       val udf = copyAll()

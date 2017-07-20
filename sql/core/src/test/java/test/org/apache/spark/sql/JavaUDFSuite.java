@@ -123,17 +123,10 @@ public class JavaUDFSuite implements Serializable {
     Assert.assertEquals(1, result.getInt(0));
   }
 
-  public static class RandUDFTest implements UDF1<Integer, Double> {
-    @Override
-    public Double call(Integer i) {
-      return i + Math.random();
-    }
-  }
-
   @SuppressWarnings("unchecked")
   @Test
   public void udf7Test() {
-    spark.udf().registerJava("randUDF", RandUDFTest.class.getName(), DataTypes.DoubleType, false);
+    spark.udf().registerJava("randUDF", JavaRandUDF.class.getName(), DataTypes.DoubleType, false);
     Row result = spark.sql("SELECT randUDF(1)").head();
     Assert.assertTrue(result.getDouble(0) >= 0.0);
   }
