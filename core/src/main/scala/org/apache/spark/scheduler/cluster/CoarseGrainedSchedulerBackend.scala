@@ -28,7 +28,7 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.{CredentialsSerializer, HadoopDelegationTokenManager}
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -46,10 +46,10 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
  */
 private[spark]
 class CoarseGrainedSchedulerBackend(
-  scheduler: TaskSchedulerImpl,
-  val rpcEnv: RpcEnv,
-  hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager])
-  extends ExecutorAllocationClient with SchedulerBackend with Logging
+    scheduler: TaskSchedulerImpl,
+    val rpcEnv: RpcEnv,
+    hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager])
+    extends ExecutorAllocationClient with SchedulerBackend with Logging
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   protected val totalCoreCount = new AtomicInteger(0)
@@ -264,7 +264,6 @@ class CoarseGrainedSchedulerBackend(
           "containers exceeding thresholds, or network issues. Check driver logs for WARN " +
           "messages.")))
     }
-
 
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
@@ -600,6 +599,7 @@ class CoarseGrainedSchedulerBackend(
    * When asking the executor to be replaced, the executor loss is considered a failure, and
    * killed tasks that are running on the executor will count towards the failure limits. If no
    * replacement is being requested, then the tasks will not count towards the limit.
+   *
    * @param executorIds identifiers of executors to kill
    * @param replace whether to replace the killed executors with new ones, default false
    * @param force whether to force kill busy executors, default false
@@ -693,7 +693,7 @@ class CoarseGrainedSchedulerBackend(
         val creds = UserGroupInformation.getCurrentUser.getCredentials
         val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
         manager.obtainDelegationTokens(hadoopConf, creds)
-        new CredentialsSerializer().serialize(creds)
+        SparkHadoopUtil.get.serialize(creds)
       }
     } else {
       None

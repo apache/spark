@@ -224,7 +224,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
         val creds = new CredentialsSerializer().deserialize(hadoopCreds)
-        addCredentials(creds)
+        SparkHadoopUtil.get.addCurrentUserCredentials(creds)
       }
 
       val env = SparkEnv.createExecutorEnv(
@@ -238,14 +238,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       env.rpcEnv.awaitTermination()
       SparkHadoopUtil.get.stopCredentialUpdater()
     }
-  }
-
-  /** Add Credentials to the currently logged in user. */
-  private def addCredentials(creds: Credentials): Unit = {
-    logInfo(s"Adding ${creds.numberOfTokens()} tokens and ${creds.numberOfSecretKeys()} secret" +
-      s"keys to the current user's credentials.")
-
-    UserGroupInformation.getCurrentUser().addCredentials(creds)
   }
 
   def main(args: Array[String]) {

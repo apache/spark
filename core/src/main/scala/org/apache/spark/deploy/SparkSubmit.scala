@@ -67,7 +67,7 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit extends CommandLineUtils with Logging {
+object SparkSubmit extends CommandLineUtils {
 
   // Cluster managers
   private val YARN = 1
@@ -677,7 +677,9 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private def setRMPrincipal(sysProps: HashMap[String, String]): Unit = {
     val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
     val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
-    logDebug(s"Setting ${key} to ${shortUserName}")
+    // scalastyle:off println
+    printStream.println(s"Setting ${key} to ${shortUserName}")
+    // scalastyle:off println
     sysProps.put(key, shortUserName)
   }
 
