@@ -2336,7 +2336,7 @@ object functions {
   /**
    * Trim the specified character string from left end for the specified string column.
    * @group string_funcs
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def ltrim(e: Column, trimString: String): Column =
     withExpr { StringTrimLeft(e.expr, Literal(trimString))}
@@ -2421,7 +2421,7 @@ object functions {
   /**
    * Trim the specified character string from right end for the specified string column.
    * @group string_funcs
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def rtrim(e: Column, trimString: String): Column =
     withExpr { StringTrimRight(e.expr, Literal(trimString))}
@@ -2496,7 +2496,7 @@ object functions {
   /**
    * Trim the specified character from both ends for the specified string column.
    * @group string_funcs
-   * @since 2.2.0
+   * @since 2.3.0
    */
   def trim(e: Column, trimString: String): Column =
     withExpr { StringTrim(e.expr, Literal(trimString))}
