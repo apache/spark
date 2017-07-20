@@ -25,8 +25,9 @@ import org.apache.spark.sql.types.*;
  */
 public abstract class ReadOnlyColumnVector extends ColumnVector {
 
-  protected ReadOnlyColumnVector(int capacity, MemoryMode memMode) {
+  protected ReadOnlyColumnVector(int capacity, DataType type, MemoryMode memMode) {
     super(capacity, DataTypes.NullType, memMode);
+    this.type = type;
     isConstant = true;
   }
 

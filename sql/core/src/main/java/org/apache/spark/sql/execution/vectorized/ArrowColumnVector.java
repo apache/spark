@@ -240,9 +240,9 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
   }
 
   public ArrowColumnVector(ValueVector vector) {
-    super(vector.getValueCapacity(), MemoryMode.OFF_HEAP);
+    super(vector.getValueCapacity(), ArrowUtils.fromArrowField(vector.getField()),
+      MemoryMode.OFF_HEAP);
 
-    type = ArrowUtils.fromArrowField(vector.getField());
     if (vector instanceof NullableBitVector) {
       accessor = new BooleanAccessor((NullableBitVector) vector);
     } else if (vector instanceof NullableTinyIntVector) {
