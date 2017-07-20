@@ -480,8 +480,10 @@ object SQLConf {
 
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
-  val OUTPUT_COMMITTER_CLASS =
-    buildConf("spark.sql.sources.outputCommitterClass").internal().stringConf.createOptional
+  val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
+    .internal()
+    .stringConf
+    .createOptional
 
   val FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.sources.commitProtocolClass")
