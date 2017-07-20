@@ -98,8 +98,7 @@ case class InsertIntoHadoopFsRelationCommand(
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
-      outputPath = outputPath.toString,
-      isAppend = isAppend)
+      outputPath = outputPath.toString)
 
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>

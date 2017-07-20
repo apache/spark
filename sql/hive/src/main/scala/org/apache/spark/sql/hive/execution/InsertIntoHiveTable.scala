@@ -337,8 +337,7 @@ case class InsertIntoHiveTable(
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
-      outputPath = tmpLocation.toString,
-      isAppend = false)
+      outputPath = tmpLocation.toString)
 
     val partitionAttributes = partitionColumnNames.takeRight(numDynamicPartitions).map { name =>
       query.resolve(name :: Nil, sparkSession.sessionState.analyzer.resolver).getOrElse {
