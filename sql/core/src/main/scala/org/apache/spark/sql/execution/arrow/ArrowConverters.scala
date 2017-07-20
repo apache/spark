@@ -69,14 +69,23 @@ private[sql] object ArrowConverters {
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
     val arrowWriter = ArrowWriter.create(root)
 
+    var closed = false
+
     context.addTaskCompletionListener { _ =>
-      root.close()
-      allocator.close()
+      if (!closed) {
+        root.close()
+        allocator.close()
+      }
     }
 
     new Iterator[ArrowPayload] {
 
-      override def hasNext: Boolean = rowIter.hasNext
+      override def hasNext: Boolean = rowIter.hasNext || {
+        root.close()
+        allocator.close()
+        closed = true
+        false
+      }
 
       override def next(): ArrowPayload = {
         val out = new ByteArrayOutputStream()
