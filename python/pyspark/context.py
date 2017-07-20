@@ -30,7 +30,7 @@ from py4j.protocol import Py4JError
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
-from pyspark.broadcast import Broadcast
+from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
@@ -195,7 +195,7 @@ class SparkContext(object):
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to
         # send.
-        self._pickled_broadcast_vars = set()
+        self._pickled_broadcast_registry = BroadcastPickleRegistry(self._lock)
 
         SparkFiles._sc = self
         root_dir = SparkFiles.getRootDirectory()
@@ -793,7 +793,7 @@ class SparkContext(object):
         object for reading it in distributed functions. The variable will
         be sent to each cluster only once.
         """
-        return Broadcast(self, value, self._pickled_broadcast_vars)
+        return Broadcast(self, value, self._pickled_broadcast_registry)
 
     def accumulator(self, value, accum_param=None):
         """

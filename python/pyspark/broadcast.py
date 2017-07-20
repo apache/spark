@@ -139,6 +139,29 @@ class Broadcast(object):
         return _from_id, (self._jbroadcast.id(),)
 
 
+class BroadcastPickleRegistry(object):
+    """ Thread-safe registry for broadcast variables that have been pickled
+    """
+
+    def __init__(self, lock):
+        self._registry = set()
+        self._lock = lock
+
+    @property
+    def lock(self):
+        return self._lock
+
+    def add(self, bcast):
+        with self._lock:
+            self._registry.add(bcast)
+
+    def get_and_clear(self):
+        with self._lock:
+            registry_copy = self._registry.copy()
+            self._registry.clear()
+        return registry_copy
+
+
 if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
