@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A column backed by Apache Arrow.
+ * A column vector backed by Apache Arrow.
  */
 public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
