@@ -25,7 +25,6 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.collect.ImmutableSet
 import com.google.common.io.ByteStreams
 
 import org.apache.spark._
@@ -514,7 +513,7 @@ private[spark] class ExternalSorter[K, V, C](
         }
 
         val start = batchOffsets(batchId)
-        fileChannel = FileChannel.open(spill.file.toPath, ImmutableSet.of(StandardOpenOption.READ))
+        fileChannel = FileChannel.open(spill.file.toPath, StandardOpenOption.READ)
         fileChannel.position(start)
         batchId += 1
 

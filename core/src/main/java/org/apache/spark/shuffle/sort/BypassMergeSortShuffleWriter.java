@@ -30,7 +30,6 @@ import scala.Tuple2;
 import scala.collection.Iterator;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,7 +75,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
   private final int fileBufferSize;
-  private final boolean transferToEnabled;
   private final int numPartitions;
   private final BlockManager blockManager;
   private final Partitioner partitioner;
@@ -108,7 +106,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       SparkConf conf) {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
-    this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;
@@ -189,15 +186,16 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       return lengths;
     }
 
-    final FileChannel out = FileChannel.open(outputFile.toPath(),
-      ImmutableSet.of(WRITE, APPEND, CREATE));
+    // This file needs to opened in append mode in order to work around a Linux kernel bug that
+    // affects transferTo; see SPARK-3948 for more details.
+    final FileChannel out = FileChannel.open(outputFile.toPath(), WRITE, APPEND, CREATE);
     final long writeStartTime = System.nanoTime();
     boolean threwException = true;
     try {
       for (int i = 0; i < numPartitions; i++) {
         final File file = partitionWriterSegments[i].file();
         if (file.exists()) {
-          final FileChannel in = FileChannel.open(file.toPath(), ImmutableSet.of(READ));
+          final FileChannel in = FileChannel.open(file.toPath(), READ);
           boolean copyThrewException = true;
           try {
             long size = in.size();

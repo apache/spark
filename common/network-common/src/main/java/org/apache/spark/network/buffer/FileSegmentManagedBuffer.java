@@ -27,7 +27,6 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 
 import com.google.common.base.Objects;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.io.ByteStreams;
 import io.netty.channel.DefaultFileRegion;
 
@@ -134,8 +133,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     if (conf.lazyFileDescriptor()) {
       return new DefaultFileRegion(file, offset, length);
     } else {
-      FileChannel fileChannel = FileChannel.open(file.toPath(),
-        ImmutableSet.of(StandardOpenOption.READ));
+      FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
       return new DefaultFileRegion(fileChannel, offset, length);
     }
   }

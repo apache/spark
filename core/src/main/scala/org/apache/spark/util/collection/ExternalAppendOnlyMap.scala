@@ -26,7 +26,6 @@ import scala.collection.BufferedIterator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.collect.ImmutableSet
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkEnv, TaskContext}
@@ -486,7 +485,7 @@ class ExternalAppendOnlyMap[K, V, C](
         }
 
         val start = batchOffsets(batchIndex)
-        fileChannel = FileChannel.open(file.toPath, ImmutableSet.of(StandardOpenOption.READ))
+        fileChannel = FileChannel.open(file.toPath, StandardOpenOption.READ)
         fileChannel.position(start)
         batchIndex += 1
 
