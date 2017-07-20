@@ -283,3 +283,65 @@ class JavaPredictionModel():
         Returns the number of features the model was trained on. If unknown, returns -1
         """
         return self._call_java("numFeatures")
+
+
+@inherit_doc
+class DefaultParamsWritable(MLWritable):
+
+    def write(self):
+        return DefaultParamsWriter()
+
+
+@inherit_doc
+class DefaultParamsWriter(MLWriter):
+
+    def __init__(self, instance):
+        self.instance = instance
+
+    def saveImpl(self, path):
+        # need spark context as well?
+        DefaultParamsWriter.save_metadata(instance, path)
+
+    @staticmethod
+    def save_metadata(path):
+        pass
+
+    @staticmethod
+    def get_metatdata_to_save():
+        pass
+
+
+@inherit_doc
+class DefaultParamsReadable(MLReadable):
+
+    def read(self):
+        return DefaultParamsReader()
+
+
+@inherit_doc
+class DefaultParamsReader(MLReader):
+
+    def __init__(self):
+        pass
+
+    def load(self):
+        pass
+
+    # TODO: missing getParamName from case class Metadata in Scala - Check what to do with this
+
+    @staticmethod
+    def loadMetadata():
+        pass
+
+    @staticmethod
+    def parseMetaData():
+        pass
+
+    @staticmethod
+    def getAndSetParams():
+        pass
+
+    @staticmethod
+    def loadParamsInstance():
+        pass
+
