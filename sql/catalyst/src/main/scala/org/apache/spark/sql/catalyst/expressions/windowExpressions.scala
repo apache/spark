@@ -58,20 +58,20 @@ case class WindowSpecDefinition(
         TypeCheckFailure(
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis. " +
             "Please file a bug report.")
-      case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded
-        && orderSpec.isEmpty =>
+      case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded &&
+        orderSpec.isEmpty =>
         TypeCheckFailure(
           "A range window frame cannot be used in an unordered window specification.")
-      case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound
-        && orderSpec.size > 1 =>
+      case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
+        orderSpec.size > 1 =>
         TypeCheckFailure(
           s"A range window frame with value boundaries cannot be used in a window specification " +
             s"with multiple order by expressions: ${orderSpec.mkString(",")}")
-      case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound
-        && !isValidFrameType(f.children.head.dataType) =>
+      case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
+        !isValidFrameType(f.valueBoundary.head.dataType) =>
         TypeCheckFailure(
           s"The data type '${orderSpec.head.dataType}' used in the order specification does " +
-            s"not match the data type '${f.children.head.dataType}' which is used in the " +
+            s"not match the data type '${f.valueBoundary.head.dataType}' which is used in the " +
             "range frame.")
       case _ => TypeCheckSuccess
     }
@@ -89,11 +89,7 @@ case class WindowSpecDefinition(
     elements.mkString("(", " ", ")")
   }
 
-  private def isValidFrameType(ft: DataType): Boolean = (orderSpec.head.dataType, ft) match {
-    case (DateType, IntegerType) => true
-    case (TimestampType, CalendarIntervalType) => true
-    case (a, b) => a == b
-  }
+  private def isValidFrameType(ft: DataType): Boolean = orderSpec.head.dataType == ft
 }
 
 /**
@@ -140,7 +136,12 @@ case object RangeFrame extends FrameType {
 /**
  * The trait used to represent special boundaries used in a window frame.
  */
-sealed trait SpecialFrameBoundary
+sealed trait SpecialFrameBoundary extends Expression with Unevaluable {
+  override lazy val children: Seq[Expression] = Nil
+  override def dataType: DataType = NullType
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+}
 
 /** UNBOUNDED boundary. */
 case object Unbounded extends SpecialFrameBoundary
@@ -167,11 +168,14 @@ case object UnspecifiedFrame extends WindowFrame
  */
 case class SpecifiedWindowFrame(
     frameType: FrameType,
-    lower: AnyRef,
-    upper: AnyRef)
+    lower: Expression,
+    upper: Expression)
   extends WindowFrame {
 
-  override lazy val children: Seq[Expression] = expr(lower).toSeq ++ expr(upper).toSeq
+  override lazy val children: Seq[Expression] = lower :: upper :: Nil
+
+  lazy val valueBoundary: Seq[Expression] =
+    children.filterNot(_.isInstanceOf[SpecialFrameBoundary])
 
   override def checkInputDataTypes(): TypeCheckResult = {
     // Check lower value.
@@ -188,6 +192,8 @@ case class SpecifiedWindowFrame(
 
     // Check combination (of expressions).
     (lower, upper) match {
+      case (l: SpecialFrameBoundary, _) => TypeCheckSuccess
+      case (_, u: SpecialFrameBoundary) => TypeCheckSuccess
       case (l: Expression, u: Expression) if l.dataType != u.dataType =>
         TypeCheckFailure(
           s"Window frame bounds '$lower' and '$upper' do no not have the same data type: " +
@@ -207,19 +213,14 @@ case class SpecifiedWindowFrame(
 
   def isUnbounded: Boolean = lower == Unbounded && upper == Unbounded
 
-  def isValueBound: Boolean = children.nonEmpty
+  def isValueBound: Boolean = valueBoundary.nonEmpty
 
   def isOffset: Boolean = (lower, upper) match {
     case (l: Expression, u: Expression) => frameType == RowFrame && l == u
     case _ => false
   }
 
-  private def expr(v: AnyRef): Option[Expression] = v match {
-    case e: Expression => Option(e)
-    case _ => None
-  }
-
-  private def boundarySql(A: AnyRef, defaultDirection: String): String = A match {
+  private def boundarySql(expr: Expression, defaultDirection: String): String = expr match {
     case CurrentRow => "CURRENT ROW"
     case Unbounded => "UNBOUNDED " + defaultDirection
     case UnaryMinus(n) => n.sql + " PRECEDING"
@@ -230,14 +231,12 @@ case class SpecifiedWindowFrame(
     GreaterThan(l, r).eval().asInstanceOf[Boolean]
   }
 
-  private def checkBoundary(b: AnyRef, location: String): TypeCheckResult = b match {
-    case o if !o.isInstanceOf[Expression] && !o.isInstanceOf[SpecialFrameBoundary] =>
-      TypeCheckFailure(
-        s"Window frame $location bound '$b' is not an expression or frame boundary.")
-    case e: Expression if !e.foldable =>
+  private def checkBoundary(b: Expression, location: String): TypeCheckResult = b match {
+    case e: Expression if !e.foldable && !e.isInstanceOf[SpecialFrameBoundary] =>
       TypeCheckFailure(
         s"Window frame $location bound '$e' is not a literal.")
-    case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
+    case e: Expression if !frameType.inputType.acceptsType(e.dataType) &&
+      !e.isInstanceOf[SpecialFrameBoundary] =>
       TypeCheckFailure(
         s"The data type of the $location bound '${e.dataType} does not match " +
           s"the expected data type '${frameType.inputType}'.")

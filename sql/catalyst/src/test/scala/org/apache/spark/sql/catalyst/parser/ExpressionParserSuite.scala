@@ -265,7 +265,6 @@ class ExpressionParserSuite extends PlanTest {
         WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
 
     // Range/Row
-    val date = Literal.default(DateType)
     val frameTypes = Seq(("rows", RowFrame), ("range", RangeFrame))
     val boundaries = Seq(
       ("10 preceding", -Literal(10), CurrentRow),

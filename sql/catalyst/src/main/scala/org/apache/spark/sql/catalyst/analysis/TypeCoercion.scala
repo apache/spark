@@ -820,10 +820,13 @@ object TypeCoercion {
           createBoundaryCast(upper, order.dataType)))
     }
 
-    private def createBoundaryCast(boundary: AnyRef, dt: DataType): AnyRef = boundary match {
-      case e: Expression if e.dataType != dt && Cast.canCast(e.dataType, dt) =>
-        Cast(e, dt)
-      case _ => boundary
+    private def createBoundaryCast(boundary: Expression, dt: DataType): Expression = {
+      boundary match {
+        case e: Expression if e.dataType != dt && Cast.canCast(e.dataType, dt) &&
+          !e.isInstanceOf[SpecialFrameBoundary] =>
+          Cast(e, dt)
+        case _ => boundary
+      }
     }
   }
 }

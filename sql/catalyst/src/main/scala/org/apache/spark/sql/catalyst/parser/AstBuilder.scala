@@ -1181,7 +1181,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create or resolve a frame boundary expressions.
    */
-  override def visitFrameBound(ctx: FrameBoundContext): AnyRef = withOrigin(ctx) {
+  override def visitFrameBound(ctx: FrameBoundContext): Expression = withOrigin(ctx) {
     def value: Expression = {
       val e = expression(ctx.expression)
       validate(e.resolved && e.foldable, "Frame bound value must be a literal.", ctx)

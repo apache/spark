@@ -1122,7 +1122,7 @@ class TypeCoercionSuite extends AnalysisTest {
         Seq(SortOrder(Literal(1L), Ascending)),
         SpecifiedWindowFrame(RangeFrame, Cast(3, LongType), Literal(2147483648L)))
     )
-    // Can cast frame boundaries to order dataType.
+    // Cannot cast frame boundaries to order dataType.
     ruleTest(WindowFrameCoercion,
       windowSpec(
         Seq(UnresolvedAttribute("a")),
