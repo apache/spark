@@ -448,6 +448,9 @@ class StructType(DataType):
     Iterating a :class:`StructType` will iterate its :class:`StructField`\\s.
     A contained :class:`StructField` can be accessed by name or position.
 
+    .. note:: `names` attribute is deprecated in 2.3. Use `fieldNames` method instead
+        to get a list of field names.
+
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
     StructField(f1,StringType,true)
