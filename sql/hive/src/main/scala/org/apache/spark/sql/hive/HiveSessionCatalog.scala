@@ -34,6 +34,8 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.execution.aggregate.ScalaUDAF
+import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
@@ -95,6 +97,8 @@ private[sql] class HiveSessionCatalog(
           val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), children)
           udtf.elementSchema // Force it to check input data types.
           udtf
+        } else if (classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
+          ScalaUDAF(children, clazz.newInstance().asInstanceOf[UserDefinedAggregateFunction])
         } else {
           throw new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}'")
         }

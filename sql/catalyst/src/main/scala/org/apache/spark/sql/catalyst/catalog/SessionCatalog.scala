@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.lang.reflect.InvocationTargetException
 import java.net.URI
 import java.util.Locale
 import java.util.concurrent.Callable
@@ -24,6 +25,7 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
@@ -40,6 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, 
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
@@ -1096,8 +1099,43 @@ class SessionCatalog(
    * This performs reflection to decide what type of [[Expression]] to return in the builder.
    */
   protected def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
-    // TODO: at least support UDAFs here
-    throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
+    makeFunctionBuilder(name, Utils.classForName(functionClassName))
+  }
+
+  /**
+   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   */
+  private def makeFunctionBuilder(name: String, clazz: Class[_]): FunctionBuilder = {
+    // When we instantiate ScalaUDAF class, we may throw exception if the input
+    // expressions don't satisfy the UDAF, such as type mismatch, input number
+    // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
+    (children: Seq[Expression]) => {
+      try {
+        val clsForUDAF =
+          Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
+        if (clsForUDAF.isAssignableFrom(clazz)) {
+          val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
+          // val ctor = classOf[Integer].getConstructor(classOf[Int])
+          cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
+            .newInstance(children, clazz.newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
+            .asInstanceOf[Expression]
+        } else {
+          throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
+        }
+      } catch {
+        case NonFatal(exception) =>
+          val e = exception match {
+            // Since we are using shim, the exceptions thrown by the underlying method of
+            // Method.invoke() are wrapped by InvocationTargetException
+            case i: InvocationTargetException => i.getCause
+            case o => o
+          }
+          val analysisException =
+            new AnalysisException(s"No handler for UDAF '${clazz.getCanonicalName}': $e")
+          analysisException.setStackTrace(e.getStackTrace)
+          throw analysisException
+      }
+    }
   }
 
   /**
@@ -1116,12 +1154,17 @@ class SessionCatalog(
       overrideIfExists: Boolean,
       functionBuilder: Option[FunctionBuilder] = None): Unit = {
     val func = funcDefinition.identifier
+    val className = funcDefinition.className
     if (functionRegistry.functionExists(func) && !overrideIfExists) {
       throw new AnalysisException(s"Function $func already exists")
     }
-    val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
+    if (!Utils.classIsLoadable(className)) {
+      throw new AnalysisException(s"Can not load class '$className' when registering " +
+        s"the function '$func', please make sure it is on the classpath")
+    }
+    val info = new ExpressionInfo(className, func.database.orNull, func.funcName)
     val builder =
-      functionBuilder.getOrElse(makeFunctionBuilder(func.unquotedString, funcDefinition.className))
+      functionBuilder.getOrElse(makeFunctionBuilder(func.unquotedString, className))
     functionRegistry.registerFunction(func, info, builder)
   }
 
