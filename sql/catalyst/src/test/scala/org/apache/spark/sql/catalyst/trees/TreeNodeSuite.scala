@@ -442,10 +442,16 @@ class TreeNodeSuite extends SparkFunSuite {
       List(
         JObject(
           "class" -> classOf[SpecifiedWindowFrame].getName,
-          "num-children" -> 0,
+          "num-children" -> 2,
           "frameType" -> JObject("object" -> JString(RowFrame.getClass.getName)),
-          "lower" -> JObject("object" -> JString(Unbounded.getClass.getName)),
-          "upper" -> JObject("object" -> JString(CurrentRow.getClass.getName)))))
+          "lower" -> 0,
+          "upper" -> 1),
+        JObject(
+          "class" -> Unbounded.getClass.getName,
+          "num-children" -> 0),
+        JObject(
+          "class" -> CurrentRow.getClass.getName,
+          "num-children" -> 0)))
 
     // Converts Partitioning to JSON
     assertJSON(
