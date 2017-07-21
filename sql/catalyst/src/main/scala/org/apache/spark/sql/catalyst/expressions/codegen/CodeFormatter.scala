@@ -28,9 +28,7 @@ import java.util.regex.Matcher
 object CodeFormatter {
   val commentHolder = """\/\*(.+?)\*\/""".r
 
-  def format(code: CodeAndComment): String = format(code, -1)
-
-  def format(code: CodeAndComment, maxLines: Int): String = {
+  def format(code: CodeAndComment, maxLines: Int = -1): String = {
     val formatter = new CodeFormatter
     val lines = code.body.split("\n")
     val needToTruncate = maxLines >= 0 && lines.length > maxLines
