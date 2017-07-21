@@ -34,7 +34,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
   val TEST_POOL = "testPool"
 
-  private def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
+  def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
     : TaskSetManager = {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, Nil)
