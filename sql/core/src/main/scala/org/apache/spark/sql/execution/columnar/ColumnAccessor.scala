@@ -62,6 +62,9 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
   }
 
   protected def underlyingBuffer = buffer
+
+  def getByteBuffer: ByteBuffer =
+    buffer.duplicate.order(ByteOrder.nativeOrder())
 }
 
 private[columnar] class NullColumnAccessor(buffer: ByteBuffer)
@@ -147,6 +150,18 @@ private[columnar] object ColumnAccessor {
       case udt: UserDefinedType[_] => ColumnAccessor(udt.sqlType, buffer)
       case other =>
         throw new Exception(s"not support type: $other")
+    }
+  }
+
+  def decompress(columnAccessor: ColumnAccessor, numRows: Int): (ByteBuffer, ByteBuffer) = {
+    if (columnAccessor.isInstanceOf[NativeColumnAccessor[_]]) {
+      val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
+      nativeAccessor.decompress(numRows)
+    } else {
+      val buffer = columnAccessor.asInstanceOf[BasicColumnAccessor[_]].getByteBuffer
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      (buffer, nullsBuffer)
     }
   }
 }
