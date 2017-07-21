@@ -419,7 +419,7 @@ case class InsertIntoHiveTable(
     } else if (outputClass.getName.equalsIgnoreCase("org.apache.parquet.hadoop.ParquetOutputCommitter")){
       source = "parquet"
     }
-    //wuzl add merger files
+    //add merger files
     if (source.equals("orc") || source.equals("text")){
       if (partition.nonEmpty && partitionColumnNames.length >= 3){}
       else {
@@ -468,7 +468,7 @@ case class InsertIntoHiveTable(
         }
       }
     }
-    //wuzl end 
+    // end 
     // Invalidate the cache.
     sqlContext.sharedState.cacheManager.invalidateCache(table)
     sqlContext.sessionState.catalog.refreshTable(table.catalogTable.identifier)
