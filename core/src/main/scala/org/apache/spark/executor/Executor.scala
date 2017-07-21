@@ -502,6 +502,8 @@ private[spark] class Executor(
             }
             setTaskFinishedAndClearInterruptStatus()
             execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
+          } else {
+            logInfo("Not reporting error to driver during JVM shutdown.")
           }
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
