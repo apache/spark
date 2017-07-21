@@ -1913,10 +1913,11 @@ class Analyzer(
           nondeterToAttr.get(e).map(_.toAttribute).getOrElse(e)
         }.copy(child = newChild)
 
-      case j: Join if j.condition.isDefined && !j.condition.get.deterministic =>
+      case j: Join if conf.nonDeterministicJoinEnabled &&
+          j.condition.isDefined && !j.condition.get.deterministic =>
         j match {
-          // We can push down non-deterministic joining keys.
-          // We can't push down non-deterministic conditions.
+          // We only push down non-deterministic equi-join joining keys.
+          // Other non-deterministic joining conditions are disallowed for now.
           case ExtractEquiJoinKeys(_, leftKeys, rightKeys, conditions, _, _)
               if (leftKeys.exists(!_.deterministic) || rightKeys.exists(!_.deterministic)) &&
                 conditions.map(_.deterministic).getOrElse(true) =>

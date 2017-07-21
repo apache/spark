@@ -18,11 +18,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Test suite for moving non-deterministic expressions into Project.
@@ -61,48 +63,63 @@ class PullOutNondeterministicSuite extends AnalysisTest {
   }
 
   test("join") {
+    val conf = new SQLConf().copy(SQLConf.NON_DETERMINISTIC_JOIN_ENABLED -> true)
+    val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
+    val analyzer = new Analyzer(catalog, conf)
+
     val rnd = Rand(a).as('_nondeterministic)
     val rndref = rnd.toAttribute
 
     // Don't pull non-deterministic conditions:
-    // Deterministic joining keys
+    // With deterministic joining keys
     val m1 = intercept[AnalysisException] {
-      val plan = left.join(right,
-        Inner, Some(And(EqualTo(Ceil(c), a), EqualTo(Rand(a), Literal(10.1))))).analyze
-      SimpleAnalyzer.checkAnalysis(plan)
+      val plan = analyzer.execute(
+        left.join(right,
+          Inner, Some(And(EqualTo(Ceil(c), a), EqualTo(Rand(a), Literal(10.1))))))
+      analyzer.checkAnalysis(plan)
     }.getMessage
-    assert(m1.contains("For Join, nondeterministic expressions are only allowed in joining keys"))
+    assert(m1.contains("For Join, nondeterministic expressions are only allowed in equi join keys"))
 
-    // Non-determinstic joining keys
+    // With non-determinstic joining keys
     val m2 = intercept[AnalysisException] {
-      val plan = left.join(right,
-        Inner, Some(And(EqualTo(c, Rand(a)), EqualTo(Rand(a), Literal(10.1)))))
-      SimpleAnalyzer.checkAnalysis(plan)
+      val plan = analyzer.execute(
+        left.join(right,
+          Inner, Some(And(EqualTo(c, Rand(a)), EqualTo(Rand(a), Literal(10.1))))))
+      analyzer.checkAnalysis(plan)
     }.getMessage
-    assert(m2.contains("For Join, nondeterministic expressions are only allowed in joining keys"))
+    assert(m2.contains("For Join, nondeterministic expressions are only allowed in equi join keys"))
 
-    // Empty joining keys
+    // With empty joining keys
     val m3 = intercept[AnalysisException] {
-      val plan = left.join(right, Inner, Some(GreaterThan(c, Rand(a))))
-      SimpleAnalyzer.checkAnalysis(plan)
+      val plan = analyzer.execute(left.join(right, Inner, Some(GreaterThan(c, Rand(a)))))
+      analyzer.checkAnalysis(plan)
     }.getMessage
-    assert(m3.contains("For Join, nondeterministic expressions are only allowed in joining keys"))
+    assert(m3.contains("For Join, nondeterministic expressions are only allowed in equi join keys"))
 
     // Pull non-determinstic joining keys:
-    // Empty conditions
-    checkAnalysis(
-      left.join(right, Inner, Some(EqualTo(c, Rand(a)))),
+    // With empty conditions
+    comparePlans(
+      analyzer.execute(
+        left.join(right, Inner, Some(EqualTo(c, Rand(a))))),
       left.select(c).join(right.select(a, rnd), Inner, Some(EqualTo(c, rndref)))
        .select(c, a)
     )
-    // Deterministic conditions
-    checkAnalysis(
-      left.join(right, Inner, Some(And(EqualTo(c, Rand(a)), EqualTo(a, Literal(10))))),
+    // With deterministic conditions
+    comparePlans(
+      analyzer.execute(
+        left.join(right, Inner, Some(And(EqualTo(c, Rand(a)), EqualTo(a, Literal(10)))))),
       left.select(c).join(
         right.select(a, rnd),
         Inner,
         Some(And(EqualTo(c, rndref), EqualTo(a, Literal(10)))))
       .select(c, a)
     )
+
+    // When the config is disabled (default), non-deterministic joining keys are disallowed too.
+    intercept[AnalysisException] {
+      val plan = SimpleAnalyzer.execute(
+        left.join(right, Inner, Some(EqualTo(c, Rand(a)))))
+      SimpleAnalyzer.checkAnalysis(plan)
+    }
   }
 }

@@ -326,8 +326,8 @@ trait CheckAnalysis extends PredicateHelper {
 
           case o if o.expressions.exists(!_.deterministic) && o.isInstanceOf[Join] =>
             failAnalysis(
-              s"""For Join, nondeterministic expressions are only allowed in joining keys
-                 |, found:
+              s"""For Join, nondeterministic expressions are only allowed in equi join keys
+                 |when spark.sql.nonDeterministicJoin.enabled is enabled, found:
                  | ${o.expressions.map(_.sql).mkString(",")}
                  |in Join operator ${operator.simpleString}
                """.stripMargin)
