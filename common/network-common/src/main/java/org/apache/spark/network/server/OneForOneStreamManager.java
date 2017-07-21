@@ -161,6 +161,11 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   @Override
+  public void streamSent(String streamId) {
+    chunkSent(OneForOneStreamManager.parseStreamChunkId(streamId).getLeft());
+  }
+
+  @Override
   public long chunksBeingTransferred() {
     long sum = 0L;
     for (StreamState streamState: streams.values()) {

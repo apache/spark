@@ -173,10 +173,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
     if (buf != null) {
       respond(new StreamResponse(req.streamId, buf.size(), buf)).addListener(future -> {
-        if (streamManager instanceof OneForOneStreamManager) {
-          streamManager.chunkSent(OneForOneStreamManager.parseStreamChunkId(req.streamId)
-            .getLeft());
-        }
+        streamManager.streamSent(req.streamId);
       });
     } else {
       respond(new StreamFailure(req.streamId, String.format(

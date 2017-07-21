@@ -95,4 +95,9 @@ public abstract class StreamManager {
    */
   public void chunkSent(long streamId) { }
 
+  /**
+   * Called when a stream is successfully sent.
+   */
+  public void streamSent(String streamId) { }
+
 }

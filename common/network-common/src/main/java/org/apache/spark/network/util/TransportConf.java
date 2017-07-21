@@ -262,6 +262,6 @@ public class TransportConf {
    * shuffle server.
    */
   public long maxChunksBeingTransferred() {
-    return conf.getLong("spark.network.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);
+    return conf.getLong("spark.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);
   }
 }
