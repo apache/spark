@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.SparkFunSuite
-
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, AttributeSet, InterpretedMutableProjection, Literal, NullsFirst, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, AttributeSet, InterpretedMutableProjection, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.DataTypes
 
