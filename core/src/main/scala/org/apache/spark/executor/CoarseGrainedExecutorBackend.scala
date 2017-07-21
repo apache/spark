@@ -31,7 +31,6 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.CredentialsSerializer
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
@@ -223,7 +222,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
-        val creds = new CredentialsSerializer().deserialize(hadoopCreds)
+        val creds = SparkHadoopUtil.get.deserialize(hadoopCreds)
         SparkHadoopUtil.get.addCurrentUserCredentials(creds)
       }
 
