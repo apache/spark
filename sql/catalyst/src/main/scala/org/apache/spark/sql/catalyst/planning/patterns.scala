@@ -173,7 +173,7 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
-    case _ => (Seq((plan, parentJoinType)), Seq())
+    case _ => (Seq((plan, parentJoinType)), Seq.empty)
   }
 
   def unapply(plan: LogicalPlan): Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]

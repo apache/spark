@@ -438,11 +438,11 @@ class CoarseGrainedSchedulerBackend(
    * be called in the yarn-client mode when AM re-registers after a failure.
    * */
   protected def reset(): Unit = {
-    val executors = synchronized {
+    val executors: Set[String] = synchronized {
       requestedTotalExecutors = 0
       numPendingExecutors = 0
       executorsPendingToRemove.clear()
-      Set() ++ executorDataMap.keys
+      executorDataMap.keys.toSet
     }
 
     // Remove all the lingering executors that should be removed but not yet. The reason might be
@@ -588,6 +588,7 @@ class CoarseGrainedSchedulerBackend(
    * of requesting a delta of executors risks double counting new executors when there are
    * insufficient resources to satisfy the first request. We make the assumption here that the
    * cluster manager will eventually fulfill all requests when resources free up.
+   *
    * @return a future whose evaluation indicates whether the request is acknowledged.
    */
   protected def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] =

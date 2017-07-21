@@ -429,6 +429,7 @@ export("structField",
        "structField.character",
        "print.structField",
        "structType",
+       "structType.character",
        "structType.jobj",
        "structType.structField",
        "print.structType")
@@ -465,5 +466,6 @@ S3method(print, summary.GBTRegressionModel)
 S3method(print, summary.GBTClassificationModel)
 S3method(structField, character)
 S3method(structField, jobj)
+S3method(structType, character)
 S3method(structType, jobj)
 S3method(structType, structField)

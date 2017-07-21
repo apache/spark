@@ -436,16 +436,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("create table - duplicate column names in the table definition") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int, a string) USING json")
-    }
-    assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
-
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val e2 = intercept[AnalysisException] {
-        sql("CREATE TABLE tbl(a int, A string) USING json")
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING parquet")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the table definition of `t`"))
       }
-      assert(e2.message == "Found duplicate column(s) in table definition of `tbl`: a")
     }
   }
 
@@ -466,17 +463,33 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("create table - column repeated in partition columns") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int) USING json PARTITIONED BY (a, a)")
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t($c0 INT) USING parquet PARTITIONED BY ($c0, $c1)")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the partition schema"))
+      }
     }
-    assert(e.message == "Found duplicate column(s) in partition: a")
   }
 
-  test("create table - column repeated in bucket columns") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int) USING json CLUSTERED BY (a, a) INTO 4 BUCKETS")
+  test("create table - column repeated in bucket/sort columns") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        var errMsg = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t($c0 INT) USING parquet CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the bucket definition"))
+
+        errMsg = intercept[AnalysisException] {
+          sql(s"""
+              |CREATE TABLE t($c0 INT, col INT) USING parquet CLUSTERED BY (col)
+              |  SORTED BY ($c0, $c1) INTO 2 BUCKETS
+             """.stripMargin)
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the sort definition"))
+      }
     }
-    assert(e.message == "Found duplicate column(s) in bucket: a")
   }
 
   test("Refresh table after changing the data source table partitioning") {
@@ -524,6 +537,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val tableMetadataAfterRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
         assert(tableMetadataAfterRefresh.schema == schema)
         assert(tableMetadataAfterRefresh.partitionColumnNames == partitionCols)
+      }
+    }
+  }
+
+  test("create view - duplicate column names in the view definition") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"CREATE VIEW t AS SELECT * FROM VALUES (1, 1) AS t($c0, $c1)")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the view definition"))
       }
     }
   }
@@ -2267,6 +2291,57 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("ALTER TABLE t1 ADD COLUMNS (c1 string)")
       }.getMessage
       assert(e.contains("Found duplicate column(s)"))
+    }
+  }
+
+  test("create temporary function with if not exists") {
+    withUserDefinedFunction("func1" -> true) {
+      val sql1 =
+        """
+          |CREATE TEMPORARY FUNCTION IF NOT EXISTS func1 as
+          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+          |JAR '/path/to/jar2'
+        """.stripMargin
+      val e = intercept[AnalysisException] {
+        sql(sql1)
+      }.getMessage
+      assert(e.contains("It is not allowed to define a TEMPORARY function with IF NOT EXISTS"))
+    }
+  }
+
+  test("create function with both if not exists and replace") {
+    withUserDefinedFunction("func1" -> false) {
+      val sql1 =
+        """
+          |CREATE OR REPLACE FUNCTION IF NOT EXISTS func1 as
+          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+          |JAR '/path/to/jar2'
+        """.stripMargin
+      val e = intercept[AnalysisException] {
+        sql(sql1)
+      }.getMessage
+      assert(e.contains("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed"))
+    }
+  }
+
+  test("create temporary function by specifying a database") {
+    val dbName = "mydb"
+    withDatabase(dbName) {
+      sql(s"CREATE DATABASE $dbName")
+      sql(s"USE $dbName")
+      withUserDefinedFunction("func1" -> true) {
+        val sql1 =
+          s"""
+             |CREATE TEMPORARY FUNCTION $dbName.func1 as
+             |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+             |JAR '/path/to/jar2'
+            """.stripMargin
+        val e = intercept[AnalysisException] {
+          sql(sql1)
+        }.getMessage
+        assert(e.contains(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
+          s"is not allowed: '$dbName'"))
+      }
     }
   }
 

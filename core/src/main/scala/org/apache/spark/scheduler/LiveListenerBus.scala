@@ -136,7 +136,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
   def post(event: SparkListenerEvent): Unit = {
     if (stopped.get) {
       // Drop further events to make `listenerThread` exit ASAP
-      logError(s"$name has already stopped! Dropping event $event")
+      logDebug(s"$name has already stopped! Dropping event $event")
       return
     }
     metrics.numEventsPosted.inc()
@@ -232,6 +232,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
         "This likely means one of the SparkListeners is too slow and cannot keep up with " +
         "the rate at which tasks are being started by the scheduler.")
     }
+    logTrace(s"Dropping event $event")
   }
 }
 

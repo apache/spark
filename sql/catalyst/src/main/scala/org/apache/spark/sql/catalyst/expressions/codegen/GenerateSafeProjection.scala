@@ -175,16 +175,13 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           ${ctx.initPartition()}
         }
 
-        ${ctx.declareAddedFunctions()}
-
         public java.lang.Object apply(java.lang.Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
           $allExpressions
           return mutableRow;
         }
 
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
+        ${ctx.declareAddedFunctions()}
       }
     """
 
