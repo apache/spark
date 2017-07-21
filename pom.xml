@@ -510,7 +510,7 @@
         <groupId>org.slf4j</groupId>
         <artifactId>jcl-over-slf4j</artifactId>
         <version>${slf4j.version}</version>
-        <scope>runtime</scope>
+        <!-- runtime scope is appropriate, but causes SBT build problems -->
       </dependency>
       <dependency>
         <groupId>log4j</groupId>
