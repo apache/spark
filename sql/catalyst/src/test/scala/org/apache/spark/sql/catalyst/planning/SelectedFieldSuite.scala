@@ -180,7 +180,10 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     val indentedSchema = schema.treeString.split('\n').map(x => "  " + x).mkString("\n") + "\n"
+    // Print the test schema at the beginning of the test
+    // scalastyle:off println
     println("Testing SelectedField extractor using the following schema:\n" + indentedSchema)
+    // scalastyle:on println
   }
 
   test("should not match an attribute reference") {
@@ -398,6 +401,8 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
       super.assertResult(expected)(actual)
     } catch {
       case ex: TestFailedException =>
+        // Print some helpful diagnostics in the case of failure
+        // scalastyle:off println
         println("For " + expr)
         println("Expected:")
         println(StructType(expected :: Nil).treeString)
@@ -405,6 +410,7 @@ class SelectedFieldSuite extends SparkFunSuite with BeforeAndAfterAll {
         println(StructType(actual :: Nil).treeString)
         println("expected.dataType.sameType(actual.dataType) = " +
           expected.dataType.sameType(actual.dataType))
+        // scalastyle:on println
         throw ex
     }
   }
