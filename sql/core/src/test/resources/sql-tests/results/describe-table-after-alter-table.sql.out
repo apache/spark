@@ -25,6 +25,7 @@ Database            	default
 Table               	table_with_comment  	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	added               	                    
@@ -54,6 +55,7 @@ Database            	default
 Table               	table_with_comment  	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	modified comment    	                    
@@ -90,6 +92,7 @@ Database            	default
 Table               	table_comment       	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Location [not included in comparison]sql/core/spark-warehouse/table_comment
@@ -116,6 +119,7 @@ Database            	default
 Table               	table_comment       	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	added comment       	                    
@@ -143,6 +147,7 @@ Database            	default
 Table               	table_comment       	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Location [not included in comparison]sql/core/spark-warehouse/table_comment

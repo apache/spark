@@ -229,7 +229,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x")
         .replaceAll("Location.*/sql/core/", s"Location ${notIncludedMsg}sql/core/")
         .replaceAll("Created.*", s"Created $notIncludedMsg")
-        .replaceAll("Last Access.*", s"Last Access $notIncludedMsg"))
+        .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
+        .replaceAll("Create Version.*", s"Create Version $notIncludedMsg"))
 
       // If the output is not pre-sorted, sort it.
       if (needSort(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)

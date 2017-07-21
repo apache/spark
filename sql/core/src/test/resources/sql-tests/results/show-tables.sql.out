@@ -121,6 +121,7 @@ struct<database:string,tableName:string,isTemporary:boolean,information:string>
 show_t3	true	Table: show_t3
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type: VIEW
 Schema: root
  |-- e: integer (nullable = true)
@@ -130,6 +131,7 @@ showdb	show_t1	false	Database: showdb
 Table: show_t1
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type: MANAGED
 Provider: parquet
 Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1
@@ -146,6 +148,7 @@ showdb	show_t2	false	Database: showdb
 Table: show_t2
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type: MANAGED
 Provider: parquet
 Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t2

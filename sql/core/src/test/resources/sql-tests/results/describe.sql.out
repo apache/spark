@@ -122,6 +122,7 @@ Database            	default
 Table               	t                   	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Num Buckets         	2                   	                    
@@ -153,6 +154,7 @@ Database            	default
 Table               	t                   	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Num Buckets         	2                   	                    
@@ -192,6 +194,7 @@ Database            	default
 Table               	t                   	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Num Buckets         	2                   	                    
@@ -230,6 +233,7 @@ Database            	default
 Table               	t                   	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Num Buckets         	2                   	                    
@@ -460,6 +464,7 @@ Database            	default
 Table               	v                   	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Default Database	default             	                    
@@ -482,6 +487,7 @@ Database            	default
 Table               	v                   	                    
 Created [not included in comparison]
 Last Access [not included in comparison]
+Create Version [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Default Database	default             	                    

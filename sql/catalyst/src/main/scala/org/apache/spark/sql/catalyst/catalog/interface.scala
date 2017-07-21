@@ -217,6 +217,7 @@ case class CatalogTable(
     owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
+    createVersion: String = org.apache.spark.SPARK_VERSION,
     properties: Map[String, String] = Map.empty,
     stats: Option[CatalogStatistics] = None,
     viewText: Option[String] = None,
@@ -304,6 +305,7 @@ case class CatalogTable(
     if (owner.nonEmpty) map.put("Owner", owner)
     map.put("Created", new Date(createTime).toString)
     map.put("Last Access", new Date(lastAccessTime).toString)
+    map.put("Create Version", createVersion)
     map.put("Type", tableType.name)
     provider.foreach(map.put("Provider", _))
     bucketSpec.foreach(map ++= _.toLinkedHashMap)
@@ -345,6 +347,7 @@ object CatalogTable {
   val VIEW_QUERY_OUTPUT_PREFIX = "view.query.out."
   val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
   val VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX = VIEW_QUERY_OUTPUT_PREFIX + "col."
+  val SCHEMA_SPARK_VERSION = "spark.sql.create.version"
 }
 
 /**
