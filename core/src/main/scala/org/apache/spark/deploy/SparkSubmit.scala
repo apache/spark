@@ -649,7 +649,6 @@ object SparkSubmit extends CommandLineUtils {
 
     // Resolve paths in certain spark properties
     val pathConfigs = Seq(
-      "spark.jars",
       "spark.files",
       "spark.yarn.dist.files",
       "spark.yarn.dist.archives",
@@ -973,7 +972,7 @@ object SparkSubmit extends CommandLineUtils {
     paths.split(",").map(_.trim).filter(_.nonEmpty).flatMap { path =>
       val uri = Utils.resolveURI(path)
       uri.getScheme match {
-        case "local" | "http" | "https" | "ftp" => Array(path)
+        case "local" | "file" | "http" | "https" | "ftp" => Array(path)
         case _ =>
           val fs = FileSystem.get(uri, hadoopConf)
           Option(fs.globStatus(new Path(uri))).map { status =>
