@@ -432,7 +432,7 @@ case class InsertIntoHiveTable(
           val filesize = fs.getContentSummary(tableLocation).getLength()
           val numpartition = (filesize / blocksize + 1).toInt
           val df = sqlContext.read.format(source).load(tableLocation.toString())
-                  .repartition(numpartition)
+                  .coalesce(numpartition)
           df.write.format(source).save(tmppath)
           
           val srcPath = new Path(tmppath)
@@ -442,7 +442,7 @@ case class InsertIntoHiveTable(
           fs.rename(srcPath, dstPath)
           val successpath = new Path(tableLocation + "/_SUCCESS")
           if(fs.exists(successpath)) fs.delete(successpath, true)
-          
+          if(fs.exists(srcPath)) fs.delete(srcPath, true)
         }else{
           //have partition ,but Supports 2 partition fields
           val fs = FileSystem.get(hadoopConf)
@@ -452,7 +452,7 @@ case class InsertIntoHiveTable(
               val partionPath = partitonTmppath + "_merges"
               val filesize = fs.getContentSummary(new Path(partitonTmppath)).getLength()
               val numpartition = (filesize / blocksize + 1).toInt
-              val df = sqlContext.read.format(source).load(partitonTmppath).repartition(numpartition)
+              val df = sqlContext.read.format(source).load(partitonTmppath).coalesce(numpartition)
               df.write.format(source).save(partionPath)
             
               val srcPath = new Path(partionPath)
@@ -462,6 +462,7 @@ case class InsertIntoHiveTable(
               fs.rename(srcPath, dstPath)
               val successpath = new Path(partitonTmppath + "/_SUCCESS")
               if(fs.exists(successpath)) fs.delete(successpath, true)
+              if(fs.exists(srcPath)) fs.delete(srcPath, true)
             }
           }
         }
