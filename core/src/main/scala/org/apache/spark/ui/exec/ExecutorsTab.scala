@@ -19,7 +19,7 @@ package org.apache.spark.ui.exec
 
 import scala.collection.mutable.{LinkedHashMap, ListBuffer}
 
-import org.apache.spark.{ExceptionFailure, Resubmitted, SparkConf, SparkContext}
+import org.apache.spark.{ExceptionFailure, ExecutorLostFailure, Resubmitted, SparkConf, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
@@ -139,6 +139,8 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
           // metrics added by each attempt, but this is much more complicated.
           return
         case _: ExceptionFailure =>
+          taskSummary.tasksFailed += 1
+        case _: ExecutorLostFailure =>
           taskSummary.tasksFailed += 1
         case _ =>
           taskSummary.tasksComplete += 1
