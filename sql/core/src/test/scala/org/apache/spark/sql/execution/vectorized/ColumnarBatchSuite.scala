@@ -1317,7 +1317,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
     assert(column.isNullAt(0) == true)
-    for (i <- 0 until 16) {
+    for (i <- 1 until 16) {
       assert(column.isNullAt(i) == false)
       assert(column.getShort(i) == i)
     }
@@ -1341,7 +1341,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
     assert(column.isNullAt(0) == true)
-    for (i <- 0 until 16) {
+    for (i <- 1 until 16) {
       assert(column.isNullAt(i) == false)
       assert(column.getInt(i) == i)
     }
@@ -1436,7 +1436,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val column = new CachedBatchColumnVector(
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
-    assert(column.isNullAt(0) == false)
+    assert(column.isNullAt(0) == true)
     for (i <- 1 until 16) {
       assert(column.isNullAt(i) == false)
       dataType match {
@@ -1450,10 +1450,19 @@ class ColumnarBatchSuite extends SparkFunSuite {
     (BooleanType :: IntegerType :: DoubleType :: Nil).foreach { dataType => {
       val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
       val row = new SpecificInternalRow(Array(dataType))
+      for (i <- 0 until 16) {
+        dataType match {
+          case _ : BooleanType => row.setBoolean(0, i % 2 == 0)
+          case _ : IntegerType => row.setInt(0, i)
+          case _ : DoubleType => row.setDouble(0, i)
+        }
+        columnBuilder.appendFrom(row, 0)
+      }
 
       /* check row access order */
       val column = new CachedBatchColumnVector(
         JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+
       dataType match {
         case _: BooleanType =>
           /* Row access may start with non-0 */

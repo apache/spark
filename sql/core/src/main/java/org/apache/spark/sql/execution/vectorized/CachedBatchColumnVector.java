@@ -51,7 +51,6 @@ public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
   public CachedBatchColumnVector(byte[] buffer, int numRows, DataType type) {
     super(numRows, type, MemoryMode.ON_HEAP);
     initialize(buffer, type);
-    reserveInternal(numRows);
     reset();
   }
 
