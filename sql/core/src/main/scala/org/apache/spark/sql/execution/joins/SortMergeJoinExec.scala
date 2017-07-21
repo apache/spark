@@ -969,7 +969,7 @@ private class SortMergeFullOuterJoinScanner(
 
   def destruct(): Unit = {
     while (leftIter.advanceNext()) {}
-    while(rightIter.advanceNext()) {}
+    while (rightIter.advanceNext()) {}
   }
   // --- Private methods --------------------------------------------------------------------------
 
