@@ -1257,9 +1257,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
     val row = new SpecificInternalRow(Array(dataType))
 
-    val nullRow = InternalRow(false)
-    nullRow.setNullAt(0)
-    columnBuilder.appendFrom(nullRow, 0)
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
     for (i <- 1 until 16) {
       row.setBoolean(0, i % 2 == 0)
       columnBuilder.appendFrom(row, 0)
@@ -1281,9 +1280,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
     val row = new SpecificInternalRow(Array(dataType))
 
-    val nullRow = InternalRow(false)
-    nullRow.setNullAt(0)
-    columnBuilder.appendFrom(nullRow, 0)
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
     for (i <- 1 until 16) {
       row.setByte(0, i.toByte)
       columnBuilder.appendFrom(row, 0)
@@ -1305,9 +1303,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
     val row = new SpecificInternalRow(Array(dataType))
 
-    val nullRow = InternalRow(false)
-    nullRow.setNullAt(0)
-    columnBuilder.appendFrom(nullRow, 0)
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
     for (i <- 1 until 16) {
       row.setShort(0, i.toShort)
       columnBuilder.appendFrom(row, 0)
@@ -1329,9 +1326,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
     val row = new SpecificInternalRow(Array(dataType))
 
-    val nullRow = InternalRow(false)
-    nullRow.setNullAt(0)
-    columnBuilder.appendFrom(nullRow, 0)
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
     for (i <- 1 until 16) {
       row.setInt(0, i)
       columnBuilder.appendFrom(row, 0)
@@ -1353,9 +1349,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
     val row = new SpecificInternalRow(Array(dataType))
 
-    val nullRow = InternalRow(false)
-    nullRow.setNullAt(0)
-    columnBuilder.appendFrom(nullRow, 0)
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
     for (i <- 1 until 16) {
       row.setLong(0, i.toLong)
       columnBuilder.appendFrom(row, 0)
@@ -1377,9 +1372,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
     val row = new SpecificInternalRow(Array(dataType))
 
-    val nullRow = InternalRow(false)
-    nullRow.setNullAt(0)
-    columnBuilder.appendFrom(nullRow, 0)
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
     for (i <- 1 until 16) {
       row.setFloat(0, i.toFloat)
       columnBuilder.appendFrom(row, 0)
@@ -1401,9 +1395,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
     val row = new SpecificInternalRow(Array(dataType))
 
-    val nullRow = InternalRow(false)
-    nullRow.setNullAt(0)
-    columnBuilder.appendFrom(nullRow, 0)
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
     for (i <- 1 until 16) {
       row.setDouble(0, i.toDouble)
       columnBuilder.appendFrom(row, 0)
@@ -1423,13 +1416,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
   test("CachedBatch String type Apis") {
     val dataType = StringType
     val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
 
-    val nullRow = InternalRow("")
-    nullRow.setNullAt(0)
-    columnBuilder.appendFrom(nullRow, 0)
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
     for (i <- 1 until 16) {
-      val converter = UnsafeProjection.create(Array[DataType](dataType))
-      val row = converter.apply(InternalRow(UTF8String.fromString((i % 4).toString)))
+      row.update(0, UTF8String.fromString((i % 4).toString))
       columnBuilder.appendFrom(row, 0)
     }
 

@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A column backed by data compressed thru ColumnAccessor
+ * A column vector backed by data compressed thru ColumnAccessor
  * this is a wrapper to read compressed data for table cache
  */
 public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
@@ -51,7 +51,6 @@ public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
   public CachedBatchColumnVector(byte[] buffer, int numRows, DataType type) {
     super(numRows, type, MemoryMode.ON_HEAP);
     initialize(buffer, type);
-    reset();
   }
 
   @Override
@@ -233,16 +232,13 @@ public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
   }
 
   private void initialize(byte[] buffer, DataType type) {
-    if (columnAccessor == null) {
-      ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
-      columnAccessor = ColumnAccessor$.MODULE$.apply(type, byteBuffer);
-    }
-    if (mutableRow == null) {
-      unsafeRow = new UnsafeRow(1);
-      bufferHolder = new BufferHolder(unsafeRow);
-      rowWriter = new UnsafeRowWriter(bufferHolder, 1);
-      mutableRow = new MutableUnsafeRow(rowWriter);
-    }
+    ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
+    columnAccessor = ColumnAccessor$.MODULE$.apply(type, byteBuffer);
+
+    unsafeRow = new UnsafeRow(1);
+    bufferHolder = new BufferHolder(unsafeRow);
+    rowWriter = new UnsafeRowWriter(bufferHolder, 1);
+    mutableRow = new MutableUnsafeRow(rowWriter);
 
     if (type instanceof ArrayType) {
       throw new UnsupportedOperationException();
