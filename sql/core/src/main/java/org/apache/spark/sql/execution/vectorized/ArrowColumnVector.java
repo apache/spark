@@ -240,7 +240,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
   }
 
   @Override
-  public void loadBytes(Array array) {
+  public void loadBytes(ColumnVector.Array array) {
     throw new UnsupportedOperationException();
   }
 
@@ -304,7 +304,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
 
       childColumns = new ColumnVector[1];
       childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
-      resultArray = new Array(childColumns[0]);
+      resultArray = new ColumnVector.Array(childColumns[0]);
     } else if (vector instanceof MapVector) {
       MapVector mapVector = (MapVector) vector;
       accessor = new StructAccessor(mapVector);
