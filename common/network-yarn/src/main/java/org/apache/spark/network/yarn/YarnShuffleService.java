@@ -243,7 +243,6 @@ public class YarnShuffleService extends AuxiliaryService {
     String appId = context.getApplicationId().toString();
     try {
       ByteBuffer shuffleSecret = context.getApplicationDataForService();
-      logger.info("Initializing application {}", appId);
       if (isAuthenticationEnabled()) {
         AppId fullId = new AppId(appId);
         if (db != null) {
