@@ -80,7 +80,7 @@ public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
       }
     } else {
       throw new UnsupportedOperationException("Row access order must be equal or ascending." +
-        " Row " + rowId + "is accessed after row "+ previousRowId + "was accessed.");
+        " Row " + rowId + "is accessed after row "+ previousRowId + " was accessed.");
     }
   }
 
