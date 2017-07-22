@@ -129,6 +129,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
         chunksBeingTransferred, maxChunksBeingTransferred);
       channel.close();
+      return;
     }
 
     ManagedBuffer buf;
@@ -143,6 +144,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       return;
     }
 
+    streamManager.chunkBeingSent(req.streamChunkId.streamId);
     respond(new ChunkFetchSuccess(req.streamChunkId, buf)).addListener(future -> {
       streamManager.chunkSent(req.streamChunkId.streamId);
     });
@@ -159,9 +161,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
         chunksBeingTransferred, maxChunksBeingTransferred);
       channel.close();
+      return;
     }
     ManagedBuffer buf;
-
     try {
       buf = streamManager.openStream(req.streamId);
     } catch (Exception e) {
@@ -172,6 +174,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     }
 
     if (buf != null) {
+      streamManager.streamBeingSent(req.streamId);
       respond(new StreamResponse(req.streamId, buf.size(), buf)).addListener(future -> {
         streamManager.streamSent(req.streamId);
       });

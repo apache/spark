@@ -258,8 +258,7 @@ public class TransportConf {
   }
 
   /**
-   * The max number of chunks being transferred at the same time. This config helps avoid OOM on
-   * shuffle server.
+   * The max number of chunks allowed to being transferred at the same time on shuffle service.
    */
   public long maxChunksBeingTransferred() {
     return conf.getLong("spark.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);

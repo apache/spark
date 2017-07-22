@@ -56,12 +56,11 @@ public class OneForOneStreamManager extends StreamManager {
     int curChunk = 0;
 
     // Used to keep track of the number of chunks being transferred and not finished yet.
-    AtomicLong chunksBeingTransferred;
+    volatile long chunksBeingTransferred = 0L;
 
     StreamState(String appId, Iterator<ManagedBuffer> buffers) {
       this.appId = appId;
       this.buffers = Preconditions.checkNotNull(buffers);
-      this.chunksBeingTransferred = new AtomicLong(0L);
     }
   }
 
@@ -90,7 +89,6 @@ public class OneForOneStreamManager extends StreamManager {
         "Requested chunk index beyond end %s", chunkIndex));
     }
     state.curChunk += 1;
-    state.chunksBeingTransferred.incrementAndGet();
     ManagedBuffer nextChunk = state.buffers.next();
 
     if (!state.buffers.hasNext()) {
@@ -111,6 +109,8 @@ public class OneForOneStreamManager extends StreamManager {
     return String.format("%d_%d", streamId, chunkId);
   }
 
+  // Parse streamChunkId to be stream id and chunk id. This is used when fetch remote chunk as a
+  // stream.
   public static Pair<Long, Integer> parseStreamChunkId(String streamChunkId) {
     String[] array = streamChunkId.split("_");
     assert array.length == 2:
@@ -134,7 +134,6 @@ public class OneForOneStreamManager extends StreamManager {
         }
       }
     }
-
   }
 
   @Override
@@ -153,10 +152,20 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   @Override
+  public void chunkBeingSent(long streamId) {
+    streams.get(streamId).chunksBeingTransferred++;
+  }
+
+  @Override
+  public void streamBeingSent(String streamId) {
+    chunkBeingSent(parseStreamChunkId(streamId).getLeft());
+  }
+
+  @Override
   public void chunkSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
-      streamState.chunksBeingTransferred.decrementAndGet();
+      streamState.chunksBeingTransferred--;
     }
   }
 
@@ -169,7 +178,7 @@ public class OneForOneStreamManager extends StreamManager {
   public long chunksBeingTransferred() {
     long sum = 0L;
     for (StreamState streamState: streams.values()) {
-      sum += streamState.chunksBeingTransferred.get();
+      sum += streamState.chunksBeingTransferred;
     }
     return sum;
   }

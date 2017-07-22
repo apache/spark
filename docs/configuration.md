@@ -623,6 +623,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.maxChunksBeingTransferred</code></td>
+  <td>Long.MAX_VALUE</td>
+  <td>
+    The max number of chunks allowed to being transferred at the same time on shuffle service.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
   <td>200</td>
   <td>
@@ -1806,14 +1813,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Disable unencrypted connections for services that support SASL authentication.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.maxChunksBeingTransferred</code></td>
-  <td>Long.MAX_VALUE</td>
-  <td>
-    The max number of chunks being transferred at the same time. This config helps avoid OOM on
-    shuffle server.
   </td>
 </tr>
 <tr>
