@@ -39,6 +39,7 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
@@ -1050,12 +1051,14 @@ object CodeGenerator extends Logging {
       case e: JaninoRuntimeException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
-        logInfo(s"\n${CodeFormatter.format(code, maxLines = 1000)}")
+        val maxLines = new SQLConf().loggingMaxLinesForCodegen
+        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
         throw new JaninoRuntimeException(msg, e)
       case e: CompileException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
-        logInfo(s"\n${CodeFormatter.format(code, maxLines = 1000)}")
+        val maxLines = new SQLConf().loggingMaxLinesForCodegen
+        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
         throw new CompileException(msg, e.getLocation)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
