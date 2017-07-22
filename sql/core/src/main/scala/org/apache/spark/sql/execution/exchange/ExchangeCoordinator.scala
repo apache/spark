@@ -100,6 +100,9 @@ class ExchangeCoordinator(
   // synchronized.
   @volatile private[this] var estimated: Boolean = false
 
+  // A boolean that indicates if this coordinator is active for adaptive query execution.
+  @volatile private[this] var active: Boolean = true
+
   /**
    * Registers a [[ShuffleExchange]] operator to this coordinator. This method is only allowed to
    * be called in the `doPrepare` method of a [[ShuffleExchange]] operator.
@@ -110,6 +113,12 @@ class ExchangeCoordinator(
   }
 
   def isEstimated: Boolean = estimated
+
+  def deactivate: Unit = {
+    active = false
+  }
+
+  def isActive: Boolean = active
 
   /**
    * Estimates partition start indices for post-shuffle partitions based on

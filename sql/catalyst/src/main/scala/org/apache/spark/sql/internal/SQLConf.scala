@@ -204,6 +204,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ADAPTIVE_ONLY_FOR_LAST_SHUFFLE = buildConf("spark.sql.adaptiveOnlyForLastShuffle")
+    .doc("When true, adaptive query execution is enabled only for the last shuffle.")
+    .booleanConf
+    .createWithDefault(false)
+
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.minNumPostShufflePartitions")
       .internal()
@@ -969,6 +974,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def adaptiveOnlyForLastShuffle: Boolean = getConf(ADAPTIVE_ONLY_FOR_LAST_SHUFFLE)
 
   def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)

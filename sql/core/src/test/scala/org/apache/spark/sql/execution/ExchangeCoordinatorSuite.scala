@@ -252,7 +252,8 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   def withSparkSession(
       f: SparkSession => Unit,
       targetNumPostShufflePartitions: Int,
-      minNumPostShufflePartitions: Option[Int]): Unit = {
+      minNumPostShufflePartitions: Option[Int],
+      adaptiveOnlyForLastShuffle: Boolean = false): Unit = {
     val sparkConf =
       new SparkConf(false)
         .setMaster("local[*]")
@@ -265,6 +266,8 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         .set(
           SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key,
           targetNumPostShufflePartitions.toString)
+        .set("spark.sql.adaptiveOnlyForLastShuffle",
+          if (adaptiveOnlyForLastShuffle) "true" else "false")
     minNumPostShufflePartitions match {
       case Some(numPartitions) =>
         sparkConf.set(SQLConf.SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS.key, numPartitions.toString)
@@ -479,5 +482,40 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
       withSparkSession(test, 6144, minNumPostShufflePartitions)
     }
+  }
+
+  test("Enable adaptive query execution only for last shuffle.") {
+    val test = {
+      spark: SparkSession =>
+        val df = spark
+          .range(0, 1000, 1, numInputPartitions)
+          .selectExpr("id % 20 as key", "id as value")
+          .groupBy("key").sum("value").toDF("newId", "newValue")
+          .selectExpr("newId % 2 as key", "newValue")
+          .groupBy("key").sum("newValue")
+
+        // Check the answer first
+        val expected = spark.range(0, 1000)
+          .selectExpr("id % 2 as key", "id as value")
+          .groupBy("key").sum("value").collect()
+        checkAnswer(df, expected)
+
+        // Check the number of active coordinator
+        var activeCoordinatorOpt: Option[ExchangeCoordinator] = None
+        var nonActiveCoordinatorOpt: Option[ExchangeCoordinator] = None
+        df.queryExecution.executedPlan transformDown {
+          case operator @ ShuffleExchange(_, _, Some(coordinator)) =>
+            if (coordinator.isActive) {
+              assert(activeCoordinatorOpt.isEmpty && nonActiveCoordinatorOpt.isEmpty)
+              activeCoordinatorOpt = Some(coordinator)
+            } else {
+              assert(activeCoordinatorOpt.isDefined && nonActiveCoordinatorOpt.isEmpty)
+              nonActiveCoordinatorOpt = Some(coordinator)
+            }
+            operator
+        }
+        assert(activeCoordinatorOpt.isDefined && nonActiveCoordinatorOpt.isDefined)
+    }
+    withSparkSession(test, 2000, None, true)
   }
 }
