@@ -2228,7 +2228,8 @@ object functions {
    * Locate the position of the first occurrence of substr column in the given string.
    * Returns null if either of the arguments are null.
    *
-   * @note The position is not zero based, but 1 based index.
+   * @note The position is not zero based, but 1 based index. Returns 0 if substr
+   * could not be found in str.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2407,8 +2408,7 @@ object functions {
    * returns the slice of byte array that starts at `pos` in byte and is of length `len`
    * when str is Binary type
    *
-   * @note The position is not zero based, but 1 based index. Returns 0 if substr
-   * could not be found in str.
+   * @note The position is not zero based, but 1 based index.
    *
    * @group string_funcs
    * @since 1.5.0
