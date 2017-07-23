@@ -149,7 +149,7 @@ public final class ColumnarBatch {
           } else if (dt instanceof DoubleType) {
             row.setDouble(i, getDouble(i));
           } else if (dt instanceof StringType) {
-            row.update(i, getUTF8String(i));
+            row.update(i, getUTF8String(i).copy());
           } else if (dt instanceof BinaryType) {
             row.update(i, getBinary(i));
           } else if (dt instanceof DecimalType) {

@@ -631,21 +631,23 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def alterTableStats(
       db: String,
       table: String,
-      stats: CatalogStatistics): Unit = withClient {
+      stats: Option[CatalogStatistics]): Unit = withClient {
     requireTableExists(db, table)
     val rawTable = getRawTable(db, table)
 
     // convert table statistics to properties so that we can persist them through hive client
-    var statsProperties: Map[String, String] =
-      Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
-    if (stats.rowCount.isDefined) {
-      statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
-    }
-    val colNameTypeMap: Map[String, DataType] =
-      rawTable.schema.fields.map(f => (f.name, f.dataType)).toMap
-    stats.colStats.foreach { case (colName, colStat) =>
-      colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
-        statsProperties += (columnStatKeyPropName(colName, k) -> v)
+    val statsProperties = new mutable.HashMap[String, String]()
+    if (stats.isDefined) {
+      statsProperties += STATISTICS_TOTAL_SIZE -> stats.get.sizeInBytes.toString()
+      if (stats.get.rowCount.isDefined) {
+        statsProperties += STATISTICS_NUM_ROWS -> stats.get.rowCount.get.toString()
+      }
+      val colNameTypeMap: Map[String, DataType] =
+        rawTable.schema.fields.map(f => (f.name, f.dataType)).toMap
+      stats.get.colStats.foreach { case (colName, colStat) =>
+        colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
+          statsProperties += (columnStatKeyPropName(colName, k) -> v)
+        }
       }
     }
 
@@ -1086,8 +1088,18 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
     val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
-    client.getPartitions(db, table, partialSpec.map(lowerCasePartitionSpec)).map { part =>
+    val res = client.getPartitions(db, table, partialSpec.map(lowerCasePartitionSpec)).map { part =>
       part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
+    }
+
+    partialSpec match {
+      // This might be a bug of Hive: When the partition value inside the partial partition spec
+      // contains dot, and we ask Hive to list partitions w.r.t. the partial partition spec, Hive
+      // treats dot as matching any single character and may return more partitions than we
+      // expected. Here we do an extra filter to drop unexpected partitions.
+      case Some(spec) if spec.exists(_._2.contains(".")) =>
+        res.filter(p => isPartialPartitionSpec(spec, p.spec))
+      case _ => res
     }
   }
 
@@ -1128,6 +1140,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override protected def doDropFunction(db: String, name: String): Unit = withClient {
     requireFunctionExists(db, name)
     client.dropFunction(db, name)
+  }
+
+  override protected def doAlterFunction(
+      db: String, funcDefinition: CatalogFunction): Unit = withClient {
+    requireDbExists(db)
+    val functionName = funcDefinition.identifier.funcName.toLowerCase(Locale.ROOT)
+    requireFunctionExists(db, functionName)
+    val functionIdentifier = funcDefinition.identifier.copy(funcName = functionName)
+    client.alterFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
   override protected def doRenameFunction(
