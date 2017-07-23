@@ -2713,7 +2713,7 @@ class Dataset[T] private[sql](
    */
   def persist(eager: Boolean): this.type = {
     persist()
-    if (eager) queryExecution.toRdd.count()
+    if (eager) queryExecution.toRdd.foreachPartition(_ => {})
     this
   }
 
@@ -2761,18 +2761,10 @@ class Dataset[T] private[sql](
     queryExecution.sparkPlan match {
       case i: InMemoryTableScanExec =>
         val blockManager = sparkSession.sparkContext.env.blockManager
-
         val rdd = i.relation.cachedColumnBuffers
         val blockIDs = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index))
-
-        var foundNonexistentBlocks = false
         blockIDs.foreach { bid =>
-          if (blockManager.get(bid).isEmpty) {
-            foundNonexistentBlocks = true
-          } else {
-            blockManager.releaseLock(bid)
-          }
-          if (foundNonexistentBlocks) return false
+          if (blockManager.get(bid).nonEmpty) blockManager.releaseLock(bid) else return false
         }
         true
       case _ => false
