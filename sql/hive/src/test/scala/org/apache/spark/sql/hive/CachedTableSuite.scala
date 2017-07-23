@@ -28,27 +28,10 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
 
 class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
-
-  def rddIdOf(tableName: String): Int = {
-    val plan = table(tableName).queryExecution.sparkPlan
-    plan.collect {
-      case InMemoryTableScanExec(_, _, relation) =>
-        relation.cachedColumnBuffers.id
-      case _ =>
-        fail(s"Table $tableName is not cached\n" + plan)
-    }.head
-  }
-
-  def isMaterialized(rddId: Int): Boolean = {
-    val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
-    maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
-    maybeBlock.nonEmpty
-  }
 
   test("cache table") {
     val preCacheResults = sql("SELECT * FROM src").collect().toSeq
@@ -138,14 +121,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT * FROM src")
       assertCached(table("testCacheTable"))
-
-      val rddId = rddIdOf("testCacheTable")
-      assert(
-        isMaterialized(rddId),
-        "Eagerly cached in-memory table should have already been materialized")
+      assertMaterialized(table("testCacheTable"))
 
       uncacheTable("testCacheTable")
-      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+      assertNotMaterialized(table("testCacheTable"))
     }
   }
 
@@ -153,33 +132,23 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT key FROM src LIMIT 10")
       assertCached(table("testCacheTable"))
-
-      val rddId = rddIdOf("testCacheTable")
-      assert(
-        isMaterialized(rddId),
-        "Eagerly cached in-memory table should have already been materialized")
+      assertMaterialized(table("testCacheTable"))
 
       uncacheTable("testCacheTable")
-      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+      assertNotMaterialized(table("testCacheTable"))
     }
   }
 
   test("CACHE LAZY TABLE tableName") {
     sql("CACHE LAZY TABLE src")
     assertCached(table("src"))
-
-    val rddId = rddIdOf("src")
-    assert(
-      !isMaterialized(rddId),
-      "Lazily cached in-memory table shouldn't be materialized eagerly")
+    assertNotMaterialized(table("src"))
 
     sql("SELECT COUNT(*) FROM src").collect()
-    assert(
-      isMaterialized(rddId),
-      "Lazily cached in-memory table should have been materialized")
+    assertMaterialized(table("src"))
 
     uncacheTable("src")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    assertNotMaterialized(table("src"))
   }
 
   test("CACHE TABLE with Hive UDF") {

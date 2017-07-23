@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningC
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -54,7 +55,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
@@ -2748,6 +2749,34 @@ class Dataset[T] private[sql](
     sparkSession.sharedState.cacheManager.lookupCachedData(this).map { cachedData =>
       cachedData.cachedRepresentation.storageLevel
     }.getOrElse(StorageLevel.NONE)
+  }
+
+  /**
+   * Returns true when the Dataset is cached and materialized.
+   *
+   * @group basic
+   * @since 2.3.0
+   */
+  def isMaterialized(): Boolean = {
+    queryExecution.sparkPlan match {
+      case i: InMemoryTableScanExec =>
+        val blockManager = sparkSession.sparkContext.env.blockManager
+
+        val rdd = i.relation.cachedColumnBuffers
+        val blockIDs = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index))
+
+        var foundNonexistentBlocks = false
+        blockIDs.foreach { bid =>
+          if (blockManager.get(bid).isEmpty) {
+            foundNonexistentBlocks = true
+          } else {
+            blockManager.releaseLock(bid)
+          }
+          if (foundNonexistentBlocks) return false
+        }
+        true
+      case _ => false
+    }
   }
 
   /**

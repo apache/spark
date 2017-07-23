@@ -17,39 +17,21 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.storage.StorageLevel
 
 
 class DatasetCacheSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  def isMaterialized(rddId: Int): Boolean = {
-    val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
-    maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
-    maybeBlock.nonEmpty
-  }
-
-  def rddIdOf(ds: DataFrame): Int = {
-    val plan = ds.queryExecution.sparkPlan
-    plan.collect {
-      case InMemoryTableScanExec(_, _, relation) =>
-        relation.cachedColumnBuffers.id
-      case _ =>
-        fail(s"Table $tableName is not cached\n" + plan)
-    }.head
-  }
-
   test("eager persist") {
     val ds = Seq("1", "2").toDF()
     ds.persist(eager = false)
-    val rddId = rddIdOf(ds)
-    assert(!isMaterialized(rddId))
+    assert(!ds.isMaterialized())
     ds.persist(eager = true)
     ds.collect()
-    assert(isMaterialized(rddId))
+    assert(ds.isMaterialized())
   }
 
   test("get storage level") {

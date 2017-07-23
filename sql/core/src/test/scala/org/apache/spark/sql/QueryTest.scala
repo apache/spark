@@ -17,23 +17,13 @@
 
 package org.apache.spark.sql
 
-import java.util.{ArrayDeque, Locale, TimeZone}
+import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.streaming.MemoryPlan
-import org.apache.spark.sql.types.{Metadata, ObjectType}
 
 
 abstract class QueryTest extends PlanTest {
@@ -223,6 +213,21 @@ abstract class QueryTest extends PlanTest {
       cachedData.size == numCachedTables,
       s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
         planWithCaching)
+  }
+
+  /**
+   * Asserts that a given [[Dataset]] has been materialized.
+   */
+  def assertMaterialized(query: Dataset[_]): Unit = {
+    assert(query.isMaterialized(),
+      "Eagerly cached cached Dataset should have already been materialized")
+  }
+
+  /**
+   * Asserts that a given [[Dataset]] has not been materialized.
+   */
+  def assertNotMaterialized(query: Dataset[_]): Unit = {
+    assert(!query.isMaterialized(), "Dataset should not be materialized")
   }
 
   /**

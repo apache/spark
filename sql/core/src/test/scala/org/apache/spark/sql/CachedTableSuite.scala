@@ -21,8 +21,6 @@ import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.concurrent.Eventually._
-
 import org.apache.spark.CleanerListener
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
@@ -31,7 +29,7 @@ import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 private case class BigData(s: String)
@@ -47,22 +45,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     } finally {
       super.afterEach()
     }
-  }
-
-  def rddIdOf(tableName: String): Int = {
-    val plan = spark.table(tableName).queryExecution.sparkPlan
-    plan.collect {
-      case InMemoryTableScanExec(_, _, relation) =>
-        relation.cachedColumnBuffers.id
-      case _ =>
-        fail(s"Table $tableName is not cached\n" + plan)
-    }.head
-  }
-
-  def isMaterialized(rddId: Int): Boolean = {
-    val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
-    maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
-    maybeBlock.nonEmpty
   }
 
   private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
@@ -240,17 +222,29 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   test("'CACHE TABLE' and 'UNCACHE TABLE' SQL statement") {
     sql("CACHE TABLE testData")
     assertCached(spark.table("testData"))
-
-    val rddId = rddIdOf("testData")
-    assert(
-      isMaterialized(rddId),
-      "Eagerly cached in-memory table should have already been materialized")
+    assertMaterialized(spark.table("testData"))
 
     sql("UNCACHE TABLE testData")
     assert(!spark.catalog.isCached("testData"), "Table 'testData' should not be cached")
 
     eventually(timeout(10 seconds)) {
-      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+      assertNotMaterialized(spark.table("testData"))
+    }
+  }
+
+  test("'CACHE PARTITIONED TABLE' and 'UNCACHE PARTITIONED TABLE' SQL statement") {
+    withTempView("t1") {
+      testData.repartition(6, $"value").createOrReplaceTempView("t1")
+      sql("CACHE TABLE t1")
+      assertCached(spark.table("t1"))
+      assertMaterialized(spark.table("t1"))
+
+      sql("UNCACHE TABLE t1")
+      assert(!spark.catalog.isCached("t1"), "Table 't1' should not be cached")
+
+      eventually(timeout(10 seconds)) {
+        assertNotMaterialized(spark.table("t1"))
+      }
     }
   }
 
@@ -258,15 +252,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
       assertCached(spark.table("testCacheTable"))
-
-      val rddId = rddIdOf("testCacheTable")
-      assert(
-        isMaterialized(rddId),
-        "Eagerly cached in-memory table should have already been materialized")
+      assertMaterialized(spark.table("testCacheTable"))
 
       spark.catalog.uncacheTable("testCacheTable")
       eventually(timeout(10 seconds)) {
-        assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+        assertNotMaterialized(spark.table("testCacheTable"))
       }
     }
   }
@@ -275,15 +265,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT key FROM testData LIMIT 10")
       assertCached(spark.table("testCacheTable"))
-
-      val rddId = rddIdOf("testCacheTable")
-      assert(
-        isMaterialized(rddId),
-        "Eagerly cached in-memory table should have already been materialized")
+      assertMaterialized(spark.table("testCacheTable"))
 
       spark.catalog.uncacheTable("testCacheTable")
       eventually(timeout(10 seconds)) {
-        assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+        assertNotMaterialized(spark.table("testCacheTable"))
       }
     }
   }
@@ -291,20 +277,14 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   test("CACHE LAZY TABLE tableName") {
     sql("CACHE LAZY TABLE testData")
     assertCached(spark.table("testData"))
-
-    val rddId = rddIdOf("testData")
-    assert(
-      !isMaterialized(rddId),
-      "Lazily cached in-memory table shouldn't be materialized eagerly")
+    assertNotMaterialized(spark.table("testData"))
 
     sql("SELECT COUNT(*) FROM testData").collect()
-    assert(
-      isMaterialized(rddId),
-      "Lazily cached in-memory table should have been materialized")
+    assertMaterialized(spark.table("testData"))
 
     spark.catalog.uncacheTable("testData")
     eventually(timeout(10 seconds)) {
-      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+      assertNotMaterialized(spark.table("testData"))
     }
   }
 

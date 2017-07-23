@@ -462,6 +462,8 @@ abstract class Catalog {
    * @param tableName is either a qualified or unqualified name that designates a table/view.
    *                  If no database identifier is provided, it refers to a temporary view or
    *                  a table/view in the current database.
+   * @return true if the table is cached. Even if it is cached, the table might not be materialized,
+   *         until the first time it is used.
    * @since 2.0.0
    */
   def isCached(tableName: String): Boolean
