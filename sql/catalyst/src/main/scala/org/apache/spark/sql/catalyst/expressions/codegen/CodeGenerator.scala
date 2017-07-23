@@ -1051,13 +1051,13 @@ object CodeGenerator extends Logging {
       case e: JaninoRuntimeException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
-        val maxLines = new SQLConf().loggingMaxLinesForCodegen
+        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
         logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
         throw new JaninoRuntimeException(msg, e)
       case e: CompileException =>
         val msg = s"failed to compile: $e"
         logError(msg, e)
-        val maxLines = new SQLConf().loggingMaxLinesForCodegen
+        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
         logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
         throw new CompileException(msg, e.getLocation)
     }

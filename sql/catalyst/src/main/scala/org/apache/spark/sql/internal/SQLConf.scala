@@ -564,8 +564,10 @@ object SQLConf {
 
   val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
     .internal()
-    .doc("The maximum number of codegen lines to log when errors occur.")
+    .doc("The maximum number of codegen lines to log when errors occur. Use -1 for unlimited.")
     .intConf
+    .checkValue(maxLines => maxLines >= -1, "The maximum must be a positive integer, 0 to " +
+      "disable logging or -1 to apply no limit.")
     .createWithDefault(1000)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")

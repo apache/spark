@@ -129,6 +129,20 @@ class CodeFormatterSuite extends SparkFunSuite {
     """.stripMargin
   }
 
+  testCase("function calls with maxLines=0") (
+    """
+      |foo(
+      |a,
+      |b,
+      |c)
+    """.stripMargin,
+    maxLines = 0
+  ) {
+    """
+      |/* 001 */ [truncated to 0 lines (total lines is 4)]
+    """.stripMargin
+  }
+
   testCase("function calls with maxLines=2") (
     """
       |foo(
