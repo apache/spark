@@ -153,7 +153,11 @@ public class OneForOneStreamManager extends StreamManager {
 
   @Override
   public void chunkBeingSent(long streamId) {
-    streams.get(streamId).chunksBeingTransferred++;
+    StreamState streamState = streams.get(streamId);
+    if (streamState != null) {
+      streamState.chunksBeingTransferred++;
+    }
+
   }
 
   @Override
