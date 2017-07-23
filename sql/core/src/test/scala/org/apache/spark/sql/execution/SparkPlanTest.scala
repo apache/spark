@@ -247,6 +247,7 @@ object SparkPlanTest {
                 sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
           }
       }
+      override lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
     }
     execution.executedPlan.executeCollectPublic().toSeq
   }
