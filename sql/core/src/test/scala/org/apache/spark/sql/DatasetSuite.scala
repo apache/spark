@@ -474,6 +474,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       count,
       (Tuple1(3), 2L), (Tuple1(5), 1L)
     )
+    assert(count.schema(1).name == "count")
   }
 
   test("typed aggregation: expr") {

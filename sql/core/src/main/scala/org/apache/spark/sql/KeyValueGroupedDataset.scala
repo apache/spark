@@ -522,7 +522,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def count(): Dataset[(K, Long)] = agg(functions.count("*").as(ExpressionEncoder[Long]()))
+  def count(): Dataset[(K, Long)] =
+    agg(functions.count("*").as("count").as(ExpressionEncoder[Long]()))
 
   /**
    * (Scala-specific)
