@@ -149,8 +149,17 @@ public class OutputRedirectionSuite extends BaseSuite {
   }
 
   private void waitFor(ChildProcAppHandle handle) throws Exception {
-    while (handle.isRunning()) {
-      Thread.sleep(10);
+    try {
+      while (handle.isRunning()) {
+        Thread.sleep(10);
+      }
+    } finally {
+      // Explicit unregister from server since the handle doesn't yet do that when the
+      // process finishes by itself.
+      LauncherServer server = LauncherServer.getServerInstance();
+      if (server != null) {
+        server.unregister(handle);
+      }
     }
   }
 
