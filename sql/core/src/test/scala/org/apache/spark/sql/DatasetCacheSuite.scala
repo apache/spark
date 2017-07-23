@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.storage.StorageLevel
@@ -100,17 +99,32 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
 
   test("Correct query plans after persist/unpersist") {
     val ds = Seq(1).toDS()
-    assert(ds.queryExecution.executedPlan.collect {
-      case i: InMemoryTableScanExec => i
-    }.isEmpty, "The query plan should not contain cached relation before persist.")
+    assertCached(ds, 0)
     ds.persist()
     ds.count()
-    assert(ds.queryExecution.executedPlan.collect {
-      case i: InMemoryTableScanExec => i
-    }.nonEmpty, "The query plan should contain cached relation after persist.")
+    assertCached(ds, 1)
     ds.unpersist()
-    assert(ds.queryExecution.executedPlan.collect {
-      case i: InMemoryTableScanExec => i
-    }.isEmpty, "The query plan should not contain cached relation after unpersist.")
+    assertCached(ds, 0)
+  }
+
+  test("Dataset's query plans should be correctly cached/uncached after persis/unpersist") {
+    withTable("t") {
+      Seq("1", "2").toDF().write.saveAsTable("t")
+      val ds1 = spark.table("t")
+      val ds2 = spark.table("t")
+
+      // Let's materialize ds1's query plan. ds1 should use uncached plan.
+      assertCached(ds1, 0)
+
+      ds2.persist()
+
+      // ds1 should use cached plan now.
+      assertCached(ds1, 1)
+
+      ds2.unpersist()
+
+      // ds1 should use uncached plan now.
+      assertCached(ds1, 0)
+    }
   }
 }
