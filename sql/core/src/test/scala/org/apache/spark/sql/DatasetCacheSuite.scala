@@ -25,6 +25,15 @@ import org.apache.spark.storage.StorageLevel
 class DatasetCacheSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  override def afterEach(): Unit = {
+    try {
+      // Clear all persistent datasets after each test
+      spark.sharedState.cacheManager.clearCache()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   test("eager persist") {
     val ds = Seq("1", "2").toDF()
     ds.persist(eager = false)
