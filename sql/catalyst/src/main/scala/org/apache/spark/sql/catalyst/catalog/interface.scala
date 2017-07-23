@@ -205,6 +205,7 @@ case class BucketSpec(
  *                           configured.
  * @param ignoredProperties is a list of table properties that are used by the underlying table
  *                          but ignored by Spark SQL yet.
+ * @param createVersion records the version of Spark that created this table metadata.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -303,9 +304,9 @@ case class CatalogTable(
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
     if (owner.nonEmpty) map.put("Owner", owner)
-    map.put("Created", new Date(createTime).toString)
+    map.put("Created Time", new Date(createTime).toString)
     map.put("Last Access", new Date(lastAccessTime).toString)
-    map.put("Create Version", createVersion)
+    map.put("Created By", "Spark " + createVersion)
     map.put("Type", tableType.name)
     provider.foreach(map.put("Provider", _))
     bucketSpec.foreach(map ++= _.toLinkedHashMap)
@@ -347,7 +348,7 @@ object CatalogTable {
   val VIEW_QUERY_OUTPUT_PREFIX = "view.query.out."
   val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
   val VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX = VIEW_QUERY_OUTPUT_PREFIX + "col."
-  val SCHEMA_SPARK_VERSION = "spark.sql.create.version"
+  val CREATED_SPARK_VERSION = "spark.sql.create.version"
 }
 
 /**

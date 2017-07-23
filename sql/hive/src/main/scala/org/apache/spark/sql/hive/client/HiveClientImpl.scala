@@ -44,7 +44,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.catalog.CatalogTable.SCHEMA_SPARK_VERSION
+import org.apache.spark.sql.catalyst.catalog.CatalogTable.CREATED_SPARK_VERSION
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
@@ -478,7 +478,7 @@ private[hive] class HiveClientImpl(
         owner = h.getOwner,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
-        createVersion = h.getProperty(SCHEMA_SPARK_VERSION),
+        createVersion = h.getProperty(CREATED_SPARK_VERSION),
         storage = CatalogStorageFormat(
           locationUri = shim.getDataLocation(h).map(CatalogUtils.stringToURI),
           // To avoid ClassNotFound exception, we try our best to not get the format class, but get
@@ -934,7 +934,7 @@ private[hive] object HiveClientImpl {
       table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
-    hiveTable.setProperty(SCHEMA_SPARK_VERSION, table.createVersion)
+    hiveTable.setProperty(CREATED_SPARK_VERSION, table.createVersion)
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
     // Hive will expand the view text, so it needs 2 fields: viewOriginalText and viewExpandedText.
     // Since we don't expand the view text, but only add table properties, we map the `viewText` to
