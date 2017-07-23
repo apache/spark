@@ -25,6 +25,11 @@ import org.apache.spark.storage.StorageLevel
 class DatasetCacheSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  // Clear all persistent datasets after each test
+  override def afterEach(): Unit = {
+    spark.sharedState.cacheManager.clearCache()
+  }
+
   test("get storage level") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")
@@ -43,8 +48,6 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     // joined Dataset should not be persisted
     val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
     assert(joined.storageLevel == StorageLevel.NONE)
-    ds1.unpersist()
-    ds2.unpersist()
   }
 
   test("persist and unpersist") {
@@ -61,7 +64,6 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     // Drop the cache.
     cached.unpersist()
     assert(cached.storageLevel == StorageLevel.NONE, "The Dataset should not be cached.")
-    ds.unpersist()
   }
 
   test("persist and then rebind right encoder when join 2 datasets") {
