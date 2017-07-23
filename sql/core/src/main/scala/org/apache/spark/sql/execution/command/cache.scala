@@ -41,7 +41,7 @@ case class CacheTableCommand(
 
     if (!isLazy) {
       // Performs eager caching
-      sparkSession.table(tableIdent).count()
+      sparkSession.table(tableIdent).persist(eager = true)
     }
 
     Seq.empty[Row]
