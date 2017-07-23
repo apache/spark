@@ -2706,6 +2706,18 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
+   * @param eager If true, persist the Dataset eagerly.
+   * @group basic
+   * @since 2.3.0
+   */
+  def persist(eager: Boolean): this.type = {
+    persist()
+    if (eager) queryExecution.toRdd.count()
+    this
+  }
+
+  /**
+   * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
    * @group basic
    * @since 1.6.0
