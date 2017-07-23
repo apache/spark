@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
 class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   // TODO: Move the planner an optimizer into here from SessionState.
-  protected def planner = sparkSession.sessionState.planner
+  def planner: SparkPlanner = sparkSession.sessionState.planner
 
   def assertAnalyzed(): Unit = {
     // Analyzer is invoked outside the try block to avoid calling it again from within the
@@ -257,11 +257,11 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
  * plans.
  */
 class CacheWatcher(val queryExecution: QueryExecution) {
-  private var _withCachedData: Option[LogicalPlan] = None
-  private var _optimizedPlan: Option[LogicalPlan] = None
-  private var _sparkPlan: Option[SparkPlan] = None
-  private var _executedPlan: Option[SparkPlan] = None
-  private var _rdd: Option[RDD[InternalRow]] = None
+  protected var _withCachedData: Option[LogicalPlan] = None
+  protected var _optimizedPlan: Option[LogicalPlan] = None
+  protected var _sparkPlan: Option[SparkPlan] = None
+  protected var _executedPlan: Option[SparkPlan] = None
+  protected var _rdd: Option[RDD[InternalRow]] = None
 
   private def reset(): Unit = {
     _withCachedData = None
@@ -272,7 +272,7 @@ class CacheWatcher(val queryExecution: QueryExecution) {
   }
 
   // Check if the query plan needs to be changed due to changes in cache status.
-  private def updateWithCachePlans(): Unit = if (_withCachedData.isEmpty) {
+  protected def updateWithCachePlans(): Unit = if (_withCachedData.isEmpty) {
     queryExecution.assertAnalyzed()
     queryExecution.assertSupported()
     val cachedPlan =
@@ -295,7 +295,7 @@ class CacheWatcher(val queryExecution: QueryExecution) {
     _withCachedData.get
   }
 
-  private def updateAndGetOptimizedPlan(): LogicalPlan = {
+  protected def updateAndGetOptimizedPlan(): LogicalPlan = {
     val plan = queryExecution.sparkSession.sessionState.optimizer.execute(withCachedData)
     _optimizedPlan = Some(plan)
     plan
@@ -308,12 +308,12 @@ class CacheWatcher(val queryExecution: QueryExecution) {
     _optimizedPlan.getOrElse(updateAndGetOptimizedPlan())
   }
 
-  private def updateAndGetSparkPlan(): SparkPlan = {
+  protected def updateAndGetSparkPlan(): SparkPlan = {
     SparkSession.setActiveSession(queryExecution.sparkSession)
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
     //       but we will implement to choose the best plan.
     val plan =
-      queryExecution.sparkSession.sessionState.planner.plan(ReturnAnswer(optimizedPlan)).next()
+      queryExecution.planner.plan(ReturnAnswer(optimizedPlan)).next()
     _sparkPlan = Some(plan)
     plan
   }
@@ -325,7 +325,7 @@ class CacheWatcher(val queryExecution: QueryExecution) {
     _sparkPlan.getOrElse(updateAndGetSparkPlan())
   }
 
-  private def updateAndGetExecutedPlan(): SparkPlan = {
+  protected def updateAndGetExecutedPlan(): SparkPlan = {
     val plan = queryExecution.prepareForExecution(sparkPlan)
     _executedPlan = Some(plan)
     plan
@@ -338,7 +338,7 @@ class CacheWatcher(val queryExecution: QueryExecution) {
     _executedPlan.getOrElse(updateAndGetExecutedPlan())
   }
 
-  private def updateAndGetRDD(): RDD[InternalRow] = {
+  protected def updateAndGetRDD(): RDD[InternalRow] = {
     val rdd = executedPlan.execute()
     _rdd = Some(rdd)
     rdd
