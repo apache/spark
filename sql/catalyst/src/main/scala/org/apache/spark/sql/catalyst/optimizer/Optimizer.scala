@@ -495,6 +495,20 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Eliminate no-op Projects
     case p @ Project(_, child) if sameOutput(child.output, p.output) => child
 
+    // The column of father project contains not deterministic function
+    // e.g Rand function. father project will be split to two project.
+    case h @ Project(fields, child)
+      if !fields.forall(_.deterministic) && (child.outputSet -- h.references).nonEmpty =>
+      val firstChild = h.children.head
+      val newOutput = prunedChild(firstChild, h.references).output
+      val newChildren = h.children.map { p =>
+        val selected = p.output.zipWithIndex.filter { case (a, i) =>
+          newOutput.contains(firstChild.output(i))
+        }.map(_._1)
+        Project(selected, p)
+      }
+      h.withNewChildren(newChildren)
+
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
@@ -522,8 +536,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
    * so remove it.
    */
   private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
-      if p2.outputSet.subsetOf(child.outputSet) =>
+    case p1 @ Project(_, f @ Filter(condition, p2 @ Project(_, child)))
+      if p2.outputSet.subsetOf(child.outputSet) && condition.deterministic =>
       p1.copy(child = f.copy(child = child))
   }
 }
@@ -535,6 +549,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
 object CollapseProject extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case p1 @ Project(fields, p2 @ Project(_, _))
+      if !fields.forall(_.deterministic) && p2.references.nonEmpty => p1
     case p1 @ Project(_, p2: Project) =>
       if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
         p1
@@ -774,7 +790,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // matters for non-deterministic expressions, while pushing down predicates changes the order.
     // This also applies to Aggregate.
     case Filter(condition, project @ Project(fields, grandChild))
-      if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
+      if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition)
+        && condition.deterministic =>
 
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
