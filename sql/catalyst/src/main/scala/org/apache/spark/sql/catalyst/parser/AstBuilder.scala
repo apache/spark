@@ -765,17 +765,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     } else {
       ctx.tableAlias.strictIdentifier.getText
     }
-
-    val columnNamesOption = if (ctx.tableAlias.identifierList != null) {
-      Some(visitIdentifierList(ctx.tableAlias.identifierList)).map { names =>
-        names.map(n => UnresolvedAttribute(n :: Nil))
-      }
+    val subquery = SubqueryAlias(alias, plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample))
+    if (ctx.tableAlias.identifierList != null) {
+      val columnNames = visitIdentifierList(ctx.tableAlias.identifierList)
+      UnresolvedSubqueryColumnAlias(columnNames, subquery)
     } else {
-      None
+      subquery
     }
-
-    SubqueryAlias(alias, plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample),
-      columnNamesOption)
   }
 
   /**
