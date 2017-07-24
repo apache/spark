@@ -261,7 +261,6 @@ public class YarnShuffleService extends AuxiliaryService {
   public void stopApplication(ApplicationTerminationContext context) {
     String appId = context.getApplicationId().toString();
     try {
-      logger.info("Stopping application {}", appId);
       if (isAuthenticationEnabled()) {
         AppId fullId = new AppId(appId);
         if (db != null) {
