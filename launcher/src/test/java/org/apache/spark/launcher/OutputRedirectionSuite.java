@@ -30,7 +30,9 @@ import static java.nio.file.attribute.PosixFilePermission.*;
 
 import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.spi.LoggingEvent;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
@@ -40,6 +42,29 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 public class OutputRedirectionSuite extends BaseSuite {
 
   private static final List<String> MESSAGES = new ArrayList<>();
+
+  private static final List<String> TEST_SCRIPT = Arrays.asList(
+    "#!/bin/sh",
+    "echo \"output\"",
+    "echo \"error\" 1>&2");
+
+  private static File TEST_SCRIPT_PATH;
+
+  @AfterClass
+  public static void cleanupClass() throws Exception {
+    if (TEST_SCRIPT_PATH != null) {
+      TEST_SCRIPT_PATH.delete();
+      TEST_SCRIPT_PATH = null;
+    }
+  }
+
+  @BeforeClass
+  public static void setupClass() throws Exception {
+    TEST_SCRIPT_PATH = File.createTempFile("output-redir-test", ".sh");
+    Files.setPosixFilePermissions(TEST_SCRIPT_PATH.toPath(),
+      EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE));
+    Files.write(TEST_SCRIPT_PATH.toPath(), TEST_SCRIPT);
+  }
 
   @Before
   public void cleanupLog() {
@@ -170,10 +195,8 @@ public class OutputRedirectionSuite extends BaseSuite {
     }
 
     @Override
-    String findSparkSubmit() throws IOException {
-      Path script = new File(getClass().getResource("/output-redir-test.sh").getPath()).toPath();
-      Files.setPosixFilePermissions(script, EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE));
-      return script.toFile().getAbsolutePath();
+    String findSparkSubmit() {
+      return TEST_SCRIPT_PATH.getAbsolutePath();
     }
 
   }
