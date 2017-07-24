@@ -369,7 +369,8 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverFrameworkID(desc: MesosDriverDescription): String = {
-    s"${frameworkId}-${desc.submissionId}"
+    val retries = desc.retryState.map { d => s"-retry-${d.retries.toString}" }.getOrElse("")
+    s"${frameworkId}-${desc.submissionId}${retries}"
   }
 
   private def adjust[A, B](m: collection.Map[A, B], k: A, default: B)(f: B => B) = {
