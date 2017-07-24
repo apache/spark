@@ -42,7 +42,7 @@ case class WindowSpecDefinition(
     orderSpec: Seq[SortOrder],
     frameSpecification: WindowFrame) extends Expression with WindowSpec with Unevaluable {
 
-  override def children: Seq[Expression] = partitionSpec ++ orderSpec ++ Seq(frameSpecification)
+  override def children: Seq[Expression] = partitionSpec ++ orderSpec :+ frameSpecification
 
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess &&

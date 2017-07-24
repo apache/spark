@@ -1133,6 +1133,17 @@ class TypeCoercionSuite extends AnalysisTest {
         Seq(SortOrder(Literal.default(DateType), Ascending)),
         SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L)))
     )
+    // Should not cast SpecialFrameBoundary.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, CurrentRow, Unbounded)),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, CurrentRow, Unbounded))
+    )
   }
 }
 
