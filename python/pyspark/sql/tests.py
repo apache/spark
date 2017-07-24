@@ -30,8 +30,10 @@ import pickle
 import functools
 import time
 import datetime
-
+import array
+import ctypes
 import py4j
+
 try:
     import xmlrunner
 except ImportError:
@@ -58,6 +60,8 @@ from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
+from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_type_mappings
+from pyspark.sql.types import _array_unsigned_int_typecode_ctype_mappings
 from pyspark.tests import QuietTest, ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
@@ -672,6 +676,27 @@ class SQLTests(ReusedPySparkTestCase):
             """Identity"""
             return x
 
+        return_type = IntegerType()
+        f_ = udf(f, return_type)
+
+        self.assertTrue(f.__doc__ in f_.__doc__)
+        self.assertEqual(f, f_.func)
+        self.assertEqual(return_type, f_.returnType)
+
+        class F(object):
+            """Identity"""
+            def __call__(self, x):
+                return x
+
+        f = F()
+        return_type = IntegerType()
+        f_ = udf(f, return_type)
+
+        self.assertTrue(f.__doc__ in f_.__doc__)
+        self.assertEqual(f, f_.func)
+        self.assertEqual(return_type, f_.returnType)
+
+        f = functools.partial(f, x=1)
         return_type = IntegerType()
         f_ = udf(f, return_type)
 
@@ -2311,6 +2336,97 @@ class SQLTests(ReusedPySparkTestCase):
                 [bytearray(b'and here is some more')]]
         df = self.spark.createDataFrame(data, schema=schema)
         df.collect()
+
+    # test for SPARK-16542
+    def test_array_types(self):
+        # This test need to make sure that the Scala type selected is at least
+        # as large as the python's types. This is necessary because python's
+        # array types depend on C implementation on the machine. Therefore there
+        # is no machine independent correspondence between python's array types
+        # and Scala types.
+        # See: https://docs.python.org/2/library/array.html
+
+        def assertCollectSuccess(typecode, value):
+            row = Row(myarray=array.array(typecode, [value]))
+            df = self.spark.createDataFrame([row])
+            self.assertEqual(df.first()["myarray"][0], value)
+
+        # supported string types
+        #
+        # String types in python's array are "u" for Py_UNICODE and "c" for char.
+        # "u" will be removed in python 4, and "c" is not supported in python 3.
+        supported_string_types = []
+        if sys.version_info[0] < 4:
+            supported_string_types += ['u']
+            # test unicode
+            assertCollectSuccess('u', u'a')
+        if sys.version_info[0] < 3:
+            supported_string_types += ['c']
+            # test string
+            assertCollectSuccess('c', 'a')
+
+        # supported float and double
+        #
+        # Test max, min, and precision for float and double, assuming IEEE 754
+        # floating-point format.
+        supported_fractional_types = ['f', 'd']
+        assertCollectSuccess('f', ctypes.c_float(1e+38).value)
+        assertCollectSuccess('f', ctypes.c_float(1e-38).value)
+        assertCollectSuccess('f', ctypes.c_float(1.123456).value)
+        assertCollectSuccess('d', sys.float_info.max)
+        assertCollectSuccess('d', sys.float_info.min)
+        assertCollectSuccess('d', sys.float_info.epsilon)
+
+        # supported signed int types
+        #
+        # The size of C types changes with implementation, we need to make sure
+        # that there is no overflow error on the platform running this test.
+        supported_signed_int_types = list(
+            set(_array_signed_int_typecode_ctype_mappings.keys())
+            .intersection(set(_array_type_mappings.keys())))
+        for t in supported_signed_int_types:
+            ctype = _array_signed_int_typecode_ctype_mappings[t]
+            max_val = 2 ** (ctypes.sizeof(ctype) * 8 - 1)
+            assertCollectSuccess(t, max_val - 1)
+            assertCollectSuccess(t, -max_val)
+
+        # supported unsigned int types
+        #
+        # JVM does not have unsigned types. We need to be very careful to make
+        # sure that there is no overflow error.
+        supported_unsigned_int_types = list(
+            set(_array_unsigned_int_typecode_ctype_mappings.keys())
+            .intersection(set(_array_type_mappings.keys())))
+        for t in supported_unsigned_int_types:
+            ctype = _array_unsigned_int_typecode_ctype_mappings[t]
+            assertCollectSuccess(t, 2 ** (ctypes.sizeof(ctype) * 8) - 1)
+
+        # all supported types
+        #
+        # Make sure the types tested above:
+        # 1. are all supported types
+        # 2. cover all supported types
+        supported_types = (supported_string_types +
+                           supported_fractional_types +
+                           supported_signed_int_types +
+                           supported_unsigned_int_types)
+        self.assertEqual(set(supported_types), set(_array_type_mappings.keys()))
+
+        # all unsupported types
+        #
+        # Keys in _array_type_mappings is a complete list of all supported types,
+        # and types not in _array_type_mappings are considered unsupported.
+        # `array.typecodes` are not supported in python 2.
+        if sys.version_info[0] < 3:
+            all_types = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
+        else:
+            all_types = set(array.typecodes)
+        unsupported_types = all_types - set(supported_types)
+        # test unsupported types
+        for t in unsupported_types:
+            with self.assertRaises(TypeError):
+                a = array.array(t)
+                self.spark.createDataFrame([Row(myarray=a)]).collect()
 
     def test_bucketed_write(self):
         data = [

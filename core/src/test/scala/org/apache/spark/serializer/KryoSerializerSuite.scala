@@ -276,7 +276,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("kryo with collect for specialized tuples") {
-    assert (sc.parallelize( Array((1, 11), (2, 22), (3, 33)) ).collect().head === (1, 11))
+    assert (sc.parallelize( Array((1, 11), (2, 22), (3, 33)) ).collect().head === ((1, 11)))
   }
 
   test("kryo with SerializableHyperLogLog") {
@@ -475,7 +475,7 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
     val deserializationStream = serInstance.deserializeStream(new ByteArrayInputStream(worldWorld))
     assert(deserializationStream.readValue[Any]() === world)
     deserializationStream.close()
-    assert(serInstance.deserialize[Any](helloHello) === (hello, hello))
+    assert(serInstance.deserialize[Any](helloHello) === ((hello, hello)))
   }
 }
 

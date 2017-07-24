@@ -113,4 +113,12 @@ public class JavaUDFSuite implements Serializable {
     spark.udf().register("inc", (Long i) -> i + 1, DataTypes.LongType);
     List<Row> results = spark.sql("SELECT inc(1, 5)").collectAsList();
   }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void udf6Test() {
+    spark.udf().register("returnOne", () -> 1, DataTypes.IntegerType);
+    Row result = spark.sql("SELECT returnOne()").head();
+    Assert.assertEquals(1, result.getInt(0));
+  }
 }

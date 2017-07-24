@@ -877,7 +877,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     // Reverse the contexts to have them in the same sequence as in the SQL statement & turn them
     // into expressions.
-    val expressions = contexts.reverse.map(expression)
+    val expressions = contexts.reverseMap(expression)
 
     // Create a balanced tree.
     def reduceToExpressionTree(low: Int, high: Int): Expression = high - low match {
@@ -1261,25 +1261,54 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a dereference expression. The return type depends on the type of the parent, this can
-   * either be a [[UnresolvedAttribute]] (if the parent is an [[UnresolvedAttribute]]), or an
-   * [[UnresolvedExtractValue]] if the parent is some expression.
+   * Currently only regex in expressions of SELECT statements are supported; in other
+   * places, e.g., where `(a)?+.+` = 2, regex are not meaningful.
+   */
+  private def canApplyRegex(ctx: ParserRuleContext): Boolean = withOrigin(ctx) {
+    var parent = ctx.getParent
+    while (parent != null) {
+      if (parent.isInstanceOf[NamedExpressionContext]) return true
+      parent = parent.getParent
+    }
+    return false
+  }
+
+  /**
+   * Create a dereference expression. The return type depends on the type of the parent.
+   * If the parent is an [[UnresolvedAttribute]], it can be a [[UnresolvedAttribute]] or
+   * a [[UnresolvedRegex]] for regex quoted in ``; if the parent is some other expression,
+   * it can be [[UnresolvedExtractValue]].
    */
   override def visitDereference(ctx: DereferenceContext): Expression = withOrigin(ctx) {
     val attr = ctx.fieldName.getText
     expression(ctx.base) match {
-      case UnresolvedAttribute(nameParts) =>
-        UnresolvedAttribute(nameParts :+ attr)
+      case unresolved_attr @ UnresolvedAttribute(nameParts) =>
+        ctx.fieldName.getStart.getText match {
+          case escapedIdentifier(columnNameRegex)
+            if conf.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
+            UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name),
+              conf.caseSensitiveAnalysis)
+          case _ =>
+            UnresolvedAttribute(nameParts :+ attr)
+        }
       case e =>
         UnresolvedExtractValue(e, Literal(attr))
     }
   }
 
   /**
-   * Create an [[UnresolvedAttribute]] expression.
+   * Create an [[UnresolvedAttribute]] expression or a [[UnresolvedRegex]] if it is a regex
+   * quoted in ``
    */
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
-    UnresolvedAttribute.quoted(ctx.getText)
+    ctx.getStart.getText match {
+      case escapedIdentifier(columnNameRegex)
+        if conf.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
+        UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
+      case _ =>
+        UnresolvedAttribute.quoted(ctx.getText)
+    }
+
   }
 
   /**

@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
@@ -980,7 +980,7 @@ class Dataset[T] private[sql](
    * @param condition Join expression.
    * @param joinType Type of join to perform. Default `inner`. Must be one of:
    *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
-   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
+   *                 `right`, `right_outer`.
    *
    * @group typedrel
    * @since 1.6.0
@@ -996,6 +996,10 @@ class Dataset[T] private[sql](
         other.logicalPlan,
         JoinType(joinType),
         Some(condition.expr))).analyzed.asInstanceOf[Join]
+
+    if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
+      throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
+    }
 
     // For both join side, combine all outputs into a single column and alias it with "_1" or "_2",
     // to match the schema for the encoder of the join result.
@@ -1178,8 +1182,29 @@ class Dataset[T] private[sql](
     case "*" =>
       Column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
-      val expr = resolve(colName)
-      Column(expr)
+      if (sqlContext.conf.supportQuotedRegexColumnName) {
+        colRegex(colName)
+      } else {
+        val expr = resolve(colName)
+        Column(expr)
+      }
+  }
+
+  /**
+   * Selects column based on the column name specified as a regex and return it as [[Column]].
+   * @group untypedrel
+   * @since 2.3.0
+   */
+  def colRegex(colName: String): Column = {
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    colName match {
+      case ParserUtils.escapedIdentifier(columnNameRegex) =>
+        Column(UnresolvedRegex(columnNameRegex, None, caseSensitive))
+      case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
+        Column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
+      case _ =>
+        Column(resolve(colName))
+    }
   }
 
   /**

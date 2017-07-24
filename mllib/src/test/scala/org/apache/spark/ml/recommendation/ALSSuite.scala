@@ -898,7 +898,7 @@ class ALSStorageSuite
     // check final factor RDD default storage levels
     val defaultFactorRDDs = sc.getPersistentRDDs.collect {
       case (id, rdd) if rdd.name == "userFactors" || rdd.name == "itemFactors" =>
-        rdd.name -> (id, rdd.getStorageLevel)
+        rdd.name -> ((id, rdd.getStorageLevel))
     }.toMap
     defaultFactorRDDs.foreach { case (_, (id, level)) =>
       assert(level == StorageLevel.MEMORY_AND_DISK)

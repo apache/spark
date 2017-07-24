@@ -15,25 +15,19 @@
  * limitations under the License.
  */
 
-package scala.tools.nsc
+package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.test.SharedSQLContext
 
-// NOTE: Forced to be public (and in scala.tools.nsc package) to access the
-//       settings "explicitParentLoader" method
+class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
 
-/**
- * Provides exposure for the explicitParentLoader method on settings instances.
- */
-@DeveloperApi
-object SparkHelper {
-  /**
-   * Retrieves the explicit parent loader for the provided settings.
-   *
-   * @param settings The settings whose explicit parent loader to retrieve
-   *
-   * @return The Optional classloader representing the explicit parent loader
-   */
-  @DeveloperApi
-  def explicitParentLoader(settings: Settings) = settings.explicitParentLoader
+  test("empty file should be skipped while write to file") {
+    withTempPath { path =>
+      spark.range(100).repartition(10).where("id = 50").write.parquet(path.toString)
+      val partFiles = path.listFiles()
+        .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+      assert(partFiles.length === 2)
+    }
+  }
 }

@@ -15,17 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark.repl
+package org.apache.spark.util
 
-import scala.tools.nsc.Settings
+import org.apache.spark.SparkFunSuite
 
-/**
- * <i>scala.tools.nsc.Settings</i> implementation adding Spark-specific REPL
- * command line options.
- */
-private[repl] class SparkRunnerSettings(error: String => Unit) extends Settings(error) {
-  val loadfiles = MultiStringSetting(
-      "-i",
-      "file",
-      "load a file (assumes the code is given interactively)")
+class BoundedPriorityQueueSuite extends SparkFunSuite {
+  test("BoundedPriorityQueue poll test") {
+    val pq = new BoundedPriorityQueue[Double](4)
+
+    pq += 0.1
+    pq += 1.5
+    pq += 1.0
+    pq += 0.3
+    pq += 0.01
+
+    assert(pq.isEmpty == false)
+    assert(pq.poll() == 0.1)
+    assert(pq.poll() == 0.3)
+    assert(pq.poll() == 1.0)
+    assert(pq.poll() == 1.5)
+    assert(pq.isEmpty == true)
+
+    val pq2 = new BoundedPriorityQueue[(Int, Double)](4)(Ordering.by(_._2))
+    pq2 += 1 -> 0.5
+    pq2 += 5 -> 0.1
+    pq2 += 3 -> 0.3
+    pq2 += 4 -> 0.2
+    pq2 += 1 -> 0.4
+
+    assert(pq2.poll()._2 == 0.2)
+    assert(pq2.poll()._2 == 0.3)
+    assert(pq2.poll()._2 == 0.4)
+    assert(pq2.poll()._2 == 0.5)
+  }
 }

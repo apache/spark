@@ -24,6 +24,7 @@ import json
 import re
 import base64
 from array import array
+import ctypes
 
 if sys.version >= "3":
     long = int
@@ -915,6 +916,93 @@ if sys.version < "3":
         long: LongType,
     })
 
+# Mapping Python array types to Spark SQL DataType
+# We should be careful here. The size of these types in python depends on C
+# implementation. We need to make sure that this conversion does not lose any
+# precision. Also, JVM only support signed types, when converting unsigned types,
+# keep in mind that it required 1 more bit when stored as singed types.
+#
+# Reference for C integer size, see:
+# ISO/IEC 9899:201x specification, chapter 5.2.4.2.1 Sizes of integer types <limits.h>.
+# Reference for python array typecode, see:
+# https://docs.python.org/2/library/array.html
+# https://docs.python.org/3.6/library/array.html
+# Reference for JVM's supported integral types:
+# http://docs.oracle.com/javase/specs/jvms/se8/html/jvms-2.html#jvms-2.3.1
+
+_array_signed_int_typecode_ctype_mappings = {
+    'b': ctypes.c_byte,
+    'h': ctypes.c_short,
+    'i': ctypes.c_int,
+    'l': ctypes.c_long,
+}
+
+_array_unsigned_int_typecode_ctype_mappings = {
+    'B': ctypes.c_ubyte,
+    'H': ctypes.c_ushort,
+    'I': ctypes.c_uint,
+    'L': ctypes.c_ulong
+}
+
+
+def _int_size_to_type(size):
+    """
+    Return the Catalyst datatype from the size of integers.
+    """
+    if size <= 8:
+        return ByteType
+    if size <= 16:
+        return ShortType
+    if size <= 32:
+        return IntegerType
+    if size <= 64:
+        return LongType
+
+# The list of all supported array typecodes is stored here
+_array_type_mappings = {
+    # Warning: Actual properties for float and double in C is not specified in C.
+    # On almost every system supported by both python and JVM, they are IEEE 754
+    # single-precision binary floating-point format and IEEE 754 double-precision
+    # binary floating-point format. And we do assume the same thing here for now.
+    'f': FloatType,
+    'd': DoubleType
+}
+
+# compute array typecode mappings for signed integer types
+for _typecode in _array_signed_int_typecode_ctype_mappings.keys():
+    size = ctypes.sizeof(_array_signed_int_typecode_ctype_mappings[_typecode]) * 8
+    dt = _int_size_to_type(size)
+    if dt is not None:
+        _array_type_mappings[_typecode] = dt
+
+# compute array typecode mappings for unsigned integer types
+for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
+    # JVM does not have unsigned types, so use signed types that is at least 1
+    # bit larger to store
+    size = ctypes.sizeof(_array_unsigned_int_typecode_ctype_mappings[_typecode]) * 8 + 1
+    dt = _int_size_to_type(size)
+    if dt is not None:
+        _array_type_mappings[_typecode] = dt
+
+# Type code 'u' in Python's array is deprecated since version 3.3, and will be
+# removed in version 4.0. See: https://docs.python.org/3/library/array.html
+if sys.version_info[0] < 4:
+    _array_type_mappings['u'] = StringType
+
+# Type code 'c' are only available at python 2
+if sys.version_info[0] < 3:
+    _array_type_mappings['c'] = StringType
+
+# SPARK-21465:
+# In python2, array of 'L' happened to be mistakenly partially supported. To
+# avoid breaking user's code, we should keep this partial support. Below is a
+# dirty hacking to keep this partial support and make the unit test passes
+import platform
+if sys.version_info[0] < 3 and platform.python_implementation() != 'PyPy':
+    if 'L' not in _array_type_mappings.keys():
+        _array_type_mappings['L'] = LongType
+        _array_unsigned_int_typecode_ctype_mappings['L'] = ctypes.c_uint
+
 
 def _infer_type(obj):
     """Infer the DataType from obj
@@ -938,12 +1026,17 @@ def _infer_type(obj):
                 return MapType(_infer_type(key), _infer_type(value), True)
         else:
             return MapType(NullType(), NullType(), True)
-    elif isinstance(obj, (list, array)):
+    elif isinstance(obj, list):
         for v in obj:
             if v is not None:
                 return ArrayType(_infer_type(obj[0]), True)
         else:
             return ArrayType(NullType(), True)
+    elif isinstance(obj, array):
+        if obj.typecode in _array_type_mappings:
+            return ArrayType(_array_type_mappings[obj.typecode](), False)
+        else:
+            raise TypeError("not supported type: array(%s)" % obj.typecode)
     else:
         try:
             return _infer_schema(obj)

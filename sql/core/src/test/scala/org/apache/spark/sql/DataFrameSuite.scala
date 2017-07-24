@@ -1167,7 +1167,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-6899: type should match when using codegen") {
-    checkAnswer(decimalData.agg(avg('a)), Row(new java.math.BigDecimal(2.0)))
+    checkAnswer(decimalData.agg(avg('a)), Row(new java.math.BigDecimal(2)))
   }
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
@@ -1179,28 +1179,31 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    val df = spark.read.json(Seq("""{"a.b": {"c": {"d..e": {"f": 1}}}}""").toDS())
-    checkAnswer(
-      df.select(df("`a.b`.c.`d..e`.`f`")),
-      Row(1)
-    )
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      val df = spark.read.json(Seq("""{"a.b": {"c": {"d..e": {"f": 1}}}}""").toDS())
+      checkAnswer(
+        df.select(df("`a.b`.c.`d..e`.`f`")),
+        Row(1)
+      )
 
-    val df2 = spark.read.json(Seq("""{"a  b": {"c": {"d  e": {"f": 1}}}}""").toDS())
-    checkAnswer(
-      df2.select(df2("`a  b`.c.d  e.f")),
-      Row(1)
-    )
+      val df2 = spark.read.json(Seq("""{"a  b": {"c": {"d  e": {"f": 1}}}}""").toDS())
+      checkAnswer(
+        df2.select(df2("`a  b`.c.d  e.f")),
+        Row(1)
+      )
 
-    def checkError(testFun: => Unit): Unit = {
-      val e = intercept[org.apache.spark.sql.AnalysisException] {
-        testFun
+      def checkError(testFun: => Unit): Unit = {
+        val e = intercept[org.apache.spark.sql.AnalysisException] {
+          testFun
+        }
+        assert(e.getMessage.contains("syntax error in attribute name:"))
       }
-      assert(e.getMessage.contains("syntax error in attribute name:"))
+
+      checkError(df("`abc.`c`"))
+      checkError(df("`abc`..d"))
+      checkError(df("`a`.b."))
+      checkError(df("`a.b`.c.`d"))
     }
-    checkError(df("`abc.`c`"))
-    checkError(df("`abc`..d"))
-    checkError(df("`a`.b."))
-    checkError(df("`a.b`.c.`d"))
   }
 
   test("SPARK-7324 dropDuplicates") {
@@ -1928,11 +1931,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-17957: outer join + na.fill") {
-    val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
-    val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
-    val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
-    val df3 = Seq((3, 1)).toDF("a", "d")
-    checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
+      val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
+      val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
+      val df3 = Seq((3, 1)).toDF("a", "d")
+      checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
+    }
   }
 
   test("SPARK-17123: Performing set operations that combine non-scala native types") {
@@ -1966,7 +1971,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-19691 Calculating percentile of decimal column fails with ClassCastException") {
     val df = spark.range(1).selectExpr("CAST(id as DECIMAL) as x").selectExpr("percentile(x, 0.5)")
-    checkAnswer(df, Row(BigDecimal(0.0)) :: Nil)
+    checkAnswer(df, Row(BigDecimal(0)) :: Nil)
   }
 
   test("SPARK-19893: cannot run set operations with map type") {

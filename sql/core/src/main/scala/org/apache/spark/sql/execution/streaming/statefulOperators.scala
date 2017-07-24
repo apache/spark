@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -29,9 +31,9 @@ import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CompletionIterator, NextIterator}
 
@@ -73,8 +75,20 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
     "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "total time to update rows"),
     "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "total time to remove rows"),
-    "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes")
-  )
+    "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
+    "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state")
+  ) ++ stateStoreCustomMetrics
+
+  /**
+   * Get the progress made by this stateful operator after execution. This should be called in
+   * the driver after this SparkPlan has been executed and metrics have been updated.
+   */
+  def getProgress(): StateOperatorProgress = {
+    new StateOperatorProgress(
+      numRowsTotal = longMetric("numTotalStateRows").value,
+      numRowsUpdated = longMetric("numUpdatedStateRows").value,
+      memoryUsedBytes = longMetric("stateMemory").value)
+  }
 
   /** Records the duration of running `body` for the next query progress update. */
   protected def timeTakenMs(body: => Unit): Long = {
@@ -82,6 +96,29 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     val result = body
     val endTime = System.nanoTime()
     math.max(NANOSECONDS.toMillis(endTime - startTime), 0)
+  }
+
+  /**
+   * Set the SQL metrics related to the state store.
+   * This should be called in that task after the store has been updated.
+   */
+  protected def setStoreMetrics(store: StateStore): Unit = {
+    val storeMetrics = store.metrics
+    longMetric("numTotalStateRows") += storeMetrics.numKeys
+    longMetric("stateMemory") += storeMetrics.memoryUsedBytes
+    storeMetrics.customMetrics.foreach { case (metric, value) =>
+      longMetric(metric.name) += value
+    }
+  }
+
+  private def stateStoreCustomMetrics: Map[String, SQLMetric] = {
+    val provider = StateStoreProvider.create(sqlContext.conf.stateStoreProviderClass)
+    provider.supportedCustomMetrics.map {
+      case StateStoreCustomSizeMetric(name, desc) =>
+        name -> SQLMetrics.createSizeMetric(sparkContext, desc)
+      case StateStoreCustomTimingMetric(name, desc) =>
+        name -> SQLMetrics.createTimingMetric(sparkContext, desc)
+    }.toMap
   }
 }
 
@@ -197,7 +234,6 @@ case class StateStoreSaveExec(
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
         val numOutputRows = longMetric("numOutputRows")
-        val numTotalStateRows = longMetric("numTotalStateRows")
         val numUpdatedStateRows = longMetric("numUpdatedStateRows")
         val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
         val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
@@ -218,7 +254,7 @@ case class StateStoreSaveExec(
             commitTimeMs += timeTakenMs {
               store.commit()
             }
-            numTotalStateRows += store.numKeys()
+            setStoreMetrics(store)
             store.iterator().map { rowPair =>
               numOutputRows += 1
               rowPair.value
@@ -261,7 +297,7 @@ case class StateStoreSaveExec(
               override protected def close(): Unit = {
                 allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
                 commitTimeMs += timeTakenMs { store.commit() }
-                numTotalStateRows += store.numKeys()
+                setStoreMetrics(store)
               }
             }
 
@@ -285,7 +321,7 @@ case class StateStoreSaveExec(
                   // Remove old aggregates if watermark specified
                   allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
                   commitTimeMs += timeTakenMs { store.commit() }
-                  numTotalStateRows += store.numKeys()
+                  setStoreMetrics(store)
                   false
                 } else {
                   true
@@ -368,7 +404,7 @@ case class StreamingDeduplicateExec(
         allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
         allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
         commitTimeMs += timeTakenMs { store.commit() }
-        numTotalStateRows += store.numKeys()
+        setStoreMetrics(store)
       })
     }
   }

@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.net.URI
 
+import scala.language.existentials
+
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 

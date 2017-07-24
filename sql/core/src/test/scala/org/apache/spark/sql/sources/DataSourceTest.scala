@@ -20,14 +20,17 @@ package org.apache.spark.sql.sources
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] abstract class DataSourceTest extends QueryTest {
 
-  protected def sqlTest(sqlString: String, expectedAnswer: Seq[Row]) {
+  protected def sqlTest(sqlString: String, expectedAnswer: Seq[Row], enableRegex: Boolean = false) {
     test(sqlString) {
-      checkAnswer(spark.sql(sqlString), expectedAnswer)
+      withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> enableRegex.toString) {
+        checkAnswer(spark.sql(sqlString), expectedAnswer)
+      }
     }
   }
 
