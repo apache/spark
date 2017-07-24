@@ -25,15 +25,6 @@ import org.apache.spark.storage.StorageLevel
 class DatasetCacheSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  // Clear all persistent datasets after each test
-  override def afterEach(): Unit = {
-    try {
-      spark.sharedState.cacheManager.clearCache()
-    } finally {
-      super.afterEach()
-    }
-  }
-
   test("get storage level") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")
