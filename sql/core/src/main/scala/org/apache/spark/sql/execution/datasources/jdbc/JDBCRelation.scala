@@ -80,7 +80,7 @@ private[sql] object JDBCRelation extends Logging {
     val column = partitioning.column
     var i: Int = 0
     var currentValue: Long = lowerBound
-    var ans = new ArrayBuffer[Partition]()
+    val ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
       val lBound = if (i != 0) s"$column >= $currentValue" else null
       currentValue += stride
@@ -129,14 +129,9 @@ private[sql] case class JDBCRelation(
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
-    import scala.collection.JavaConverters._
-
-    val options = jdbcOptions.asProperties.asScala +
-      ("url" -> jdbcOptions.url, "dbtable" -> jdbcOptions.table)
-    val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
-
-    new JdbcRelationProvider().createRelation(
-      data.sparkSession.sqlContext, mode, options.toMap, data)
+    data.write
+      .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
+      .jdbc(jdbcOptions.url, jdbcOptions.table, jdbcOptions.asProperties)
   }
 
   override def toString: String = {

@@ -43,11 +43,13 @@ public final class OnHeapColumnVector extends ColumnVector {
   private byte[] byteData;
   private short[] shortData;
   private int[] intData;
-  // This is not only used to store data for long column vector, but also can store offsets and
-  // lengths for array column vector.
   private long[] longData;
   private float[] floatData;
   private double[] doubleData;
+
+  // Only set if type is Array.
+  private int[] arrayLengths;
+  private int[] arrayOffsets;
 
   protected OnHeapColumnVector(int capacity, DataType type) {
     super(capacity, type, MemoryMode.ON_HEAP);
@@ -128,6 +130,16 @@ public final class OnHeapColumnVector extends ColumnVector {
     return byteData[rowId] == 1;
   }
 
+  @Override
+  public boolean[] getBooleans(int rowId, int count) {
+    assert(dictionary == null);
+    boolean[] array = new boolean[count];
+    for (int i = 0; i < count; ++i) {
+      array[i] = (byteData[rowId + i] == 1);
+    }
+   return array;
+  }
+
   //
 
   //
@@ -160,6 +172,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public byte[] getBytes(int rowId, int count) {
+    assert(dictionary == null);
+    byte[] array = new byte[count];
+    System.arraycopy(byteData, rowId, array, 0, count);
+    return array;
+  }
+
   //
   // APIs dealing with Shorts
   //
@@ -188,6 +208,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public short[] getShorts(int rowId, int count) {
+    assert(dictionary == null);
+    short[] array = new short[count];
+    System.arraycopy(shortData, rowId, array, 0, count);
+    return array;
   }
 
 
@@ -230,6 +258,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public int[] getInts(int rowId, int count) {
+    assert(dictionary == null);
+    int[] array = new int[count];
+    System.arraycopy(intData, rowId, array, 0, count);
+    return array;
   }
 
   /**
@@ -284,6 +320,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public long[] getLongs(int rowId, int count) {
+    assert(dictionary == null);
+    long[] array = new long[count];
+    System.arraycopy(longData, rowId, array, 0, count);
+    return array;
+  }
+
   //
   // APIs dealing with floats
   //
@@ -321,6 +365,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public float[] getFloats(int rowId, int count) {
+    assert(dictionary == null);
+    float[] array = new float[count];
+    System.arraycopy(floatData, rowId, array, 0, count);
+    return array;
   }
 
   //
@@ -365,21 +417,62 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
+  public double[] getDoubles(int rowId, int count) {
+    assert(dictionary == null);
+    double[] array = new double[count];
+    System.arraycopy(doubleData, rowId, array, 0, count);
+    return array;
+  }
+
+  //
+  // APIs dealing with Arrays
+  //
+
+  @Override
+  public int getArrayLength(int rowId) {
+    return arrayLengths[rowId];
+  }
+  @Override
+  public int getArrayOffset(int rowId) {
+    return arrayOffsets[rowId];
+  }
+
+  @Override
+  public void putArray(int rowId, int offset, int length) {
+    arrayOffsets[rowId] = offset;
+    arrayLengths[rowId] = length;
+  }
+
+  @Override
   public void loadBytes(ColumnVector.Array array) {
     array.byteArray = byteData;
     array.byteArrayOffset = array.offset;
+  }
+
+  //
+  // APIs dealing with Byte Arrays
+  //
+
+  @Override
+  public int putByteArray(int rowId, byte[] value, int offset, int length) {
+    int result = arrayData().appendBytes(length, value, offset);
+    arrayOffsets[rowId] = result;
+    arrayLengths[rowId] = length;
+    return result;
   }
 
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
     if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
-      // need 1 long as offset and length for each array.
-      if (longData == null || longData.length < newCapacity) {
-        long[] newData = new long[newCapacity];
-        if (longData != null) System.arraycopy(longData, 0, newData, 0, capacity);
-        longData = newData;
+      int[] newLengths = new int[newCapacity];
+      int[] newOffsets = new int[newCapacity];
+      if (this.arrayLengths != null) {
+        System.arraycopy(this.arrayLengths, 0, newLengths, 0, capacity);
+        System.arraycopy(this.arrayOffsets, 0, newOffsets, 0, capacity);
       }
+      arrayLengths = newLengths;
+      arrayOffsets = newOffsets;
     } else if (type instanceof BooleanType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];

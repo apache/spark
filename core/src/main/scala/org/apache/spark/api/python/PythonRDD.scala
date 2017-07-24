@@ -974,6 +974,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
         }
       }
     }
+    super.finalize()
   }
 }
 // scalastyle:on no.finalize

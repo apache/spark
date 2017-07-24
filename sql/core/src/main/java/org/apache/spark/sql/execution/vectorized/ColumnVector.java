@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
@@ -100,6 +99,27 @@ public abstract class ColumnVector implements AutoCloseable {
     public ArrayData copy() {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public boolean[] toBooleanArray() { return data.getBooleans(offset, length); }
+
+    @Override
+    public byte[] toByteArray() { return data.getBytes(offset, length); }
+
+    @Override
+    public short[] toShortArray() { return data.getShorts(offset, length); }
+
+    @Override
+    public int[] toIntArray() { return data.getInts(offset, length); }
+
+    @Override
+    public long[] toLongArray() { return data.getLongs(offset, length); }
+
+    @Override
+    public float[] toFloatArray() { return data.getFloats(offset, length); }
+
+    @Override
+    public double[] toDoubleArray() { return data.getDoubles(offset, length); }
 
     // TODO: this is extremely expensive.
     @Override
@@ -368,6 +388,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract boolean getBoolean(int rowId);
 
   /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract boolean[] getBooleans(int rowId, int count);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putByte(int rowId, byte value);
@@ -388,6 +413,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract byte getByte(int rowId);
 
   /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract byte[] getBytes(int rowId, int count);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putShort(int rowId, short value);
@@ -406,6 +436,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract short getShort(int rowId);
+
+  /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract short[] getShorts(int rowId, int count);
 
   /**
    * Sets the value at rowId to `value`.
@@ -432,6 +467,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract int getInt(int rowId);
+
+  /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract int[] getInts(int rowId, int count);
 
   /**
    * Returns the dictionary Id for rowId.
@@ -467,6 +507,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract long getLong(int rowId);
 
   /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract long[] getLongs(int rowId, int count);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putFloat(int rowId, float value);
@@ -491,6 +536,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract float getFloat(int rowId);
+
+  /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract float[] getFloats(int rowId, int count);
 
   /**
    * Sets the value at rowId to `value`.
@@ -519,13 +569,24 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract double getDouble(int rowId);
 
   /**
-   * After writing array elements to the child column vector, call this method to set the offset and
-   * size of the written array.
+   * Gets values from [rowId, rowId + count)
    */
-  public void putArrayOffsetAndSize(int rowId, int offset, int size) {
-    long offsetAndSize = (((long) offset) << 32) | size;
-    putLong(rowId, offsetAndSize);
-  }
+  public abstract double[] getDoubles(int rowId, int count);
+
+  /**
+   * Puts a byte array that already exists in this column.
+   */
+  public abstract void putArray(int rowId, int offset, int length);
+
+  /**
+   * Returns the length of the array at rowid.
+   */
+  public abstract int getArrayLength(int rowId);
+
+  /**
+   * Returns the offset of the array at rowid.
+   */
+  public abstract int getArrayOffset(int rowId);
 
   /**
    * Returns a utility object to get structs.
@@ -548,9 +609,8 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the array at rowid.
    */
   public final Array getArray(int rowId) {
-    long offsetAndSize = getLong(rowId);
-    resultArray.offset = (int) (offsetAndSize >> 32);
-    resultArray.length = (int) offsetAndSize;
+    resultArray.length = getArrayLength(rowId);
+    resultArray.offset = getArrayOffset(rowId);
     return resultArray;
   }
 
@@ -562,12 +622,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Sets the value at rowId to `value`.
    */
-  public int putByteArray(int rowId, byte[] value, int offset, int length) {
-    int result = arrayData().appendBytes(length, value, offset);
-    putArrayOffsetAndSize(rowId, result, length);
-    return result;
-  }
-
+  public abstract int putByteArray(int rowId, byte[] value, int offset, int count);
   public final int putByteArray(int rowId, byte[] value) {
     return putByteArray(rowId, value, 0, value.length);
   }
@@ -591,7 +646,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the decimal for rowId.
    */
-  public final Decimal getDecimal(int rowId, int precision, int scale) {
+  public Decimal getDecimal(int rowId, int precision, int scale) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       return Decimal.createUnsafe(getInt(rowId), precision, scale);
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
@@ -606,7 +661,7 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
 
-  public final void putDecimal(int rowId, Decimal value, int precision) {
+  public void putDecimal(int rowId, Decimal value, int precision) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       putInt(rowId, (int) value.toUnscaledLong());
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
@@ -620,7 +675,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the UTF8String for rowId.
    */
-  public final UTF8String getUTF8String(int rowId) {
+  public UTF8String getUTF8String(int rowId) {
     if (dictionary == null) {
       ColumnVector.Array a = getByteArray(rowId);
       return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
@@ -633,7 +688,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the byte array for rowId.
    */
-  public final byte[] getBinary(int rowId) {
+  public byte[] getBinary(int rowId) {
     if (dictionary == null) {
       ColumnVector.Array array = getByteArray(rowId);
       byte[] bytes = new byte[array.length];
@@ -830,13 +885,13 @@ public abstract class ColumnVector implements AutoCloseable {
   public final int appendByteArray(byte[] value, int offset, int length) {
     int copiedOffset = arrayData().appendBytes(length, value, offset);
     reserve(elementsAppended + 1);
-    putArrayOffsetAndSize(elementsAppended, copiedOffset, length);
+    putArray(elementsAppended, copiedOffset, length);
     return elementsAppended++;
   }
 
   public final int appendArray(int length) {
     reserve(elementsAppended + 1);
-    putArrayOffsetAndSize(elementsAppended, arrayData().elementsAppended, length);
+    putArray(elementsAppended, arrayData().elementsAppended, length);
     return elementsAppended++;
   }
 
@@ -901,7 +956,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Data type for this column.
    */
-  protected final DataType type;
+  protected DataType type;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
@@ -933,17 +988,17 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * If this is a nested type (array or struct), the column for the child data.
    */
-  protected final ColumnVector[] childColumns;
+  protected ColumnVector[] childColumns;
 
   /**
    * Reusable Array holder for getArray().
    */
-  protected final Array resultArray;
+  protected Array resultArray;
 
   /**
    * Reusable Struct holder for getStruct().
    */
-  protected final ColumnarBatch.Row resultStruct;
+  protected ColumnarBatch.Row resultStruct;
 
   /**
    * The Dictionary for this column.

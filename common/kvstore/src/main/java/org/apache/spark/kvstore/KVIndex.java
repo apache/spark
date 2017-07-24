@@ -50,7 +50,7 @@ import java.lang.annotation.Target;
 @Target({ElementType.FIELD, ElementType.METHOD})
 public @interface KVIndex {
 
-  public static final String NATURAL_INDEX_NAME = "__main__";
+  String NATURAL_INDEX_NAME = "__main__";
 
   /**
    * The name of the index to be created for the annotated entity. Must be unique within

@@ -17,9 +17,6 @@
 
 package org.apache.spark.kvstore;
 
-import java.util.Iterator;
-import java.util.Map;
-
 import com.google.common.base.Preconditions;
 
 /**

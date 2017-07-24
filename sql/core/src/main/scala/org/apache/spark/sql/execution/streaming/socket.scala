@@ -195,13 +195,17 @@ class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegis
     if (!parameters.contains("port")) {
       throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
     }
-    val schema =
+    if (schema.nonEmpty) {
+      throw new AnalysisException("The socket source does not support a user-specified schema.")
+    }
+
+    val sourceSchema =
       if (parseIncludeTimestamp(parameters)) {
         TextSocketSource.SCHEMA_TIMESTAMP
       } else {
         TextSocketSource.SCHEMA_REGULAR
       }
-    ("textSocket", schema)
+    ("textSocket", sourceSchema)
   }
 
   override def createSource(
