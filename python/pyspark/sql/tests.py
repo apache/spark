@@ -3010,9 +3010,9 @@ class ArrowTests(ReusedPySparkTestCase):
             StructField("5_double_t", DoubleType(), True),
             StructField("6_date_t", DateType(), True),
             StructField("7_timestamp_t", TimestampType(), True)])
-        cls.data = [("a", 1, 10, 0.2, 2.0, datetime(2011, 1, 1), datetime(1970, 1, 1, 0, 0, 0)),
+        cls.data = [("a", 1, 10, 0.2, 2.0, datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
                     ("b", 2, 20, 0.4, 4.0, datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
-                    ("c", 3, 30, 0.8, 6.0, datetime(2013, 3, 3), datetime(2013, 3, 3, 3, 3, 3))]
+                    ("c", 3, 30, 0.8, 6.0, datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
 
     def assertFramesEqual(self, df_with_arrow, df_without):
         msg = ("DataFrame from Arrow is not equal" +
@@ -3039,6 +3039,9 @@ class ArrowTests(ReusedPySparkTestCase):
         pdf = df.toPandas()
         self.spark.conf.set("spark.sql.execution.arrow.enable", "true")
         pdf_arrow = df.toPandas()
+        # need to remove timezone for comparison
+        pdf_arrow["7_timestamp_t"] = \
+            pdf_arrow["7_timestamp_t"].apply(lambda ts: ts.tz_localize(None))
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_pandas_round_trip(self):
@@ -3053,6 +3056,9 @@ class ArrowTests(ReusedPySparkTestCase):
         pdf = pd.DataFrame(data=data_dict)
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf_arrow = df.toPandas()
+        # need to remove timezone for comparison
+        pdf_arrow["7_timestamp_t"] = \
+            pdf_arrow["7_timestamp_t"].apply(lambda ts: ts.tz_localize(None))
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_filtered_frame(self):
