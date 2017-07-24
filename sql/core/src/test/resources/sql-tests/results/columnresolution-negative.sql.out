@@ -72,7 +72,7 @@ SELECT i1 FROM t1, mydb1.t1
 struct<>
 -- !query 8 output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 'i1' is ambiguous, could be: t1.i1, t1.i1.; line 1 pos 7
 
 
 -- !query 9
@@ -81,7 +81,7 @@ SELECT t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query 9 output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 't1.i1' is ambiguous, could be: t1.i1, t1.i1.; line 1 pos 7
 
 
 -- !query 10
@@ -99,7 +99,7 @@ SELECT i1 FROM t1, mydb2.t1
 struct<>
 -- !query 11 output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 'i1' is ambiguous, could be: t1.i1, t1.i1.; line 1 pos 7
 
 
 -- !query 12
@@ -108,7 +108,7 @@ SELECT t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query 12 output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 't1.i1' is ambiguous, could be: t1.i1, t1.i1.; line 1 pos 7
 
 
 -- !query 13
@@ -125,7 +125,7 @@ SELECT i1 FROM t1, mydb1.t1
 struct<>
 -- !query 14 output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 'i1' is ambiguous, could be: t1.i1, t1.i1.; line 1 pos 7
 
 
 -- !query 15
@@ -134,7 +134,7 @@ SELECT t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query 15 output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 't1.i1' is ambiguous, could be: t1.i1, t1.i1.; line 1 pos 7
 
 
 -- !query 16
@@ -143,7 +143,7 @@ SELECT i1 FROM t1, mydb2.t1
 struct<>
 -- !query 16 output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 'i1' is ambiguous, could be: t1.i1, t1.i1.; line 1 pos 7
 
 
 -- !query 17
@@ -152,7 +152,7 @@ SELECT t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query 17 output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 't1.i1' is ambiguous, could be: t1.i1, t1.i1.; line 1 pos 7
 
 
 -- !query 18

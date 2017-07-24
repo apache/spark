@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Spark Programming Guide
+title: RDD Programming Guide
 description: Spark SPARK_VERSION_SHORT programming guide in Java, Scala and Python
 ---
 
@@ -86,12 +86,21 @@ import org.apache.spark.SparkConf;
 
 <div data-lang="python"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Python 2.6+ or Python 3.4+. It can use the standard CPython interpreter,
+Spark {{site.SPARK_VERSION}} works with Python 2.7+ or Python 3.4+. It can use the standard CPython interpreter,
 so C libraries like NumPy can be used. It also works with PyPy 2.3+.
 
-Note that support for Python 2.6 is deprecated as of Spark 2.0.0, and may be removed in Spark 2.2.0.
+Python 2.6 support was removed in Spark 2.2.0.
 
-To run Spark applications in Python, use the `bin/spark-submit` script located in the Spark directory.
+Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including including it in your setup.py as:
+
+{% highlight python %}
+    install_requires=[
+        'pyspark=={site.SPARK_VERSION}'
+    ]
+{% endhighlight %}
+
+
+To run Spark applications in Python without pip installing PySpark, use the `bin/spark-submit` script located in the Spark directory.
 This script will load Spark's Java/Scala libraries and allow you to submit applications to a cluster.
 You can also use `bin/pyspark` to launch an interactive Python shell.
 
