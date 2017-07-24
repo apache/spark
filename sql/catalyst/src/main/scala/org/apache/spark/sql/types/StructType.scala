@@ -477,7 +477,7 @@ object StructType extends AbstractDataType {
                       dataType = dataType,
                       nullable = leftNullable || rightNullable)
                   case Failure(e) =>
-                    throw new SparkException(s"Failed to merge field $leftName: " + e.getMessage)
+                    throw new SparkException(s"Failed to merge field '$leftName': " + e.getMessage)
                 }
               }
               .orElse {
