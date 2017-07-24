@@ -739,12 +739,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create an alias (SubqueryAlias) for a join relation. This is practically the same as
    * visitAliasedQuery and visitNamedExpression, ANTLR4 however requires us to use 3 different
-   * hooks.
+   * hooks. We could add alias names for output columns, for example:
+   * {{{
+   *   SELECT a, b, c, d FROM (src1 s1 INNER JOIN src2 s2 ON s1.id = s2.id) dst(a, b, c, d)
+   * }}}
    */
   override def visitAliasedRelation(ctx: AliasedRelationContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.relation)
-      .optionalMap(ctx.sample)(withSample)
-      .optionalMap(ctx.strictIdentifier)(aliasPlan)
+    val relation = plan(ctx.relation).optionalMap(ctx.sample)(withSample)
+    mayApplyAliasPlan(ctx.tableAlias, relation)
   }
 
   /**
@@ -756,29 +758,41 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    val alias = if (ctx.tableAlias.strictIdentifier == null) {
+    val relation = plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample)
+    if (ctx.tableAlias.strictIdentifier == null) {
       // For un-aliased subqueries, use a default alias name that is not likely to conflict with
       // normal subquery names, so that parent operators can only access the columns in subquery by
       // unqualified names. Users can still use this special qualifier to access columns if they
       // know it, but that's not recommended.
-      "__auto_generated_subquery_name"
+      SubqueryAlias("__auto_generated_subquery_name", relation)
     } else {
-      ctx.tableAlias.strictIdentifier.getText
-    }
-    val subquery = SubqueryAlias(alias, plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample))
-    if (ctx.tableAlias.identifierList != null) {
-      val columnAliases = visitIdentifierList(ctx.tableAlias.identifierList)
-      UnresolvedSubqueryColumnAliases(columnAliases, subquery)
-    } else {
-      subquery
+      mayApplyAliasPlan(ctx.tableAlias, relation)
     }
   }
 
   /**
-   * Create an alias (SubqueryAlias) for a LogicalPlan.
+   * Create an alias ([[SubqueryAlias]]) for a [[LogicalPlan]].
    */
   private def aliasPlan(alias: ParserRuleContext, plan: LogicalPlan): LogicalPlan = {
     SubqueryAlias(alias.getText, plan)
+  }
+
+  /**
+   * If aliases specified in a FROM clause, create a subquery alias ([[SubqueryAlias]]) and
+   * column aliases for a [[LogicalPlan]].
+   */
+  private def mayApplyAliasPlan(tableAlias: TableAliasContext, plan: LogicalPlan): LogicalPlan = {
+    if (tableAlias.strictIdentifier != null) {
+      val subquery = SubqueryAlias(tableAlias.strictIdentifier.getText, plan)
+      if (tableAlias.identifierList != null) {
+        val columnNames = visitIdentifierList(tableAlias.identifierList)
+        UnresolvedSubqueryColumnAliases(columnNames, subquery)
+      } else {
+        subquery
+      }
+    } else {
+      plan
+    }
   }
 
   /**

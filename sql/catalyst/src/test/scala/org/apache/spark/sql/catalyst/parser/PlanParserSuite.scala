@@ -506,6 +506,19 @@ class PlanParserSuite extends AnalysisTest {
       ).select(star()))
   }
 
+  test("SPARK-20963 Support aliases for join relations in FROM clause") {
+    val src1 = UnresolvedRelation(TableIdentifier("src1")).as("s1")
+    val src2 = UnresolvedRelation(TableIdentifier("src2")).as("s2")
+    assertEqual(
+      "SELECT * FROM (src1 s1 INNER JOIN src2 s2 ON s1.id = s2.id) dst(a, b, c, d)",
+      UnresolvedSubqueryColumnAliases(
+        Seq("a", "b", "c", "d"),
+        SubqueryAlias(
+          "dst",
+          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+      ).select(star()))
+  }
+
   test("inline table") {
     assertEqual("values 1, 2, 3, 4",
       UnresolvedInlineTable(Seq("col1"), Seq(1, 2, 3, 4).map(x => Seq(Literal(x)))))
