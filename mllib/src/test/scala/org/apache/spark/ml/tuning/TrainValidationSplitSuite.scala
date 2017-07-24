@@ -23,12 +23,12 @@ import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressio
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.param.{ParamMap}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.types.StructType
 
 class TrainValidationSplitSuite
@@ -75,16 +75,11 @@ class TrainValidationSplitSuite
     assert(tvsModel.hasSummary)
     assert(tvsModel.summary.params === lrParamMaps)
     assert(tvsModel.summary.trainingMetrics.count() === lrParamMaps.length)
-    val expectedSummary = spark.createDataFrame(Seq(
-      (0, 0.001),
-      (2, 0.001),
-      (0, 1.0),
-      (2, 1.0),
-      (0, 1000.0),
-      (2, 1000.0)
-    ).map(t => (t._1.toString, t._2.toString))).toDF("maxIter", "regParam")
-    assert(tvsModel.summary.trainingMetrics.select("maxIter", "regParam").collect().toSet
-      .equals(expectedSummary.collect().toSet))
+
+    val expected = lrParamMaps.zip(tvsModel.validationMetrics).map { case (map, metric) =>
+      Row.fromSeq(map.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric.toString))
+    }
+    assert(tvsModel.summary.trainingMetrics.collect().toSet === expected.toSet)
   }
 
   test("train validation with linear regression") {

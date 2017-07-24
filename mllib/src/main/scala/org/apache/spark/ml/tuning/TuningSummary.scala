@@ -23,21 +23,22 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 /**
  * :: Experimental ::
- * Summary of grid search tuning.
+ * Summary for the grid search tuning.
  *
- * @param params  estimator param maps
- * @param metrics  Corresponding evaluation metrics for the param maps
+ * @param params  ParamMaps for the Estimator
+ * @param metrics  corresponding evaluation metrics for the params
+ * @param bestIndex  index in params for the ParamMap of the best model.
  */
 @Since("2.3.0")
 @Experimental
 private[tuning] class TuningSummary private[tuning](
-    val params: Array[ParamMap],
-    val metrics: Array[Double],
-    val bestIndex: Int) {
+    private[tuning] val params: Array[ParamMap],
+    private[tuning] val metrics: Array[Double],
+    private[tuning] val bestIndex: Int) {
 
   /**
    * Summary of grid search tuning in the format of DataFrame. Each row contains one candidate
-   * paramMap and its corresponding metrics.
+   * paramMap and its corresponding metric.
    */
   def trainingMetrics: DataFrame = {
     require(params.nonEmpty, "estimator param maps should not be empty")

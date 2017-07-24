@@ -29,7 +29,7 @@ import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.types.StructType
 
 class CrossValidatorSuite
@@ -82,16 +82,11 @@ class CrossValidatorSuite
     assert(cvModel.hasSummary)
     assert(cvModel.summary.params === lrParamMaps)
     assert(cvModel.summary.trainingMetrics.count() === lrParamMaps.length)
-    val expectedSummary = spark.createDataFrame(Seq(
-      (0, 0.001),
-      (2, 0.001),
-      (0, 1.0),
-      (2, 1.0),
-      (0, 1000.0),
-      (2, 1000.0)
-    ).map(t => (t._1.toString, t._2.toString))).toDF("maxIter", "regParam")
-    assert(cvModel.summary.trainingMetrics.select("maxIter", "regParam").collect().toSet
-      .equals(expectedSummary.collect().toSet))
+
+    val expected = lrParamMaps.zip(cvModel.avgMetrics).map { case (map, metric) =>
+      Row.fromSeq(map.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric.toString))
+    }
+    assert(cvModel.summary.trainingMetrics.collect().toSet === expected.toSet)
   }
 
   test("cross validation with linear regression") {
