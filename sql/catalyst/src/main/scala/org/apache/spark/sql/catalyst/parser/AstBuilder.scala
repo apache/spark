@@ -750,7 +750,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create an alias (SubqueryAlias) for a sub-query. This is practically the same as
    * visitAliasedRelation and visitNamedExpression, ANTLR4 however requires us to use 3 different
-   * hooks.
+   * hooks. We could add alias names for output columns, for example:
+   * {{{
+   *   SELECT col1, col2 FROM testData AS t(col1, col2)
+   * }}}
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
     val alias = if (ctx.tableAlias.strictIdentifier == null) {
