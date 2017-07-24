@@ -177,7 +177,7 @@ public class LauncherServerSuite extends BaseSuite {
         client.send(new EvilPayload());
       } catch (SocketException se) {
         // SPARK-21522: this can happen if the server closes the socket before the full message has
-        // been written, so it's expected. It may cause false positives through (socket errors
+        // been written, so it's expected. It may cause false positives though (socket errors
         // happening for other reasons).
       }
 
