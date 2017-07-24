@@ -27,7 +27,11 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
 
   // Clear all persistent datasets after each test
   override def afterEach(): Unit = {
-    spark.sharedState.cacheManager.clearCache()
+    try {
+      spark.sharedState.cacheManager.clearCache()
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("get storage level") {
