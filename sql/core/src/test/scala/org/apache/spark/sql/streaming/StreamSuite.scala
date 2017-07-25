@@ -479,61 +479,6 @@ class StreamSuite extends StreamTest {
       CheckAnswer((1, 2), (2, 2), (3, 2)))
   }
 
-  testQuietly("store to and recover from a checkpoint") {
-    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
-
-    def query(data: MemoryStream[Int], checkpointDir: String, queryName: String):
-        DataStreamWriter[Row] = {
-      data.toDF
-        .groupBy($"value")
-        .agg(count("*"))
-        .writeStream
-        .outputMode("complete")
-        .option("checkpointLocation", checkpointDir)
-        .format("memory")
-        .queryName(queryName)
-    }
-
-    withSQLConf(
-      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
-      var writeQuery: StreamingQuery = null
-      try {
-        val data = MemoryStream[Int]
-        writeQuery = query(data, checkpointDir, "write").start()
-
-        data.addData(1, 2, 3, 4)
-        writeQuery.processAllAvailable()
-        data.addData(3, 4, 5, 6)
-        writeQuery.processAllAvailable()
-        data.addData(5, 6, 7, 8)
-        writeQuery.processAllAvailable()
-      } finally {
-        assert(writeQuery != null)
-        writeQuery.stop()
-      }
-
-      var restartQuery: StreamingQuery = null
-      try {
-        val data = MemoryStream[Int]
-        data.addData(1, 2, 3, 4)
-        data.addData(3, 4, 5, 6)
-        data.addData(5, 6, 7, 8)
-
-        restartQuery = query(data, checkpointDir, "counts").start()
-        restartQuery.processAllAvailable()
-        data.addData(9)
-        restartQuery.processAllAvailable()
-
-        QueryTest.checkAnswer(spark.table("counts").toDF,
-          Row("1", 1) :: Row("2", 1) :: Row("3", 2) :: Row("4", 2) ::
-            Row("5", 2) :: Row("6", 2) :: Row("7", 1) :: Row("8", 1) :: Row("9", 1) :: Nil)
-      } finally {
-        assert(restartQuery != null)
-        restartQuery.stop()
-      }
-    }
-  }
-
   testQuietly("recover from a Spark v2.1 checkpoint") {
     var inputData: MemoryStream[Int] = null
     var query: DataStreamWriter[Row] = null
