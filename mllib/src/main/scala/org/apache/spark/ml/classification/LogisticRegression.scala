@@ -477,10 +477,18 @@ class LogisticRegression @Since("1.2.0") (
 
   private var optInitialModel: Option[LogisticRegressionModel] = None
 
-  private[spark] def setInitialModel(model: LogisticRegressionModel): this.type = {
+  /**
+   * Set the initial logistic regression parameters, bypassing the default parameter initialization.
+   */
+  def setInitialModel(model: LogisticRegressionModel): this.type = {
     this.optInitialModel = Some(model)
     this
   }
+
+  /**
+   * Return the user-supplied initial logistic regression model, if supplied
+   */
+  def getInitialModel(): Option[LogisticRegressionModel] = this.optInitialModel
 
   override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
