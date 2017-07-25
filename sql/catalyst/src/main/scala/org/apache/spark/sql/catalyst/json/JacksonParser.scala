@@ -347,13 +347,18 @@ class JacksonParser(
       Utils.tryWithResource(createParser(factory, record)) { parser =>
         // a null first token is equivalent to testing for input.trim.isEmpty
         // but it works on any token stream and not just strings
-        parser.nextToken() match {
-          case null => Nil
-          case _ => rootConverter.apply(parser) match {
-            case null => throw new RuntimeException("Root converter returned null")
-            case rows => rows
+        var endLoop = false
+        val allRows = scala.collection.mutable.ArrayBuffer.empty[InternalRow]
+        while (!endLoop) {
+          Option(parser.nextToken()) match {
+            case Some(_) => rootConverter.apply(parser) match {
+              case null => throw new RuntimeException("Root converter returned null")
+              case rows => allRows ++= rows
+            }
+            case None => endLoop = true
           }
         }
+        allRows
       }
     } catch {
       case e @ (_: RuntimeException | _: JsonProcessingException) =>

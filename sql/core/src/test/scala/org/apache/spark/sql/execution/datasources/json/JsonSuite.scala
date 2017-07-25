@@ -2034,4 +2034,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       }
     }
   }
+
+  test("SPARK-20990: Read all JSON documents in files in multiline mode") {
+    val testFile = Thread.currentThread().getContextClassLoader
+      .getResource("test-data/cars.json").toString
+    val cars = sqlContext.read.option("multiLine", true).json(testFile)
+    assert(cars.count() == 3)
+  }
 }

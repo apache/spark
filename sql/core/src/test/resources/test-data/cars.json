@@ -1,0 +1,21 @@
+{
+  "year": 2012,
+  "make": "Tesla",
+  "model": "S",
+  "price": 80000.65,
+  "comment": null
+}
+{
+  "year": 1997,
+  "make": "Ford",
+  "model": "E350",
+  "price": 35000,
+  "comment": "Go get one now they are going fast"
+}
+{
+  "year": 2015,
+  "make": "Chevy",
+  "model": "Volt",
+  "price": 5000.10,
+  "comment": null
+}
