@@ -35,7 +35,7 @@ private[spark] object CoarseGrainedClusterMessages {
       ioEncryptionKey: Option[Array[Byte]])
     extends CoarseGrainedClusterMessage
 
-  case object RetrieveLastAllocatedExecutorId extends CoarseGrainedClusterMessage
+  case object GetAMInitialState extends CoarseGrainedClusterMessage
 
   // Driver to executors
   case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
