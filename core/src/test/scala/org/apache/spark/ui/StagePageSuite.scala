@@ -84,6 +84,19 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         jobListener.onTaskEnd(
           SparkListenerTaskEnd(0, 0, "result", Success, taskInfo, taskMetrics))
     }
+    (3 to 4).foreach {
+      taskId =>
+        val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY, false)
+        jobListener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
+        jobListener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
+        taskInfo.markFinished(TaskState.FAILED, System.currentTimeMillis())
+        val taskMetrics = TaskMetrics.empty
+        taskMetrics.incPeakExecutionMemory(peakExecutionMemory)
+        jobListener.onTaskEnd(
+          SparkListenerTaskEnd(0, 0, "result",
+            new ExecutorLostFailure("0", false, Option[String] {"Killed by external signal"}),
+            taskInfo, taskMetrics))
+    }
     jobListener.onStageCompleted(SparkListenerStageCompleted(stageInfo))
     page.render(request)
   }
