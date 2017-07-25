@@ -87,6 +87,8 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach with Eventua
 
   protected override def afterEach(): Unit = {
     super.afterEach()
+    // Clear all persistent datasets after each test
+    spark.sharedState.cacheManager.clearCache()
     // files can be closed from other threads, so wait a bit
     // normally this doesn't take more than 1s
     eventually(timeout(10.seconds)) {
