@@ -20,11 +20,12 @@ package org.apache.spark.ml.tuning
 import java.io.File
 import java.nio.file.{Files, StandardCopyOption}
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLReader, MLWritable}
+import org.scalatest.Assertions
 
-object ValidatorParamsSuiteHelpers extends SparkFunSuite {
+import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
+import org.apache.spark.ml.util.{Identifiable, MLReader, MLWritable}
+
+object ValidatorParamsSuiteHelpers extends Assertions {
   /**
    * Assert sequences of estimatorParamMaps are identical.
    * If the values for a parameter are not directly comparable with ===
