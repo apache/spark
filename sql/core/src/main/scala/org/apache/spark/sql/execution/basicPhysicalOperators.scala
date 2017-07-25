@@ -106,6 +106,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       // Convert ByteBuffer => InternalRows
       val resIter = toInternalRow(outputBuffer)
 
+      mockReturnByteBuffer(originBuffer)
+
       resIter
 
     }
@@ -224,6 +226,10 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   def mockFPGA(input: ByteBuffer): ByteBuffer = {
 //    input
     FpgaSqlEngine.project(input, FPGARowNumber)
+  }
+
+  def mockReturnByteBuffer(buffer: ByteBuffer) = {
+    FpgaSqlEngine.putBuf(buffer)
   }
 
 
