@@ -37,13 +37,19 @@ import org.apache.spark.util.collection.OpenHashMap
  * space). This is done using the hashing trick (https://en.wikipedia.org/wiki/Feature_hashing)
  * to map features to indices in the feature vector.
  *
- * The [[FeatureHasher]] transformer operates on multiple columns. Each column may be numeric
- * (representing a real feature) or string (representing a categorical feature). Boolean columns
- * are also supported, and treated as categorical features. For numeric features, the hash value of
- * the column name is used to map the feature value to its index in the feature vector.
- * For categorical features, the hash value of the string "column_name=value" is used to map to the
- * vector index, with an indicator value of `1.0`. Thus, categorical features are "one-hot" encoded
- * (similarly to using [[OneHotEncoder]] with `dropLast=false`).
+ * The [[FeatureHasher]] transformer operates on multiple columns. Each column may contain either
+ * numeric or categorical features. Behavior and handling of column data types is as follows:
+ *  -Numeric columns: For numeric features, the hash value of the column name is used to map the
+ *                    feature value to its index in the feature vector. Numeric features are never
+ *                    treated as categorical, even when they are integers. You must explicitly
+ *                    convert numeric columns containing categorical features to strings first.
+ *  -String columns: For categorical features, the hash value of the string "column_name=value"
+ *                   is used to map to the vector index, with an indicator value of `1.0`.
+ *                   Thus, categorical features are "one-hot" encoded
+ *                   (similarly to using [[OneHotEncoder]] with `dropLast=false`).
+ *  -Boolean columns: Boolean values are treated in the same way as string columns. That is,
+ *                    boolean features are represented as "column_name=true" or "column_name=false",
+ *                    with an indicator value of `1.0`.
  *
  * Null (missing) values are ignored (implicitly zero in the resulting feature vector).
  *
