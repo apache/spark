@@ -113,19 +113,18 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   }
 
   test("ZeroArgument non-deterministic UDF") {
-    val foo = udf(() => { Math.random() })
+    val foo = udf(() => Math.random())
     spark.udf.register("random0", foo.asNondeterministic())
     val df = sql("SELECT random0()")
     assert(df.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
     assert(df.head().getDouble(0) >= 0.0)
 
-    val foo1 = udf(() => { Math.random() }).asNondeterministic()
-    val df1 = testData.select(foo1())
+    val df1 = testData.select(foo())
     assert(df1.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
     assert(df1.head().getDouble(0) >= 0.0)
 
-    val foo2 = udf(() => { Math.random() }, DataTypes.DoubleType).asNondeterministic()
-    val df2 = testData.select(foo2())
+    val bar = udf(() => Math.random(), DataTypes.DoubleType).asNondeterministic()
+    val df2 = testData.select(bar())
     assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
     assert(df2.head().getDouble(0) >= 0.0)
   }

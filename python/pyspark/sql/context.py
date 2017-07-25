@@ -28,7 +28,7 @@ from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import DoubleType, IntegerType, Row, StringType
+from pyspark.sql.types import IntegerType, Row, StringType
 from pyspark.sql.utils import install_exception_handler
 
 __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
@@ -208,17 +208,14 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(2.1)
-    def registerJavaFunction(self, name, javaClassName, returnType=None, deterministic=True):
+    def registerJavaFunction(self, name, javaClassName, returnType=None):
         """Register a java UDF so it can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not specified we would infer it via reflection.
-
-        :param name: name of the UDF.
-        :param javaClassName: fully qualified name of java class.
-        :param returnType: a :class:`pyspark.sql.types.DataType` object.
-        :param deterministic: a flag indicating if the UDF is deterministic.  Deterministic UDF
-            returns same result each time it is invoked with a particular input.
+        :param name:  name of the UDF
+        :param javaClassName: fully qualified name of java class
+        :param returnType: a :class:`pyspark.sql.types.DataType` object
 
         >>> sqlContext.registerJavaFunction("javaStringLength",
         ...   "test.org.apache.spark.sql.JavaStringLength", IntegerType())
@@ -228,17 +225,12 @@ class SQLContext(object):
         ...   "test.org.apache.spark.sql.JavaStringLength")
         >>> sqlContext.sql("SELECT javaStringLength2('test')").collect()
         [Row(UDF:javaStringLength2(test)=4)]
-        >>> sqlContext.registerJavaFunction("javaRand",
-        ...   "test.org.apache.spark.sql.JavaRandUDF", DoubleType(), deterministic=False)
-        >>> sqlContext.sql("SELECT javaRand(3)").collect()  # doctest: +SKIP
-        [Row(UDF:javaRand(3)=3.12345)]
 
         """
         jdt = None
         if returnType is not None:
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
-        self.sparkSession._jsparkSession.udf().registerJava(
-            name, javaClassName, jdt, deterministic)
+        self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
     @ignore_unicode_prefix
     @since(2.3)
