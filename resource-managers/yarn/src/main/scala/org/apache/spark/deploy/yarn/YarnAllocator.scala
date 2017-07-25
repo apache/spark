@@ -502,6 +502,7 @@ private[yarn] class YarnAllocator(
 
       def updateInternalState(): Unit = synchronized {
         numExecutorsRunning.incrementAndGet()
+        numExecutorsStarting.decrementAndGet()
         executorIdToContainer(executorId) = container
         containerIdToExecutorId(container.getId) = executorId
 
@@ -512,8 +513,8 @@ private[yarn] class YarnAllocator(
       }
 
       if (numExecutorsRunning.get < targetNumExecutors) {
+        numExecutorsStarting.incrementAndGet()
         if (launchContainers) {
-          numExecutorsStarting.incrementAndGet()
           launcherPool.execute(new Runnable {
             override def run(): Unit = {
               try {
@@ -532,13 +533,16 @@ private[yarn] class YarnAllocator(
                 ).run()
                 updateInternalState()
               } catch {
-                case NonFatal(e) =>
-                  logError(s"Failed to launch executor $executorId on container $containerId", e)
-                  // Assigned container should be released immediately
-                  // to avoid unnecessary resource occupation.
-                  amClient.releaseAssignedContainer(containerId)
-              } finally {
-                numExecutorsStarting.decrementAndGet()
+                case e: Throwable =>
+                  numExecutorsStarting.decrementAndGet()
+                  if (NonFatal(e)) {
+                    logError(s"Failed to launch executor $executorId on container $containerId", e)
+                    // Assigned container should be released immediately
+                    // to avoid unnecessary resource occupation.
+                    amClient.releaseAssignedContainer(containerId)
+                  } else {
+                    throw e
+                  }
               }
             }
           })
