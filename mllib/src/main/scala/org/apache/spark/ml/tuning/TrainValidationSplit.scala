@@ -108,16 +108,16 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
     // multi-model training
     logDebug(s"Train split with multiple sets of parameters.")
-    val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
-    trainingDataset.unpersist()
     var i = 0
     while (i < numModels) {
+      val model = est.fit(trainingDataset, epm(i)).asInstanceOf[Model[_]]
       // TODO: duplicate evaluator to take extra params from input
-      val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
+      val metric = eval.evaluate(model.transform(validationDataset, epm(i)))
       logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
       metrics(i) += metric
       i += 1
     }
+    trainingDataset.unpersist()
     validationDataset.unpersist()
 
     logInfo(s"Train validation split metrics: ${metrics.toSeq}")
