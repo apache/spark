@@ -367,7 +367,6 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
             // This is work around for the following.
             // Pre-Spark 2.3 mistakenly append 4 bytes to the value row in
             // `FixedLengthRowBasedKeyValueBatch`, which gets persisted into the checkpoint data
-            assert(valueSize % 8 == 0)
             valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             map.put(keyRow, valueRow)
           }
