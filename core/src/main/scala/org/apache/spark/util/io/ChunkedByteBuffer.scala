@@ -40,6 +40,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   require(chunks != null, "chunks must not be null")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
+  private val NIO_BUFFER_LIMIT = 64 * 1024 * 1024 // Chunk size in bytes
+
   private[this] var disposed: Boolean = false
 
   /**
@@ -57,6 +59,19 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   def writeFully(channel: WritableByteChannel): Unit = {
     for (bytes <- getChunks()) {
       while (bytes.remaining > 0) {
+        channel.write(bytes)
+      }
+    }
+  }
+
+  /**
+    * Write this buffer to a channel with slice.
+    */
+  def writeWithSlice(channel: WritableByteChannel): Unit = {
+    for (bytes <- getChunks()) {
+      val capacity = bytes.limit()
+      while (bytes.position() < capacity) {
+        bytes.limit(Math.min(capacity, bytes.position + NIO_BUFFER_LIMIT.toInt))
         channel.write(bytes)
       }
     }
