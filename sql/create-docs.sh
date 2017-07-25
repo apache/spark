@@ -42,15 +42,11 @@ fi
 
 # Now create markdown file
 rm -fr docs
-rm -rf "$WAREHOUSE_DIR"
 mkdir docs
 echo "Generating markdown files for SQL documentation."
-"$SPARK_HOME/bin/spark-submit" \
-  --driver-java-options "-Dlog4j.configuration=file:$FWDIR/log4j.properties" \
-  --conf spark.sql.warehouse.dir="$WAREHOUSE_DIR" \
-  gen-sql-markdown.py
-rm -rf "$WAREHOUSE_DIR"
+"$SPARK_HOME/bin/spark-submit" gen-sql-markdown.py
 
 # Now create HTML files
 echo "Generating HTML files for SQL documentation."
 mkdocs build --clean
+rm -fr docs
