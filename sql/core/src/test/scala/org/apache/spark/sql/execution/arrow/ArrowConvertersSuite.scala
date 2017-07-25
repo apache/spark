@@ -849,7 +849,8 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |      "name" : "timestamp",
          |      "type" : {
          |        "name" : "timestamp",
-         |        "unit" : "MICROSECOND"
+         |        "unit" : "MICROSECOND",
+         |        "timezone" : "${DateTimeUtils.defaultTimeZone().getID}"
          |      },
          |      "nullable" : true,
          |      "children" : [ ],
@@ -1138,11 +1139,6 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     runUnsupported { arrayData.toDF().toArrowPayload.collect() }
     runUnsupported { mapData.toDF().toArrowPayload.collect() }
     runUnsupported { complexData.toArrowPayload.collect() }
-
-    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
-    val ts1 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
-    val ts2 = new Timestamp(sdf.parse("2013-04-08 13:10:10.789 UTC").getTime)
-    runUnsupported { Seq(ts1, ts2).toDF("timestamp").toArrowPayload.collect() }
   }
 
   test("test Arrow Validator") {
