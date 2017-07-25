@@ -119,7 +119,8 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(df.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
     assert(df.head().getDouble(0) >= 0.0)
 
-    val df1 = testData.select(foo())
+    val foo1 = foo.asNondeterministic()
+    val df1 = testData.select(foo1())
     assert(df1.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
     assert(df1.head().getDouble(0) >= 0.0)
 
