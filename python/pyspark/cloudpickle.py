@@ -519,6 +519,7 @@ class CloudPickler(Pickler):
         save(f_globals)
         save(defaults)
         save(dct)
+        save(func.__module__)
         save(closure_values)
         write(pickle.TUPLE)
         write(pickle.REDUCE)  # applies _fill_function on the tuple
@@ -1007,13 +1008,14 @@ class _empty_cell_value(object):
         return cls.__name__
 
 
-def _fill_function(func, globals, defaults, dict, closure_values):
+def _fill_function(func, globals, defaults, dict, module, closure_values):
     """ Fills in the rest of function data into the skeleton function object
         that were created via _make_skel_func().
     """
     func.__globals__.update(globals)
     func.__defaults__ = defaults
     func.__dict__ = dict
+    func.__module__ = module
 
     cells = func.__closure__
     if cells is not None:
