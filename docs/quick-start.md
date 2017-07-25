@@ -421,7 +421,7 @@ $ YOUR_SPARK_HOME/bin/spark-submit \
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
-If you have PySpark pip installed into your enviroment (e.g., `pip instal pyspark` you can run your application with the regular Python Interpreter or use the provided 'spark-submit' as you prefer.
+If you have PySpark pip installed into your enviroment (e.g., `pip install pyspark` you can run your application with the regular Python Interpreter or use the provided 'spark-submit' as you prefer.
 
 {% highlight bash %}
 # Use the Python Interpreter to run your application
