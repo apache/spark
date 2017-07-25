@@ -20,10 +20,16 @@ import io.netty.buffer.ByteBufInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+
 public class FpgaSqlEngine {
 
 private static final Logger logger = LoggerFactory.getLogger(FpgaSqlEngine.class);
 
+private static Lock lock;
+private static int initFlag = 0;
 
 //static private native int sqlEngineInit(Logger logger);
 
@@ -43,20 +49,43 @@ public static int init() {
 }
 */
 
+static void init() {
+    if(1 != initFlag) {
+        initFlag = 1;
+        lock = new ReentrantLock();
+        logger.warn("WQF: initalizing FPGA lock\n");
+    }
+}
+
 public static ByteBuffer getBuf(int size) {
+  init();
+
   logger.warn("WQF: invoking getBuf");
+  lock.lock();
+
+  logger.warn("WQF: grabbed FPGA lock\n");
   return sqlEngineGetBuf(size);
 }
 
 public static void putBuf(ByteBuffer buf) {
   logger.warn("WQF: invoking putBuf");
+  init();
+
   sqlEnginePutBuf(buf);
+
+  lock.unlock();
+
+  logger.warn("WQF: released FPGA lock\n");
 }
 
 public static ByteBuffer project(ByteBuffer buf, int rowCount) {
   logger.warn("WQF: invoking project");
+  init();
+
 //  return buf;
+  buf.limit(rowCount*768);
   return sqlEngineRun(buf, rowCount);
+  
 }
 
 
