@@ -384,7 +384,7 @@ class CloudPickler(Pickler):
                 # check if the package has any currently loaded sub-imports
                 prefix = x.__name__ + '.'
                 for name, module in sys.modules.items():
-                    if name.startswith(prefix):
+                    if name is not None and name.startswith(prefix):
                         # check whether the function can address the sub-module
                         tokens = set(name[len(prefix):].split('.'))
                         if not tokens - set(code.co_names):
