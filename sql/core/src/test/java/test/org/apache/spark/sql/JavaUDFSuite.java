@@ -28,7 +28,6 @@ import org.junit.Test;
 import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.api.java.UDF1;
 import org.apache.spark.sql.api.java.UDF2;
 import org.apache.spark.sql.types.DataTypes;
 
@@ -121,23 +120,5 @@ public class JavaUDFSuite implements Serializable {
     spark.udf().register("returnOne", () -> 1, DataTypes.IntegerType);
     Row result = spark.sql("SELECT returnOne()").head();
     Assert.assertEquals(1, result.getInt(0));
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void udf7Test() {
-    spark.udf().registerJava("randUDF", JavaRandUDF.class.getName(), DataTypes.DoubleType, false);
-    Row result = spark.sql("SELECT randUDF(1)").head();
-    Assert.assertTrue(result.getDouble(0) >= 0.0);
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void udf8Test() {
-    spark.udf().register("randUDF", (Integer i) -> i + Math.random(), DataTypes.DoubleType, false);
-    Row result = spark.sql("SELECT randUDF(1)").head();
-    Assert.assertTrue(result.getDouble(0) >= 0.0);
-    Assert.assertTrue("EXPLAIN outputs are expected to contain the UDF name.",
-      spark.sql("EXPLAIN SELECT randUDF(1) AS r").collectAsList().toString().contains("randUDF"));
   }
 }
