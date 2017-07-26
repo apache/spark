@@ -45,36 +45,25 @@ object ArrowWriter {
 
   private def createFieldWriter(vector: ValueVector): ArrowFieldWriter = {
     val field = vector.getField()
-    ArrowUtils.fromArrowField(field) match {
-      case BooleanType =>
-        new BooleanWriter(vector.asInstanceOf[NullableBitVector])
-      case ByteType =>
-        new ByteWriter(vector.asInstanceOf[NullableTinyIntVector])
-      case ShortType =>
-        new ShortWriter(vector.asInstanceOf[NullableSmallIntVector])
-      case IntegerType =>
-        new IntegerWriter(vector.asInstanceOf[NullableIntVector])
-      case LongType =>
-        new LongWriter(vector.asInstanceOf[NullableBigIntVector])
-      case FloatType =>
-        new FloatWriter(vector.asInstanceOf[NullableFloat4Vector])
-      case DoubleType =>
-        new DoubleWriter(vector.asInstanceOf[NullableFloat8Vector])
-      case StringType =>
-        new StringWriter(vector.asInstanceOf[NullableVarCharVector])
-      case BinaryType =>
-        new BinaryWriter(vector.asInstanceOf[NullableVarBinaryVector])
-      case ArrayType(_, _) =>
-        val v = vector.asInstanceOf[ListVector]
-        val elementVector = createFieldWriter(v.getDataVector())
-        new ArrayWriter(v, elementVector)
-      case StructType(_) =>
-        val v = vector.asInstanceOf[NullableMapVector]
-        val children = (0 until v.size()).map { ordinal =>
-          createFieldWriter(v.getChildByOrdinal(ordinal))
+    (ArrowUtils.fromArrowField(field), vector) match {
+      case (BooleanType, vector: NullableBitVector) => new BooleanWriter(vector)
+      case (ByteType, vector: NullableTinyIntVector) => new ByteWriter(vector)
+      case (ShortType, vector: NullableSmallIntVector) => new ShortWriter(vector)
+      case (IntegerType, vector: NullableIntVector) => new IntegerWriter(vector)
+      case (LongType, vector: NullableBigIntVector) => new LongWriter(vector)
+      case (FloatType, vector: NullableFloat4Vector) => new FloatWriter(vector)
+      case (DoubleType, vector: NullableFloat8Vector) => new DoubleWriter(vector)
+      case (StringType, vector: NullableVarCharVector) => new StringWriter(vector)
+      case (BinaryType, vector: NullableVarBinaryVector) => new BinaryWriter(vector)
+      case (ArrayType(_, _), vector: ListVector) =>
+        val elementVector = createFieldWriter(vector.getDataVector())
+        new ArrayWriter(vector, elementVector)
+      case (StructType(_), vector: NullableMapVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
-        new StructWriter(v, children.toArray)
-      case dt =>
+        new StructWriter(vector, children.toArray)
+      case (dt, _) =>
         throw new UnsupportedOperationException(s"Unsupported data type: ${dt.simpleString}")
     }
   }

@@ -27,7 +27,7 @@ import org.apache.spark.unsafe.types.UTF8String
 class ArrowWriterSuite extends SparkFunSuite {
 
   test("simple") {
-    def check(dt: DataType, data: Seq[Any], get: (ArrowColumnVector, Int) => Any): Unit = {
+    def check(dt: DataType, data: Seq[Any]): Unit = {
       val schema = new StructType().add("value", dt, nullable = true)
       val writer = ArrowWriter.create(schema)
       assert(writer.schema === schema)
@@ -40,32 +40,36 @@ class ArrowWriterSuite extends SparkFunSuite {
       val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
       data.zipWithIndex.foreach {
         case (null, rowId) => assert(reader.isNullAt(rowId))
-        case (datum, rowId) => assert(get(reader, rowId) === datum)
+        case (datum, rowId) =>
+          val value = dt match {
+            case BooleanType => reader.getBoolean(rowId)
+            case ByteType => reader.getByte(rowId)
+            case ShortType => reader.getShort(rowId)
+            case IntegerType => reader.getInt(rowId)
+            case LongType => reader.getLong(rowId)
+            case FloatType => reader.getFloat(rowId)
+            case DoubleType => reader.getDouble(rowId)
+            case StringType => reader.getUTF8String(rowId)
+            case BinaryType => reader.getBinary(rowId)
+          }
+          assert(value === datum)
       }
 
       writer.root.close()
     }
-    check(BooleanType, Seq(true, null, false), (reader, rowId) => reader.getBoolean(rowId))
-    check(ByteType,
-      Seq(1.toByte, 2.toByte, null, 4.toByte), (reader, rowId) => reader.getByte(rowId))
-    check(ShortType,
-      Seq(1.toShort, 2.toShort, null, 4.toShort), (reader, rowId) => reader.getShort(rowId))
-    check(IntegerType, Seq(1, 2, null, 4), (reader, rowId) => reader.getInt(rowId))
-    check(LongType, Seq(1L, 2L, null, 4L), (reader, rowId) => reader.getLong(rowId))
-    check(FloatType, Seq(1.0f, 2.0f, null, 4.0f), (reader, rowId) => reader.getFloat(rowId))
-    check(DoubleType, Seq(1.0d, 2.0d, null, 4.0d), (reader, rowId) => reader.getDouble(rowId))
-
-    check(StringType,
-      Seq("a", "b", null, "d").map(UTF8String.fromString),
-      (reader, rowId) => reader.getUTF8String(rowId))
-
-    check(BinaryType,
-      Seq("a".getBytes(), "b".getBytes(), null, "d".getBytes()),
-      (reader, rowId) => reader.getBinary(rowId))
+    check(BooleanType, Seq(true, null, false))
+    check(ByteType, Seq(1.toByte, 2.toByte, null, 4.toByte))
+    check(ShortType, Seq(1.toShort, 2.toShort, null, 4.toShort))
+    check(IntegerType, Seq(1, 2, null, 4))
+    check(LongType, Seq(1L, 2L, null, 4L))
+    check(FloatType, Seq(1.0f, 2.0f, null, 4.0f))
+    check(DoubleType, Seq(1.0d, 2.0d, null, 4.0d))
+    check(StringType, Seq("a", "b", null, "d").map(UTF8String.fromString))
+    check(BinaryType, Seq("a".getBytes(), "b".getBytes(), null, "d".getBytes()))
   }
 
   test("get multiple") {
-    def check[A](dt: DataType, data: Seq[A], get: (ArrowColumnVector, Int) => Seq[A]): Unit = {
+    def check(dt: DataType, data: Seq[Any]): Unit = {
       val schema = new StructType().add("value", dt, nullable = false)
       val writer = ArrowWriter.create(schema)
       assert(writer.schema === schema)
@@ -76,17 +80,26 @@ class ArrowWriterSuite extends SparkFunSuite {
       writer.finish()
 
       val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
-      assert(get(reader, data.size) === data)
+      val values = dt match {
+        case BooleanType => reader.getBooleans(0, data.size)
+        case ByteType => reader.getBytes(0, data.size)
+        case ShortType => reader.getShorts(0, data.size)
+        case IntegerType => reader.getInts(0, data.size)
+        case LongType => reader.getLongs(0, data.size)
+        case FloatType => reader.getFloats(0, data.size)
+        case DoubleType => reader.getDoubles(0, data.size)
+      }
+      assert(values === data)
 
       writer.root.close()
     }
-    check(BooleanType, Seq(true, false), (reader, count) => reader.getBooleans(0, count))
-    check(ByteType, (0 until 10).map(_.toByte), (reader, count) => reader.getBytes(0, count))
-    check(ShortType, (0 until 10).map(_.toShort), (reader, count) => reader.getShorts(0, count))
-    check(IntegerType, (0 until 10), (reader, count) => reader.getInts(0, count))
-    check(LongType, (0 until 10).map(_.toLong), (reader, count) => reader.getLongs(0, count))
-    check(FloatType, (0 until 10).map(_.toFloat), (reader, count) => reader.getFloats(0, count))
-    check(DoubleType, (0 until 10).map(_.toDouble), (reader, count) => reader.getDoubles(0, count))
+    check(BooleanType, Seq(true, false))
+    check(ByteType, (0 until 10).map(_.toByte))
+    check(ShortType, (0 until 10).map(_.toShort))
+    check(IntegerType, (0 until 10))
+    check(LongType, (0 until 10).map(_.toLong))
+    check(FloatType, (0 until 10).map(_.toFloat))
+    check(DoubleType, (0 until 10).map(_.toDouble))
   }
 
   test("array") {

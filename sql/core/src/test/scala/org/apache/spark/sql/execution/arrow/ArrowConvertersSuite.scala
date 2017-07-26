@@ -1073,12 +1073,12 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |}
        """.stripMargin
 
-    val a_arr = Seq(Seq(1, 2), Seq(3, 4), Seq(), Seq(5))
-    val b_arr = Seq(Some(Seq(1, 2)), None, Some(Seq()), None)
-    val c_arr = Seq(Seq(Some(1), Some(2)), Seq(Some(3), None), Seq(), Seq(Some(5)))
-    val d_arr = Seq(Seq(Seq(1, 2)), Seq(Seq(3), Seq()), Seq(), Seq(Seq(5)))
+    val aArr = Seq(Seq(1, 2), Seq(3, 4), Seq(), Seq(5))
+    val bArr = Seq(Some(Seq(1, 2)), None, Some(Seq()), None)
+    val cArr = Seq(Seq(Some(1), Some(2)), Seq(Some(3), None), Seq(), Seq(Some(5)))
+    val dArr = Seq(Seq(Seq(1, 2)), Seq(Seq(3), Seq()), Seq(), Seq(Seq(5)))
 
-    val df = a_arr.zip(b_arr).zip(c_arr).zip(d_arr).map {
+    val df = aArr.zip(bArr).zip(cArr).zip(dArr).map {
       case (((a, b), c), d) => (a, b, c, d)
     }.toDF("a_arr", "b_arr", "c_arr", "d_arr")
 
@@ -1281,11 +1281,11 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |}
        """.stripMargin
 
-    val a_struct = Seq(Row(1), Row(2), Row(3))
-    val b_struct = Seq(Row(1), null, Row(3))
-    val c_struct = Seq(Row(1), Row(null), Row(3))
-    val d_struct = Seq(Row(Row(1)), null, Row(null))
-    val data = a_struct.zip(b_struct).zip(c_struct).zip(d_struct).map {
+    val aStruct = Seq(Row(1), Row(2), Row(3))
+    val bStruct = Seq(Row(1), null, Row(3))
+    val cStruct = Seq(Row(1), Row(null), Row(3))
+    val dStruct = Seq(Row(Row(1)), null, Row(null))
+    val data = aStruct.zip(bStruct).zip(cStruct).zip(dStruct).map {
       case (((a, b), c), d) => Row(a, b, c, d)
     }
 
