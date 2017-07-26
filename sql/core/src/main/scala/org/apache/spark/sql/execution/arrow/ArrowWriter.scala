@@ -53,6 +53,8 @@ object ArrowWriter {
       case (LongType, vector: NullableBigIntVector) => new LongWriter(vector)
       case (FloatType, vector: NullableFloat4Vector) => new FloatWriter(vector)
       case (DoubleType, vector: NullableFloat8Vector) => new DoubleWriter(vector)
+      case (DecimalType.Fixed(precision, scale), vector: NullableDecimalVector) =>
+        new DecimalWriter(vector, precision, scale)
       case (StringType, vector: NullableVarCharVector) => new StringWriter(vector)
       case (BinaryType, vector: NullableVarBinaryVector) => new BinaryWriter(vector)
       case (ArrayType(_, _), vector: ListVector) =>
@@ -221,6 +223,25 @@ private[arrow] class DoubleWriter(val valueVector: NullableFloat8Vector) extends
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueMutator.setSafe(count, input.getDouble(ordinal))
+  }
+}
+
+private[arrow] class DecimalWriter(
+    val valueVector: NullableDecimalVector,
+    precision: Int,
+    scale: Int) extends ArrowFieldWriter {
+
+  override def valueMutator: NullableDecimalVector#Mutator = valueVector.getMutator()
+
+  override def setNull(): Unit = {
+    valueMutator.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueMutator.setIndexDefined(count)
+    val decimal = input.getDecimal(ordinal, precision, scale)
+    decimal.changePrecision(precision, scale)
+    DecimalUtility.writeBigDecimalToArrowBuf(decimal.toJavaBigDecimal, valueVector.getBuffer, count)
   }
 }
 
