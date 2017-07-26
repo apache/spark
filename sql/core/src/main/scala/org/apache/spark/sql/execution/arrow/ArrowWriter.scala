@@ -368,6 +368,11 @@ private[arrow] class StructWriter(
   }
 
   override def skip(): Unit = {
+    var i = 0
+    while (i < children.length) {
+      children(i).writeSkip()
+      i += 1
+    }
     valueMutator.setIndexDefined(count)
   }
 
