@@ -1107,7 +1107,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def sort(sortCol: String, sortCols: String*): Dataset[T] = {
-    sort((sortCol +: sortCols).map(apply) : _*)
+    sort((sortCol +: sortCols).map(Column(_)) : _*)
   }
 
   /**
