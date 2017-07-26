@@ -37,4 +37,11 @@ object DateTimeTestUtils {
       DateTimeUtils.resetThreadLocals()
     }
   }
+
+  def setDefaultTimeZone(id: String): String = {
+    val originalDefaultTimeZone = DateTimeUtils.defaultTimeZone().getID
+    DateTimeUtils.resetThreadLocals()
+    TimeZone.setDefault(TimeZone.getTimeZone(id))
+    originalDefaultTimeZone
+  }
 }

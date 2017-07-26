@@ -20,7 +20,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
 import com.google.common.io.Files
 import org.apache.arrow.memory.RootAllocator
@@ -31,7 +31,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -841,52 +841,54 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   }
 
   test("timestamp type conversion") {
-    val json =
-      s"""
-         |{
-         |  "schema" : {
-         |    "fields" : [ {
-         |      "name" : "timestamp",
-         |      "type" : {
-         |        "name" : "timestamp",
-         |        "unit" : "MICROSECOND",
-         |        "timezone" : "${DateTimeUtils.defaultTimeZone().getID}"
-         |      },
-         |      "nullable" : true,
-         |      "children" : [ ],
-         |      "typeLayout" : {
-         |        "vectors" : [ {
-         |          "type" : "VALIDITY",
-         |          "typeBitWidth" : 1
-         |        }, {
-         |          "type" : "DATA",
-         |          "typeBitWidth" : 64
-         |        } ]
-         |      }
-         |    } ]
-         |  },
-         |  "batches" : [ {
-         |    "count" : 4,
-         |    "columns" : [ {
-         |      "name" : "timestamp",
-         |      "count" : 4,
-         |      "VALIDITY" : [ 1, 1, 1, 1 ],
-         |      "DATA" : [ -1234, 0, 1365383415567000, 33057298500000000 ]
-         |    } ]
-         |  } ]
-         |}
-       """.stripMargin
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("America/Los_Angeles")) {
+      val json =
+        s"""
+           |{
+           |  "schema" : {
+           |    "fields" : [ {
+           |      "name" : "timestamp",
+           |      "type" : {
+           |        "name" : "timestamp",
+           |        "unit" : "MICROSECOND",
+           |        "timezone" : "${DateTimeUtils.defaultTimeZone().getID}"
+           |      },
+           |      "nullable" : true,
+           |      "children" : [ ],
+           |      "typeLayout" : {
+           |        "vectors" : [ {
+           |          "type" : "VALIDITY",
+           |          "typeBitWidth" : 1
+           |        }, {
+           |          "type" : "DATA",
+           |          "typeBitWidth" : 64
+           |        } ]
+           |      }
+           |    } ]
+           |  },
+           |  "batches" : [ {
+           |    "count" : 4,
+           |    "columns" : [ {
+           |      "name" : "timestamp",
+           |      "count" : 4,
+           |      "VALIDITY" : [ 1, 1, 1, 1 ],
+           |      "DATA" : [ -1234, 0, 1365383415567000, 33057298500000000 ]
+           |    } ]
+           |  } ]
+           |}
+         """.stripMargin
 
-    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
-    val ts1 = DateTimeUtils.toJavaTimestamp(-1234L)
-    val ts2 = DateTimeUtils.toJavaTimestamp(0L)
-    val ts3 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
-    val ts4 = new Timestamp(sdf.parse("3017-07-18 14:55:00.000 UTC").getTime)
-    val data = Seq(ts1, ts2, ts3, ts4)
+      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
+      val ts1 = DateTimeUtils.toJavaTimestamp(-1234L)
+      val ts2 = DateTimeUtils.toJavaTimestamp(0L)
+      val ts3 = new Timestamp(sdf.parse("2013-04-08 01:10:15.567 UTC").getTime)
+      val ts4 = new Timestamp(sdf.parse("3017-07-18 14:55:00.000 UTC").getTime)
+      val data = Seq(ts1, ts2, ts3, ts4)
 
-    val df = data.toDF("timestamp")
+      val df = data.toDF("timestamp")
 
-    collectAndValidate(df, json, "timestampData.json")
+      collectAndValidate(df, json, "timestampData.json")
+    }
   }
 
   test("floating-point NaN") {
