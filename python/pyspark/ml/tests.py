@@ -1957,6 +1957,7 @@ class ChiSquareTestTests(SparkSessionTestCase):
         expectedFields = ["pValues", "degreesOfFreedom", "statistics"]
         self.assertTrue(all(field in fieldNames for field in expectedFields))
 
+
 class DefaultReadWriteTests(SparkSessionTestCase):
 
     def test_default_read_write(self):
@@ -1964,7 +1965,7 @@ class DefaultReadWriteTests(SparkSessionTestCase):
         lr.setMaxIter(50)
         lr.setThreshold(.75)
         writer = DefaultParamsWriter(lr)
-        
+
         tempFile = tempfile.NamedTemporaryFile(delete=True)
         tempFile.close()
 
@@ -1975,8 +1976,6 @@ class DefaultReadWriteTests(SparkSessionTestCase):
 
         self.assertEqual(lr.uid, lr2.uid)
         self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
-
-
 
 
 if __name__ == "__main__":
