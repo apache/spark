@@ -259,6 +259,8 @@ public class TransportConf {
 
   /**
    * The max number of chunks allowed to being transferred at the same time on shuffle service.
+   * Note that new coming connections will be closed when the max number is hit. Client should
+   * have retry mechanism, otherwise it will end up with fetch failure.
    */
   public long maxChunksBeingTransferred() {
     return conf.getLong("spark.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);
