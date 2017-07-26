@@ -26,7 +26,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
 import org.apache.spark._
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
 import org.apache.spark.tags.ExtendedYarnTest
@@ -46,26 +48,56 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     yarnConfig
   }
 
+  protected def extraSparkConf(): Map[String, String] = {
+    val shuffleServicePort = YarnTestAccessor.getShuffleServicePort
+    val shuffleService = YarnTestAccessor.getShuffleServiceInstance
+    logInfo("Shuffle service port = " + shuffleServicePort)
+
+    Map(
+      "spark.shuffle.service.enabled" -> "true",
+      "spark.shuffle.service.port" -> shuffleServicePort.toString,
+      MAX_EXECUTOR_FAILURES.key -> "1"
+    )
+  }
+
   test("external shuffle service") {
     val shuffleServicePort = YarnTestAccessor.getShuffleServicePort
     val shuffleService = YarnTestAccessor.getShuffleServiceInstance
 
     val registeredExecFile = YarnTestAccessor.getRegisteredExecutorFile(shuffleService)
 
-    logInfo("Shuffle service port = " + shuffleServicePort)
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(
       false,
       mainClassName(YarnExternalShuffleDriver.getClass),
       appArgs = Seq(result.getAbsolutePath(), registeredExecFile.getAbsolutePath),
-      extraConf = Map(
-        "spark.shuffle.service.enabled" -> "true",
-        "spark.shuffle.service.port" -> shuffleServicePort.toString
-      )
+      extraConf = extraSparkConf()
     )
     checkResult(finalState, result)
     assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
   }
+}
+
+/**
+ * Integration test for the external shuffle service with auth on.
+ */
+@ExtendedYarnTest
+class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
+
+  override def newYarnConfig(): YarnConfiguration = {
+    val yarnConfig = super.newYarnConfig()
+    yarnConfig.set(NETWORK_AUTH_ENABLED.key, "true")
+    yarnConfig.set(NETWORK_ENCRYPTION_ENABLED.key, "true")
+    yarnConfig
+  }
+
+  override protected def extraSparkConf(): Map[String, String] = {
+    super.extraSparkConf() ++ Map(
+      NETWORK_AUTH_ENABLED.key -> "true",
+      NETWORK_ENCRYPTION_ENABLED.key -> "true"
+    )
+  }
+
 }
 
 private object YarnExternalShuffleDriver extends Logging with Matchers {
