@@ -462,9 +462,15 @@ test_that("create DataFrame from list or data.frame", {
   df <- createDataFrame(l, c("a", "b"))
   expect_equal(columns(df), c("a", "b"))
 
+  df <- createDataFrame(list(list(1, 2)), list("..a", "..."))
+  expect_equal(columns(df), c("..a", "..."))
+
   l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
   df <- createDataFrame(l)
   expect_equal(columns(df), c("a", "b"))
+
+  df <- createDataFrame(list(list(a.a = 1, a.. = 2)))
+  expect_equal(columns(df), c("a.a", "a.."))
 
   a <- 1:3
   b <- c("a", "b", "c")
