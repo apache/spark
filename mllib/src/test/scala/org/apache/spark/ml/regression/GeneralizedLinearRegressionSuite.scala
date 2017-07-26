@@ -1556,7 +1556,7 @@ class GeneralizedLinearRegressionSuite
     }
   }
 
-  test("glm summary: coefficient matrix") {
+  test("glm summary: coefficient with statistics") {
     /*
       R code:
 
@@ -1593,14 +1593,14 @@ class GeneralizedLinearRegressionSuite
         .setFamily("gaussian")
         .setFitIntercept(fitIntercept)
       val model = trainer.fit(dataset)
-      val coefficients = model.summary.coefficientCollection
+      val coefficientsWithStatistics = model.summary.coefficientsWithStatistics
 
-      coefficients.map(_._1).zip(expectedFeature(idx)).foreach{ x => assert(x._1 === x._2,
-        "Feature name mismatch in summaryTable") }
-      assert(Vectors.dense(coefficients.map(_._2))
-        ~== expectedEstimate(idx) absTol 1E-3, "Coefficient mismatch in summaryTable")
-      assert(Vectors.dense(coefficients.map(_._3))
-        ~== expectedStdError(idx) absTol 1E-3, "Standard error mismatch in summaryTable")
+      coefficientsWithStatistics.map(_._1).zip(expectedFeature(idx)).foreach { x =>
+        assert(x._1 === x._2, "Feature name mismatch in coefficientsWithStatistics") }
+      assert(Vectors.dense(coefficientsWithStatistics.map(_._2)) ~= expectedEstimate(idx)
+        absTol 1E-3, "Coefficients mismatch in coefficientsWithStatistics")
+      assert(Vectors.dense(coefficientsWithStatistics.map(_._3)) ~= expectedStdError(idx)
+        absTol 1E-3, "Standard error mismatch in coefficientsWithStatistics")
       idx += 1
     }
   }

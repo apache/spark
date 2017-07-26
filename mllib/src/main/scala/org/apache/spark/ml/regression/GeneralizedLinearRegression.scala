@@ -142,6 +142,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   /**
    * Param for offset column name. If this is not set or empty, we treat all instance offsets
    * as 0.0. The feature specified as offset has a constant coefficient of 1.0.
+   *
    * @group param
    */
   @Since("2.3.0")
@@ -325,6 +326,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    *    $$
    * </blockquote>
    * Default is 0.0.
+   *
    *
    * @group setParam
    */
@@ -1213,11 +1215,10 @@ class GeneralizedLinearRegressionSummary private[regression] (
   private[ml] lazy val featureNames: Array[String] = {
     val featureAttrs = AttributeGroup.fromStructField(
       dataset.schema(model.getFeaturesCol)).attributes
-    if (featureAttrs == None) {
-      Array.tabulate[String](origModel.numFeatures)(
-        (x: Int) => (model.getFeaturesCol + "_" + x))
-    } else {
+    if (featureAttrs.isDefined) {
       featureAttrs.get.map(_.name.get)
+    } else {
+      Array.tabulate[String](origModel.numFeatures)((x: Int) => model.getFeaturesCol + "_" + x)
     }
   }
 
@@ -1477,138 +1478,94 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   }
 
   /**
-   * Collection of feature name, coefficient, standard error,
-   * tValue and pValue.
+   * coefficients with statistics: feature name, coefficients, standard error, tValue and pValue.
    */
-  private[ml] lazy val coefficientCollection: Array[(String, Double, Double, Double, Double)] = {
-    if (isNormalSolver) {
-      var featureNamesLocal = featureNames
-      var coefficients = model.coefficients.toArray
-      var idx = Array.range(0, coefficients.length)
-      if (model.getFitIntercept) {
-        featureNamesLocal = featureNamesLocal :+ "(Intercept)"
-        coefficients = coefficients :+ model.intercept
-        // Reorder so that intercept comes first
-        idx = (coefficients.length - 1) +: idx
-      }
-      val result = for (i <- idx) yield
-        (featureNamesLocal(i), coefficients(i), coefficientStandardErrors(i),
+  private[ml] lazy val coefficientsWithStatistics: Array[
+    (String, Double, Double, Double, Double)] = {
+    var featureNamesLocal = featureNames
+    var coefficientsArray = model.coefficients.toArray
+    var index = Array.range(0, coefficientsArray.length)
+    if (model.getFitIntercept) {
+      featureNamesLocal = featureNamesLocal :+ "(Intercept)"
+      coefficientsArray = coefficientsArray :+ model.intercept
+      // Reorder so that intercept comes first
+      index = (coefficientsArray.length - 1) +: index
+    }
+    index.map { i =>
+      (featureNamesLocal(i), coefficientsArray(i), coefficientStandardErrors(i),
         tValues(i), pValues(i))
-      result
+    }
+  }
+
+  override def toString: String = {
+    if (isNormalSolver) {
+
+      def round(x: Double): String = {
+        BigDecimal(x).setScale(5, BigDecimal.RoundingMode.HALF_UP).toString
+      }
+
+      val colNames = Array("Feature", "Estimate", "Std Error", "T Value", "P Value")
+
+      val data = coefficientsWithStatistics.map { row =>
+        val strRow = row.productIterator.map { cell =>
+          val str = cell match {
+            case s: String => s
+            case n: Double => round(n)
+          }
+          // Truncate if length > 20
+          if (str.length > 20) {
+            str.substring(0, 17) + "..."
+          } else {
+            str
+          }
+        }
+        strRow.toArray
+      }
+
+      // Compute the width of each column
+      val colWidths = colNames.map(_.length)
+      data.foreach { strRow =>
+        strRow.zipWithIndex.foreach { case (cell: String, i: Int) =>
+          colWidths(i) = math.max(colWidths(i), cell.length)
+        }
+      }
+
+      val sb = new StringBuilder
+
+      // Output coefficients with statistics
+      sb.append("Coefficients:\n")
+      colNames.zipWithIndex.map { case (colName: String, i: Int) =>
+        StringUtils.leftPad(colName, colWidths(i))
+      }.addString(sb, "", " ", "\n")
+
+      data.foreach { case strRow: Array[String] =>
+        strRow.zipWithIndex.map { case (cell: String, i: Int) =>
+          StringUtils.leftPad(cell.toString, colWidths(i))
+        }.addString(sb, "", " ", "\n")
+      }
+
+      sb.append("\n")
+      sb.append(s"(Dispersion parameter for ${family.name} family taken to be " +
+        s"${round(dispersion)})")
+
+      sb.append("\n")
+      val nd = s"Null deviance: ${round(nullDeviance)} on $degreesOfFreedom degrees of freedom"
+      val rd = s"Residual deviance: ${round(deviance)} on $residualDegreeOfFreedom degrees of " +
+        "freedom"
+      val l = math.max(nd.length, rd.length)
+      sb.append(StringUtils.leftPad(nd, l))
+      sb.append("\n")
+      sb.append(StringUtils.leftPad(rd, l))
+
+      if (family.name != "tweedie") {
+        sb.append("\n")
+        sb.append(s"AIC: " + round(aic))
+      }
+
+      sb.toString()
     } else {
       throw new UnsupportedOperationException(
         "No summary available for this GeneralizedLinearRegressionModel")
     }
   }
-
-  private def round(x: Double, digit: Int): String = {
-    BigDecimal(x).setScale(digit, BigDecimal.RoundingMode.HALF_UP).toString()
-  }
-
-  private[regression] def showString(_numRows: Int,
-                                     truncate: Int = 20,
-                                     numDigits: Int = 3): String = {
-    val numRows = _numRows.max(1)
-    val data = coefficientCollection.take(numRows)
-    val hasMoreData = coefficientCollection.size > numRows
-
-    val colNames = Array("Feature", "Estimate", "StdError", "TValue", "PValue")
-    val numCols = colNames.size
-
-    val rows = colNames +: data.map( row => {
-      val mrow = for (cell <- row.productIterator) yield {
-        val str = cell match {
-          case s: String => s
-          case n: Double => round(n, numDigits).toString
-        }
-        if (truncate > 0 && str.length > truncate) {
-          // do not show ellipses for strings shorter than 4 characters.
-          if (truncate < 4) str.substring(0, truncate)
-          else str.substring(0, truncate - 3) + "..."
-        } else {
-          str
-        }
-      }
-      mrow.toArray
-    })
-
-    val sb = new StringBuilder
-    val colWidths = Array.fill(numCols)(3)
-
-    // Compute the width of each column
-    for (row <- rows) {
-      for ((cell, i) <- row.zipWithIndex) {
-        colWidths(i) = math.max(colWidths(i), cell.length)
-      }
-    }
-
-    // Create SeparateLine
-    val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
-
-    // column names
-    rows.head.zipWithIndex.map { case (cell, i) =>
-      if (truncate > 0) {
-        StringUtils.leftPad(cell, colWidths(i))
-      } else {
-        StringUtils.rightPad(cell, colWidths(i))
-      }
-    }.addString(sb, "|", "|", "|\n")
-    sb.append(sep)
-
-    // data
-    rows.tail.map {
-      _.zipWithIndex.map { case (cell, i) =>
-        if (truncate > 0) {
-          StringUtils.leftPad(cell.toString, colWidths(i))
-        } else {
-          StringUtils.rightPad(cell.toString, colWidths(i))
-        }
-      }.addString(sb, "|", "|", "|\n")
-    }
-
-    // For Data that has more than "numRows" records
-    if (hasMoreData) {
-      sb.append("...\n")
-      sb.append(sep)
-      val rowsString = if (numRows == 1) "row" else "rows"
-      sb.append(s"only showing top $numRows $rowsString\n")
-    } else {
-      sb.append(sep)
-    }
-
-    sb.append("\n")
-    sb.append(s"(Dispersion parameter for ${family.name} family taken to be " +
-      round(dispersion, numDigits) + ")")
-
-    sb.append("\n")
-    val nd = "Null deviance: " + round(nullDeviance, numDigits) +
-      s" on $degreesOfFreedom degrees of freedom"
-    val rd = "Residual deviance: " + round(deviance, numDigits) +
-      s" on $residualDegreeOfFreedom degrees of freedom"
-    val l = math.max(nd.length, rd.length)
-    sb.append(StringUtils.leftPad(nd, l))
-    sb.append("\n")
-    sb.append(StringUtils.leftPad(rd, l))
-
-    if (family.name != "tweedie") {
-      sb.append("\n")
-      sb.append(s"AIC: " + round(aic, numDigits))
-    }
-
-    sb.toString()
-  }
-
-  /**
-   * Displays the summary of a GeneralizedLinearModel fit. Strings more than 20 characters
-   * will be truncated, and all cells will be aligned right. Numbers are rounded to three
-   * decimal places.
-   *
-   * @since 2.3.0
-   */
-  // scalastyle:off println
-  def show(): Unit = {
-    println(showString(coefficientCollection.size, truncate = 20, 3))
-  }
-  // scalastyle:on println
-
 }
