@@ -115,10 +115,10 @@ private[r] object GeneralizedLinearRegressionWrapper
     }
 
     val rCoefficients: Array[Double] = if (summary.isNormalSolver) {
-      summary.coefficientCollection.map(_._2) ++
-        summary.coefficientCollection.map(_._3) ++
-        summary.coefficientCollection.map(_._4) ++
-        summary.coefficientCollection.map(_._5)
+      summary.coefficientsWithStatistics.map(_._2) ++
+        summary.coefficientsWithStatistics.map(_._3) ++
+        summary.coefficientsWithStatistics.map(_._4) ++
+        summary.coefficientsWithStatistics.map(_._5)
     } else {
       if (glm.getFitIntercept) {
         Array(glm.intercept) ++ glm.coefficients.toArray
