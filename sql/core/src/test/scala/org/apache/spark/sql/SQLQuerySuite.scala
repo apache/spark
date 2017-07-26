@@ -231,7 +231,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-6201 IN type conversion") {
     spark.read
-      .json(Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}").toDS())
+      .json(Seq("{\"a\": \"1\"}", "{\"a\": \"2\"}", "{\"a\": \"3\"}").toDS())
       .createOrReplaceTempView("d")
 
     checkAnswer(
@@ -241,7 +241,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-11226 Skip empty line in json file") {
     spark.read
-      .json(Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}", "").toDS())
+      .json(Seq("{\"a\": \"1\"}", "{\"a\": \"2\"}", "{\"a\": \"3\"}", "").toDS())
       .createOrReplaceTempView("d")
 
     checkAnswer(
