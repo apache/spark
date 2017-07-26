@@ -336,10 +336,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val getAggregatorFunc = new LeastSquaresAggregator(yStd, yMean, $(fitIntercept),
       bcFeaturesStd, bcFeaturesMean)(_)
+    val getFeaturesStd = (j: Int) => if (j >= 0 && j < numFeatures) featuresStd(j) else 0.0
     val regularization = if (effectiveL2RegParam != 0.0) {
       val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
       Some(new L2Regularization(effectiveL2RegParam, shouldApply,
-        if ($(standardization)) None else Some(featuresStd)))
+        if ($(standardization)) None else Some(getFeaturesStd)))
     } else {
       None
     }

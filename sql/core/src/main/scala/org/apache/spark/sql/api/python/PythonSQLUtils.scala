@@ -17,9 +17,16 @@
 
 package org.apache.spark.sql.api.python
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.DataType
 
 private[sql] object PythonSQLUtils {
   def parseDataType(typeText: String): DataType = CatalystSqlParser.parseDataType(typeText)
+
+  // This is needed when generating SQL documentation for built-in functions.
+  def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
+    FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
+  }
 }
