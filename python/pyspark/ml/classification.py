@@ -1517,10 +1517,10 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 weightCol=None, classifier=None):
+                 classifier=None, weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 weightCol=None, classifier=None)
+                 classifier=None, weightCol=None)
         """
         super(OneVsRest, self).__init__()
         kwargs = self._input_kwargs
@@ -1529,10 +1529,10 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     @keyword_only
     @since("2.0.0")
     def setParams(self, featuresCol=None, labelCol=None, predictionCol=None,
-                  weightCol=None, classifier=None):
+                  classifier=None, weightCol=None):
         """
         setParams(self, featuresCol=None, labelCol=None, predictionCol=None, \
-                  weightCol=None, classifier=None):
+                  classifier=None, weightCol=None):
         Sets params for OneVsRest.
         """
         kwargs = self._input_kwargs
