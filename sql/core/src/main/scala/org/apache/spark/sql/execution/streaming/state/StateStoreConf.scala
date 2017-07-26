@@ -38,7 +38,7 @@ class StateStoreConf(@transient private val sqlConf: SQLConf)
    * Optional fully qualified name of the subclass of [[StateStoreProvider]]
    * managing state data. That is, the implementation of the State Store to use.
    */
-  val providerClass: Option[String] = sqlConf.stateStoreProviderClass
+  val providerClass: String = sqlConf.stateStoreProviderClass
 
   /**
    * Additional configurations related to state store. This will capture all configs in

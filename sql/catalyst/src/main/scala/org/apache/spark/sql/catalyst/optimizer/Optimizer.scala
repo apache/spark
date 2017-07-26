@@ -34,12 +34,13 @@ import org.apache.spark.sql.types._
  * Abstract class all optimizers should inherit of, contains the standard batches (extending
  * Optimizers can override this.
  */
-abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
+abstract class Optimizer(sessionCatalog: SessionCatalog)
   extends RuleExecutor[LogicalPlan] {
 
-  protected val fixedPoint = FixedPoint(conf.optimizerMaxIterations)
+  protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
   def batches: Seq[Batch] = {
+    Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
     // However, because we also use the analyzer to canonicalized queries (for view definition),
@@ -76,11 +77,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
     Batch("Operator Optimizations", fixedPoint, Seq(
       // Operator push down
       PushProjectionThroughUnion,
-      ReorderJoin(conf),
+      ReorderJoin,
       EliminateOuterJoin,
       PushPredicateThroughJoin,
       PushDownPredicate,
-      LimitPushDown(conf),
+      LimitPushDown,
       ColumnPruning,
       InferFiltersFromConstraints,
       // Operator combine
@@ -91,10 +92,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       CombineLimits,
       CombineUnions,
       // Constant folding and strength reduction
-      NullPropagation(conf),
+      NullPropagation,
       ConstantPropagation,
       FoldablePropagation,
-      OptimizeIn(conf),
+      OptimizeIn,
       ConstantFolding,
       ReorderAssociativeOperator,
       LikeSimplification,
@@ -116,11 +117,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       CombineConcats) ++
       extendedOperatorOptimizationRules: _*) ::
     Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts(conf)) ::
+      CheckCartesianProducts) ::
     Batch("Join Reorder", Once,
-      CostBasedJoinReorder(conf)) ::
+      CostBasedJoinReorder) ::
     Batch("Decimal Optimizations", fixedPoint,
-      DecimalAggregates(conf)) ::
+      DecimalAggregates) ::
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters) ::
@@ -128,7 +129,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
     Batch("OptimizeCodegen", Once,
-      OptimizeCodegen(conf)) ::
+      OptimizeCodegen) ::
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       CollapseProject) :: Nil
@@ -152,6 +153,20 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
 }
 
 /**
+ * Remove useless DISTINCT for MAX and MIN.
+ * This rule should be applied before RewriteDistinctAggregates.
+ */
+object EliminateDistinct extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
+    case ae: AggregateExpression if ae.isDistinct =>
+      ae.aggregateFunction match {
+        case _: Max | _: Min => ae.copy(isDistinct = false)
+        case _ => ae
+      }
+  }
+}
+
+/**
  * An optimizer used in test code.
  *
  * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
@@ -163,8 +178,7 @@ class SimpleTestOptimizer extends Optimizer(
   new SessionCatalog(
     new InMemoryCatalog,
     EmptyFunctionRegistry,
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)),
-  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)))
 
 /**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
@@ -273,7 +287,7 @@ object RemoveRedundantProject extends Rule[LogicalPlan] {
 /**
  * Pushes down [[LocalLimit]] beneath UNION ALL and beneath the streamed inputs of outer joins.
  */
-case class LimitPushDown(conf: SQLConf) extends Rule[LogicalPlan] {
+object LimitPushDown extends Rule[LogicalPlan] {
 
   private def stripGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
     plan match {
@@ -317,7 +331,7 @@ case class LimitPushDown(conf: SQLConf) extends Rule[LogicalPlan] {
         case FullOuter =>
           (left.maxRows, right.maxRows) match {
             case (None, None) =>
-              if (left.stats(conf).sizeInBytes >= right.stats(conf).sizeInBytes) {
+              if (left.stats.sizeInBytes >= right.stats.sizeInBytes) {
                 join.copy(left = maybePushLimit(exp, left))
               } else {
                 join.copy(right = maybePushLimit(exp, right))
@@ -1062,8 +1076,7 @@ object CombineLimits extends Rule[LogicalPlan] {
  * the join between R and S is not a cartesian product and therefore should be allowed.
  * The predicate R.r = S.s is not recognized as a join condition until the ReorderJoin rule.
  */
-case class CheckCartesianProducts(conf: SQLConf)
-    extends Rule[LogicalPlan] with PredicateHelper {
+object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Check if a join is a cartesian product. Returns true if
    * there are no join conditions involving references from both left and right.
@@ -1075,7 +1088,7 @@ case class CheckCartesianProducts(conf: SQLConf)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan =
-    if (conf.crossJoinEnabled) {
+    if (SQLConf.get.crossJoinEnabled) {
       plan
     } else plan transform {
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, condition)
@@ -1097,7 +1110,7 @@ case class CheckCartesianProducts(conf: SQLConf)
  * This uses the same rules for increasing the precision and scale of the output as
  * [[org.apache.spark.sql.catalyst.analysis.DecimalPrecision]].
  */
-case class DecimalAggregates(conf: SQLConf) extends Rule[LogicalPlan] {
+object DecimalAggregates extends Rule[LogicalPlan] {
   import Decimal.MAX_LONG_DIGITS
 
   /** Maximum number of decimal digits representable precisely in a Double */
@@ -1115,7 +1128,7 @@ case class DecimalAggregates(conf: SQLConf) extends Rule[LogicalPlan] {
             we.copy(windowFunction = ae.copy(aggregateFunction = Average(UnscaledValue(e))))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-            DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
+            DecimalType(prec + 4, scale + 4), Option(SQLConf.get.sessionLocalTimeZone))
 
         case _ => we
       }
@@ -1127,7 +1140,7 @@ case class DecimalAggregates(conf: SQLConf) extends Rule[LogicalPlan] {
           val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-            DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
+            DecimalType(prec + 4, scale + 4), Option(SQLConf.get.sessionLocalTimeZone))
 
         case _ => ae
       }

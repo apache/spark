@@ -80,6 +80,7 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
         case Some(appId) =>
           apps.remove(appId)
           master.send(UnregisterApplication(appId))
+        case None =>
       }
       driverIdToAppId.remove(driverId)
   }
@@ -214,7 +215,7 @@ class MasterSuite extends SparkFunSuite
       master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
       // Wait until Master recover from checkpoint data.
       eventually(timeout(5 seconds), interval(100 milliseconds)) {
-        master.idToApp.size should be(1)
+        master.workers.size should be(1)
       }
 
       master.idToApp.keySet should be(Set(fakeAppInfo.id))
@@ -575,7 +576,7 @@ class MasterSuite extends SparkFunSuite
       override val rpcEnv: RpcEnv = master.rpcEnv
 
       override def receive: PartialFunction[Any, Unit] = {
-        case KillExecutor(_, appId, execId) => killedExecutors.add(appId, execId)
+        case KillExecutor(_, appId, execId) => killedExecutors.add((appId, execId))
         case KillDriver(driverId) => killedDrivers.add(driverId)
       }
     })

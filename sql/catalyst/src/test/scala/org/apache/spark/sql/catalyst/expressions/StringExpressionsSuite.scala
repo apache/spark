@@ -558,20 +558,40 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
     checkEvaluation(Length(Literal("a花花c")), 4, create_row(string))
+    checkEvaluation(OctetLength(Literal("a花花c")), 8, create_row(string))
+    checkEvaluation(BitLength(Literal("a花花c")), 8 * 8, create_row(string))
     // scalastyle:on
     checkEvaluation(Length(Literal(bytes)), 5, create_row(Array.empty[Byte]))
+    checkEvaluation(OctetLength(Literal(bytes)), 5, create_row(Array.empty[Byte]))
+    checkEvaluation(BitLength(Literal(bytes)), 5 * 8, create_row(Array.empty[Byte]))
 
     checkEvaluation(Length(a), 5, create_row(string))
+    checkEvaluation(OctetLength(a), 5, create_row(string))
+    checkEvaluation(BitLength(a), 5 * 8, create_row(string))
     checkEvaluation(Length(b), 5, create_row(bytes))
+    checkEvaluation(OctetLength(b), 5, create_row(bytes))
+    checkEvaluation(BitLength(b), 5 * 8, create_row(bytes))
 
     checkEvaluation(Length(a), 0, create_row(""))
+    checkEvaluation(OctetLength(a), 0, create_row(""))
+    checkEvaluation(BitLength(a), 0, create_row(""))
     checkEvaluation(Length(b), 0, create_row(Array.empty[Byte]))
+    checkEvaluation(OctetLength(b), 0, create_row(Array.empty[Byte]))
+    checkEvaluation(BitLength(b), 0, create_row(Array.empty[Byte]))
 
     checkEvaluation(Length(a), null, create_row(null))
+    checkEvaluation(OctetLength(a), null, create_row(null))
+    checkEvaluation(BitLength(a), null, create_row(null))
     checkEvaluation(Length(b), null, create_row(null))
+    checkEvaluation(OctetLength(b), null, create_row(null))
+    checkEvaluation(BitLength(b), null, create_row(null))
 
     checkEvaluation(Length(Literal.create(null, StringType)), null, create_row(string))
+    checkEvaluation(OctetLength(Literal.create(null, StringType)), null, create_row(string))
+    checkEvaluation(BitLength(Literal.create(null, StringType)), null, create_row(string))
     checkEvaluation(Length(Literal.create(null, BinaryType)), null, create_row(bytes))
+    checkEvaluation(OctetLength(Literal.create(null, BinaryType)), null, create_row(bytes))
+    checkEvaluation(BitLength(Literal.create(null, BinaryType)), null, create_row(bytes))
   }
 
   test("format_number / FormatNumber") {

@@ -140,6 +140,16 @@ case class DropFunctionPreEvent(database: String, name: String) extends Function
 case class DropFunctionEvent(database: String, name: String) extends FunctionEvent
 
 /**
+ * Event fired before a function is altered.
+ */
+case class AlterFunctionPreEvent(database: String, name: String) extends FunctionEvent
+
+/**
+ * Event fired after a function has been altered.
+ */
+case class AlterFunctionEvent(database: String, name: String) extends FunctionEvent
+
+/**
  * Event fired before a function is renamed.
  */
 case class RenameFunctionPreEvent(

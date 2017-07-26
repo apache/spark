@@ -20,18 +20,18 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util._
 
-
 class CodeFormatterSuite extends SparkFunSuite {
 
-  def testCase(name: String)(
-      input: String, comment: Map[String, String] = Map.empty)(expected: String): Unit = {
+  def testCase(name: String)(input: String,
+      comment: Map[String, String] = Map.empty, maxLines: Int = -1)(expected: String): Unit = {
     test(name) {
       val sourceCode = new CodeAndComment(input.trim, comment)
-      if (CodeFormatter.format(sourceCode).trim !== expected.trim) {
+      if (CodeFormatter.format(sourceCode, maxLines).trim !== expected.trim) {
         fail(
           s"""
              |== FAIL: Formatted code doesn't match ===
-             |${sideBySide(CodeFormatter.format(sourceCode).trim, expected.trim).mkString("\n")}
+             |${sideBySide(CodeFormatter.format(sourceCode, maxLines).trim,
+                 expected.trim).mkString("\n")}
            """.stripMargin)
       }
     }
@@ -126,6 +126,36 @@ class CodeFormatterSuite extends SparkFunSuite {
       |/* 002 */   a,
       |/* 003 */   b,
       |/* 004 */   c)
+    """.stripMargin
+  }
+
+  testCase("function calls with maxLines=0") (
+    """
+      |foo(
+      |a,
+      |b,
+      |c)
+    """.stripMargin,
+    maxLines = 0
+  ) {
+    """
+      |/* 001 */ [truncated to 0 lines (total lines is 4)]
+    """.stripMargin
+  }
+
+  testCase("function calls with maxLines=2") (
+    """
+      |foo(
+      |a,
+      |b,
+      |c)
+    """.stripMargin,
+    maxLines = 2
+  ) {
+    """
+      |/* 001 */ foo(
+      |/* 002 */   a,
+      |/* 003 */   [truncated to 2 lines (total lines is 4)]
     """.stripMargin
   }
 

@@ -20,9 +20,7 @@ package org.apache.spark.kvstore;
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 import org.apache.commons.io.FileUtils;
 import org.iq80.leveldb.DBIterator;

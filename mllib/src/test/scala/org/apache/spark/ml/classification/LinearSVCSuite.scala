@@ -128,6 +128,39 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     MLTestingUtils.checkCopyAndUids(lsvc, model)
   }
 
+  test("LinearSVC threshold acts on rawPrediction") {
+    val lsvc =
+      new LinearSVCModel(uid = "myLSVCM", coefficients = Vectors.dense(1.0), intercept = 0.0)
+    val df = spark.createDataFrame(Seq(
+      (1, Vectors.dense(1e-7)),
+      (0, Vectors.dense(0.0)),
+      (-1, Vectors.dense(-1e-7)))).toDF("id", "features")
+
+    def checkOneResult(
+        model: LinearSVCModel,
+        threshold: Double,
+        expected: Set[(Int, Double)]): Unit = {
+      model.setThreshold(threshold)
+      val results = model.transform(df).select("id", "prediction").collect()
+        .map(r => (r.getInt(0), r.getDouble(1)))
+        .toSet
+      assert(results === expected, s"Failed for threshold = $threshold")
+    }
+
+    def checkResults(threshold: Double, expected: Set[(Int, Double)]): Unit = {
+      // Check via code path using Classifier.raw2prediction
+      lsvc.setRawPredictionCol("rawPrediction")
+      checkOneResult(lsvc, threshold, expected)
+      // Check via code path using Classifier.predict
+      lsvc.setRawPredictionCol("")
+      checkOneResult(lsvc, threshold, expected)
+    }
+
+    checkResults(0.0, Set((1, 1.0), (0, 0.0), (-1, 0.0)))
+    checkResults(Double.PositiveInfinity, Set((1, 0.0), (0, 0.0), (-1, 0.0)))
+    checkResults(Double.NegativeInfinity, Set((1, 1.0), (0, 1.0), (-1, 1.0)))
+  }
+
   test("linear svc doesn't fit intercept when fitIntercept is off") {
     val lsvc = new LinearSVC().setFitIntercept(false).setMaxIter(5)
     val model = lsvc.fit(smallBinaryDataset)
