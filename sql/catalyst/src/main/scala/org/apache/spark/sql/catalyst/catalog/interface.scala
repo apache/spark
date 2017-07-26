@@ -218,7 +218,7 @@ case class CatalogTable(
     owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
-    createVersion: String = org.apache.spark.SPARK_VERSION,
+    createVersion: String = "",
     properties: Map[String, String] = Map.empty,
     stats: Option[CatalogStatistics] = None,
     viewText: Option[String] = None,
@@ -348,7 +348,6 @@ object CatalogTable {
   val VIEW_QUERY_OUTPUT_PREFIX = "view.query.out."
   val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
   val VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX = VIEW_QUERY_OUTPUT_PREFIX + "col."
-  val CREATED_SPARK_VERSION = "spark.sql.create.version"
 }
 
 /**
