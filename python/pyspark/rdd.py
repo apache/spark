@@ -2370,14 +2370,13 @@ class RDD(object):
 def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
     ser = CloudPickleSerializer()
-    with sc._pickled_broadcast_registry.lock:
-        pickled_command = ser.dumps(command)
-        if len(pickled_command) > (1 << 20):  # 1M
-            # The broadcast will have same life cycle as created PythonRDD
-            broadcast = sc.broadcast(pickled_command)
-            pickled_command = ser.dumps(broadcast)
-        pickled_broadcast_vars = sc._pickled_broadcast_registry.get_and_clear()
-    broadcast_vars = [x._jbroadcast for x in pickled_broadcast_vars]
+    pickled_command = ser.dumps(command)
+    if len(pickled_command) > (1 << 20):  # 1M
+        # The broadcast will have same life cycle as created PythonRDD
+        broadcast = sc.broadcast(pickled_command)
+        pickled_command = ser.dumps(broadcast)
+    broadcast_vars = [x._jbroadcast for x in sc._pickled_broadcast_registry]
+    sc._pickled_broadcast_registry.clear()
     return pickled_command, broadcast_vars, sc.environment, sc._python_includes
 
 

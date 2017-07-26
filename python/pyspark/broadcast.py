@@ -19,6 +19,7 @@ import os
 import sys
 import gc
 from tempfile import NamedTemporaryFile
+import threading
 
 from pyspark.cloudpickle import print_exec
 from pyspark.util import _exception_message
@@ -139,27 +140,22 @@ class Broadcast(object):
         return _from_id, (self._jbroadcast.id(),)
 
 
-class BroadcastPickleRegistry(object):
-    """ Thread-safe registry for broadcast variables that have been pickled
+class BroadcastPickleRegistry(threading.local):
+    """ Thread-local registry for broadcast variables that have been pickled
     """
 
-    def __init__(self, lock):
-        self._registry = set()
-        self._lock = lock
+    def __init__(self):
+        self.__dict__.setdefault("_registry", set())
 
-    @property
-    def lock(self):
-        return self._lock
+    def __iter__(self):
+        for bcast in self._registry:
+            yield bcast
 
     def add(self, bcast):
-        with self._lock:
-            self._registry.add(bcast)
+        self._registry.add(bcast)
 
-    def get_and_clear(self):
-        with self._lock:
-            registry_copy = self._registry.copy()
-            self._registry.clear()
-        return registry_copy
+    def clear(self):
+        self._registry.clear()
 
 
 if __name__ == "__main__":
