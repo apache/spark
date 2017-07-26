@@ -66,7 +66,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    * Wrap this buffer to view it as a Netty ByteBuf.
    */
   def toNetty: ByteBuf = {
-    Unpooled.wrappedBuffer(getChunks(): _*)
+    Unpooled.wrappedBuffer(chunks.length, getChunks(): _*)
   }
 
   /**

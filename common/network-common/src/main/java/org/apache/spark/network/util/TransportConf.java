@@ -257,4 +257,10 @@ public class TransportConf {
     return CryptoUtils.toCryptoConf("spark.network.crypto.config.", conf.getAll());
   }
 
+  /**
+   * The max number of chunks allowed to being transferred at the same time on shuffle service.
+   */
+  public long maxChunksBeingTransferred() {
+    return conf.getLong("spark.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);
+  }
 }
