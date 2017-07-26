@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
+import json
 import sys
+import os
+import time
 import uuid
 import warnings
 
@@ -67,6 +70,9 @@ class MLWriter(object):
 
     .. versionadded:: 2.0.0
     """
+
+    def __init__(self):
+        self.shouldOverwrite = False
 
     def save(self, path):
         """Save the ML instance to the input path."""
@@ -288,32 +294,76 @@ class JavaPredictionModel():
 @inherit_doc
 class DefaultParamsWritable(MLWritable):
 
+    # overrides the write() function in MLWriteable
+    # users call .save() in MLWriteable which calls this write() function and then calls the .save() in DefaultParamsWriter
+    # this can be overridden to return a different Writer (ex. OneVsRestWriter as seen in Scala)
     def write(self):
-        return DefaultParamsWriter()
+        # instance of check for params?
+        return DefaultParamsWriter(self)
 
 
 @inherit_doc
 class DefaultParamsWriter(MLWriter):
 
     def __init__(self, instance):
+        super(DefaultParamsWriter, self).__init__()
         self.instance = instance
+        self.sc = SparkContext._active_spark_context
 
-    def saveImpl(self, path):
-        # need spark context as well?
-        DefaultParamsWriter.save_metadata(instance, path)
+    # if a model extends DefaultParamsWriteable this save() function is called
+    def save(self, path):
+        if self.shouldOverwrite:
+            # This command removes a file. Is this enough?
+            os.remove(path)
+        DefaultParamsWriter.save_metadata(self.instance, path, self.sc)
+
+
+    def overwrite(self):
+        self.shouldOverwrite = True
+        return self
+
+    # # used to mimic the structure in Scala
+    # # can be overridden by other writers (ex. OneVsRestWriter as seen in Scala)
+    # def saveImpl(self, path):
+    #     # need spark context as well?
+    #     DefaultParamsWriter.save_metadata(instance, path, self.sc)
 
     @staticmethod
-    def save_metadata(path):
-        pass
+    def save_metadata(instance, path, sc, extraMetadata=None, paramMap=None):
+        #print "sc in save_metadata:",sc
+        metadataPath = os.path.join(path, "metadata")
+        metadataJson = DefaultParamsWriter.get_metadata_to_save(instance, metadataPath, sc, extraMetadata, paramMap)
+        sc.parallelize([metadataJson], 1).saveAsTextFile(metadataPath)
 
     @staticmethod
-    def get_metatdata_to_save():
-        pass
+    def get_metadata_to_save(instance, path, sc, extraMetadata=None, paramMap=None):
+        uid = instance.uid
+        cls = instance.__module__ + '.' + instance.__class__.__name__ # should be the name of the class of instance
+        # params = list(instance.extractParamMap())
+        params = instance.extractParamMap()
+        #print "sc in function:",sc
+        jsonParams = {}
+        if paramMap is not None:
+            for p in paramMap:
+                jsonParams[p.name] = paramMap[p]
+        else:
+            for p in params:
+                jsonParams[p.name] = params[p]
+        basicMetadata = {"class": cls, "timestamp": int(round(time.time() * 1000)), \
+                         "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams}
+        if extraMetadata is not None:
+            basicMetadata.update(extraMetadata)
+        return json.dumps(basicMetadata)
+
+
+        
 
 
 @inherit_doc
 class DefaultParamsReadable(MLReadable):
 
+    # overrides the read() functino in MLReadable
+    # users call .load() in MLReadable which calls this read() function and reads using the DefaultParamsReader load() function
     def read(self):
         return DefaultParamsReader()
 
@@ -322,24 +372,63 @@ class DefaultParamsReadable(MLReadable):
 class DefaultParamsReader(MLReader):
 
     def __init__(self):
-        pass
+        #print "spark context pre init",sc
+        super(DefaultParamsReader, self).__init__()
+        self.sc = SparkContext._active_spark_context
+        print "spark context post init",self.sc
 
-    def load(self):
-        pass
+    # made this a static method just for testing purposes (normally it takes self and does not take a spark context)
+    def load(self, path):
+
+        def __get_class(clazz):
+            """
+            Loads Python class from its name.
+            """
+            parts = clazz.split('.')
+            module = ".".join(parts[:-1])
+            m = __import__(module)
+            for comp in parts[1:]:
+                m = getattr(m, comp)
+            return m
+
+        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        print "metadata:",metadata
+        py_type = __get_class(metadata['class'])
+        print "py_type:",py_type
+        instance = py_type()
+        print "instance:",instance
+        instance._resetUid(metadata['uid'])
+        DefaultParamsReader.getAndSetParams(instance, metadata)
+        print "instance param map:",instance.extractParamMap()
+        return instance
 
     # TODO: missing getParamName from case class Metadata in Scala - Check what to do with this
 
     @staticmethod
-    def loadMetadata():
-        pass
+    def loadMetadata(path, sc, expectedClassName=""):
+        metadataPath = os.path.join(path, "metadata")
+        metadataStr = sc.textFile(metadataPath, 1).first()
+        # print "metadata str:",metadataStr
+        loadedVals = DefaultParamsReader.parseMetaData(metadataStr, expectedClassName)
+        # print "Loaded vals:",loadedVals
+        return loadedVals
 
     @staticmethod
-    def parseMetaData():
-        pass
+    def parseMetaData(metadataStr, expectedClassName=""):
+        metadata = json.loads(metadataStr)
+        className = metadata['class']
+        if len(expectedClassName) > 0:
+            assert className == expectedClassName, "Error loading metadata: Expected class name {} " + \
+                "but found class name {}".format(expectedClassName, className)
+        return metadata
 
     @staticmethod
-    def getAndSetParams():
-        pass
+    def getAndSetParams(instance, metadata):
+        for paramName in metadata['paramMap']:
+            param = instance.getParam(paramName)
+            paramValue = metadata['paramMap'][paramName]
+            instance.set(param, paramValue)
+        
 
     @staticmethod
     def loadParamsInstance():

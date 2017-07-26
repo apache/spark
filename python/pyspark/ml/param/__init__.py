@@ -375,6 +375,18 @@ class Params(Identifiable):
         that._defaultParamMap = {}
         return self._copyValues(that, extra)
 
+    def set(self, param, value):
+        """
+            Sets the value for a parameter in the parameter map.
+        """
+        if not self.hasParam(param.name):
+            raise TypeError('Invalid param %s given for instance %r. %s' % (p.name, self, e))
+        try:
+            value = param.typeConverter(value)
+        except TypeError as e:
+            raise TypeError('Invalid param value given for param "%s". %s' % (p.name, e))
+        self._paramMap[param] = value
+
     def _shouldOwn(self, param):
         """
         Validates that the input param belongs to this Params instance.

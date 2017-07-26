@@ -62,6 +62,7 @@ from pyspark.ml.regression import DecisionTreeRegressor, GeneralizedLinearRegres
     LinearRegression
 from pyspark.ml.stat import ChiSquareTest
 from pyspark.ml.tuning import *
+from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
@@ -1955,6 +1956,27 @@ class ChiSquareTestTests(SparkSessionTestCase):
         fieldNames = set(field.name for field in res.schema.fields)
         expectedFields = ["pValues", "degreesOfFreedom", "statistics"]
         self.assertTrue(all(field in fieldNames for field in expectedFields))
+
+class DefaultReadWriteTests(SparkSessionTestCase):
+
+    def test_default_read_write(self):
+        lr = LogisticRegression()
+        lr.setMaxIter(50)
+        lr.setThreshold(.75)
+        writer = DefaultParamsWriter(lr)
+        
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+
+        writer.save(tempFile.name)
+
+        reader = DefaultParamsReader()
+        lr2 = reader.load(tempFile.name)
+
+        self.assertEqual(lr.uid, lr2.uid)
+        self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
+
+
 
 
 if __name__ == "__main__":
