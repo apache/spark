@@ -60,8 +60,6 @@ object ArrowWriter {
         new FloatWriter(vector.asInstanceOf[NullableFloat4Vector])
       case DoubleType =>
         new DoubleWriter(vector.asInstanceOf[NullableFloat8Vector])
-      case DecimalType.Fixed(precision, scale) =>
-        new DecimalWriter(vector.asInstanceOf[NullableDecimalVector], precision, scale)
       case StringType =>
         new StringWriter(vector.asInstanceOf[NullableVarCharVector])
       case BinaryType =>
@@ -76,6 +74,8 @@ object ArrowWriter {
           createFieldWriter(v.getChildByOrdinal(ordinal))
         }
         new StructWriter(v, children.toArray)
+      case dt =>
+        throw new UnsupportedOperationException(s"Unsupported data type: ${dt.simpleString}")
     }
   }
 }
@@ -262,29 +262,6 @@ private[arrow] class DoubleWriter(val valueVector: NullableFloat8Vector) extends
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueMutator.setSafe(count, input.getDouble(ordinal))
-  }
-
-  override def skip(): Unit = {
-    valueMutator.setIndexDefined(count)
-  }
-}
-
-private[arrow] class DecimalWriter(
-    val valueVector: NullableDecimalVector,
-    precision: Int,
-    scale: Int) extends ArrowFieldWriter {
-
-  override def valueMutator: NullableDecimalVector#Mutator = valueVector.getMutator()
-
-  override def setNull(): Unit = {
-    valueMutator.setNull(count)
-  }
-
-  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueMutator.setIndexDefined(count)
-    val decimal = input.getDecimal(ordinal, precision, scale)
-    decimal.changePrecision(precision, scale)
-    DecimalUtility.writeBigDecimalToArrowBuf(decimal.toJavaBigDecimal, valueVector.getBuffer, count)
   }
 
   override def skip(): Unit = {

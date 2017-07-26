@@ -55,10 +55,6 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(FloatType, Seq(1.0f, 2.0f, null, 4.0f), (reader, rowId) => reader.getFloat(rowId))
     check(DoubleType, Seq(1.0d, 2.0d, null, 4.0d), (reader, rowId) => reader.getDouble(rowId))
 
-    check(DecimalType.SYSTEM_DEFAULT, Seq(Decimal(1), Decimal(2), null, Decimal(4)),
-      (reader, rowId) => reader.getDecimal(
-        rowId, DecimalType.SYSTEM_DEFAULT.precision, DecimalType.SYSTEM_DEFAULT.scale))
-
     check(StringType,
       Seq("a", "b", null, "d").map(UTF8String.fromString),
       (reader, rowId) => reader.getUTF8String(rowId))
