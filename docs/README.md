@@ -68,6 +68,6 @@ jekyll plugin to run `build/sbt unidoc` before building the site so if you haven
 may take some time as it generates all of the scaladoc.  The jekyll plugin also generates the
 PySpark docs using [Sphinx](http://sphinx-doc.org/).
 
-NOTE: To skip the step of building and copying over the Scala, Python, R API docs, run `SKIP_API=1
-jekyll`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, and `SKIP_RDOC=1` can be used to skip a single
-step of the corresponding language.
+NOTE: To skip the step of building and copying over the Scala, Python, R and SQL API docs, run `SKIP_API=1
+jekyll`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
+to skip a single step of the corresponding language.
