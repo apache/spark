@@ -2375,8 +2375,8 @@ def _prepare_for_python_RDD(sc, command):
         # The broadcast will have same life cycle as created PythonRDD
         broadcast = sc.broadcast(pickled_command)
         pickled_command = ser.dumps(broadcast)
-    broadcast_vars = [x._jbroadcast for x in sc._pickled_broadcast_registry]
-    sc._pickled_broadcast_registry.clear()
+    broadcast_vars = [x._jbroadcast for x in sc._pickled_broadcast_vars]
+    sc._pickled_broadcast_vars.clear()
     return pickled_command, broadcast_vars, sc.environment, sc._python_includes
 
 
