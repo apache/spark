@@ -51,6 +51,7 @@ public class UnsafeRowWriter {
     this.nullBitsSize = UnsafeRow.calculateBitSetWidthInBytes(numFields);
     this.fixedSize = nullBitsSize + 8 * numFields;
     this.startingOffset = holder.cursor;
+    holder.reset();
   }
 
   /**
