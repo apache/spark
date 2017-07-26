@@ -327,7 +327,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    * </blockquote>
    * Default is 0.0.
    *
-   *
    * @group setParam
    */
   @Since("2.0.0")
@@ -1478,7 +1477,7 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   }
 
   /**
-   * coefficients with statistics: feature name, coefficients, standard error, tValue and pValue.
+   * Coefficients with statistics: feature name, coefficients, standard error, tValue and pValue.
    */
   private[ml] lazy val coefficientsWithStatistics: Array[
     (String, Double, Double, Double, Double)] = {
@@ -1501,7 +1500,7 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
     if (isNormalSolver) {
 
       def round(x: Double): String = {
-        BigDecimal(x).setScale(5, BigDecimal.RoundingMode.HALF_UP).toString
+        BigDecimal(x).setScale(4, BigDecimal.RoundingMode.HALF_UP).toString
       }
 
       val colNames = Array("Feature", "Estimate", "Std Error", "T Value", "P Value")
