@@ -89,9 +89,6 @@ private[spark] class ApplicationMaster(
 
   @volatile private var reporterThread: Thread = _
   @volatile private var allocator: YarnAllocator = _
-  
-  // A flag to check whether user has initialized spark context
-  @volatile private var registered = false
 
   private val userClassLoader = {
     val classpath = Client.getUserClasspath(sparkConf)
@@ -322,7 +319,7 @@ private[spark] class ApplicationMaster(
    */
   final def unregister(status: FinalApplicationStatus, diagnostics: String = null): Unit = {
     synchronized {
-      if (registered && !unregistered) {
+      if (!unregistered) {
         logInfo(s"Unregistering ApplicationMaster with $status" +
           Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
         unregistered = true
@@ -335,15 +332,10 @@ private[spark] class ApplicationMaster(
     synchronized {
       if (!finished) {
         val inShutdown = ShutdownHookManager.inShutdown()
-        if (registered) {
-          exitCode = code
-          finalStatus = status
-        } else {
-          finalStatus = FinalApplicationStatus.FAILED
-          exitCode = ApplicationMaster.EXIT_SC_NOT_INITED
-        }
-        logInfo(s"Final app status: $finalStatus, exitCode: $exitCode" +
+        logInfo(s"Final app status: $status, exitCode: $code" +
           Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
+        exitCode = code
+        finalStatus = status
         finalMsg = msg
         finished = true
         if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
@@ -447,11 +439,12 @@ private[spark] class ApplicationMaster(
           sc.getConf.get("spark.driver.port"),
           isClusterMode = true)
         registerAM(sc.getConf, rpcEnv, driverRef, sc.ui.map(_.webUrl), securityMgr)
-        registered = true
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
         // if the user app did not create a SparkContext.
-        throw new IllegalStateException("User did not initialize spark context!")
+        if (!finished) {
+          throw new IllegalStateException("SparkContext is null but app is still running!")
+        }
       }
       userClassThread.join()
     } catch {
