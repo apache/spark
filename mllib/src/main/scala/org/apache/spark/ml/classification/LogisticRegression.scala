@@ -23,6 +23,7 @@ import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, LBFGSB => BreezeLBFGSB, OWLQN => BreezeOWLQN}
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -1726,25 +1727,22 @@ private class LogisticAggregator(
     var maxMargin = Double.NegativeInfinity
 
     val margins = new Array[Double](numClasses)
+    val featureStdArray = new Array[Double](features.size)
     features.foreachActive { (index, value) =>
-      val stdValue = value / localFeaturesStd(index)
-      var j = 0
-      while (j < numClasses) {
-        margins(j) += localCoefficients(index * numClasses + j) * stdValue
-        j += 1
-      }
+      featureStdArray(index) = value / localFeaturesStd(index)
     }
-    var i = 0
-    while (i < numClasses) {
-      if (fitIntercept) {
+
+    blas.dgemv("N", numCoefficientSets, numFeatures, 1.0, coefficientsArray,
+      numCoefficientSets, featureStdArray, 1, 1.0, margins, 1)
+    if (fitIntercept) {
+      var i = 0
+      while (i < numClasses) {
         margins(i) += localCoefficients(numClasses * numFeatures + i)
+        i += 1
       }
-      if (i == label.toInt) marginOfLabel = margins(i)
-      if (margins(i) > maxMargin) {
-        maxMargin = margins(i)
-      }
-      i += 1
     }
+    marginOfLabel = margins(label.toInt)
+    maxMargin = margins.max
 
     /**
      * When maxMargin is greater than 0, the original formula could cause overflow.
@@ -1768,17 +1766,10 @@ private class LogisticAggregator(
     margins.indices.foreach { i =>
       multipliers(i) = multipliers(i) / sum - (if (label == i) 1.0 else 0.0)
     }
-    features.foreachActive { (index, value) =>
-      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-        val stdValue = value / localFeaturesStd(index)
-        var j = 0
-        while (j < numClasses) {
-          localGradientArray(index * numClasses + j) +=
-            weight * multipliers(j) * stdValue
-          j += 1
-        }
-      }
-    }
+
+    blas.dger(numCoefficientSets, numFeatures, weight, multipliers,
+      1, featureStdArray, 1, localGradientArray, numCoefficientSets)
+
     if (fitIntercept) {
       var i = 0
       while (i < numClasses) {
