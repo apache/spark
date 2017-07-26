@@ -631,7 +631,7 @@ class SparkSubmitSuite
     )
     val appArgs = new SparkSubmitArguments(clArgs)
     val sysProps = SparkSubmit.prepareSubmitEnvironment(appArgs)._3
-    sysProps("spark.jars") should be(jars + ',' + Utils.resolveURIs("thejar.jar"))
+    sysProps("spark.jars") should be(Utils.resolveURIs(jars + ",thejar.jar"))
     sysProps("spark.files") should be(Utils.resolveURIs(files))
 
     // Test files and archives (Yarn)
