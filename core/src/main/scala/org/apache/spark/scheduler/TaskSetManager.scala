@@ -644,10 +644,12 @@ private[spark] class TaskSetManager(
         }
 
         pendingTask.foreach { indexInTaskSet =>
+          var currentExecutorNumber = 0
           // try to find some executor this task can run on.  Its possible that some *other*
           // task isn't schedulable anywhere, but we will discover that in some later call,
           // when that unschedulable task is the last task remaining.
           val blacklistedEverywhere = hostToExecutors.forall { case (host, execsOnHost) =>
+            currentExecutorNumber += execsOnHost.size
             // Check if the task can run on the node
             val nodeBlacklisted =
               appBlacklist.isNodeBlacklisted(host) ||
@@ -665,10 +667,15 @@ private[spark] class TaskSetManager(
             }
           }
           if (blacklistedEverywhere) {
-            val partition = tasks(indexInTaskSet).partitionId
-            abort(s"Aborting $taskSet because task $indexInTaskSet (partition $partition) " +
-              s"cannot run anywhere due to node and executor blacklist.  Blacklisting behavior " +
-              s"can be configured via spark.blacklist.*.")
+            val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
+            val mayAllocateNewExecutor =
+              conf.getInt("spark.executor.instances", -1) > currentExecutorNumber
+            if (!dynamicAllocationEnabled && !mayAllocateNewExecutor) {
+              val partition = tasks(indexInTaskSet).partitionId
+              abort(s"Aborting $taskSet because task $indexInTaskSet (partition $partition) " +
+                s"cannot run anywhere due to node and executor blacklist.  Blacklisting behavior " +
+                s"can be configured via spark.blacklist.*.")
+            }
           }
         }
       }
