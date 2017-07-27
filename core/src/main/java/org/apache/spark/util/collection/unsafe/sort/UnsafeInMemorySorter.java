@@ -75,14 +75,20 @@ public final class UnsafeInMemorySorter {
 
   private final MemoryConsumer consumer;
   private final TaskMemoryManager memoryManager;
+
+  private final PrefixComparator prefixComparator;
+
   @Nullable
-  private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
+  private final RecordComparator.Factory recordComparatorFactory;
 
   /**
    * If non-null, specifies the radix sort parameters and that radix sort will be used.
    */
   @Nullable
   private final PrefixComparators.RadixSortSupport radixSortSupport;
+
+  @Nullable
+  private Comparator<RecordPointerAndKeyPrefix> sortComparator;
 
   /**
    * Within this buffer, position {@code 2 * i} holds a pointer to the record at
@@ -118,26 +124,28 @@ public final class UnsafeInMemorySorter {
   public UnsafeInMemorySorter(
     final MemoryConsumer consumer,
     final TaskMemoryManager memoryManager,
-    final RecordComparator recordComparator,
+    final RecordComparator.Factory recordComparatorFactory,
     final PrefixComparator prefixComparator,
     int initialSize,
     boolean canUseRadixSort) {
-    this(consumer, memoryManager, recordComparator, prefixComparator,
+    this(consumer, memoryManager, recordComparatorFactory, prefixComparator,
       consumer.allocateArray(initialSize * 2), canUseRadixSort);
   }
 
   public UnsafeInMemorySorter(
       final MemoryConsumer consumer,
       final TaskMemoryManager memoryManager,
-      final RecordComparator recordComparator,
+      final RecordComparator.Factory recordComparatorFactory,
       final PrefixComparator prefixComparator,
       LongArray array,
       boolean canUseRadixSort) {
     this.consumer = consumer;
     this.memoryManager = memoryManager;
     this.initialSize = array.size();
-    if (recordComparator != null) {
-      this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
+    this.prefixComparator = prefixComparator;
+    this.recordComparatorFactory = recordComparatorFactory;
+    if (recordComparatorFactory != null) {
+      this.sortComparator = createNewSortComparator();
       if (canUseRadixSort && prefixComparator instanceof PrefixComparators.RadixSortSupport) {
         this.radixSortSupport = (PrefixComparators.RadixSortSupport)prefixComparator;
       } else {
@@ -149,6 +157,10 @@ public final class UnsafeInMemorySorter {
     }
     this.array = array;
     this.usableCapacity = getUsableCapacity();
+  }
+
+  private SortComparator createNewSortComparator() {
+    return new SortComparator(recordComparatorFactory.create(), prefixComparator, memoryManager);
   }
 
   private int getUsableCapacity() {
@@ -175,6 +187,9 @@ public final class UnsafeInMemorySorter {
     }
     pos = 0;
     nullBoundaryPos = 0;
+    if (sortComparator != null) {
+      sortComparator = createNewSortComparator();
+    }
   }
 
   /**

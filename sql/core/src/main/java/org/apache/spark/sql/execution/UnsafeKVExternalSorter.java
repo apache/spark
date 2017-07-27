@@ -76,7 +76,7 @@ public final class UnsafeKVExternalSorter {
     prefixComputer = SortPrefixUtils.createPrefixGenerator(keySchema);
     PrefixComparator prefixComparator = SortPrefixUtils.getPrefixComparator(keySchema);
     BaseOrdering ordering = GenerateOrdering.create(keySchema);
-    KVComparator recordComparator = new KVComparator(ordering, keySchema.length());
+    KVComparatorFactory recordComparatorFactory = new KVComparatorFactory(ordering, keySchema.length());
     boolean canUseRadixSort = keySchema.length() == 1 &&
       SortPrefixUtils.canSortFullyWithPrefix(keySchema.apply(0));
 
@@ -88,7 +88,7 @@ public final class UnsafeKVExternalSorter {
         blockManager,
         serializerManager,
         taskContext,
-        recordComparator,
+        recordComparatorFactory,
         prefixComparator,
         SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
                                      UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
@@ -104,7 +104,7 @@ public final class UnsafeKVExternalSorter {
       // as the underlying array for in-memory sorter (it's always large enough).
       // Since we will not grow the array, it's fine to pass `null` as consumer.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        null, taskMemoryManager, recordComparator, prefixComparator, map.getArray(),
+        null, taskMemoryManager, recordComparatorFactory, prefixComparator, map.getArray(),
         canUseRadixSort);
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
@@ -137,7 +137,7 @@ public final class UnsafeKVExternalSorter {
         blockManager,
         serializerManager,
         taskContext,
-        new KVComparator(ordering, keySchema.length()),
+        recordComparatorFactory,
         prefixComparator,
         SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
                                      UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
@@ -221,6 +221,21 @@ public final class UnsafeKVExternalSorter {
    */
   public void cleanupResources() {
     sorter.cleanupResources();
+  }
+
+  private static final class KVComparatorFactory implements RecordComparator.Factory {
+    private final BaseOrdering ordering;
+    private final int numKeyFields;
+
+    private KVComparatorFactory(BaseOrdering ordering, int numKeyFields) {
+      this.ordering = ordering;
+      this.numKeyFields = numKeyFields;
+    }
+
+    @Override
+    public RecordComparator create() {
+      return new KVComparator(ordering, numKeyFields);
+    }
   }
 
   private static final class KVComparator extends RecordComparator {
