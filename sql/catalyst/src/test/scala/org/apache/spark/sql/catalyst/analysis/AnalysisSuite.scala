@@ -473,7 +473,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
 
   test("SPARK-20962 Support subquery column aliases in FROM clause") {
     def tableColumnsWithAliases(outputNames: Seq[String]): LogicalPlan = {
-      UnresolvedSubqueryColumnAlias(
+      UnresolvedSubqueryColumnAliases(
         outputNames,
         SubqueryAlias(
           "t",

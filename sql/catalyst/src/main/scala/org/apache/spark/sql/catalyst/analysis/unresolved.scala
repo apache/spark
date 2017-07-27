@@ -423,16 +423,17 @@ case class UnresolvedAlias(
 }
 
 /**
- * Aliased column names for subquery. We could add alias names for output columns in the subquery:
+ * Aliased column names resolved by positions for subquery. We could add alias names for output
+ * columns in the subquery:
  * {{{
  *   // Assign alias names for output columns
  *   SELECT col1, col2 FROM testData AS t(col1, col2);
  * }}}
  *
- * @param outputColumnNames the column names for this subquery.
+ * @param outputColumnNames the [[LogicalPlan]] on which this subquery column aliases apply.
  * @param child the logical plan of this subquery.
  */
-case class UnresolvedSubqueryColumnAlias(
+case class UnresolvedSubqueryColumnAliases(
     outputColumnNames: Seq[String],
     child: LogicalPlan)
   extends UnaryNode {

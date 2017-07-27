@@ -767,8 +767,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
     val subquery = SubqueryAlias(alias, plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample))
     if (ctx.tableAlias.identifierList != null) {
-      val columnNames = visitIdentifierList(ctx.tableAlias.identifierList)
-      UnresolvedSubqueryColumnAlias(columnNames, subquery)
+      val columnAliases = visitIdentifierList(ctx.tableAlias.identifierList)
+      UnresolvedSubqueryColumnAliases(columnAliases, subquery)
     } else {
       subquery
     }

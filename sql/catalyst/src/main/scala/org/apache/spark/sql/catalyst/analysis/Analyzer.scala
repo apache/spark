@@ -859,14 +859,14 @@ class Analyzer(
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
 
-      case u @ UnresolvedSubqueryColumnAlias(columnNames, child) if child.resolved =>
+      case u @ UnresolvedSubqueryColumnAliases(columnNames, child) if child.resolved =>
         // Resolves output attributes if a query has alias names in its subquery:
         // e.g., SELECT * FROM (SELECT 1 AS a, 1 AS b) t(col1, col2)
         val outputAttrs = child.output
         // Checks if the number of the aliases equals to the number of output columns
         // in the subquery.
         if (columnNames.size != outputAttrs.size) {
-          u.failAnalysis(s"Number of column aliases does not match number of columns. " +
+          u.failAnalysis("Number of column aliases does not match number of columns. " +
             s"Number of column aliases: ${columnNames.size}; " +
             s"number of columns: ${outputAttrs.size}.")
         }
