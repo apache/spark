@@ -154,10 +154,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     this.fileBufferSizeBytes = 32 * 1024;
 
     if (existingInMemorySorter == null) {
+      RecordComparator comparator = null;
+      if (recordComparatorSupplier != null) {
+        comparator = recordComparatorSupplier.get();
+      }
       this.inMemSorter = new UnsafeInMemorySorter(
         this,
         taskMemoryManager,
-        recordComparatorSupplier.get(),
+        comparator,
         prefixComparator,
         initialSize,
         canUseRadixSort);
