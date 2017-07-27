@@ -369,7 +369,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
             val valueRowBuffer = new Array[Byte](valueSize)
             ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
-            valueRow.pointTo(valueRowBuffer, valueSize)
+            // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
+            // This is a workaround for the following:
+            // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
+            // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
+            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             map.put(keyRow, valueRow)
           }
         }
@@ -433,7 +437,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
             val valueRowBuffer = new Array[Byte](valueSize)
             ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
-            valueRow.pointTo(valueRowBuffer, valueSize)
+            // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
+            // This is a workaround for the following:
+            // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
+            // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
+            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             map.put(keyRow, valueRow)
           }
         }
