@@ -31,32 +31,38 @@ import java.lang.annotation.RetentionPolicy;
  * `usage()` will be used for the function usage in brief way.
  *
  * These below are concatenated and used for the function usage in verbose way, suppose arguments,
- * examples, note  and since will be provided.
+ * examples, note and since will be provided.
  *
  * `arguments()` describes arguments for the expression. This should follow the format as below:
  *
  *   Arguments:
- *     arg0 - ...
- *     arg1 - ...
+ *     * arg0 - ...
+ *         ....
+ *     * arg1 - ...
+ *         ....
  *
  * `examples()` describes examples for the expression. This should follow the format as below:
  *
  *   Examples:
- *     > SELECT _FUNC_('2008-02-20');
- *      8
+ *     > SELECT ...;
+ *      ...
+ *     > SELECT ...;
+ *      ...
  *
  * `note()` contains some notes for the expression optionally.
- * `since()` contains version information for the expression.
  *
- *  And we can refer the function name by `_FUNC_`, in `usage` and `examples`, as it's
+ * `since()` contains version information for the expression. Version is specified by,
+ * for example, "2.2.0".
+ *
+ *  We can refer the function name by `_FUNC_`, in `usage`, `arguments` and `examples`, as it's
  *  registered in `FunctionRegistry`.
  */
 @DeveloperApi
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ExpressionDescription {
-  String usage() default "";
-  String arguments() default "";
-  String examples() default "";
-  String note() default "";
-  String since() default "";
+    String usage() default "";
+    String arguments() default "";
+    String examples() default "";
+    String note() default "";
+    String since() default "";
 }

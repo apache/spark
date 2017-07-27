@@ -498,7 +498,8 @@ case class JsonTuple(children: Seq[Expression])
        {"a":1, "b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"2015-08-26 00:00:00.0"}
-  """)
+  """,
+  since = "2.2.0")
 // scalastyle:on line.size.limit
 case class JsonToStructs(
     schema: DataType,
@@ -608,7 +609,8 @@ case class JsonToStructs(
        {"time":"26/08/2015"}
       > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
        [{"a":1,"b":2}]
-  """)
+  """,
+  since = "2.2.0")
 // scalastyle:on line.size.limit
 case class StructsToJson(
     options: Map[String, String],

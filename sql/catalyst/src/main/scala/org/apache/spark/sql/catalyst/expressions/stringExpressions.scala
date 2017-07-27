@@ -348,10 +348,10 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   usage = "_FUNC_(str, search[, replace]) - Replaces all occurrences of `search` with `replace`.",
   arguments = """
     Arguments:
-      str - a string expression
-      search - a string expression. If `search` is not found in `str`, `str` is returned unchanged.
-      replace - a string expression. If `replace` is not specified or is an empty string, nothing replaces
-                the string that is removed from `str`.
+      * str - a string expression
+      * search - a string expression. If `search` is not found in `str`, `str` is returned unchanged.
+      * replace - a string expression. If `replace` is not specified or is an empty string, nothing replaces
+          the string that is removed from `str`.
   """,
   examples = """
     Examples:
