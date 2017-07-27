@@ -112,7 +112,7 @@ private[arrow] abstract class ArrowFieldWriter {
   def setNull(): Unit
   def setValue(input: SpecializedGetters, ordinal: Int): Unit
 
-  protected var count: Int = 0
+  private[arrow] var count: Int = 0
 
   def write(input: SpecializedGetters, ordinal: Int): Unit = {
     if (input.isNullAt(ordinal)) {
@@ -120,11 +120,6 @@ private[arrow] abstract class ArrowFieldWriter {
     } else {
       setValue(input, ordinal)
     }
-    count += 1
-  }
-
-  def writeNull(): Unit = {
-    setNull()
     count += 1
   }
 
@@ -299,7 +294,8 @@ private[arrow] class StructWriter(
   override def setNull(): Unit = {
     var i = 0
     while (i < children.length) {
-      children(i).writeNull()
+      children(i).setNull()
+      children(i).count += 1
       i += 1
     }
     valueMutator.setNull(count)
