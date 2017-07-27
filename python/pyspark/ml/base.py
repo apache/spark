@@ -19,7 +19,10 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import since
 from pyspark.ml.param import Params
+from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
+from pyspark.sql.functions import udf
+from pyspark.sql.types import StructField, StructType
 
 
 @inherit_doc
@@ -117,12 +120,42 @@ class Model(Transformer):
 
     __metaclass__ = ABCMeta
 
+
 @inherit_doc
 class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
 
-    def __init__(self, input, output, datatype):
-        self.in = in
-        self.out = out
-        self.type = datatype
+    @abstractmethod
+    def createTransformFunc(self):
+        """
+        Creates the transoform function using the given param map.
+        """
+        raise NotImplementedError()
 
+    @abstractmethod
+    def outputDataType(self):
+        """
+        Returns the data type of the output column as a sql type
+        """
+        raise NotImplementedError()
 
+    @abstractmethod
+    def validateInputType(self, inputType):
+        """
+        Validates the input type. Throws an exception if it is invalid.
+        """
+        raise NotImplementedError()
+
+    def transformSchema(self, schema):
+        inputType = schema[self.getInputCol()].dataType
+        self.validateInputType(inputType)
+        if self.getOutputCol() in schema.names:
+            raise ValueError("Output column %s already exists." % self.getOutputCol())
+        outputFields = schema.fields.append(StructField(self.getOutputCol(),
+                                                        self.outputDataType(),
+                                                        nullable=False))
+        return StructType(outputFields)
+
+    def transform(self, dataset, paramMap=None):
+        transformSchema(dataset.schema())
+        transformUDF = udf(self.createTransformFunc(), self.outputDataType())
+        dataset.withColumn(self.getOutputCol(), transformUDF(self.getInputCol()))
