@@ -102,7 +102,6 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("one-vs-rest: tuning parallelism does not change output") {
-    val numClasses = 3
     val ovaPar1 = new OneVsRest()
       .setClassifier(new LogisticRegression)
 

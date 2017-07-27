@@ -1403,10 +1403,10 @@ class OneVsRestTests(SparkSessionTestCase):
         modelPar1 = ovrPar1.fit(df)
         ovrPar2 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=2)
         modelPar2 = ovrPar2.fit(df)
-        self.assertEqual(modelPar1.getPredictionCol(), modelPar2.getPredictionCol())
         for i, model in enumerate(modelPar1.models):
-            assert(np.allclose(model.coefficients.toArray(),
+            self.assertTrue(np.allclose(model.coefficients.toArray(),
                                modelPar2.models[i].coefficients.toArray(), atol=1E-4))
+            self.assertTrue(np.allclose(model.intercept, modelPar2.models[i].intercept, atol=1E-4))
 
 
 class HashingTFTest(SparkSessionTestCase):
