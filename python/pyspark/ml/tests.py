@@ -1405,7 +1405,7 @@ class OneVsRestTests(SparkSessionTestCase):
         modelPar2 = ovrPar2.fit(df)
         for i, model in enumerate(modelPar1.models):
             self.assertTrue(np.allclose(model.coefficients.toArray(),
-                               modelPar2.models[i].coefficients.toArray(), atol=1E-4))
+                                        modelPar2.models[i].coefficients.toArray(), atol=1E-4))
             self.assertTrue(np.allclose(model.intercept, modelPar2.models[i].intercept, atol=1E-4))
 
 
