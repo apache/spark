@@ -89,7 +89,7 @@ private[spark] class ApplicationMaster(
 
   @volatile private var reporterThread: Thread = _
   @volatile private var allocator: YarnAllocator = _
-  
+
   // A flag to check whether user has initialized spark context
   @volatile private var registered = false
 
