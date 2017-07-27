@@ -793,7 +793,7 @@ class ALSSuite
     val itemSubset = expected.keys.toSeq.toDF("item")
     val numItemsSubset = itemSubset.count
 
-    Seq(2, 4, 6).foreach { k =>
+    Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
       val expectedUpToN = expected.mapValues(_.slice(0, n))
       val topUsers = model.recommendForItemSubset(itemSubset, k)
