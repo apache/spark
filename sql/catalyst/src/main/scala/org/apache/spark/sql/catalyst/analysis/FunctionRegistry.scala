@@ -557,7 +557,9 @@ object FunctionRegistry {
     }
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
-    (name, (new ExpressionInfo(clazz.getCanonicalName, null, name, usage, null), builder))
+    val expressionInfo =
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "")
+    (name, (expressionInfo, builder))
   }
 
   /**
@@ -567,7 +569,15 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+      new ExpressionInfo(
+        clazz.getCanonicalName,
+        null,
+        name,
+        df.usage(),
+        df.arguments(),
+        df.examples(),
+        df.note(),
+        df.since())
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }
