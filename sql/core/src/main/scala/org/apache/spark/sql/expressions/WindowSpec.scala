@@ -125,14 +125,14 @@ class WindowSpec private[sql](
   def rowsBetween(start: Long, end: Long): WindowSpec = {
     val boundaryStart = start match {
       case 0 => CurrentRow
-      case Long.MinValue => Unbounded
+      case Long.MinValue => UnboundedPreceding
       case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
       case x => throw new AnalysisException(s"Boundary start is not a valid integer: $x")
     }
 
     val boundaryEnd = end match {
       case 0 => CurrentRow
-      case Long.MaxValue => Unbounded
+      case Long.MaxValue => UnboundedFollowing
       case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
       case x => throw new AnalysisException(s"Boundary end is not a valid integer: $x")
     }
@@ -193,13 +193,13 @@ class WindowSpec private[sql](
   def rangeBetween(start: Long, end: Long): WindowSpec = {
     val boundaryStart = start match {
       case 0 => CurrentRow
-      case Long.MinValue => Unbounded
+      case Long.MinValue => UnboundedPreceding
       case x => Literal(x)
     }
 
     val boundaryEnd = end match {
       case 0 => CurrentRow
-      case Long.MaxValue => Unbounded
+      case Long.MaxValue => UnboundedFollowing
       case x => Literal(x)
     }
 

@@ -1190,13 +1190,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
     ctx.boundType.getType match {
       case SqlBaseParser.PRECEDING if ctx.UNBOUNDED != null =>
-        Unbounded
+        UnboundedPreceding
       case SqlBaseParser.PRECEDING =>
         UnaryMinus(value)
       case SqlBaseParser.CURRENT =>
         CurrentRow
       case SqlBaseParser.FOLLOWING if ctx.UNBOUNDED != null =>
-        Unbounded
+        UnboundedFollowing
       case SqlBaseParser.FOLLOWING =>
         value
     }

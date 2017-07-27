@@ -1138,11 +1138,11 @@ class TypeCoercionSuite extends AnalysisTest {
       windowSpec(
         Seq(UnresolvedAttribute("a")),
         Seq(SortOrder(Literal(1L), Ascending)),
-        SpecifiedWindowFrame(RangeFrame, CurrentRow, Unbounded)),
+        SpecifiedWindowFrame(RangeFrame, CurrentRow, UnboundedFollowing)),
       windowSpec(
         Seq(UnresolvedAttribute("a")),
         Seq(SortOrder(Literal(1L), Ascending)),
-        SpecifiedWindowFrame(RangeFrame, CurrentRow, Unbounded))
+        SpecifiedWindowFrame(RangeFrame, CurrentRow, UnboundedFollowing))
     )
   }
 }

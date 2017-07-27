@@ -270,11 +270,11 @@ class ExpressionParserSuite extends PlanTest {
       ("10 preceding", -Literal(10), CurrentRow),
       ("2147483648 preceding", -Literal(2147483648L), CurrentRow),
       ("3 + 1 following", Add(Literal(3), Literal(1)), CurrentRow), // Will fail during analysis
-      ("unbounded preceding", Unbounded, CurrentRow),
-      ("unbounded following", Unbounded, CurrentRow), // Will fail during analysis
-      ("between unbounded preceding and current row", Unbounded, CurrentRow),
+      ("unbounded preceding", UnboundedPreceding, CurrentRow),
+      ("unbounded following", UnboundedFollowing, CurrentRow), // Will fail during analysis
+      ("between unbounded preceding and current row", UnboundedPreceding, CurrentRow),
       ("between unbounded preceding and unbounded following",
-        Unbounded, Unbounded),
+        UnboundedPreceding, UnboundedFollowing),
       ("between 10 preceding and current row", -Literal(10), CurrentRow),
       ("between current row and 5 following", CurrentRow, Literal(5)),
       ("between 10 preceding and 5 following", -Literal(10), Literal(5))

@@ -219,13 +219,13 @@ case class WindowExec(
                 offset)
 
           // Entire Partition Frame.
-          case ("AGGREGATE", _, Unbounded, Unbounded) =>
+          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing) =>
             target: InternalRow => {
               new UnboundedWindowFunctionFrame(target, processor)
             }
 
           // Growing Frame.
-          case ("AGGREGATE", frameType, Unbounded, upper) =>
+          case ("AGGREGATE", frameType, UnboundedPreceding, upper) =>
             target: InternalRow => {
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
@@ -234,7 +234,7 @@ case class WindowExec(
             }
 
           // Shrinking Frame.
-          case ("AGGREGATE", frameType, lower, Unbounded) =>
+          case ("AGGREGATE", frameType, lower, UnboundedFollowing) =>
             target: InternalRow => {
               new UnboundedFollowingWindowFunctionFrame(
                 target,

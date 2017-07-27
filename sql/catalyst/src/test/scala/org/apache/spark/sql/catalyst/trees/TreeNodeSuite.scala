@@ -438,7 +438,7 @@ class TreeNodeSuite extends SparkFunSuite {
 
     // Converts WindowFrame to JSON
     assertJSON(
-      SpecifiedWindowFrame(RowFrame, Unbounded, CurrentRow),
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow),
       List(
         JObject(
           "class" -> classOf[SpecifiedWindowFrame].getName,
@@ -447,7 +447,7 @@ class TreeNodeSuite extends SparkFunSuite {
           "lower" -> 0,
           "upper" -> 1),
         JObject(
-          "class" -> Unbounded.getClass.getName,
+          "class" -> UnboundedPreceding.getClass.getName,
           "num-children" -> 0),
         JObject(
           "class" -> CurrentRow.getClass.getName,
