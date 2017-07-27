@@ -637,8 +637,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The max number of chunks allowed to be transferred at the same time on shuffle service.
     Note that new incoming connections will be closed when the max number is hit. The client will
-    retry according to the shuffle retry configs (see spark.shuffle.io.maxRetries and
-    spark.shuffle.io.retryWait), if those limits are reached the task will fail with fetch failure.
+    retry according to the shuffle retry configs (see <code>spark.shuffle.io.maxRetries</code> and
+    <code>spark.shuffle.io.retryWait</code>), if those limits are reached the task will fail with
+    fetch failure.
   </td>
 </tr>
 <tr>
