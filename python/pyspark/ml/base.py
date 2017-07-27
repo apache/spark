@@ -17,6 +17,8 @@
 
 from abc import ABCMeta, abstractmethod
 
+import copy
+
 from pyspark import since
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import *
@@ -150,9 +152,10 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
         self.validateInputType(inputType)
         if self.getOutputCol() in schema.names:
             raise ValueError("Output column %s already exists." % self.getOutputCol())
-        outputFields = schema.fields.append(StructField(self.getOutputCol(),
-                                                        self.outputDataType(),
-                                                        nullable=False))
+        outputFields = copy.copy(schema.fields)
+        outputFields.append(StructField(self.getOutputCol(),
+                                        self.outputDataType(),
+                                        nullable=False))
         return StructType(outputFields)
 
     def transform(self, dataset, paramMap=None):
