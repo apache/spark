@@ -1248,7 +1248,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |      "children" : [ {
          |        "name" : "i",
          |        "count" : 3,
-         |        "VALIDITY" : [ 1, 1, 1 ],
+         |        "VALIDITY" : [ 1, 0, 1 ],
          |        "DATA" : [ 1, 2, 3 ]
          |      } ]
          |    }, {
@@ -1268,11 +1268,11 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |      "children" : [ {
          |        "name" : "nested",
          |        "count" : 3,
-         |        "VALIDITY" : [ 1, 1, 0 ],
+         |        "VALIDITY" : [ 1, 0, 0 ],
          |        "children" : [ {
          |          "name" : "i",
          |          "count" : 3,
-         |          "VALIDITY" : [ 1, 1, 1 ],
+         |          "VALIDITY" : [ 1, 0, 0 ],
          |          "DATA" : [ 1, 2, 0 ]
          |        } ]
          |      } ]

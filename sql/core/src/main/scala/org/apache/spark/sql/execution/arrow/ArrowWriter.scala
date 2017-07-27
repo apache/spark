@@ -111,7 +111,6 @@ private[arrow] abstract class ArrowFieldWriter {
 
   def setNull(): Unit
   def setValue(input: SpecializedGetters, ordinal: Int): Unit
-  def skip(): Unit
 
   protected var count: Int = 0
 
@@ -124,8 +123,8 @@ private[arrow] abstract class ArrowFieldWriter {
     count += 1
   }
 
-  def writeSkip(): Unit = {
-    skip()
+  def writeNull(): Unit = {
+    setNull()
     count += 1
   }
 
@@ -150,10 +149,6 @@ private[arrow] class BooleanWriter(val valueVector: NullableBitVector) extends A
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueMutator.setSafe(count, if (input.getBoolean(ordinal)) 1 else 0)
   }
-
-  override def skip(): Unit = {
-    valueMutator.setIndexDefined(count)
-  }
 }
 
 private[arrow] class ByteWriter(val valueVector: NullableTinyIntVector) extends ArrowFieldWriter {
@@ -166,10 +161,6 @@ private[arrow] class ByteWriter(val valueVector: NullableTinyIntVector) extends 
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueMutator.setSafe(count, input.getByte(ordinal))
-  }
-
-  override def skip(): Unit = {
-    valueMutator.setIndexDefined(count)
   }
 }
 
@@ -184,10 +175,6 @@ private[arrow] class ShortWriter(val valueVector: NullableSmallIntVector) extend
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueMutator.setSafe(count, input.getShort(ordinal))
   }
-
-  override def skip(): Unit = {
-    valueMutator.setIndexDefined(count)
-  }
 }
 
 private[arrow] class IntegerWriter(val valueVector: NullableIntVector) extends ArrowFieldWriter {
@@ -200,10 +187,6 @@ private[arrow] class IntegerWriter(val valueVector: NullableIntVector) extends A
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueMutator.setSafe(count, input.getInt(ordinal))
-  }
-
-  override def skip(): Unit = {
-    valueMutator.setIndexDefined(count)
   }
 }
 
@@ -218,10 +201,6 @@ private[arrow] class LongWriter(val valueVector: NullableBigIntVector) extends A
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueMutator.setSafe(count, input.getLong(ordinal))
   }
-
-  override def skip(): Unit = {
-    valueMutator.setIndexDefined(count)
-  }
 }
 
 private[arrow] class FloatWriter(val valueVector: NullableFloat4Vector) extends ArrowFieldWriter {
@@ -235,10 +214,6 @@ private[arrow] class FloatWriter(val valueVector: NullableFloat4Vector) extends 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueMutator.setSafe(count, input.getFloat(ordinal))
   }
-
-  override def skip(): Unit = {
-    valueMutator.setIndexDefined(count)
-  }
 }
 
 private[arrow] class DoubleWriter(val valueVector: NullableFloat8Vector) extends ArrowFieldWriter {
@@ -251,10 +226,6 @@ private[arrow] class DoubleWriter(val valueVector: NullableFloat8Vector) extends
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueMutator.setSafe(count, input.getDouble(ordinal))
-  }
-
-  override def skip(): Unit = {
-    valueMutator.setIndexDefined(count)
   }
 }
 
@@ -271,10 +242,6 @@ private[arrow] class StringWriter(val valueVector: NullableVarCharVector) extend
     // todo: for off-heap UTF8String, how to pass in to arrow without copy?
     valueMutator.setSafe(count, utf8.getByteBuffer, 0, utf8.numBytes())
   }
-
-  override def skip(): Unit = {
-    valueMutator.setIndexDefined(count)
-  }
 }
 
 private[arrow] class BinaryWriter(
@@ -289,10 +256,6 @@ private[arrow] class BinaryWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val bytes = input.getBinary(ordinal)
     valueMutator.setSafe(count, bytes, 0, bytes.length)
-  }
-
-  override def skip(): Unit = {
-    valueMutator.setIndexDefined(count)
   }
 }
 
@@ -316,10 +279,6 @@ private[arrow] class ArrayWriter(
     valueMutator.endValue(count, array.numElements())
   }
 
-  override def skip(): Unit = {
-    valueMutator.setNotNull(count)
-  }
-
   override def finish(): Unit = {
     super.finish()
     elementWriter.finish()
@@ -340,7 +299,7 @@ private[arrow] class StructWriter(
   override def setNull(): Unit = {
     var i = 0
     while (i < children.length) {
-      children(i).writeSkip()
+      children(i).writeNull()
       i += 1
     }
     valueMutator.setNull(count)
@@ -351,15 +310,6 @@ private[arrow] class StructWriter(
     var i = 0
     while (i < struct.numFields) {
       children(i).write(struct, i)
-      i += 1
-    }
-    valueMutator.setIndexDefined(count)
-  }
-
-  override def skip(): Unit = {
-    var i = 0
-    while (i < children.length) {
-      children(i).writeSkip()
       i += 1
     }
     valueMutator.setIndexDefined(count)
