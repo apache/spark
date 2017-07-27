@@ -37,6 +37,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def adaptiveExecutionEnabled: Boolean = conf.adaptiveExecutionEnabled
 
+  private def adaptiveOnlyForLastShuffle: Boolean = conf.adaptiveOnlyForLastShuffle
+
   private def minNumPostShufflePartitions: Option[Int] = {
     val minNumPostShufflePartitions = conf.minNumPostShufflePartitions
     if (minNumPostShufflePartitions > 0) Some(minNumPostShufflePartitions) else None
@@ -258,13 +260,28 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     operator.withNewChildren(children)
   }
 
-  def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case operator @ ShuffleExchange(partitioning, child, _) =>
-      child.children match {
-        case ShuffleExchange(childPartitioning, baseChild, _)::Nil =>
-          if (childPartitioning.guarantees(partitioning)) child else operator
-        case _ => operator
+  def apply(plan: SparkPlan): SparkPlan = {
+    var ret = plan.transformUp {
+      case operator @ ShuffleExchange(partitioning, child, _) =>
+        child.children match {
+          case ShuffleExchange(childPartitioning, baseChild, _)::Nil =>
+            if (childPartitioning.guarantees(partitioning)) child else operator
+          case _ => operator
+        }
+      case operator: SparkPlan => ensureDistributionAndOrdering(operator)
+    }
+    if (adaptiveOnlyForLastShuffle) {
+      var rootCoordinator: Option[ExchangeCoordinator] = None
+      ret = ret transformDown {
+        case operator @ ShuffleExchange(_, _, Some(coordinator)) =>
+          if (rootCoordinator.isEmpty) {
+            rootCoordinator = Some(coordinator)
+          } else if (coordinator != rootCoordinator.get) {
+            coordinator.deactivate
+          }
+          operator
       }
-    case operator: SparkPlan => ensureDistributionAndOrdering(operator)
+    }
+    ret
   }
 }

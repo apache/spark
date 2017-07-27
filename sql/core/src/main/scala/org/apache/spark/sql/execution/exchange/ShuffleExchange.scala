@@ -116,7 +116,7 @@ case class ShuffleExchange(
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
     if (cachedShuffleRDD == null) {
       cachedShuffleRDD = coordinator match {
-        case Some(exchangeCoordinator) =>
+        case Some(exchangeCoordinator) if exchangeCoordinator.isActive =>
           val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
           assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
           shuffleRDD
