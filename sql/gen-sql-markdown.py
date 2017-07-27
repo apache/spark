@@ -33,10 +33,12 @@ def _list_function_infos(jvm):
     infos = []
     for jinfo in jinfos:
         name = jinfo.getName()
+        usage = jinfo.getUsage()
+        usage = usage.replace("_FUNC_", name) if usage is not None else usage
         infos.append(ExpressionInfo(
             className=jinfo.getClassName(),
             name=name,
-            usage=jinfo.getUsage().replace("_FUNC_", name),
+            usage=usage,
             arguments=jinfo.getArguments().replace("_FUNC_", name),
             examples=jinfo.getExamples().replace("_FUNC_", name),
             note=jinfo.getNote(),
@@ -50,7 +52,7 @@ def _make_pretty_usage(usage):
     is not an empty string. Otherwise, returns None.
     """
 
-    if usage.strip() != "":
+    if usage is not None and usage.strip() != "":
         usage = "\n".join(map(lambda u: u.strip(), usage.split("\n")))
         return "%s\n\n" % usage
 

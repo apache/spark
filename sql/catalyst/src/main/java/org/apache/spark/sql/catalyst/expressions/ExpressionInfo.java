@@ -87,24 +87,18 @@ public class ExpressionInfo {
         this.className = className;
         this.db = db;
         this.name = name;
+        this.usage = usage;
         this.arguments = arguments;
         this.examples = examples;
         this.note = note;
         this.since = since;
-        if (usage == null || usage.isEmpty()) {
-            this.usage = "\n    _FUNC_ is undocumented.";
-        } else {
-            this.usage = usage;
-        }
 
-        // Make extended description.
-        this.extended = "";
-        this.extended += arguments;
-        this.extended += examples;
-        if (arguments.isEmpty() && examples.isEmpty()) {
-           this.extended += "\n    No example/argument for _FUNC_.\n";
+        // Make the extended description.
+        this.extended = arguments + examples;
+        if (this.extended.isEmpty()) {
+            this.extended = "\n    No example/argument for _FUNC_.\n";
         }
-        if (!arguments.isEmpty()) {
+        if (!note.isEmpty()) {
             this.extended += "\n    Note:\n      " + note.trim() + "\n";
         }
         if (!since.isEmpty()) {
