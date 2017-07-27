@@ -1306,12 +1306,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-21538: Attribute resolution inconsistency in Dataset API") {
-    val df = spark.range(1).withColumnRenamed("id", "x")
-    checkAnswer(df.sort(col("id")), df.sort("id"))
-    checkAnswer(df.sort($"id"), df.sort("id"))
-    checkAnswer(df.sort('id), df.sort("id"))
-    checkAnswer(df.orderBy('id), df.sort("id"))
-    checkAnswer(df.orderBy("id"), df.sort("id"))
+    val df = spark.range(3).withColumnRenamed("id", "x")
+    val expected = Row(0) :: Row(1) :: Row (2) :: Nil
+    checkAnswer(df.sort("id"), expected)
+    checkAnswer(df.sort(col("id")), expected)
+    checkAnswer(df.sort($"id"), expected)
+    checkAnswer(df.sort('id), expected)
+    checkAnswer(df.orderBy("id"), expected)
+    checkAnswer(df.orderBy(col("id")), expected)
+    checkAnswer(df.orderBy($"id"), expected)
+    checkAnswer(df.orderBy('id), expected)
   }
 }
 
