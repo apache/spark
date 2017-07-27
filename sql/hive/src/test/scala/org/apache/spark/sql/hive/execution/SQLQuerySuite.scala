@@ -326,7 +326,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkKeywordsExist(sql("describe function udtf_count"),
         "Function: default.udtf_count",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
-        "Usage: \n    udtf_count is undocumented")
+        "Usage: N/A")
 
       checkAnswer(
         sql("SELECT udtf_count(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
@@ -335,7 +335,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkKeywordsExist(sql("describe function udtf_count"),
         "Function: default.udtf_count",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
-        "Usage: \n    udtf_count is undocumented")
+        "Usage: N/A")
     }
   }
 
@@ -351,7 +351,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkKeywordsExist(sql("describe function udtf_count_temp"),
         "Function: udtf_count_temp",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
-        "Usage: \n    udtf_count_temp is undocumented")
+        "Usage: N/A")
 
       checkAnswer(
         sql("SELECT udtf_count_temp(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
@@ -360,7 +360,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkKeywordsExist(sql("describe function udtf_count_temp"),
         "Function: udtf_count_temp",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
-        "Usage: \n    udtf_count_temp is undocumented")
+        "Usage: N/A")
     }
   }
 
