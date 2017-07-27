@@ -126,7 +126,6 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
-          <shadedArtifactAttached>true</shadedArtifactAttached>
           <shadeTestJar>true</shadeTestJar>
         </configuration>
       </plugin>
