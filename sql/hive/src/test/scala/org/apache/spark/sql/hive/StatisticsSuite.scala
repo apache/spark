@@ -117,6 +117,26 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("analyze non hive compatible datasource tables") {
+    val table = "parquet_tab"
+    withTable(table) {
+      sql(
+        s"""
+          |CREATE TABLE $table (a int, b int)
+          |USING parquet
+          |OPTIONS (skipHiveMetadata true)
+        """.stripMargin)
+      sql(s"insert into $table values (1, 1)")
+      sql(s"insert into $table values (2, 1)")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS a, b")
+      val fetchedStats0 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2))
+      assert(fetchedStats0.get.colStats == Map(
+        "a" -> ColumnStat(2, Some(1), Some(2), 0, 4, 4),
+        "b" -> ColumnStat(1, Some(1), Some(1), 0, 4, 4)))
+    }
+  }
+
   test("SPARK-21079 - analyze table with location different than that of individual partitions") {
     val tableName = "analyzeTable_part"
     withTable(tableName) {
