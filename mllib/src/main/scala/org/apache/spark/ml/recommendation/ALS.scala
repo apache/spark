@@ -386,9 +386,8 @@ class ALSModel private[ml] (
   }
 
   /**
-   * Returns a subset of a factor DataFrame limited to only those ids contained
-   * in the input dataset. The caller is responsible for removing any duplicate ids
-   * from the dataset.
+   * Returns a subset of a factor DataFrame limited to only those unique ids contained
+   * in the input dataset.
    * @param dataset input Dataset containing id column to user to filter factors.
    * @param factors factor DataFrame to filter.
    * @param column column name containing the ids in the input dataset.
@@ -400,6 +399,7 @@ class ALSModel private[ml] (
       factors: DataFrame,
       column: String): DataFrame = {
     dataset.select(column)
+      .distinct()
       .join(factors, dataset(column) === factors("id"))
       .select(factors("id"), factors("features"))
   }

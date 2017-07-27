@@ -803,21 +803,30 @@ class ALSSuite
     }
   }
 
-  test("subset recommendations eliminate duplicate ids") {
+  test("subset recommendations eliminate duplicate ids, returns same results as unique ids") {
     val spark = this.spark
     import spark.implicits._
     val model = getALSModel
-
     val k = 2
+
+    val users = Seq(0, 1).toDF("user")
     val dupUsers = Seq(0, 1, 0, 1).toDF("user")
-    val userRecs = model.recommendForUserSubset(dupUsers, k)
-    assert(userRecs.count == 2)
+    val singleUserRecs = model.recommendForUserSubset(users, k)
+    val dupUserRecs = model.recommendForUserSubset(dupUsers, k)
+      .as[(Int, Seq[(Int, Float)])].collect().toMap
+    assert(singleUserRecs.count == dupUserRecs.size)
+    checkRecommendations(singleUserRecs, dupUserRecs, "item")
+
+    val items = Seq(3, 4, 5).toDF("item")
     val dupItems = Seq(3, 4, 5, 4, 5).toDF("item")
-    val itemRecs = model.recommendForItemSubset(dupItems, k)
-    assert(itemRecs.count == 3)
+    val singleItemRecs = model.recommendForItemSubset(items, k)
+    val dupItemRecs = model.recommendForItemSubset(dupItems, k)
+      .as[(Int, Seq[(Int, Float)])].collect().toMap
+    assert(singleItemRecs.count == dupItemRecs.size)
+    checkRecommendations(singleItemRecs, dupItemRecs, "user")
   }
 
-  test("subset recommendations on full input dataset equivalent to recommendForAll methods") {
+  test("subset recommendations on full input dataset equivalent to recommendForAll") {
     val spark = this.spark
     import spark.implicits._
     val model = getALSModel
