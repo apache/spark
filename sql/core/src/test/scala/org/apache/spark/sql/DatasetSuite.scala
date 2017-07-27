@@ -1304,6 +1304,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       assert(rlike3.count() == 0)
     }
   }
+
+  test("SPARK-21538: Attribute resolution inconsistency in Dataset API") {
+    val df = spark.range(1).withColumnRenamed("id", "x")
+    checkAnswer(df.sort(col("id")), df.sort("id"))
+    checkAnswer(df.sort($"id"), df.sort("id"))
+    checkAnswer(df.sort('id), df.sort("id"))
+  }
 }
 
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
