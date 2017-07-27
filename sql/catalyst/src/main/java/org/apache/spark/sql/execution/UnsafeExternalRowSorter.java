@@ -84,7 +84,7 @@ public final class UnsafeExternalRowSorter {
       sparkEnv.blockManager(),
       sparkEnv.serializerManager(),
       taskContext,
-      new RowComparator(ordering, schema.length()),
+      () -> new RowComparator(ordering, schema.length()),
       prefixComparator,
       sparkEnv.conf().getInt("spark.shuffle.sort.initialBufferSize",
                              DEFAULT_INITIAL_SORT_BUFFER_SIZE),
@@ -195,12 +195,10 @@ public final class UnsafeExternalRowSorter {
 
   private static final class RowComparator extends RecordComparator {
     private final Ordering<InternalRow> ordering;
-    private final int numFields;
     private final UnsafeRow row1;
     private final UnsafeRow row2;
 
     RowComparator(Ordering<InternalRow> ordering, int numFields) {
-      this.numFields = numFields;
       this.row1 = new UnsafeRow(numFields);
       this.row2 = new UnsafeRow(numFields);
       this.ordering = ordering;
